@@ -124,6 +124,9 @@ export struct ShortcutsEntry {
     model-subdivide: string,
     model-merge: string,
     model-slice: string,
+    model-connect: string,
+    model-spin: string,
+    model-dissolve: string,
     model-delete: string,
     select-point: string,
     select-edge: string,
@@ -147,10 +150,13 @@ export struct ShortcutsEntry {
     paint-fill: string,
     paint-line: string,
     paint-rectangle: string,
+    paint-gradient: string,
     uv-select: string,
     uv-unwrap: string,
     uv-pack: string,
     uv-project-ref: string,
+    uv-stitch: string,
+    uv-relax: string,
 }
 
 /// Tooltip rico moderno (Blender / VS Code / Figma style):
@@ -2811,6 +2817,8 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> paint-symmetry-x: false;
     in-out property <bool> paint-symmetry-y: false;
     in-out property <bool> paint-symmetry-z: false;
+    in-out property <bool> paint-target-vertex: false;
+    in-out property <bool> paint-mask-selection: false;
     in-out property <bool> asset-library-visible: false;
     in-out property <bool> is-orthographic: false;
     in-out property <bool> is-wireframe: true;
@@ -3449,6 +3457,8 @@ export component PetuniaSlintShell inherits Window {
     callback paint-symmetry-x-toggled;
     callback paint-symmetry-y-toggled;
     callback paint-symmetry-z-toggled;
+    callback paint-target-vertex-changed(bool);
+    callback paint-mask-selection-toggled;
     callback shortcut-requested(string, bool, bool, bool);
     callback toggle-face-orientation;
     callback toggle-uv-checker;
@@ -6135,6 +6145,27 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "slice";
                                 clicked => { root.active-tool-changed("slice"); }
                             }
+                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                                icon: IconSet.Link;
+                                semantic-label: "Connect";
+                                shortcut: root.shortcuts.model-connect;
+                                description: "Bridge edge loops with configurable quad segments and twist";
+                                clicked => { root.command-executed("model.connect"); }
+                            }
+                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                                icon: IconSet.RotateCcw;
+                                semantic-label: "Spin";
+                                shortcut: root.shortcuts.model-spin;
+                                description: "Revolve selection around cursor or axis into lathe surface";
+                                clicked => { root.command-executed("model.spin"); }
+                            }
+                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                                icon: IconSet.X;
+                                semantic-label: "Dissolve";
+                                shortcut: root.shortcuts.model-dissolve;
+                                description: "Dissolve selected vertices, edges or faces without removing surrounding geometry";
+                                clicked => { root.command-executed("model.dissolve"); }
+                            }
 
                             if active-workspace == "PAINT": ToolButton {
                                 icon: IconSet.Paintbrush;
@@ -6192,6 +6223,14 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "rectangle";
                                 clicked => { root.active-tool-changed("rectangle"); }
                             }
+                            if active-workspace == "PAINT": ToolButton {
+                                icon: IconSet.Sliders;
+                                semantic-label: "Gradient";
+                                shortcut: root.shortcuts.paint-gradient;
+                                description: "Draw linear color gradients between endpoints across active canvas";
+                                active: active-tool == "gradient";
+                                clicked => { root.active-tool-changed("gradient"); }
+                            }
 
                             if active-workspace == "UV": ToolButton {
                                 icon: IconSet.Maximize2;
@@ -6213,6 +6252,20 @@ export component PetuniaSlintShell inherits Window {
                                 shortcut: root.shortcuts.uv-project-ref;
                                 description: "Project UV coordinates from active camera perspective";
                                 clicked => { root.command-executed("uv.project_reference"); }
+                            }
+                            if active-workspace == "UV": ToolButton {
+                                icon: IconSet.Link;
+                                semantic-label: "Stitch";
+                                shortcut: root.shortcuts.uv-stitch;
+                                description: "Weld coincident 3D edges that have split UV seams";
+                                clicked => { root.command-executed("uv.stitch"); }
+                            }
+                            if active-workspace == "UV": ToolButton {
+                                icon: IconSet.Minimize2;
+                                semantic-label: "Relax";
+                                shortcut: root.shortcuts.uv-relax;
+                                description: "Smooth unpinned UV island corners to minimize distortion";
+                                clicked => { root.command-executed("uv.relax"); }
                             }
 
                             Rectangle {
@@ -6437,7 +6490,7 @@ export component PetuniaSlintShell inherits Window {
                         x: min(parent.width - self.width - 14px, context-bar.x + context-bar.width - self.width);
                         y: context-bar.y - self.height - 8px;
                         width: 190px;
-                        height: 292px;
+                        height: 380px;
                         border-radius: 8px;
                         background: DesignTokens.surface-raised;
                         border-width: 1px;
@@ -6450,8 +6503,11 @@ export component PetuniaSlintShell inherits Window {
                             ContextMenuItem { label: root.label-model-push-pull; shortcut: root.shortcuts.model-push-pull; clicked => { root.shelf-overflow-open = false; root.command-executed("model.push_pull"); } }
                             ContextMenuItem { label: root.label-model-profile; shortcut: root.shortcuts.model-profile; clicked => { root.shelf-overflow-open = false; root.active-tool-changed("draw_profile"); } }
                             ContextMenuItem { label: root.label-model-slice; shortcut: root.shortcuts.model-slice; clicked => { root.shelf-overflow-open = false; root.active-tool-changed("slice"); } }
+                            ContextMenuItem { label: "Connect Loops"; shortcut: root.shortcuts.model-connect; clicked => { root.shelf-overflow-open = false; root.command-executed("model.connect"); } }
+                            ContextMenuItem { label: "Spin / Lathe"; shortcut: root.shortcuts.model-spin; clicked => { root.shelf-overflow-open = false; root.command-executed("model.spin"); } }
                             ContextMenuItem { label: "Subdivide"; shortcut: root.shortcuts.model-subdivide; clicked => { root.shelf-overflow-open = false; root.command-executed("model.subdivide"); } }
                             ContextMenuItem { label: "Merge Center"; shortcut: root.shortcuts.model-merge; clicked => { root.shelf-overflow-open = false; root.command-executed("model.merge"); } }
+                            ContextMenuItem { label: "Dissolve"; shortcut: root.shortcuts.model-dissolve; clicked => { root.shelf-overflow-open = false; root.command-executed("model.dissolve"); } }
                             ContextMenuItem { label: "Slice"; shortcut: root.shortcuts.model-slice; clicked => { root.shelf-overflow-open = false; root.command-executed("model.slice"); } }
                             ContextMenuItem { label: "Delete"; shortcut: root.shortcuts.model-delete; danger: true; clicked => { root.shelf-overflow-open = false; root.delete-requested(); } }
                         }
@@ -7827,6 +7883,51 @@ export component PetuniaSlintShell inherits Window {
                                             TouchArea { clicked => { root.paint-symmetry-z-toggled(); } }
                                         }
                                     }
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Text {
+                                            text: "Target:";
+                                            color: DesignTokens.text-secondary;
+                                            font-size: 11px;
+                                            horizontal-stretch: 1;
+                                        }
+                                        Rectangle {
+                                            width: 64px;
+                                            height: 24px;
+                                            border-radius: 4px;
+                                            background: !root.paint-target-vertex ? DesignTokens.accent : DesignTokens.surface-raised;
+                                            Text { text: "Texture"; color: !root.paint-target-vertex ? #ffffff : DesignTokens.text-primary; font-size: 10px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                            TouchArea { clicked => { root.paint-target-vertex-changed(false); } }
+                                        }
+                                        Rectangle { width: 4px; }
+                                        Rectangle {
+                                            width: 58px;
+                                            height: 24px;
+                                            border-radius: 4px;
+                                            background: root.paint-target-vertex ? DesignTokens.accent : DesignTokens.surface-raised;
+                                            Text { text: "Vertex"; color: root.paint-target-vertex ? #ffffff : DesignTokens.text-primary; font-size: 10px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                            TouchArea { clicked => { root.paint-target-vertex-changed(true); } }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Text {
+                                            text: "Mask Selection:";
+                                            color: DesignTokens.text-secondary;
+                                            font-size: 11px;
+                                            horizontal-stretch: 1;
+                                        }
+                                        Rectangle {
+                                            width: 44px;
+                                            height: 24px;
+                                            border-radius: 4px;
+                                            background: root.paint-mask-selection ? DesignTokens.accent : DesignTokens.surface-raised;
+                                            Text { text: root.paint-mask-selection ? "ON" : "OFF"; color: root.paint-mask-selection ? #ffffff : DesignTokens.text-secondary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                            TouchArea { clicked => { root.paint-mask-selection-toggled(); } }
+                                        }
+                                    }
                                 }
                             }
 
@@ -7948,16 +8049,37 @@ export component PetuniaSlintShell inherits Window {
 
                                         TouchArea {
                                             property <bool> extend: false;
+                                            property <bool> dragging: false;
+                                            property <float> last-u: 0.0;
+                                            property <float> last-v: 0.0;
                                             pointer-event(event) => {
                                                 extend = event.modifiers.shift;
                                                 if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                                    dragging = true;
+                                                    last-u = self.mouse-x / self.width;
+                                                    last-v = 1.0 - self.mouse-y / self.height;
                                                     // O domínio usa UV com origem embaixo; a caixa desenha
                                                     // com origem em cima, então o V é invertido aqui.
                                                     root.uv-editor-clicked(
-                                                        self.mouse-x / self.width,
-                                                        1.0 - self.mouse-y / self.height,
+                                                        last-u,
+                                                        last-v,
                                                         extend,
                                                     );
+                                                } else if event.kind == PointerEventKind.up {
+                                                    dragging = false;
+                                                }
+                                            }
+                                            moved => {
+                                                if self.pressed && dragging {
+                                                    let cur-u = self.mouse-x / self.width;
+                                                    let cur-v = 1.0 - self.mouse-y / self.height;
+                                                    let du = cur-u - last-u;
+                                                    let dv = cur-v - last-v;
+                                                    if Math.abs(du) > 0.002 || Math.abs(dv) > 0.002 {
+                                                        root.uv-moved(du, dv);
+                                                        last-u = cur-u;
+                                                        last-v = cur-v;
+                                                    }
                                                 }
                                             }
                                         }
@@ -8175,6 +8297,33 @@ export component PetuniaSlintShell inherits Window {
                                             accessible-role: button;
                                             accessible-label: "Equalize texel density across UV islands";
                                             TouchArea { clicked => { root.uv-equalize-texel-density(); } }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        height: 28px;
+                                        spacing: 6px;
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            border-radius: 4px;
+                                            background: DesignTokens.surface-raised;
+                                            border-width: 1px;
+                                            border-color: DesignTokens.border;
+                                            Text { text: "Stitch Seams"; color: DesignTokens.text-primary; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                                            accessible-role: button;
+                                            accessible-label: "Weld coincident 3D edges that have split UV seams";
+                                            TouchArea { clicked => { root.command-executed("uv.stitch"); } }
+                                        }
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            border-radius: 4px;
+                                            background: DesignTokens.surface-raised;
+                                            border-width: 1px;
+                                            border-color: DesignTokens.border;
+                                            Text { text: "Relax UV"; color: DesignTokens.text-primary; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+                                            accessible-role: button;
+                                            accessible-label: "Smooth unpinned UV island corners to minimize distortion";
+                                            TouchArea { clicked => { root.command-executed("uv.relax"); } }
                                         }
                                     }
                                 }

@@ -17,3 +17,4 @@ docs/.vitepress/.temp/
 .vercel
 .env*
 /.commandcode/
+.cargo/

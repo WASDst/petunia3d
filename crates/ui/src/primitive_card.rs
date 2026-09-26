@@ -10,7 +10,7 @@
 //! viewport confirma.
 
 use egui::{Key, Pos2, Rect, Ui, pos2, vec2};
-use petunia_core::{AppState, CircleFill, PrimitiveDescriptor};
+use petunia_core::{AppState, CircleFill, PrimitiveDescriptor, PrimitiveDescriptorExt};
 use petunia_mesh::primitives::primitive_audit;
 
 use crate::tokens;

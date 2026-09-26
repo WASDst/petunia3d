@@ -5,6 +5,20 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Sprint E: Finalização Canônica dos Workspaces MODEL, PAINT e UV (26/09/2026)
+- **Workspace MODEL**:
+  - **Dissolução Limpa de Topologia (`model.dissolve` / `X`)**: Implementação de dissolução não-destrutiva de faces, arestas e vértices coplanares ou de grau 2/fan, preservando a contiguidade 2-manifold da malha. Registrado no catálogo de comandos e atalhos globais.
+  - **Ponte entre Loops e Fronteiras (`model.connect`)**: Algoritmo de conexão e ponte (*Bridge Edge Loops*) entre pares de laços de arestas ou faces desacopladas com suporte a múltiplos segmentos intermediários e torção (*twist*).
+  - **Revolução em Torno de Eixos (`model.spin`)**: Ferramenta de *Spin/Lathe* de arestas e perfis selecionados ao redor dos eixos coordenados principais com definição de passos angulares e centro de rotação.
+- **Workspace PAINT**:
+  - **Pintura de Cor por Vértice (`paint_vertex_color_3d` / P3D-150)**: Suporte completo à pintura 3D de atributos de cor por vértice na geometria com queda esférica cúbica suave (*spherical falloff*), complementando a pintura em texturas e decalques.
+  - **Modo de Destino e Máscara de Seleção**: Seleção de alvo entre Textura e Cor de Vértice (`paint_target_vertex`) e alternância de máscara de isolamento por seleção (`paint_mask_selection`), restringindo a área de aplicação das pinceladas às faces ativas.
+  - **Ferramenta de Gradiente Linear 2D (`canvas_gradient_linear` / P3D-165)**: Interação de âncora e arraste vetorial em 2D na textura ativa para projeção de gradientes suaves entre a cor primária e secundária da paleta.
+- **Workspace UV**:
+  - **Costura de Costuras UV (`uv.stitch`)**: Ferramenta de junção e solda de arestas correspondentes separadas no espaço UV (*Stitch Seams*), respeitando vértices ancorados (*pinned*).
+  - **Relaxamento de Coordenadas UV (`uv.relax`)**: Algoritmo de suavização Laplaciana iterativa com amortecimento de contorno para redução de distorções geométricas e equalização de estiramento de UV.
+  - **Manipulação Tátil Direta no UV Editor**: Suporte a arraste tátil 2D nas ilhas e sub-elementos do editor UV Slint integrado aos atalhos de translação.
+
 ### Sprint D: Ergonomia Unificada de Ferramentas, Navegação de Domínio e Medição Viewport (25/09/2026)
 - **Filosofia Unificada de Ativação de Ferramentas (1 Toque Card/Gizmo vs. 2 Toques Modo Livre)**:
   - Todas as ferramentas de modelagem (`model.extrude`, `model.inset`, `model.bevel`, `model.push_pull`, `model.extrude_individual`) agora seguem a mesma ergonomia das ferramentas de transformação (`move`, `rotate`, `scale`).

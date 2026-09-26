@@ -7,6 +7,17 @@ use crate::{Face, Mesh, edge_key};
 impl Mesh {
     /// Remove two caps and bridge their boundaries, including unequal counts.
     pub fn connect_loops(&mut self, face_a: usize, face_b: usize) -> Result<(), String> {
+        self.connect_loops_with_options(face_a, face_b, 1, 0)
+    }
+
+    /// Remove two caps and bridge their boundaries with specified segments and twist.
+    pub fn connect_loops_with_options(
+        &mut self,
+        face_a: usize,
+        face_b: usize,
+        segments: usize,
+        twist: i32,
+    ) -> Result<(), String> {
         if face_a == face_b {
             return Err("Select two different faces".into());
         }
@@ -31,7 +42,7 @@ impl Mesh {
         let mut candidate = self.clone();
         candidate.faces.remove(face_a.max(face_b));
         candidate.faces.remove(face_a.min(face_b));
-        candidate.bridge_boundaries(&a, &b, true, material)?;
+        candidate.bridge_boundaries(&a, &b, true, material, segments, twist)?;
         *self = candidate;
         Ok(())
     }
@@ -39,6 +50,15 @@ impl Mesh {
     /// Connect exactly two selected boundary chains. Open chains remain open at
     /// their ends; closed rings wrap once. Branches and non-boundaries are errors.
     pub fn connect_selected_edges(&mut self) -> Result<(), String> {
+        self.connect_selected_edges_with_options(1, 0)
+    }
+
+    /// Connect exactly two selected boundary chains with specified segments and twist.
+    pub fn connect_selected_edges_with_options(
+        &mut self,
+        segments: usize,
+        twist: i32,
+    ) -> Result<(), String> {
         let mut adjacency = BTreeMap::<u32, Vec<u32>>::new();
         for &(a, b) in &self.selected_edges {
             if a == b || a as usize >= self.verts.len() || b as usize >= self.verts.len() {
@@ -126,7 +146,7 @@ impl Mesh {
             b.reverse();
         }
         let mut candidate = self.clone();
-        candidate.bridge_boundaries(&a, &b, closed, None)?;
+        candidate.bridge_boundaries(&a, &b, closed, None, segments, twist)?;
         *self = candidate;
         Ok(())
     }
@@ -137,6 +157,8 @@ impl Mesh {
         b: &[u32],
         closed: bool,
         material: Option<usize>,
+        segments: usize,
+        twist: i32,
     ) -> Result<(), String> {
         if a.iter()
             .chain(b)
@@ -148,8 +170,8 @@ impl Mesh {
             return Err("Boundaries must not share points".into());
         }
         let mut b = b.to_vec();
-        if closed {
-            // Preserve boundary winding; choose only a cyclic offset.
+        if closed && !b.is_empty() {
+            // Preserve boundary winding; choose cyclic offset adjusted by twist.
             let best = (0..b.len())
                 .min_by(|&i, &j| {
                     let cost = |shift| {
@@ -165,13 +187,18 @@ impl Mesh {
                     cost(i).total_cmp(&cost(j))
                 })
                 .unwrap_or(0);
-            b.rotate_left(best);
+            let offset = ((best as i32 + twist).rem_euclid(b.len() as i32)) as usize;
+            b.rotate_left(offset);
         }
         let na = if closed { a.len() } else { a.len() - 1 };
         let nb = if closed { b.len() } else { b.len() - 1 };
         if na == 0 || nb == 0 {
             return Err("Empty boundary".into());
         }
+
+        let segments = segments.max(1);
+        let mut intermediate_map = std::collections::HashMap::<(u32, u32, usize), u32>::new();
+
         let (mut i, mut j) = (0, 0);
         let mut faces = Vec::new();
         while i < na || j < nb {
@@ -180,46 +207,122 @@ impl Mesh {
             let advance_b = j < nb && (i == na || (j + 1) * na <= (i + 1) * nb);
             let av = a[i % a.len()];
             let bv = b[j % b.len()];
-            let (verts, uv) = match (advance_a, advance_b) {
-                (true, true) => (
-                    vec![av, a[(i + 1) % a.len()], b[(j + 1) % b.len()], bv],
-                    vec![
-                        [i as f32 / na as f32, 0.0],
-                        [(i + 1) as f32 / na as f32, 0.0],
-                        [(j + 1) as f32 / nb as f32, 1.0],
-                        [j as f32 / nb as f32, 1.0],
-                    ],
-                ),
-                (true, false) => (
-                    vec![av, a[(i + 1) % a.len()], bv],
-                    vec![
-                        [i as f32 / na as f32, 0.0],
-                        [(i + 1) as f32 / na as f32, 0.0],
-                        [j as f32 / nb as f32, 1.0],
-                    ],
-                ),
-                (false, true) => (
-                    vec![av, b[(j + 1) % b.len()], bv],
-                    vec![
-                        [i as f32 / na as f32, 0.0],
-                        [(j + 1) as f32 / nb as f32, 1.0],
-                        [j as f32 / nb as f32, 1.0],
-                    ],
-                ),
-                _ => return Err("Cannot advance boundary connection".into()),
-            };
-            let p0 = self.verts[verts[0] as usize].vec();
-            if (self.verts[verts[1] as usize].vec() - p0)
-                .cross(self.verts[verts[2] as usize].vec() - p0)
-                .length_squared()
-                < 1.0e-14
-            {
-                return Err("Connection would create a degenerate face".into());
+            let a_next = a[(i + 1) % a.len()];
+            let b_next = b[(j + 1) % b.len()];
+
+            for s in 0..segments {
+                let u_frac0 = s as f32 / segments as f32;
+                let u_frac1 = (s + 1) as f32 / segments as f32;
+
+                let mut get_pt = |mesh: &mut Mesh, u: u32, v: u32, step: usize| -> u32 {
+                    if step == 0 {
+                        return u;
+                    }
+                    if step == segments {
+                        return v;
+                    }
+                    let key = (u, v, step);
+                    if let Some(&idx) = intermediate_map.get(&key) {
+                        return idx;
+                    }
+                    let p_u = mesh.verts[u as usize].vec();
+                    let p_v = mesh.verts[v as usize].vec();
+                    let t = step as f32 / segments as f32;
+                    let pos = p_u.lerp(p_v, t);
+                    let mut new_vert = mesh.verts[u as usize].clone();
+                    new_vert.pos = pos.to_array();
+                    new_vert.selected = true;
+                    let idx = mesh.verts.len() as u32;
+                    mesh.verts.push(new_vert);
+                    intermediate_map.insert(key, idx);
+                    idx
+                };
+
+                let (verts, uv) = match (advance_a, advance_b) {
+                    (true, true) => {
+                        let p0 = get_pt(self, av, bv, s);
+                        let p1 = get_pt(self, a_next, b_next, s);
+                        let p2 = get_pt(self, a_next, b_next, s + 1);
+                        let p3 = get_pt(self, av, bv, s + 1);
+                        (
+                            vec![p0, p1, p2, p3],
+                            vec![
+                                [i as f32 / na as f32, u_frac0],
+                                [(i + 1) as f32 / na as f32, u_frac0],
+                                [(j + 1) as f32 / nb as f32, u_frac1],
+                                [j as f32 / nb as f32, u_frac1],
+                            ],
+                        )
+                    }
+                    (true, false) => {
+                        let p0 = get_pt(self, av, bv, s);
+                        let p1 = get_pt(self, a_next, bv, s);
+                        let p2 = get_pt(self, a_next, bv, s + 1);
+                        let p3 = get_pt(self, av, bv, s + 1);
+                        if p2 == p3 {
+                            (
+                                vec![p0, p1, p2],
+                                vec![
+                                    [i as f32 / na as f32, u_frac0],
+                                    [(i + 1) as f32 / na as f32, u_frac0],
+                                    [j as f32 / nb as f32, u_frac1],
+                                ],
+                            )
+                        } else {
+                            (
+                                vec![p0, p1, p2, p3],
+                                vec![
+                                    [i as f32 / na as f32, u_frac0],
+                                    [(i + 1) as f32 / na as f32, u_frac0],
+                                    [j as f32 / nb as f32, u_frac1],
+                                    [j as f32 / nb as f32, u_frac1],
+                                ],
+                            )
+                        }
+                    }
+                    (false, true) => {
+                        let p0 = get_pt(self, av, bv, s);
+                        let p1 = get_pt(self, av, b_next, s);
+                        let p2 = get_pt(self, av, b_next, s + 1);
+                        let p3 = get_pt(self, av, bv, s + 1);
+                        if p0 == p1 {
+                            (
+                                vec![p0, p2, p3],
+                                vec![
+                                    [i as f32 / na as f32, u_frac0],
+                                    [(j + 1) as f32 / nb as f32, u_frac1],
+                                    [j as f32 / nb as f32, u_frac1],
+                                ],
+                            )
+                        } else {
+                            (
+                                vec![p0, p1, p2, p3],
+                                vec![
+                                    [i as f32 / na as f32, u_frac0],
+                                    [i as f32 / na as f32, u_frac0],
+                                    [(j + 1) as f32 / nb as f32, u_frac1],
+                                    [j as f32 / nb as f32, u_frac1],
+                                ],
+                            )
+                        }
+                    }
+                    _ => return Err("Cannot advance boundary connection".into()),
+                };
+
+                let p0 = self.verts[verts[0] as usize].vec();
+                if (self.verts[verts[1] as usize].vec() - p0)
+                    .cross(self.verts[verts[2] as usize].vec() - p0)
+                    .length_squared()
+                    < 1.0e-14
+                {
+                    return Err("Connection would create a degenerate face".into());
+                }
+                let mut face = Face::with_uv(verts, uv);
+                face.selected = true;
+                face.material_slot = material;
+                faces.push(face);
             }
-            let mut face = Face::with_uv(verts, uv);
-            face.selected = true;
-            face.material_slot = material;
-            faces.push(face);
+
             if advance_a {
                 i += 1;
             }

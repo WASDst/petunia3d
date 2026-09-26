@@ -811,6 +811,26 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "uv.stitch",
+                "Stitch UV Seams",
+                "Weld and align separated UV seams on shared 3D edges",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvStitchCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.relax",
+                "Relax UVs",
+                "Smooth and relax UV coordinates to reduce stretching",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvRelaxCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "paint.bake_reference",
                 "Bake Reference to Texture",
                 "Project UVs and bake visible reference image into the active texture",
@@ -864,7 +884,27 @@ impl CommandDispatcher {
                 CommandCategory::Model,
             )
             .with_docs(DocsTopic::Modeling),
-            ConnectLoopsCmd,
+            ConnectLoopsCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.dissolve",
+                "Dissolve",
+                "Dissolve selected edges, faces, or vertices cleanly",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            DissolveCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.spin",
+                "Spin",
+                "Extrude and spin selected geometry in an arc around axis",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            RevolveCmd::default(),
         );
         d.register_with_meta(
             CommandMetadata::new(
@@ -3539,6 +3579,58 @@ impl Command for UvProjectFromReferenceCmd {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct UvStitchCmd;
+
+impl Command for UvStitchCmd {
+    fn label(&self) -> &'static str {
+        "uv stitch"
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let before = state.project.clone();
+        let Some(mesh) = state.project.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let count = mesh.stitch_uv(&state.session.uv_selected);
+        state.project.undo.checkpoint("uv stitch", &before);
+        state.emit_mesh_changed();
+        state.mark_dirty();
+        state.set_status(format!("Stitched {count} UV seam edge(s)"));
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UvRelaxCmd {
+    pub iterations: usize,
+}
+
+impl Default for UvRelaxCmd {
+    fn default() -> Self {
+        Self { iterations: 5 }
+    }
+}
+
+impl Command for UvRelaxCmd {
+    fn label(&self) -> &'static str {
+        "uv relax"
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let before = state.project.clone();
+        let Some(mesh) = state.project.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let count = mesh.relax_uv(&state.session.uv_selected, self.iterations);
+        state.project.undo.checkpoint("uv relax", &before);
+        state.emit_mesh_changed();
+        state.mark_dirty();
+        state.set_status(format!("Relaxed {count} UV face(s)"));
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct PaintBakeReferenceCmd;
 
 impl Command for PaintBakeReferenceCmd {
@@ -3616,8 +3708,20 @@ impl Command for PaintBakeReferenceCmd {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ConnectLoopsCmd;
+#[derive(Debug, Clone)]
+pub struct ConnectLoopsCmd {
+    pub segments: usize,
+    pub twist: i32,
+}
+
+impl Default for ConnectLoopsCmd {
+    fn default() -> Self {
+        Self {
+            segments: 1,
+            twist: 0,
+        }
+    }
+}
 
 impl Command for ConnectLoopsCmd {
     fn label(&self) -> &'static str {
@@ -3640,9 +3744,12 @@ impl Command for ConnectLoopsCmd {
                 .project
                 .active_mesh_mut()
                 .ok_or(CommandError::NoActiveAsset)?;
-            mesh.connect_selected_edges()
+            mesh.connect_selected_edges_with_options(self.segments, self.twist)
                 .map_err(CommandError::Execution)?;
-            state.set_status("Connected selected boundaries");
+            state.set_status(format!(
+                "Connected selected boundaries ({} segments, {} twist)",
+                self.segments, self.twist
+            ));
             return Ok(());
         }
         let faces: Vec<usize> = state
@@ -3663,9 +3770,47 @@ impl Command for ConnectLoopsCmd {
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        mesh.connect_loops(faces[0], faces[1])
+        mesh.connect_loops_with_options(faces[0], faces[1], self.segments, self.twist)
             .map_err(CommandError::Execution)?;
-        state.set_status("Connected loops");
+        state.set_status(format!(
+            "Connected loops ({} segments, {} twist)",
+            self.segments, self.twist
+        ));
+        Ok(())
+    }
+}
+
+/// Comando para dissolver seleção (arestas, faces ou vértices) sem deixar buracos na malha.
+#[derive(Debug, Clone, Default)]
+pub struct DissolveCmd;
+
+impl Command for DissolveCmd {
+    fn label(&self) -> &'static str {
+        "dissolve"
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+        let has_sel = !mesh.selected_edges.is_empty()
+            || mesh.faces.iter().any(|f| f.selected)
+            || mesh.verts.iter().any(|v| v.selected);
+        if has_sel {
+            Ok(())
+        } else {
+            Err("Select edges, faces or vertices to dissolve")
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let before = state.project.clone();
+        let Some(mesh) = state.project.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.dissolve_selected();
+        state.project.undo.checkpoint("dissolve", &before);
+        state.sync_selection();
+        state.set_status("Dissolved selected geometry");
+        state.emit_mesh_changed();
         Ok(())
     }
 }

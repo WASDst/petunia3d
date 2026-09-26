@@ -607,3 +607,32 @@ fn dragging_floating_card_header_reports_clamped_move() {
     );
     assert!((y - 100.0).abs() < 3.0, "y deve ficar parado, veio {y}");
 }
+
+#[test]
+fn test_tooltip_hover() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+
+    let tab = ElementHandle::find_by_accessible_label(&shell, "Model Workspace")
+        .next()
+        .expect("Model tab");
+    let pos = tab.absolute_position();
+    let size = tab.size();
+    let center_x = pos.x + size.width / 2.0;
+    let center_y = pos.y + size.height / 2.0;
+    println!("Tab pos: {:?}, size: {:?}", pos, size);
+
+    move_pointer(&shell, center_x, center_y);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(1000));
+
+    // Check active popups or tooltip elements
+    let all_elements: Vec<_> = ElementHandle::find_by_element_type_name(&shell, "Text").collect();
+    for elem in &all_elements {
+        if let Some(text) = elem.accessible_label() {
+            println!("Found text: {}", text);
+        }
+    }
+}

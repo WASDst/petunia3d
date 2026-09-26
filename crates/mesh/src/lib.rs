@@ -752,6 +752,18 @@ mod tests {
     }
 
     #[test]
+    fn connect_loops_with_segments_and_twist() {
+        let mut m1 = Mesh::plane(2.0);
+        let mut m2 = Mesh::plane(2.0);
+        m2.translate_selected([0.0, 3.0, 0.0]);
+        m1.join(&m2);
+        let res = m1.connect_loops_with_options(0, 1, 3, 1);
+        assert!(res.is_ok());
+        // Com 3 segmentos em torno de 4 arestas, deve gerar 4 * 3 = 12 faces
+        assert_eq!(m1.faces.len(), 12);
+    }
+
+    #[test]
     fn dissolve_selected_edge_merges_faces() {
         let mut m = Mesh::plane(2.0);
         // Subdivide o plano para ter aresta interna
@@ -769,6 +781,43 @@ mod tests {
         m.selected_edges.insert(internal_edge.unwrap());
         m.dissolve_selected();
         assert_eq!(m.faces.len(), faces_before - 1);
+    }
+
+    #[test]
+    fn dissolve_selected_faces_merges_faces() {
+        let mut m = Mesh::plane(2.0);
+        m.select_all();
+        m.subdivide_selected();
+        assert_eq!(m.faces.len(), 4);
+        // Seleciona duas faces adjacentes
+        m.deselect_all();
+        m.faces[0].selected = true;
+        m.faces[1].selected = true;
+        m.dissolve_selected();
+        // As duas faces devem se fundir em 1, restando 3 faces no plano
+        assert_eq!(m.faces.len(), 3);
+    }
+
+    #[test]
+    fn dissolve_selected_vertex_merges_fan() {
+        let mut m = Mesh::plane(2.0);
+        m.select_all();
+        m.subdivide_selected();
+        assert_eq!(m.faces.len(), 4);
+        // O vértice central tem índice 8 (ou valência 4)
+        let center_vert = (0..m.verts.len()).find(|&v| {
+            m.faces
+                .iter()
+                .filter(|f| f.verts.contains(&(v as u32)))
+                .count()
+                == 4
+        });
+        assert!(center_vert.is_some());
+        m.deselect_all();
+        m.verts[center_vert.unwrap()].selected = true;
+        m.dissolve_selected();
+        // Dissolver o vértice central deve fundir as 4 faces em 1 polígono
+        assert_eq!(m.faces.len(), 1);
     }
 
     #[test]

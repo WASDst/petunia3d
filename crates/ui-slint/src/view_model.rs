@@ -96,6 +96,9 @@ pub struct ShortcutsModel {
     pub model_subdivide: String,
     pub model_merge: String,
     pub model_slice: String,
+    pub model_connect: String,
+    pub model_spin: String,
+    pub model_dissolve: String,
     pub model_delete: String,
     pub select_point: String,
     pub select_edge: String,
@@ -119,10 +122,13 @@ pub struct ShortcutsModel {
     pub paint_fill: String,
     pub paint_line: String,
     pub paint_rectangle: String,
+    pub paint_gradient: String,
     pub uv_select: String,
     pub uv_unwrap: String,
     pub uv_pack: String,
     pub uv_project_ref: String,
+    pub uv_stitch: String,
+    pub uv_relax: String,
 }
 
 impl ShortcutsModel {
@@ -160,6 +166,9 @@ impl ShortcutsModel {
             model_subdivide: fmt("model.subdivide", "Ctrl+1"),
             model_merge: fmt("model.merge", "M, C"),
             model_slice: fmt("model.slice", "Shift+K"),
+            model_connect: fmt("model.connect", "F"),
+            model_spin: fmt("model.spin", "Alt+S"),
+            model_dissolve: fmt("model.dissolve", "Ctrl+X"),
             model_delete: fmt("model.delete", "X"),
             select_point: fmt("model.select_vertex", "1"),
             select_edge: fmt("model.select_edge", "2"),
@@ -183,10 +192,13 @@ impl ShortcutsModel {
             paint_fill: fmt("paint.fill", "G"),
             paint_line: fmt("paint.line", "D"),
             paint_rectangle: fmt("paint.rectangle", "U"),
+            paint_gradient: fmt("paint.gradient", "G"),
             uv_select: fmt("uv.select", "W"),
             uv_unwrap: fmt("uv.unwrap_auto", "U"),
             uv_pack: fmt("uv.pack_islands", "Ctrl+P"),
             uv_project_ref: fmt("uv.project_reference", "Alt+U"),
+            uv_stitch: fmt("uv.stitch", "V"),
+            uv_relax: fmt("uv.relax", "Shift+V"),
         }
     }
 }
@@ -210,6 +222,8 @@ pub struct ShellViewModel {
     pub paint_symmetry_x: bool,
     pub paint_symmetry_y: bool,
     pub paint_symmetry_z: bool,
+    pub paint_target_vertex: bool,
+    pub paint_mask_selection: bool,
     pub status_message: String,
     /// Resumo persistente da seleção para a pill da viewport
     /// ("2 objects selected", "Selected: 3 points · 1 edge", "No selection").
@@ -1011,6 +1025,8 @@ impl ShellViewModel {
             paint_symmetry_x: state.session.tools.paint_symmetry_x,
             paint_symmetry_y: state.session.tools.paint_symmetry_y,
             paint_symmetry_z: state.session.tools.paint_symmetry_z,
+            paint_target_vertex: false,
+            paint_mask_selection: state.session.tools.paint_isolate_selection,
             status_message,
             selection_summary: format_selection_summary(state),
             position: [0.0, 0.0, 0.0],

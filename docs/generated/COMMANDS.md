@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **93**.
+Total de comandos registrados no motor: **97**.
 
 ## Tabela Geral de Comandos
 
@@ -50,6 +50,7 @@ Total de comandos registrados no motor: **93**.
 | `model.bevel` | **Bevel Edges** | `Model` | Sim | Bevel | Bevel selected mesh edges |
 | `model.connect` | **Connect Loops** | `Model` | Sim | Modeling | Connect two faces or boundary loops with quads and triangles |
 | `model.cut` | **Cut** | `Model` | Não | Modeling | Subtract the boolean operand from the active object |
+| `model.dissolve` | **Dissolve** | `Model` | Sim | Modeling | Dissolve selected edges, faces, or vertices cleanly |
 | `model.extrude` | **Extrude** | `Model` | Sim | Extrude | Extrude selected faces along surface normal |
 | `model.extrude_individual` | **Extrude Individual** | `Model` | Sim | Extrude | Extrude selected faces individually |
 | `model.flip_diagonal` | **Flip Diagonal** | `Model` | Sim | Modeling | Flip quad internal diagonal or triangle edge |
@@ -66,6 +67,7 @@ Total de comandos registrados no motor: **93**.
 | `model.revolve` | **Revolve 360** | `Model` | Sim | Modeling | Revolve selected profile 360 degrees around an axis |
 | `model.scale_selection` | **Scale Selection** | `Model` | Sim | Modeling | Scale selected geometry uniformly around its center |
 | `model.separate_selection` | **Separate Selection** | `Model` | Sim | Modeling | Separate selected geometry into a new object |
+| `model.spin` | **Spin** | `Model` | Sim | Modeling | Extrude and spin selected geometry in an arc around axis |
 | `model.subdivide` | **Subdivide** | `Model` | Sim | LoopCut | Subdivide selected geometry |
 | `model.symmetrize` | **Symmetrize** | `Model` | Sim | Modeling | Copy one side to the other across an axis |
 | `model.weld` | **Merge by Distance** | `Model` | Sim | Modeling | Weld duplicate vertices within distance |
@@ -89,6 +91,8 @@ Total de comandos registrados no motor: **93**.
 | `uv.pack_islands` | **Pack UV Islands** | `Tools` | Sim | UvUnwrapping | Pack UV islands into 0..1 without overlaps |
 | `uv.project_reference` | **Project From Reference** | `Tools` | Sim | UvUnwrapping | Project UVs from the active reference image or fallback to camera view |
 | `uv.project_view` | **Project From View** | `Tools` | Sim | UvUnwrapping | Project UVs from the current camera view |
+| `uv.relax` | **Relax UVs** | `Tools` | Sim | UvUnwrapping | Smooth and relax UV coordinates to reduce stretching |
+| `uv.stitch` | **Stitch UV Seams** | `Tools` | Sim | UvUnwrapping | Weld and align separated UV seams on shared 3D edges |
 | `uv.unwrap_auto` | **Auto UV** | `Tools` | Sim | UvUnwrapping | Unwrap the active mesh with the generic UV provider |
 | `view.back` | **View Back** | `View` | Não | Navigation | Align camera to Back orthographic view |
 | `view.bottom` | **View Bottom** | `View` | Não | Navigation | Align camera to Bottom orthographic view |

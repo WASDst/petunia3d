@@ -6616,3 +6616,81 @@ fn parametric_primitive_auto_freeze_on_destructive_modal() {
     assert!(!bridge.state.active_is_parametric());
     assert!(!bridge.view_model().active_asset_is_parametric);
 }
+
+#[test]
+fn test_model_connect_spin_dissolve_commands() {
+    // 1. Dissolve
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        mesh.faces[0].selected = true;
+        mesh.faces[1].selected = true;
+    }
+    assert!(bridge.execute_core_command("model.dissolve").is_ok());
+
+    // 2. Connect
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        let mut m1 = petunia_mesh::Mesh::plane(2.0);
+        let mut m2 = petunia_mesh::Mesh::plane(2.0);
+        m2.translate_selected([0.0, 3.0, 0.0]);
+        m1.join(&m2);
+        m1.faces[0].selected = true;
+        m1.faces[1].selected = true;
+        *mesh = m1;
+    }
+    assert!(bridge.execute_core_command("model.connect").is_ok());
+
+    // 3. Spin
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        mesh.deselect_all();
+        mesh.verts[0].selected = true;
+        mesh.verts[1].selected = true;
+        mesh.selected_edges.insert(petunia_mesh::edge_key(0, 1));
+    }
+    assert!(bridge.execute_core_command("model.spin").is_ok());
+}
+
+#[test]
+fn test_paint_target_vertex_and_mask_intents() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(!bridge.view_model().paint_target_vertex);
+    assert!(!bridge.view_model().paint_mask_selection);
+
+    bridge.apply(UiIntent::SetPaintTargetVertex(true));
+    assert!(bridge.view_model().paint_target_vertex);
+
+    bridge.apply(UiIntent::TogglePaintMaskSelection);
+    assert!(bridge.view_model().paint_mask_selection);
+
+    bridge.apply(UiIntent::SetPaintMaskSelection(false));
+    assert!(!bridge.view_model().paint_mask_selection);
+}
+
+#[test]
+fn test_paint_2d_gradient_tool_flow() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetActiveTool("gradient".to_string()));
+    assert!(bridge.is_shape_tool());
+
+    // 2D stroke: Phase 0 (down) anchors gradient
+    assert!(bridge.paint_2d_stroke(0.1, 0.1, 0));
+    assert!(bridge.shape_anchor.is_some());
+
+    // Phase 1 (move)
+    assert!(bridge.paint_2d_stroke(0.8, 0.8, 1));
+
+    // Phase 2 (up) commits gradient
+    assert!(bridge.paint_2d_stroke(0.8, 0.8, 2));
+    assert!(bridge.shape_anchor.is_none());
+}
+
+#[test]
+fn test_uv_stitch_and_relax_commands() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Uv));
+
+    assert!(bridge.execute_core_command("uv.stitch").is_ok());
+    assert!(bridge.execute_core_command("uv.relax").is_ok());
+}

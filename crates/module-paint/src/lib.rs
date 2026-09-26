@@ -66,6 +66,40 @@ impl PaintModule {
         n
     }
 
+    /// Pinta cores diretamente nos vértices da malha dentro de um raio esférico no espaço 3D (P3D-150).
+    pub fn paint_vertex_color_3d(
+        state: &mut AppState,
+        hit_pos: Vec3,
+        radius_world: f32,
+        strength: f32,
+        color: [f32; 3],
+    ) -> usize {
+        let mut affected = 0;
+        let Some(mesh) = state.project.active_mesh_mut() else {
+            return 0;
+        };
+        let r = radius_world.max(0.01);
+        let r_sq = r * r;
+        for v in &mut mesh.verts {
+            let p = v.vec();
+            let d_sq = (p - hit_pos).length_squared();
+            if d_sq <= r_sq {
+                let dist = d_sq.sqrt();
+                let t = (1.0 - (dist / r)).max(0.0);
+                let factor = (t * t * strength).clamp(0.0, 1.0);
+                for (dst, &src) in v.color.iter_mut().zip(color.iter()) {
+                    *dst = *dst * (1.0 - factor) + src * factor;
+                }
+                affected += 1;
+            }
+        }
+        if affected > 0 {
+            state.emit_mesh_changed();
+            state.mark_dirty();
+        }
+        affected
+    }
+
     /// Eyedropper: copia a cor do vértice para o pincel.
     pub fn eyedrop_vertex(state: &mut AppState, vi: usize) {
         if let Some(color) = state
@@ -738,6 +772,46 @@ impl PaintModule {
             cv.fill(color);
         }
 
+        Self::composite_active(state);
+    }
+
+    /// Aplica um gradiente linear na camada ativa de (x0, y0) até (x1, y1) entre duas cores RGBA.
+    pub fn canvas_gradient_linear(
+        state: &mut AppState,
+        x0: u32,
+        y0: u32,
+        x1: u32,
+        y1: u32,
+        color_start: [u8; 4],
+        color_end: [u8; 4],
+    ) {
+        Self::ensure_stack(state);
+        let active_idx = state.project.active;
+        if let Some(o) = state.project.assets.get_mut(active_idx)
+            && let Some(stack) = o.paint_stack.as_mut()
+            && let Some(layer) = stack.active_mut()
+            && let Some(cv) = layer.canvas_mut()
+        {
+            let dx = x1 as f32 - x0 as f32;
+            let dy = y1 as f32 - y0 as f32;
+            let len_sq = dx * dx + dy * dy;
+
+            for y in 0..cv.h {
+                for x in 0..cv.w {
+                    let t = if len_sq < 1.0 {
+                        0.0
+                    } else {
+                        let proj = (x as f32 - x0 as f32) * dx + (y as f32 - y0 as f32) * dy;
+                        (proj / len_sq).clamp(0.0, 1.0)
+                    };
+                    let r = (color_start[0] as f32 * (1.0 - t) + color_end[0] as f32 * t) as u8;
+                    let g = (color_start[1] as f32 * (1.0 - t) + color_end[1] as f32 * t) as u8;
+                    let b = (color_start[2] as f32 * (1.0 - t) + color_end[2] as f32 * t) as u8;
+                    let a = (color_start[3] as f32 * (1.0 - t) + color_end[3] as f32 * t) as u8;
+                    cv.set(x, y, [r, g, b, a]);
+                }
+            }
+        }
         Self::composite_active(state);
     }
 
@@ -1972,5 +2046,47 @@ mod tests {
         assert_eq!(canvas.get(5, 10), Some([0, 255, 0, 255]));
         // Simétrico no eixo X em 32x32: 31 - 5 = 26
         assert_eq!(canvas.get(26, 10), Some([0, 255, 0, 255]));
+    }
+
+    #[test]
+    fn test_paint_vertex_color_3d() {
+        let mut state = AppState::new("en");
+        let active = state.project.active;
+        state.project.assets[active].mesh = petunia_mesh::Mesh::cube(2.0);
+        let hit = glam::Vec3::new(1.0, 1.0, 1.0);
+        let count = PaintModule::paint_vertex_color_3d(&mut state, hit, 1.5, 1.0, [1.0, 0.0, 0.0]);
+        assert!(count > 0);
+        let mesh = &state.project.assets[active].mesh;
+        let v_corner = mesh
+            .verts
+            .iter()
+            .find(|v| {
+                (v.pos[0] - 1.0).abs() < 1e-3
+                    && (v.pos[1] - 1.0).abs() < 1e-3
+                    && (v.pos[2] - 1.0).abs() < 1e-3
+            })
+            .unwrap();
+        assert!((v_corner.color[0] - 1.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_canvas_gradient_linear() {
+        let mut state = AppState::new("en");
+        let active = state.project.active;
+        state.project.assets[active].texture = Some(Canvas::new(16, 16, [0, 0, 0, 255]));
+        PaintModule::canvas_gradient_linear(
+            &mut state,
+            0,
+            0,
+            15,
+            0,
+            [255, 0, 0, 255],
+            [0, 0, 255, 255],
+        );
+        let canvas = state.project.assets[active].texture.as_ref().unwrap();
+        let left = canvas.get(0, 0).unwrap();
+        let right = canvas.get(15, 0).unwrap();
+        assert_eq!(left, [255, 0, 0, 255]);
+        assert_eq!(right, [0, 0, 255, 255]);
     }
 }

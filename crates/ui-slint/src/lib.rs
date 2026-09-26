@@ -266,6 +266,9 @@ pub enum UiIntent {
     SetPaintSymmetryX(bool),
     SetPaintSymmetryY(bool),
     SetPaintSymmetryZ(bool),
+    SetPaintTargetVertex(bool),
+    TogglePaintMaskSelection,
+    SetPaintMaskSelection(bool),
     SetActiveTool(String),
     OpenCommandSearch,
     OpenSettings,
@@ -538,6 +541,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub paint_pixel_grid: bool,
     pub paint_canvas_zoom: i32,
     pub paint_2d_last: Option<(u32, u32)>,
+    pub paint_target_vertex: bool,
     /// Sessão de manipulação interativa de decalque 3D: (origem_x, origem_y, center_uv_inicial, scale_uv_inicial, rot_deg_inicial).
     pub decal_drag_initial: Option<DecalDragInitial>,
     /// Runtime dock/float/pin layouts of the six Inspector sections.
@@ -725,6 +729,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             paint_pixel_grid: true,
             paint_canvas_zoom: 1,
             paint_2d_last: None,
+            paint_target_vertex: false,
             decal_drag_initial: None,
             section_layouts: section_layout::default_section_layouts(),
             preferences: petunia_config::UserPreferences::default(),
@@ -990,6 +995,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::SetPaintSymmetryZ(val) => {
                 self.state.session.tools.paint_symmetry_z = val;
+            }
+            UiIntent::SetPaintTargetVertex(val) => {
+                self.paint_target_vertex = val;
+            }
+            UiIntent::TogglePaintMaskSelection => {
+                self.state.session.tools.paint_isolate_selection =
+                    !self.state.session.tools.paint_isolate_selection;
+            }
+            UiIntent::SetPaintMaskSelection(val) => {
+                self.state.session.tools.paint_isolate_selection = val;
             }
             UiIntent::SetActiveTool(tool) => {
                 if self.state.session.tools.active_tool == "draw_profile"
@@ -3735,10 +3750,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         matches!(
             petunia_core::brush_type_from_kind(self.state.session.tools.paint_brush_kind),
             petunia_core::BrushType::Line | petunia_core::BrushType::Rectangle
-        )
+        ) || self.state.session.tools.active_tool == "gradient"
     }
 
-    /// Inicia uma forma (Line/Rectangle) no pixel do canvas sob o cursor.
+    /// Inicia uma forma (Line/Rectangle/Gradient) no pixel do canvas sob o cursor.
     pub fn begin_paint_shape_at(&mut self, x: f32, y: f32) -> bool {
         if self.state.workspace != Workspace::Paint {
             return false;
@@ -3766,6 +3781,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .set_status("Shape: release point is off the surface, discarded");
             return false;
         };
+        if self.state.session.tools.active_tool == "gradient" {
+            let color_start = [
+                (self.state.paint_color[0] * 255.0).clamp(0.0, 255.0) as u8,
+                (self.state.paint_color[1] * 255.0).clamp(0.0, 255.0) as u8,
+                (self.state.paint_color[2] * 255.0).clamp(0.0, 255.0) as u8,
+                255,
+            ];
+            let color_end = [255, 255, 255, 0];
+            self.state.checkpoint("paint gradient");
+            petunia_module_paint::PaintModule::canvas_gradient_linear(
+                &mut self.state,
+                x0,
+                y0,
+                x1,
+                y1,
+                color_start,
+                color_end,
+            );
+            self.state.emit_mesh_changed();
+            self.state.mark_dirty();
+            self.state.set_status("Gradient committed");
+            return true;
+        }
         let brush = petunia_core::brush_type_from_kind(self.state.session.tools.paint_brush_kind);
         let color = [
             (self.state.paint_color[0] * 255.0).clamp(0.0, 255.0) as u8,
@@ -3958,6 +3996,51 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         let px = ((norm_x * width as f32).floor() as i32).clamp(0, width as i32 - 1) as u32;
         let py = ((norm_y * height as f32).floor() as i32).clamp(0, height as i32 - 1) as u32;
+
+        let tool = self.state.session.tools.active_tool.clone();
+        if tool == "gradient" {
+            match phase {
+                0 => {
+                    self.shape_anchor = Some((px, py));
+                    self.state
+                        .set_status("Gradient: drag to set direction and length");
+                    return true;
+                }
+                1 => {
+                    return true;
+                }
+                2 => {
+                    if let Some((x0, y0)) = self.shape_anchor.take() {
+                        let color_start = [
+                            (self.state.paint_color[0] * 255.0).clamp(0.0, 255.0) as u8,
+                            (self.state.paint_color[1] * 255.0).clamp(0.0, 255.0) as u8,
+                            (self.state.paint_color[2] * 255.0).clamp(0.0, 255.0) as u8,
+                            255,
+                        ];
+                        let color_end = [255, 255, 255, 0];
+                        self.state.checkpoint("paint gradient");
+                        petunia_module_paint::PaintModule::canvas_gradient_linear(
+                            &mut self.state,
+                            x0,
+                            y0,
+                            px,
+                            py,
+                            color_start,
+                            color_end,
+                        );
+                        self.state.emit_mesh_changed();
+                        self.state.mark_dirty();
+                        self.state.set_status("Gradient applied");
+                        return true;
+                    }
+                    return false;
+                }
+                _ => {
+                    self.shape_anchor = None;
+                    return false;
+                }
+            }
+        }
 
         match phase {
             0 => {
@@ -6672,18 +6755,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "pixel" => petunia_core::BrushType::Pixel,
             _ => petunia_core::BrushType::Soft,
         };
-        let radius = (self.state.session.tools.paint_radius * 8.0).max(1.0) as u32;
-        let strength = self.state.session.tools.paint_strength;
-        let isolate = self.state.session.tools.paint_isolate_selection;
-        petunia_module_paint::PaintModule::paint_mesh_3d(
-            &mut self.state,
-            face,
-            hit,
-            brush,
-            radius,
-            strength,
-            isolate,
-        );
+        if self.paint_target_vertex {
+            let radius = (self.state.session.tools.paint_radius * 0.5).max(0.01);
+            let strength = self.state.session.tools.paint_strength;
+            let color = self.state.paint_color;
+            petunia_module_paint::PaintModule::paint_vertex_color_3d(
+                &mut self.state,
+                hit,
+                radius,
+                strength,
+                color,
+            );
+        } else {
+            let radius = (self.state.session.tools.paint_radius * 8.0).max(1.0) as u32;
+            let strength = self.state.session.tools.paint_strength;
+            let isolate = self.state.session.tools.paint_isolate_selection;
+            petunia_module_paint::PaintModule::paint_mesh_3d(
+                &mut self.state,
+                face,
+                hit,
+                brush,
+                radius,
+                strength,
+                isolate,
+            );
+        }
     }
 
     pub fn select_viewport(&mut self, normalized_x: f32, normalized_y: f32, extend: bool) {
@@ -6747,6 +6843,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.pick_paint_color_at(
                         normalized_x * self.viewport_size[0],
                         normalized_y * self.viewport_size[1],
+                    );
+                } else if self.paint_target_vertex {
+                    let radius = (self.state.session.tools.paint_radius * 0.5).max(0.01);
+                    let strength = self.state.session.tools.paint_strength;
+                    let color = self.state.paint_color;
+                    petunia_module_paint::PaintModule::paint_vertex_color_3d(
+                        &mut self.state,
+                        hit,
+                        radius,
+                        strength,
+                        color,
                     );
                 } else {
                     let radius = (self.state.session.tools.paint_radius * 8.0).max(1.0) as u32;
@@ -7069,6 +7176,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         match id {
             "uv.unwrap" => self.state.dispatch_command("uv.unwrap_auto"),
             "uv.pack_islands" => self.state.dispatch_command("uv.pack_islands"),
+            "uv.stitch" => {
+                let res = self.state.dispatch_command("uv.stitch");
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                res
+            }
+            "uv.relax" => {
+                let res = self.state.dispatch_command("uv.relax");
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                res
+            }
+            "model.connect" => {
+                let res = self.state.dispatch_command("model.connect");
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                res
+            }
+            "model.spin" => {
+                let res = self.state.dispatch_command("model.spin");
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                res
+            }
+            "model.dissolve" => {
+                let res = self.state.dispatch_command("model.dissolve");
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                res
+            }
             "uv.equalize_texel_density" => {
                 self.uv_equalize_texel_density();
                 Ok(())
@@ -7764,6 +7901,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn view_model(&self) -> ShellViewModel {
         let mut vm = ShellViewModel::from_state(&self.state);
+        vm.paint_target_vertex = self.paint_target_vertex;
+        vm.paint_mask_selection = self.state.session.tools.paint_isolate_selection;
         vm.position = [
             self.position[0].value(),
             self.position[1].value(),

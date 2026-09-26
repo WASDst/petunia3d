@@ -247,6 +247,9 @@ impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
             model_subdivide: s.model_subdivide.as_str().into(),
             model_merge: s.model_merge.as_str().into(),
             model_slice: s.model_slice.as_str().into(),
+            model_connect: s.model_connect.as_str().into(),
+            model_spin: s.model_spin.as_str().into(),
+            model_dissolve: s.model_dissolve.as_str().into(),
             model_delete: s.model_delete.as_str().into(),
             select_point: s.select_point.as_str().into(),
             select_edge: s.select_edge.as_str().into(),
@@ -270,10 +273,13 @@ impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
             paint_fill: s.paint_fill.as_str().into(),
             paint_line: s.paint_line.as_str().into(),
             paint_rectangle: s.paint_rectangle.as_str().into(),
+            paint_gradient: s.paint_gradient.as_str().into(),
             uv_select: s.uv_select.as_str().into(),
             uv_unwrap: s.uv_unwrap.as_str().into(),
             uv_pack: s.uv_pack.as_str().into(),
             uv_project_ref: s.uv_project_ref.as_str().into(),
+            uv_stitch: s.uv_stitch.as_str().into(),
+            uv_relax: s.uv_relax.as_str().into(),
         }
     }
 }
@@ -336,6 +342,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_paint_symmetry_x(vm.paint_symmetry_x);
     window.set_paint_symmetry_y(vm.paint_symmetry_y);
     window.set_paint_symmetry_z(vm.paint_symmetry_z);
+    window.set_paint_target_vertex(vm.paint_target_vertex);
+    window.set_paint_mask_selection(vm.paint_mask_selection);
 
     window.set_pos_x(vm.position[0]);
     window.set_pos_y(vm.position[1]);
@@ -3691,6 +3699,30 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_symmetry_z_toggled(move || {
         if let Ok(mut bridge) = sym_z_bridge.lock() {
             bridge.apply(UiIntent::TogglePaintSymmetryZ);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let target_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_target_vertex_changed(move |val| {
+        if let Ok(mut bridge) = target_bridge.lock() {
+            bridge.apply(UiIntent::SetPaintTargetVertex(val));
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let mask_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_mask_selection_toggled(move || {
+        if let Ok(mut bridge) = mask_bridge.lock() {
+            bridge.apply(UiIntent::TogglePaintMaskSelection);
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

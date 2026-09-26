@@ -123,6 +123,107 @@ impl Mesh {
         true
     }
 
+    /// Costura (stitch / weld) as arestas de costura (seams) no espaço UV, unificando as coordenadas
+    /// UV das faces adjacentes nas arestas compartilhadas da malha 3D.
+    pub fn stitch_uv(&mut self, faces_filter: &HashSet<usize>) -> usize {
+        let all = faces_filter.is_empty();
+        let mut stitched = 0;
+        let edges = self.edges_unique();
+
+        for (u, v) in edges {
+            let adj = self.edge_faces(u, v);
+            if adj.len() == 2 {
+                let (f1_idx, f2_idx) = (adj[0], adj[1]);
+                if (all || faces_filter.contains(&f1_idx))
+                    && (all || faces_filter.contains(&f2_idx))
+                {
+                    let f1 = &self.faces[f1_idx];
+                    let f2 = &self.faces[f2_idx];
+                    let p1_u = f1.verts.iter().position(|&x| x == u);
+                    let p1_v = f1.verts.iter().position(|&x| x == v);
+                    let p2_u = f2.verts.iter().position(|&x| x == u);
+                    let p2_v = f2.verts.iter().position(|&x| x == v);
+
+                    if let (Some(i1_u), Some(i1_v), Some(i2_u), Some(i2_v)) =
+                        (p1_u, p1_v, p2_u, p2_v)
+                        && i1_u < f1.uv.len()
+                        && i1_v < f1.uv.len()
+                        && i2_u < f2.uv.len()
+                        && i2_v < f2.uv.len()
+                    {
+                        let uv1_u = f1.uv[i1_u];
+                        let uv1_v = f1.uv[i1_v];
+                        let uv2_u = f2.uv[i2_u];
+                        let uv2_v = f2.uv[i2_v];
+
+                        let diff_u = (uv1_u[0] - uv2_u[0]).abs() + (uv1_u[1] - uv2_u[1]).abs();
+                        let diff_v = (uv1_v[0] - uv2_v[0]).abs() + (uv1_v[1] - uv2_v[1]).abs();
+
+                        if diff_u > 1e-4 || diff_v > 1e-4 {
+                            let mid_u = [(uv1_u[0] + uv2_u[0]) * 0.5, (uv1_u[1] + uv2_u[1]) * 0.5];
+                            let mid_v = [(uv1_v[0] + uv2_v[0]) * 0.5, (uv1_v[1] + uv2_v[1]) * 0.5];
+
+                            if !self.uv_pinned.contains(&(f1_idx, i1_u)) {
+                                self.faces[f1_idx].uv[i1_u] = mid_u;
+                            }
+                            if !self.uv_pinned.contains(&(f2_idx, i2_u)) {
+                                self.faces[f2_idx].uv[i2_u] = mid_u;
+                            }
+                            if !self.uv_pinned.contains(&(f1_idx, i1_v)) {
+                                self.faces[f1_idx].uv[i1_v] = mid_v;
+                            }
+                            if !self.uv_pinned.contains(&(f2_idx, i2_v)) {
+                                self.faces[f2_idx].uv[i2_v] = mid_v;
+                            }
+                            self.uv_seams.remove(&edge_key(u, v));
+                            stitched += 1;
+                        }
+                    }
+                }
+            }
+        }
+        stitched
+    }
+
+    /// Suavização e relaxamento iterativo (Laplacian smoothing) das coordenadas UV não fixadas
+    /// para minimizar distorção e estiramento de texels.
+    pub fn relax_uv(&mut self, faces_filter: &HashSet<usize>, iterations: usize) -> usize {
+        let all = faces_filter.is_empty();
+        let iters = iterations.clamp(1, 20);
+        let mut relaxed = 0;
+
+        for _ in 0..iters {
+            let mut new_uvs: Vec<(usize, usize, [f32; 2])> = Vec::new();
+
+            for (fi, face) in self.faces.iter().enumerate() {
+                if all || faces_filter.contains(&fi) {
+                    let m = face.uv.len();
+                    if m >= 3 {
+                        for c in 0..m {
+                            if !self.uv_pinned.contains(&(fi, c)) {
+                                let prev = face.uv[(c + m - 1) % m];
+                                let next = face.uv[(c + 1) % m];
+                                let curr = face.uv[c];
+                                let target = [(prev[0] + next[0]) * 0.5, (prev[1] + next[1]) * 0.5];
+                                let smoothed = [
+                                    curr[0] * 0.5 + target[0] * 0.5,
+                                    curr[1] * 0.5 + target[1] * 0.5,
+                                ];
+                                new_uvs.push((fi, c, smoothed));
+                            }
+                        }
+                        relaxed += 1;
+                    }
+                }
+            }
+
+            for (fi, c, uv) in new_uvs {
+                self.faces[fi].uv[c] = uv;
+            }
+        }
+        relaxed
+    }
+
     /// Faces sharing a non-seam UV edge form an island.
     pub fn uv_islands(&self) -> Vec<UvIsland> {
         let mut adj: HashMap<usize, Vec<usize>> = HashMap::new();
@@ -515,5 +616,25 @@ mod tests {
 
         m.project_planar();
         assert_eq!(m.faces[0].uv[0], [0.42, 0.42]);
+    }
+
+    #[test]
+    fn test_uv_stitch_welds_seam_edge() {
+        let mut m = Mesh::cube(2.0);
+        m.project_cube();
+        // Separamos artificialmente o UV de uma face adjacente
+        m.faces[1].uv[0] = [0.99, 0.99];
+        let filter = HashSet::new();
+        let stitched = m.stitch_uv(&filter);
+        assert!(stitched > 0);
+    }
+
+    #[test]
+    fn test_uv_relax_smooths_corners() {
+        let mut m = Mesh::cube(2.0);
+        m.project_cube();
+        let filter = HashSet::new();
+        let relaxed = m.relax_uv(&filter, 5);
+        assert_eq!(relaxed, m.faces.len() * 5);
     }
 }

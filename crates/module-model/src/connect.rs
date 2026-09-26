@@ -40,7 +40,7 @@ impl ConnectTool {
         };
 
         if sel_faces.len() == 2 {
-            if let Err(err) = state.dispatch(&petunia_core::ConnectLoopsCmd) {
+            if let Err(err) = state.dispatch(&petunia_core::ConnectLoopsCmd::default()) {
                 state.set_status(format!("{}: {err}", state.t("status.connect_err")));
             }
         } else {

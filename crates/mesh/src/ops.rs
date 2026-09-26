@@ -1692,10 +1692,46 @@ impl Mesh {
         }
     }
 
-    /// Dissolve elementos selecionados (arestas compartilhadas ou vértices redundantes)
+    /// Dissolve elementos selecionados (arestas compartilhadas, faces adjacentes ou vértices redundantes)
     /// sem deixar buracos na geometria.
     pub fn dissolve_selected(&mut self) {
-        // 1. Dissolve iterativo de arestas selecionadas compartilhadas por exatamente 2 faces
+        // 1. Se não houver arestas selecionadas explicitamente, checa faces selecionadas
+        if self.selected_edges.is_empty() {
+            let sel_faces: Vec<usize> = self
+                .faces
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| f.selected)
+                .map(|(i, _)| i)
+                .collect();
+
+            if sel_faces.len() >= 2 {
+                for &(a, b) in &self.edges_unique() {
+                    let adj = self.edge_faces(a, b);
+                    if adj.len() == 2 && sel_faces.contains(&adj[0]) && sel_faces.contains(&adj[1])
+                    {
+                        self.selected_edges.insert((a.min(b), a.max(b)));
+                    }
+                }
+            }
+        }
+
+        // 2. Se ainda não houver arestas, verifica se há vértices selecionados
+        if self.selected_edges.is_empty() {
+            let sel_verts: Vec<u32> = self
+                .verts
+                .iter()
+                .enumerate()
+                .filter(|(_, v)| v.selected)
+                .map(|(i, _)| i as u32)
+                .collect();
+            if !sel_verts.is_empty() {
+                self.dissolve_vertices(&sel_verts);
+                return;
+            }
+        }
+
+        // 3. Dissolve iterativo de arestas selecionadas compartilhadas por exatamente 2 faces
         loop {
             let mut dissolved_any = false;
             let edges_to_dissolve: Vec<(u32, u32)> = self.selected_edges.iter().copied().collect();
@@ -1783,6 +1819,107 @@ impl Mesh {
         }
         self.remove_isolated_vertices();
         self.selected_edges.clear();
+    }
+
+    /// Dissolve um conjunto de vértices:
+    /// - Vértices com valência 2 em contorno de polígonos têm as duas arestas unificadas.
+    /// - Vértices internos cercados por um leque fechado de faces têm o leque fundido em um polígono.
+    pub fn dissolve_vertices(&mut self, verts_to_dissolve: &[u32]) {
+        for &v in verts_to_dissolve {
+            if v as usize >= self.verts.len() {
+                continue;
+            }
+            let incident_face_indices: Vec<usize> = self
+                .faces
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| f.verts.contains(&v))
+                .map(|(i, _)| i)
+                .collect();
+
+            if incident_face_indices.is_empty() {
+                continue;
+            }
+
+            let mut neighbors = std::collections::HashSet::new();
+            for &fi in &incident_face_indices {
+                let f = &self.faces[fi];
+                if let Some(pos) = f.verts.iter().position(|&x| x == v) {
+                    let prev = f.verts[(pos + f.verts.len() - 1) % f.verts.len()];
+                    let next = f.verts[(pos + 1) % f.verts.len()];
+                    neighbors.insert(prev);
+                    neighbors.insert(next);
+                }
+            }
+
+            if neighbors.len() == 2 {
+                for &fi in &incident_face_indices {
+                    let f = &mut self.faces[fi];
+                    if let Some(pos) = f.verts.iter().position(|&x| x == v) {
+                        f.verts.remove(pos);
+                        if pos < f.uv.len() {
+                            f.uv.remove(pos);
+                        }
+                    }
+                }
+                self.faces.retain(|f| f.verts.len() >= 3);
+            } else if incident_face_indices.len() >= 3 {
+                let mut outer_edges = Vec::new();
+                for &fi in &incident_face_indices {
+                    let f = &self.faces[fi];
+                    let n = f.verts.len();
+                    for i in 0..n {
+                        let e_a = f.verts[i];
+                        let e_b = f.verts[(i + 1) % n];
+                        if e_a != v && e_b != v {
+                            outer_edges.push((e_a, e_b, f.uv[i], f.uv[(i + 1) % n]));
+                        }
+                    }
+                }
+
+                if outer_edges.len() >= 3 {
+                    let mut cycle_verts = Vec::new();
+                    let mut cycle_uvs = Vec::new();
+                    let mut current = outer_edges[0].0;
+                    let mut visited_edges = std::collections::HashSet::new();
+
+                    let mut valid_cycle = true;
+                    for _ in 0..outer_edges.len() {
+                        let mut found = false;
+                        for (idx, &(e_a, e_b, uv_a, _)) in outer_edges.iter().enumerate() {
+                            if !visited_edges.contains(&idx) && e_a == current {
+                                cycle_verts.push(e_a);
+                                cycle_uvs.push(uv_a);
+                                visited_edges.insert(idx);
+                                current = e_b;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if !found {
+                            valid_cycle = false;
+                            break;
+                        }
+                    }
+
+                    if valid_cycle && current == cycle_verts[0] && cycle_verts.len() >= 3 {
+                        let first_fi = incident_face_indices[0];
+                        let mat = self.faces[first_fi].material_slot;
+                        let mut new_face = Face::with_uv(cycle_verts, cycle_uvs);
+                        new_face.material_slot = mat;
+                        new_face.selected = true;
+
+                        let mut sorted_indices = incident_face_indices.clone();
+                        sorted_indices.sort_unstable_by(|a, b| b.cmp(a));
+                        for fi in sorted_indices {
+                            self.faces.remove(fi);
+                        }
+                        self.push_face(new_face);
+                    }
+                }
+            }
+        }
+        self.remove_isolated_vertices();
     }
 
     /// Fatiamento planar (Slice Plane): bissecciona a geometria ao longo de um plano definido por
