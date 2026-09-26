@@ -5998,6 +5998,40 @@ fn test_slice_15_deg_snap_and_trim_arrow() {
 }
 
 #[test]
+fn test_slice_persistent_cut_and_multi_drag_and_shortcut_t_and_confirm() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    bridge.apply(UiIntent::SetActiveTool("slice".to_string()));
+
+    // 1. Primeiro arrasto
+    assert!(bridge.begin_slice(400.0, 300.0));
+    assert!(bridge.update_slice(400.0, 380.0));
+    assert_eq!(bridge.state.session.tools.active_tool, "slice");
+    assert!(bridge.slice_anchor.is_some());
+    assert_eq!(bridge.state.project.undo.depth(), (0, 0));
+
+    // 2. Ajuste/recorreção antes de confirmar: segundo arrasto sem ter feito commit
+    assert!(bridge.begin_slice(400.0, 300.0));
+    assert!(bridge.update_slice(450.0, 300.0));
+    assert_eq!(bridge.state.session.tools.active_tool, "slice");
+    assert!(bridge.slice_anchor.is_some());
+    assert_eq!(bridge.state.project.undo.depth(), (0, 0));
+
+    // 3. Tecla rápida 'T' alterna entre Split e Trim
+    assert!(!bridge.slice_trim);
+    assert!(bridge.route_shortcut("t", false, false, false));
+    assert!(bridge.slice_trim);
+    assert!(bridge.route_shortcut("T", false, false, false));
+    assert!(!bridge.slice_trim);
+
+    // 4. Enter confirma o corte
+    assert!(bridge.route_shortcut("Enter", false, false, false));
+    assert!(bridge.slice_anchor.is_none());
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+}
+
+#[test]
 fn test_uv_seam_shortcut_u() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     // Seleciona domínio de aresta e uma aresta

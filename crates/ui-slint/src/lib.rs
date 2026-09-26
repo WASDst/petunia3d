@@ -5626,15 +5626,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Abre o plano de corte (Slice) ancorado no ponto pressionado.
     pub fn begin_slice(&mut self, x: f32, y: f32) -> bool {
-        let Some(mesh) = self.state.project.active_mesh().cloned() else {
-            self.state.set_status("Slice: no active mesh");
-            return false;
+        let original_mesh = if let Some(session) = &self.state.session.tools.cut_session {
+            if let Some(active) = self.state.project.active_mesh_mut() {
+                *active = session.source.clone();
+            }
+            session.source.clone()
+        } else {
+            let Some(mesh) = self.state.project.active_mesh().cloned() else {
+                self.state.set_status("Slice: no active mesh");
+                return false;
+            };
+            mesh
         };
-        self.state.session.tools.cut_session = Some(petunia_core::CutSession::new(mesh));
+        let mut session = petunia_core::CutSession::new(original_mesh);
+        session.fill_cap = self.slice_trim;
+        self.state.session.tools.cut_session = Some(session);
         self.state.session.tools.active_tool = "slice".to_string();
         self.slice_anchor = Some([x, y]);
-        self.state
-            .set_status("Slice: drag to orient the plane, release to cut");
+        self.pointer_position = [x, y];
+        self.state.set_status(
+            "Slice: arraste para cortar · T: Trim/Split · Enter para confirmar · Esc para cancelar",
+        );
         true
     }
 
@@ -5731,6 +5743,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let Some(session) = self.state.session.tools.cut_session.take() else {
             self.slice_anchor = None;
+            if self.state.session.tools.active_tool == "slice" {
+                self.state.session.tools.active_tool = "select".to_string();
+                self.state.set_status("Slice cancelled");
+                return true;
+            }
             return false;
         };
         self.slice_anchor = None;
@@ -5748,6 +5765,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.slice_trim = trim;
         if let Some(session) = self.state.session.tools.cut_session.as_mut() {
             session.fill_cap = trim;
+        }
+        if let Some(anchor) = self.slice_anchor {
+            let viewport = petunia_core::LogicalRect::from_min_max(
+                [0.0, 0.0],
+                [self.viewport_size[0], self.viewport_size[1]],
+            );
+            if let Some(session) = self.state.session.tools.cut_session.as_ref()
+                && let Some(sliced) = session.compute_slice(
+                    &self.state.session.camera,
+                    anchor,
+                    self.pointer_position,
+                    viewport,
+                )
+            {
+                if let Some(active) = self.state.project.active_mesh_mut() {
+                    *active = sliced;
+                }
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+            }
         }
     }
 
@@ -7287,6 +7324,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return self.toggle_micro_inspector();
         }
+        if self.state.session.tools.active_tool == "slice"
+            && text.eq_ignore_ascii_case("t")
+            && !ctrl
+            && !alt
+        {
+            let next_trim = !self.slice_trim;
+            self.set_slice_trim(next_trim);
+            self.state.set_status(if next_trim {
+                "Slice: Modo Trim (Remove o lado cortado) · Enter para confirmar"
+            } else {
+                "Slice: Modo Split (Mantém ambos os lados) · Enter para confirmar"
+            });
+            return true;
+        }
         if text.eq_ignore_ascii_case("u")
             && !ctrl
             && !alt
@@ -7679,7 +7730,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "loop_cut" {
             return self.place_loop_cut_hover();
         }
-        if self.slice_anchor.is_some() {
+        if self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some() {
             return self.commit_slice();
         }
         if self.state.session.tools.active_tool == "cut" {
@@ -8663,14 +8714,32 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "scale" => self.state.t_id(petunia_config::text_id::TOOLS_SCALE),
                 "rotate" => self.state.t_id(petunia_config::text_id::TOOLS_ROTATE),
                 "move" => self.state.t_id(petunia_config::text_id::TOOLS_TRANSFORM),
-                "inset" => self
-                    .state
-                    .t_id(petunia_config::text_id::UI_ACTION_SUBDIVIDE),
+                "slice" => self.state.t_id(petunia_config::text_id::TOOLS_SLICE),
+                "knife" => self.state.t("tools.knife"),
+                "extrude" => self.state.t("tools.extrude"),
+                "extrude_individual" => self.state.t("tools.extrude_individual"),
+                "inset" => self.state.t("tools.inset"),
                 "bevel" => self.state.t("tools.bevel"),
                 "push_pull" => self.state.t_id(petunia_config::text_id::TOOLS_PUSH_PULL),
-                _ => self
-                    .state
-                    .t_id(petunia_config::text_id::UI_NO_TOOL_PARAMETERS),
+                "cursor" | "cursor_3d" => "3D Cursor".to_string(),
+                "measure" => self.state.t("tools.measure"),
+                other => {
+                    let key = format!("tools.{other}");
+                    let val = self.state.t(&key);
+                    if val != key {
+                        val
+                    } else if !other.is_empty() {
+                        let mut chars = other.chars();
+                        match chars.next() {
+                            Some(first) => {
+                                first.to_uppercase().collect::<String>() + chars.as_str()
+                            }
+                            None => "Tool Options".to_string(),
+                        }
+                    } else {
+                        "Tool Options".to_string()
+                    }
+                }
             }
         };
         vm.tool_options_hint = if self.tool_modal.is_some() {

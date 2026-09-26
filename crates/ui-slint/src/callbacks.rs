@@ -1676,17 +1676,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_viewport_transform_end(move || {
         if let Ok(mut bridge) = transform_end_bridge.lock() {
-            if bridge.commit_slice() {
-                let vm = bridge.view_model();
-                let new_frame = bridge.render_viewport();
-                if let Some(window) = window_weak.upgrade() {
-                    sync_window_properties(&window, &vm);
-                    if let Some(frame) = new_frame {
-                        window.set_viewport_image(frame);
-                    }
-                }
-                return;
-            }
             bridge.end_viewport_transform();
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3335,10 +3324,48 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_slice_trim_set(move |trim| {
         if let Ok(mut bridge) = slice_trim_bridge.lock() {
-            bridge.slice_trim = trim;
+            bridge.set_slice_trim(trim);
             let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let slice_confirm_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_slice_confirm(move || {
+        if let Ok(mut bridge) = slice_confirm_bridge.lock()
+            && bridge.commit_slice()
+        {
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let slice_cancel_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_slice_cancel(move || {
+        if let Ok(mut bridge) = slice_cancel_bridge.lock()
+            && bridge.cancel_slice()
+        {
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });

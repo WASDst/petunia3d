@@ -663,7 +663,7 @@ component ToolCard inherits Rectangle {
     in-out property <bool> collapsed: false;
     callback collapse-toggled;
 
-    width: 250px;
+    width: 264px;
     height: card-layout.preferred-height;
     border-radius: 8px;
     background: DesignTokens.surface-raised;
@@ -687,6 +687,7 @@ component ToolCard inherits Rectangle {
                 font-weight: 700;
                 horizontal-stretch: 1;
                 vertical-alignment: center;
+                overflow: elide;
             }
             Rectangle {
                 width: 20px;
@@ -3405,6 +3406,8 @@ export component PetuniaSlintShell inherits Window {
     callback primitive-cancel;
     callback freeze-primitive-requested;
     callback slice-trim-set(bool);
+    callback slice-confirm();
+    callback slice-cancel();
     callback toggle-bevel-clamp-overlap;
     callback toggle-bevel-affect-vertices;
     callback inspector-width-changed(float);
@@ -3812,7 +3815,7 @@ export component PetuniaSlintShell inherits Window {
                                 description: "Resize active selection proportionally or along specific axes";
                                 active: active-tool == "scale";
                                 live-mode: active-tool == "scale" && root.transform-instant-active;
-                                clicked => { root.command-executed("model.scale_selection"); }
+                                clicked => { root.active-tool-changed("scale"); }
                             }
                             ViewportSvgButton {
                                 glyph: @image-url("icons/tool-transform.svg");
@@ -4461,7 +4464,6 @@ export component PetuniaSlintShell inherits Window {
                                     is-loop-place = false;
                                 }
                                 if is-slice-drag {
-                                    root.viewport-transform-end();
                                     is-slice-drag = false;
                                 }
                                 if is-gizmo-drag {
@@ -4957,6 +4959,7 @@ export component PetuniaSlintShell inherits Window {
 
                     // Pílula de Ferramenta Ativa e Modo de Operação (Feedback visual contínuo)
                     if !root.measure-visible && active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "knife" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
+                        width: min(parent.width - 40px, active-tool-hud-row.preferred-width + 24px);
                         x: (parent.width - self.width) / 2;
                         y: 58px;
                         height: 28px;
@@ -4967,9 +4970,9 @@ export component PetuniaSlintShell inherits Window {
                         drop-shadow-blur: 8px;
                         drop-shadow-color: #00000066;
 
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            padding-right: 10px;
+                        active-tool-hud-row := HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
                             spacing: 8px;
                             alignment: center;
 
@@ -4979,6 +4982,7 @@ export component PetuniaSlintShell inherits Window {
                                 font-size: 11px;
                                 font-weight: 700;
                                 vertical-alignment: center;
+                                overflow: elide;
                             }
 
                             Rectangle {
@@ -5000,9 +5004,11 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             Text {
-                                text: root.is-instant-tool-mode
-                                    ? "Mova o mouse · LMB/Enter Confirma · RMB/Esc Cancela"
-                                    : "2 Toques no atalho: Modo Livre · Enter Confirma";
+                                text: root.active-tool == "slice"
+                                    ? "Arraste o corte · T: Trim/Split · Enter Confirma · Esc Cancela"
+                                    : (root.is-instant-tool-mode
+                                        ? "Mova o mouse · LMB/Enter Confirma · RMB/Esc Cancela"
+                                        : "2 Toques no atalho: Modo Livre · Enter Confirma");
                                 color: DesignTokens.text-muted;
                                 font-size: 9px;
                                 vertical-alignment: center;
@@ -5012,6 +5018,7 @@ export component PetuniaSlintShell inherits Window {
 
                     // Pílula Flutuante de Medição / Dimensões (Centro: Resumo HUD no Topo)
                     if root.measure-visible && root.measure-hud-text != "" && active-workspace == "MODEL": Rectangle {
+                        width: min(parent.width - 40px, measure-hud-row.preferred-width + 24px);
                         x: (parent.width - self.width) / 2;
                         y: 58px;
                         height: 26px;
@@ -5023,7 +5030,7 @@ export component PetuniaSlintShell inherits Window {
                         drop-shadow-color: #00000088;
                         drop-shadow-offset-y: 2px;
 
-                        HorizontalLayout {
+                        measure-hud-row := HorizontalLayout {
                             padding-left: 10px;
                             padding-right: 10px;
                             spacing: 6px;
@@ -5364,6 +5371,7 @@ export component PetuniaSlintShell inherits Window {
                             text: root.operation-hud-hint;
                             color: DesignTokens.text-muted;
                             font-size: 9px;
+                            wrap: word-wrap;
                         }
                     }
 
@@ -5689,7 +5697,7 @@ export component PetuniaSlintShell inherits Window {
                                     border-width: 1px;
                                     border-color: !root.slice-trim ? DesignTokens.accent : DesignTokens.border;
                                     Text {
-                                        text: "Split (Keep Both)";
+                                        text: "Split (T)";
                                         color: !root.slice-trim ? DesignTokens.canvas : DesignTokens.text-primary;
                                         font-size: 10px;
                                         font-weight: !root.slice-trim ? 700 : 400;
@@ -5705,7 +5713,7 @@ export component PetuniaSlintShell inherits Window {
                                     border-width: 1px;
                                     border-color: root.slice-trim ? DesignTokens.accent : DesignTokens.border;
                                     Text {
-                                        text: "Trim (Delete Cut)";
+                                        text: "Trim (T)";
                                         color: root.slice-trim ? DesignTokens.canvas : DesignTokens.text-primary;
                                         font-size: 10px;
                                         font-weight: root.slice-trim ? 700 : 400;
@@ -5725,10 +5733,17 @@ export component PetuniaSlintShell inherits Window {
                                     border-width: 1px;
                                     border-color: DesignTokens.border;
                                     Text { text: root.label-cancel; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
-                                    TouchArea { clicked => { root.viewport-transform-end(); } }
+                                    TouchArea { clicked => { root.slice-cancel(); } }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 4px;
+                                    background: DesignTokens.accent;
+                                    Text { text: "Confirm Cut"; color: DesignTokens.canvas; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.slice-confirm(); } }
                                 }
                             }
-                            Text { text: "Drag mouse across mesh · Esc cancel"; color: DesignTokens.text-muted; font-size: 9px; }
+                            Text { text: "Enter: Confirm · Esc: Cancel · T: Toggle Trim"; color: DesignTokens.text-muted; font-size: 9px; wrap: word-wrap; }
                         }
 
                         if root.active-tool == "bevel": VerticalLayout {
