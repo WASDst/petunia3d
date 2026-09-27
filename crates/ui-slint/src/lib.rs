@@ -2348,9 +2348,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     (d2, (v_indices[2], v_indices[3])),
                     (d3, (v_indices[3], v_indices[0])),
                 ];
-                candidates.sort_by(|a, b| {
-                    a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
-                });
+                candidates
+                    .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
                 for (_, seed) in candidates {
                     if let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed) {
                         return Some((mesh.clone(), ring, seed));
@@ -4920,7 +4919,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => petunia_core::RefAxis::Front,
         };
         let axis_key = axis_str.to_lowercase();
-        self.reference_thumbnails.insert(axis_key, (width, height, rgba.clone()));
+        self.reference_thumbnails
+            .insert(axis_key, (width, height, rgba.clone()));
         if axis_str == "custom" {
             petunia_core::project_service::ProjectService::add_reference_image(
                 &mut self.state,

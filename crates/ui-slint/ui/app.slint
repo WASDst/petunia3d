@@ -4590,7 +4590,7 @@ export component PetuniaSlintShell inherits Window {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
                             : (root.active-workspace == "PAINT") ? crosshair
-                            : (root.active-tool == "slice" || root.active-tool == "knife" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select) ? crosshair
+                            : (root.active-tool == "slice" || root.active-tool == "knife" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
                             : (root.active-tool == "extrude" || root.active-tool == "push_pull") ? ns-resize
                             : root.active-tool == "bevel" ? nesw-resize
                             : root.active-tool == "inset" ? nwse-resize
@@ -4603,7 +4603,9 @@ export component PetuniaSlintShell inherits Window {
                         property <length> last-y;
                         property <bool> is-box-select: false;
                         property <bool> is-lasso-select: false;
+                        property <bool> pending-lasso-select: false;
                         property <string> lasso-points: "";
+                        property <string> lasso-base-commands: "";
                         property <string> lasso-commands: "";
                         property <length> lasso-last-x;
                         property <length> lasso-last-y;
@@ -4637,7 +4639,9 @@ export component PetuniaSlintShell inherits Window {
                         function clear-gesture() {
                             self.is-box-select = false;
                             self.is-lasso-select = false;
+                            self.pending-lasso-select = false;
                             self.lasso-points = "";
+                            self.lasso-base-commands = "";
                             self.lasso-commands = "";
                             self.is-transform = false;
                             self.pending-transform = false;
@@ -4700,6 +4704,7 @@ export component PetuniaSlintShell inherits Window {
                                 is-transform = false;
                                 pending-transform = false;
                                 pending-box-select = false;
+                                pending-lasso-select = false;
                                 if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
                                     if root.profile-volume-mode != "none" {
                                         is-profile-volume-drag = true;
@@ -4728,14 +4733,15 @@ export component PetuniaSlintShell inherits Window {
                                     is-orbit = true;
                                     is-pan = false;
                                 } else if event.button == PointerEventButton.left && root.active-tool == "lasso_select" && !event.modifiers.alt {
-                                    is-lasso-select = true;
+                                    pending-lasso-select = true;
+                                    is-lasso-select = false;
                                     subtract-selection = event.modifiers.control;
                                     lasso-last-x = self.mouse-x;
                                     lasso-last-y = self.mouse-y;
-                                    lasso-count = 1;
-                                    lasso-points = "\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
-                                    lasso-commands = "M \{self.mouse-x / 1px} \{self.mouse-y / 1px} ";
-                                    moved-since-down = true;
+                                    lasso-count = 0;
+                                    lasso-points = "";
+                                    lasso-base-commands = "";
+                                    lasso-commands = "";
                                 } else if event.button == PointerEventButton.left && (root.active-tool == "cursor" || root.active-tool == "cursor_3d") {
                                     consume-click = true;
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
@@ -4801,13 +4807,26 @@ export component PetuniaSlintShell inherits Window {
                                 }
                                 if is-box-select {
                                     if abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px { moved-since-down = true; }
-                                } else if is-lasso-select && self.pressed && lasso-count < 4096
+                                } else if pending-lasso-select && self.pressed
                                     && (abs(self.mouse-x - lasso-last-x) > 3px || abs(self.mouse-y - lasso-last-y) > 3px) {
+                                    pending-lasso-select = false;
+                                    is-lasso-select = true;
+                                    moved-since-down = true;
+                                    lasso-count = 2;
+                                    lasso-points = "\{lasso-last-x / self.width},\{lasso-last-y / self.height};\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
+                                    lasso-base-commands = "M \{lasso-last-x / 1px} \{lasso-last-y / 1px} L \{self.mouse-x / 1px} \{self.mouse-y / 1px} ";
+                                    lasso-commands = lasso-base-commands + "Z";
                                     lasso-last-x = self.mouse-x;
                                     lasso-last-y = self.mouse-y;
-                                    lasso-count += 1;
-                                    lasso-points += "\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
-                                    lasso-commands += "L \{self.mouse-x / 1px} \{self.mouse-y / 1px} ";
+                                } else if is-lasso-select && self.pressed {
+                                    if lasso-count < 4096 && (abs(self.mouse-x - lasso-last-x) > 3px || abs(self.mouse-y - lasso-last-y) > 3px) {
+                                        lasso-last-x = self.mouse-x;
+                                        lasso-last-y = self.mouse-y;
+                                        lasso-count += 1;
+                                        lasso-points += "\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
+                                        lasso-base-commands += "L \{self.mouse-x / 1px} \{self.mouse-y / 1px} ";
+                                    }
+                                    lasso-commands = lasso-base-commands + "L \{self.mouse-x / 1px} \{self.mouse-y / 1px} Z";
                                 } else if pending-box-select && self.pressed
                                     && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
                                         || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
@@ -4907,13 +4926,20 @@ export component PetuniaSlintShell inherits Window {
                                     is-box-select = false;
                                 }
                                 if is-lasso-select {
+                                    if abs(self.mouse-x - lasso-last-x) > 1px || abs(self.mouse-y - lasso-last-y) > 1px {
+                                        lasso-points += "\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
+                                        lasso-count += 1;
+                                    }
                                     if lasso-count >= 3 {
                                         root.viewport-lasso-select(lasso-points, extend-selection, subtract-selection);
                                     }
                                     is-lasso-select = false;
+                                    pending-lasso-select = false;
                                     lasso-points = "";
+                                    lasso-base-commands = "";
                                     lasso-commands = "";
                                 }
+                                pending-lasso-select = false;
                                 is-orbit = false;
                                 is-pan = false;
                                 is-profile-depth-drag = false;
@@ -4995,8 +5021,11 @@ export component PetuniaSlintShell inherits Window {
                         border-width: 1px;
                     }
                     if viewport-touch.is-lasso-select: Path {
+                        width: 100%;
+                        height: 100%;
+                        fit: ImageFit.preserve;
                         commands: viewport-touch.lasso-commands;
-                        fill: transparent;
+                        fill: DesignTokens.selection.transparentize(0.85);
                         stroke: DesignTokens.selection;
                         stroke-width: 1.5px;
                     }
