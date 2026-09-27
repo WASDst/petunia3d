@@ -7477,3 +7477,127 @@ fn test_loop_cut_2d_scrubbing_and_candidate_detection() {
     assert!(bridge.commit_loop_cut());
     assert!(bridge.loop_cut.is_none());
 }
+
+#[test]
+fn test_profile_point_and_handle_interactive_manipulation() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+
+    // Create a 2D Rectangle (starts closed with 4 nodes)
+    bridge.add_profile_rectangle(2.0, 2.0);
+    assert_eq!(bridge.state.profile.nodes.len(), 4);
+    assert!(bridge.state.profile.closed);
+
+    // Project anchor 0 to screen
+    let p0 = bridge.state.profile.nodes[0].point;
+    let matrix = bridge.state.session.camera.view_proj();
+    let pt3d = bridge.state.profile.to_3d_point(p0);
+    let clip = matrix * pt3d.extend(1.0);
+    let scr_x = (clip.x / clip.w * 0.5 + 0.5) * 800.0;
+    let scr_y = (0.5 - clip.y / clip.w * 0.5) * 600.0;
+
+    // 1. Hit test on anchor 0
+    let hit = bridge.hit_test_profile(scr_x, scr_y);
+    assert_eq!(hit, Some(ProfileHitTarget::Anchor(0)));
+
+    // 2. Pointer down on anchor 0
+    assert!(bridge.profile_pointer_down(scr_x, scr_y, false));
+    assert_eq!(bridge.profile_selected_node, Some(0));
+    assert_eq!(
+        bridge.profile_drag_target,
+        Some(ProfileHitTarget::Anchor(0))
+    );
+
+    // 3. Pointer move to drag anchor 0
+    let old_pt = bridge.state.profile.nodes[0].point;
+    assert!(bridge.profile_pointer_move(scr_x + 30.0, scr_y + 30.0, false));
+    let new_pt = bridge.state.profile.nodes[0].point;
+    assert_ne!(old_pt, new_pt);
+    assert_eq!(bridge.state.profile.points[0], new_pt);
+
+    // 4. Pointer up ends drag
+    bridge.profile_pointer_up();
+    assert_eq!(bridge.profile_drag_target, None);
+    assert_eq!(bridge.profile_selected_node, Some(0));
+
+    // 5. Alt-drag anchor to pull out handles
+    assert!(bridge.profile_pointer_down(scr_x + 30.0, scr_y + 30.0, true));
+    assert_eq!(
+        bridge.profile_drag_target,
+        Some(ProfileHitTarget::HandleOut(0))
+    );
+    assert!(bridge.profile_pointer_move(scr_x + 60.0, scr_y + 40.0, true));
+    let node0 = &bridge.state.profile.nodes[0];
+    assert!(node0.handle_out.is_some());
+    bridge.profile_pointer_up();
+
+    // 6. Preview commands render anchor boxes and handle markers
+    let cmds = bridge.profile_preview_commands();
+    assert!(cmds.contains("M"));
+    assert!(cmds.contains("Z"));
+
+    // 7. Delete selected node with delete key / command
+    let _ = bridge.execute_core_command("model.delete");
+    assert_eq!(bridge.state.profile.nodes.len(), 3);
+    assert_eq!(bridge.profile_selected_node, None);
+}
+
+#[test]
+fn test_profile_extrude_card_depth_and_generate() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // Add 2D Circle
+    bridge.add_profile_circle(1.0, 16);
+    assert!(bridge.state.profile.closed);
+    assert_eq!(bridge.profile_volume_mode, None);
+
+    // Changing depth in the card automatically enters interactive extrude mode with live preview
+    assert!(bridge.set_profile_depth(3.5));
+    assert_eq!(
+        bridge.profile_volume_mode,
+        Some(petunia_module_model::ProfileVolumeMode::Extrude)
+    );
+    assert!(bridge.profile_preview_asset_id.is_some());
+    assert_eq!(bridge.state.profile.depth, 3.5);
+
+    // Further adjustments update the live extrude preview mesh
+    assert!(bridge.set_profile_depth(4.0));
+    assert_eq!(bridge.state.profile.depth, 4.0);
+
+    // Clicking "Gerar" (generate_profile_extrude) commits the 3D volume into project
+    assert!(bridge.generate_profile_extrude());
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    assert_eq!(bridge.profile_volume_mode, None);
+    assert!(bridge.state.profile.points.is_empty());
+    let asset = bridge.state.project.active().expect("active mesh");
+    assert_eq!(asset.name, "Profile");
+    assert!(!asset.mesh.faces.is_empty());
+}
+
+#[test]
+fn test_profile_shortcut_and_shelf_extrude() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // Add 2D rectangle
+    bridge.add_profile_rectangle(2.0, 1.5);
+    assert!(bridge.state.profile.closed);
+    assert_eq!(bridge.profile_volume_mode, None);
+
+    // Triggering "model.extrude" via shortcut or shelf button enters extrude preview
+    let _ = bridge.execute_core_command("model.extrude");
+    assert_eq!(
+        bridge.profile_volume_mode,
+        Some(petunia_module_model::ProfileVolumeMode::Extrude)
+    );
+    assert!(bridge.profile_preview_asset_id.is_some());
+
+    // Triggering it again commits the volume
+    let _ = bridge.execute_core_command("model.extrude");
+    assert_eq!(bridge.profile_volume_mode, None);
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    let asset = bridge.state.project.active().expect("active mesh");
+    assert_eq!(asset.name, "Profile");
+}

@@ -1713,6 +1713,54 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let profile_down_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_profile_pointer_down(move |x, y, alt| {
+        if let Ok(mut bridge) = profile_down_bridge.lock() {
+            let hit = bridge.profile_pointer_down(x, y, alt);
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+            hit
+        } else {
+            false
+        }
+    });
+
+    let profile_move_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_profile_pointer_move(move |x, y, alt| {
+        if let Ok(mut bridge) = profile_move_bridge.lock()
+            && bridge.profile_pointer_move(x, y, alt)
+        {
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let profile_up_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_profile_pointer_up(move || {
+        if let Ok(mut bridge) = profile_up_bridge.lock() {
+            bridge.profile_pointer_up();
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
     let transform_begin_bridge = Arc::clone(&bridge);
     window.on_viewport_transform_begin(move |kind_str, x, y| {
         let kind = match kind_str.as_str() {

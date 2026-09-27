@@ -28,7 +28,7 @@ pub fn profile_screen_to_plane(state: &AppState, nx: f32, ny: f32) -> Option<[f3
     }
     let o = glam::Vec3::from(p.origin);
     let t = (o - origin).dot(n) / denom;
-    if t < 0.0 {
+    if t < 0.0 && state.session.camera.proj == petunia_core::Projection::Perspective {
         return None;
     }
     let hit = origin + dir * t;

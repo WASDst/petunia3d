@@ -3742,6 +3742,9 @@ export component PetuniaSlintShell inherits Window {
     callback profile-volume-confirm();
     callback profile-volume-cancel();
     callback profile-revolve-angle-set(string) -> bool;
+    callback viewport-profile-pointer-down(float, float, bool) -> bool;
+    callback viewport-profile-pointer-move(float, float, bool);
+    callback viewport-profile-pointer-up();
     callback viewport-profile-drag-handle(float, float, bool);
     callback toggle-paint-show-uv();
     callback toggle-uv-show-texture();
@@ -4631,6 +4634,7 @@ export component PetuniaSlintShell inherits Window {
                         property <bool> is-profile-depth-drag: false;
                         property <bool> is-profile-volume-drag: false;
                         property <bool> is-profile-draw-drag: false;
+                        property <bool> is-profile-point-drag: false;
                         property <bool> consume-click: false;
                         property <bool> tool-drag-fine: false;
                         property <bool> loop-selection: false;
@@ -4650,6 +4654,7 @@ export component PetuniaSlintShell inherits Window {
                             self.is-profile-depth-drag = false;
                             self.is-profile-volume-drag = false;
                             self.is-profile-draw-drag = false;
+                            self.is-profile-point-drag = false;
                             self.is-loop-drag = false;
                             self.is-loop-place = false;
                             self.pending-slice = false;
@@ -4706,7 +4711,10 @@ export component PetuniaSlintShell inherits Window {
                                 pending-box-select = false;
                                 pending-lasso-select = false;
                                 if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
-                                    if root.profile-volume-mode != "none" {
+                                    if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt) {
+                                        is-profile-point-drag = true;
+                                        consume-click = true;
+                                    } else if root.profile-volume-mode != "none" {
                                         is-profile-volume-drag = true;
                                         tool-drag-fine = event.modifiers.shift;
                                     } else if root.profile-closed {
@@ -4877,6 +4885,9 @@ export component PetuniaSlintShell inherits Window {
                                     root.tool-modal-scrubbed((self.mouse-y - last-y) / 1px, tool-drag-fine, self.mouse-x / 1px, self.mouse-y / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
+                                } else if is-profile-point-drag {
+                                    moved-since-down = true;
+                                    root.viewport-profile-pointer-move(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt);
                                 } else if is-profile-volume-drag {
                                     moved-since-down = true;
                                     if root.profile-volume-mode == "extrude" {
@@ -4942,6 +4953,10 @@ export component PetuniaSlintShell inherits Window {
                                 pending-lasso-select = false;
                                 is-orbit = false;
                                 is-pan = false;
+                                if is-profile-point-drag {
+                                    root.viewport-profile-pointer-up();
+                                    is-profile-point-drag = false;
+                                }
                                 is-profile-depth-drag = false;
                                 is-profile-volume-drag = false;
                                 is-profile-draw-drag = false;
@@ -5884,7 +5899,7 @@ export component PetuniaSlintShell inherits Window {
                             if root.profile-closed: Rectangle {
                                 horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.accent;
                                 Text { text: root.label-profile-generate; color: DesignTokens.canvas; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { clicked => { root.profile-enter-extrude(); } }
+                                TouchArea { clicked => { root.profile-generate(); } }
                             }
                         }
                         if root.profile-volume-mode != "none": VerticalLayout {

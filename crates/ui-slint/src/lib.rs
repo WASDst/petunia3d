@@ -577,9 +577,19 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub uv_show_texture: bool,
     pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
     pub profile_drag_anchor: Option<[f32; 2]>,
+    pub profile_drag_target: Option<ProfileHitTarget>,
+    pub profile_selected_node: Option<usize>,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
+}
+
+/// Alvo de hit-test para manipulação interativa de nós e alças do perfil 2D.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileHitTarget {
+    Anchor(usize),
+    HandleOut(usize),
+    HandleIn(usize),
 }
 
 /// Menu de contexto do Outliner aberto sobre uma linha do painel Parts,
@@ -761,6 +771,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             uv_show_texture: true,
             profile_volume_mode: None,
             profile_drag_anchor: None,
+            profile_drag_target: None,
+            profile_selected_node: None,
             profile_preview_asset_id: None,
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
@@ -3011,8 +3023,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
 
         // Alças tangentes e marcadores de nós Bézier
-        for node in &profile.nodes {
+        for (i, node) in profile.nodes.iter().enumerate() {
             let p_anchor = project_pt(node.point);
+            let is_selected = self.profile_selected_node == Some(i);
+
             if let (Some(anchor_scr), Some(h_out)) = (p_anchor, node.handle_out) {
                 let out_pt = [node.point[0] + h_out[0], node.point[1] + h_out[1]];
                 if let Some(out_scr) = project_pt(out_pt) {
@@ -3054,6 +3068,45 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         in_scr[1] + 2.5,
                         in_scr[0] - 2.5,
                         in_scr[1] + 2.5
+                    );
+                }
+            }
+
+            // Marcador do ponto âncora (destacado se selecionado)
+            if let Some(anchor_scr) = p_anchor {
+                let s = if is_selected { 5.0 } else { 3.0 };
+                let _ = write!(
+                    commands,
+                    "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
+                    anchor_scr[0] - s,
+                    anchor_scr[1] - s,
+                    anchor_scr[0] + s,
+                    anchor_scr[1] - s,
+                    anchor_scr[0] + s,
+                    anchor_scr[1] + s,
+                    anchor_scr[0] - s,
+                    anchor_scr[1] + s
+                );
+            }
+        }
+
+        // Se nodes estiver vazio mas houver points
+        if profile.nodes.is_empty() {
+            for (i, &pt) in profile.points.iter().enumerate() {
+                if let Some(anchor_scr) = project_pt(pt) {
+                    let is_selected = self.profile_selected_node == Some(i);
+                    let s = if is_selected { 5.0 } else { 3.0 };
+                    let _ = write!(
+                        commands,
+                        "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
+                        anchor_scr[0] - s,
+                        anchor_scr[1] - s,
+                        anchor_scr[0] + s,
+                        anchor_scr[1] - s,
+                        anchor_scr[0] + s,
+                        anchor_scr[1] + s,
+                        anchor_scr[0] - s,
+                        anchor_scr[1] + s
                     );
                 }
             }
@@ -3107,8 +3160,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.profile.depth = depth.clamp(0.01, 1000.0);
         self.state.mark_dirty();
-        if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Extrude) {
-            self.update_profile_volume_preview();
+        if self.state.profile.closed {
+            if self.profile_volume_mode.is_none() {
+                self.enter_profile_volume("extrude");
+            } else if self.profile_volume_mode
+                == Some(petunia_module_model::ProfileVolumeMode::Extrude)
+            {
+                self.update_profile_volume_preview();
+            }
         }
         true
     }
@@ -3199,6 +3258,270 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         updated
+    }
+
+    /// Realiza hit-testing em screen space contra âncoras e alças Bézier do perfil ativo.
+    pub fn hit_test_profile(&self, screen_x: f32, screen_y: f32) -> Option<ProfileHitTarget> {
+        if self.state.session.tools.active_tool != "draw_profile" {
+            return None;
+        }
+        let profile = &self.state.profile;
+        if (profile.nodes.is_empty() && profile.points.is_empty())
+            || self.viewport_size[0] <= 1.0
+            || self.viewport_size[1] <= 1.0
+        {
+            return None;
+        }
+        let matrix = self.state.session.camera.view_proj();
+        let project_pt = |p: [f32; 2]| -> Option<[f32; 2]> {
+            let pt_3d = profile.to_3d_point(p);
+            let point = matrix * pt_3d.extend(1.0);
+            if !point.is_finite() || point.w <= 0.05 || point.z < 0.0 || point.z > point.w {
+                None
+            } else {
+                Some([
+                    (point.x / point.w * 0.5 + 0.5) * self.viewport_size[0],
+                    (0.5 - point.y / point.w * 0.5) * self.viewport_size[1],
+                ])
+            }
+        };
+
+        let hit_radius = 16.0f32;
+        let mut best_target = None;
+        let mut best_dist = hit_radius;
+
+        for (i, node) in profile.nodes.iter().enumerate() {
+            // Test handle_out
+            if let Some(h_out) = node.handle_out {
+                let out_pt = [node.point[0] + h_out[0], node.point[1] + h_out[1]];
+                if let Some(scr) = project_pt(out_pt) {
+                    let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_target = Some(ProfileHitTarget::HandleOut(i));
+                    }
+                }
+            }
+            // Test handle_in
+            if let Some(h_in) = node.handle_in {
+                let in_pt = [node.point[0] + h_in[0], node.point[1] + h_in[1]];
+                if let Some(scr) = project_pt(in_pt) {
+                    let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_target = Some(ProfileHitTarget::HandleIn(i));
+                    }
+                }
+            }
+            // Test anchor point
+            if let Some(scr) = project_pt(node.point) {
+                let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_target = Some(ProfileHitTarget::Anchor(i));
+                }
+            }
+        }
+
+        // Se nodes estiver vazio mas houver points
+        if profile.nodes.is_empty() {
+            for (i, &pt) in profile.points.iter().enumerate() {
+                if let Some(scr) = project_pt(pt) {
+                    let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_target = Some(ProfileHitTarget::Anchor(i));
+                    }
+                }
+            }
+        }
+
+        best_target
+    }
+
+    /// Processa clique inicial do ponteiro para selecionar e iniciar arraste de nós/alças do perfil.
+    pub fn profile_pointer_down(&mut self, screen_x: f32, screen_y: f32, alt: bool) -> bool {
+        if self.state.session.tools.active_tool != "draw_profile" {
+            return false;
+        }
+        // Garante que nodes espelhe points caso tenha sido inicializado apenas com points
+        if self.state.profile.nodes.len() != self.state.profile.points.len()
+            && !self.state.profile.points.is_empty()
+        {
+            self.state.profile.nodes = self
+                .state
+                .profile
+                .points
+                .iter()
+                .map(|&p| petunia_mesh::curve::BezierNode::new(p))
+                .collect();
+        }
+        if let Some(target) = self.hit_test_profile(screen_x, screen_y) {
+            match target {
+                ProfileHitTarget::Anchor(idx) => {
+                    // Fecha perfil se clicar no primeiro nó de um perfil aberto com >= 3 pontos
+                    if !self.state.profile.closed && self.state.profile.nodes.len() >= 3 && idx == 0
+                    {
+                        self.state.profile.closed = true;
+                        self.profile_selected_node = Some(0);
+                        self.profile_drag_target = None;
+                        self.state.set_status(self.state.t("profile.closed"));
+                        self.state.mark_dirty();
+                        return true;
+                    }
+                    self.profile_selected_node = Some(idx);
+                    if alt {
+                        if self.state.profile.nodes[idx].handle_out.is_none() {
+                            self.state.profile.nodes[idx].kind =
+                                petunia_mesh::curve::BezierNodeKind::Symmetric;
+                            self.state.profile.nodes[idx].handle_out = Some([0.0, 0.0]);
+                            self.state.profile.nodes[idx].handle_in = Some([0.0, 0.0]);
+                        }
+                        self.profile_drag_target = Some(ProfileHitTarget::HandleOut(idx));
+                    } else {
+                        self.profile_drag_target = Some(ProfileHitTarget::Anchor(idx));
+                    }
+                }
+                ProfileHitTarget::HandleOut(idx) => {
+                    self.profile_selected_node = Some(idx);
+                    self.profile_drag_target = Some(ProfileHitTarget::HandleOut(idx));
+                }
+                ProfileHitTarget::HandleIn(idx) => {
+                    self.profile_selected_node = Some(idx);
+                    self.profile_drag_target = Some(ProfileHitTarget::HandleIn(idx));
+                }
+            }
+            self.state.mark_dirty();
+            return true;
+        }
+        self.profile_drag_target = None;
+        self.profile_selected_node = None;
+        self.state.mark_dirty();
+        false
+    }
+
+    /// Processa movimento do ponteiro durante o arraste de um nó ou alça.
+    pub fn profile_pointer_move(&mut self, screen_x: f32, screen_y: f32, alt: bool) -> bool {
+        let Some(target) = self.profile_drag_target else {
+            return false;
+        };
+        if self.state.session.tools.active_tool != "draw_profile" {
+            return false;
+        }
+        let width = self.viewport_size[0].max(1.0);
+        let height = self.viewport_size[1].max(1.0);
+        let nx = (screen_x / width).clamp(0.0, 1.0);
+        let ny = (screen_y / height).clamp(0.0, 1.0);
+        let ndc_x = nx * 2.0 - 1.0;
+        let ndc_y = 1.0 - ny * 2.0;
+
+        let Some([curr_x, curr_y]) =
+            petunia_module_model::profile_screen_to_plane(&self.state, ndc_x, ndc_y)
+        else {
+            return false;
+        };
+
+        match target {
+            ProfileHitTarget::Anchor(idx) => {
+                if idx < self.state.profile.nodes.len() {
+                    self.state.profile.nodes[idx].point = [curr_x, curr_y];
+                    if idx < self.state.profile.points.len() {
+                        self.state.profile.points[idx] = [curr_x, curr_y];
+                    }
+                    self.state.mark_dirty();
+                    if self.profile_volume_mode.is_some() {
+                        self.update_profile_volume_preview();
+                    }
+                    return true;
+                }
+            }
+            ProfileHitTarget::HandleOut(idx) => {
+                if idx < self.state.profile.nodes.len() {
+                    let anchor = self.state.profile.nodes[idx].point;
+                    let dx = curr_x - anchor[0];
+                    let dy = curr_y - anchor[1];
+                    let node = &mut self.state.profile.nodes[idx];
+                    if alt {
+                        node.kind = petunia_mesh::curve::BezierNodeKind::Sharp;
+                        node.handle_out = Some([dx, dy]);
+                    } else {
+                        match node.kind {
+                            petunia_mesh::curve::BezierNodeKind::Sharp => {
+                                node.handle_out = Some([dx, dy]);
+                            }
+                            petunia_mesh::curve::BezierNodeKind::Symmetric => {
+                                node.handle_out = Some([dx, dy]);
+                                node.handle_in = Some([-dx, -dy]);
+                            }
+                            petunia_mesh::curve::BezierNodeKind::Smooth => {
+                                let len = dx.hypot(dy);
+                                node.handle_out = Some([dx, dy]);
+                                if len > 1e-4 {
+                                    if let Some(in_h) = node.handle_in {
+                                        let in_len = in_h[0].hypot(in_h[1]);
+                                        node.handle_in =
+                                            Some([-dx / len * in_len, -dy / len * in_len]);
+                                    } else {
+                                        node.handle_in = Some([-dx, -dy]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.state.mark_dirty();
+                    if self.profile_volume_mode.is_some() {
+                        self.update_profile_volume_preview();
+                    }
+                    return true;
+                }
+            }
+            ProfileHitTarget::HandleIn(idx) => {
+                if idx < self.state.profile.nodes.len() {
+                    let anchor = self.state.profile.nodes[idx].point;
+                    let dx = curr_x - anchor[0];
+                    let dy = curr_y - anchor[1];
+                    let node = &mut self.state.profile.nodes[idx];
+                    if alt {
+                        node.kind = petunia_mesh::curve::BezierNodeKind::Sharp;
+                        node.handle_in = Some([dx, dy]);
+                    } else {
+                        match node.kind {
+                            petunia_mesh::curve::BezierNodeKind::Sharp => {
+                                node.handle_in = Some([dx, dy]);
+                            }
+                            petunia_mesh::curve::BezierNodeKind::Symmetric => {
+                                node.handle_in = Some([dx, dy]);
+                                node.handle_out = Some([-dx, -dy]);
+                            }
+                            petunia_mesh::curve::BezierNodeKind::Smooth => {
+                                let len = dx.hypot(dy);
+                                node.handle_in = Some([dx, dy]);
+                                if len > 1e-4 {
+                                    if let Some(out_h) = node.handle_out {
+                                        let out_len = out_h[0].hypot(out_h[1]);
+                                        node.handle_out =
+                                            Some([-dx / len * out_len, -dy / len * out_len]);
+                                    } else {
+                                        node.handle_out = Some([-dx, -dy]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.state.mark_dirty();
+                    if self.profile_volume_mode.is_some() {
+                        self.update_profile_volume_preview();
+                    }
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Conclui o arraste de um nó ou alça.
+    pub fn profile_pointer_up(&mut self) {
+        self.profile_drag_target = None;
     }
 
     pub fn enter_profile_volume(&mut self, mode_str: &str) -> bool {
@@ -5913,6 +6236,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn add_profile_rectangle(&mut self, width: f32, height: f32) -> bool {
+        self.cancel_profile_volume();
+        self.profile_selected_node = None;
+        self.profile_drag_target = None;
         petunia_module_model::profile_set_rectangle(&mut self.state, width, height);
         self.state.render.mark_dirty();
         self.state.set_status(format!(
@@ -5922,6 +6248,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn add_profile_circle(&mut self, radius: f32, segments: usize) -> bool {
+        self.cancel_profile_volume();
+        self.profile_selected_node = None;
+        self.profile_drag_target = None;
         petunia_module_model::profile_set_circle(&mut self.state, radius, segments);
         self.state.render.mark_dirty();
         self.state.set_status(format!(
@@ -7214,7 +7543,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     true
                 }
                 "delete" => {
-                    if self.state.selection_domain().is_component() {
+                    if self.state.session.tools.active_tool == "draw_profile" {
+                        if let Some(idx) = self.profile_selected_node
+                            && idx < self.state.profile.nodes.len()
+                        {
+                            self.state.profile.nodes.remove(idx);
+                            if idx < self.state.profile.points.len() {
+                                self.state.profile.points.remove(idx);
+                            }
+                            if self.state.profile.nodes.len() < 3 {
+                                self.state.profile.closed = false;
+                            }
+                            self.profile_selected_node = None;
+                            self.profile_drag_target = None;
+                            self.state.mark_dirty();
+                            if self.profile_volume_mode.is_some() {
+                                self.update_profile_volume_preview();
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    } else if self.state.selection_domain().is_component() {
                         let _ = self.execute_core_command("model.delete");
                         true
                     } else {
@@ -7227,7 +7577,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     true
                 }
                 "extrude" => {
-                    self.execute_shortcut_tool("model.extrude");
+                    if self.state.session.tools.active_tool == "draw_profile"
+                        && (self.state.profile.closed || self.state.profile.points.len() >= 3)
+                    {
+                        if self.profile_volume_mode
+                            == Some(petunia_module_model::ProfileVolumeMode::Extrude)
+                        {
+                            self.commit_profile_volume();
+                        } else {
+                            self.enter_profile_volume("extrude");
+                        }
+                    } else {
+                        self.execute_shortcut_tool("model.extrude");
+                    }
                     true
                 }
                 "inset" => {
@@ -8090,6 +8452,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn execute_core_command(&mut self, id: &str) -> Result<(), petunia_core::CommandError> {
         self.command_search_visible = false;
         self.overlays.remove(OverlayId::CommandPalette);
+        if id == "model.extrude"
+            && self.state.session.tools.active_tool == "draw_profile"
+            && (self.state.profile.closed || self.state.profile.points.len() >= 3)
+        {
+            if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Extrude) {
+                self.commit_profile_volume();
+            } else {
+                self.enter_profile_volume("extrude");
+            }
+            return Ok(());
+        }
+        if id == "model.delete"
+            && self.state.session.tools.active_tool == "draw_profile"
+            && let Some(idx) = self.profile_selected_node
+            && idx < self.state.profile.nodes.len()
+        {
+            self.state.profile.nodes.remove(idx);
+            if idx < self.state.profile.points.len() {
+                self.state.profile.points.remove(idx);
+            }
+            if self.state.profile.nodes.len() < 3 {
+                self.state.profile.closed = false;
+            }
+            self.profile_selected_node = None;
+            self.profile_drag_target = None;
+            self.state.mark_dirty();
+            if self.profile_volume_mode.is_some() {
+                self.update_profile_volume_preview();
+            }
+            return Ok(());
+        }
         // Ferramentas paramétricas abrem uma sessão modal com Tool Properties
         // próprias em vez de rodar como one-shot de valor fixo.
         if let Some(kind) = ToolModalKind::from_id(id) {
@@ -8689,7 +9082,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let _ = self.execute_core_command("view.frame_selection");
             }
             "model.extrude" => {
-                self.execute_shortcut_tool("model.extrude");
+                if self.state.session.tools.active_tool == "draw_profile"
+                    && (self.state.profile.closed || self.state.profile.points.len() >= 3)
+                {
+                    if self.profile_volume_mode
+                        == Some(petunia_module_model::ProfileVolumeMode::Extrude)
+                    {
+                        self.commit_profile_volume();
+                    } else {
+                        self.enter_profile_volume("extrude");
+                    }
+                } else {
+                    self.execute_shortcut_tool("model.extrude");
+                }
             }
             "model.inset" => {
                 self.execute_shortcut_tool("model.inset");
@@ -8697,7 +9102,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.bevel" => {
                 self.execute_shortcut_tool("model.bevel");
             }
-            "model.delete" => self.apply(UiIntent::DeleteActiveAsset),
+            "model.delete" => {
+                if self.state.session.tools.active_tool == "draw_profile"
+                    && let Some(idx) = self.profile_selected_node
+                    && idx < self.state.profile.nodes.len()
+                {
+                    self.state.profile.nodes.remove(idx);
+                    if idx < self.state.profile.points.len() {
+                        self.state.profile.points.remove(idx);
+                    }
+                    if self.state.profile.nodes.len() < 3 {
+                        self.state.profile.closed = false;
+                    }
+                    self.profile_selected_node = None;
+                    self.profile_drag_target = None;
+                    self.state.mark_dirty();
+                    if self.profile_volume_mode.is_some() {
+                        self.update_profile_volume_preview();
+                    }
+                } else {
+                    self.apply(UiIntent::DeleteActiveAsset);
+                }
+            }
             "model.push_pull" => {
                 self.execute_shortcut_tool("model.push_pull");
             }
