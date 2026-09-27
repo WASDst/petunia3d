@@ -942,6 +942,10 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_protractor_visible(vm.protractor_visible);
     window.set_protractor_wedge_commands(vm.protractor_wedge_commands.as_str().into());
     window.set_protractor_ticks_commands(vm.protractor_ticks_commands.as_str().into());
+    window.set_settings_visible(vm.settings_visible);
+    window.set_command_search_visible(vm.command_search_visible);
+    window.set_scene_drawer_visible(vm.scene_drawer_visible);
+    window.set_active_keymap_id(vm.active_keymap_id.as_str().into());
 
     theme::apply_theme(window, &vm.current_theme);
 }
@@ -1176,8 +1180,37 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_settings_requested(move || {
         if let Ok(mut bridge) = settings_bridge.lock() {
             bridge.apply(UiIntent::OpenSettings);
+            let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 window.set_settings_visible(true);
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let settings_close_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_settings_closed(move || {
+        if let Ok(mut bridge) = settings_close_bridge.lock() {
+            bridge.apply(UiIntent::CloseSettings);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                window.set_settings_visible(false);
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let keymap_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_keymap_changed(move |keymap_id| {
+        if let Ok(mut bridge) = keymap_bridge.lock() {
+            if bridge.set_keymap_profile(keymap_id.as_str()) {
+                persist_user_preferences(&mut bridge);
+            }
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
             }
         }
     });

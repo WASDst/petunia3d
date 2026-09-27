@@ -6885,3 +6885,115 @@ fn test_loop_selection_face_and_vertex_in_bridge() {
         assert!(mesh.select_vertex_loop(0, false) >= 2);
     }
 }
+
+#[test]
+fn test_w_shortcut_toggles_selection_tool_in_model_workspace() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Model));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+
+    // W cycles from "select" to "box_select"
+    assert!(bridge.route_shortcut("w", false, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "box_select");
+    assert_eq!(bridge.view_model().active_tool, "box_select");
+
+    // W cycles back from "box_select" to "select"
+    assert!(bridge.route_shortcut("w", false, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    assert_eq!(bridge.view_model().active_tool, "select");
+
+    // When another tool is active, W switches back to "select"
+    bridge.apply(UiIntent::SetActiveTool("move".to_string()));
+    assert_eq!(bridge.state.session.tools.active_tool, "move");
+    assert!(bridge.route_shortcut("w", false, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+}
+
+#[test]
+fn test_w_shortcut_activates_selection_in_uv_workspace() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Uv));
+    bridge.apply(UiIntent::SetActiveTool("move".to_string()));
+
+    assert!(bridge.route_shortcut("w", false, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+}
+
+#[test]
+fn test_settings_open_close_intents_and_view_model_sync() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(!bridge.settings_visible);
+    assert!(!bridge.view_model().settings_visible);
+
+    // Open settings
+    bridge.apply(UiIntent::OpenSettings);
+    assert!(bridge.settings_visible);
+    assert!(bridge.view_model().settings_visible);
+
+    // Close settings via intent (scrim click, close button, or callback)
+    bridge.apply(UiIntent::CloseSettings);
+    assert!(!bridge.settings_visible);
+    assert!(!bridge.view_model().settings_visible);
+
+    // Open again and test escape handling
+    bridge.apply(UiIntent::OpenSettings);
+    assert!(bridge.settings_visible);
+    assert!(bridge.handle_escape());
+    assert!(!bridge.settings_visible);
+    assert!(!bridge.view_model().settings_visible);
+}
+
+#[test]
+fn test_keymap_profile_switching() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert_eq!(bridge.state.ui.active_keymap_id, "petunia-default");
+    assert_eq!(bridge.view_model().active_keymap_id, "petunia-default");
+
+    // Switch to Blender profile
+    assert!(bridge.set_keymap_profile("blender"));
+    assert_eq!(bridge.state.ui.active_keymap_id, "blender");
+    assert_eq!(bridge.preferences.active_keymap_id, "blender");
+    assert_eq!(bridge.view_model().active_keymap_id, "blender");
+
+    // Switching to the same profile returns false (no-op)
+    assert!(!bridge.set_keymap_profile("blender"));
+
+    // Switch to Maya profile
+    assert!(bridge.set_keymap_profile("maya"));
+    assert_eq!(bridge.state.ui.active_keymap_id, "maya");
+    assert_eq!(bridge.view_model().active_keymap_id, "maya");
+}
+
+#[test]
+fn test_tools_and_viewport_settings_toggles() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // Bevel clamp overlap
+    let initial_clamp = bridge.state.tools.bevel_clamp_overlap;
+    bridge.toggle_bevel_clamp_overlap();
+    assert_eq!(bridge.state.tools.bevel_clamp_overlap, !initial_clamp);
+    assert_eq!(bridge.view_model().bevel_clamp_overlap, !initial_clamp);
+
+    // Slice trim
+    assert!(!bridge.slice_trim);
+    bridge.set_slice_trim(true);
+    assert!(bridge.slice_trim);
+    assert!(bridge.view_model().slice_trim);
+
+    // Wireframe overlay
+    let initial_wire = bridge.state.session.show_wireframe_overlay;
+    bridge.execute_command(CommandId::ToggleWireOverlay);
+    assert_eq!(bridge.state.session.show_wireframe_overlay, !initial_wire);
+    assert_eq!(bridge.view_model().is_wireframe, !initial_wire);
+
+    // Face orientation
+    let initial_face = bridge.state.session.show_face_orientation;
+    bridge.apply(UiIntent::ToggleFaceOrientation);
+    assert_eq!(bridge.state.session.show_face_orientation, !initial_face);
+    assert_eq!(bridge.view_model().show_face_orientation, !initial_face);
+
+    // Camera projection
+    let initial_ortho = bridge.view_model().is_orthographic;
+    bridge.apply(UiIntent::ToggleProjection);
+    assert_eq!(bridge.view_model().is_orthographic, !initial_ortho);
+}

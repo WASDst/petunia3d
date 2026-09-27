@@ -272,6 +272,8 @@ pub enum UiIntent {
     SetActiveTool(String),
     OpenCommandSearch,
     OpenSettings,
+    CloseSettings,
+    SetKeymap(String),
     ToggleSceneDrawer,
     ExecuteCommand(CommandId),
     DismissTopOverlay,
@@ -814,6 +816,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     dismiss_on_escape: true,
                     dismiss_on_click_away: true,
                 });
+            }
+            UiIntent::CloseSettings => {
+                self.settings_visible = false;
+                self.overlays.remove(OverlayId::Settings);
+            }
+            UiIntent::SetKeymap(profile_id) => {
+                self.set_keymap_profile(&profile_id);
             }
             UiIntent::ToggleSceneDrawer => {
                 self.scene_drawer_visible = !self.scene_drawer_visible;
@@ -5143,7 +5152,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// passam preferências construídas à mão em vez de tocar o disco.
     pub fn restore_section_layouts(&mut self, preferences: &petunia_config::UserPreferences) {
         self.preferences = preferences.clone();
+        if !preferences.active_keymap_id.is_empty() {
+            self.state.ui.active_keymap_id = preferences.active_keymap_id.clone();
+            self.state.ui.keybinds =
+                petunia_config::Keybinds::load_profile(&preferences.active_keymap_id);
+        }
         self.section_layouts = section_layout::restore_section_layouts(preferences);
+    }
+
+    pub fn set_keymap_profile(&mut self, profile_id: &str) -> bool {
+        if self.state.ui.active_keymap_id == profile_id {
+            return false;
+        }
+        self.state.ui.active_keymap_id = profile_id.to_string();
+        self.state.ui.keybinds = petunia_config::Keybinds::load_profile(profile_id);
+        self.preferences.active_keymap_id = profile_id.to_string();
+        self.state.mark_dirty();
+        self.state
+            .set_status(format!("Perfil de atalhos ativado: {profile_id}"));
+        true
     }
 
     /// Refresh the cached preferences from live UI state (section layouts are
@@ -5158,6 +5185,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.preferences.selection_rgb = self.state.ui.selection_rgb;
         self.preferences.selection_thickness = self.state.ui.selection_thickness;
         self.preferences.model_quick_actions = self.state.ui.model_quick_actions.clone();
+        self.preferences.active_keymap_id = self.state.ui.active_keymap_id.clone();
     }
 
     /// Persist runtime section layouts; failures surface as status, never panic.
@@ -7743,6 +7771,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .find_in_context(key, mods, context)
             .map(str::to_owned)
         else {
+            if text.eq_ignore_ascii_case("w")
+                && !ctrl
+                && !alt
+                && !shift
+                && self.state.session.tools.modal.is_none()
+                && self.drag.is_none()
+                && self.rename_draft.is_none()
+            {
+                if self.state.workspace == Workspace::Model {
+                    let next = if self.state.session.tools.active_tool == "select" {
+                        "box_select"
+                    } else {
+                        "select"
+                    };
+                    self.apply(UiIntent::SetActiveTool(next.to_string()));
+                    return true;
+                } else if self.state.workspace == Workspace::Uv {
+                    self.apply(UiIntent::SetActiveTool("select".to_string()));
+                    return true;
+                }
+            }
             return false;
         };
         match action.as_str() {
@@ -7758,6 +7807,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             "model.select_edge" => self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge)),
             "model.select_face" => self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face)),
+            "model.tool_select" | "model.select" | "model.select_tool" => {
+                if self.state.workspace == Workspace::Model {
+                    let next = if self.state.session.tools.active_tool == "select" {
+                        "box_select"
+                    } else {
+                        "select"
+                    };
+                    self.apply(UiIntent::SetActiveTool(next.to_string()));
+                } else if self.state.workspace == Workspace::Uv {
+                    self.apply(UiIntent::SetActiveTool("select".to_string()));
+                }
+            }
             "model.box_select" => self.apply(UiIntent::SetActiveTool("box_select".into())),
             "model.move" | "model.transform" => {
                 self.begin_keyboard_transform(TransformKind::Position)
@@ -9146,6 +9207,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 })
                 .collect();
         }
+        vm.settings_visible = self.settings_visible;
+        vm.command_search_visible = self.command_search_visible;
+        vm.scene_drawer_visible = self.scene_drawer_visible;
+        vm.active_keymap_id = self.state.ui.active_keymap_id.clone();
         vm
     }
 
@@ -9225,6 +9290,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
     // restore below. / Clone (no máximo 6 ids curtos): `preferences` segue
     // íntegro para o restore das seções abaixo.
     state.ui.model_quick_actions = preferences.model_quick_actions.clone();
+    if !preferences.active_keymap_id.is_empty() {
+        state.ui.active_keymap_id = preferences.active_keymap_id.clone();
+        state.ui.keybinds = petunia_config::Keybinds::load_profile(&preferences.active_keymap_id);
+    }
 
     let mut viewport: Box<dyn PetuniaViewport> = if let Some((_, _, device, queue)) = gpu_context {
         println!("Viewport backend: shared WGPU fast path");

@@ -2761,6 +2761,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> scene-drawer-visible: false;
     in-out property <bool> scene-drawer-pinned: false;
     in-out property <bool> settings-visible: false;
+    in-out property <string> active-keymap-id: "petunia-default";
     in-out property <bool> saved: true;
     in-out property <image> viewport-image;
     in-out property <bool> has-gpu-viewport: false;
@@ -3518,6 +3519,8 @@ export component PetuniaSlintShell inherits Window {
     callback add-profile-rectangle(float, float);
     callback add-profile-circle(float, int);
     callback paint-decal-layer-added;
+    callback settings-closed;
+    callback keymap-changed(string);
 
     // Cor e espessura de um handle do gizmo conforme o estado da interação.
     function gizmo-handle-color(axis: int, base: color) -> color {
@@ -3578,6 +3581,11 @@ export component PetuniaSlintShell inherits Window {
             root.precision-mode = event.modifiers.shift;
             root.snap-mode = event.modifiers.control;
             if event.text == Key.Escape {
+                if root.settings-visible {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                    return accept;
+                }
                 viewport-touch.clear-gesture();
                 root.escape-requested();
                 return accept;
@@ -9919,7 +9927,10 @@ export component PetuniaSlintShell inherits Window {
             background: DesignTokens.scrim;
 
             TouchArea {
-                clicked => { root.click-away-requested(); }
+                clicked => {
+                    root.settings-visible = false;
+                    root.settings-closed();
+                }
             }
 
             Rectangle {
@@ -9974,7 +9985,10 @@ export component PetuniaSlintShell inherits Window {
                             TopAction {
                                 icon: IconSet.X;
                                 semantic-label: "Close settings";
-                                clicked => { root.click-away-requested(); }
+                                clicked => {
+                                    root.settings-visible = false;
+                                    root.settings-closed();
+                                }
                             }
                         }
                     }
@@ -10329,6 +10343,61 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 2: VerticalLayout {
                                     spacing: 12px;
 
+                                    Text { text: "Perfil de Atalhos de Teclado"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 110px; height: 32px; border-radius: 4px;
+                                            background: root.active-keymap-id == "petunia-default" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: root.active-keymap-id == "petunia-default" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            Text {
+                                                text: "Petunia Padrão";
+                                                color: root.active-keymap-id == "petunia-default" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.keymap-changed("petunia-default"); } }
+                                        }
+                                        Rectangle {
+                                            width: 110px; height: 32px; border-radius: 4px;
+                                            background: root.active-keymap-id == "blender" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: root.active-keymap-id == "blender" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            Text {
+                                                text: "Blender (Oficial)";
+                                                color: root.active-keymap-id == "blender" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.keymap-changed("blender"); } }
+                                        }
+                                        Rectangle {
+                                            width: 110px; height: 32px; border-radius: 4px;
+                                            background: root.active-keymap-id == "maya" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: root.active-keymap-id == "maya" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            Text {
+                                                text: "Autodesk Maya";
+                                                color: root.active-keymap-id == "maya" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.keymap-changed("maya"); } }
+                                        }
+                                        Rectangle {
+                                            width: 110px; height: 32px; border-radius: 4px;
+                                            background: root.active-keymap-id == "3ds-max" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: root.active-keymap-id == "3ds-max" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            Text {
+                                                text: "Autodesk 3ds Max";
+                                                color: root.active-keymap-id == "3ds-max" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.keymap-changed("3ds-max"); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
                                     Text { text: "Modo de Confirmação de Ferramenta"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     HorizontalLayout {
                                         spacing: 8px;
@@ -10424,6 +10493,7 @@ export component PetuniaSlintShell inherits Window {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 10px; spacing: 6px;
+                                            HorizontalLayout { Text { text: "W: Alternar Seleção (Select / Box Select)"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "Alt+W: Subdividir (Subdivide)"; color: DesignTokens.text-secondary; font-size: 10px; } }
                                             HorizontalLayout { Text { text: "G: Mover / Transladar"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "Tab: Modo de Seleção (V/E/F/Obj)"; color: DesignTokens.text-secondary; font-size: 10px; } }
                                             HorizontalLayout { Text { text: "R: Rotacionar"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "F1 / F2 / F3: Workspaces (Model/Paint/UV)"; color: DesignTokens.text-secondary; font-size: 10px; } }
                                             HorizontalLayout { Text { text: "S: Escalonar"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "Espaço: Micro-Inspector flutuante"; color: DesignTokens.text-secondary; font-size: 10px; } }
@@ -10496,15 +10566,36 @@ export component PetuniaSlintShell inherits Window {
                                         VerticalLayout {
                                             padding: 12px; spacing: 8px;
                                             Text { text: "Bisel (Round Edge / Bevel)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                                            Text { text: "• Clamp Overlap: ativado para evitar auto-interseção de geometria"; color: DesignTokens.text-secondary; font-size: 10px; }
-                                            Text { text: "• Modo padrão: Arestas com arredondamento contínuo"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Rectangle {
+                                                height: 32px; border-radius: 4px;
+                                                background: root.bevel-clamp-overlap ? DesignTokens.surface-raised : (bevel-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                                border-width: 1px; border-color: root.bevel-clamp-overlap ? DesignTokens.accent : DesignTokens.border;
+                                                HorizontalLayout {
+                                                    padding-left: 10px; padding-right: 10px;
+                                                    Text { text: "Clamp Overlap (evita auto-interseção de geometria)"; color: DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                                    Rectangle { horizontal-stretch: 1; }
+                                                    Text { text: root.bevel-clamp-overlap ? "Ativado" : "Desativado"; color: root.bevel-clamp-overlap ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                }
+                                                bevel-touch := TouchArea { clicked => { root.toggle-bevel-clamp-overlap(); } }
+                                            }
                                             Rectangle { height: 1px; background: DesignTokens.border; }
                                             Text { text: "Perfil & Esboço 2D (Draw Profile)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
                                             Text { text: "• Workplane automático: Ground (XZ), Face ativa ou Vista ortográfica"; color: DesignTokens.text-secondary; font-size: 10px; }
                                             Text { text: "• Gerar volume direto por arraste de profundidade ou Enter"; color: DesignTokens.text-secondary; font-size: 10px; }
                                             Rectangle { height: 1px; background: DesignTokens.border; }
                                             Text { text: "Fatiador (Slice / Loop Cut)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                                            Text { text: "• Auto-Trim configurável no Inspector e HUD de operação"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Rectangle {
+                                                height: 32px; border-radius: 4px;
+                                                background: root.slice-trim ? DesignTokens.surface-raised : (slice-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                                border-width: 1px; border-color: root.slice-trim ? DesignTokens.accent : DesignTokens.border;
+                                                HorizontalLayout {
+                                                    padding-left: 10px; padding-right: 10px;
+                                                    Text { text: "Modo Trim (remove lado cortado ao invés de split)"; color: DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                                    Rectangle { horizontal-stretch: 1; }
+                                                    Text { text: root.slice-trim ? "Trim (Ativado)" : "Split (Desativado)"; color: root.slice-trim ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                }
+                                                slice-touch := TouchArea { clicked => { root.slice-trim-set(!root.slice-trim); } }
+                                            }
                                         }
                                     }
                                 }
@@ -10519,25 +10610,50 @@ export component PetuniaSlintShell inherits Window {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 8px;
-                                            HorizontalLayout {
-                                                Text { text: "Wireframe Overlay sobreposto"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: root.is-wireframe ? "Ativado" : "Desativado"; color: root.is-wireframe ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            Rectangle {
+                                                height: 32px; border-radius: 4px;
+                                                background: root.is-wireframe ? DesignTokens.surface-raised : (wire-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                                border-width: 1px; border-color: root.is-wireframe ? DesignTokens.accent : DesignTokens.border;
+                                                HorizontalLayout {
+                                                    padding-left: 10px; padding-right: 10px;
+                                                    Text { text: "Wireframe Overlay sobreposto"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                    Rectangle { horizontal-stretch: 1; }
+                                                    Text { text: root.is-wireframe ? "Ativado" : "Desativado"; color: root.is-wireframe ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                }
+                                                wire-touch := TouchArea { clicked => { root.toggle-wireframe-requested(); } }
                                             }
-                                            HorizontalLayout {
-                                                Text { text: "Orientação de Faces (Normais frontais/traseiras)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: root.show-face-orientation ? "Ativado" : "Desativado"; color: root.show-face-orientation ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            Rectangle {
+                                                height: 32px; border-radius: 4px;
+                                                background: root.show-face-orientation ? DesignTokens.surface-raised : (face-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                                border-width: 1px; border-color: root.show-face-orientation ? DesignTokens.accent : DesignTokens.border;
+                                                HorizontalLayout {
+                                                    padding-left: 10px; padding-right: 10px;
+                                                    Text { text: "Orientação de Faces (Normais frontais/traseiras)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                    Rectangle { horizontal-stretch: 1; }
+                                                    Text { text: root.show-face-orientation ? "Ativado" : "Desativado"; color: root.show-face-orientation ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                }
+                                                face-touch := TouchArea { clicked => { root.toggle-face-orientation(); } }
                                             }
-                                            HorizontalLayout {
-                                                Text { text: "Projeção da Câmera"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: root.is-orthographic ? "Ortográfica" : "Perspectiva"; color: DesignTokens.text-secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            Rectangle {
+                                                height: 32px; border-radius: 4px;
+                                                background: proj-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                                                border-width: 1px; border-color: DesignTokens.border;
+                                                HorizontalLayout {
+                                                    padding-left: 10px; padding-right: 10px;
+                                                    Text { text: "Projeção da Câmera"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                    Rectangle { horizontal-stretch: 1; }
+                                                    Text { text: root.is-orthographic ? "Ortográfica" : "Perspectiva"; color: DesignTokens.accent; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                }
+                                                proj-touch := TouchArea { clicked => { root.toggle-projection-requested(); } }
                                             }
-                                            HorizontalLayout {
-                                                Text { text: "Grade de Chão (Ground Grid)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Passo 1.0 m (Subdivisões 0.1 m)"; color: DesignTokens.text-secondary; font-size: 10px; vertical-alignment: center; }
+                                            Rectangle {
+                                                height: 32px; border-radius: 4px;
+                                                HorizontalLayout {
+                                                    padding-left: 10px; padding-right: 10px;
+                                                    Text { text: "Grade de Chão (Ground Grid)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                    Rectangle { horizontal-stretch: 1; }
+                                                    Text { text: "Passo 1.0 m (Subdivisões 0.1 m)"; color: DesignTokens.text-secondary; font-size: 10px; vertical-alignment: center; }
+                                                }
                                             }
                                         }
                                     }

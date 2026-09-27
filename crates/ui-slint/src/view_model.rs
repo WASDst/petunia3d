@@ -678,6 +678,10 @@ pub struct ShellViewModel {
     pub section_states: Vec<SectionStateModel>,
     pub material_slots: Vec<String>,
     pub active_material_slot: i32,
+    pub settings_visible: bool,
+    pub command_search_visible: bool,
+    pub scene_drawer_visible: bool,
+    pub active_keymap_id: String,
 }
 
 impl ShellViewModel {
@@ -1489,6 +1493,10 @@ impl ShellViewModel {
             quick_action_candidates: Vec::new(),
             modifier_rows: Vec::new(),
             section_states: Vec::new(),
+            settings_visible: false,
+            command_search_visible: false,
+            scene_drawer_visible: false,
+            active_keymap_id: state.ui.active_keymap_id.clone(),
         }
     }
 

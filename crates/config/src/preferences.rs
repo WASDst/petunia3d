@@ -127,6 +127,8 @@ pub struct UserPreferences {
     pub reduced_motion: bool,
     /// Exibe tag flutuante com a média de medidas na multiseleção de arestas.
     pub multiselection_measure_tag: bool,
+    /// Perfil ativo de atalhos de teclado ("petunia-default", "blender", "maya", "3ds-max", etc.).
+    pub active_keymap_id: String,
     /// Dock/float/pin por módulo do Inspector, chaveado por `InspectorSectionId::as_str`.
     /// Chaves desconhecidas são descartadas ao carregar; módulos ausentes usam o padrão.
     /// Dock/float/pin per Inspector module, keyed by `InspectorSectionId::as_str`.
@@ -146,6 +148,7 @@ impl Default for UserPreferences {
             colorblind_axes: false,
             reduced_motion: false,
             multiselection_measure_tag: true,
+            active_keymap_id: "petunia-default".to_string(),
             section_layouts: BTreeMap::new(),
         }
     }
@@ -175,6 +178,9 @@ impl UserPreferences {
         }
         if preferences.double_tap_interval_ms > 2000 {
             preferences.double_tap_interval_ms = 2000;
+        }
+        if preferences.active_keymap_id.is_empty() {
+            preferences.active_keymap_id = "petunia-default".to_string();
         }
         let mut seen = HashSet::new();
         preferences
@@ -259,6 +265,7 @@ mod tests {
             colorblind_axes: false,
             reduced_motion: false,
             multiselection_measure_tag: true,
+            active_keymap_id: "blender".to_string(),
             double_tap_interval_ms: 300,
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),
