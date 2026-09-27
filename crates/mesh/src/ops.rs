@@ -294,17 +294,17 @@ impl Mesh {
         }
         let mut count = 0;
         for (u, v) in loop_edges {
-            if let Some(vertex) = self.verts.get_mut(u as usize) {
-                if !vertex.selected {
-                    vertex.selected = true;
-                    count += 1;
-                }
+            if let Some(vertex) = self.verts.get_mut(u as usize)
+                && !vertex.selected
+            {
+                vertex.selected = true;
+                count += 1;
             }
-            if let Some(vertex) = self.verts.get_mut(v as usize) {
-                if !vertex.selected {
-                    vertex.selected = true;
-                    count += 1;
-                }
+            if let Some(vertex) = self.verts.get_mut(v as usize)
+                && !vertex.selected
+            {
+                vertex.selected = true;
+                count += 1;
             }
         }
         count
@@ -338,7 +338,11 @@ impl Mesh {
         };
 
         let (start_edge_a, start_edge_b) = if let Some(se) = seed_edge {
-            let norm_se = if se.0 < se.1 { (se.0, se.1) } else { (se.1, se.0) };
+            let norm_se = if se.0 < se.1 {
+                (se.0, se.1)
+            } else {
+                (se.1, se.0)
+            };
             if get_edge_key(seed, 0) == norm_se || get_edge_key(seed, 2) == norm_se {
                 (get_edge_key(seed, 0), get_edge_key(seed, 2))
             } else {
@@ -355,10 +359,7 @@ impl Mesh {
 
         let mut walk_dir = |mut current_face: usize, mut exit_edge: (u32, u32)| {
             let mut list = Vec::new();
-            loop {
-                let Some(neighbors) = edge_to_faces.get(&exit_edge) else {
-                    break;
-                };
+            while let Some(neighbors) = edge_to_faces.get(&exit_edge) {
                 let next_face = neighbors.iter().copied().find(|&fi| fi != current_face);
                 let Some(next_fi) = next_face else {
                     break;
@@ -2609,7 +2610,11 @@ mod region_tests {
         let mut mesh = Mesh::cube(2.0);
         // Cube has 6 quad faces. A face loop around 4 side faces forms a closed quad ring.
         let loop_faces = mesh.face_loop(0, None);
-        assert_eq!(loop_faces.len(), 4, "face loop around cube ring contains 4 faces");
+        assert_eq!(
+            loop_faces.len(),
+            4,
+            "face loop around cube ring contains 4 faces"
+        );
         let count = mesh.select_face_loop(0, None, false);
         assert_eq!(count, 4);
         assert_eq!(mesh.faces.iter().filter(|f| f.selected).count(), 4);
@@ -2620,7 +2625,10 @@ mod region_tests {
         let mut mesh = Mesh::plane(2.0);
         // Plane has 1 quad face, 4 boundary vertices in the loop
         let count = mesh.select_vertex_loop(0, false);
-        assert_eq!(count, 4, "vertex loop around plane boundary contains 4 vertices");
+        assert_eq!(
+            count, 4,
+            "vertex loop around plane boundary contains 4 vertices"
+        );
         assert_eq!(mesh.selected_vert_count(), 4);
     }
 }

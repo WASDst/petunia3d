@@ -6801,3 +6801,87 @@ fn test_settings_redesign_language_scale_and_selection_color() {
     assert!(bridge.set_selection_color_hex("#E96A00"));
     assert_eq!(bridge.view_model().selection_color_hex, "#E96A00");
 }
+
+#[test]
+fn test_viewport_context_menu_modeling_actions_and_dismissal() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+
+    // 1. Right click opens viewport context menu
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.context_menu.is_some());
+    assert!(bridge.view_model().context_menu_open);
+
+    // 2. Click away dismisses it
+    assert!(bridge.handle_click_away());
+    assert!(bridge.context_menu.is_none());
+    assert!(!bridge.view_model().context_menu_open);
+
+    // 3. Re-open and dismiss with Escape
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.context_menu.is_some());
+    assert!(bridge.handle_escape());
+    assert!(bridge.context_menu.is_none());
+
+    // 4. Test actions in viewport context menu
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.context_menu_action("shade_smooth"));
+    assert_eq!(
+        bridge.view_model().status_message,
+        "Normais recalculadas (suave)"
+    );
+
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.context_menu_action("subdivide"));
+}
+
+#[test]
+fn test_menu_and_workspace_keyboard_shortcuts() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+
+    // Alt+F opens File menu
+    assert!(bridge.route_shortcut("f", false, false, true));
+    assert_eq!(bridge.view_model().menu_open, "file");
+
+    // Alt+E switches to Edit menu
+    assert!(bridge.route_shortcut("e", false, false, true));
+    assert_eq!(bridge.view_model().menu_open, "edit");
+
+    // Escape closes menu
+    assert!(bridge.route_shortcut("Escape", false, false, false));
+    assert_eq!(bridge.view_model().menu_open, "");
+
+    // Ctrl+PageDown cycles workspace MODEL -> PAINT -> UV -> MODEL
+    assert_eq!(bridge.state.workspace, Workspace::Model);
+    assert!(bridge.route_shortcut("PageDown", true, false, false));
+    assert_eq!(bridge.state.workspace, Workspace::Paint);
+    assert!(bridge.route_shortcut("PageDown", true, false, false));
+    assert_eq!(bridge.state.workspace, Workspace::Uv);
+    assert!(bridge.route_shortcut("PageDown", true, false, false));
+    assert_eq!(bridge.state.workspace, Workspace::Model);
+
+    // Ctrl+PageUp cycles backwards MODEL -> UV -> PAINT -> MODEL
+    assert!(bridge.route_shortcut("PageUp", true, false, false));
+    assert_eq!(bridge.state.workspace, Workspace::Uv);
+    assert!(bridge.route_shortcut("PageUp", true, false, false));
+    assert_eq!(bridge.state.workspace, Workspace::Paint);
+    assert!(bridge.route_shortcut("PageUp", true, false, false));
+    assert_eq!(bridge.state.workspace, Workspace::Model);
+}
+
+#[test]
+fn test_loop_selection_face_and_vertex_in_bridge() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face));
+
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        assert_eq!(mesh.select_face_loop(0, None, false), 4);
+    }
+
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Vertex));
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        assert!(mesh.select_vertex_loop(0, false) >= 2);
+    }
+}

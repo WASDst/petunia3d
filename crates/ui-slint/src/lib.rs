@@ -530,6 +530,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub shape_anchor: Option<(u32, u32)>,
     /// Plano de corte (Slice) ativo: âncora em pixels lógicos da viewport.
     pub slice_anchor: Option<[f32; 2]>,
+    /// Último clique na viewport com timestamp para detecção de duplo-clique.
+    pub last_viewport_click: Option<([f32; 2], std::time::Instant)>,
     /// Sessão de loop cut com slide interativo (P3D-131).
     pub loop_cut: Option<LoopCutSessionState>,
     /// Aresta atualmente sob o cursor para a prévia não destrutiva do Loop Cut.
@@ -719,6 +721,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             pivot_menu_open: false,
             shape_anchor: None,
             slice_anchor: None,
+            last_viewport_click: None,
             loop_cut: None,
             loop_cut_hover_ring: None,
             loop_cut_hover_source: None,
@@ -5672,11 +5675,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut session = petunia_core::CutSession::new(original_mesh);
         session.fill_cap = self.slice_trim;
         self.state.session.tools.cut_session = Some(session);
+
+        let mut anchor_pt = [x, y];
+        if let Some(old_anchor) = self.slice_anchor {
+            let d_anchor = (x - old_anchor[0]).hypot(y - old_anchor[1]);
+            let d_end = (x - self.pointer_position[0]).hypot(y - self.pointer_position[1]);
+            if d_anchor <= 28.0 {
+                anchor_pt = self.pointer_position;
+                self.pointer_position = [x, y];
+            } else if d_end <= 28.0 {
+                anchor_pt = old_anchor;
+                self.pointer_position = [x, y];
+            } else {
+                self.pointer_position = [x, y];
+            }
+        } else {
+            self.pointer_position = [x, y];
+        }
+
         self.state.session.tools.active_tool = "slice".to_string();
-        self.slice_anchor = Some([x, y]);
-        self.pointer_position = [x, y];
+        self.slice_anchor = Some(anchor_pt);
         self.state.set_status(
-            "Slice: arraste para cortar · T: Trim/Split · Enter para confirmar · Esc para cancelar",
+            "Slice: arraste para ajustar · T: Trim/Split · Enter para confirmar · Esc para cancelar",
         );
         true
     }
@@ -6525,8 +6545,80 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     true
                 }
                 "delete" => {
-                    self.apply(UiIntent::DeleteActiveAsset);
+                    if self.state.selection_domain().is_component() {
+                        let _ = self.execute_core_command("model.delete");
+                        true
+                    } else {
+                        self.apply(UiIntent::DeleteActiveAsset);
+                        true
+                    }
+                }
+                "duplicate" => {
+                    self.apply(UiIntent::DuplicateActiveAsset);
                     true
+                }
+                "extrude" => {
+                    self.execute_shortcut_tool("model.extrude");
+                    true
+                }
+                "inset" => {
+                    self.execute_shortcut_tool("model.inset");
+                    true
+                }
+                "bevel" => {
+                    self.execute_shortcut_tool("model.bevel");
+                    true
+                }
+                "subdivide" => {
+                    let _ = self.execute_core_command("model.subdivide");
+                    true
+                }
+                "loop_cut" => {
+                    self.apply(UiIntent::SetActiveTool("loop_cut".to_string()));
+                    true
+                }
+                "connect" => {
+                    let _ = self.execute_core_command("model.connect");
+                    true
+                }
+                "merge" => {
+                    let _ = self.execute_core_command("model.merge");
+                    true
+                }
+                "flip_normals" => {
+                    let _ = self.execute_core_command("model.flip_normals");
+                    true
+                }
+                "mark_seam" => self.toggle_selected_uv_seams(),
+                "shade_smooth" => {
+                    if let Some(mesh) = self.state.project.active_mesh_mut() {
+                        mesh.recalculate_normals();
+                        self.state.emit_mesh_changed();
+                        self.state.mark_dirty();
+                        self.state.set_status("Normais recalculadas (suave)");
+                        true
+                    } else {
+                        false
+                    }
+                }
+                "shade_flat" => {
+                    if let Some(_mesh) = self.state.project.active_mesh_mut() {
+                        self.state.emit_mesh_changed();
+                        self.state.mark_dirty();
+                        self.state.set_status("Sombreamento facetado ativo");
+                        true
+                    } else {
+                        false
+                    }
+                }
+                "boolean_operand" => {
+                    if let Some(active) = self.state.project.active() {
+                        self.state.session.tools.boolean_operand = Some(active.id);
+                        self.state.set_status("Definido como operando booleano");
+                        true
+                    } else {
+                        false
+                    }
                 }
                 "origin_to_geometry" => self.set_origin_geometry(),
                 "origin_to_bottom" => self.set_origin_bottom(),
@@ -6864,6 +6956,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !normalized_x.is_finite() || !normalized_y.is_finite() {
             return;
         }
+        let now = std::time::Instant::now();
+        let is_double_click = if let Some((last_pos, last_time)) = self.last_viewport_click {
+            let dt = now.duration_since(last_time).as_millis();
+            let dx = normalized_x - last_pos[0];
+            let dy = normalized_y - last_pos[1];
+            (40..=400).contains(&dt) && (dx * dx + dy * dy) < 0.0025
+        } else {
+            false
+        };
+        self.last_viewport_click = Some(([normalized_x, normalized_y], now));
+        let loop_select = loop_select || is_double_click;
+
         if self.state.session.tools.active_tool == "draw_profile" {
             petunia_module_model::draw_profile::profile_add_point(
                 &mut self.state,
@@ -6888,8 +6992,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         // A faca consome o clique antes da seleção: com uma sessão de corte
         // aberta, clicar é escolher ponto de aresta, não selecionar.
-        if self.state.session.tools.cut_session.is_some() {
+        if (self.state.session.tools.active_tool == "cut"
+            || self.state.session.tools.active_tool == "knife")
+            && self.state.session.tools.cut_session.is_some()
+        {
             self.knife_click(normalized_x, normalized_y);
+            return;
+        }
+        if self.state.session.tools.active_tool == "slice" {
             return;
         }
         let ndc_x = normalized_x.clamp(0.0, 1.0) * 2.0 - 1.0;
@@ -6955,14 +7065,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Target::Vertex(index) => {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
-                    if !extend {
-                        mesh.deselect_all();
-                    }
-                    if let Some(vertex) = mesh.verts.get_mut(index as usize) {
-                        vertex.selected = !extend || !vertex.selected;
+                    if loop_select {
+                        let count = mesh.select_vertex_loop(index, extend);
+                        self.state
+                            .set_status(format!("Selected vertex loop ({count} points)"));
+                    } else {
+                        if !extend {
+                            mesh.deselect_all();
+                        }
+                        if let Some(vertex) = mesh.verts.get_mut(index as usize) {
+                            vertex.selected = !extend || !vertex.selected;
+                        }
+                        self.state.set_status(format!("Point {index} selected"));
                     }
                 }
-                self.state.set_status(format!("Point {index} selected"));
             }
             Target::Edge(a, b) => {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
@@ -6999,15 +7115,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Target::Face(face) => {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
-                    if !extend {
-                        mesh.deselect_all();
+                    if loop_select {
+                        let count = mesh.select_face_loop(face, None, extend);
+                        self.state
+                            .set_status(format!("Selected face loop ({count} faces)"));
+                    } else {
+                        if !extend {
+                            mesh.deselect_all();
+                        }
+                        if let Some(current) = mesh.faces.get_mut(face) {
+                            current.selected = !extend || !current.selected;
+                        }
+                        mesh.sync_vert_selection_from_faces();
+                        self.state.set_status(format!("Face {face} selected"));
                     }
-                    if let Some(current) = mesh.faces.get_mut(face) {
-                        current.selected = !extend || !current.selected;
-                    }
-                    mesh.sync_vert_selection_from_faces();
                 }
-                self.state.set_status(format!("Face {face} selected"));
             }
             Target::None => {
                 if self.state.selection_domain() == SelectionDomain::Object {
@@ -7126,12 +7248,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn handle_click_away(&mut self) -> bool {
+        let mut handled = false;
+        if self.close_context_menu() {
+            handled = true;
+        }
+        if self.close_menu() {
+            handled = true;
+        }
+        if self.add_menu_open {
+            self.add_menu_open = false;
+            handled = true;
+        }
+        if self.pivot_menu_open {
+            self.pivot_menu_open = false;
+            self.overlays.remove(OverlayId::PivotMenu);
+            handled = true;
+        }
         if let Some(entry) = self.overlays.click_away() {
             self.hide_overlay(entry.id);
-            true
-        } else {
-            false
+            handled = true;
         }
+        handled
     }
 
     pub fn execute_command(&mut self, id: CommandId) {
@@ -7354,6 +7491,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             && self.drag.is_none()
         {
             return self.toggle_micro_inspector();
+        }
+        if alt && !ctrl && !shift {
+            match text.to_ascii_lowercase().as_str() {
+                "f" => return self.toggle_menu("file"),
+                "e" => return self.toggle_menu("edit"),
+                "v" => return self.toggle_menu("view"),
+                "h" => return self.toggle_menu("help"),
+                _ => {}
+            }
+        }
+        if ctrl && !shift && !alt {
+            match text {
+                "PageUp" => {
+                    let next = match self.state.workspace {
+                        Workspace::Model => Workspace::Uv,
+                        Workspace::Paint => Workspace::Model,
+                        Workspace::Uv => Workspace::Paint,
+                    };
+                    self.apply(UiIntent::SetWorkspace(next));
+                    return true;
+                }
+                "PageDown" => {
+                    let next = match self.state.workspace {
+                        Workspace::Model => Workspace::Paint,
+                        Workspace::Paint => Workspace::Uv,
+                        Workspace::Uv => Workspace::Model,
+                    };
+                    self.apply(UiIntent::SetWorkspace(next));
+                    return true;
+                }
+                _ => {}
+            }
         }
         if self.state.session.tools.active_tool == "slice"
             && text.eq_ignore_ascii_case("t")
@@ -7761,10 +7930,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "loop_cut" {
             return self.place_loop_cut_hover();
         }
-        if self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some() {
+        if self.state.session.tools.active_tool == "slice"
+            && (self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some())
+        {
             return self.commit_slice();
         }
-        if self.state.session.tools.active_tool == "cut" {
+        if self.state.session.tools.active_tool == "cut"
+            || self.state.session.tools.active_tool == "knife"
+        {
             return self.commit_knife();
         }
         if self.state.session.tools.active_tool == "draw_profile" && self.state.profile.closed {
@@ -8684,6 +8857,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "M {:.2} {:.2} L {:.2} {:.2}",
                 anchor[0], anchor[1], self.pointer_position[0], self.pointer_position[1]
             );
+            let r = 5.0;
+            cmd.push_str(&format!(
+                " M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z",
+                anchor[0] - r,
+                anchor[1] - r,
+                anchor[0] + r,
+                anchor[1] - r,
+                anchor[0] + r,
+                anchor[1] + r,
+                anchor[0] - r,
+                anchor[1] + r,
+            ));
+            cmd.push_str(&format!(
+                " M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z",
+                self.pointer_position[0],
+                self.pointer_position[1] - r,
+                self.pointer_position[0] + r,
+                self.pointer_position[1],
+                self.pointer_position[0],
+                self.pointer_position[1] + r,
+                self.pointer_position[0] - r,
+                self.pointer_position[1],
+            ));
             if self.slice_trim {
                 let dx = self.pointer_position[0] - anchor[0];
                 let dy = self.pointer_position[1] - anchor[1];

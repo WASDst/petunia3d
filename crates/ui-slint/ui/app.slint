@@ -338,7 +338,7 @@ component ViewportBarButton inherits Rectangle {
             reject
         }
         bar-touch := TouchArea {
-            clicked => { bar-focus.focus(); root.clicked(); }
+            clicked => { root.clicked(); }
             Tooltip {
                 RichTooltip {
                     title: root.label;
@@ -389,7 +389,7 @@ component ViewportSvgButton inherits Rectangle {
             reject
         }
         touch := TouchArea {
-            clicked => { svg-focus.focus(); root.clicked(); }
+            clicked => { root.clicked(); }
             Tooltip {
                 RichTooltip {
                     title: root.label;
@@ -553,7 +553,6 @@ component TopAction inherits Rectangle {
             enabled: root.enabled;
             clicked => {
                 if root.enabled {
-                    top-focus.focus();
                     root.clicked();
                 }
             }
@@ -890,7 +889,7 @@ component ToolButton inherits Rectangle {
             reject
         }
         touch-area := TouchArea {
-            clicked => { tool-focus.focus(); root.clicked(); }
+            clicked => { root.clicked(); }
             Tooltip {
                 RichTooltip {
                     title: root.semantic-label;
@@ -1240,7 +1239,6 @@ component InspectorSection inherits Rectangle {
                         }
                     }
                     clicked => {
-                        section-focus.focus();
                         if self.alt-down { root.toggle-all(); } else { root.toggled(); }
                         self.alt-down = false;
                     }
@@ -3585,8 +3583,34 @@ export component PetuniaSlintShell inherits Window {
                 return accept;
             }
             if !root.command-search-visible && !root.settings-visible {
+                let key-name = event.text == Key.Tab ? "Tab" :
+                    event.text == Key.Return ? "Enter" :
+                    event.text == Key.Backspace ? "Backspace" :
+                    event.text == Key.Delete ? "Delete" :
+                    event.text == Key.Home ? "Home" :
+                    event.text == Key.End ? "End" :
+                    event.text == Key.PageUp ? "PageUp" :
+                    event.text == Key.PageDown ? "PageDown" :
+                    event.text == Key.Insert ? "Insert" :
+                    event.text == Key.UpArrow ? "Up" :
+                    event.text == Key.DownArrow ? "Down" :
+                    event.text == Key.LeftArrow ? "Left" :
+                    event.text == Key.RightArrow ? "Right" :
+                    event.text == Key.F1 ? "F1" :
+                    event.text == Key.F2 ? "F2" :
+                    event.text == Key.F3 ? "F3" :
+                    event.text == Key.F4 ? "F4" :
+                    event.text == Key.F5 ? "F5" :
+                    event.text == Key.F6 ? "F6" :
+                    event.text == Key.F7 ? "F7" :
+                    event.text == Key.F8 ? "F8" :
+                    event.text == Key.F9 ? "F9" :
+                    event.text == Key.F10 ? "F10" :
+                    event.text == Key.F11 ? "F11" :
+                    event.text == Key.F12 ? "F12" :
+                    event.text;
                 root.shortcut-requested(
-                    event.text == Key.Tab ? "Tab" : event.text == Key.Return ? "Enter" : event.text == Key.Backspace ? "Backspace" : event.text == Key.Delete ? "Delete" : event.text == Key.Home ? "Home" : event.text == Key.UpArrow ? "Up" : event.text == Key.DownArrow ? "Down" : event.text == Key.LeftArrow ? "Left" : event.text == Key.RightArrow ? "Right" : event.text,
+                    key-name,
                     event.modifiers.control, event.modifiers.shift, event.modifiers.alt);
                 return accept;
             }
@@ -4272,6 +4296,7 @@ export component PetuniaSlintShell inherits Window {
                         property <bool> is-tool-drag: false;
                         property <bool> is-loop-drag: false;
                         property <bool> is-loop-place: false;
+                        property <bool> pending-slice: false;
                         property <bool> is-slice-drag: false;
                         property <bool> is-gizmo-drag: false;
                         property <bool> is-keyboard-transform-drag: false;
@@ -4293,6 +4318,7 @@ export component PetuniaSlintShell inherits Window {
                             self.is-profile-depth-drag = false;
                             self.is-loop-drag = false;
                             self.is-loop-place = false;
+                            self.pending-slice = false;
                             self.is-slice-drag = false;
                             self.is-gizmo-drag = false;
                             self.is-keyboard-transform-drag = false;
@@ -4396,8 +4422,7 @@ export component PetuniaSlintShell inherits Window {
                                         is-painting = true;
                                         root.viewport-paint-begin(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
                                     } else if root.active-tool == "slice" {
-                                        is-slice-drag = true;
-                                        root.viewport-transform-begin("slice", self.mouse-x / 1px, self.mouse-y / 1px);
+                                        pending-slice = true;
                                     } else if root.active-tool == "loop_cut" && !root.loop-cut-active {
                                         is-loop-place = true;
                                         consume-click = true;
@@ -4508,6 +4533,14 @@ export component PetuniaSlintShell inherits Window {
                                     last-y = self.mouse-y;
                                 } else if is-loop-place {
                                     root.viewport-hover(self.mouse-x / self.width, self.mouse-y / self.height);
+                                } else if pending-slice && self.pressed
+                                    && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
+                                        || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
+                                    pending-slice = false;
+                                    is-slice-drag = true;
+                                    moved-since-down = true;
+                                    root.viewport-transform-begin("slice", last-x / 1px, last-y / 1px);
+                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
                                 } else if is-slice-drag {
                                     moved-since-down = true;
                                     root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
@@ -4542,6 +4575,7 @@ export component PetuniaSlintShell inherits Window {
                                 }
                                 pending-transform = false;
                                 pending-box-select = false;
+                                pending-slice = false;
                                 if is-painting {
                                     root.viewport-paint-end(self.mouse-x / 1px, self.mouse-y / 1px);
                                     is-painting = false;
@@ -4573,7 +4607,8 @@ export component PetuniaSlintShell inherits Window {
 
                         clicked => {
                             if !consume-click && !moved-since-down && !is-transform && !is-painting
-                                && root.active-workspace != "PAINT" {
+                                && root.active-workspace != "PAINT"
+                                && root.active-tool != "slice" {
                                 root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, extend-selection, loop-selection);
                             }
                             consume-click = false;
@@ -9415,45 +9450,100 @@ export component PetuniaSlintShell inherits Window {
                         shortcut: "Ctrl+I";
                         clicked => { root.context-menu-action("invert_selection"); }
                     }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: "Extrude";
+                        shortcut: "E";
+                        clicked => { root.context-menu-action("extrude"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain == "FACE": ContextMenuItem {
+                        label: "Inset";
+                        shortcut: "I";
+                        clicked => { root.context-menu-action("inset"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: "Bevel";
+                        shortcut: "Ctrl+B";
+                        clicked => { root.context-menu-action("bevel"); }
+                    }
+                    if root.context-menu-mode == "viewport": ContextMenuItem {
+                        label: "Subdivide";
+                        shortcut: "W";
+                        clicked => { root.context-menu-action("subdivide"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain == "EDGE": ContextMenuItem {
+                        label: "Loop Cut";
+                        shortcut: "Ctrl+R";
+                        clicked => { root.context-menu-action("loop_cut"); }
+                    }
+                    if root.context-menu-mode == "viewport" && (root.selection-domain == "VERTEX" || root.selection-domain == "EDGE"): ContextMenuItem {
+                        label: "Connect";
+                        shortcut: "J";
+                        clicked => { root.context-menu-action("connect"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain == "EDGE": ContextMenuItem {
+                        label: "Mark / Clear Seam";
+                        shortcut: "U";
+                        clicked => { root.context-menu-action("mark_seam"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain == "FACE": ContextMenuItem {
+                        label: "Flip Normals";
+                        shortcut: "Alt+N";
+                        clicked => { root.context-menu-action("flip_normals"); }
+                    }
+                    if root.context-menu-mode == "viewport" && (root.selection-domain == "OBJECT" || root.selection-domain == "FACE"): ContextMenuItem {
+                        label: "Shade Smooth";
+                        shortcut: "";
+                        clicked => { root.context-menu-action("shade_smooth"); }
+                    }
+                    if root.context-menu-mode == "viewport" && (root.selection-domain == "OBJECT" || root.selection-domain == "FACE"): ContextMenuItem {
+                        label: "Shade Flat";
+                        shortcut: "";
+                        clicked => { root.context-menu-action("shade_flat"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain == "OBJECT": ContextMenuItem {
+                        label: "Duplicate";
+                        shortcut: "Shift+D";
+                        clicked => { root.context-menu-action("duplicate"); }
+                    }
                     ContextMenuItem {
                         label: "Frame Selection";
                         shortcut: "F";
                         clicked => { root.context-menu-action("frame"); }
                     }
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: "Set as Boolean Operand";
                         shortcut: "";
                         clicked => { root.context-menu-action("boolean_operand"); }
                     }
 
-                    Rectangle { height: 1px; background: DesignTokens.border; }
+                    if root.selection-domain == "OBJECT": Rectangle { height: 1px; background: DesignTokens.border; }
 
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: root.label-edit-pivot;
                         shortcut: "Insert";
                         clicked => { root.context-menu-action("toggle_edit_pivot"); }
                     }
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: root.label-origin-to-geometry;
                         shortcut: "";
                         clicked => { root.context-menu-action("origin_to_geometry"); }
                     }
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: root.label-origin-to-bottom;
                         shortcut: "";
                         clicked => { root.context-menu-action("origin_to_bottom"); }
                     }
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: root.label-origin-to-cursor;
                         shortcut: "";
                         clicked => { root.context-menu-action("origin_to_cursor"); }
                     }
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: root.label-origin-to-selection;
                         shortcut: "";
                         clicked => { root.context-menu-action("origin_to_selection"); }
                     }
-                    ContextMenuItem {
+                    if root.selection-domain == "OBJECT": ContextMenuItem {
                         label: root.label-geometry-to-origin;
                         shortcut: "";
                         clicked => { root.context-menu-action("geometry_to_origin"); }

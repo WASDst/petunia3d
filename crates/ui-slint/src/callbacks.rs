@@ -1270,13 +1270,14 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_escape_requested(move || {
         if let Ok(mut bridge) = esc_bridge.lock() {
-            bridge.apply(UiIntent::DismissTopOverlay);
+            bridge.handle_escape();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                window.set_command_search_visible(bridge.command_search_visible);
-                window.set_settings_visible(bridge.settings_visible);
-                window.set_scene_drawer_visible(bridge.scene_drawer_visible);
-                window.set_asset_library_visible(bridge.asset_library_visible);
-                window.set_menu_open(bridge.view_model().menu_open.into());
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
@@ -1286,12 +1287,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_click_away_requested(move || {
         if let Ok(mut bridge) = click_away_bridge.lock() {
             bridge.handle_click_away();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                window.set_command_search_visible(bridge.command_search_visible);
-                window.set_settings_visible(bridge.settings_visible);
-                window.set_scene_drawer_visible(bridge.scene_drawer_visible);
-                window.set_asset_library_visible(bridge.asset_library_visible);
-                window.set_menu_open(bridge.view_model().menu_open.into());
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
