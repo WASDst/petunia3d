@@ -230,21 +230,104 @@ impl BrushSettings {
     /// `dab_step_px`. Traços rápidos e lentos com os mesmos extremos
     /// produzem exatamente o mesmo conjunto (P3D-057).
     pub fn stroke_dabs(self, x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<(u32, u32)> {
-        let dx = x1 - x0;
-        let dy = y1 - y0;
-        let len = (dx * dx + dy * dy).sqrt();
-        let step = self.dab_step_px();
-        if len <= step {
-            return vec![(x0.round() as u32, y0.round() as u32)];
-        }
-        let steps = (len / step).ceil() as usize;
-        (0..=steps)
-            .map(|i| {
-                let t = i as f32 / steps as f32;
-                ((x0 + dx * t).round() as u32, (y0 + dy * t).round() as u32)
+        let mut sampler = StrokeSampler::default();
+        let mut dabs = sampler.begin([x0, y0], self.dab_step_px());
+        dabs.extend(sampler.extend([x1, y1]));
+        dabs.into_iter()
+            .map(|point| {
+                (
+                    point[0].round().max(0.0) as u32,
+                    point[1].round().max(0.0) as u32,
+                )
             })
             .collect()
     }
+}
+
+/// Amostrador incremental de strokes por comprimento de arco em espaço 2D.
+///
+/// O residual entre eventos é preservado, portanto dividir o mesmo caminho em
+/// frequências diferentes de pointer events produz os mesmos dabs. A camada de
+/// apresentação escolhe o espaço (pixels de textura ou pixels lógicos de tela)
+/// e apenas entrega pontos; o sampler não conhece UI, teclas ou ferramentas.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StrokeSampler {
+    last_input: Option<[f32; 2]>,
+    step: f32,
+    distance_to_next: f32,
+}
+
+impl Default for StrokeSampler {
+    fn default() -> Self {
+        Self {
+            last_input: None,
+            step: 1.0,
+            distance_to_next: 1.0,
+        }
+    }
+}
+
+impl StrokeSampler {
+    /// Inicia uma sessão e emite o dab inicial.
+    pub fn begin(&mut self, point: [f32; 2], step: f32) -> Vec<[f32; 2]> {
+        if !point[0].is_finite() || !point[1].is_finite() {
+            self.reset();
+            return Vec::new();
+        }
+        self.step = sanitize_step(step);
+        self.distance_to_next = self.step;
+        self.last_input = Some(point);
+        vec![point]
+    }
+
+    /// Acrescenta um pointer sample e emite somente os dabs regularmente
+    /// espaçados que cabem no novo segmento.
+    pub fn extend(&mut self, point: [f32; 2]) -> Vec<[f32; 2]> {
+        if !point[0].is_finite() || !point[1].is_finite() {
+            return Vec::new();
+        }
+        let Some(previous) = self.last_input else {
+            return self.begin(point, self.step);
+        };
+        self.last_input = Some(point);
+
+        let delta = [point[0] - previous[0], point[1] - previous[1]];
+        let segment_length = (delta[0] * delta[0] + delta[1] * delta[1]).sqrt();
+        if segment_length <= f32::EPSILON {
+            return Vec::new();
+        }
+
+        let direction = [delta[0] / segment_length, delta[1] / segment_length];
+        let mut travelled = 0.0;
+        let mut dabs = Vec::new();
+        while travelled + self.distance_to_next <= segment_length + f32::EPSILON {
+            travelled += self.distance_to_next;
+            dabs.push([
+                previous[0] + direction[0] * travelled,
+                previous[1] + direction[1] * travelled,
+            ]);
+            self.distance_to_next = self.step;
+        }
+        self.distance_to_next -= segment_length - travelled;
+        if self.distance_to_next <= f32::EPSILON {
+            self.distance_to_next = self.step;
+        }
+        dabs
+    }
+
+    /// Encerra a sessão sem emitir um dab artificial no pointer-up.
+    pub fn reset(&mut self) {
+        self.last_input = None;
+        self.distance_to_next = self.step;
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.last_input.is_some()
+    }
+}
+
+fn sanitize_step(step: f32) -> f32 {
+    if step.is_finite() { step.max(0.5) } else { 1.0 }
 }
 
 /// Clamp 0..=1 tolerante a NaN (NaN cai em 0, o valor neutro dos parâmetros).
@@ -301,25 +384,41 @@ mod tests {
             spacing: 0.2,
             ..Default::default()
         };
-        // Traço "rápido": um único segmento longo.
-        let fast = s.stroke_dabs(0.0, 0.0, 100.0, 100.0);
-        // Traço "lento": o mesmo caminho em vários segmentos pequenos.
-        let mut slow = Vec::new();
-        let mut prev: Option<(f32, f32)> = None;
+        let mut fast_sampler = StrokeSampler::default();
+        let mut fast = fast_sampler.begin([0.0, 0.0], s.dab_step_px());
+        fast.extend(fast_sampler.extend([100.0, 100.0]));
+
+        let mut slow_sampler = StrokeSampler::default();
+        let mut slow = slow_sampler.begin([0.0, 0.0], s.dab_step_px());
         for i in 1..=10 {
-            let p = (i as f32 * 10.0, i as f32 * 10.0);
-            if let Some((px, py)) = prev {
-                slow.extend(s.stroke_dabs(px, py, p.0, p.1));
-            }
-            prev = Some(p);
+            slow.extend(slow_sampler.extend([i as f32 * 10.0, i as f32 * 10.0]));
         }
-        slow.insert(0, (0, 0));
-        slow.dedup();
-        assert!(slow.len() > 5, "traço lento não pode degenerar");
-        // Cobertura equivalente: extremos e densidade comparáveis.
-        assert_eq!(fast.first(), Some(&(0, 0)));
-        assert_eq!(fast.last(), Some(&(100, 100)));
-        assert!((fast.len() as i32 - slow.len() as i32).abs() <= 2);
+
+        assert_eq!(fast.len(), slow.len());
+        for (fast, slow) in fast.iter().zip(&slow) {
+            assert!((fast[0] - slow[0]).abs() < 1e-3);
+            assert!((fast[1] - slow[1]).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn stroke_sampler_carries_sub_step_residual_between_events() {
+        let mut sampler = StrokeSampler::default();
+        assert_eq!(sampler.begin([0.0, 0.0], 5.0), vec![[0.0, 0.0]]);
+        assert!(sampler.extend([2.0, 0.0]).is_empty());
+        assert_eq!(sampler.extend([4.0, 0.0]), Vec::<[f32; 2]>::new());
+        assert_eq!(sampler.extend([6.0, 0.0]), vec![[5.0, 0.0]]);
+        assert_eq!(sampler.extend([11.0, 0.0]), vec![[10.0, 0.0]]);
+    }
+
+    #[test]
+    fn stroke_sampler_rejects_non_finite_input_without_corrupting_session() {
+        let mut sampler = StrokeSampler::default();
+        sampler.begin([1.0, 2.0], 2.0);
+        assert!(sampler.extend([f32::NAN, 2.0]).is_empty());
+        assert_eq!(sampler.extend([3.0, 2.0]), vec![[3.0, 2.0]]);
+        sampler.begin([f32::INFINITY, 0.0], 2.0);
+        assert!(!sampler.is_active());
     }
 
     #[test]

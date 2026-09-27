@@ -92,6 +92,18 @@ impl Default for ViewportRenderState {
     }
 }
 
+fn texture_points(points: &[[f32; 2]], width: u32, height: u32) -> Vec<(u32, u32)> {
+    points
+        .iter()
+        .map(|point| {
+            (
+                (point[0].round() as i32).clamp(0, width.saturating_sub(1) as i32) as u32,
+                (point[1].round() as i32).clamp(0, height.saturating_sub(1) as i32) as u32,
+            )
+        })
+        .collect()
+}
+
 /// Gizmo 3D projetado para o overlay da viewport.
 ///
 /// A projeção acontece no bridge; o Slint só desenha as três hastes a partir
@@ -508,6 +520,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub viewport_size: [f32; 2],
     /// Última posição de tela do traço de pintura ativo.
     pub paint_last: Option<[f32; 2]>,
+    /// Amostragem incremental do stroke 3D em pixels lógicos da viewport.
+    pub paint_sampler: petunia_core::StrokeSampler,
     /// Menu de primitivas aberto (apresentação).
     pub add_menu_open: bool,
     /// Ferramenta paramétrica modal ativa (Extrude, Inset, Bevel, Push/Pull).
@@ -552,6 +566,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub paint_pixel_grid: bool,
     pub paint_canvas_zoom: i32,
     pub paint_2d_last: Option<(u32, u32)>,
+    /// Amostragem incremental do stroke no espaço de pixels da textura.
+    pub paint_2d_sampler: petunia_core::StrokeSampler,
     pub paint_target_vertex: bool,
     /// Sessão de manipulação interativa de decalque 3D: (origem_x, origem_y, center_uv_inicial, scale_uv_inicial, rot_deg_inicial).
     pub decal_drag_initial: Option<DecalDragInitial>,
@@ -739,6 +755,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             drag: None,
             viewport_size: [1024.0, 768.0],
             paint_last: None,
+            paint_sampler: petunia_core::StrokeSampler::default(),
             add_menu_open: false,
             tool_modal: None,
             keyboard_tool_modal_active: false,
@@ -767,6 +784,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             paint_pixel_grid: true,
             paint_canvas_zoom: 1,
             paint_2d_last: None,
+            paint_2d_sampler: petunia_core::StrokeSampler::default(),
             paint_target_vertex: false,
             decal_drag_initial: None,
             section_layouts: section_layout::default_section_layouts(),
@@ -1603,40 +1621,49 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .as_ref()
             .and_then(|stack| stack.active())
             .and_then(|layer| layer.canvas())?;
-        let zoom = self.paint_canvas_zoom.clamp(1, 16) as u32;
-        let out_w = canvas.w * zoom;
-        let out_h = canvas.h * zoom;
-        let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(out_w, out_h);
+        let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(canvas.w, canvas.h);
         let pixels = buffer.make_mut_bytes();
         let source = &canvas.pixels;
+        let length = pixels.len().min(source.len());
+        pixels[..length].copy_from_slice(&source[..length]);
+        Some(slint::Image::from_rgba8(buffer))
+    }
 
-        if zoom == 1 {
-            let length = pixels.len().min(source.len());
-            pixels[..length].copy_from_slice(&source[..length]);
-        } else {
-            for y in 0..out_h {
-                let src_y = (y / zoom).min(canvas.h - 1);
-                let is_grid_y = self.paint_pixel_grid && zoom >= 4 && (y % zoom == 0);
-                for x in 0..out_w {
-                    let src_x = (x / zoom).min(canvas.w - 1);
-                    let is_grid_x = self.paint_pixel_grid && zoom >= 4 && (x % zoom == 0);
-                    let dst_idx = ((y * out_w + x) * 4) as usize;
-                    let src_idx = ((src_y * canvas.w + src_x) * 4) as usize;
-                    if src_idx + 3 < source.len() && dst_idx + 3 < pixels.len() {
-                        if is_grid_x || is_grid_y {
-                            pixels[dst_idx] = (source[src_idx] as f32 * 0.75).round() as u8;
-                            pixels[dst_idx + 1] = (source[src_idx + 1] as f32 * 0.75).round() as u8;
-                            pixels[dst_idx + 2] = (source[src_idx + 2] as f32 * 0.75).round() as u8;
-                            pixels[dst_idx + 3] = source[src_idx + 3];
-                        } else {
-                            pixels[dst_idx..dst_idx + 4]
-                                .copy_from_slice(&source[src_idx..src_idx + 4]);
-                        }
-                    }
-                }
+    /// Grade vetorial contextual do editor 2D, nas coordenadas do quadro Slint.
+    pub fn paint_canvas_grid_commands(&self) -> String {
+        use std::fmt::Write as _;
+
+        const VIEW_SIZE: f32 = 256.0;
+        if !self.paint_pixel_grid {
+            return String::new();
+        }
+        let Some((width, height)) = self.paint_canvas_dimensions() else {
+            return String::new();
+        };
+        let zoom = self.paint_canvas_zoom.clamp(1, 16) as f32;
+        let scaled_size = VIEW_SIZE * zoom;
+        let offset = (VIEW_SIZE - scaled_size) * 0.5;
+        let step_x = scaled_size / width.max(1) as f32;
+        let step_y = scaled_size / height.max(1) as f32;
+        let mut commands = String::new();
+
+        if step_x >= 4.0 {
+            let first = ((-offset) / step_x).ceil().max(0.0) as u32;
+            let last = ((VIEW_SIZE - offset) / step_x).floor().min(width as f32) as u32;
+            for column in first..=last {
+                let x = offset + column as f32 * step_x;
+                let _ = write!(&mut commands, "M {x:.2} 0 L {x:.2} {VIEW_SIZE:.2} ");
             }
         }
-        Some(slint::Image::from_rgba8(buffer))
+        if step_y >= 4.0 {
+            let first = ((-offset) / step_y).ceil().max(0.0) as u32;
+            let last = ((VIEW_SIZE - offset) / step_y).floor().min(height as f32) as u32;
+            for row in first..=last {
+                let y = offset + row as f32 * step_y;
+                let _ = write!(&mut commands, "M 0 {y:.2} L {VIEW_SIZE:.2} {y:.2} ");
+            }
+        }
+        commands
     }
 
     /// Gera comandos SVG de projeção da estampa de decalque sobre a superfície 3D (P3D-133).
@@ -4476,7 +4503,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.begin_paint_shape_at(x, y);
         }
         self.state.begin_paint_stroke();
-        self.paint_dab_at(x, y);
+        let settings = self.viewport_brush_settings();
+        let dabs = self.paint_sampler.begin([x, y], settings.dab_step_px());
+        self.paint_dabs_at(&dabs, settings);
         self.paint_last = Some([x, y]);
         self.state.mark_dirty();
         true
@@ -4634,18 +4663,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.active_layer_is_decal() {
             return self.decal_drag_to(x, y, is_shift, is_ctrl);
         }
-        let Some(last) = self.paint_last else {
+        if self.paint_last.is_none() {
             return false;
-        };
-        let delta_x = x - last[0];
-        let delta_y = y - last[1];
-        let distance = (delta_x * delta_x + delta_y * delta_y).sqrt();
-        // ~3 px lógicos entre dabs deixam o traço contínuo sem buracos.
-        let steps = (distance / 3.0).ceil().max(1.0) as usize;
-        for step in 1..=steps {
-            let t = step as f32 / steps as f32;
-            self.paint_dab_at(last[0] + delta_x * t, last[1] + delta_y * t);
         }
+        let settings = self.viewport_brush_settings();
+        let dabs = self.paint_sampler.extend([x, y]);
+        self.paint_dabs_at(&dabs, settings);
         self.paint_last = Some([x, y]);
         self.state.mark_dirty();
         true
@@ -4659,9 +4682,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.shape_anchor.is_some() {
             return self.end_paint_shape_at(x, y);
         }
-        if self.paint_last.take().is_none() {
+        if self.paint_last.is_none() {
             return false;
         }
+        self.paint_stroke_to(x, y);
+        self.paint_last = None;
+        self.paint_sampler.reset();
         self.state.finish_paint_stroke(false);
         true
     }
@@ -4674,6 +4700,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return true;
         }
         if self.paint_2d_last.take().is_some() {
+            self.paint_2d_sampler.reset();
             self.state.finish_paint_stroke(true);
             self.state.mark_dirty();
             return true;
@@ -4681,6 +4708,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.paint_last.take().is_none() {
             return false;
         }
+        self.paint_sampler.reset();
         self.state.finish_paint_stroke(true);
         true
     }
@@ -4695,7 +4723,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let mut changed = false;
         if let Some([x, y]) = self.paint_last {
-            self.paint_dab_at(x, y);
+            let settings = self.viewport_brush_settings();
+            self.paint_dabs_at(&[[x, y]], settings);
             changed = true;
         }
         if let Some((px, py)) = self.paint_2d_last {
@@ -4818,10 +4847,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 self.state.begin_paint_stroke();
                 let settings = self.state.brush_settings();
-                petunia_module_paint::PaintModule::canvas_brush_with_symmetry(
+                let dabs = self
+                    .paint_2d_sampler
+                    .begin([px as f32, py as f32], settings.dab_step_px());
+                let dabs = texture_points(&dabs, width, height);
+                petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
                     &mut self.state,
-                    px,
-                    py,
+                    &dabs,
                     settings,
                 );
                 self.paint_2d_last = Some((px, py));
@@ -4829,27 +4861,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             1 => {
-                let Some((last_x, last_y)) = self.paint_2d_last else {
+                if self.paint_2d_last.is_none() {
                     return false;
-                };
-                let dx = px as f32 - last_x as f32;
-                let dy = py as f32 - last_y as f32;
-                let dist = (dx * dx + dy * dy).sqrt();
-                let steps = (dist / 1.0).ceil().max(1.0) as usize;
-                let settings = self.state.brush_settings();
-                for step in 1..=steps {
-                    let t = step as f32 / steps as f32;
-                    let ix =
-                        ((last_x as f32 + dx * t).round() as i32).clamp(0, width as i32 - 1) as u32;
-                    let iy = ((last_y as f32 + dy * t).round() as i32).clamp(0, height as i32 - 1)
-                        as u32;
-                    petunia_module_paint::PaintModule::canvas_brush_with_symmetry(
-                        &mut self.state,
-                        ix,
-                        iy,
-                        settings,
-                    );
                 }
+                let settings = self.state.brush_settings();
+                let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
+                let dabs = texture_points(&dabs, width, height);
+                petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
+                    &mut self.state,
+                    &dabs,
+                    settings,
+                );
                 self.paint_2d_last = Some((px, py));
                 self.state.mark_dirty();
                 true
@@ -4858,6 +4880,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.paint_2d_last.take().is_none() {
                     return false;
                 }
+                let settings = self.state.brush_settings();
+                let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
+                let dabs = texture_points(&dabs, width, height);
+                petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
+                    &mut self.state,
+                    &dabs,
+                    settings,
+                );
+                self.paint_2d_sampler.reset();
                 self.state.finish_paint_stroke(false);
                 self.state.mark_dirty();
                 true
@@ -4866,6 +4897,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.paint_2d_last.take().is_none() {
                     return false;
                 }
+                self.paint_2d_sampler.reset();
                 self.state.finish_paint_stroke(true);
                 self.state.mark_dirty();
                 true
@@ -8350,27 +8382,47 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    fn paint_dab_at(&mut self, x: f32, y: f32) {
+    fn viewport_brush_settings(&self) -> petunia_core::BrushSettings {
+        let mut settings = self.state.brush_settings();
+        settings.kind = match self.state.session.tools.active_tool.as_str() {
+            "eraser" => petunia_core::BrushType::Eraser,
+            "airbrush" => petunia_core::BrushType::Airbrush,
+            "pixel" => petunia_core::BrushType::Pixel,
+            _ => settings.kind,
+        };
+        settings.size_px = (self.state.session.tools.paint_radius * 16.0).max(2.0);
+        settings.sanitized()
+    }
+
+    fn paint_dabs_at(&mut self, points: &[[f32; 2]], settings: petunia_core::BrushSettings) {
+        if points.is_empty() {
+            return;
+        }
         let width = self.viewport_size[0].max(1.0);
         let height = self.viewport_size[1].max(1.0);
-        if !x.is_finite()
-            || !y.is_finite()
-            || !(0.0..width).contains(&x)
-            || !(0.0..height).contains(&y)
-        {
-            return;
+        let mut hits = Vec::with_capacity(points.len());
+        for &[x, y] in points {
+            if !x.is_finite()
+                || !y.is_finite()
+                || !(0.0..width).contains(&x)
+                || !(0.0..height).contains(&y)
+            {
+                continue;
+            }
+            let ndc_x = x / width * 2.0 - 1.0;
+            let ndc_y = 1.0 - y / height * 2.0;
+            let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
+            if let Some(hit) = pick_face_hit(&self.state, origin, direction) {
+                hits.push(hit);
+            }
         }
-        let ndc_x = x / width * 2.0 - 1.0;
-        let ndc_y = 1.0 - y / height * 2.0;
-        let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
-        let Some((face, hit)) = pick_face_hit(&self.state, origin, direction) else {
+        let Some(&(face, hit)) = hits.first() else {
             return;
         };
-        let tool = self.state.session.tools.active_tool.clone();
-        if tool == "picker" {
+        if self.state.session.tools.active_tool == "picker" {
             return;
         }
-        if tool == "fill" {
+        if self.state.session.tools.active_tool == "fill" {
             let scope = self.state.session.tools.fill_scope;
             let isolate = self.state.session.tools.paint_isolate_selection;
             let seed =
@@ -8385,34 +8437,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(format!("Filled ({scope:?})"));
             return;
         }
-        let brush = match tool.as_str() {
-            "eraser" => petunia_core::BrushType::Eraser,
-            "airbrush" => petunia_core::BrushType::Airbrush,
-            "pixel" => petunia_core::BrushType::Pixel,
-            _ => petunia_core::BrushType::Soft,
-        };
         if self.paint_target_vertex {
             let radius = (self.state.session.tools.paint_radius * 0.5).max(0.01);
             let strength = self.state.session.tools.paint_strength;
             let color = self.state.paint_color;
-            petunia_module_paint::PaintModule::paint_vertex_color_3d(
+            let hit_positions: Vec<_> = hits.iter().map(|(_, hit)| *hit).collect();
+            petunia_module_paint::PaintModule::paint_vertex_color_3d_batch(
                 &mut self.state,
-                hit,
+                &hit_positions,
                 radius,
                 strength,
                 color,
             );
         } else {
-            let radius = (self.state.session.tools.paint_radius * 8.0).max(1.0) as u32;
-            let strength = self.state.session.tools.paint_strength;
             let isolate = self.state.session.tools.paint_isolate_selection;
-            petunia_module_paint::PaintModule::paint_mesh_3d(
+            petunia_module_paint::PaintModule::paint_mesh_3d_batch_with_settings(
                 &mut self.state,
-                face,
-                hit,
-                brush,
-                radius,
-                strength,
+                &hits,
+                settings,
                 isolate,
             );
         }
@@ -10515,6 +10557,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.paint_lock = format!("{:?}", self.state.session.tools.brush_lock);
         vm.paint_pixel_grid = self.paint_pixel_grid;
         vm.paint_canvas_zoom = self.paint_canvas_zoom;
+        vm.paint_canvas_grid_commands = self.paint_canvas_grid_commands();
         vm.paint_show_uv_overlay = self.paint_show_uv_overlay;
         vm.uv_show_texture = self.uv_show_texture;
         vm.uv_editor = if cfg!(test)

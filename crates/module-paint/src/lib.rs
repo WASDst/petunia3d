@@ -25,6 +25,62 @@ pub use petunia_project::paint_layers::{
 /// com call sites existentes (`petunia_module_paint::BrushType`).
 pub use petunia_core::{BrushSettings, BrushType};
 
+/// Tiles alterados por uma amostra consolidada de pintura raster.
+///
+/// A lista é normalizada antes de sair do módulo: índices ordenados, únicos e
+/// limitados às dimensões do canvas. Ela é o contrato entre mutação, compositor
+/// parcial e, futuramente, upload parcial da textura.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DirtyTiles {
+    indices: Vec<u32>,
+}
+
+impl DirtyTiles {
+    pub fn as_slice(&self) -> &[u32] {
+        &self.indices
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.indices.len()
+    }
+
+    fn mark_dab(&mut self, x: u32, y: u32, radius: u32, canvas_w: u32, canvas_h: u32) {
+        use petunia_project::paint_layers::TILE_SIZE;
+
+        if canvas_w == 0 || canvas_h == 0 || x >= canvas_w || y >= canvas_h {
+            return;
+        }
+        let tiles_x = canvas_w.div_ceil(TILE_SIZE).max(1);
+        let x0 = x.saturating_sub(radius).min(canvas_w - 1);
+        let y0 = y.saturating_sub(radius).min(canvas_h - 1);
+        let x1 = x.saturating_add(radius).min(canvas_w - 1);
+        let y1 = y.saturating_add(radius).min(canvas_h - 1);
+        for ty in (y0 / TILE_SIZE)..=(y1 / TILE_SIZE) {
+            for tx in (x0 / TILE_SIZE)..=(x1 / TILE_SIZE) {
+                self.indices.push(ty * tiles_x + tx);
+            }
+        }
+    }
+
+    fn mark_all(&mut self, canvas_w: u32, canvas_h: u32) {
+        use petunia_project::paint_layers::TILE_SIZE;
+
+        let tiles_x = canvas_w.div_ceil(TILE_SIZE);
+        let tiles_y = canvas_h.div_ceil(TILE_SIZE);
+        self.indices
+            .extend((0..tiles_y).flat_map(|ty| (0..tiles_x).map(move |tx| ty * tiles_x + tx)));
+    }
+
+    fn normalize(&mut self) {
+        self.indices.sort_unstable();
+        self.indices.dedup();
+    }
+}
+
 /// Traço de forma (Line/Rectangle) com estilo do pincel ativo.
 #[derive(Clone, Copy, Debug)]
 pub struct ShapeStroke {
@@ -74,23 +130,36 @@ impl PaintModule {
         strength: f32,
         color: [f32; 3],
     ) -> usize {
+        Self::paint_vertex_color_3d_batch(state, &[hit_pos], radius_world, strength, color)
+    }
+
+    /// Aplica todos os dabs de vertex paint e publica uma única revisão de cor.
+    pub fn paint_vertex_color_3d_batch(
+        state: &mut AppState,
+        hit_positions: &[Vec3],
+        radius_world: f32,
+        strength: f32,
+        color: [f32; 3],
+    ) -> usize {
         let mut affected = 0;
         let Some(mesh) = state.project.active_mesh_mut() else {
             return 0;
         };
         let r = radius_world.max(0.01);
         let r_sq = r * r;
-        for v in &mut mesh.verts {
-            let p = v.vec();
-            let d_sq = (p - hit_pos).length_squared();
-            if d_sq <= r_sq {
-                let dist = d_sq.sqrt();
-                let t = (1.0 - (dist / r)).max(0.0);
-                let factor = (t * t * strength).clamp(0.0, 1.0);
-                for (dst, &src) in v.color.iter_mut().zip(color.iter()) {
-                    *dst = *dst * (1.0 - factor) + src * factor;
+        for &hit_pos in hit_positions {
+            for v in &mut mesh.verts {
+                let p = v.vec();
+                let d_sq = (p - hit_pos).length_squared();
+                if d_sq <= r_sq {
+                    let dist = d_sq.sqrt();
+                    let t = (1.0 - (dist / r)).max(0.0);
+                    let factor = (t * t * strength).clamp(0.0, 1.0);
+                    for (dst, &src) in v.color.iter_mut().zip(color.iter()) {
+                        *dst = *dst * (1.0 - factor) + src * factor;
+                    }
+                    affected += 1;
                 }
-                affected += 1;
             }
         }
         if affected > 0 {
@@ -204,37 +273,70 @@ impl PaintModule {
         }
         let partial = tileable && !dirty_tiles.is_empty();
         if partial {
-            if let Some(o) = state.project.assets.get_mut(active_idx)
-                && let Some(stack) = o.paint_stack.clone()
+            if let Some(asset) = state.project.assets.get_mut(active_idx)
+                && let Some(stack) = asset.paint_stack.as_ref()
             {
-                let cv = o
+                let canvas = asset
                     .texture
                     .get_or_insert_with(|| Canvas::new(w, h, [0, 0, 0, 0]));
-                stack.composite_tiles(cv, dirty_tiles);
+                stack.composite_tiles(canvas, dirty_tiles);
             }
         } else {
             state.project.project.composite_paint_stack(active_idx);
         }
         if partial {
-            let mat_id = state
-                .project
-                .assets
-                .get(active_idx)
-                .and_then(|a| a.material_id);
-            if let Some(mid) = mat_id
-                && let Some(tex) = state
-                    .project
-                    .assets
-                    .get(active_idx)
-                    .and_then(|a| a.texture.clone())
-                && let Some(mat) = state.project.project.get_material_mut(mid)
-            {
-                mat.albedo_texture = Some(tex);
-            }
+            Self::sync_material_tiles(state, active_idx, dirty_tiles);
         }
         state.emit_texture_changed();
         state.render.canvas_dirty = true;
         state.mark_dirty();
+    }
+
+    fn sync_material_tiles(state: &mut AppState, active_idx: usize, dirty_tiles: &[u32]) {
+        use petunia_project::paint_layers::TILE_SIZE;
+
+        let project = &mut state.project.project;
+        let (assets, materials) = (&project.assets, &mut project.materials);
+        let Some(asset) = assets.get(active_idx) else {
+            return;
+        };
+        let (Some(material_id), Some(source)) = (asset.material_id, asset.texture.as_ref()) else {
+            return;
+        };
+        let Some(material) = materials
+            .iter_mut()
+            .find(|material| material.id == material_id)
+        else {
+            return;
+        };
+        let Some(target) = material.albedo_texture.as_mut() else {
+            material.albedo_texture = Some(source.clone());
+            return;
+        };
+        if (target.w, target.h) != (source.w, source.h)
+            || target.pixels.len() != source.pixels.len()
+        {
+            *target = source.clone();
+            return;
+        }
+
+        let tiles_x = source.w.div_ceil(TILE_SIZE).max(1);
+        for &tile in dirty_tiles {
+            let tile_x = tile % tiles_x;
+            let tile_y = tile / tiles_x;
+            let x0 = tile_x * TILE_SIZE;
+            let y0 = tile_y * TILE_SIZE;
+            let x1 = (x0 + TILE_SIZE).min(source.w);
+            let y1 = (y0 + TILE_SIZE).min(source.h);
+            if x0 >= x1 || y0 >= y1 {
+                continue;
+            }
+            for y in y0..y1 {
+                let start = ((y * source.w + x0) * 4) as usize;
+                let end = ((y * source.w + x1) * 4) as usize;
+                target.pixels[start..end].copy_from_slice(&source.pixels[start..end]);
+            }
+        }
     }
 
     /// Redimensiona canvas base + todas as camadas raster (operação explícita;
@@ -569,15 +671,26 @@ impl PaintModule {
 
     /// Pinta no canvas 2D com o descriptor canônico (iniciativa Paint).
     ///
-    /// Carimba um único dab. A interpolação do traço entre eventos de ponteiro
+    /// Carimba um único dab. A interpolação incremental do traço entre eventos
     /// é responsabilidade de quem alimenta os pontos — use
-    /// [`BrushSettings::stroke_dabs`] para densidade independente de poll rate.
+    /// [`petunia_core::StrokeSampler`] para preservar o residual entre eventos.
     pub fn canvas_brush_with_settings(
         state: &mut AppState,
         x: u32,
         y: u32,
         settings: BrushSettings,
     ) {
+        Self::canvas_brush_batch(state, &[(x, y)], settings);
+    }
+
+    fn canvas_brush_batch(
+        state: &mut AppState,
+        points: &[(u32, u32)],
+        settings: BrushSettings,
+    ) -> DirtyTiles {
+        if points.is_empty() {
+            return DirtyTiles::default();
+        }
         Self::ensure_stack(state);
         let s = settings.sanitized();
         let color = [
@@ -589,63 +702,68 @@ impl PaintModule {
         let radius = s.radius_px();
 
         let active_idx = state.project.active;
-        let mut picked = None;
         // Conta-gotas amostra o composto (o que o usuário vê — P3D-060).
         if s.kind == BrushType::Eyedropper {
-            if let Some(o) = state.project.assets.get(active_idx)
+            if let Some(&(x, y)) = points.last()
+                && let Some(o) = state.project.assets.get(active_idx)
                 && let Some(cv) = o.texture.as_ref()
                 && x < cv.w
                 && y < cv.h
                 && let Some(c) = cv.get(x, y)
             {
-                picked = Some([
+                let picked = [
                     c[0] as f32 / 255.0,
                     c[1] as f32 / 255.0,
                     c[2] as f32 / 255.0,
-                ]);
+                ];
+                state.paint_color = picked;
+                state.session.tools.paint_color = picked;
             }
-        } else if let Some(o) = state.project.assets.get_mut(active_idx)
+            return DirtyTiles::default();
+        }
+        if matches!(s.kind, BrushType::Line | BrushType::Rectangle) {
+            return DirtyTiles::default();
+        }
+
+        let mut dirty = DirtyTiles::default();
+        if let Some(o) = state.project.assets.get_mut(active_idx)
             && let Some(stack) = o.paint_stack.as_mut()
             && let Some(layer) = stack.active_mut()
             && let Some(cv) = layer.canvas_mut()
         {
-            match s.kind {
-                BrushType::Pixel => Self::stamp_pixel_brush(cv, x, y, radius, color),
-                BrushType::Soft => {
-                    Self::stamp_soft_brush_hard(cv, x, y, radius, color, s.strength, s.hardness);
+            let (canvas_w, canvas_h) = (cv.w, cv.h);
+            for &(x, y) in points {
+                match s.kind {
+                    BrushType::Pixel => Self::stamp_pixel_brush(cv, x, y, radius, color),
+                    BrushType::Soft => {
+                        Self::stamp_soft_brush_hard(cv, x, y, radius, color, s.strength, s.hardness)
+                    }
+                    // Airbrush: falloff máximo + força modulada pelo fluxo.
+                    BrushType::Airbrush => Self::stamp_soft_brush_hard(
+                        cv,
+                        x,
+                        y,
+                        radius,
+                        color,
+                        (s.strength * s.flow).clamp(0.0, 1.0),
+                        0.0,
+                    ),
+                    BrushType::Eraser => Self::stamp_eraser(cv, x, y, radius, s.strength),
+                    BrushType::Fill => Self::flood_fill(cv, x, y, color, 16),
+                    BrushType::Line | BrushType::Rectangle | BrushType::Eyedropper => {}
                 }
-                // Airbrush: falloff máximo + força modulada pelo fluxo.
-                BrushType::Airbrush => Self::stamp_soft_brush_hard(
-                    cv,
-                    x,
-                    y,
-                    radius,
-                    color,
-                    (s.strength * s.flow).clamp(0.0, 1.0),
-                    0.0,
-                ),
-                BrushType::Eraser => Self::stamp_eraser(cv, x, y, radius, s.strength),
-                BrushType::Fill => Self::flood_fill(cv, x, y, color, 16),
-                // Formas e conta-gotas têm caminho próprio (commit_shape / composto).
-                BrushType::Line | BrushType::Rectangle | BrushType::Eyedropper => {}
+                if s.kind == BrushType::Fill {
+                    dirty.mark_all(canvas_w, canvas_h);
+                } else {
+                    dirty.mark_dab(x, y, radius, canvas_w, canvas_h);
+                }
             }
         }
-        if let Some(c) = picked {
-            state.paint_color = c;
-            state.session.tools.paint_color = c;
+        dirty.normalize();
+        if !dirty.is_empty() {
+            Self::composite_active_tiles(state, dirty.as_slice());
         }
-
-        if s.kind != BrushType::Eyedropper {
-            let canvas_w = state
-                .project
-                .assets
-                .get(state.project.active)
-                .and_then(|a| a.texture.as_ref())
-                .map(|c| c.w)
-                .unwrap_or(256);
-            let tiles = Self::dab_dirty_tiles(x, y, radius, canvas_w);
-            Self::composite_active_tiles(state, &tiles);
-        }
+        dirty
     }
 
     /// Pinta no canvas 2D aplicando simetria em tempo real nos eixos X e Y se habilitados.
@@ -655,15 +773,21 @@ impl PaintModule {
         y: u32,
         settings: BrushSettings,
     ) {
-        Self::canvas_brush_with_settings(state, x, y, settings);
+        Self::canvas_brush_batch_with_symmetry(state, &[(x, y)], settings);
+    }
+
+    /// Pinta vários dabs e suas cópias simétricas com uma única composição.
+    pub fn canvas_brush_batch_with_symmetry(
+        state: &mut AppState,
+        points: &[(u32, u32)],
+        settings: BrushSettings,
+    ) -> DirtyTiles {
+        if points.is_empty() {
+            return DirtyTiles::default();
+        }
 
         let sym_x = state.session.tools.paint_symmetry_x;
         let sym_y = state.session.tools.paint_symmetry_y;
-
-        if !sym_x && !sym_y {
-            return;
-        }
-
         let (width, height) = match state
             .project
             .assets
@@ -674,45 +798,25 @@ impl PaintModule {
             None => (256, 256),
         };
 
-        if sym_x {
-            let sx = (width - 1).saturating_sub(x);
-            if sx != x {
-                Self::canvas_brush_with_settings(state, sx, y, settings);
-            }
-        }
-        if sym_y {
-            let sy = (height - 1).saturating_sub(y);
-            if sy != y {
-                Self::canvas_brush_with_settings(state, x, sy, settings);
-            }
-        }
-        if sym_x && sym_y {
+        let mut dabs = Vec::with_capacity(points.len() * 4);
+        for &(x, y) in points {
+            let mut sample = vec![(x, y)];
             let sx = (width - 1).saturating_sub(x);
             let sy = (height - 1).saturating_sub(y);
-            if sx != x && sy != y {
-                Self::canvas_brush_with_settings(state, sx, sy, settings);
+            if sym_x {
+                sample.push((sx, y));
             }
-        }
-    }
-
-    fn dab_dirty_tiles(x: u32, y: u32, radius: u32, canvas_w: u32) -> Vec<u32> {
-        use petunia_project::paint_layers::TILE_SIZE;
-        let tiles_x = canvas_w.div_ceil(TILE_SIZE).max(1);
-        let x0 = x.saturating_sub(radius);
-        let y0 = y.saturating_sub(radius);
-        let x1 = x.saturating_add(radius);
-        let y1 = y.saturating_add(radius);
-        let tx0 = x0 / TILE_SIZE;
-        let ty0 = y0 / TILE_SIZE;
-        let tx1 = x1 / TILE_SIZE;
-        let ty1 = y1 / TILE_SIZE;
-        let mut tiles = Vec::new();
-        for ty in ty0..=ty1 {
-            for tx in tx0..=tx1 {
-                tiles.push(ty * tiles_x + tx);
+            if sym_y {
+                sample.push((x, sy));
             }
+            if sym_x && sym_y {
+                sample.push((sx, sy));
+            }
+            sample.sort_unstable();
+            sample.dedup();
+            dabs.extend(sample);
         }
-        tiles
+        Self::canvas_brush_batch(state, &dabs, settings)
     }
 
     /// Confirma forma (Line/Rectangle) entre dois pontos do canvas.
@@ -1170,28 +1274,40 @@ impl PaintModule {
         settings: BrushSettings,
         isolate_selection: bool,
     ) -> bool {
+        Self::paint_mesh_3d_batch_with_settings(
+            state,
+            &[(face_idx, hit_pos)],
+            settings,
+            isolate_selection,
+        )
+    }
+
+    /// Projeta vários hits 3D, agrega simetria e compõe o canvas uma única vez.
+    pub fn paint_mesh_3d_batch_with_settings(
+        state: &mut AppState,
+        hits: &[(usize, Vec3)],
+        settings: BrushSettings,
+        isolate_selection: bool,
+    ) -> bool {
         let s = settings.sanitized();
-        let Some(uv) = Self::face_hit_uv(state, face_idx, hit_pos, isolate_selection) else {
-            return false;
-        };
-        // Formas são confirmadas no release (commit_shape); aqui só pincéis livres.
-        if s.kind.is_shape() {
+        if hits.is_empty() || s.kind.is_shape() {
             return false;
         }
 
         Self::ensure_canvas(state);
-        let Some((px, py)) = Self::uv_to_px(state, uv) else {
-            return false;
-        };
-
-        Self::canvas_brush_with_settings(state, px, py, s);
-
-        // Simetria de pintura 3D em tempo real nos eixos X, Y e Z
         let sym_x = state.session.tools.paint_symmetry_x;
         let sym_y = state.session.tools.paint_symmetry_y;
         let sym_z = state.session.tools.paint_symmetry_z;
+        let mut dabs = Vec::with_capacity(hits.len() * 8);
 
-        if sym_x || sym_y || sym_z {
+        for &(face_idx, hit_pos) in hits {
+            let Some(uv) = Self::face_hit_uv(state, face_idx, hit_pos, isolate_selection) else {
+                continue;
+            };
+            let Some(primary) = Self::uv_to_px(state, uv) else {
+                continue;
+            };
+            let mut sample = vec![primary];
             let mut sym_points = Vec::with_capacity(7);
             if sym_x {
                 sym_points.push(Vec3::new(-hit_pos.x, hit_pos.y, hit_pos.z));
@@ -1219,11 +1335,17 @@ impl PaintModule {
                 if let Some(uv_sym) = Self::find_mesh_uv_at_pos(state, p_sym, isolate_selection)
                     && let Some((px_sym, py_sym)) = Self::uv_to_px(state, uv_sym)
                 {
-                    Self::canvas_brush_with_settings(state, px_sym, py_sym, s);
+                    sample.push((px_sym, py_sym));
                 }
             }
+            sample.sort_unstable();
+            sample.dedup();
+            dabs.extend(sample);
         }
-
+        if dabs.is_empty() {
+            return false;
+        }
+        Self::canvas_brush_batch(state, &dabs, s);
         true
     }
 
@@ -1273,16 +1395,20 @@ impl PaintModule {
             .active_mesh()
             .map(|m| m.faces.len())
             .unwrap_or(0);
-        let mut n = 0;
+        let mut hits = Vec::new();
         for fi in 0..face_count {
             if !Self::lock_allows_face(state, fi) {
                 continue;
             }
-            if Self::paint_mesh_3d_with_settings(state, fi, hit_pos, settings, isolate) {
-                n += 1;
+            if Self::face_hit_uv(state, fi, hit_pos, isolate).is_some() {
+                hits.push((fi, hit_pos));
             }
         }
-        n
+        let count = hits.len();
+        if count > 0 {
+            Self::paint_mesh_3d_batch_with_settings(state, &hits, settings, isolate);
+        }
+        count
     }
 
     pub fn fill_scope(state: &mut AppState, scope: petunia_core::FillScope) {
@@ -2058,6 +2184,51 @@ mod tests {
         assert_eq!(canvas.get(5, 10), Some([0, 255, 0, 255]));
         // Simétrico no eixo X em 32x32: 31 - 5 = 26
         assert_eq!(canvas.get(26, 10), Some([0, 255, 0, 255]));
+    }
+
+    #[test]
+    fn batched_symmetry_composes_once_and_syncs_only_dirty_tiles() {
+        let mut state = AppState::new("en");
+        let active = state.project.active;
+        state.project.assets[active].texture = Some(Canvas::new(64, 64, [0, 0, 0, 255]));
+        state.session.tools.paint_symmetry_x = true;
+        state.session.tools.paint_symmetry_y = true;
+        state.paint_color = [0.2, 0.8, 0.1];
+        PaintModule::ensure_stack(&mut state);
+
+        let before_revision = state.project.project.texture_revision;
+        let dirty = PaintModule::canvas_brush_batch_with_symmetry(
+            &mut state,
+            &[(5, 10), (38, 42)],
+            BrushSettings {
+                kind: BrushType::Pixel,
+                size_px: 6.0,
+                hardness: 1.0,
+                strength: 1.0,
+                flow: 1.0,
+                spacing: 0.25,
+            },
+        );
+
+        assert!(!dirty.is_empty());
+        assert!(dirty.indices.windows(2).all(|pair| pair[0] < pair[1]));
+        assert_eq!(state.project.project.texture_revision, before_revision + 1);
+
+        let asset = &state.project.assets[active];
+        let material = asset
+            .material(&state.project.project)
+            .expect("material associado");
+        assert_eq!(material.albedo_texture.as_ref(), asset.texture.as_ref());
+    }
+
+    #[test]
+    fn dirty_tiles_clamp_dabs_to_canvas_bounds() {
+        let mut dirty = DirtyTiles::default();
+        dirty.mark_dab(63, 63, 12, 64, 64);
+        dirty.mark_dab(100, 100, 12, 64, 64);
+        dirty.normalize();
+
+        assert_eq!(dirty.as_slice(), &[3]);
     }
 
     #[test]

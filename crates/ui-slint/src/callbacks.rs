@@ -943,6 +943,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     }
     window.set_paint_pixel_grid(vm.paint_pixel_grid);
     window.set_paint_canvas_zoom(vm.paint_canvas_zoom);
+    window.set_paint_canvas_grid_commands(vm.paint_canvas_grid_commands.as_str().into());
 
     window.set_primitive_active(vm.primitive_active);
     window.set_primitive_kind(vm.primitive_kind.as_str().into());

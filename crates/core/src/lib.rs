@@ -69,7 +69,7 @@ pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename
 
 pub use brush::{
     BrushLock, BrushPreviewKind, BrushPreviewStyle, BrushProjectionMode, BrushSettings, BrushType,
-    FillScope, brush_type_from_kind, kind_from_brush_type,
+    FillScope, StrokeSampler, brush_type_from_kind, kind_from_brush_type,
 };
 pub use camera::{Camera, Projection, ViewPreset};
 pub use events::{AppEvent, EventBus};

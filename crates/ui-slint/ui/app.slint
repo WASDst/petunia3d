@@ -3514,6 +3514,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <image> paint-canvas-image;
     in-out property <bool> paint-pixel-grid: true;
     in-out property <int> paint-canvas-zoom: 1;
+    in-out property <string> paint-canvas-grid-commands: "";
     in-out property <string> paint-fill-scope: "ConnectedPixels";
     in-out property <string> paint-projection: "Surface";
     in-out property <string> paint-lock: "None";
@@ -7970,33 +7971,47 @@ export component PetuniaSlintShell inherits Window {
                                         border-color: DesignTokens.border;
                                         clip: true;
 
-                                        Image {
-                                            width: 100%;
-                                            height: 100%;
+                                        paint-canvas-raster := Image {
+                                            width: parent.width * root.paint-canvas-zoom;
+                                            height: parent.height * root.paint-canvas-zoom;
+                                            x: (parent.width - self.width) / 2;
+                                            y: (parent.height - self.height) / 2;
                                             image-fit: fill;
+                                            image-rendering: pixelated;
                                             source: root.paint-canvas-image;
                                         }
 
                                         if root.paint-show-uv: Path {
-                                            width: 100%;
-                                            height: 100%;
+                                            width: paint-canvas-raster.width;
+                                            height: paint-canvas-raster.height;
+                                            x: paint-canvas-raster.x;
+                                            y: paint-canvas-raster.y;
                                             fill: transparent;
                                             stroke: #00ffff99;
                                             stroke-width: 1px;
                                             commands: root.uv-layout-commands;
                                         }
 
+                                        if root.paint-pixel-grid && root.paint-canvas-grid-commands != "": Path {
+                                            width: 100%;
+                                            height: 100%;
+                                            fill: transparent;
+                                            stroke: DesignTokens.border.transparentize(0.35);
+                                            stroke-width: 1px;
+                                            commands: root.paint-canvas-grid-commands;
+                                        }
+
                                         TouchArea {
                                             pointer-event(event) => {
                                                 if (event.kind == PointerEventKind.down) {
-                                                    root.paint-2d-stroke(self.mouse-x / self.width, self.mouse-y / self.height, 0);
+                                                    root.paint-2d-stroke((self.mouse-x - paint-canvas-raster.x) / paint-canvas-raster.width, (self.mouse-y - paint-canvas-raster.y) / paint-canvas-raster.height, 0);
                                                 } else if (event.kind == PointerEventKind.up) {
-                                                    root.paint-2d-stroke(self.mouse-x / self.width, self.mouse-y / self.height, 2);
+                                                    root.paint-2d-stroke((self.mouse-x - paint-canvas-raster.x) / paint-canvas-raster.width, (self.mouse-y - paint-canvas-raster.y) / paint-canvas-raster.height, 2);
                                                 }
                                             }
                                             moved => {
                                                 if (self.pressed) {
-                                                    root.paint-2d-stroke(self.mouse-x / self.width, self.mouse-y / self.height, 1);
+                                                    root.paint-2d-stroke((self.mouse-x - paint-canvas-raster.x) / paint-canvas-raster.width, (self.mouse-y - paint-canvas-raster.y) / paint-canvas-raster.height, 1);
                                                 }
                                             }
                                         }

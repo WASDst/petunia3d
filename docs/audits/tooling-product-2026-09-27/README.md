@@ -87,7 +87,9 @@ compartilhadas ampliaria exatamente esses gargalos.
 | TX-02 | UV stitch/relax e dissolve podem registrar undo no comando e no dispatcher | P0 | DUPLICATED |
 | TX-03 | Estimativa genérica do histórico mede só o tamanho superficial de `Project` | P0 | BROKEN |
 | PA-01 | Cada dab pode clonar/recompor canvas, stack e textura integral | P1 | PARTIALLY_COMPLIANT |
-| PA-02 | Canvas 2D faz upscale CPU e pode alocar cerca de 64 MiB em 256² × 16 | P1 | BROKEN |
+| PA-02 | Produção Slint ignora spacing canônico em strokes importantes | P1 | BROKEN |
+| PA-03 | Canvas 2D faz upscale CPU e pode alocar cerca de 64 MiB em 256² × 16 | P1 | BROKEN |
+| PA-04 | Upload de textura varre e envia o canvas inteiro | P1 | BROKEN |
 | UI-01 | Dois catálogos de comandos e atalhos físicos fora do keymap | P1 | DUPLICATED |
 | UI-02 | UI anuncia PBR/ray tracing/sombras ausentes no shader | P1 | FUNCTIONAL_BUT_DIFFERENT |
 | UV-01 | Workspace UV independente contradiz o addendum canônico mais recente | P1 | OBSOLETE |
@@ -136,6 +138,8 @@ produto nem substitutos para os critérios do caderno.
 - [`g0-remediation-2026-09-27.md`](./g0-remediation-2026-09-27.md) — fechamento
   do primeiro conjunto prioritário: transações, revisões, histórico e cache de
   modifiers.
+- [`g1-paint-remediation-2026-09-27.md`](./g1-paint-remediation-2026-09-27.md) —
+  remediação do stroke, batch simétrico, composição por tiles e canvas 2D nativo.
 
 ## 6. Fontes canônicas principais
 

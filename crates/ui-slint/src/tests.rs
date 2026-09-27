@@ -4745,11 +4745,62 @@ fn paint_pixel_grid_and_canvas_zoom() {
     bridge.apply(UiIntent::SetPaintCanvasZoom(-2));
     assert_eq!(bridge.paint_canvas_zoom, 1);
 
-    // render_paint_canvas succeeds with zoom and grid
+    // Zoom stays presentation-only: the published RGBA buffer is native-size.
     bridge.apply(UiIntent::SetPaintCanvasZoom(4));
     petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
-    let image = bridge.render_paint_canvas();
-    assert!(image.is_some());
+    let dimensions = bridge.paint_canvas_dimensions().unwrap();
+    let image = bridge.render_paint_canvas().expect("native canvas image");
+    assert_eq!(image.size().width, dimensions.0);
+    assert_eq!(image.size().height, dimensions.1);
+    assert!(!bridge.paint_canvas_grid_commands().is_empty());
+
+    bridge.apply(UiIntent::TogglePaintPixelGrid);
+    assert!(bridge.paint_canvas_grid_commands().is_empty());
+}
+
+#[test]
+fn paint_2d_spacing_is_poll_rate_invariant() {
+    fn painted_texture(samples: &[f32]) -> petunia_project::Canvas {
+        let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+        bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+        bridge.apply(UiIntent::SetActiveTool("pixel".into()));
+        bridge.state.session.tools.canvas_brush = 10;
+        bridge.state.session.tools.brush_spacing = 0.5;
+        bridge.apply(UiIntent::SetPaintColor([0.9, 0.1, 0.2]));
+
+        assert!(bridge.paint_2d_stroke(samples[0], 0.5, 0));
+        for &sample in &samples[1..] {
+            assert!(bridge.paint_2d_stroke(sample, 0.5, 1));
+        }
+        assert!(bridge.paint_2d_stroke(*samples.last().unwrap(), 0.5, 2));
+        bridge
+            .state
+            .project
+            .active()
+            .and_then(|asset| asset.texture.clone())
+            .expect("painted texture")
+    }
+
+    let fast = painted_texture(&[0.1, 0.9]);
+    let slow = painted_texture(&[0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.9]);
+    assert_eq!(fast, slow);
+}
+
+#[test]
+fn paint_2d_symmetry_batch_publishes_one_texture_revision_per_event() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetActiveTool("pixel".into()));
+    bridge.state.session.tools.canvas_brush = 8;
+    bridge.state.session.tools.brush_spacing = 0.2;
+    bridge.state.session.tools.paint_symmetry_x = true;
+    bridge.state.session.tools.paint_symmetry_y = true;
+
+    assert!(bridge.paint_2d_stroke(0.1, 0.5, 0));
+    let before = bridge.state.project.project.texture_revision;
+    assert!(bridge.paint_2d_stroke(0.9, 0.5, 1));
+    assert_eq!(bridge.state.project.project.texture_revision, before + 1);
+    assert!(bridge.paint_2d_stroke(0.9, 0.5, 2));
 }
 
 #[test]

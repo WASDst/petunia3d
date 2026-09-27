@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Gate G1 — Stroke e Composição Incremental de Paint (27/09/2026)
+- **Stroke determinístico**: `StrokeSampler` neutro preserva a distância residual entre pointer events; PAINT 2D e 3D passam a respeitar `BrushSettings::spacing` independentemente da taxa de eventos.
+- **Batch e Dirty Tiles**: dabs de uma amostra, inclusive simetrias 2D/3D, são agregados antes de uma única composição e publicação de revisão; a stack deixa de ser clonada no caminho parcial.
+- **Sincronização incremental**: o albedo derivado copia somente as linhas dos tiles alterados quando dimensões e recurso já existem, mantendo fallback integral apenas para inicialização/resize.
+- **Canvas nativo**: Slint recebe RGBA na resolução original; zoom, recorte, nearest-neighbor e grade vetorial passam à apresentação, removendo o pico de cerca de 64 MiB do antigo upscale 256² × 16.
+
 ### Gate G0 — Integridade Transacional, Revisões e Cache (27/09/2026)
 - **Transações e Undo/Redo**: `CommandDispatcher` passa a ser o owner único do lifecycle de comandos destrutivos; Paint, decal, delete/dissolve e Profile Volume usam snapshots anteriores e um único roundtrip, com cancelamento sem histórico.
 - **Revisões Granulares**: novos domínios para topologia, posições, normais, seleção, UV, cores, materiais, texturas e transforms reduzem invalidações indevidas e permanecem monotônicos após restore.
