@@ -160,6 +160,7 @@ impl WgpuViewport {
             state.hover,
         );
         self.renderer.set_overlays(true, state.show_grid);
+        self.renderer.upload_ref_pixels(&self.queue, refs);
 
         let mut encoder = self
             .device

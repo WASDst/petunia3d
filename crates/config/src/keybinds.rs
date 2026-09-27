@@ -413,7 +413,7 @@ impl Keybinds {
             ("model.tool_select", "W"),
             ("model.rotate", "R"),
             ("model.scale", "S"),
-            ("model.frame_selection", "F"),
+            ("model.make_face", "F"),
             ("model.extrude", "E"),
             ("model.extrude_individual", "Alt+E"),
             ("model.push_pull", "P"),

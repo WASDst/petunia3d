@@ -8036,6 +8036,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let _ = self.execute_core_command("model.connect");
                     true
                 }
+                "make_face" => {
+                    let _ = self.execute_core_command("model.make_face");
+                    true
+                }
                 "merge" => {
                     let _ = self.execute_core_command("model.merge");
                     true
@@ -9532,8 +9536,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             "model.rotate" => self.begin_keyboard_transform(TransformKind::Rotation),
             "model.scale" => self.begin_keyboard_transform(TransformKind::Scale),
+            "model.make_face" => {
+                let _ = self.execute_core_command("model.make_face");
+            }
             "model.frame_selection" => {
-                let _ = self.execute_core_command("view.frame_selection");
+                if self.state.selection_domain().is_component() {
+                    let _ = self.execute_core_command("model.make_face");
+                } else {
+                    let _ = self.execute_core_command("view.frame_selection");
+                }
             }
             "model.extrude" => {
                 if self.state.session.tools.active_tool == "draw_profile"

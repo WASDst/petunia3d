@@ -2,7 +2,7 @@
 
 use super::{Face, Mesh, Vertex, edge_key, triangulate};
 use glam::Vec3;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl Mesh {
     // ---------------- seleção ----------------
@@ -2358,6 +2358,246 @@ impl Mesh {
         self.join(other);
         self.weld(eps);
     }
+
+    /// Cria uma nova face conectando elementos selecionados (3+ arestas, 3+ vértices ou fecha triângulo com 2 arestas).
+    /// Se apenas 2 vértices estiverem selecionados, cria uma aresta conectando-os.
+    pub fn make_face_from_selection(&mut self) -> Result<(), &'static str> {
+        let sel_verts: Vec<u32> = self
+            .verts
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.selected)
+            .map(|(i, _)| i as u32)
+            .collect();
+
+        let sel_edges: Vec<(u32, u32)> = self.selected_edges.iter().copied().collect();
+
+        // Caso 1: Arestas selecionadas
+        if sel_edges.len() >= 2 {
+            if sel_edges.len() == 2 {
+                let e0 = sel_edges[0];
+                let e1 = sel_edges[1];
+                let mut vset = HashSet::new();
+                vset.insert(e0.0);
+                vset.insert(e0.1);
+                vset.insert(e1.0);
+                vset.insert(e1.1);
+
+                if vset.len() == 3 {
+                    let shared = if e0.0 == e1.0 || e0.0 == e1.1 {
+                        e0.0
+                    } else {
+                        e0.1
+                    };
+                    let other0 = if e0.0 == shared { e0.1 } else { e0.0 };
+                    let other1 = if e1.0 == shared { e1.1 } else { e1.0 };
+                    let tri = vec![other0, shared, other1];
+
+                    let mut sorted = tri.clone();
+                    sorted.sort_unstable();
+                    if self.faces.iter().any(|f| {
+                        let mut fs = f.verts.clone();
+                        fs.sort_unstable();
+                        fs == sorted
+                    }) {
+                        return Err("Face already exists");
+                    }
+
+                    let mut face = Face::new(tri);
+                    face.selected = true;
+                    self.push_face(face);
+                    self.sync_vert_selection_from_faces();
+                    self.sync_edge_selection_from_verts();
+                    self.recalculate_normals();
+                    return Ok(());
+                } else if vset.len() == 4 {
+                    let (a, b) = e0;
+                    let (c, d) = e1;
+                    let pa = self.verts[a as usize].vec();
+                    let pb = self.verts[b as usize].vec();
+                    let pc = self.verts[c as usize].vec();
+                    let pd = self.verts[d as usize].vec();
+                    let d1 = pa.distance(pc) + pb.distance(pd);
+                    let d2 = pa.distance(pd) + pb.distance(pc);
+                    let quad = if d1 < d2 {
+                        vec![a, b, d, c]
+                    } else {
+                        vec![a, b, c, d]
+                    };
+
+                    let mut sorted = quad.clone();
+                    sorted.sort_unstable();
+                    if self.faces.iter().any(|f| {
+                        let mut fs = f.verts.clone();
+                        fs.sort_unstable();
+                        fs == sorted
+                    }) {
+                        return Err("Face already exists");
+                    }
+
+                    let mut face = Face::new(quad);
+                    face.selected = true;
+                    self.push_face(face);
+                    self.sync_vert_selection_from_faces();
+                    self.sync_edge_selection_from_verts();
+                    self.recalculate_normals();
+                    return Ok(());
+                }
+            }
+
+            // 3 ou mais arestas selecionadas: constrói um caminho/ciclo encadeado
+            let mut adj: std::collections::HashMap<u32, Vec<u32>> =
+                std::collections::HashMap::new();
+            for &(u, v) in &sel_edges {
+                adj.entry(u).or_default().push(v);
+                adj.entry(v).or_default().push(u);
+            }
+
+            let start = adj
+                .iter()
+                .find(|(_, nbrs)| nbrs.len() == 1)
+                .map(|(&v, _)| v)
+                .or_else(|| adj.keys().copied().next())
+                .ok_or("No vertices in selected edges")?;
+
+            let mut path = Vec::new();
+            let mut visited_edges: HashSet<(u32, u32)> = HashSet::new();
+            let mut curr = start;
+            path.push(curr);
+
+            loop {
+                let next_opt = adj.get(&curr).and_then(|nbrs| {
+                    nbrs.iter()
+                        .copied()
+                        .find(|&nbr| !visited_edges.contains(&edge_key(curr, nbr)))
+                });
+                if let Some(next) = next_opt {
+                    visited_edges.insert(edge_key(curr, next));
+                    if next == start {
+                        break;
+                    }
+                    path.push(next);
+                    curr = next;
+                } else {
+                    break;
+                }
+            }
+
+            if path.len() >= 3 {
+                let mut sorted = path.clone();
+                sorted.sort_unstable();
+                if self.faces.iter().any(|f| {
+                    let mut fs = f.verts.clone();
+                    fs.sort_unstable();
+                    fs == sorted
+                }) {
+                    return Err("Face already exists");
+                }
+
+                let mut face = Face::new(path);
+                face.selected = true;
+                self.push_face(face);
+                self.sync_vert_selection_from_faces();
+                self.sync_edge_selection_from_verts();
+                self.recalculate_normals();
+                return Ok(());
+            }
+        }
+
+        // Caso 2: Vértices selecionados diretamente
+        if sel_verts.len() == 2 {
+            self.selected_edges
+                .insert(edge_key(sel_verts[0], sel_verts[1]));
+            return Ok(());
+        }
+
+        if sel_verts.len() == 3 {
+            let mut sorted = sel_verts.clone();
+            sorted.sort_unstable();
+            if self.faces.iter().any(|f| {
+                let mut fs = f.verts.clone();
+                fs.sort_unstable();
+                fs == sorted
+            }) {
+                return Err("Face already exists");
+            }
+
+            let mut face = Face::new(sel_verts);
+            face.selected = true;
+            self.push_face(face);
+            self.sync_vert_selection_from_faces();
+            self.sync_edge_selection_from_verts();
+            self.recalculate_normals();
+            return Ok(());
+        }
+
+        if sel_verts.len() >= 4 {
+            let mut centroid = Vec3::ZERO;
+            for &vi in &sel_verts {
+                centroid += self.verts[vi as usize].vec();
+            }
+            centroid /= sel_verts.len() as f32;
+
+            let mut normal = Vec3::ZERO;
+            for i in 0..sel_verts.len() {
+                let p0 = self.verts[sel_verts[i] as usize].vec() - centroid;
+                let p1 = self.verts[sel_verts[(i + 1) % sel_verts.len()] as usize].vec() - centroid;
+                normal += p0.cross(p1);
+            }
+            let normal = normal.normalize_or_zero();
+            let normal = if normal.length_squared() > 0.1 {
+                normal
+            } else {
+                Vec3::Y
+            };
+
+            let u = (self.verts[sel_verts[0] as usize].vec() - centroid).normalize_or_zero();
+            let u = if u.length_squared() > 0.1 {
+                u
+            } else {
+                let fallback = if normal.x.abs() < 0.9 {
+                    Vec3::X
+                } else {
+                    Vec3::Y
+                };
+                normal.cross(fallback).normalize_or_zero()
+            };
+            let v = normal.cross(u).normalize_or_zero();
+
+            let mut ordered = sel_verts.clone();
+            ordered.sort_by(|&a, &b| {
+                let pa = self.verts[a as usize].vec() - centroid;
+                let pb = self.verts[b as usize].vec() - centroid;
+                let angle_a = pa.dot(v).atan2(pa.dot(u));
+                let angle_b = pb.dot(v).atan2(pb.dot(u));
+                angle_a
+                    .partial_cmp(&angle_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            let mut sorted = ordered.clone();
+            sorted.sort_unstable();
+            if self.faces.iter().any(|f| {
+                let mut fs = f.verts.clone();
+                fs.sort_unstable();
+                fs == sorted
+            }) {
+                return Err("Face already exists");
+            }
+
+            let mut face = Face::new(ordered);
+            face.selected = true;
+            self.push_face(face);
+            self.sync_vert_selection_from_faces();
+            self.sync_edge_selection_from_verts();
+            self.recalculate_normals();
+            return Ok(());
+        }
+
+        Err(
+            "Select at least 3 edges or vertices to create a face (or 2 vertices to connect an edge)",
+        )
+    }
 }
 
 #[cfg(test)]
@@ -2630,5 +2870,48 @@ mod region_tests {
             "vertex loop around plane boundary contains 4 vertices"
         );
         assert_eq!(mesh.selected_vert_count(), 4);
+    }
+
+    #[test]
+    fn make_face_from_selected_edges_and_vertices() {
+        // 1. A partir de 4 arestas (cubo sem a face superior)
+        let mut mesh = Mesh::cube(2.0);
+        assert_eq!(mesh.faces.len(), 6);
+        let removed_face = mesh.faces.remove(0); // Remove uma face
+        assert_eq!(mesh.faces.len(), 5);
+
+        // Seleciona as 4 arestas da face removida
+        let n = removed_face.verts.len();
+        for i in 0..n {
+            let u = removed_face.verts[i];
+            let v = removed_face.verts[(i + 1) % n];
+            mesh.selected_edges.insert(edge_key(u, v));
+        }
+
+        assert!(mesh.make_face_from_selection().is_ok());
+        assert_eq!(mesh.faces.len(), 6);
+        assert!(mesh.faces.last().unwrap().selected);
+
+        // 2. A partir de 3 vértices soltos (triângulo)
+        let mut mesh = Mesh::default();
+        mesh.verts.push(Vertex::new(0.0, 0.0, 0.0));
+        mesh.verts.push(Vertex::new(1.0, 0.0, 0.0));
+        mesh.verts.push(Vertex::new(0.0, 1.0, 0.0));
+        for v in &mut mesh.verts {
+            v.selected = true;
+        }
+        assert!(mesh.make_face_from_selection().is_ok());
+        assert_eq!(mesh.faces.len(), 1);
+        assert_eq!(mesh.faces[0].verts.len(), 3);
+
+        // 3. A partir de 2 vértices (conecta com aresta)
+        let mut mesh = Mesh::default();
+        mesh.verts.push(Vertex::new(0.0, 0.0, 0.0));
+        mesh.verts.push(Vertex::new(1.0, 0.0, 0.0));
+        mesh.verts[0].selected = true;
+        mesh.verts[1].selected = true;
+        assert!(mesh.make_face_from_selection().is_ok());
+        assert_eq!(mesh.selected_edges.len(), 1);
+        assert!(mesh.selected_edges.contains(&edge_key(0, 1)));
     }
 }

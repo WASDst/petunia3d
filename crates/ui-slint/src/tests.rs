@@ -7743,3 +7743,130 @@ fn test_extrude_mode_switch_and_presets() {
     bridge.cancel_tool_modal();
     assert_eq!(bridge.tool_modal, None);
 }
+
+#[test]
+fn test_make_face_from_selection_and_shortcut_f() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.set_edit_mode(petunia_core::EditMode::Edit);
+
+    // 1. Delete a face from cube to create an open boundary
+    assert_eq!(bridge.state.project.active_mesh().unwrap().faces.len(), 6);
+    let removed_face = {
+        let mesh = bridge.state.project.active_mesh_mut().unwrap();
+        mesh.faces.remove(0)
+    };
+    assert_eq!(bridge.state.project.active_mesh().unwrap().faces.len(), 5);
+
+    // Select the 4 boundary edges in Edge Mode
+    bridge.state.set_selection_domain(SelectionDomain::Edge);
+    {
+        let mesh = bridge.state.project.active_mesh_mut().unwrap();
+        let n = removed_face.verts.len();
+        for i in 0..n {
+            let u = removed_face.verts[i];
+            let v = removed_face.verts[(i + 1) % n];
+            mesh.selected_edges.insert(petunia_mesh::edge_key(u, v));
+        }
+    }
+
+    // Press 'F' in Edge Mode -> Make Face closes the cube
+    assert!(bridge.route_shortcut("f", false, false, false));
+    assert_eq!(bridge.state.project.active_mesh().unwrap().faces.len(), 6);
+    assert!(
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .last()
+            .unwrap()
+            .selected
+    );
+
+    // 2. Select 3 vertices in Vertex Mode -> Press 'F' creates triangle
+    bridge.state.set_selection_domain(SelectionDomain::Vertex);
+    {
+        let mesh = bridge.state.project.active_mesh_mut().unwrap();
+        mesh.deselect_all();
+        mesh.verts.push(petunia_mesh::Vertex::new(10.0, 0.0, 0.0));
+        mesh.verts.push(petunia_mesh::Vertex::new(11.0, 0.0, 0.0));
+        mesh.verts.push(petunia_mesh::Vertex::new(10.0, 1.0, 0.0));
+        let l = mesh.verts.len();
+        mesh.verts[l - 3].selected = true;
+        mesh.verts[l - 2].selected = true;
+        mesh.verts[l - 1].selected = true;
+    }
+    assert!(bridge.route_shortcut("f", false, false, false));
+    assert_eq!(bridge.state.project.active_mesh().unwrap().faces.len(), 7);
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .last()
+            .unwrap()
+            .verts
+            .len(),
+        3
+    );
+
+    // 3. Context Menu action "make_face" works identically
+    bridge.open_viewport_context_menu(100.0, 100.0);
+    // Select 2 remaining loose vertices
+    {
+        let mesh = bridge.state.project.active_mesh_mut().unwrap();
+        mesh.deselect_all();
+        mesh.verts.push(petunia_mesh::Vertex::new(20.0, 0.0, 0.0));
+        mesh.verts.push(petunia_mesh::Vertex::new(21.0, 0.0, 0.0));
+        let l = mesh.verts.len();
+        mesh.verts[l - 2].selected = true;
+        mesh.verts[l - 1].selected = true;
+    }
+    assert!(bridge.context_menu_action("make_face"));
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .selected_edges
+            .len(),
+        1
+    );
+
+    // 4. In Object Mode, 'F' frames selection instead of making face
+    bridge.state.set_selection_domain(SelectionDomain::Object);
+    assert!(bridge.route_shortcut("f", false, false, false));
+}
+
+#[test]
+fn test_slider_and_preference_responsiveness() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // Selection thickness slider
+    assert!(bridge.set_selection_thickness(3.5));
+    assert!((bridge.state.ui.selection_thickness - 3.5).abs() < 1e-4);
+
+    // Double tap interval slider
+    assert!(bridge.set_double_tap_interval_ms(250));
+    assert_eq!(bridge.preferences.double_tap_interval_ms, 250);
+
+    // Asset thumbnail size slider
+    bridge.set_asset_thumbnail_size(88.0);
+    assert!((bridge.state.ui.asset_thumbnail_size - 88.0).abs() < 1e-4);
+
+    // Reference slot slider param changes without wiping references
+    let dummy_rgba = vec![255u8; 16 * 16 * 4];
+    let mut ref_img =
+        petunia_core::ReferenceImage::from_rgba("Test Ref".to_string(), 16, 16, dummy_rgba);
+    ref_img.axis = petunia_core::RefAxis::Front;
+    bridge.state.project.refs.push(ref_img);
+
+    assert!(bridge.set_reference_param("front", "opacity", 0.65));
+    assert!((bridge.state.project.refs[0].opacity - 0.65).abs() < 1e-4);
+    assert!(bridge.set_reference_param("front", "size", 7.5));
+    assert!((bridge.state.project.refs[0].size - 7.5).abs() < 1e-4);
+}

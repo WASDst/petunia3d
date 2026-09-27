@@ -2768,6 +2768,15 @@ component ReferenceSlotCard inherits Rectangle {
     callback toggle-lock();
     callback set-param(string, float);
 
+    in-out property <float> local-opacity: slot.opacity;
+    in-out property <float> local-size: slot.size;
+    in-out property <float> local-offset: slot.offset;
+    changed slot => {
+        root.local-opacity = slot.opacity;
+        root.local-size = slot.size;
+        root.local-offset = slot.offset;
+    }
+
     border-radius: 6px;
     background: DesignTokens.surface;
     border-width: 1px;
@@ -2950,7 +2959,7 @@ component ReferenceSlotCard inherits Rectangle {
                 if slot.has-image: HorizontalLayout {
                     spacing: 8px;
                     Text {
-                        text: "Opacity: \{round(slot.opacity * 100)}%";
+                        text: "Opacity: \{round(root.local-opacity * 100)}%";
                         color: DesignTokens.text-secondary;
                         font-size: 10px;
                         width: 72px;
@@ -2960,7 +2969,7 @@ component ReferenceSlotCard inherits Rectangle {
                         horizontal-stretch: 1;
                         minimum: 0.05;
                         maximum: 1.0;
-                        value: slot.opacity;
+                        value <=> root.local-opacity;
                         changed(v) => { root.set-param("opacity", v); }
                     }
                 }
@@ -2968,7 +2977,7 @@ component ReferenceSlotCard inherits Rectangle {
                 if slot.has-image: HorizontalLayout {
                     spacing: 8px;
                     Text {
-                        text: "Size: \{round(slot.size * 10) / 10}";
+                        text: "Size: \{round(root.local-size * 10) / 10}";
                         color: DesignTokens.text-secondary;
                         font-size: 10px;
                         width: 72px;
@@ -2978,7 +2987,7 @@ component ReferenceSlotCard inherits Rectangle {
                         horizontal-stretch: 1;
                         minimum: 0.5;
                         maximum: 20.0;
-                        value: slot.size;
+                        value <=> root.local-size;
                         changed(v) => { root.set-param("size", v); }
                     }
                 }
@@ -2986,7 +2995,7 @@ component ReferenceSlotCard inherits Rectangle {
                 if slot.has-image: HorizontalLayout {
                     spacing: 8px;
                     Text {
-                        text: "Offset: \{round(slot.offset * 10) / 10}";
+                        text: "Offset: \{round(root.local-offset * 10) / 10}";
                         color: DesignTokens.text-secondary;
                         font-size: 10px;
                         width: 72px;
@@ -2996,7 +3005,7 @@ component ReferenceSlotCard inherits Rectangle {
                         horizontal-stretch: 1;
                         minimum: -10.0;
                         maximum: 10.0;
-                        value: slot.offset;
+                        value <=> root.local-offset;
                         changed(v) => { root.set-param("offset", v); }
                     }
                 }
@@ -3667,6 +3676,7 @@ export component PetuniaSlintShell inherits Window {
     callback colorblind-axes-set(bool);
     callback reduced-motion-set(bool);
     callback double-tap-interval-set(int);
+    callback double-tap-interval-released(int);
     callback multiselection-measure-tag-set(bool);
     callback asset-query-changed(string);
     callback parts-query-changed(string);
@@ -3677,6 +3687,7 @@ export component PetuniaSlintShell inherits Window {
     callback asset-thumbnail-size-changed(float);
     callback selection-color-set(string);
     callback selection-thickness-set(float);
+    callback selection-thickness-released(float);
     callback ui-scale-set(float);
     callback language-changed(string);
     callback tool-modal-cancel;
@@ -5448,6 +5459,14 @@ export component PetuniaSlintShell inherits Window {
                                     active: root.shading-popover-open;
                                     clicked => { root.shading-popover-toggled(!root.shading-popover-open); }
                                 }
+                                ViewportBarButton {
+                                    icon: IconSet.Image;
+                                    label: "Ref Images";
+                                    shortcut: "F4";
+                                    description: "Reference Images manager for background blueprints and modeling guides";
+                                    active: root.reference-manager-visible;
+                                    clicked => { root.reference-manager-toggle(); }
+                                }
                             }
                         }
 
@@ -6912,6 +6931,13 @@ export component PetuniaSlintShell inherits Window {
                                 description: "Bridge edge loops with configurable quad segments and twist";
                                 clicked => { root.command-executed("model.connect"); }
                             }
+                            if active-workspace == "MODEL" && root.viewport-region-width >= 720: ToolButton {
+                                icon: IconSet.Square;
+                                semantic-label: "Make Face";
+                                shortcut: "F";
+                                description: "Create face or edge connecting selected vertices or edges (F)";
+                                clicked => { root.command-executed("model.make_face"); }
+                            }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: @image-url("icons/tool-spin.svg");
                                 semantic-label: "Spin";
@@ -7264,6 +7290,7 @@ export component PetuniaSlintShell inherits Window {
                             ContextMenuItem { label: root.label-model-profile; shortcut: root.shortcuts.model-profile; clicked => { root.shelf-overflow-open = false; root.active-tool-changed("draw_profile"); } }
                             ContextMenuItem { label: root.label-model-slice; shortcut: root.shortcuts.model-slice; clicked => { root.shelf-overflow-open = false; root.active-tool-changed("slice"); } }
                             ContextMenuItem { label: "Connect Loops"; shortcut: root.shortcuts.model-connect; clicked => { root.shelf-overflow-open = false; root.command-executed("model.connect"); } }
+                            ContextMenuItem { label: "Make Face / Edge"; shortcut: "F"; clicked => { root.shelf-overflow-open = false; root.command-executed("model.make_face"); } }
                             ContextMenuItem { label: "Spin / Lathe"; shortcut: root.shortcuts.model-spin; clicked => { root.shelf-overflow-open = false; root.command-executed("model.spin"); } }
                             ContextMenuItem { label: "Subdivide"; shortcut: root.shortcuts.model-subdivide; clicked => { root.shelf-overflow-open = false; root.command-executed("model.subdivide"); } }
                             ContextMenuItem { label: "Merge Center"; shortcut: root.shortcuts.model-merge; clicked => { root.shelf-overflow-open = false; root.command-executed("model.merge"); } }
@@ -9818,7 +9845,7 @@ export component PetuniaSlintShell inherits Window {
                             min-width: 110px;
                             minimum: 0.1;
                             maximum: 0.9;
-                            value: root.xray-opacity;
+                            value <=> root.xray-opacity;
                             accessible-label: root.label-xray-opacity;
                             changed(value) => { root.xray-opacity-set(value); }
                         }
@@ -10063,6 +10090,11 @@ export component PetuniaSlintShell inherits Window {
                         clicked => { root.context-menu-open = false; root.context-menu-action("connect"); }
                     }
                     if root.context-menu-mode == "viewport" && (root.selection-domain == "VERTEX" || root.selection-domain == "EDGE"): ContextMenuItem {
+                        label: "Make Face / Edge";
+                        shortcut: "F";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("make_face"); }
+                    }
+                    if root.context-menu-mode == "viewport" && (root.selection-domain == "VERTEX" || root.selection-domain == "EDGE"): ContextMenuItem {
                         label: "Merge";
                         shortcut: "M";
                         clicked => { root.context-menu-open = false; root.context-menu-action("merge"); }
@@ -10283,7 +10315,7 @@ export component PetuniaSlintShell inherits Window {
                         width: 100px;
                         minimum: 48;
                         maximum: 128;
-                        value: root.asset-thumbnail-size;
+                        value <=> root.asset-thumbnail-size;
                         changed(value) => { root.asset-thumbnail-size-changed(value); }
                     }
                     Text { text: "\{round(root.asset-thumbnail-size)}"; color: DesignTokens.text-muted; font-size: 10px; width: 24px; horizontal-alignment: right; vertical-alignment: center; }
@@ -10999,9 +11031,10 @@ export component PetuniaSlintShell inherits Window {
                                         Slider {
                                             horizontal-stretch: 1;
                                             minimum: 1; maximum: 6;
-                                            value: root.selection-thickness;
+                                            value <=> root.selection-thickness;
                                             accessible-label: root.label-highlight-thickness;
                                             changed(value) => { root.selection-thickness-set(value); }
+                                            released(value) => { root.selection-thickness-released(value); }
                                         }
                                         Text { text: "\{round(root.selection-thickness * 10) / 10} px"; color: DesignTokens.text-secondary; font-size: 10px; width: 44px; horizontal-alignment: right; vertical-alignment: center; }
                                     }
@@ -11196,6 +11229,7 @@ export component PetuniaSlintShell inherits Window {
                                             value: root.double-tap-interval-ms;
                                             accessible-label: root.label-double-tap-interval;
                                             changed(value) => { root.double-tap-interval-set(Math.round(value)); }
+                                            released(value) => { root.double-tap-interval-released(Math.round(value)); }
                                         }
                                         Text {
                                             text: root.double-tap-interval-ms == 0 ? "Desativado (0)" : "\{root.double-tap-interval-ms} ms";

@@ -1218,6 +1218,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_settings_closed(move || {
         if let Ok(mut bridge) = settings_close_bridge.lock() {
+            persist_user_preferences(&mut bridge);
             bridge.apply(UiIntent::CloseSettings);
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
@@ -1960,12 +1961,17 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_double_tap_interval_set(move |interval| {
         if let Ok(mut bridge) = double_tap_bridge.lock() {
-            if bridge.set_double_tap_interval_ms(interval.max(0) as u64) {
-                persist_user_preferences(&mut bridge);
-            }
+            bridge.set_double_tap_interval_ms(interval.max(0) as u64);
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &bridge.view_model());
+                window.set_double_tap_interval_ms(interval);
             }
+        }
+    });
+
+    let double_tap_rel_bridge = Arc::clone(&bridge);
+    window.on_double_tap_interval_released(move |_interval| {
+        if let Ok(mut bridge) = double_tap_rel_bridge.lock() {
+            persist_user_preferences(&mut bridge);
         }
     });
 
@@ -2005,17 +2011,21 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_selection_thickness_set(move |thickness| {
         if let Ok(mut bridge) = selection_thickness_bridge.lock() {
-            if bridge.set_selection_thickness(thickness) {
-                persist_user_preferences(&mut bridge);
-            }
-            let vm = bridge.view_model();
+            bridge.set_selection_thickness(thickness);
             let frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
+                window.set_selection_thickness(thickness);
                 if let Some(frame) = frame {
                     window.set_viewport_image(frame);
                 }
             }
+        }
+    });
+
+    let selection_thickness_rel_bridge = Arc::clone(&bridge);
+    window.on_selection_thickness_released(move |_thickness| {
+        if let Ok(mut bridge) = selection_thickness_rel_bridge.lock() {
+            persist_user_preferences(&mut bridge);
         }
     });
 
@@ -2119,7 +2129,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         if let Ok(mut bridge) = asset_size_bridge.lock() {
             bridge.set_asset_thumbnail_size(size);
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &bridge.view_model());
+                window.set_asset_thumbnail_size(size);
             }
         }
     });
@@ -2557,10 +2567,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_xray_opacity_set(move |opacity| {
         if let Ok(mut bridge) = xray_opacity_bridge.lock() {
             bridge.set_xray_opacity(opacity);
-            let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
+                window.set_xray_opacity(opacity);
                 if let Some(frame) = new_frame {
                     window.set_viewport_image(frame);
                 }
@@ -4737,13 +4746,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_reference_slot_set_param(move |axis, param, val| {
         if let Ok(mut bridge) = ref_param_bridge.lock() {
             bridge.set_reference_param(axis.as_str(), param.as_str(), val);
-            let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
+                window.set_viewport_image(frame);
             }
         }
     });

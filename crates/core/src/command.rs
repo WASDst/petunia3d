@@ -898,6 +898,16 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.make_face",
+                "Make Face / Edge",
+                "Create a new face or edge connecting selected vertices or edges (F)",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            MakeFaceCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.spin",
                 "Spin",
                 "Extrude and spin selected geometry in an arc around axis",
@@ -3818,6 +3828,47 @@ impl Command for DissolveCmd {
         state.set_status("Dissolved selected geometry");
         state.emit_mesh_changed();
         Ok(())
+    }
+}
+
+/// Comando para criar uma nova face a partir de 3 ou mais arestas/vértices selecionados (atalho 'F').
+#[derive(Debug, Clone, Default)]
+pub struct MakeFaceCmd;
+
+impl Command for MakeFaceCmd {
+    fn label(&self) -> &'static str {
+        "make_face"
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+        let vert_count = mesh.verts.iter().filter(|v| v.selected).count();
+        let edge_count = mesh.selected_edges.len();
+        if edge_count >= 2 || vert_count >= 2 {
+            Ok(())
+        } else {
+            Err("Select at least 3 edges or vertices to make a face (or 2 to make an edge)")
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let before = state.project.clone();
+        let Some(mesh) = state.project.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        match mesh.make_face_from_selection() {
+            Ok(()) => {
+                state.project.undo.checkpoint("make_face", &before);
+                state.sync_selection();
+                state.set_status("Face created from selection");
+                state.emit_mesh_changed();
+                Ok(())
+            }
+            Err(err) => {
+                state.set_status(format!("Make face: {err}"));
+                Err(CommandError::Execution(err.into()))
+            }
+        }
     }
 }
 

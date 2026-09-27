@@ -56,6 +56,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
@@ -85,7 +86,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (49 atalhos)
+### Perfil: `3ds-max` (50 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -113,6 +114,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -162,11 +164,11 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.duplicate` | <kbd>Shift+D</kbd> |
 | `model.extrude` | <kbd>E</kbd> |
 | `model.extrude_individual` | <kbd>Alt+E</kbd> |
-| `model.frame_selection` | <kbd>F</kbd> |
 | `model.inset` | <kbd>I</kbd> |
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |
@@ -193,7 +195,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `blender-notebook` (49 atalhos)
+### Perfil: `blender-notebook` (50 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -221,6 +223,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -247,7 +250,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `cinema-4d` (49 atalhos)
+### Perfil: `cinema-4d` (50 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -275,6 +278,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -301,7 +305,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `maya` (49 atalhos)
+### Perfil: `maya` (50 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -329,6 +333,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -355,7 +360,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `petunia-notebook` (49 atalhos)
+### Perfil: `petunia-notebook` (50 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -383,6 +388,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |
@@ -409,7 +415,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `petunia-simple` (49 atalhos)
+### Perfil: `petunia-simple` (50 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -437,6 +443,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>A</kbd> |

@@ -54,6 +54,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.invert_selection` | <kbd>Ctrl+I</kbd> |
 | `model.knife` | <kbd>K</kbd> |
 | `model.loop_cut` | <kbd>Ctrl+R</kbd> |
+| `model.make_face` | <kbd>F</kbd> |
 | `model.merge` | <kbd>M</kbd> |
 | `model.move` | <kbd>G</kbd> |
 | `model.primitives` | <kbd>Shift+A</kbd> |

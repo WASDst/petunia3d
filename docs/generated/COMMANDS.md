@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **97**.
+Total de comandos registrados no motor: **98**.
 
 ## Tabela Geral de Comandos
 
@@ -62,6 +62,7 @@ Total de comandos registrados no motor: **97**.
 | `model.join` | **Join** | `Model` | Não | Modeling | Merge the operand into the active object keeping both topologies |
 | `model.knife` | **Knife** | `Model` | Não | Knife | Cut the active mesh along edge points picked in the viewport |
 | `model.loop_cut` | **Loop Cut** | `Model` | Sim | LoopCut | Insert evenly spaced cuts along a quad ring |
+| `model.make_face` | **Make Face / Edge** | `Model` | Sim | Modeling | Create a new face or edge connecting selected vertices or edges (F) |
 | `model.merge` | **Merge Center** | `Model` | Sim | Modeling | Merge selected vertices into center point |
 | `model.push_pull` | **Push/Pull** | `Model` | Não | Modeling | Push or pull selected faces along the surface normal |
 | `model.revolve` | **Revolve 360** | `Model` | Sim | Modeling | Revolve selected profile 360 degrees around an axis |
