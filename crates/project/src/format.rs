@@ -17,7 +17,9 @@
 use serde::{Deserialize, Serialize};
 use std::io::{Cursor, Read, Write};
 
-use super::Project;
+use super::{
+    AnimationAsset, AnnotationItem, Asset, Light, Material, MeasurementItem, Project, Skeleton,
+};
 use crate::io_atomic::atomic_write;
 
 pub const PROJECT_VERSION: u32 = 1;
@@ -33,6 +35,77 @@ struct PetuniaFile {
     magic: [u8; 8],
     version: u32,
     project: Project,
+}
+
+#[derive(Debug, Deserialize)]
+struct LegacyPetuniaFileBeforeSplines {
+    magic: [u8; 8],
+    version: u32,
+    project: LegacyProjectBeforeSplines,
+}
+
+#[derive(Debug, Deserialize)]
+struct LegacyProjectBeforeSplines {
+    id: uuid::Uuid,
+    name: String,
+    assets: Vec<Asset>,
+    active: usize,
+    palette: Vec<[f32; 3]>,
+    collections: Vec<String>,
+    annotations: Vec<AnnotationItem>,
+    annotation_groups: Vec<String>,
+    measurements: Vec<MeasurementItem>,
+    annotations_visible: bool,
+    annotations_locked: bool,
+    measurements_visible: bool,
+    materials: Vec<Material>,
+    lights: Vec<Light>,
+    skeletons: Vec<Skeleton>,
+    animations: Vec<AnimationAsset>,
+    topology_revision: u64,
+    position_revision: u64,
+    selection_revision: u64,
+    material_revision: u64,
+    texture_revision: u64,
+    transform_revision: u64,
+    normal_revision: u64,
+    uv_revision: u64,
+    color_revision: u64,
+}
+
+impl LegacyProjectBeforeSplines {
+    fn into_project(self) -> Project {
+        Project {
+            id: self.id,
+            name: self.name,
+            assets: self.assets,
+            active: self.active,
+            history_selection: Vec::new(),
+            palette: self.palette,
+            collections: self.collections,
+            annotations: self.annotations,
+            annotation_groups: self.annotation_groups,
+            measurements: self.measurements,
+            annotations_visible: self.annotations_visible,
+            annotations_locked: self.annotations_locked,
+            measurements_visible: self.measurements_visible,
+            materials: self.materials,
+            lights: self.lights,
+            skeletons: self.skeletons,
+            animations: self.animations,
+            topology_revision: self.topology_revision,
+            position_revision: self.position_revision,
+            selection_revision: self.selection_revision,
+            material_revision: self.material_revision,
+            texture_revision: self.texture_revision,
+            transform_revision: self.transform_revision,
+            normal_revision: self.normal_revision,
+            uv_revision: self.uv_revision,
+            color_revision: self.color_revision,
+            spline_revision: 0,
+            splines: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -177,8 +250,24 @@ fn load_zip(bytes: &[u8]) -> Result<Project, ProjectError> {
 }
 
 fn load_legacy_postcard(bytes: &[u8]) -> Result<Project, ProjectError> {
-    let file: PetuniaFile =
-        postcard::from_bytes(bytes).map_err(|e| ProjectError::Format(e.to_string()))?;
+    let file: PetuniaFile = match postcard::from_bytes(bytes) {
+        Ok(file) => file,
+        Err(current_error) => {
+            let legacy: LegacyPetuniaFileBeforeSplines =
+                postcard::from_bytes(bytes).map_err(|legacy_error| {
+                    ProjectError::Format(format!("{current_error}; legacy layout: {legacy_error}"))
+                })?;
+            if legacy.magic != *MAGIC {
+                return Err(ProjectError::Format("magic inválido".into()));
+            }
+            if legacy.version > PROJECT_VERSION {
+                return Err(ProjectError::Version(legacy.version, PROJECT_VERSION));
+            }
+            let mut project = legacy.project.into_project();
+            project.validate();
+            return Ok(project);
+        }
+    };
     if file.magic != *MAGIC {
         return Err(ProjectError::Format("magic inválido".into()));
     }
@@ -192,14 +281,66 @@ fn load_legacy_postcard(bytes: &[u8]) -> Result<Project, ProjectError> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::Asset;
     use super::*;
     use petunia_mesh::Mesh;
+    use serde::ser::SerializeStruct;
+
+    struct LegacyProjectV1<'a>(&'a Project);
+
+    impl serde::Serialize for LegacyProjectV1<'_> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let project = self.0;
+            let mut state = serializer.serialize_struct("Project", 25)?;
+            state.serialize_field("id", &project.id)?;
+            state.serialize_field("name", &project.name)?;
+            state.serialize_field("assets", &project.assets)?;
+            state.serialize_field("active", &project.active)?;
+            state.serialize_field("palette", &project.palette)?;
+            state.serialize_field("collections", &project.collections)?;
+            state.serialize_field("annotations", &project.annotations)?;
+            state.serialize_field("annotation_groups", &project.annotation_groups)?;
+            state.serialize_field("measurements", &project.measurements)?;
+            state.serialize_field("annotations_visible", &project.annotations_visible)?;
+            state.serialize_field("annotations_locked", &project.annotations_locked)?;
+            state.serialize_field("measurements_visible", &project.measurements_visible)?;
+            state.serialize_field("materials", &project.materials)?;
+            state.serialize_field("lights", &project.lights)?;
+            state.serialize_field("skeletons", &project.skeletons)?;
+            state.serialize_field("animations", &project.animations)?;
+            state.serialize_field("topology_revision", &project.topology_revision)?;
+            state.serialize_field("position_revision", &project.position_revision)?;
+            state.serialize_field("selection_revision", &project.selection_revision)?;
+            state.serialize_field("material_revision", &project.material_revision)?;
+            state.serialize_field("texture_revision", &project.texture_revision)?;
+            state.serialize_field("transform_revision", &project.transform_revision)?;
+            state.serialize_field("normal_revision", &project.normal_revision)?;
+            state.serialize_field("uv_revision", &project.uv_revision)?;
+            state.serialize_field("color_revision", &project.color_revision)?;
+            state.end()
+        }
+    }
+
+    #[derive(serde::Serialize)]
+    struct LegacyPetuniaFileV1<'a> {
+        magic: [u8; 8],
+        version: u32,
+        project: LegacyProjectV1<'a>,
+    }
 
     #[test]
     fn save_load_roundtrip() {
         let mut p = Project::new();
         p.add("Plane", Mesh::plane(1.0));
+        let spline = crate::SplineResource::from_polyline(
+            "Cable path",
+            &[[0.0, 0.0, 0.0], [1.0, 0.5, 0.0], [2.0, 0.0, 0.0]],
+            false,
+        );
+        let spline_id = spline.id;
+        p.add_spline(spline).unwrap();
         let dir = std::env::temp_dir();
         let path = dir.join("petunia_test_roundtrip.petunia");
         save(&p, &path).unwrap();
@@ -207,6 +348,9 @@ mod tests {
         assert_eq!(q.assets.len(), 2);
         assert_eq!(q.assets[1].name, "Plane");
         assert_eq!(q.assets[1].id, p.assets[1].id);
+        assert_eq!(q.splines.len(), 1);
+        assert_eq!(q.splines[0].id, spline_id);
+        assert_eq!(q.splines[0].points, p.splines[0].points);
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(&bytes[0..2], b"PK");
         let _ = std::fs::remove_file(&path);
@@ -319,6 +463,38 @@ mod tests {
         let loaded = load_bytes(&bytes).unwrap();
         assert_eq!(loaded.assets.len(), p.assets.len());
         assert_eq!(loaded.assets[0].name, "Cube");
+    }
+
+    #[test]
+    fn postcard_layout_before_splines_loads_with_additive_defaults() {
+        let project = Project::new();
+        let bytes = postcard::to_allocvec(&LegacyPetuniaFileV1 {
+            magic: *MAGIC,
+            version: 1,
+            project: LegacyProjectV1(&project),
+        })
+        .unwrap();
+
+        let loaded = load_bytes(&bytes).unwrap();
+
+        assert_eq!(loaded.assets.len(), project.assets.len());
+        assert_eq!(loaded.assets[0].id, project.assets[0].id);
+        assert_eq!(loaded.assets[0].name, project.assets[0].name);
+        assert!(loaded.splines.is_empty());
+        assert_eq!(loaded.spline_revision, 0);
+    }
+
+    #[test]
+    fn document_without_spline_fields_defaults_to_empty_storage() {
+        let mut document = serde_json::to_value(Project::new()).unwrap();
+        let object = document.as_object_mut().unwrap();
+        object.remove("splines");
+        object.remove("spline_revision");
+
+        let loaded: Project = serde_json::from_value(document).unwrap();
+
+        assert!(loaded.splines.is_empty());
+        assert_eq!(loaded.spline_revision, 0);
     }
 
     #[test]

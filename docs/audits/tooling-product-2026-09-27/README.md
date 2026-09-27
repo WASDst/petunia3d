@@ -9,6 +9,10 @@
 > **Regra de execução:** corrigir incrementalmente; este dossiê não autoriza
 > reescrita total nem reabertura da UI Baseline V1
 
+> **Estado pós-auditoria:** os gates G0–G3 estão registrados separadamente. O G3
+> eleva `HA-01` a `PARTIALLY_COMPLIANT` com a fundação headless de Spline Core;
+> attachment, UI, Profile persistente, generators e Hair continuam pendentes.
+
 ## 1. Veredito executivo
 
 O Petunia3D já possui uma base de editor 3D significativamente mais real do que
@@ -142,6 +146,8 @@ produto nem substitutos para os critérios do caderno.
   remediação do stroke, batch simétrico, composição por tiles e canvas 2D nativo.
 - [`g2-paint-gpu-remediation-2026-09-27.md`](./g2-paint-gpu-remediation-2026-09-27.md) —
   fechamento do upload regional Paint→Slint/WGPU, sem rebuild geométrico.
+- [`g3-spline-core-remediation-2026-09-27.md`](./g3-spline-core-remediation-2026-09-27.md) —
+  fundação persistente/transacional de splines e frames compartilhados com Sweep.
 
 ## 6. Fontes canônicas principais
 

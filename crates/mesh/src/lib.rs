@@ -229,6 +229,7 @@ pub mod knife;
 pub mod loop_cut;
 pub mod obj;
 pub mod ops;
+pub mod path_frames;
 pub mod primitives;
 pub mod profile_geo;
 pub mod sweep;
@@ -242,6 +243,7 @@ pub use curve::{BezierNode, BezierNodeKind, BezierPath, create_hollow_profile, o
 pub use half_edge::{
     EdgeId, FaceId, HalfEdge, HalfEdgeId, HalfEdgeMesh, TopologyDefect, TopologyReport, VertexId,
 };
+pub use path_frames::{PathFrame, PathFrameError, compute_parallel_transport_frames};
 pub use primitives::{CircleFill, PrimitiveAudit, PrimitiveDescriptor, primitive_audit};
 pub use sweep::{SweepFrame, SweepOptions, compute_rmf_frames, generate_sweep};
 pub use topology::{DirtyDomains, ElementRemap, TopologyResult};

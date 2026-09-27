@@ -36,8 +36,10 @@ pub use docs::DocsTopic;
 pub use handles::{Handle, HandleTable};
 pub use jobs::{JobChannel, JobsError, par_finite_sum, par_validate};
 pub use petunia_project::{
-    AssetSummary, AutosaveConfig, AutosaveService, ModelLibraryQuery, ModelLibraryService,
-    ModelLibrarySort, RecoveryInfo, SessionLockInfo,
+    ArcLengthTable, AssetSummary, AutosaveConfig, AutosaveService, ModelLibraryQuery,
+    ModelLibraryService, ModelLibrarySort, RecoveryInfo, SessionLockInfo, SplineError,
+    SplineEvaluationCache, SplineFrame, SplineHandleMode, SplineInterpolation, SplinePoint,
+    SplineResource, SplineSample, SplineSnapSettings, snap_spline_position,
 };
 pub use queries::{
     SceneHierarchyDto, SceneObjectDto, SelectionDetailsDto, ToolStatusDto, UvDiagnosticsDto,
@@ -50,16 +52,18 @@ pub use schema_contracts::{
 };
 
 pub use command::{
-    AddPrimitiveCmd, BakeDecalCmd, BevelCmd, BooleanOpCmd, BoxSelectCmd, ClearSelectionCmd,
-    Command, CommandCategory, CommandDispatcher, CommandError, CommandMetadata, CommandPaletteItem,
-    ConnectLoopsCmd, CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd,
-    DeleteSelectionCmd, DuplicateAssetCmd, DuplicateSelectionCmd, ExportGlbCmd, ExportObjCmd,
-    ExtrudeIndividualCmd, ExtrudeSelectedCmd, FlipDiagonalCmd, FlipNormalsCmd, FrameSelectionCmd,
-    ImportObjCmd, InsetFacesCmd, InstantiateAssetCmd, InvertSelectionCmd, JoinObjectsCmd,
-    KnifeToolCmd, LoopCutCmd, MergeCenterCmd, NewProjectCmd, OpenProjectCmd, PrimitiveKind,
-    PushPullToolCmd, RedoCmd, ReorderAssetCmd, ResetCameraCmd, RevolveCmd, SaveActiveAsAssetCmd,
-    SaveProjectAsCmd, SaveProjectCmd, ScaleSelectionCmd, SelectAllCmd, SelectLinkedCmd,
-    SeparateSelectionCmd, SetAssetCollectionCmd, SetDecalTransformCmd, SetSelectionDomainCmd,
+    AddPrimitiveCmd, AddSplinePointCmd, BakeDecalCmd, BevelCmd, BooleanOpCmd, BoxSelectCmd,
+    ClearSelectionCmd, Command, CommandCategory, CommandDispatcher, CommandError, CommandMetadata,
+    CommandPaletteItem, ConnectLoopsCmd, ConvertSplineToPolylineCmd, CreateSplineCmd,
+    CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeleteSelectionCmd,
+    DeleteSplineCmd, DeleteSplinePointCmd, DuplicateAssetCmd, DuplicateSelectionCmd, ExportGlbCmd,
+    ExportObjCmd, ExtrudeIndividualCmd, ExtrudeSelectedCmd, FlipDiagonalCmd, FlipNormalsCmd,
+    FrameSelectionCmd, ImportObjCmd, InsetFacesCmd, InstantiateAssetCmd, InvertSelectionCmd,
+    JoinObjectsCmd, KnifeToolCmd, LoopCutCmd, MergeCenterCmd, MoveSplinePointCmd, NewProjectCmd,
+    OpenProjectCmd, PrimitiveKind, PushPullToolCmd, RedoCmd, ReorderAssetCmd, ResetCameraCmd,
+    ReverseSplineCmd, RevolveCmd, SaveActiveAsAssetCmd, SaveProjectAsCmd, SaveProjectCmd,
+    ScaleSelectionCmd, SelectAllCmd, SelectLinkedCmd, SeparateSelectionCmd, SetAssetCollectionCmd,
+    SetDecalTransformCmd, SetSelectionDomainCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
     SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
     ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd,
     ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, UndoCmd,

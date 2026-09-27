@@ -3,8 +3,10 @@
 > Esta matriz preserva o snapshot original da auditoria. O estado pós-remediação
 > dos gates concluídos está registrado em `g0-remediation-2026-09-27.md`,
 > `g1-paint-remediation-2026-09-27.md` e
-> `g2-paint-gpu-remediation-2026-09-27.md`; em especial, `PA-04` passa a
-> `COMPLIANT` no frontend Slint/WGPU de produção após o G2.
+> `g2-paint-gpu-remediation-2026-09-27.md`; `PA-04` passa a `COMPLIANT` no
+> frontend Slint/WGPU de produção após o G2. O G3 está registrado em
+> `g3-spline-core-remediation-2026-09-27.md` e eleva `HA-01` a
+> `PARTIALLY_COMPLIANT`, sem declarar attachment/UI/Bake mesh concluídos.
 
 ## 1. Legenda obrigatória
 

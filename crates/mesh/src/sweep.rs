@@ -4,9 +4,9 @@
 //! com minimização de torção (Parallel Transport / Double Reflection RMF),
 //! mitering com contenção em cantos vivos e tampas (end caps) trianguladas.
 
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 
-use super::{Face, Mesh, Vertex, triangulate};
+use super::{Face, Mesh, Vertex, compute_parallel_transport_frames, triangulate};
 
 /// Opções de configuração para a operação de Sweep.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,140 +60,23 @@ impl SweepFrame {
 /// Este método elimina o gimbal lock e torções indesejadas (flipping) em curvas 3D,
 /// garantindo transporte paralelo de 4ª ordem globalmente sem singularidades.
 pub fn compute_rmf_frames(path: &[Vec3], closed: bool) -> Result<Vec<SweepFrame>, String> {
-    let n = path.len();
-    if n < 2 {
-        return Err("O caminho de Sweep precisa de pelo menos 2 pontos".to_string());
-    }
-
-    // Calcula tangentes para cada ponto do caminho
-    let mut tangents = Vec::with_capacity(n);
-    for i in 0..n {
-        let t = if closed {
-            let prev = path[(i + n - 1) % n];
-            let next = path[(i + 1) % n];
-            (next - prev).normalize_or_zero()
-        } else if i == 0 {
-            (path[1] - path[0]).normalize_or_zero()
-        } else if i == n - 1 {
-            (path[n - 1] - path[n - 2]).normalize_or_zero()
-        } else {
-            let prev = path[i - 1];
-            let next = path[i + 1];
-            (next - prev).normalize_or_zero()
-        };
-        let t = if t.length_squared() > 1e-6 {
-            t
-        } else if i + 1 < n {
-            (path[i + 1] - path[i]).normalize_or_zero()
-        } else {
-            Vec3::Z
-        };
-        tangents.push(t);
-    }
-
-    // Define o frame inicial no ponto 0
-    let t0 = tangents[0];
-    let up_guide = if t0.y.abs() < 0.9 { Vec3::Y } else { Vec3::X };
-    let r0 = t0.cross(up_guide).normalize_or_zero();
-    let s0 = t0.cross(r0).normalize_or_zero();
-
-    let mut frames = Vec::with_capacity(n);
-    frames.push(SweepFrame {
-        origin: path[0],
-        tangent: t0,
-        normal: r0,
-        binormal: s0,
-    });
-
-    // Propaga via Double Reflection
-    for i in 0..(n - 1) {
-        let x_i = path[i];
-        let x_next = path[i + 1];
-        let v1 = x_next - x_i;
-        let c1 = v1.length_squared();
-
-        let r_curr = frames[i].normal;
-        let t_curr = frames[i].tangent;
-        let t_next = tangents[i + 1];
-
-        if c1 < 1e-8 {
-            frames.push(SweepFrame {
-                origin: x_next,
-                tangent: t_next,
-                normal: r_curr,
-                binormal: frames[i].binormal,
-            });
-            continue;
-        }
-
-        // Primeira reflexão (em torno do hiperplano médio entre x_i e x_next)
-        let r_i_l = r_curr - (2.0 / c1) * v1.dot(r_curr) * v1;
-        let t_i_l = t_curr - (2.0 / c1) * v1.dot(t_curr) * v1;
-
-        // Segunda reflexão (em torno do hiperplano médio entre t_i_l e t_next)
-        let v2 = t_next - t_i_l;
-        let c2 = v2.length_squared();
-
-        let r_next = if c2 < 1e-8 {
-            r_i_l
-        } else {
-            r_i_l - (2.0 / c2) * v2.dot(r_i_l) * v2
-        };
-
-        let r_next = r_next.normalize_or_zero();
-        let s_next = t_next.cross(r_next).normalize_or_zero();
-
-        frames.push(SweepFrame {
-            origin: x_next,
-            tangent: t_next,
-            normal: r_next,
-            binormal: s_next,
-        });
-    }
-
-    // Se o caminho for fechado, distribui o erro angular acumulado (twist compensation)
-    if closed && n > 2 {
-        let last_frame = frames[n - 1];
-        let v_close = path[0] - path[n - 1];
-        let c_close = v_close.length_squared();
-
-        let (r_end, _s_end) = if c_close > 1e-8 {
-            let r_l =
-                last_frame.normal - (2.0 / c_close) * v_close.dot(last_frame.normal) * v_close;
-            let t_l =
-                last_frame.tangent - (2.0 / c_close) * v_close.dot(last_frame.tangent) * v_close;
-            let v_t = t0 - t_l;
-            let c_t = v_t.length_squared();
-            let r_proj = if c_t < 1e-8 {
-                r_l
-            } else {
-                r_l - (2.0 / c_t) * v_t.dot(r_l) * v_t
-            };
-            let r_norm = r_proj.normalize_or_zero();
-            (r_norm, t0.cross(r_norm).normalize_or_zero())
-        } else {
-            (last_frame.normal, last_frame.binormal)
-        };
-
-        // Ângulo de defasagem entre o fechamento e o frame inicial
-        let cos_theta = r_end.dot(r0).clamp(-1.0, 1.0);
-        let sin_theta = r_end.dot(s0);
-        let delta_angle = sin_theta.atan2(cos_theta);
-
-        // Desrotaciona gradualmente os frames ao longo do comprimento
-        for (i, frame) in frames.iter_mut().enumerate() {
-            let factor = (i as f32) / (n as f32);
-            let angle = -delta_angle * factor;
-            let cos_a = angle.cos();
-            let sin_a = angle.sin();
-            let r_rotated = frame.normal * cos_a + frame.binormal * sin_a;
-            let s_rotated = frame.tangent.cross(r_rotated).normalize_or_zero();
-            frame.normal = r_rotated;
-            frame.binormal = s_rotated;
-        }
-    }
-
-    Ok(frames)
+    let path: Vec<_> = path
+        .iter()
+        .map(|point| DVec3::new(point.x as f64, point.y as f64, point.z as f64))
+        .collect();
+    compute_parallel_transport_frames(&path, closed)
+        .map(|frames| {
+            frames
+                .into_iter()
+                .map(|frame| SweepFrame {
+                    origin: frame.origin.as_vec3(),
+                    tangent: frame.tangent.as_vec3(),
+                    normal: frame.normal.as_vec3(),
+                    binormal: frame.binormal.as_vec3(),
+                })
+                .collect()
+        })
+        .map_err(|error| format!("Caminho de Sweep inválido: {error}"))
 }
 
 /// Aplica o alinhamento de bissetriz (mitering) em vértices de canto.

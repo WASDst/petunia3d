@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use petunia_mesh::Mesh;
-use petunia_project::ProjectChanges;
+use petunia_project::{ProjectChanges, SplineError, SplineHandleMode, SplinePoint, SplineResource};
 
 use crate::camera::ViewPreset;
 use crate::docs::DocsTopic;
@@ -26,6 +26,8 @@ pub enum CommandError {
     UnknownCommand(String),
     #[error("Erro ao executar comando: {0}")]
     Execution(String),
+    #[error(transparent)]
+    Spline(#[from] SplineError),
 }
 
 /// Trait central de comando executável contra o estado do editor (`AppState`).
@@ -4031,6 +4033,384 @@ impl Command for SetDecalTransformCmd {
 #[derive(Debug, Clone)]
 pub struct BakeDecalCmd {
     pub layer_id: uuid::Uuid,
+}
+
+/// Adiciona um recurso de path persistente sem criar mesh derivada (P3D-161).
+#[derive(Debug, Clone)]
+pub struct CreateSplineCmd {
+    pub spline: SplineResource,
+}
+
+impl Command for CreateSplineCmd {
+    fn label(&self) -> &'static str {
+        "create spline"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        if state.project.project.get_spline(self.spline.id).is_some() {
+            Err("Spline id already exists")
+        } else if self.spline.validate_authoring().is_err() {
+            Err("Spline data is invalid")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state.project.project.add_spline(self.spline.clone())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DeleteSplineCmd {
+    pub spline_id: uuid::Uuid,
+}
+
+impl Command for DeleteSplineCmd {
+    fn label(&self) -> &'static str {
+        "delete spline"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .map(|_| ())
+            .ok_or("Spline not found")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .remove_spline(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AddSplinePointCmd {
+    pub spline_id: uuid::Uuid,
+    pub index: Option<usize>,
+    pub point: SplinePoint,
+}
+
+impl Command for AddSplinePointCmd {
+    fn label(&self) -> &'static str {
+        "add spline point"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let spline = state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?;
+        let index = self.index.unwrap_or(spline.points.len());
+        if index > spline.points.len() {
+            return Err("Spline point index is invalid");
+        }
+        if spline.point(self.point.id).is_some() {
+            return Err("Spline point id already exists");
+        }
+        if self
+            .point
+            .position
+            .iter()
+            .chain(&self.point.handle_in)
+            .chain(&self.point.handle_out)
+            .any(|component| !component.is_finite())
+        {
+            return Err("Spline point data is not finite");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let spline = state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?;
+        spline.insert_point(
+            self.index.unwrap_or(spline.points.len()),
+            self.point.clone(),
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MoveSplinePointCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+    pub position: [f64; 3],
+}
+
+impl Command for MoveSplinePointCmd {
+    fn label(&self) -> &'static str {
+        "move spline point"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let spline = state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?;
+        let point = spline
+            .point(self.point_id)
+            .ok_or("Spline point not found")?;
+        if self.position.iter().any(|component| !component.is_finite()) {
+            Err("Spline point position is not finite")
+        } else if point.position == self.position {
+            Err("Spline point position is unchanged")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?
+            .move_point(self.point_id, self.position)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DeleteSplinePointCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+}
+
+impl Command for DeleteSplinePointCmd {
+    fn label(&self) -> &'static str {
+        "delete spline point"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?
+            .point(self.point_id)
+            .map(|_| ())
+            .ok_or("Spline point not found")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?
+            .delete_point(self.point_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SetSplineHandlesCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+    pub handle_in: [f64; 3],
+    pub handle_out: [f64; 3],
+    pub mode: SplineHandleMode,
+}
+
+impl Command for SetSplineHandlesCmd {
+    fn label(&self) -> &'static str {
+        "set spline handles"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let point = state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?
+            .point(self.point_id)
+            .ok_or("Spline point not found")?;
+        let (handle_in, handle_out) =
+            SplinePoint::resolved_handles(self.handle_in, self.handle_out, self.mode)
+                .map_err(|_| "Spline handle data is not finite")?;
+        if point.handle_in == handle_in
+            && point.handle_out == handle_out
+            && point.handle_mode == self.mode
+        {
+            Err("Spline handles are unchanged")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?
+            .set_handles(self.point_id, self.handle_in, self.handle_out, self.mode)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SetSplineClosedCmd {
+    pub spline_id: uuid::Uuid,
+    pub closed: bool,
+}
+
+impl Command for SetSplineClosedCmd {
+    fn label(&self) -> &'static str {
+        "set spline closed"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let spline = state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?;
+        if spline.closed == self.closed {
+            Err("Spline closed state is unchanged")
+        } else if self.closed && spline.points.len() < 3 {
+            Err("A closed spline needs at least three points")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?
+            .set_closed(self.closed)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ReverseSplineCmd {
+    pub spline_id: uuid::Uuid,
+}
+
+impl Command for ReverseSplineCmd {
+    fn label(&self) -> &'static str {
+        "reverse spline"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let spline = state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?;
+        if spline.points.len() < 2 {
+            Err("Spline needs at least two points")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let spline = state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?;
+        if spline.points.len() < 2 {
+            return Err(SplineError::NeedsTwoPoints.into());
+        }
+        spline.reverse();
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ConvertSplineToPolylineCmd {
+    pub spline_id: uuid::Uuid,
+    pub spacing: f64,
+    pub tolerance: f64,
+}
+
+impl Command for ConvertSplineToPolylineCmd {
+    fn label(&self) -> &'static str {
+        "convert spline to polyline"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let spline = state
+            .project
+            .project
+            .get_spline(self.spline_id)
+            .ok_or("Spline not found")?;
+        if !self.spacing.is_finite() || self.spacing <= 0.0 {
+            Err("Spline sample spacing is invalid")
+        } else if !self.tolerance.is_finite() || self.tolerance <= 0.0 {
+            Err("Spline sampling tolerance is invalid")
+        } else if spline.segment_count() == 0 {
+            Err("Spline needs at least two points")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .get_spline_mut(self.spline_id)
+            .ok_or(SplineError::SplineNotFound(self.spline_id))?
+            .convert_to_polyline(self.spacing, self.tolerance)?;
+        Ok(())
+    }
 }
 
 impl Command for BakeDecalCmd {

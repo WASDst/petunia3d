@@ -4,15 +4,18 @@
 
 use petunia_core::ProjectService;
 use petunia_core::command::{
-    AddPrimitiveCmd, BakeDecalCmd, BoxSelectCmd, ClearSelectionCmd, CommandDispatcher,
-    CommandError, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeleteSelectionCmd, DissolveCmd,
-    DuplicateAssetCmd, DuplicateSelectionCmd, ExtrudeIndividualCmd, FlipDiagonalCmd,
-    FlipNormalsCmd, InvertSelectionCmd, MergeCenterCmd, PrimitiveKind, ReorderAssetCmd, RevolveCmd,
-    SelectAllCmd, SelectLinkedCmd, SetAssetCollectionCmd, SetDecalTransformCmd,
+    AddPrimitiveCmd, AddSplinePointCmd, BakeDecalCmd, BoxSelectCmd, ClearSelectionCmd,
+    CommandDispatcher, CommandError, ConvertSplineToPolylineCmd, CreateSplineCmd, DeleteAssetCmd,
+    DeleteOrDissolveSelectionCmd, DeleteSelectionCmd, DeleteSplineCmd, DeleteSplinePointCmd,
+    DissolveCmd, DuplicateAssetCmd, DuplicateSelectionCmd, ExtrudeIndividualCmd, FlipDiagonalCmd,
+    FlipNormalsCmd, InvertSelectionCmd, MergeCenterCmd, MoveSplinePointCmd, PrimitiveKind,
+    ReorderAssetCmd, ReverseSplineCmd, RevolveCmd, SelectAllCmd, SelectLinkedCmd,
+    SetAssetCollectionCmd, SetDecalTransformCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
     SubdivideSelectionCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
     ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UvRelaxCmd, UvStitchCmd,
 };
-use petunia_core::state::{ASSET_NAME_MAX_LEN, AppState, AssetRenameError, EditMode};
+use petunia_core::state::{ASSET_NAME_MAX_LEN, AppState, AssetRenameError, DirtyReason, EditMode};
+use petunia_core::{SplineHandleMode, SplineInterpolation, SplinePoint, SplineResource};
 
 #[test]
 fn test_add_primitive_commands_and_undo_redo() {
@@ -269,6 +272,7 @@ fn selection_command_advances_only_selection_revision() {
     assert_eq!(after[6], before[6], "material revision");
     assert_eq!(after[7], before[7], "texture revision");
     assert_eq!(after[8], before[8], "transform revision");
+    assert_eq!(after[9], before[9], "spline revision");
     assert_eq!(state.project.undo.depth(), (0, 0));
 }
 
@@ -295,6 +299,7 @@ fn uv_commands_commit_once_and_advance_only_uv_revision() {
         assert_eq!(after[6], before[6], "{} materials", command.label());
         assert_eq!(after[7], before[7], "{} textures", command.label());
         assert_eq!(after[8], before[8], "{} transforms", command.label());
+        assert_eq!(after[9], before[9], "{} splines", command.label());
     }
 }
 
@@ -308,10 +313,167 @@ fn flip_normals_advances_only_normal_revision() {
     let after = state.project.project.revision_clock();
 
     assert_eq!(state.project.undo.depth(), (1, 0));
-    for index in [0, 1, 3, 4, 5, 6, 7, 8] {
+    for index in [0, 1, 3, 4, 5, 6, 7, 8, 9] {
         assert_eq!(after[index], before[index], "revision index {index}");
     }
     assert_eq!(after[2], before[2] + 1);
+}
+
+#[test]
+fn spline_create_move_undo_redo_is_transactional_and_domain_scoped() {
+    let mut state = AppState::default();
+    state.sync_selection();
+    let spline = SplineResource::from_polyline(
+        "Guide",
+        &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.5, 0.0]],
+        false,
+    );
+    let spline_id = spline.id;
+    let point_id = spline.points[1].id;
+    let before = state.project.project.revision_clock();
+
+    state.dispatch(&CreateSplineCmd { spline }).unwrap();
+
+    let after_create = state.project.project.revision_clock();
+    assert_eq!(state.project.undo.depth(), (1, 0));
+    assert_eq!(state.render.last_dirty_reason, Some(DirtyReason::CurveEdit));
+    for index in 0..9 {
+        assert_eq!(after_create[index], before[index], "revision index {index}");
+    }
+    assert_eq!(after_create[9], before[9] + 1);
+
+    state
+        .dispatch(&MoveSplinePointCmd {
+            spline_id,
+            point_id,
+            position: [1.0, 1.0, 0.0],
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth(), (2, 0));
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .point(point_id)
+            .unwrap()
+            .position,
+        [1.0, 1.0, 0.0]
+    );
+
+    let before_no_op = state.project.project.revision_clock();
+    let depth_before_no_op = state.project.undo.depth();
+    assert!(
+        state
+            .dispatch(&MoveSplinePointCmd {
+                spline_id,
+                point_id,
+                position: [1.0, 1.0, 0.0],
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.undo.depth(), depth_before_no_op);
+    assert_eq!(state.project.project.revision_clock(), before_no_op);
+
+    assert!(state.undo());
+    assert_eq!(
+        state.render.last_dirty_reason,
+        Some(DirtyReason::MaterialEdit)
+    );
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .point(point_id)
+            .unwrap()
+            .position,
+        [1.0, 0.0, 0.0]
+    );
+    assert!(state.redo());
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .point(point_id)
+            .unwrap()
+            .position,
+        [1.0, 1.0, 0.0]
+    );
+}
+
+#[test]
+fn spline_authoring_commands_cover_point_handles_loop_reverse_convert_and_delete() {
+    let mut state = AppState::default();
+    let mut spline = SplineResource::new("Bezier guide", SplineInterpolation::CubicBezier);
+    for position in [[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [2.0, 0.0, 0.0]] {
+        spline.add_point(SplinePoint::new(position)).unwrap();
+    }
+    let spline_id = spline.id;
+    let first_point = spline.points[0].id;
+    state.dispatch(&CreateSplineCmd { spline }).unwrap();
+
+    let inserted = SplinePoint::new([0.5, 0.25, 0.0]);
+    let inserted_id = inserted.id;
+    state
+        .dispatch(&AddSplinePointCmd {
+            spline_id,
+            index: Some(1),
+            point: inserted,
+        })
+        .unwrap();
+    assert_eq!(
+        state.project.project.get_spline(spline_id).unwrap().points[1].id,
+        inserted_id
+    );
+    state
+        .dispatch(&DeleteSplinePointCmd {
+            spline_id,
+            point_id: inserted_id,
+        })
+        .unwrap();
+
+    state
+        .dispatch(&SetSplineHandlesCmd {
+            spline_id,
+            point_id: first_point,
+            handle_in: [-0.5, 0.0, 0.0],
+            handle_out: [0.5, 0.0, 0.0],
+            mode: SplineHandleMode::Mirrored,
+        })
+        .unwrap();
+    state
+        .dispatch(&SetSplineClosedCmd {
+            spline_id,
+            closed: true,
+        })
+        .unwrap();
+    state.dispatch(&ReverseSplineCmd { spline_id }).unwrap();
+    state
+        .dispatch(&ConvertSplineToPolylineCmd {
+            spline_id,
+            spacing: 0.25,
+            tolerance: 1.0e-4,
+        })
+        .unwrap();
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .interpolation,
+        SplineInterpolation::Polyline
+    );
+
+    state.dispatch(&DeleteSplineCmd { spline_id }).unwrap();
+    assert!(state.project.project.get_spline(spline_id).is_none());
+    assert!(state.undo());
+    assert!(state.project.project.get_spline(spline_id).is_some());
 }
 
 #[test]

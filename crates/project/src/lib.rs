@@ -23,6 +23,7 @@ impl ProjectChanges {
     pub const TRANSFORMS: Self = Self(1 << 6);
     pub const NORMALS: Self = Self(1 << 7);
     pub const COLORS: Self = Self(1 << 8);
+    pub const SPLINES: Self = Self(1 << 9);
     pub const GEOMETRY: Self =
         Self(Self::TOPOLOGY.0 | Self::POSITIONS.0 | Self::NORMALS.0 | Self::UVS.0 | Self::COLORS.0);
     pub const ALL: Self = Self(
@@ -30,7 +31,8 @@ impl ProjectChanges {
             | Self::SELECTION.0
             | Self::MATERIALS.0
             | Self::TEXTURES.0
-            | Self::TRANSFORMS.0,
+            | Self::TRANSFORMS.0
+            | Self::SPLINES.0,
     );
 
     pub const fn contains(self, other: Self) -> bool {
@@ -74,6 +76,7 @@ pub mod paint_layers;
 pub mod palette;
 pub mod pipeline;
 pub mod rig;
+pub mod spline;
 pub mod surface_recipe;
 
 pub use animation::{
@@ -102,6 +105,11 @@ pub use pipeline::{
     PipelineError,
 };
 pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight};
+pub use spline::{
+    ArcLengthTable, SplineError, SplineEvaluationCache, SplineFrame, SplineHandleMode,
+    SplineInterpolation, SplinePoint, SplineResource, SplineSample, SplineSnapSettings,
+    snap_spline_position,
+};
 pub use surface_recipe::{
     NodeSpec, RECIPE_SCHEMA_VERSION, RecipeEdge, RecipeError, RecipeNode, RecipeOutputChannel,
     RecipeResult, SocketType, SocketValue, SurfaceRecipe,
@@ -765,6 +773,12 @@ pub struct Project {
     pub uv_revision: u64,
     #[serde(default)]
     pub color_revision: u64,
+    #[serde(default)]
+    pub spline_revision: u64,
+    /// Append-only no schema binário legado: novos campos persistentes devem
+    /// permanecer após todos os campos V1 existentes para não deslocar postcard.
+    #[serde(default)]
+    pub splines: Vec<SplineResource>,
 }
 
 impl Project {
@@ -780,6 +794,7 @@ impl Default for Project {
             id: Uuid::new_v4(),
             name: default_project_name(),
             assets: Vec::new(),
+            splines: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -805,6 +820,7 @@ impl Default for Project {
             material_revision: 0,
             texture_revision: 0,
             transform_revision: 0,
+            spline_revision: 0,
         }
     }
 }
@@ -888,6 +904,9 @@ impl Project {
     pub fn bump_transforms(&mut self) {
         self.transform_revision = self.transform_revision.wrapping_add(1);
     }
+    pub fn bump_splines(&mut self) {
+        self.spline_revision = self.spline_revision.wrapping_add(1);
+    }
 
     pub fn bump_changes(&mut self, changes: ProjectChanges) {
         if changes.contains(ProjectChanges::TOPOLOGY) {
@@ -917,10 +936,13 @@ impl Project {
         if changes.contains(ProjectChanges::TRANSFORMS) {
             self.bump_transforms();
         }
+        if changes.contains(ProjectChanges::SPLINES) {
+            self.bump_splines();
+        }
     }
 
     /// Keeps cache revisions monotonic when undo/redo restores an older snapshot.
-    pub fn revision_clock(&self) -> [u64; 9] {
+    pub fn revision_clock(&self) -> [u64; 10] {
         [
             self.topology_revision,
             self.position_revision,
@@ -931,10 +953,11 @@ impl Project {
             self.material_revision,
             self.texture_revision,
             self.transform_revision,
+            self.spline_revision,
         ]
     }
 
-    pub fn rebase_revisions_after_restore(&mut self, previous: [u64; 9]) {
+    pub fn rebase_revisions_after_restore(&mut self, previous: [u64; 10]) {
         self.topology_revision = self.topology_revision.max(previous[0]);
         self.position_revision = self.position_revision.max(previous[1]);
         self.normal_revision = self.normal_revision.max(previous[2]);
@@ -944,6 +967,7 @@ impl Project {
         self.material_revision = self.material_revision.max(previous[6]);
         self.texture_revision = self.texture_revision.max(previous[7]);
         self.transform_revision = self.transform_revision.max(previous[8]);
+        self.spline_revision = self.spline_revision.max(previous[9]);
     }
 
     /// Rebuilds the derived texture cache for one asset from its canonical
@@ -1035,6 +1059,20 @@ impl Project {
             if let Some((_, _, mesh)) = asset.eval_cache.as_ref() {
                 n = n.saturating_add(mesh_heap_bytes(mesh));
             }
+        }
+        n = n.saturating_add(
+            self.splines
+                .capacity()
+                .saturating_mul(std::mem::size_of::<SplineResource>()),
+        );
+        for spline in &self.splines {
+            n = n.saturating_add(spline.name.capacity());
+            n = n.saturating_add(
+                spline
+                    .points
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<SplinePoint>()),
+            );
         }
         n = n.saturating_add(
             self.history_selection
@@ -1185,6 +1223,7 @@ impl Project {
             id: Uuid::new_v4(),
             name: default_project_name(),
             assets: vec![cube],
+            splines: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1208,6 +1247,7 @@ impl Project {
             material_revision: 0,
             texture_revision: 0,
             transform_revision: 0,
+            spline_revision: 0,
         }
     }
 
@@ -1397,6 +1437,31 @@ impl Project {
         Some(new_id)
     }
 
+    // ---- Spline Resources (P3D-161) ----
+
+    pub fn add_spline(&mut self, spline: SplineResource) -> Result<Uuid, SplineError> {
+        if self.splines.iter().any(|existing| existing.id == spline.id) {
+            return Err(SplineError::DuplicateSpline(spline.id));
+        }
+        spline.validate_authoring()?;
+        let id = spline.id;
+        self.splines.push(spline);
+        Ok(id)
+    }
+
+    pub fn get_spline(&self, id: Uuid) -> Option<&SplineResource> {
+        self.splines.iter().find(|spline| spline.id == id)
+    }
+
+    pub fn get_spline_mut(&mut self, id: Uuid) -> Option<&mut SplineResource> {
+        self.splines.iter_mut().find(|spline| spline.id == id)
+    }
+
+    pub fn remove_spline(&mut self, id: Uuid) -> Option<SplineResource> {
+        let index = self.splines.iter().position(|spline| spline.id == id)?;
+        Some(self.splines.remove(index))
+    }
+
     // ---- Material Management (P3D-050) ----
 
     pub fn add_material(&mut self, mat: Material) -> Uuid {
@@ -1445,6 +1510,14 @@ impl Project {
     /// Normaliza projeto vindo de arquivo (M2/M3): malhas válidas,
     /// no mínimo 1 asset, `active` dentro dos limites e materiais íntegros (P3D-050).
     pub fn validate(&mut self) {
+        let mut spline_ids = std::collections::HashSet::with_capacity(self.splines.len());
+        for spline in &mut self.splines {
+            if !spline_ids.insert(spline.id) {
+                spline.id = Uuid::new_v4();
+                spline_ids.insert(spline.id);
+            }
+            spline.validate();
+        }
         for mat in &mut self.materials {
             mat.validate();
         }
@@ -1573,11 +1646,12 @@ mod tests {
         assert_eq!(project.color_revision, 0);
         assert_eq!(project.material_revision, 0);
         assert_eq!(project.transform_revision, 0);
+        assert_eq!(project.spline_revision, 0);
     }
 
     #[test]
     fn restored_revision_clock_advances_only_the_published_domain() {
-        let previous = [4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let previous = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
         let mut restored = Project::new();
 
         restored.rebase_revisions_after_restore(previous);
@@ -1587,5 +1661,20 @@ mod tests {
         let mut expected = previous;
         expected[4] += 1;
         assert_eq!(restored.revision_clock(), expected);
+    }
+
+    #[test]
+    fn spline_storage_is_counted_in_history_budget() {
+        let mut project = Project::new();
+        let before = project.estimated_bytes();
+        project
+            .add_spline(SplineResource::from_polyline(
+                "Hair guide",
+                &[[0.0, 0.0, 0.0], [0.0, 1.0, 0.2], [0.2, 2.0, 0.4]],
+                false,
+            ))
+            .unwrap();
+
+        assert!(project.estimated_bytes() > before);
     }
 }

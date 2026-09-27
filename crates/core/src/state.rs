@@ -1381,6 +1381,7 @@ pub enum DirtyReason {
     CameraZoom,
     Selection,
     GeometryEdit,
+    CurveEdit,
     MaterialEdit,
     TransformModal,
     TimelinePlayback,
@@ -2301,7 +2302,9 @@ impl AppState {
                 }
             }
         }
-        let reason = if changes.intersects(ProjectChanges::TEXTURES | ProjectChanges::MATERIALS) {
+        let reason = if changes == ProjectChanges::SPLINES {
+            DirtyReason::CurveEdit
+        } else if changes.intersects(ProjectChanges::TEXTURES | ProjectChanges::MATERIALS) {
             DirtyReason::MaterialEdit
         } else if changes.contains(ProjectChanges::TRANSFORMS) {
             DirtyReason::TransformModal

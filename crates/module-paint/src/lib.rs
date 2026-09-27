@@ -1635,7 +1635,7 @@ mod tests {
         assert!(PaintModule::fill_selection(&mut state) > 0);
         let after = state.project.project.revision_clock();
         assert_eq!(state.project.undo.depth(), (1, 0));
-        for index in [0, 1, 2, 3, 4, 6, 7, 8] {
+        for index in [0, 1, 2, 3, 4, 6, 7, 8, 9] {
             assert_eq!(after[index], before[index], "revision index {index}");
         }
         assert_eq!(after[5], before[5] + 1);

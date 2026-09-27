@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Gate G3 — Fundação Headless de Spline Core (27/09/2026)
+- **Authoring persistente**: `SplineResource` adiciona polyline/Bézier, paths abertos/fechados, control points com IDs/handles, revisão própria e round-trip `.petunia` retrocompatível.
+- **Avaliação compartilhada**: comprimento de arco, tangentes, resampling e frames de transporte paralelo em `f64` passam a alimentar tanto splines quanto o Sweep existente, removendo RMF duplicado.
+- **Transações e cache**: comandos tipados cobrem o ciclo autoral com Undo/Redo e invalidação exclusiva de splines; caches derivados usam revisão + fingerprint geométrico e limites contra avaliações patológicas.
+- **Escopo honesto**: SurfaceAttachment, overlay Slint, Profile persistente, generators e Hair continuam nos gates seguintes; `HA-01` fica `PARTIALLY_COMPLIANT`, não concluído.
+
 ### Gate G2 — Upload Regional de Textura WGPU (27/09/2026)
 - **Dirty regions transitórias**: tiles alterados atravessam Core e o contrato neutro de viewport sem persistir estado de GPU no documento.
 - **Upload proporcional**: o WGPU elimina o FNV integral por stroke, combina regiões contíguas e envia somente as linhas RGBA afetadas, com fallback integral seguro para criação, resize e invalidações sem região.
