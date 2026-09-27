@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Part A (Cube) -->
+  <rect x="3.5" y="7.5" width="8" height="9" rx="1" fill="#7DA5DF" fill-opacity="0.18" stroke="#7DA5DF" stroke-width="1.6"/>
+  <!-- Part B (Cube) -->
+  <rect x="12.5" y="7.5" width="8" height="9" rx="1" fill="#76BC8A" fill-opacity="0.18" stroke="#76BC8A" stroke-width="1.6"/>
+  <!-- Grouping bracket / unification bounds -->
+  <path d="M7.5 4h9M7.5 20h9M12 4v2.5M12 17.5v2.5" stroke="#E8EBF0" stroke-width="1.6"/>
+</svg>

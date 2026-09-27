@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Base corner solid walls -->
+  <path d="M4 20V4h6M4 20h16v-6" stroke="#E8EBF0" stroke-width="1.7"/>
+  <!-- Original sharp corner ghost lines -->
+  <path d="M10 4h10v10" stroke="#A5AFBF" stroke-width="1.3" stroke-dasharray="2 2"/>
+  <circle cx="20" cy="4" r="1.3" fill="#A5AFBF"/>
+  <!-- Chamfer facet and arc fillet -->
+  <path d="M10 4 20 14" stroke="#CF7190" stroke-width="2.3"/>
+  <path d="M10 4c3.5 0 10 6.5 10 10" stroke="#E5B567" stroke-width="1.4" stroke-dasharray="1.5 2"/>
+  <!-- Bevel vertices -->
+  <circle cx="10" cy="4" r="1.6" fill="#CF7190"/>
+  <circle cx="20" cy="14" r="1.6" fill="#CF7190"/>
+</svg>

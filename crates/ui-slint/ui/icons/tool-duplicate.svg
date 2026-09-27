@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Original background mesh cube -->
+  <path d="M4 8l6-3 6 3v7l-6 3-6-3z" stroke="#A5AFBF" stroke-width="1.3" stroke-dasharray="2 2"/>
+  <path d="M10 5v10M4 8l6 3 6-3" stroke="#A5AFBF" stroke-width="1.1" stroke-dasharray="2 2"/>
+  <!-- Cloned duplicate foreground mesh cube -->
+  <path d="M8 12l6-3 6 3v7l-6 3-6-3z" fill="#CF7190" fill-opacity="0.22" stroke="#CF7190" stroke-width="1.8"/>
+  <path d="M14 9v10M8 12l6 3 6-3" stroke="#CF7190" stroke-width="1.4"/>
+  <!-- Clone displacement motion vector -->
+  <path d="M5.5 13l4-2" stroke="#76BC8A" stroke-width="1.6"/>
+</svg>

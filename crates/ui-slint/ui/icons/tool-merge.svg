@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Converging arrows toward center -->
+  <path d="M5 5l5 5m0-3.5V10H6.5" stroke="#E8EBF0" stroke-width="1.6"/>
+  <path d="M19 5l-5 5m0-3.5V10h3.5" stroke="#E8EBF0" stroke-width="1.6"/>
+  <path d="M5 19l5-5m0 3.5V14H6.5" stroke="#E8EBF0" stroke-width="1.6"/>
+  <path d="M19 19l-5-5m0 3.5V14h3.5" stroke="#E8EBF0" stroke-width="1.6"/>
+  <!-- Outer vertex nodes -->
+  <circle cx="4.5" cy="4.5" r="1.4" fill="#A5AFBF"/>
+  <circle cx="19.5" cy="4.5" r="1.4" fill="#A5AFBF"/>
+  <circle cx="4.5" cy="19.5" r="1.4" fill="#A5AFBF"/>
+  <circle cx="19.5" cy="19.5" r="1.4" fill="#A5AFBF"/>
+  <!-- Central collapsed median vertex -->
+  <circle cx="12" cy="12" r="2.6" fill="#CF7190" stroke="#E8EBF0" stroke-width="1.2"/>
+</svg>

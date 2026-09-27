@@ -857,6 +857,7 @@ component PartsRowSizeControl inherits Rectangle {
 
 component ToolButton inherits Rectangle {
     in property <Icon> icon;
+    in property <image> icon-svg;
     in property <string> semantic-label;
     in property <string> shortcut: "";
     in property <string> description: "";
@@ -875,7 +876,15 @@ component ToolButton inherits Rectangle {
     border-width: tool-focus.has-focus ? 2px : (root.double-tap-armed ? 2px : ((!active && touch-area.has-hover) ? 1px : 0px));
     border-color: root.double-tap-armed ? #ffd54f : DesignTokens.focus-ring;
 
-    IconDisplay {
+    if root.icon-svg.width > 0: Image {
+        source: root.icon-svg;
+        width: 18px;
+        height: 18px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+    if root.icon-svg.width == 0: IconDisplay {
         icon: root.icon;
         size: 16px;
         stroke: active ? DesignTokens.canvas : DesignTokens.text-primary;
@@ -3917,7 +3926,7 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             ToolButton {
-                                icon: IconSet.PenLine;
+                                icon-svg: @image-url("icons/tool-profile.svg");
                                 semantic-label: "Sketch / Profile";
                                 shortcut: root.shortcuts.model-profile;
                                 description: "Draw 2D profile curves on ground, face, or viewplane to extrude or revolve";
@@ -6245,7 +6254,7 @@ export component PetuniaSlintShell inherits Window {
 
                             // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
                             if active-workspace == "MODEL": ToolButton {
-                                icon: IconSet.PenLine;
+                                icon-svg: @image-url("icons/tool-profile.svg");
                                 semantic-label: "Sketch";
                                 shortcut: root.shortcuts.model-profile;
                                 description: "Draw 2D profile curves on ground, face, or viewplane to extrude or revolve";
@@ -6273,28 +6282,28 @@ export component PetuniaSlintShell inherits Window {
 
                             // --- MODEL: Ferramentas principais de edição poligonal ---
                             if active-workspace == "MODEL": ToolButton {
-                                icon: IconSet.Move3d;
+                                icon-svg: @image-url("icons/tool-extrude.svg");
                                 semantic-label: "Extrude";
                                 shortcut: root.shortcuts.model-extrude;
                                 description: "Pull new vertices and faces outward from selected edges or faces";
                                 clicked => { root.command-executed("model.extrude"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.ArrowUpDown;
+                                icon-svg: @image-url("icons/tool-pushpull.svg");
                                 semantic-label: root.label-model-push-pull;
                                 shortcut: root.shortcuts.model-push-pull;
                                 description: "Push or pull faces along surface normals directly";
                                 clicked => { root.command-executed("model.push_pull"); }
                             }
                             if active-workspace == "MODEL": ToolButton {
-                                icon: IconSet.SquareDashed;
+                                icon-svg: @image-url("icons/tool-inset.svg");
                                 semantic-label: "Inset";
                                 shortcut: root.shortcuts.model-inset;
                                 description: "Inset new polygonal boundary inside selected faces";
                                 clicked => { root.command-executed("model.inset"); }
                             }
                             if active-workspace == "MODEL": ToolButton {
-                                icon: IconSet.CircleDot;
+                                icon-svg: @image-url("icons/tool-bevel.svg");
                                 semantic-label: "Bevel";
                                 shortcut: root.shortcuts.model-bevel;
                                 description: "Round edges or vertices with smooth chamfer bevel fillets";
@@ -6308,7 +6317,7 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "MODEL": ToolButton {
-                                icon: IconSet.Scissors;
+                                icon-svg: @image-url("icons/tool-knife.svg");
                                 semantic-label: "Knife";
                                 shortcut: root.shortcuts.model-knife;
                                 description: "Interactively slice through edges and faces with cutting line";
@@ -6316,7 +6325,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("model.knife"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Grid2x2;
+                                icon-svg: @image-url("icons/tool-loopcut.svg");
                                 semantic-label: root.label-model-loop-cut;
                                 shortcut: root.shortcuts.model-loop-cut;
                                 description: "Insert a connected edge loop ring across quad mesh geometry";
@@ -6324,28 +6333,28 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("loop_cut"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Copy;
+                                icon-svg: @image-url("icons/tool-duplicate.svg");
                                 semantic-label: "Duplicate";
                                 shortcut: root.shortcuts.model-duplicate;
                                 description: "Create an identical clone of selected geometry or parts";
                                 clicked => { root.duplicate-requested(); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Square;
+                                icon-svg: @image-url("icons/tool-subdivide.svg");
                                 semantic-label: "Subdivide";
                                 shortcut: root.shortcuts.model-subdivide;
                                 description: "Subdivide faces into quad quarters creating finer geometry";
                                 clicked => { root.command-executed("model.subdivide"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Merge;
+                                icon-svg: @image-url("icons/tool-merge.svg");
                                 semantic-label: "Merge Center";
                                 shortcut: root.shortcuts.model-merge;
                                 description: "Collapse and merge all selected vertices to their median center";
                                 clicked => { root.command-executed("model.merge"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Slice;
+                                icon-svg: @image-url("icons/tool-slice.svg");
                                 semantic-label: root.label-model-slice;
                                 shortcut: root.shortcuts.model-slice;
                                 description: "Cut mesh along an infinite cutting plane through selection";
@@ -6353,21 +6362,21 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("slice"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Link;
+                                icon-svg: @image-url("icons/tool-connect.svg");
                                 semantic-label: "Connect";
                                 shortcut: root.shortcuts.model-connect;
                                 description: "Bridge edge loops with configurable quad segments and twist";
                                 clicked => { root.command-executed("model.connect"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.RotateCcw;
+                                icon-svg: @image-url("icons/tool-spin.svg");
                                 semantic-label: "Spin";
                                 shortcut: root.shortcuts.model-spin;
                                 description: "Revolve selection around cursor or axis into lathe surface";
                                 clicked => { root.command-executed("model.spin"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.X;
+                                icon-svg: @image-url("icons/tool-dissolve.svg");
                                 semantic-label: "Dissolve";
                                 shortcut: root.shortcuts.model-dissolve;
                                 description: "Dissolve selected vertices, edges or faces without removing surrounding geometry";
@@ -7150,10 +7159,10 @@ export component PetuniaSlintShell inherits Window {
                                         Text { text: "Operand: \{root.boolean-operand-name}"; color: DesignTokens.accent; font-size: 10px; font-weight: 700; }
                                         HorizontalLayout {
                                             spacing: 4px;
-                                            ToolButton { icon: IconSet.Merge; semantic-label: "Fuse"; description: "Combine the active part with the operand"; clicked => { root.command-executed("model.fuse"); } }
-                                            ToolButton { icon: IconSet.Scissors; semantic-label: "Cut"; description: "Subtract the operand from the active part"; clicked => { root.command-executed("model.cut"); } }
-                                            ToolButton { icon: IconSet.CircleDot; semantic-label: "Intersect"; description: "Keep the overlapping volume"; clicked => { root.command-executed("model.intersect"); } }
-                                            ToolButton { icon: IconSet.Link; semantic-label: "Join"; description: "Join the operand into the active part"; clicked => { root.join-requested(); } }
+                                            ToolButton { icon-svg: @image-url("icons/boolean-fuse.svg"); semantic-label: "Fuse"; description: "Combine the active part with the operand"; clicked => { root.command-executed("model.fuse"); } }
+                                            ToolButton { icon-svg: @image-url("icons/boolean-cut.svg"); semantic-label: "Cut"; description: "Subtract the operand from the active part"; clicked => { root.command-executed("model.cut"); } }
+                                            ToolButton { icon-svg: @image-url("icons/boolean-intersect.svg"); semantic-label: "Intersect"; description: "Keep the overlapping volume"; clicked => { root.command-executed("model.intersect"); } }
+                                            ToolButton { icon-svg: @image-url("icons/boolean-join.svg"); semantic-label: "Join"; description: "Join the operand into the active part"; clicked => { root.join-requested(); } }
                                             Rectangle { horizontal-stretch: 1; }
                                         }
                                         HorizontalLayout {
