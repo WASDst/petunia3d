@@ -6728,3 +6728,76 @@ fn test_uv_stitch_and_relax_commands() {
     assert!(bridge.execute_core_command("uv.stitch").is_ok());
     assert!(bridge.execute_core_command("uv.relax").is_ok());
 }
+
+#[test]
+fn test_profile_workplanes_ground_face_view() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+
+    bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+    assert!(
+        bridge.view_model().profile_workplane == "Face"
+            || bridge.view_model().profile_workplane == "Ground"
+    );
+
+    bridge.apply(UiIntent::ProfileSetWorkplaneView);
+    assert_eq!(bridge.view_model().profile_workplane, "View");
+
+    // Adding 2D shapes preserves active workplane
+    bridge.add_profile_rectangle(2.0, 1.5);
+    bridge.add_profile_circle(1.0, 16);
+}
+
+#[test]
+fn test_paint_uv_overlay_and_uv_texture_toggles() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(!bridge.view_model().paint_show_uv_overlay);
+    assert!(bridge.view_model().uv_show_texture);
+
+    bridge.apply(UiIntent::TogglePaintUvOverlay);
+    assert!(bridge.view_model().paint_show_uv_overlay);
+
+    bridge.apply(UiIntent::ToggleUvShowTexture);
+    assert!(!bridge.view_model().uv_show_texture);
+
+    bridge.apply(UiIntent::TogglePaintUvOverlay);
+    assert!(!bridge.view_model().paint_show_uv_overlay);
+
+    bridge.apply(UiIntent::ToggleUvShowTexture);
+    assert!(bridge.view_model().uv_show_texture);
+}
+
+#[test]
+fn test_settings_redesign_language_scale_and_selection_color() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // 1. Language change
+    bridge.set_language("en-US");
+    assert_eq!(bridge.view_model().active_language, "en-US");
+    bridge.set_language("pt-BR");
+    assert_eq!(bridge.view_model().active_language, "pt-BR");
+
+    // 2. UI Scale clamping and view model update
+    bridge.set_ui_scale(1.5);
+    assert!((bridge.view_model().ui_scale - 1.5).abs() < 1e-3);
+    assert!((bridge.preferences.ui_scale - 1.5).abs() < 1e-3);
+
+    // Clamps below 1.0 and above 2.0
+    bridge.set_ui_scale(0.5);
+    assert!((bridge.view_model().ui_scale - 1.0).abs() < 1e-3);
+    bridge.set_ui_scale(3.0);
+    assert!((bridge.view_model().ui_scale - 2.0).abs() < 1e-3);
+
+    // 3. Double-tap interval: allows 0 (disabled) and presets
+    bridge.set_double_tap_interval_ms(0);
+    assert_eq!(bridge.preferences.double_tap_interval_ms, 0);
+    bridge.set_double_tap_interval_ms(350);
+    assert_eq!(bridge.preferences.double_tap_interval_ms, 350);
+
+    // 4. Selection color hex
+    assert!(bridge.set_selection_color_hex("#00D2FF"));
+    assert_eq!(bridge.view_model().selection_color_hex, "#00D2FF");
+    assert!(bridge.set_selection_color_hex("#E96A00"));
+    assert_eq!(bridge.view_model().selection_color_hex, "#E96A00");
+}

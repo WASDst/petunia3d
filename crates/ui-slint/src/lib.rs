@@ -380,6 +380,11 @@ pub enum UiIntent {
     SetReducedMotion(bool),
     SetDoubleTapIntervalMs(u64),
     ToggleMicroInspector,
+    TogglePaintUvOverlay,
+    ToggleUvShowTexture,
+    ProfileSetWorkplaneGround,
+    ProfileSetWorkplaneFace,
+    ProfileSetWorkplaneView,
 }
 
 // Presentation ViewModels and Data Transfer Objects (DTOs) for the Slint shell.
@@ -562,6 +567,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub slice_trim: bool,
     pub micro_inspector_open: bool,
     pub micro_inspector_pos: [f32; 2],
+    pub paint_show_uv_overlay: bool,
+    pub uv_show_texture: bool,
 }
 
 /// Menu de contexto do Outliner aberto sobre uma linha do painel Parts,
@@ -738,6 +745,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             slice_trim: false,
             micro_inspector_open: false,
             micro_inspector_pos: [512.0, 384.0],
+            paint_show_uv_overlay: false,
+            uv_show_texture: true,
             position: [
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
@@ -1035,37 +1044,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         }
                     }
                     "draw_profile" => {
-                        let forward = self.state.session.camera.forward();
-                        let preset = if forward.y.abs() > forward.x.abs()
-                            && forward.y.abs() > forward.z.abs()
-                        {
-                            if forward.y < 0.0 {
-                                petunia_core::ViewPreset::Top
-                            } else {
-                                petunia_core::ViewPreset::Bottom
-                            }
-                        } else if forward.x.abs() > forward.z.abs() {
-                            if forward.x > 0.0 {
-                                petunia_core::ViewPreset::Right
-                            } else {
-                                petunia_core::ViewPreset::Left
-                            }
-                        } else {
-                            if forward.z > 0.0 {
-                                petunia_core::ViewPreset::Front
-                            } else {
-                                petunia_core::ViewPreset::Back
-                            }
-                        };
-                        self.state.session.camera.set_preset(preset);
-                        self.state
-                            .session
-                            .camera
-                            .set_projection(petunia_core::Projection::Ortho);
-                        petunia_module_model::draw_profile::profile_capture_frame(&mut self.state);
-                        self.state.set_status(
-                            "Profile: click to add points, click the first point to close",
-                        );
+                        petunia_module_model::profile_capture_auto(&mut self.state);
+                        let wp = petunia_module_model::profile_workplane_label(&self.state);
+                        self.state.set_status(format!(
+                            "Sketch/Profile on {wp}: click to add points, click first point to close, then drag Depth or press Enter"
+                        ));
                     }
                     "loop_cut" => {
                         self.loop_cut_hover_ring = None;
@@ -1361,6 +1344,32 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ToggleMicroInspector => {
                 let _ = self.toggle_micro_inspector();
+            }
+            UiIntent::TogglePaintUvOverlay => {
+                self.paint_show_uv_overlay = !self.paint_show_uv_overlay;
+                self.state.mark_dirty();
+            }
+            UiIntent::ToggleUvShowTexture => {
+                self.uv_show_texture = !self.uv_show_texture;
+                self.state.mark_dirty();
+            }
+            UiIntent::ProfileSetWorkplaneGround => {
+                petunia_module_model::profile_capture_ground(&mut self.state);
+                self.state.mark_dirty();
+                self.state.set_status("Profile Workplane: Ground (XZ)");
+            }
+            UiIntent::ProfileSetWorkplaneFace => {
+                if petunia_module_model::profile_capture_face(&mut self.state) {
+                    self.state.set_status("Profile Workplane: Active Face");
+                } else {
+                    self.state.set_status("No face selected; using Ground (XZ)");
+                }
+                self.state.mark_dirty();
+            }
+            UiIntent::ProfileSetWorkplaneView => {
+                petunia_module_model::profile_capture_view(&mut self.state);
+                self.state.mark_dirty();
+                self.state.set_status("Profile Workplane: Camera View");
             }
         }
         self.sync_viewport_context();
@@ -4395,6 +4404,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.state.ui.selection_thickness = thickness;
+        true
+    }
+
+    pub fn set_language(&mut self, lang: &str) -> bool {
+        if self.state.ui.i18n.lang == lang {
+            return false;
+        }
+        self.state.ui.i18n.set_lang(lang);
+        self.state.mark_dirty();
+        true
+    }
+
+    pub fn set_ui_scale(&mut self, scale: f32) -> bool {
+        if !scale.is_finite() {
+            return false;
+        }
+        let scale = scale.clamp(1.0, 2.0);
+        if (self.preferences.ui_scale - scale).abs() < 0.001 {
+            return false;
+        }
+        self.preferences.ui_scale = scale;
+        self.state.mark_dirty();
         true
     }
 
@@ -7736,6 +7767,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "cut" {
             return self.commit_knife();
         }
+        if self.state.session.tools.active_tool == "draw_profile" && self.state.profile.closed {
+            return self.generate_profile_extrude();
+        }
         if self.drag.is_some() {
             return self.end_viewport_transform();
         }
@@ -8543,7 +8577,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.paint_lock = format!("{:?}", self.state.session.tools.brush_lock);
         vm.paint_pixel_grid = self.paint_pixel_grid;
         vm.paint_canvas_zoom = self.paint_canvas_zoom;
-        vm.uv_editor = self.build_uv_editor();
+        vm.paint_show_uv_overlay = self.paint_show_uv_overlay;
+        vm.uv_show_texture = self.uv_show_texture;
+        vm.uv_editor = if cfg!(test)
+            || self.state.workspace == Workspace::Uv
+            || (self.state.workspace == Workspace::Paint && self.paint_show_uv_overlay)
+        {
+            self.build_uv_editor()
+        } else {
+            UvEditorModel::default()
+        };
         if let Some(stack) = self
             .state
             .project
@@ -8631,6 +8674,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if vm.profile_active {
             vm.profile_preview_commands = self.profile_preview_commands();
         }
+        vm.profile_workplane =
+            petunia_module_model::profile_workplane_label(&self.state).to_string();
         vm.slice_trim = self.slice_trim;
         vm.bevel_clamp_overlap = self.state.tools.bevel_clamp_overlap;
         vm.bevel_affect_vertices = self.state.tools.bevel_affect_vertices;
@@ -8683,6 +8728,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             translated(petunia_config::text_id::PREFERENCES_DOUBLE_TAP_INTERVAL);
         vm.label_multiselection_measure_tag =
             translated(petunia_config::text_id::PREFERENCES_MULTISELECTION_MEASURE);
+        vm.active_language = self.state.ui.i18n.lang.clone();
+        vm.ui_scale = self.preferences.ui_scale;
         if let Some(kind) = self.tool_modal {
             let (minimum, maximum) = kind.bounds();
             vm.tool_modal_active = true;

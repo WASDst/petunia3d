@@ -3481,6 +3481,8 @@ impl Command for UnwrapAutoCmd {
             .unwrap_auto()
             .map_err(|e| CommandError::Execution(e.to_string()))?;
         state.set_status(format!("Auto UV ({charts} charts)"));
+        state.emit_mesh_changed();
+        state.mark_dirty();
         Ok(())
     }
 }
@@ -3507,6 +3509,8 @@ impl Command for UvPackIslandsCmd {
         };
         let n = mesh.pack_uv_islands(self.padding);
         state.set_status(format!("Packed {n} UV islands"));
+        state.emit_mesh_changed();
+        state.mark_dirty();
         Ok(())
     }
 }
@@ -3529,6 +3533,8 @@ impl Command for UvProjectFromViewCmd {
         };
         mesh.project_from_view(right, up, origin);
         state.set_status("Projected UVs from view");
+        state.emit_mesh_changed();
+        state.mark_dirty();
         Ok(())
     }
 }

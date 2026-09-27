@@ -115,6 +115,8 @@ pub struct UserPreferences {
     pub selection_rgb: [u8; 3],
     /// Espessura visual em pixels lógicos (1..=6).
     pub selection_thickness: f32,
+    /// Escala da interface (1.0 = 100%, até 2.0 = 200%).
+    pub ui_scale: f32,
     /// Ações rápidas preferidas do Inspector MODEL.
     pub model_quick_actions: Vec<String>,
     /// Intervalo máximo em milissegundos para duplo toque de tecla de ferramenta entrar em modo modal (0 desativa o temporizador).
@@ -138,6 +140,7 @@ impl Default for UserPreferences {
             invert_vertical_drag: false,
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
+            ui_scale: 1.0,
             model_quick_actions: Vec::new(),
             double_tap_interval_ms: 350,
             colorblind_axes: false,
@@ -166,6 +169,9 @@ impl UserPreferences {
             || !(1.0..=6.0).contains(&preferences.selection_thickness)
         {
             preferences.selection_thickness = Self::default().selection_thickness;
+        }
+        if !preferences.ui_scale.is_finite() || !(1.0..=2.0).contains(&preferences.ui_scale) {
+            preferences.ui_scale = 1.0;
         }
         if preferences.double_tap_interval_ms > 2000 {
             preferences.double_tap_interval_ms = 2000;
@@ -248,6 +254,7 @@ mod tests {
             invert_vertical_drag: true,
             selection_rgb: [32, 180, 240],
             selection_thickness: 3.5,
+            ui_scale: 1.25,
             model_quick_actions: vec!["model.fuse".to_string()],
             colorblind_axes: false,
             reduced_motion: false,

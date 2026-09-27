@@ -720,6 +720,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_wall_thickness(vm.profile_wall_thickness);
     window.set_profile_smoothness(vm.profile_smoothness);
     window.set_profile_has_curves(vm.profile_has_curves);
+    window.set_profile_workplane(vm.profile_workplane.as_str().into());
+    window.set_paint_show_uv(vm.paint_show_uv_overlay);
+    window.set_uv_show_texture(vm.uv_show_texture);
     window.set_tool_activation(vm.tool_activation.as_str().into());
     window.set_keyboard_tool_modal_active(vm.keyboard_tool_modal_active);
     window.set_is_instant_tool_mode(vm.is_instant_tool_mode);
@@ -733,6 +736,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_double_tap_interval(vm.label_double_tap_interval.as_str().into());
     window
         .set_label_multiselection_measure_tag(vm.label_multiselection_measure_tag.as_str().into());
+    window.set_active_language(vm.active_language.as_str().into());
+    window.set_ui_scale(vm.ui_scale);
     window.set_tool_modal_active(vm.tool_modal_active);
     window.set_tool_options_active(vm.tool_options_active);
     window.set_tool_options_title(vm.tool_options_title.as_str().into());
@@ -1013,8 +1018,16 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             bridge.apply(UiIntent::SetWorkspace(workspace));
             let vm = bridge.view_model();
             let frame = bridge.render_viewport();
+            let canvas_img = if workspace == Workspace::Paint || workspace == Workspace::Uv {
+                bridge.render_paint_canvas()
+            } else {
+                None
+            };
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
+                if let Some(canvas_img) = canvas_img {
+                    window.set_paint_canvas_image(canvas_img);
+                }
                 if let Some(frame) = frame {
                     window.set_viewport_image(frame);
                 }
@@ -1876,6 +1889,34 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 if let Some(frame) = frame {
                     window.set_viewport_image(frame);
                 }
+            }
+        }
+    });
+
+    let language_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_language_changed(move |lang| {
+        if let Ok(mut bridge) = language_bridge.lock() {
+            if bridge.set_language(lang.as_str()) {
+                persist_user_preferences(&mut bridge);
+            }
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let ui_scale_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_ui_scale_set(move |scale| {
+        if let Ok(mut bridge) = ui_scale_bridge.lock() {
+            if bridge.set_ui_scale(scale) {
+                persist_user_preferences(&mut bridge);
+            }
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
             }
         }
     });
@@ -3184,6 +3225,61 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_profile_clear_curves(move || {
         if let Ok(mut bridge) = profile_clear_curves_bridge.lock() {
             bridge.profile_clear_curves();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let wp_ground_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_set_workplane_ground(move || {
+        if let Ok(mut bridge) = wp_ground_bridge.lock() {
+            bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let wp_face_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_set_workplane_face(move || {
+        if let Ok(mut bridge) = wp_face_bridge.lock() {
+            bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let wp_view_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_set_workplane_view(move || {
+        if let Ok(mut bridge) = wp_view_bridge.lock() {
+            bridge.apply(UiIntent::ProfileSetWorkplaneView);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let toggle_paint_uv_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_toggle_paint_show_uv(move || {
+        if let Ok(mut bridge) = toggle_paint_uv_bridge.lock() {
+            bridge.apply(UiIntent::TogglePaintUvOverlay);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let toggle_uv_tex_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_toggle_uv_show_texture(move || {
+        if let Ok(mut bridge) = toggle_uv_tex_bridge.lock() {
+            bridge.apply(UiIntent::ToggleUvShowTexture);
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
             }

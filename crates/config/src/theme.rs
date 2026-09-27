@@ -566,4 +566,58 @@ mod tests {
             assert!(theme.colors.resolved.get().is_some());
         }
     }
+
+    fn relative_luminance(c: ColorRgba) -> f32 {
+        let [r, g, b, _] = c.to_rgba_f32();
+        let to_linear = |v: f32| -> f32 {
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * to_linear(r) + 0.7152 * to_linear(g) + 0.0722 * to_linear(b)
+    }
+
+    fn contrast_ratio(c1: ColorRgba, c2: ColorRgba) -> f32 {
+        let l1 = relative_luminance(c1);
+        let l2 = relative_luminance(c2);
+        let (bright, dark) = if l1 > l2 { (l1, l2) } else { (l2, l1) };
+        (bright + 0.05) / (dark + 0.05)
+    }
+
+    #[test]
+    fn test_wcag_22_contrast_ratios() {
+        let registry = ThemeRegistry::global();
+        for manifest in registry.available() {
+            let theme = registry.get_theme(&manifest.id).unwrap();
+            let text = theme.colors.get_token_color(ThemeToken::TextPrimary);
+            let canvas = theme.colors.get_token_color(ThemeToken::BgCanvas);
+            let surface = theme.colors.get_token_color(ThemeToken::BgSurface);
+            let panel = theme.colors.get_token_color(ThemeToken::BgPanel);
+
+            let ratio_canvas = contrast_ratio(text, canvas);
+            let ratio_surface = contrast_ratio(text, surface);
+            let ratio_panel = contrast_ratio(text, panel);
+
+            assert!(
+                ratio_canvas >= 4.5,
+                "Theme {} TextPrimary vs BgCanvas contrast ratio {:.2} < 4.5 (WCAG AA)",
+                manifest.id,
+                ratio_canvas
+            );
+            assert!(
+                ratio_surface >= 4.5,
+                "Theme {} TextPrimary vs BgSurface contrast ratio {:.2} < 4.5 (WCAG AA)",
+                manifest.id,
+                ratio_surface
+            );
+            assert!(
+                ratio_panel >= 4.5,
+                "Theme {} TextPrimary vs BgPanel contrast ratio {:.2} < 4.5 (WCAG AA)",
+                manifest.id,
+                ratio_panel
+            );
+        }
+    }
 }

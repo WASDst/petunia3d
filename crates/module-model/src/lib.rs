@@ -32,9 +32,10 @@ pub use connect::ConnectTool;
 pub use dissolve::DissolveTool;
 pub use draw_profile::{
     DrawProfileTool, extract_sweep_path_from_mesh, generate_extrude, generate_revolve,
-    generate_sweep, profile_add_point, profile_clear_curves, profile_screen_to_plane,
+    generate_sweep, profile_add_point, profile_capture_auto, profile_capture_face,
+    profile_capture_ground, profile_capture_view, profile_clear_curves, profile_screen_to_plane,
     profile_set_circle, profile_set_curve_smoothness, profile_set_rectangle,
-    profile_set_wall_thickness, profile_smooth_curves,
+    profile_set_wall_thickness, profile_smooth_curves, profile_workplane_label,
 };
 pub use extrude::ExtrudeTool;
 pub use inset::InsetTool;

@@ -1829,30 +1829,32 @@ impl Renderer {
         textured: bool,
     ) {
         use petunia_project::Canvas;
-        let wanted: Vec<(uuid::Uuid, u32, u32, Vec<u8>)> = if !textured {
-            Vec::new()
-        } else {
-            scene
-                .assets
-                .iter()
-                .filter(|o| o.visible)
-                .filter_map(|o| {
-                    let cv: &Canvas = o
-                        .texture
-                        .as_ref()
-                        .or_else(|| o.material(scene).and_then(|m| m.albedo_texture.as_ref()))?;
-                    Some((o.id, cv.w, cv.h, cv.pixels.clone()))
-                })
-                .collect()
-        };
+        if !textured {
+            self.asset_tex.clear();
+            return;
+        }
+
+        let wanted: Vec<(uuid::Uuid, &Canvas)> = scene
+            .assets
+            .iter()
+            .filter(|o| o.visible)
+            .filter_map(|o| {
+                let cv: &Canvas = o
+                    .texture
+                    .as_ref()
+                    .or_else(|| o.material(scene).and_then(|m| m.albedo_texture.as_ref()))?;
+                Some((o.id, cv))
+            })
+            .collect();
         // Poda slots sem canvas/asset correspondente.
         self.asset_tex.retain(|slot| {
             wanted
                 .iter()
-                .any(|(id, w, h, _)| *id == slot.asset_id && *w == slot.width && *h == slot.height)
+                .any(|(id, cv)| *id == slot.asset_id && cv.w == slot.width && cv.h == slot.height)
         });
-        for (id, w, h, pixels) in wanted {
-            let hash = fnv1a_hash(&pixels);
+        for (id, cv) in wanted {
+            let (w, h, pixels) = (cv.w, cv.h, &cv.pixels);
+            let hash = fnv1a_hash(pixels);
             if let Some(slot) = self.asset_tex.iter().find(|s| s.asset_id == id) {
                 if slot.hash.get() != hash {
                     slot.hash.set(hash);
@@ -1863,7 +1865,7 @@ impl Renderer {
                             origin: wgpu::Origin3d::ZERO,
                             aspect: wgpu::TextureAspect::All,
                         },
-                        &pixels,
+                        pixels,
                         wgpu::TexelCopyBufferLayout {
                             offset: 0,
                             bytes_per_row: Some(4 * w),
@@ -1899,7 +1901,7 @@ impl Renderer {
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
-                &pixels,
+                pixels,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * w),

@@ -262,6 +262,169 @@ impl Mesh {
         count
     }
 
+    /// Seleciona o Vertex Loop a partir de um vértice semente (caminhando pelas arestas de loop).
+    pub fn select_vertex_loop(&mut self, seed_vertex: u32, extend: bool) -> usize {
+        let mut incident_edges = Vec::new();
+        for f in &self.faces {
+            let m = f.verts.len();
+            for k in 0..m {
+                let u = f.verts[k];
+                let v = f.verts[(k + 1) % m];
+                if u == seed_vertex || v == seed_vertex {
+                    let key = if u < v { (u, v) } else { (v, u) };
+                    if !incident_edges.contains(&key) {
+                        incident_edges.push(key);
+                    }
+                }
+            }
+        }
+        if incident_edges.is_empty() {
+            if !extend {
+                self.deselect_all();
+            }
+            if let Some(v) = self.verts.get_mut(seed_vertex as usize) {
+                v.selected = true;
+                return 1;
+            }
+            return 0;
+        }
+        let loop_edges = self.edge_loop(incident_edges[0]);
+        if !extend {
+            self.deselect_all();
+        }
+        let mut count = 0;
+        for (u, v) in loop_edges {
+            if let Some(vertex) = self.verts.get_mut(u as usize) {
+                if !vertex.selected {
+                    vertex.selected = true;
+                    count += 1;
+                }
+            }
+            if let Some(vertex) = self.verts.get_mut(v as usize) {
+                if !vertex.selected {
+                    vertex.selected = true;
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Retorna os índices de faces que compõem um Face Loop (faixa contínua de quads) a partir de uma face semente.
+    pub fn face_loop(&self, seed_face: usize, seed_edge: Option<(u32, u32)>) -> Vec<usize> {
+        if seed_face >= self.faces.len() {
+            return Vec::new();
+        }
+        let seed = &self.faces[seed_face];
+        if seed.verts.len() != 4 {
+            return vec![seed_face];
+        }
+
+        let mut edge_to_faces: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+        for (fi, f) in self.faces.iter().enumerate() {
+            let m = f.verts.len();
+            for k in 0..m {
+                let u = f.verts[k];
+                let v = f.verts[(k + 1) % m];
+                let key = if u < v { (u, v) } else { (v, u) };
+                edge_to_faces.entry(key).or_default().push(fi);
+            }
+        }
+
+        let get_edge_key = |f: &Face, idx: usize| -> (u32, u32) {
+            let u = f.verts[idx];
+            let v = f.verts[(idx + 1) % f.verts.len()];
+            if u < v { (u, v) } else { (v, u) }
+        };
+
+        let (start_edge_a, start_edge_b) = if let Some(se) = seed_edge {
+            let norm_se = if se.0 < se.1 { (se.0, se.1) } else { (se.1, se.0) };
+            if get_edge_key(seed, 0) == norm_se || get_edge_key(seed, 2) == norm_se {
+                (get_edge_key(seed, 0), get_edge_key(seed, 2))
+            } else {
+                (get_edge_key(seed, 1), get_edge_key(seed, 3))
+            }
+        } else {
+            (get_edge_key(seed, 0), get_edge_key(seed, 2))
+        };
+
+        let mut result = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        result.push(seed_face);
+        visited.insert(seed_face);
+
+        let mut walk_dir = |mut current_face: usize, mut exit_edge: (u32, u32)| {
+            let mut list = Vec::new();
+            loop {
+                let Some(neighbors) = edge_to_faces.get(&exit_edge) else {
+                    break;
+                };
+                let next_face = neighbors.iter().copied().find(|&fi| fi != current_face);
+                let Some(next_fi) = next_face else {
+                    break;
+                };
+                if visited.contains(&next_fi) {
+                    break;
+                }
+                let next_f = &self.faces[next_fi];
+                if next_f.verts.len() != 4 {
+                    list.push(next_fi);
+                    visited.insert(next_fi);
+                    break;
+                }
+                list.push(next_fi);
+                visited.insert(next_fi);
+
+                let mut exit_idx = None;
+                for k in 0..4 {
+                    if get_edge_key(next_f, k) == exit_edge {
+                        exit_idx = Some(k);
+                        break;
+                    }
+                }
+                let Some(entry_k) = exit_idx else {
+                    break;
+                };
+                let opposite_k = (entry_k + 2) % 4;
+                exit_edge = get_edge_key(next_f, opposite_k);
+                current_face = next_fi;
+            }
+            list
+        };
+
+        let half_a = walk_dir(seed_face, start_edge_a);
+        for fi in half_a {
+            result.push(fi);
+        }
+        let half_b = walk_dir(seed_face, start_edge_b);
+        for fi in half_b {
+            result.push(fi);
+        }
+
+        result
+    }
+
+    /// Seleciona o Face Loop completo a partir de uma face semente. Retorna a contagem de faces selecionadas.
+    pub fn select_face_loop(
+        &mut self,
+        seed_face: usize,
+        seed_edge: Option<(u32, u32)>,
+        extend: bool,
+    ) -> usize {
+        let loop_faces = self.face_loop(seed_face, seed_edge);
+        let count = loop_faces.len();
+        if !extend {
+            self.deselect_all();
+        }
+        for &fi in &loop_faces {
+            if let Some(f) = self.faces.get_mut(fi) {
+                f.selected = true;
+            }
+        }
+        self.sync_vert_selection_from_faces();
+        count
+    }
+
     pub fn sync_face_selection_from_verts(&mut self) {
         for f in &mut self.faces {
             f.selected =
@@ -2438,6 +2601,26 @@ mod region_tests {
         assert_eq!(loop_edges.len(), 4, "boundary loop of plane has 4 edges");
         mesh.select_edge_loop(edges[0], false);
         assert_eq!(mesh.selected_edges.len(), 4);
+        assert_eq!(mesh.selected_vert_count(), 4);
+    }
+
+    #[test]
+    fn face_loop_selects_quad_ring_on_cube() {
+        let mut mesh = Mesh::cube(2.0);
+        // Cube has 6 quad faces. A face loop around 4 side faces forms a closed quad ring.
+        let loop_faces = mesh.face_loop(0, None);
+        assert_eq!(loop_faces.len(), 4, "face loop around cube ring contains 4 faces");
+        let count = mesh.select_face_loop(0, None, false);
+        assert_eq!(count, 4);
+        assert_eq!(mesh.faces.iter().filter(|f| f.selected).count(), 4);
+    }
+
+    #[test]
+    fn vertex_loop_selects_ring_on_plane() {
+        let mut mesh = Mesh::plane(2.0);
+        // Plane has 1 quad face, 4 boundary vertices in the loop
+        let count = mesh.select_vertex_loop(0, false);
+        assert_eq!(count, 4, "vertex loop around plane boundary contains 4 vertices");
         assert_eq!(mesh.selected_vert_count(), 4);
     }
 }

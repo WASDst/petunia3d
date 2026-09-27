@@ -64,8 +64,73 @@ pub fn profile_add_point(state: &mut AppState, nx: f32, ny: f32) {
     state.mark_dirty();
 }
 
-/// Captura o frame 2D da câmera atual (chamar ao ativar).
-pub fn profile_capture_frame(state: &mut AppState) {
+/// Captura o frame 2D alinhado ao plano do chão (XZ, normal +Y).
+pub fn profile_capture_ground(state: &mut AppState) {
+    state.profile.right = [1.0, 0.0, 0.0];
+    state.profile.up = [0.0, 0.0, -1.0];
+    state.profile.normal = [0.0, 1.0, 0.0];
+    state.profile.origin = [0.0, 0.0, 0.0];
+    state.profile.points.clear();
+    state.profile.nodes.clear();
+    state.profile.closed = false;
+    state.mark_dirty();
+}
+
+/// Captura o frame 2D alinhado à face selecionada da malha ativa (ou chão se nenhuma selecionada).
+pub fn profile_capture_face(state: &mut AppState) -> bool {
+    let Some(mesh) = state.project.active_mesh() else {
+        profile_capture_ground(state);
+        return false;
+    };
+    let Some(face) = mesh.faces.iter().find(|f| f.selected) else {
+        profile_capture_ground(state);
+        return false;
+    };
+    if face.verts.len() < 3 {
+        profile_capture_ground(state);
+        return false;
+    }
+    let p0 = mesh.verts[face.verts[0] as usize].vec();
+    let p1 = mesh.verts[face.verts[1] as usize].vec();
+    let p2 = mesh.verts[face.verts[2] as usize].vec();
+    let mut center = glam::Vec3::ZERO;
+    for &idx in &face.verts {
+        center += mesh.verts[idx as usize].vec();
+    }
+    center /= face.verts.len() as f32;
+
+    let normal = (p1 - p0).cross(p2 - p0).normalize_or_zero();
+    let normal = if normal.length_squared() < 1e-4 {
+        glam::Vec3::Y
+    } else {
+        normal
+    };
+
+    let right = (p1 - p0).normalize_or_zero();
+    let right = if right.length_squared() < 1e-4 || right.abs_diff_eq(normal, 0.1) {
+        if normal.y.abs() < 0.9 {
+            glam::Vec3::Y.cross(normal).normalize_or_zero()
+        } else {
+            glam::Vec3::X.cross(normal).normalize_or_zero()
+        }
+    } else {
+        right
+    };
+    let up = normal.cross(right).normalize_or_zero();
+
+    state.profile.right = right.to_array();
+    state.profile.up = up.to_array();
+    state.profile.normal = normal.to_array();
+    state.profile.origin = center.to_array();
+    state.profile.points.clear();
+    state.profile.nodes.clear();
+    state.profile.closed = false;
+    state.mark_dirty();
+    true
+}
+
+/// Captura o frame 2D da câmera atual (plano de vista perpendicular ao olhar).
+pub fn profile_capture_view(state: &mut AppState) {
     let right = state.camera.right().to_array();
     let up = state.camera.up().to_array();
     let origin = state.camera.target.to_array();
@@ -77,6 +142,49 @@ pub fn profile_capture_frame(state: &mut AppState) {
     state.profile.points.clear();
     state.profile.nodes.clear();
     state.profile.closed = false;
+    state.mark_dirty();
+}
+
+/// Captura automaticamente o melhor workplane para o contexto atual:
+/// 1. Se houver face selecionada -> Face
+/// 2. Se a câmera estiver alinhada com eixo ortogonal -> View
+/// 3. Caso contrário (perspectiva geral) -> Ground (XZ)
+pub fn profile_capture_auto(state: &mut AppState) {
+    let has_selected_face = state
+        .project
+        .active_mesh()
+        .map(|m| m.faces.iter().any(|f| f.selected))
+        .unwrap_or(false);
+    if has_selected_face {
+        profile_capture_face(state);
+        return;
+    }
+    let fwd = state.camera.forward();
+    if fwd.x.abs() > 0.95 || fwd.y.abs() > 0.95 || fwd.z.abs() > 0.95 {
+        profile_capture_view(state);
+    } else {
+        profile_capture_ground(state);
+    }
+}
+
+/// Alias para manter compatibilidade com chamadas existentes.
+pub fn profile_capture_frame(state: &mut AppState) {
+    profile_capture_auto(state);
+}
+
+/// Rótulo descritivo do workplane atualmente configurado no ProfileState.
+pub fn profile_workplane_label(state: &AppState) -> &'static str {
+    let n = glam::Vec3::from(state.profile.normal);
+    if (n - glam::Vec3::Y).length_squared() < 0.01 {
+        "Ground"
+    } else {
+        let has_selected_face = state
+            .project
+            .active_mesh()
+            .map(|m| m.faces.iter().any(|f| f.selected))
+            .unwrap_or(false);
+        if has_selected_face { "Face" } else { "View" }
+    }
 }
 
 pub fn generate_extrude(state: &mut AppState) {
@@ -263,7 +371,9 @@ pub fn generate_sweep(state: &mut AppState) {
 
 /// Define um perfil 2D retangular centralizado no plano ativo.
 pub fn profile_set_rectangle(state: &mut AppState, width: f32, height: f32) {
-    profile_capture_frame(state);
+    if state.profile.points.is_empty() {
+        profile_capture_auto(state);
+    }
     let w = if width.is_finite() && width > 0.0 {
         width
     } else {
@@ -289,15 +399,19 @@ pub fn profile_set_rectangle(state: &mut AppState, width: f32, height: f32) {
     state.profile.closed = true;
     state.session.tools.active_tool = "draw_profile".to_string();
     state.set_status(format!(
-        "Profile 2D Rectangle created ({:.1} x {:.1}): choose Extrude or Revolve",
-        w, h
+        "Shape: Rectangle 2D ({:.1} x {:.1}) on {}: drag Depth or press Enter to create volume",
+        w,
+        h,
+        profile_workplane_label(state)
     ));
     state.mark_dirty();
 }
 
 /// Define um perfil 2D circular centralizado no plano ativo.
 pub fn profile_set_circle(state: &mut AppState, radius: f32, segments: usize) {
-    profile_capture_frame(state);
+    if state.profile.points.is_empty() {
+        profile_capture_auto(state);
+    }
     let r = if radius.is_finite() && radius > 0.0 {
         radius
     } else {
@@ -317,8 +431,10 @@ pub fn profile_set_circle(state: &mut AppState, radius: f32, segments: usize) {
     state.profile.closed = true;
     state.session.tools.active_tool = "draw_profile".to_string();
     state.set_status(format!(
-        "Profile 2D Circle created (r={:.1}, {} segs): choose Extrude or Revolve",
-        r, segs
+        "Shape: Circle 2D (r={:.1}, {} segs) on {}: drag Depth or press Enter to create volume",
+        r,
+        segs,
+        profile_workplane_label(state)
     ));
     state.mark_dirty();
 }

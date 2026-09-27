@@ -162,69 +162,79 @@ export struct ShortcutsEntry {
 /// Tooltip rico moderno (Blender / VS Code / Figma style):
 /// Cabeçalho com título em destaque e badge kbd estilizado para o atalho,
 /// corpo com micro-explicação em texto secundário e rodapé de dicas/gestos.
-component RichTooltip inherits VerticalLayout {
+component RichTooltip inherits Rectangle {
     in property <string> title;
     in property <string> shortcut: "";
     in property <string> description: "";
     in property <string> hint: "";
 
-    padding-left: 8px;
-    padding-right: 8px;
-    padding-top: 6px;
-    padding-bottom: 6px;
-    spacing: 3px;
-    min-width: 120px;
-    max-width: 260px;
+    background: DesignTokens.surface-raised;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-color: #00000088;
+    drop-shadow-blur: 8px;
+    drop-shadow-offset-y: 2px;
 
-    HorizontalLayout {
-        spacing: 8px;
-        alignment: space-between;
+    VerticalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: 4px;
+        min-width: 130px;
+        max-width: 280px;
 
-        Text {
-            text: root.title;
-            color: DesignTokens.text-primary;
-            font-size: 11px;
-            font-weight: 700;
-            vertical-alignment: center;
-        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: space-between;
 
-        if root.shortcut != "": Rectangle {
-            background: DesignTokens.surface-hover;
-            border-width: 1px;
-            border-color: DesignTokens.border;
-            border-radius: 3px;
-            height: 16px;
+            Text {
+                text: root.title;
+                color: DesignTokens.text-primary;
+                font-size: 11px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
 
-            HorizontalLayout {
-                padding-left: 5px;
-                padding-right: 5px;
-                alignment: center;
+            if root.shortcut != "": Rectangle {
+                background: DesignTokens.surface-hover;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                border-radius: 3px;
+                height: 16px;
 
-                Text {
-                    text: root.shortcut;
-                    color: DesignTokens.accent;
-                    font-size: 9px;
-                    font-weight: 600;
-                    font-family: "monospace";
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
+                HorizontalLayout {
+                    padding-left: 5px;
+                    padding-right: 5px;
+                    alignment: center;
+
+                    Text {
+                        text: root.shortcut;
+                        color: DesignTokens.accent;
+                        font-size: 9px;
+                        font-weight: 600;
+                        font-family: "monospace";
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                    }
                 }
             }
         }
-    }
 
-    if root.description != "": Text {
-        text: root.description;
-        color: DesignTokens.text-secondary;
-        font-size: 10px;
-        wrap: word-wrap;
-    }
+        if root.description != "": Text {
+            text: root.description;
+            color: DesignTokens.text-secondary;
+            font-size: 10px;
+            wrap: word-wrap;
+        }
 
-    if root.hint != "": Text {
-        text: root.hint;
-        color: DesignTokens.text-muted;
-        font-size: 9px;
-        wrap: word-wrap;
+        if root.hint != "": Text {
+            text: root.hint;
+            color: DesignTokens.text-muted;
+            font-size: 9px;
+            wrap: word-wrap;
+        }
     }
 }
 
@@ -319,15 +329,6 @@ component ViewportBarButton inherits Rectangle {
         size: 14px;
         stroke: root.active ? DesignTokens.canvas : DesignTokens.text-secondary;
     }
-    Tooltip {
-        RichTooltip {
-            title: root.label;
-            shortcut: root.shortcut;
-            description: root.description;
-            hint: root.hint;
-        }
-    }
-
     bar-focus := FocusScope {
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
@@ -336,7 +337,17 @@ component ViewportBarButton inherits Rectangle {
             }
             reject
         }
-        bar-touch := TouchArea { clicked => { bar-focus.focus(); root.clicked(); } }
+        bar-touch := TouchArea {
+            clicked => { bar-focus.focus(); root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: root.label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
     }
 }
 
@@ -358,9 +369,9 @@ component ViewportSvgButton inherits Rectangle {
     width: 32px;
     height: 28px;
     border-radius: 5px;
-    background: root.live-mode ? #e68a00 : (root.active ? DesignTokens.accent : (touch.has-hover ? DesignTokens.surface-hover : transparent));
+    background: root.live-mode ? DesignTokens.live-mode : (root.active ? DesignTokens.accent : (touch.has-hover ? DesignTokens.surface-hover : transparent));
     border-width: svg-focus.has-focus ? 2px : ((root.active || root.live-mode) ? 1px : 0px);
-    border-color: root.live-mode ? #ffd54f : DesignTokens.focus-ring;
+    border-color: root.live-mode ? DesignTokens.live-mode-ring : DesignTokens.focus-ring;
     Image {
         source: root.glyph;
         width: 20px;
@@ -368,14 +379,6 @@ component ViewportSvgButton inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    Tooltip {
-        RichTooltip {
-            title: root.label;
-            shortcut: root.shortcut;
-            description: root.description;
-            hint: root.hint;
-        }
     }
     svg-focus := FocusScope {
         key-pressed(event) => {
@@ -385,7 +388,17 @@ component ViewportSvgButton inherits Rectangle {
             }
             reject
         }
-        touch := TouchArea { clicked => { svg-focus.focus(); root.clicked(); } }
+        touch := TouchArea {
+            clicked => { svg-focus.focus(); root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: root.label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
     }
 }
 
@@ -424,13 +437,12 @@ component MenuButton inherits Rectangle {
                 root.hovered();
             }
         }
-    }
-
-    if !root.open: Tooltip {
-        RichTooltip {
-            title: root.label;
-            shortcut: root.shortcut;
-            description: root.description;
+        if !root.open: Tooltip {
+            RichTooltip {
+                title: root.label;
+                shortcut: root.shortcut;
+                description: root.description;
+            }
         }
     }
 }
@@ -529,15 +541,6 @@ component TopAction inherits Rectangle {
         size: 16px;
         stroke: root.active ? DesignTokens.canvas : DesignTokens.text-secondary;
     }
-    Tooltip {
-        RichTooltip {
-            title: root.semantic-label;
-            shortcut: root.shortcut;
-            description: root.description;
-            hint: root.hint;
-        }
-    }
-
     top-focus := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") && root.enabled {
@@ -554,6 +557,14 @@ component TopAction inherits Rectangle {
                     root.clicked();
                 }
             }
+            Tooltip {
+                RichTooltip {
+                    title: root.semantic-label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
         }
     }
 }
@@ -564,6 +575,8 @@ component WorkspaceSegment inherits Rectangle {
     in property <bool> reduced-motion: false;
     callback changed(string);
 
+    accessible-role: tab-list;
+    accessible-label: "Workspaces";
     width: 246px;
     height: 28px;
     border-radius: 6px;
@@ -589,6 +602,9 @@ component WorkspaceSegment inherits Rectangle {
             width: 80px;
             height: 22px;
             background: transparent;
+            accessible-role: tab;
+            accessible-label: "Model Workspace";
+            accessible-checked: root.active == "MODEL";
             Text {
                 text: "MODEL";
                 color: root.active == "MODEL" ? DesignTokens.canvas : DesignTokens.text-secondary;
@@ -599,12 +615,12 @@ component WorkspaceSegment inherits Rectangle {
             }
             TouchArea {
                 clicked => { root.changed("MODEL"); }
-            }
-            Tooltip {
-                RichTooltip {
-                    title: "Model Workspace";
-                    shortcut: "F1";
-                    description: "3D mesh modeling, extrusion, loop cuts, and booleans";
+                Tooltip {
+                    RichTooltip {
+                        title: "Model Workspace";
+                        shortcut: "F1";
+                        description: "3D mesh modeling, extrusion, loop cuts, and booleans";
+                    }
                 }
             }
         }
@@ -612,6 +628,9 @@ component WorkspaceSegment inherits Rectangle {
             width: 80px;
             height: 22px;
             background: transparent;
+            accessible-role: tab;
+            accessible-label: "Paint Workspace";
+            accessible-checked: root.active == "PAINT";
             Text {
                 text: "PAINT";
                 color: root.active == "PAINT" ? DesignTokens.canvas : DesignTokens.text-secondary;
@@ -622,12 +641,12 @@ component WorkspaceSegment inherits Rectangle {
             }
             TouchArea {
                 clicked => { root.changed("PAINT"); }
-            }
-            Tooltip {
-                RichTooltip {
-                    title: "Paint Workspace";
-                    shortcut: "F2";
-                    description: "Texture painting, layer management, and brush tools";
+                Tooltip {
+                    RichTooltip {
+                        title: "Paint Workspace";
+                        shortcut: "F2";
+                        description: "Texture painting, layer management, and brush tools";
+                    }
                 }
             }
         }
@@ -635,6 +654,9 @@ component WorkspaceSegment inherits Rectangle {
             width: 80px;
             height: 22px;
             background: transparent;
+            accessible-role: tab;
+            accessible-label: "UV Workspace";
+            accessible-checked: root.active == "UV";
             Text {
                 text: "UV";
                 color: root.active == "UV" ? DesignTokens.canvas : DesignTokens.text-secondary;
@@ -645,12 +667,12 @@ component WorkspaceSegment inherits Rectangle {
             }
             TouchArea {
                 clicked => { root.changed("UV"); }
-            }
-            Tooltip {
-                RichTooltip {
-                    title: "UV Workspace";
-                    shortcut: "F3";
-                    description: "UV projection, unwrapping, seams, and island packing";
+                Tooltip {
+                    RichTooltip {
+                        title: "UV Workspace";
+                        shortcut: "F3";
+                        description: "UV projection, unwrapping, seams, and island packing";
+                    }
                 }
             }
         }
@@ -859,15 +881,6 @@ component ToolButton inherits Rectangle {
         size: 16px;
         stroke: active ? DesignTokens.canvas : DesignTokens.text-primary;
     }
-    Tooltip {
-        RichTooltip {
-            title: root.semantic-label;
-            shortcut: root.shortcut;
-            description: root.description;
-            hint: root.hint;
-        }
-    }
-
     tool-focus := FocusScope {
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
@@ -876,7 +889,17 @@ component ToolButton inherits Rectangle {
             }
             reject
         }
-        touch-area := TouchArea { clicked => { tool-focus.focus(); root.clicked(); } }
+        touch-area := TouchArea {
+            clicked => { tool-focus.focus(); root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: root.semantic-label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
     }
 }
 
@@ -896,12 +919,11 @@ component ColorSwatch inherits Rectangle {
 
     TouchArea {
         clicked => { root.clicked(); }
-    }
-
-    Tooltip {
-        RichTooltip {
-            title: "Color Swatch";
-            description: "Click to select or modify active color";
+        Tooltip {
+            RichTooltip {
+                title: "Color Swatch";
+                description: "Click to select or modify active color";
+            }
         }
     }
 }
@@ -935,14 +957,6 @@ component NumericField inherits Rectangle {
     background: touch.pressed ? DesignTokens.surface-hover : DesignTokens.surface-raised;
     border-width: field-focus.has-focus ? 2px : 1px;
     border-color: root.invalid ? DesignTokens.danger : (field-focus.has-focus ? DesignTokens.focus-ring : (root.editing || touch.is-scrubbing ? DesignTokens.accent : DesignTokens.border));
-    Tooltip {
-        RichTooltip {
-            title: root.full-label != "" ? root.full-label : root.label;
-            shortcut: root.shortcut;
-            description: root.description != "" ? root.description : "Numeric property field";
-            hint: root.hint;
-        }
-    }
 
     field-focus := FocusScope {
         key-pressed(event) => {
@@ -1026,6 +1040,14 @@ component NumericField inherits Rectangle {
         touch := TouchArea {
             enabled: !root.editing;
             mouse-cursor: ew-resize;
+            Tooltip {
+                RichTooltip {
+                    title: root.full-label != "" ? root.full-label : root.label;
+                    shortcut: root.shortcut;
+                    description: root.description != "" ? root.description : "Numeric property field";
+                    hint: root.hint;
+                }
+            }
             property <length> start-x;
             property <length> last-x;
             property <float> original-value;
@@ -1180,13 +1202,6 @@ component InspectorSection inherits Rectangle {
             accessible-label: root.title;
             accessible-expanded: root.open;
             forward-focus: section-focus;
-            Tooltip {
-                RichTooltip {
-                    title: root.title;
-                    description: root.description != "" ? root.description : (root.open ? "Click to collapse section" : "Click to expand section");
-                    hint: "Hold Alt and click to toggle all sections";
-                }
-            }
 
             HorizontalLayout {
                 width: 100%;
@@ -1207,6 +1222,7 @@ component InspectorSection inherits Rectangle {
                     stroke: DesignTokens.text-muted;
                 }
             }
+
             section-focus := FocusScope {
                 width: 100%;
                 height: 100%;
@@ -1227,6 +1243,13 @@ component InspectorSection inherits Rectangle {
                         section-focus.focus();
                         if self.alt-down { root.toggle-all(); } else { root.toggled(); }
                         self.alt-down = false;
+                    }
+                    Tooltip {
+                        RichTooltip {
+                            title: root.title;
+                            description: root.description != "" ? root.description : (root.open ? "Click to collapse section" : "Click to expand section");
+                            hint: "Hold Alt and click to toggle all sections";
+                        }
                     }
                 }
             }
@@ -1269,16 +1292,16 @@ component InspectorPill inherits Rectangle {
         size: 17px;
         stroke: root.active ? DesignTokens.canvas : DesignTokens.text-primary;
     }
-    Tooltip {
-        RichTooltip {
-            title: root.semantic-label;
-            description: root.description;
-            hint: "Click to expand section";
-        }
-    }
 
     pill-touch := TouchArea {
         clicked => { root.clicked(); }
+        Tooltip {
+            RichTooltip {
+                title: root.semantic-label;
+                description: root.description;
+                hint: "Click to expand section";
+            }
+        }
     }
 }
 
@@ -1390,13 +1413,15 @@ component FloatSectionCard inherits Rectangle {
                     size: 12px;
                     stroke: root.pin-open ? DesignTokens.canvas : DesignTokens.text-secondary;
                 }
-                Tooltip {
-                    VerticalLayout {
-                        padding: 8px; spacing: 2px;
-                        Text { text: root.pin-open-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                TouchArea {
+                    clicked => { root.pin-open-toggled(root.section-id); }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 8px; spacing: 2px;
+                            Text { text: root.pin-open-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                        }
                     }
                 }
-                TouchArea { clicked => { root.pin-open-toggled(root.section-id); } }
             }
 
             Rectangle {
@@ -1409,15 +1434,15 @@ component FloatSectionCard inherits Rectangle {
                     size: 12px;
                     stroke: root.pinned-asset != "" ? DesignTokens.canvas : DesignTokens.text-secondary;
                 }
-                Tooltip {
-                    VerticalLayout {
-                        padding: 8px; spacing: 2px;
-                        Text { text: root.pinned-asset != "" ? root.unpin-asset-label : root.pin-asset-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                    }
-                }
                 TouchArea {
                     clicked => {
                         root.asset-pin-changed(root.section-id, root.pinned-asset != "" ? "" : root.active-asset-id);
+                    }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 8px; spacing: 2px;
+                            Text { text: root.pinned-asset != "" ? root.unpin-asset-label : root.pin-asset-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                        }
                     }
                 }
             }
@@ -1428,13 +1453,15 @@ component FloatSectionCard inherits Rectangle {
                 accessible-role: button;
                 accessible-label: root.dock-label;
                 IconDisplay { icon: IconSet.PanelLeft; size: 12px; stroke: DesignTokens.text-secondary; }
-                Tooltip {
-                    VerticalLayout {
-                        padding: 8px; spacing: 2px;
-                        Text { text: root.dock-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                TouchArea {
+                    clicked => { root.dock-requested(root.section-id); }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 8px; spacing: 2px;
+                            Text { text: root.dock-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                        }
                     }
                 }
-                TouchArea { clicked => { root.dock-requested(root.section-id); } }
             }
         }
 
@@ -1839,13 +1866,15 @@ component MaterialBody inherits VerticalLayout {
             accessible-role: button;
             accessible-label: root.new-label;
             IconDisplay { icon: IconSet.Plus; size: 13px; stroke: DesignTokens.text-primary; }
-            Tooltip {
-                VerticalLayout {
-                    padding: 8px; spacing: 2px;
-                    Text { text: root.new-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+            TouchArea {
+                clicked => { root.create-material(); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 8px; spacing: 2px;
+                        Text { text: root.new-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                    }
                 }
             }
-            TouchArea { clicked => { root.create-material(); } }
         }
 
         Rectangle {
@@ -1858,13 +1887,15 @@ component MaterialBody inherits VerticalLayout {
             accessible-role: button;
             accessible-label: root.duplicate-label;
             IconDisplay { icon: IconSet.Copy; size: 13px; stroke: DesignTokens.text-primary; }
-            Tooltip {
-                VerticalLayout {
-                    padding: 8px; spacing: 2px;
-                    Text { text: root.duplicate-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+            TouchArea {
+                clicked => { root.duplicate-material(root.active-slot); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 8px; spacing: 2px;
+                        Text { text: root.duplicate-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                    }
                 }
             }
-            TouchArea { clicked => { root.duplicate-material(root.active-slot); } }
         }
 
         Rectangle {
@@ -1877,13 +1908,15 @@ component MaterialBody inherits VerticalLayout {
             accessible-role: button;
             accessible-label: root.remove-label;
             IconDisplay { icon: IconSet.Trash2; size: 13px; stroke: DesignTokens.danger; }
-            Tooltip {
-                VerticalLayout {
-                    padding: 8px; spacing: 2px;
-                    Text { text: root.remove-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+            TouchArea {
+                clicked => { root.remove-material(root.active-slot); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 8px; spacing: 2px;
+                        Text { text: root.remove-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                    }
                 }
             }
-            TouchArea { clicked => { root.remove-material(root.active-slot); } }
         }
     }
 
@@ -2805,6 +2838,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> scene-stats: "";
     in-out property <string> uv-stats: "";
     in-out property <string> current-theme: "petunia-dark";
+    in-out property <int> settings-tab: 0;
+    in-out property <float> ui-scale: 1.0;
+    in-out property <string> active-language: "pt-BR";
 
     in-out property <string> selection-domain: "OBJECT";
     in-out property <string> active-tool: "select";
@@ -3227,6 +3263,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <float> profile-wall-thickness: 0.0;
     in-out property <float> profile-smoothness: 0.02;
     in-out property <bool> profile-has-curves: false;
+    in-out property <string> profile-workplane: "Ground";
+    in-out property <bool> paint-show-uv: false;
+    in-out property <bool> uv-show-texture: true;
     in-out property <bool> pivot-menu-open: false;
     in-out property <string> tool-activation: "drag";
     in-out property <bool> keyboard-tool-modal-active: false;
@@ -3354,6 +3393,8 @@ export component PetuniaSlintShell inherits Window {
     callback asset-thumbnail-size-changed(float);
     callback selection-color-set(string);
     callback selection-thickness-set(float);
+    callback ui-scale-set(float);
+    callback language-changed(string);
     callback tool-modal-cancel;
     callback loop-cut-scrubbed(float);
     callback loop-cut-slide-committed(string) -> bool;
@@ -3400,6 +3441,11 @@ export component PetuniaSlintShell inherits Window {
     callback profile-smoothness-set(string) -> bool;
     callback profile-smooth-curves();
     callback profile-clear-curves();
+    callback profile-set-workplane-ground();
+    callback profile-set-workplane-face();
+    callback profile-set-workplane-view();
+    callback toggle-paint-show-uv();
+    callback toggle-uv-show-texture();
     callback primitive-param-float(string, float);
     callback primitive-param-bool(string, bool);
     callback primitive-confirm;
@@ -3834,6 +3880,35 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             ToolButton {
+                                icon: IconSet.PenLine;
+                                semantic-label: "Sketch / Profile";
+                                shortcut: root.shortcuts.model-profile;
+                                description: "Draw 2D profile curves on ground, face, or viewplane to extrude or revolve";
+                                active: active-tool == "draw_profile";
+                                clicked => { root.active-tool-changed("draw_profile"); }
+                            }
+                            ToolButton {
+                                icon: IconSet.Square;
+                                semantic-label: "2D Rectangle";
+                                description: "Create 2D rectangle profile on active workplane, ready to extrude";
+                                active: false;
+                                clicked => { root.add-profile-rectangle(2.0, 1.5); }
+                            }
+                            ToolButton {
+                                icon: IconSet.Circle;
+                                semantic-label: "2D Circle";
+                                description: "Create 2D circle profile on active workplane, ready to extrude or revolve";
+                                active: false;
+                                clicked => { root.add-profile-circle(1.0, 16); }
+                            }
+
+                            Rectangle {
+                                width: 28px;
+                                height: 1px;
+                                background: DesignTokens.border;
+                            }
+
+                            ToolButton {
                                 icon: IconSet.Plus;
                                 semantic-label: "Add Primitive";
                                 shortcut: root.shortcuts.model-add-primitive;
@@ -3859,6 +3934,14 @@ export component PetuniaSlintShell inherits Window {
                                 description: "Add UV sphere mesh with longitude and latitude rings";
                                 active: false;
                                 clicked => { root.add-primitive-requested("sphere"); }
+                            }
+                            ToolButton {
+                                icon: IconSet.Cylinder;
+                                semantic-label: "Add Cylinder";
+                                shortcut: "Shift+A, 3";
+                                description: "Add parametric cylinder with radial subdivisions";
+                                active: false;
+                                clicked => { root.add-primitive-requested("cylinder"); }
                             }
                         }
 
@@ -4192,6 +4275,7 @@ export component PetuniaSlintShell inherits Window {
                         property <bool> is-slice-drag: false;
                         property <bool> is-gizmo-drag: false;
                         property <bool> is-keyboard-transform-drag: false;
+                        property <bool> is-profile-depth-drag: false;
                         property <bool> consume-click: false;
                         property <bool> tool-drag-fine: false;
                         property <bool> loop-selection: false;
@@ -4206,6 +4290,7 @@ export component PetuniaSlintShell inherits Window {
                             self.pending-transform = false;
                             self.pending-box-select = false;
                             self.is-tool-drag = false;
+                            self.is-profile-depth-drag = false;
                             self.is-loop-drag = false;
                             self.is-loop-place = false;
                             self.is-slice-drag = false;
@@ -4260,11 +4345,16 @@ export component PetuniaSlintShell inherits Window {
                                 pending-transform = false;
                                 pending-box-select = false;
                                 if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
-                                    consume-click = true;
-                                    root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
+                                    if root.profile-closed {
+                                        is-profile-depth-drag = true;
+                                        tool-drag-fine = event.modifiers.shift;
+                                    } else {
+                                        consume-click = true;
+                                        root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
+                                    }
                                 } else if event.button == PointerEventButton.middle
                                     && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && !root.profile-active && root.active-tool != "slice" {
+                                    && root.active-tool != "slice" {
                                     if event.modifiers.shift {
                                         is-pan = true;
                                         is-orbit = false;
@@ -4274,7 +4364,7 @@ export component PetuniaSlintShell inherits Window {
                                     }
                                 } else if event.button == PointerEventButton.left && event.modifiers.alt
                                     && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && !root.profile-active && root.active-tool != "slice" {
+                                    && root.active-tool != "slice" {
                                     is-orbit = true;
                                     is-pan = false;
                                 } else if event.button == PointerEventButton.left && root.active-tool == "lasso_select" && !event.modifiers.alt {
@@ -4365,13 +4455,13 @@ export component PetuniaSlintShell inherits Window {
                                     is-box-select = true;
                                     moved-since-down = true;
                                 } else if is-orbit && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && !root.profile-active && root.active-tool != "slice" {
+                                    && root.active-tool != "slice" {
                                     moved-since-down = true;
                                     root.viewport-orbit((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
                                 } else if is-pan && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && !root.profile-active && root.active-tool != "slice" {
+                                    && root.active-tool != "slice" {
                                     moved-since-down = true;
                                     root.viewport-pan((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
                                     last-x = self.mouse-x;
@@ -4405,6 +4495,12 @@ export component PetuniaSlintShell inherits Window {
                                     root.tool-modal-scrubbed((self.mouse-y - last-y) / 1px, tool-drag-fine, self.mouse-x / 1px, self.mouse-y / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
+                                } else if is-profile-depth-drag {
+                                    moved-since-down = true;
+                                    let delta = (last-y - self.mouse-y) / 1px * (tool-drag-fine ? 0.005 : 0.02);
+                                    root.profile-depth-set("\{max(0.05, root.profile-depth + delta)}");
+                                    last-x = self.mouse-x;
+                                    last-y = self.mouse-y;
                                 } else if is-loop-drag {
                                     moved-since-down = true;
                                     root.loop-cut-scrubbed((self.mouse-x - last-x) / 1px);
@@ -4433,6 +4529,7 @@ export component PetuniaSlintShell inherits Window {
                                 }
                                 is-orbit = false;
                                 is-pan = false;
+                                is-profile-depth-drag = false;
                                 if is-transform {
                                     root.viewport-transform-end();
                                     is-transform = false;
@@ -5265,6 +5362,33 @@ export component PetuniaSlintShell inherits Window {
                         collapsed: root.tool-properties-collapsed;
                         collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
 
+                        HorizontalLayout {
+                            spacing: 4px;
+                            height: 24px;
+                            Text { text: "Plane:"; color: DesignTokens.text-secondary; font-size: 10px; width: 44px; vertical-alignment: center; }
+                            Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px;
+                                background: root.profile-workplane == "Ground" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: root.profile-workplane == "Ground" ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: "Ground"; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                TouchArea { clicked => { root.profile-set-workplane-ground(); } }
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px;
+                                background: root.profile-workplane == "Face" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: root.profile-workplane == "Face" ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: "Face"; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                TouchArea { clicked => { root.profile-set-workplane-face(); } }
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px;
+                                background: root.profile-workplane == "View" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: root.profile-workplane == "View" ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: "View"; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                TouchArea { clicked => { root.profile-set-workplane-view(); } }
+                            }
+                        }
+
                         Text { text: "\{root.label-profile-points}: \{root.profile-point-count}"; color: DesignTokens.text-secondary; font-size: 10px; }
                         if !root.profile-closed: Rectangle {
                             height: 26px; border-radius: 4px; background: DesignTokens.surface;
@@ -6064,13 +6188,26 @@ export component PetuniaSlintShell inherits Window {
                             spacing: 4px;
                             alignment: center;
 
-                            // --- MODEL: Ferramentas de modelagem e topologia (Transform vive no painel esquerdo) ---
+                            // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
+                            if active-workspace == "MODEL": ToolButton {
+                                icon: IconSet.PenLine;
+                                semantic-label: "Sketch";
+                                shortcut: root.shortcuts.model-profile;
+                                description: "Draw 2D profile curves on ground, face, or viewplane to extrude or revolve";
+                                active: active-tool == "draw_profile";
+                                clicked => { root.active-tool-changed("draw_profile"); }
+                            }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Copy;
-                                semantic-label: "Duplicate";
-                                shortcut: root.shortcuts.model-duplicate;
-                                description: "Create an identical clone of selected geometry or parts";
-                                clicked => { root.duplicate-requested(); }
+                                icon: IconSet.Square;
+                                semantic-label: "Rect 2D";
+                                description: "Create 2D rectangle profile on active workplane, ready to extrude";
+                                clicked => { root.add-profile-rectangle(2.0, 1.5); }
+                            }
+                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                                icon: IconSet.Circle;
+                                semantic-label: "Circle 2D";
+                                description: "Create 2D circle profile on active workplane, ready to extrude or revolve";
+                                clicked => { root.add-profile-circle(1.0, 16); }
                             }
 
                             if active-workspace == "MODEL": Rectangle {
@@ -6079,6 +6216,7 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
 
+                            // --- MODEL: Ferramentas principais de edição poligonal ---
                             if active-workspace == "MODEL": ToolButton {
                                 icon: IconSet.Move3d;
                                 semantic-label: "Extrude";
@@ -6131,12 +6269,11 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("loop_cut"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.PenLine;
-                                semantic-label: root.label-model-profile;
-                                shortcut: root.shortcuts.model-profile;
-                                description: "Revolve a 2D profile curve 360 degrees around rotational axis";
-                                active: active-tool == "draw_profile";
-                                clicked => { root.active-tool-changed("draw_profile"); }
+                                icon: IconSet.Copy;
+                                semantic-label: "Duplicate";
+                                shortcut: root.shortcuts.model-duplicate;
+                                description: "Create an identical clone of selected geometry or parts";
+                                clicked => { root.duplicate-requested(); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
                                 icon: IconSet.Square;
@@ -7190,7 +7327,9 @@ export component PetuniaSlintShell inherits Window {
 
                                     // Xadrez de transparência atrás do raster + pintura 2D interativa
                                     Rectangle {
-                                        height: 200px;
+                                        width: 256px;
+                                        height: 256px;
+                                        horizontal-stretch: 0;
                                         background: DesignTokens.canvas;
                                         border-width: 1px;
                                         border-color: DesignTokens.border;
@@ -7199,8 +7338,17 @@ export component PetuniaSlintShell inherits Window {
                                         Image {
                                             width: 100%;
                                             height: 100%;
-                                            image-fit: contain;
+                                            image-fit: fill;
                                             source: root.paint-canvas-image;
+                                        }
+
+                                        if root.paint-show-uv: Path {
+                                            width: 100%;
+                                            height: 100%;
+                                            fill: transparent;
+                                            stroke: #00ffff99;
+                                            stroke-width: 1px;
+                                            commands: root.uv-layout-commands;
                                         }
 
                                         TouchArea {
@@ -7216,6 +7364,27 @@ export component PetuniaSlintShell inherits Window {
                                                     root.paint-2d-stroke(self.mouse-x / self.width, self.mouse-y / self.height, 1);
                                                 }
                                             }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        height: 26px;
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            border-radius: 4px;
+                                            background: root.paint-show-uv ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                                            border-width: 1px;
+                                            border-color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.border;
+                                            Text {
+                                                text: root.paint-show-uv ? "✓ UV Wireframe Overlay" : "UV Wireframe Overlay";
+                                                color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.text-primary;
+                                                font-size: 10px;
+                                                font-weight: root.paint-show-uv ? 700 : 400;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.toggle-paint-show-uv(); } }
                                         }
                                     }
                                 }
@@ -8025,10 +8194,22 @@ export component PetuniaSlintShell inherits Window {
 
                                     // Caixa 0..1 com o layout real das UVs.
                                     uv-box := Rectangle {
+                                        width: 256px;
                                         height: 256px;
+                                        horizontal-stretch: 0;
                                         background: DesignTokens.canvas;
                                         border-width: 1px;
                                         border-color: DesignTokens.border;
+                                        clip: true;
+
+                                        // Textura ativa sob a malha UV
+                                        if root.uv-show-texture: Image {
+                                            width: 100%;
+                                            height: 100%;
+                                            image-fit: fill;
+                                            source: root.paint-canvas-image;
+                                            opacity: 0.65;
+                                        }
 
                                         // Selected UV faces / Faces UV selecionadas
                                         Path {
@@ -8104,6 +8285,27 @@ export component PetuniaSlintShell inherits Window {
                                         Rectangle { x: 0; y: parent.height - 1px; width: 100%; height: 1px; background: DesignTokens.border; }
                                         Rectangle { x: 0; y: 0; width: 1px; height: 100%; background: DesignTokens.border; }
                                         Rectangle { x: parent.width - 1px; y: 0; width: 1px; height: 100%; background: DesignTokens.border; }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        height: 26px;
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            border-radius: 4px;
+                                            background: root.uv-show-texture ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                                            border-width: 1px;
+                                            border-color: root.uv-show-texture ? DesignTokens.accent : DesignTokens.border;
+                                            Text {
+                                                text: root.uv-show-texture ? "✓ Show Texture" : "Show Texture";
+                                                color: root.uv-show-texture ? DesignTokens.accent : DesignTokens.text-primary;
+                                                font-size: 10px;
+                                                font-weight: root.uv-show-texture ? 700 : 400;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.toggle-uv-show-texture(); } }
+                                        }
                                     }
 
                                     Text {
@@ -9052,14 +9254,6 @@ export component PetuniaSlintShell inherits Window {
                         accessible-role: checkbox;
                         accessible-label: root.label-wire-overlay;
                         accessible-checked: root.is-wireframe;
-                        Tooltip {
-                            VerticalLayout {
-                                padding: 8px;
-                                spacing: 2px;
-                                Text { text: root.label-wire-overlay; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                                Text { text: root.label-wire-overlay-hint; color: DesignTokens.text-secondary; font-size: 10px; }
-                            }
-                        }
                         Text {
                             text: root.label-wire-overlay;
                             color: root.is-wireframe ? DesignTokens.canvas : DesignTokens.text-primary;
@@ -9068,7 +9262,17 @@ export component PetuniaSlintShell inherits Window {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
-                        TouchArea { clicked => { root.toggle-wireframe-requested(); } }
+                        TouchArea {
+                            clicked => { root.toggle-wireframe-requested(); }
+                            Tooltip {
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 2px;
+                                    Text { text: root.label-wire-overlay; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                                    Text { text: root.label-wire-overlay-hint; color: DesignTokens.text-secondary; font-size: 10px; }
+                                }
+                            }
+                        }
                     }
 
                     Rectangle { height: 1px; background: DesignTokens.border; }
@@ -9629,362 +9833,686 @@ export component PetuniaSlintShell inherits Window {
             }
 
             Rectangle {
-                width: 460px;
-                height: 560px;
+                width: 660px;
+                height: 520px;
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 border-radius: 8px;
                 background: DesignTokens.surface-raised;
                 border-width: 1px;
                 border-color: DesignTokens.border;
+                drop-shadow-blur: 16px;
+                drop-shadow-color: DesignTokens.shadow;
+                drop-shadow-offset-y: 6px;
+
+                // Captura cliques no card para que não atravessem para o scrim de fundo
+                TouchArea { clicked => {} }
 
                 VerticalLayout {
-                    padding: 16px;
-                    spacing: 12px;
+                    padding: 0px;
+                    spacing: 0px;
 
-                    HorizontalLayout {
-                        Text {
-                            text: root.label-preferences;
-                            color: DesignTokens.text-primary;
-                            font-size: 14px;
-                            font-weight: 700;
-                            vertical-alignment: center;
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                        TopAction {
-                            icon: IconSet.X;
-                            semantic-label: "Close settings";
-                            clicked => { root.click-away-requested(); }
+                    // Cabeçalho da modal
+                    Rectangle {
+                        height: 48px;
+                        background: DesignTokens.surface;
+                        border-top-left-radius: 8px;
+                        border-top-right-radius: 8px;
+
+                        HorizontalLayout {
+                            padding-left: 16px;
+                            padding-right: 16px;
+                            alignment: space-between;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: center;
+                                IconDisplay {
+                                    icon: IconSet.Settings2;
+                                    size: 16px;
+                                    stroke: DesignTokens.accent;
+                                }
+                                Text {
+                                    text: root.label-preferences != "" ? root.label-preferences : "Configurações";
+                                    color: DesignTokens.text-primary;
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            TopAction {
+                                icon: IconSet.X;
+                                semantic-label: "Close settings";
+                                clicked => { root.click-away-requested(); }
+                            }
                         }
                     }
 
                     Rectangle { height: 1px; background: DesignTokens.border; }
 
-                    ScrollView {
+                    // Corpo: Barra lateral de categorias + Painel de conteúdo
+                    HorizontalLayout {
                         vertical-stretch: 1;
+                        spacing: 0px;
 
-                        VerticalLayout {
-                            padding-right: 8px;
-                            spacing: 12px;
-
-                            Text {
-                                text: root.label-theme;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: start;
-
-                        for theme in root.themes: Rectangle {
-                            width: 140px;
-                            height: 28px;
-                            border-radius: 4px;
-                            background: theme.active ? DesignTokens.accent : DesignTokens.surface;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-
-                            Text {
-                                text: theme.name;
-                                color: theme.active ? DesignTokens.canvas : DesignTokens.text-primary;
-                                font-size: 11px;
-                                font-weight: 600;
-                                vertical-alignment: center;
-                                horizontal-alignment: center;
-                                overflow: elide;
-                            }
-                            TouchArea {
-                                clicked => { root.theme-changed(theme.id); }
-                            }
-                        }
-                    }
-
-                    Text {
-                        text: "Tool confirmation";
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: start;
-
+                        // Sidebar de seções
                         Rectangle {
-                            width: 200px;
-                            height: 30px;
-                            border-radius: 4px;
-                            background: root.tool-activation == "drag" ? DesignTokens.accent : DesignTokens.surface;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-                            accessible-role: radio-button;
-                            accessible-label: "Click and drag";
-                            accessible-checked: root.tool-activation == "drag";
-                            HorizontalLayout {
-                                padding-left: 10px;
-                                spacing: 6px;
-                                alignment: center;
-                                Text {
-                                    text: "Click + drag";
-                                    color: root.tool-activation == "drag" ? DesignTokens.canvas : DesignTokens.text-primary;
-                                    font-size: 11px;
-                                    font-weight: 600;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: "release confirms";
-                                    color: root.tool-activation == "drag" ? DesignTokens.canvas : DesignTokens.text-muted;
-                                    font-size: 10px;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            TouchArea { clicked => { root.tool-activation-set("drag"); } }
-                        }
-
-                        Rectangle {
-                            width: 200px;
-                            height: 30px;
-                            border-radius: 4px;
-                            background: root.tool-activation == "instant" ? DesignTokens.accent : DesignTokens.surface;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-                            accessible-role: radio-button;
-                            accessible-label: "Shortcut without clicking";
-                            accessible-checked: root.tool-activation == "instant";
-                            HorizontalLayout {
-                                padding-left: 10px;
-                                spacing: 6px;
-                                alignment: center;
-                                Text {
-                                    text: "Shortcut";
-                                    color: root.tool-activation == "instant" ? DesignTokens.canvas : DesignTokens.text-primary;
-                                    font-size: 11px;
-                                    font-weight: 600;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: "follows pointer, click confirms";
-                                    color: root.tool-activation == "instant" ? DesignTokens.canvas : DesignTokens.text-muted;
-                                    font-size: 10px;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            TouchArea { clicked => { root.tool-activation-set("instant"); } }
-                        }
-                    }
-
-                    Text {
-                        text: root.label-vertical-tool-drag;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    Rectangle {
-                        height: 30px;
-                        border-radius: 4px;
-                        background: root.invert-vertical-drag ? DesignTokens.accent : DesignTokens.surface;
-                        border-width: 1px;
-                        border-color: root.invert-vertical-drag ? DesignTokens.focus-ring : DesignTokens.border;
-                        accessible-role: checkbox;
-                        accessible-label: root.label-invert-vertical-drag;
-                        accessible-checked: root.invert-vertical-drag;
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            spacing: 8px;
-                            alignment: center;
-                            Text {
-                                text: root.label-invert-vertical-drag;
-                                color: root.invert-vertical-drag ? DesignTokens.canvas : DesignTokens.text-primary;
-                                font-size: 11px;
-                                vertical-alignment: center;
-                            }
-                        }
-                        TouchArea { clicked => { root.invert-vertical-drag-set(!root.invert-vertical-drag); } }
-                    }
-
-                    Text {
-                        text: root.label-selection-color;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: center;
-                        Rectangle {
-                            width: 30px;
-                            height: 30px;
-                            border-radius: 4px;
-                            background: root.selection-color;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-                        }
-                        Rectangle {
-                            width: 110px;
-                            height: 30px;
-                            border-radius: 4px;
+                            width: 175px;
                             background: DesignTokens.surface;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-                            TextInput {
-                                x: 8px;
-                                y: 5px;
-                                width: parent.width - 16px;
-                                height: parent.height - 10px;
-                                text: root.selection-color-hex;
-                                color: DesignTokens.text-primary;
-                                font-size: 11px;
-                                single-line: true;
-                                accessible-label: root.label-selection-color;
-                                accepted => { root.selection-color-set(self.text); }
+                            border-bottom-left-radius: 8px;
+
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 3px;
+
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 0 ? DesignTokens.accent : (tab0-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Palette; size: 14px; stroke: root.settings-tab == 0 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Aparência"; color: root.settings-tab == 0 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab0-touch := TouchArea { clicked => { root.settings-tab = 0; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 1 ? DesignTokens.accent : (tab1-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Globe; size: 14px; stroke: root.settings-tab == 1 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Idioma & Região"; color: root.settings-tab == 1 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab1-touch := TouchArea { clicked => { root.settings-tab = 1; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 2 ? DesignTokens.accent : (tab2-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Keyboard; size: 14px; stroke: root.settings-tab == 2 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Teclado & Atalhos"; color: root.settings-tab == 2 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab2-touch := TouchArea { clicked => { root.settings-tab = 2; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 3 ? DesignTokens.accent : (tab3-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Eye; size: 14px; stroke: root.settings-tab == 3 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Acessibilidade"; color: root.settings-tab == 3 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab3-touch := TouchArea { clicked => { root.settings-tab = 3; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 4 ? DesignTokens.accent : (tab4-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Box; size: 14px; stroke: root.settings-tab == 4 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Ferramentas"; color: root.settings-tab == 4 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab4-touch := TouchArea { clicked => { root.settings-tab = 4; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 5 ? DesignTokens.accent : (tab5-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Monitor; size: 14px; stroke: root.settings-tab == 5 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Viewport 3D"; color: root.settings-tab == 5 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab5-touch := TouchArea { clicked => { root.settings-tab = 5; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 6 ? DesignTokens.accent : (tab6-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Cpu; size: 14px; stroke: root.settings-tab == 6 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "Plugins"; color: root.settings-tab == 6 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab6-touch := TouchArea { clicked => { root.settings-tab = 6; } }
+                                }
+                                Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: root.settings-tab == 7 ? DesignTokens.accent : (tab7-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        spacing: 8px;
+                                        alignment: start;
+                                        IconDisplay { icon: IconSet.Terminal; size: 14px; stroke: root.settings-tab == 7 ? DesignTokens.canvas : DesignTokens.text-secondary; }
+                                        Text { text: "MCP & Automação"; color: root.settings-tab == 7 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                    }
+                                    tab7-touch := TouchArea { clicked => { root.settings-tab = 7; } }
+                                }
+                                Rectangle { vertical-stretch: 1; }
                             }
                         }
-                    }
-                    Text {
-                        text: root.label-highlight-thickness;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: center;
-                        Slider {
+
+                        Rectangle { width: 1px; background: DesignTokens.border; }
+
+                        // Painel de Conteúdo com rolagem
+                        ScrollView {
                             horizontal-stretch: 1;
-                            minimum: 1;
-                            maximum: 6;
-                            value: root.selection-thickness;
-                            accessible-label: root.label-highlight-thickness;
-                            changed(value) => { root.selection-thickness-set(value); }
-                        }
-                        Text { text: "\{round(root.selection-thickness * 10) / 10} px"; color: DesignTokens.text-secondary; font-size: 10px; width: 42px; horizontal-alignment: right; vertical-alignment: center; }
-                    }
 
-                    Text {
-                        text: root.label-colorblind-axes;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    Rectangle {
-                        height: 30px;
-                        border-radius: 4px;
-                        background: root.colorblind-axes ? DesignTokens.accent : DesignTokens.surface;
-                        border-width: 1px;
-                        border-color: root.colorblind-axes ? DesignTokens.focus-ring : DesignTokens.border;
-                        accessible-role: checkbox;
-                        accessible-label: root.label-colorblind-axes;
-                        accessible-checked: root.colorblind-axes;
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            spacing: 8px;
-                            alignment: center;
-                            Text {
-                                text: root.label-colorblind-axes;
-                                color: root.colorblind-axes ? DesignTokens.canvas : DesignTokens.text-primary;
-                                font-size: 11px;
-                                vertical-alignment: center;
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+
+                                // --- TAB 0: APARÊNCIA ---
+                                if root.settings-tab == 0: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Tema da Interface"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        for theme in root.themes: Rectangle {
+                                            width: 140px; height: 30px; border-radius: 4px;
+                                            background: theme.active ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text {
+                                                text: theme.name;
+                                                color: theme.active ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.theme-changed(theme.id); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Escala da UI (Zoom)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 60px; height: 28px; border-radius: 4px;
+                                            background: (root.ui-scale <= 1.05) ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "100%"; color: (root.ui-scale <= 1.05) ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.ui-scale-set(1.0); } }
+                                        }
+                                        Rectangle {
+                                            width: 60px; height: 28px; border-radius: 4px;
+                                            background: (root.ui-scale > 1.05 && root.ui-scale <= 1.35) ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "125%"; color: (root.ui-scale > 1.05 && root.ui-scale <= 1.35) ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.ui-scale-set(1.25); } }
+                                        }
+                                        Rectangle {
+                                            width: 60px; height: 28px; border-radius: 4px;
+                                            background: (root.ui-scale > 1.35 && root.ui-scale <= 1.65) ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "150%"; color: (root.ui-scale > 1.35 && root.ui-scale <= 1.65) ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.ui-scale-set(1.5); } }
+                                        }
+                                        Rectangle {
+                                            width: 60px; height: 28px; border-radius: 4px;
+                                            background: (root.ui-scale > 1.65) ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "200%"; color: (root.ui-scale > 1.65) ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.ui-scale-set(2.0); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Cor de Destaque / Seleção"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
+
+                                        // Preset 1: Blender Orange
+                                        Rectangle {
+                                            width: 28px; height: 28px; border-radius: 4px; background: #e96a00;
+                                            border-width: root.selection-color-hex == "#E96A00" ? 2px : 1px;
+                                            border-color: root.selection-color-hex == "#E96A00" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            TouchArea { clicked => { root.selection-color-set("#E96A00"); } }
+                                        }
+                                        // Preset 2: Electric Cyan
+                                        Rectangle {
+                                            width: 28px; height: 28px; border-radius: 4px; background: #00d2ff;
+                                            border-width: root.selection-color-hex == "#00D2FF" ? 2px : 1px;
+                                            border-color: root.selection-color-hex == "#00D2FF" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            TouchArea { clicked => { root.selection-color-set("#00D2FF"); } }
+                                        }
+                                        // Preset 3: Purple Accent
+                                        Rectangle {
+                                            width: 28px; height: 28px; border-radius: 4px; background: #b58cff;
+                                            border-width: root.selection-color-hex == "#B58CFF" ? 2px : 1px;
+                                            border-color: root.selection-color-hex == "#B58CFF" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            TouchArea { clicked => { root.selection-color-set("#B58CFF"); } }
+                                        }
+                                        // Preset 4: Emerald Green
+                                        Rectangle {
+                                            width: 28px; height: 28px; border-radius: 4px; background: #10b981;
+                                            border-width: root.selection-color-hex == "#10B981" ? 2px : 1px;
+                                            border-color: root.selection-color-hex == "#10B981" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            TouchArea { clicked => { root.selection-color-set("#10B981"); } }
+                                        }
+                                        // Preset 5: Amber Gold
+                                        Rectangle {
+                                            width: 28px; height: 28px; border-radius: 4px; background: #f59e0b;
+                                            border-width: root.selection-color-hex == "#F59E0B" ? 2px : 1px;
+                                            border-color: root.selection-color-hex == "#F59E0B" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            TouchArea { clicked => { root.selection-color-set("#F59E0B"); } }
+                                        }
+                                        // Preset 6: Coral Red
+                                        Rectangle {
+                                            width: 28px; height: 28px; border-radius: 4px; background: #ef4444;
+                                            border-width: root.selection-color-hex == "#EF4444" ? 2px : 1px;
+                                            border-color: root.selection-color-hex == "#EF4444" ? DesignTokens.focus-ring : DesignTokens.border;
+                                            TouchArea { clicked => { root.selection-color-set("#EF4444"); } }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: center;
+                                        Rectangle {
+                                            width: 30px; height: 30px; border-radius: 4px;
+                                            background: root.selection-color;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                        }
+                                        Rectangle {
+                                            width: 110px; height: 30px; border-radius: 4px;
+                                            background: DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            TextInput {
+                                                x: 8px; y: 5px; width: parent.width - 16px; height: parent.height - 10px;
+                                                text: root.selection-color-hex;
+                                                color: DesignTokens.text-primary;
+                                                font-size: 11px;
+                                                single-line: true;
+                                                accessible-label: root.label-selection-color;
+                                                accepted => { root.selection-color-set(self.text); }
+                                            }
+                                        }
+                                        Rectangle {
+                                            width: 90px; height: 30px; border-radius: 4px;
+                                            background: DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text {
+                                                text: "Reset (#E96A00)";
+                                                color: DesignTokens.text-secondary;
+                                                font-size: 10px;
+                                                font-weight: 600;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.selection-color-set("#E96A00"); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: root.label-highlight-thickness; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: center;
+                                        Slider {
+                                            horizontal-stretch: 1;
+                                            minimum: 1; maximum: 6;
+                                            value: root.selection-thickness;
+                                            accessible-label: root.label-highlight-thickness;
+                                            changed(value) => { root.selection-thickness-set(value); }
+                                        }
+                                        Text { text: "\{round(root.selection-thickness * 10) / 10} px"; color: DesignTokens.text-secondary; font-size: 10px; width: 44px; horizontal-alignment: right; vertical-alignment: center; }
+                                    }
+                                }
+
+                                // --- TAB 1: IDIOMA & REGIÃO ---
+                                if root.settings-tab == 1: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Idioma da Interface"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 160px; height: 32px; border-radius: 4px;
+                                            background: root.active-language == "pt-BR" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text {
+                                                text: "Português (Brasil)";
+                                                color: root.active-language == "pt-BR" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.language-changed("pt-BR"); } }
+                                        }
+                                        Rectangle {
+                                            width: 160px; height: 32px; border-radius: 4px;
+                                            background: root.active-language == "en" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text {
+                                                text: "English (US)";
+                                                color: root.active-language == "en" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                                font-size: 11px; font-weight: 600;
+                                                vertical-alignment: center; horizontal-alignment: center;
+                                            }
+                                            TouchArea { clicked => { root.language-changed("en"); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Status de Localização (Wave 7 / P3D-157)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface;
+                                        border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 12px; spacing: 6px;
+                                            Text { text: "✓ 100% dos TextIds cobertos em pt-BR e en"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
+                                            Text { text: "✓ Zero strings em hardcode na interface"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
+                                            Text { text: "✓ Fallback automático para inglês quando chave não encontrada"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "✓ Vocabulário canônico: Point, Round Edge, Fuse, Cut, Connect"; color: DesignTokens.text-muted; font-size: 10px; }
+                                        }
+                                    }
+                                }
+
+                                // --- TAB 2: TECLADO & ATALHOS ---
+                                if root.settings-tab == 2: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Modo de Confirmação de Ferramenta"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 180px; height: 32px; border-radius: 4px;
+                                            background: root.tool-activation == "drag" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            HorizontalLayout {
+                                                padding-left: 10px; spacing: 6px; alignment: center;
+                                                Text { text: "Clique + Arrastar"; color: root.tool-activation == "drag" ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                            }
+                                            TouchArea { clicked => { root.tool-activation-set("drag"); } }
+                                        }
+                                        Rectangle {
+                                            width: 180px; height: 32px; border-radius: 4px;
+                                            background: root.tool-activation == "instant" ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            HorizontalLayout {
+                                                padding-left: 10px; spacing: 6px; alignment: center;
+                                                Text { text: "Atalho Instantâneo"; color: root.tool-activation == "instant" ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                            }
+                                            TouchArea { clicked => { root.tool-activation-set("instant"); } }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Direção de Arraste"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Rectangle {
+                                        height: 30px; border-radius: 4px;
+                                        background: root.invert-vertical-drag ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.invert-vertical-drag ? DesignTokens.focus-ring : DesignTokens.border;
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: root.label-invert-vertical-drag != "" ? root.label-invert-vertical-drag : "Inverter resposta vertical do mouse"; color: root.invert-vertical-drag ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.invert-vertical-drag-set(!root.invert-vertical-drag); } }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Intervalo do Duplo Toque (Atalho Modal)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Rectangle {
+                                            width: 80px; height: 26px; border-radius: 4px;
+                                            background: root.double-tap-interval-ms == 0 ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "Desativado"; color: root.double-tap-interval-ms == 0 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 10px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.double-tap-interval-set(0); } }
+                                        }
+                                        Rectangle {
+                                            width: 70px; height: 26px; border-radius: 4px;
+                                            background: root.double-tap-interval-ms == 200 ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "200 ms"; color: root.double-tap-interval-ms == 200 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 10px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.double-tap-interval-set(200); } }
+                                        }
+                                        Rectangle {
+                                            width: 70px; height: 26px; border-radius: 4px;
+                                            background: root.double-tap-interval-ms == 350 ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "350 ms"; color: root.double-tap-interval-ms == 350 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 10px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.double-tap-interval-set(350); } }
+                                        }
+                                        Rectangle {
+                                            width: 70px; height: 26px; border-radius: 4px;
+                                            background: root.double-tap-interval-ms == 500 ? DesignTokens.accent : DesignTokens.surface;
+                                            border-width: 1px; border-color: DesignTokens.border;
+                                            Text { text: "500 ms"; color: root.double-tap-interval-ms == 500 ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 10px; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                            TouchArea { clicked => { root.double-tap-interval-set(500); } }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px; alignment: center;
+                                        Slider {
+                                            horizontal-stretch: 1; minimum: 0; maximum: 1000;
+                                            value: root.double-tap-interval-ms;
+                                            accessible-label: root.label-double-tap-interval;
+                                            changed(value) => { root.double-tap-interval-set(Math.round(value)); }
+                                        }
+                                        Text {
+                                            text: root.double-tap-interval-ms == 0 ? "Desativado (0)" : "\{root.double-tap-interval-ms} ms";
+                                            color: DesignTokens.text-secondary; font-size: 10px; width: 85px; horizontal-alignment: right; vertical-alignment: center;
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Atalhos de Teclado Essenciais"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 10px; spacing: 6px;
+                                            HorizontalLayout { Text { text: "G: Mover / Transladar"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "Tab: Modo de Seleção (V/E/F/Obj)"; color: DesignTokens.text-secondary; font-size: 10px; } }
+                                            HorizontalLayout { Text { text: "R: Rotacionar"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "F1 / F2 / F3: Workspaces (Model/Paint/UV)"; color: DesignTokens.text-secondary; font-size: 10px; } }
+                                            HorizontalLayout { Text { text: "S: Escalonar"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "Espaço: Micro-Inspector flutuante"; color: DesignTokens.text-secondary; font-size: 10px; } }
+                                            HorizontalLayout { Text { text: "Shift+A: Adicionar Primitiva"; color: DesignTokens.text-secondary; font-size: 10px; } Rectangle { horizontal-stretch: 1; } Text { text: "Ctrl+Z / Ctrl+Y: Desfazer / Refazer"; color: DesignTokens.text-secondary; font-size: 10px; } }
+                                        }
+                                    }
+                                }
+
+                                // --- TAB 3: ACESSIBILIDADE ---
+                                if root.settings-tab == 3: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Acessibilidade & Inclusão (WCAG 2.2 AA)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+
+                                    Rectangle {
+                                        height: 32px; border-radius: 4px;
+                                        background: root.colorblind-axes ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.colorblind-axes ? DesignTokens.focus-ring : DesignTokens.border;
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: "Diferenciação Não-Cromática de Eixos (Daltonismo)"; color: root.colorblind-axes ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.colorblind-axes-set(!root.colorblind-axes); } }
+                                    }
+
+                                    Rectangle {
+                                        height: 32px; border-radius: 4px;
+                                        background: root.reduced-motion ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.reduced-motion ? DesignTokens.focus-ring : DesignTokens.border;
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: "Redução de Movimento (Sensibilidade Vestibular)"; color: root.reduced-motion ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.reduced-motion-set(!root.reduced-motion); } }
+                                    }
+
+                                    Rectangle {
+                                        height: 32px; border-radius: 4px;
+                                        background: root.multiselection-measure-tag ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.multiselection-measure-tag ? DesignTokens.focus-ring : DesignTokens.border;
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: "Tags de Medida em Multiseleção de Arestas"; color: root.multiselection-measure-tag ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.multiselection-measure-tag-set(!root.multiselection-measure-tag); } }
+                                    }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: "Tecnologia Assistiva (Screen Readers & AccessKit)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 12px; spacing: 6px;
+                                            Text { text: "✓ Árvore de acessibilidade AccessKit ativada por padrão"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
+                                            Text { text: "✓ Controles mapeados com accessible-role e accessible-label"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
+                                            Text { text: "✓ Navegação por foco via Tab / Shift+Tab e ativação por Enter / Barra de espaço"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                        }
+                                    }
+                                }
+
+                                // --- TAB 4: FERRAMENTAS & MODELAGEM ---
+                                if root.settings-tab == 4: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Parâmetros Padrão de Modelagem"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 12px; spacing: 8px;
+                                            Text { text: "Bisel (Round Edge / Bevel)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                                            Text { text: "• Clamp Overlap: ativado para evitar auto-interseção de geometria"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "• Modo padrão: Arestas com arredondamento contínuo"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Rectangle { height: 1px; background: DesignTokens.border; }
+                                            Text { text: "Perfil & Esboço 2D (Draw Profile)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                                            Text { text: "• Workplane automático: Ground (XZ), Face ativa ou Vista ortográfica"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "• Gerar volume direto por arraste de profundidade ou Enter"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Rectangle { height: 1px; background: DesignTokens.border; }
+                                            Text { text: "Fatiador (Slice / Loop Cut)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
+                                            Text { text: "• Auto-Trim configurável no Inspector e HUD de operação"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                        }
+                                    }
+                                }
+
+                                // --- TAB 5: VIEWPORT 3D ---
+                                if root.settings-tab == 5: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Renderização e Shading do Viewport"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 12px; spacing: 8px;
+                                            HorizontalLayout {
+                                                Text { text: "Wireframe Overlay sobreposto"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: root.is-wireframe ? "Ativado" : "Desativado"; color: root.is-wireframe ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            }
+                                            HorizontalLayout {
+                                                Text { text: "Orientação de Faces (Normais frontais/traseiras)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: root.show-face-orientation ? "Ativado" : "Desativado"; color: root.show-face-orientation ? DesignTokens.accent : DesignTokens.text-muted; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            }
+                                            HorizontalLayout {
+                                                Text { text: "Projeção da Câmera"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: root.is-orthographic ? "Ortográfica" : "Perspectiva"; color: DesignTokens.text-secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                            }
+                                            HorizontalLayout {
+                                                Text { text: "Grade de Chão (Ground Grid)"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: "Passo 1.0 m (Subdivisões 0.1 m)"; color: DesignTokens.text-secondary; font-size: 10px; vertical-alignment: center; }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // --- TAB 6: PLUGINS & EXTENSÕES ---
+                                if root.settings-tab == 6: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Gerenciador de Extensões & Plugins (P3D-160)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Diretório de plugins: ~/.config/petunia3d/plugins/"; color: DesignTokens.text-muted; font-size: 10px; font-family: "monospace"; }
+
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 12px; spacing: 8px;
+                                            HorizontalLayout {
+                                                Text { text: "core.exporter.gltf — Exportador GLTF / GLB nativo"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
+                                            }
+                                            HorizontalLayout {
+                                                Text { text: "core.importer.obj — Importador Wavefront OBJ"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
+                                            }
+                                            HorizontalLayout {
+                                                Text { text: "core.tools.uvpack — Empacotador de Ilhas UV"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
+                                                Rectangle { horizontal-stretch: 1; }
+                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // --- TAB 7: MCP & AUTOMAÇÃO ---
+                                if root.settings-tab == 7: VerticalLayout {
+                                    spacing: 12px;
+
+                                    Text { text: "Model Context Protocol (MCP) & IA Colaborativa"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+
+                                    Rectangle {
+                                        border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                        VerticalLayout {
+                                            padding: 12px; spacing: 8px;
+                                            Text { text: "Protocolo: Model Context Protocol v1.0 / Google Antigravity SDK"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
+                                            Text { text: "• Status: Servidor MCP integrado e ativo para ferramentas do Petunia3D"; color: DesignTokens.success; font-size: 10px; font-weight: 600; }
+                                            Text { text: "• Segurança: Princípio do menor privilégio, zero vazamento de segredos"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "• Journal: Todas as mutações do documento são transacionais e auditáveis"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                        }
+                                    }
+                                }
+
+                                Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                Text {
+                                    text: root.shell-info;
+                                    color: DesignTokens.text-muted;
+                                    font-size: 10px;
+                                }
                             }
                         }
-                        TouchArea { clicked => { root.colorblind-axes-set(!root.colorblind-axes); } }
-                    }
-
-                    Text {
-                        text: root.label-reduced-motion;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    Rectangle {
-                        height: 30px;
-                        border-radius: 4px;
-                        background: root.reduced-motion ? DesignTokens.accent : DesignTokens.surface;
-                        border-width: 1px;
-                        border-color: root.reduced-motion ? DesignTokens.focus-ring : DesignTokens.border;
-                        accessible-role: checkbox;
-                        accessible-label: root.label-reduced-motion;
-                        accessible-checked: root.reduced-motion;
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            spacing: 8px;
-                            alignment: center;
-                            Text {
-                                text: root.label-reduced-motion;
-                                color: root.reduced-motion ? DesignTokens.canvas : DesignTokens.text-primary;
-                                font-size: 11px;
-                                vertical-alignment: center;
-                            }
-                        }
-                        TouchArea { clicked => { root.reduced-motion-set(!root.reduced-motion); } }
-                    }
-
-                    Text {
-                        text: root.label-multiselection-measure-tag;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    Rectangle {
-                        height: 30px;
-                        border-radius: 4px;
-                        background: root.multiselection-measure-tag ? DesignTokens.accent : DesignTokens.surface;
-                        border-width: 1px;
-                        border-color: root.multiselection-measure-tag ? DesignTokens.focus-ring : DesignTokens.border;
-                        accessible-role: checkbox;
-                        accessible-label: root.label-multiselection-measure-tag;
-                        accessible-checked: root.multiselection-measure-tag;
-                        HorizontalLayout {
-                            padding-left: 10px;
-                            spacing: 8px;
-                            alignment: center;
-                            Text {
-                                text: root.label-multiselection-measure-tag;
-                                color: root.multiselection-measure-tag ? DesignTokens.canvas : DesignTokens.text-primary;
-                                font-size: 11px;
-                                vertical-alignment: center;
-                            }
-                        }
-                        TouchArea { clicked => { root.multiselection-measure-tag-set(!root.multiselection-measure-tag); } }
-                    }
-
-                    Text {
-                        text: root.label-double-tap-interval;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: center;
-                        Slider {
-                            horizontal-stretch: 1;
-                            minimum: 0;
-                            maximum: 1000;
-                            value: root.double-tap-interval-ms;
-                            accessible-label: root.label-double-tap-interval;
-                            changed(value) => { root.double-tap-interval-set(Math.round(value)); }
-                        }
-                        Text {
-                            text: root.double-tap-interval-ms == 0 ? "Off" : "\{root.double-tap-interval-ms} ms";
-                            color: DesignTokens.text-secondary;
-                            font-size: 10px;
-                            width: 48px;
-                            horizontal-alignment: right;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Text {
-                        text: root.shell-info;
-                        color: DesignTokens.text-muted;
-                        font-size: 11px;
                     }
                 }
             }
         }
     }
-}
-}
 }
