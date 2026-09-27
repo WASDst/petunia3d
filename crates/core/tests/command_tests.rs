@@ -4,18 +4,23 @@
 
 use petunia_core::ProjectService;
 use petunia_core::command::{
-    AddPrimitiveCmd, AddSplinePointCmd, BakeDecalCmd, BoxSelectCmd, ClearSelectionCmd,
-    CommandDispatcher, CommandError, ConvertSplineToPolylineCmd, CreateSplineCmd, DeleteAssetCmd,
-    DeleteOrDissolveSelectionCmd, DeleteSelectionCmd, DeleteSplineCmd, DeleteSplinePointCmd,
-    DissolveCmd, DuplicateAssetCmd, DuplicateSelectionCmd, ExtrudeIndividualCmd, FlipDiagonalCmd,
-    FlipNormalsCmd, InvertSelectionCmd, MergeCenterCmd, MoveSplinePointCmd, PrimitiveKind,
-    ReorderAssetCmd, ReverseSplineCmd, RevolveCmd, SelectAllCmd, SelectLinkedCmd,
-    SetAssetCollectionCmd, SetDecalTransformCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
+    AddPrimitiveCmd, AddSplinePointCmd, AttachSplinePointCmd, BakeDecalCmd, BoxSelectCmd,
+    ClearSelectionCmd, CommandDispatcher, CommandError, ConvertSplineToPolylineCmd,
+    CreateSplineCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeleteSelectionCmd,
+    DeleteSplineCmd, DeleteSplinePointCmd, DetachSplinePointCmd, DissolveCmd, DuplicateAssetCmd,
+    DuplicateSelectionCmd, ExtrudeIndividualCmd, FlipDiagonalCmd, FlipNormalsCmd,
+    InvertSelectionCmd, MergeCenterCmd, MoveSplinePointCmd, PrimitiveKind, ReorderAssetCmd,
+    ReprojectSplinePointAttachmentCmd, ReverseSplineCmd, RevolveCmd,
+    RotateSplinePointAttachmentCmd, SelectAllCmd, SelectLinkedCmd, SetAssetCollectionCmd,
+    SetDecalTransformCmd, SetSplineClosedCmd, SetSplineHandlesCmd, SlideSplinePointAttachmentCmd,
     SubdivideSelectionCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
     ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UvRelaxCmd, UvStitchCmd,
 };
 use petunia_core::state::{ASSET_NAME_MAX_LEN, AppState, AssetRenameError, DirtyReason, EditMode};
-use petunia_core::{SplineHandleMode, SplineInterpolation, SplinePoint, SplineResource};
+use petunia_core::{
+    SplineHandleMode, SplineInterpolation, SplinePoint, SplineResource, SurfaceAttachmentStatus,
+    project_ray_to_surface_target,
+};
 
 #[test]
 fn test_add_primitive_commands_and_undo_redo() {
@@ -474,6 +479,275 @@ fn spline_authoring_commands_cover_point_handles_loop_reverse_convert_and_delete
     assert!(state.project.project.get_spline(spline_id).is_none());
     assert!(state.undo());
     assert!(state.project.project.get_spline(spline_id).is_some());
+}
+
+#[test]
+fn spline_surface_attachment_commands_are_transactional() {
+    let mut state = AppState::default();
+    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0);
+    let target_id = state.project.project.assets[0].id;
+    let spline = SplineResource::from_polyline(
+        "Surface guide",
+        &[[0.0, 0.0, 0.0], [0.75, 0.0, 0.75]],
+        false,
+    );
+    let spline_id = spline.id;
+    let point_id = spline.points[0].id;
+    state.dispatch(&CreateSplineCmd { spline }).unwrap();
+    let hit = project_ray_to_surface_target(
+        &state.project.project,
+        target_id,
+        [0.0, 2.0, 0.0],
+        [0.0, -1.0, 0.0],
+        10.0,
+    )
+    .unwrap()
+    .unwrap();
+
+    let mut attachment = hit.attachment;
+    attachment.normal_offset = 0.2;
+    state
+        .dispatch(&AttachSplinePointCmd {
+            spline_id,
+            point_id,
+            attachment,
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth(), (2, 0));
+    let point = state
+        .project
+        .project
+        .get_spline(spline_id)
+        .unwrap()
+        .point(point_id)
+        .unwrap();
+    let stored_attachment = point.attachment.unwrap();
+    assert_eq!(stored_attachment.normal_offset, 0.2);
+    assert_eq!(stored_attachment.last_world_position, [0.0, 0.2, 0.0]);
+    assert!((point.position[1] - 0.2).abs() < 1.0e-6);
+
+    let depth_before_no_op = state.project.undo.depth();
+    assert!(
+        state
+            .dispatch(&AttachSplinePointCmd {
+                spline_id,
+                point_id,
+                attachment: stored_attachment,
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.undo.depth(), depth_before_no_op);
+    assert!(
+        state
+            .dispatch(&MoveSplinePointCmd {
+                spline_id,
+                point_id,
+                position: [0.25, 0.0, 0.0],
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.undo.depth(), depth_before_no_op);
+
+    state
+        .dispatch(&RotateSplinePointAttachmentCmd {
+            spline_id,
+            point_id,
+            delta_radians: 0.5,
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth(), (3, 0));
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .point(point_id)
+            .unwrap()
+            .attachment
+            .unwrap()
+            .tangent_rotation,
+        0.5
+    );
+
+    state
+        .dispatch(&SlideSplinePointAttachmentCmd {
+            spline_id,
+            point_id,
+            ray_origin: [0.4, 2.0, -0.3],
+            ray_direction: [0.0, -1.0, 0.0],
+            max_distance: 10.0,
+        })
+        .unwrap();
+    let slid = state
+        .project
+        .project
+        .get_spline(spline_id)
+        .unwrap()
+        .point(point_id)
+        .unwrap();
+    assert!((slid.position[0] - 0.4).abs() < 1.0e-6);
+    assert!((slid.position[2] + 0.3).abs() < 1.0e-6);
+
+    let attached_before_detach = slid.attachment;
+    state
+        .dispatch(&DetachSplinePointCmd {
+            spline_id,
+            point_id,
+        })
+        .unwrap();
+    assert!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .point(point_id)
+            .unwrap()
+            .attachment
+            .is_none()
+    );
+    assert!(state.undo());
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_spline(spline_id)
+            .unwrap()
+            .point(point_id)
+            .unwrap()
+            .attachment,
+        attached_before_detach
+    );
+}
+
+#[test]
+fn spline_attachment_reprojection_repairs_topology_and_can_change_target() {
+    let mut state = AppState::default();
+    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0);
+    let first_target = state.project.project.assets[0].id;
+    let mut second_mesh = petunia_mesh::Mesh::plane(2.0);
+    for vertex in &mut second_mesh.verts {
+        vertex.pos[0] += 3.0;
+    }
+    state.project.project.add("Second surface", second_mesh);
+    let second_target = state.project.project.assets[1].id;
+    let spline = SplineResource::from_polyline(
+        "Reproject guide",
+        &[[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]],
+        false,
+    );
+    let spline_id = spline.id;
+    let point_id = spline.points[0].id;
+    state.dispatch(&CreateSplineCmd { spline }).unwrap();
+    let hit = project_ray_to_surface_target(
+        &state.project.project,
+        first_target,
+        [0.0, 2.0, 0.0],
+        [0.0, -1.0, 0.0],
+        10.0,
+    )
+    .unwrap()
+    .unwrap();
+    state
+        .dispatch(&AttachSplinePointCmd {
+            spline_id,
+            point_id,
+            attachment: hit.attachment,
+        })
+        .unwrap();
+
+    state.project.project.assets[0].mesh.faces[0]
+        .verts
+        .rotate_left(1);
+    state.project.project.bump_topology();
+    let stale = state
+        .project
+        .project
+        .get_spline(spline_id)
+        .unwrap()
+        .point(point_id)
+        .unwrap()
+        .attachment
+        .unwrap();
+    assert_eq!(
+        stale.status(&state.project.project),
+        SurfaceAttachmentStatus::NeedsReattach
+    );
+
+    state
+        .dispatch(&ReprojectSplinePointAttachmentCmd {
+            spline_id,
+            point_id,
+            target_id: second_target,
+            ray_origin: [3.25, 2.0, 0.25],
+            ray_direction: [0.0, -1.0, 0.0],
+            max_distance: 10.0,
+        })
+        .unwrap();
+    let repaired = state
+        .project
+        .project
+        .get_spline(spline_id)
+        .unwrap()
+        .point(point_id)
+        .unwrap();
+    assert_eq!(repaired.attachment.unwrap().target, second_target);
+    assert_eq!(
+        repaired.attachment.unwrap().status(&state.project.project),
+        SurfaceAttachmentStatus::Valid
+    );
+    assert!((repaired.position[0] - 3.25).abs() < 1.0e-6);
+}
+
+#[test]
+fn spline_conversion_resolves_attached_points_before_baking() {
+    let mut state = AppState::default();
+    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0);
+    let target_id = state.project.project.assets[0].id;
+    let spline = SplineResource::from_polyline(
+        "Bake attached guide",
+        &[[0.0, 0.0, 0.0], [0.75, 0.0, 0.75]],
+        false,
+    );
+    let spline_id = spline.id;
+    let point_id = spline.points[0].id;
+    state.dispatch(&CreateSplineCmd { spline }).unwrap();
+    let hit = project_ray_to_surface_target(
+        &state.project.project,
+        target_id,
+        [0.0, 2.0, 0.0],
+        [0.0, -1.0, 0.0],
+        10.0,
+    )
+    .unwrap()
+    .unwrap();
+    state
+        .dispatch(&AttachSplinePointCmd {
+            spline_id,
+            point_id,
+            attachment: hit.attachment,
+        })
+        .unwrap();
+    for vertex in &mut state.project.project.assets[0].mesh.verts {
+        vertex.pos[1] += 1.0;
+    }
+
+    state
+        .dispatch(&ConvertSplineToPolylineCmd {
+            spline_id,
+            spacing: 0.2,
+            tolerance: 1.0e-4,
+        })
+        .unwrap();
+    let converted = state.project.project.get_spline(spline_id).unwrap();
+    assert!(
+        converted
+            .points
+            .iter()
+            .all(|point| point.attachment.is_none())
+    );
+    assert!((converted.points[0].position[1] - 1.0).abs() < 1.0e-6);
 }
 
 #[test]

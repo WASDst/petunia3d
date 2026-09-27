@@ -37,43 +37,6 @@ impl ViewportQueryBuffer {
     }
 }
 
-/// Surface attachment for persistent decals. Topology edits must revalidate.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AttachmentValidity {
-    Valid,
-    NeedsReprojection,
-    Invalid,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct SurfaceAttachment {
-    pub object_id: Uuid,
-    pub face_index: usize,
-    pub barycentric: [f32; 3],
-    pub topology_revision: u64,
-}
-
-impl SurfaceAttachment {
-    pub fn validate(
-        &self,
-        object_id: Uuid,
-        face_count: usize,
-        topology_revision: u64,
-    ) -> AttachmentValidity {
-        if self.object_id != object_id {
-            return AttachmentValidity::Invalid;
-        }
-        if self.face_index >= face_count {
-            return AttachmentValidity::Invalid;
-        }
-        if self.topology_revision != topology_revision {
-            AttachmentValidity::NeedsReprojection
-        } else {
-            AttachmentValidity::Valid
-        }
-    }
-}
-
 /// Immutable scene geometry for a batch of visibility queries. Evaluated
 /// meshes and triangulation are created once per batch, never per candidate.
 pub struct ViewportSceneQuery {

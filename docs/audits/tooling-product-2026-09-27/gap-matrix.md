@@ -6,7 +6,11 @@
 > `g2-paint-gpu-remediation-2026-09-27.md`; `PA-04` passa a `COMPLIANT` no
 > frontend Slint/WGPU de produção após o G2. O G3 está registrado em
 > `g3-spline-core-remediation-2026-09-27.md` e eleva `HA-01` a
-> `PARTIALLY_COMPLIANT`, sem declarar attachment/UI/Bake mesh concluídos.
+> `PARTIALLY_COMPLIANT`. O G4 está registrado em
+> `g4-surface-attachment-remediation-2026-09-27.md` e eleva `HA-02` a
+> `PARTIALLY_COMPLIANT` na fundação headless, sem declarar transforms
+> hierárquicos, UI ou todos os consumidores concluídos. As linhas abaixo
+> preservam o snapshot original; os relatórios de gate são o estado corrente.
 
 ## 1. Legenda obrigatória
 

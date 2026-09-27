@@ -77,6 +77,7 @@ pub mod palette;
 pub mod pipeline;
 pub mod rig;
 pub mod spline;
+pub mod surface_attachment;
 pub mod surface_recipe;
 
 pub use animation::{
@@ -109,6 +110,12 @@ pub use spline::{
     ArcLengthTable, SplineError, SplineEvaluationCache, SplineFrame, SplineHandleMode,
     SplineInterpolation, SplinePoint, SplineResource, SplineSample, SplineSnapSettings,
     snap_spline_position,
+};
+pub use surface_attachment::{
+    SurfaceAttachment, SurfaceAttachmentError, SurfaceAttachmentStatus, SurfaceFrame, SurfaceHit,
+    SurfaceTriangleHandle, detach_surface_attachment_keep_world, evaluate_surface_attachment,
+    project_ray_to_surface, project_ray_to_surface_target, reproject_surface_attachment,
+    reproject_surface_attachment_to_target, slide_surface_attachment, surface_attachment_status,
 };
 pub use surface_recipe::{
     NodeSpec, RECIPE_SCHEMA_VERSION, RecipeEdge, RecipeError, RecipeNode, RecipeOutputChannel,
@@ -1455,6 +1462,20 @@ impl Project {
 
     pub fn get_spline_mut(&mut self, id: Uuid) -> Option<&mut SplineResource> {
         self.splines.iter_mut().find(|spline| spline.id == id)
+    }
+
+    pub fn resolved_spline(&self, id: Uuid) -> Result<SplineResource, SplineError> {
+        let mut spline = self
+            .get_spline(id)
+            .cloned()
+            .ok_or(SplineError::SplineNotFound(id))?;
+        for point in &mut spline.points {
+            if let Some(attachment) = point.attachment {
+                let frame = evaluate_surface_attachment(self, &attachment)?;
+                point.position = frame.position.map(f64::from);
+            }
+        }
+        Ok(spline)
     }
 
     pub fn remove_spline(&mut self, id: Uuid) -> Option<SplineResource> {

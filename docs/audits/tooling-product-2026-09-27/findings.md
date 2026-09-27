@@ -1,9 +1,9 @@
 # Catálogo técnico de achados
 
 > Este catálogo preserva as evidências do snapshot original. Remediações e
-> estados correntes são documentados pelos gates `g0`, `g1`, `g2` e `g3` no
+> estados correntes são documentados pelos gates `g0`, `g1`, `g2`, `g3` e `g4` no
 > mesmo diretório; `PA-04` está fechado no frontend Slint/WGPU de produção pelo
-> G2 e `HA-01` avança a `PARTIALLY_COMPLIANT` no G3.
+> G2, `HA-01` avança no G3 e `HA-02` avança a `PARTIALLY_COMPLIANT` no G4.
 
 ## 1. Critério de severidade
 

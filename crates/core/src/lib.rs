@@ -39,7 +39,12 @@ pub use petunia_project::{
     ArcLengthTable, AssetSummary, AutosaveConfig, AutosaveService, ModelLibraryQuery,
     ModelLibraryService, ModelLibrarySort, RecoveryInfo, SessionLockInfo, SplineError,
     SplineEvaluationCache, SplineFrame, SplineHandleMode, SplineInterpolation, SplinePoint,
-    SplineResource, SplineSample, SplineSnapSettings, snap_spline_position,
+    SplineResource, SplineSample, SplineSnapSettings, SurfaceAttachment, SurfaceAttachmentError,
+    SurfaceAttachmentStatus, SurfaceFrame, SurfaceHit, SurfaceTriangleHandle,
+    detach_surface_attachment_keep_world, evaluate_surface_attachment, project_ray_to_surface,
+    project_ray_to_surface_target, reproject_surface_attachment,
+    reproject_surface_attachment_to_target, slide_surface_attachment, snap_spline_position,
+    surface_attachment_status,
 };
 pub use queries::{
     SceneHierarchyDto, SceneObjectDto, SelectionDetailsDto, ToolStatusDto, UvDiagnosticsDto,
@@ -52,22 +57,24 @@ pub use schema_contracts::{
 };
 
 pub use command::{
-    AddPrimitiveCmd, AddSplinePointCmd, BakeDecalCmd, BevelCmd, BooleanOpCmd, BoxSelectCmd,
-    ClearSelectionCmd, Command, CommandCategory, CommandDispatcher, CommandError, CommandMetadata,
-    CommandPaletteItem, ConnectLoopsCmd, ConvertSplineToPolylineCmd, CreateSplineCmd,
-    CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeleteSelectionCmd,
-    DeleteSplineCmd, DeleteSplinePointCmd, DuplicateAssetCmd, DuplicateSelectionCmd, ExportGlbCmd,
-    ExportObjCmd, ExtrudeIndividualCmd, ExtrudeSelectedCmd, FlipDiagonalCmd, FlipNormalsCmd,
-    FrameSelectionCmd, ImportObjCmd, InsetFacesCmd, InstantiateAssetCmd, InvertSelectionCmd,
-    JoinObjectsCmd, KnifeToolCmd, LoopCutCmd, MergeCenterCmd, MoveSplinePointCmd, NewProjectCmd,
-    OpenProjectCmd, PrimitiveKind, PushPullToolCmd, RedoCmd, ReorderAssetCmd, ResetCameraCmd,
-    ReverseSplineCmd, RevolveCmd, SaveActiveAsAssetCmd, SaveProjectAsCmd, SaveProjectCmd,
-    ScaleSelectionCmd, SelectAllCmd, SelectLinkedCmd, SeparateSelectionCmd, SetAssetCollectionCmd,
-    SetDecalTransformCmd, SetSelectionDomainCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
-    SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
-    ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd,
-    ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, UndoCmd,
-    UnwrapAutoCmd, UvPackIslandsCmd, UvProjectFromViewCmd, WeldCmd,
+    AddPrimitiveCmd, AddSplinePointCmd, AttachSplinePointCmd, BakeDecalCmd, BevelCmd, BooleanOpCmd,
+    BoxSelectCmd, ClearSelectionCmd, Command, CommandCategory, CommandDispatcher, CommandError,
+    CommandMetadata, CommandPaletteItem, ConnectLoopsCmd, ConvertSplineToPolylineCmd,
+    CreateSplineCmd, CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd,
+    DeleteSelectionCmd, DeleteSplineCmd, DeleteSplinePointCmd, DetachSplinePointCmd,
+    DuplicateAssetCmd, DuplicateSelectionCmd, ExportGlbCmd, ExportObjCmd, ExtrudeIndividualCmd,
+    ExtrudeSelectedCmd, FlipDiagonalCmd, FlipNormalsCmd, FrameSelectionCmd, ImportObjCmd,
+    InsetFacesCmd, InstantiateAssetCmd, InvertSelectionCmd, JoinObjectsCmd, KnifeToolCmd,
+    LoopCutCmd, MergeCenterCmd, MoveSplinePointCmd, NewProjectCmd, OpenProjectCmd, PrimitiveKind,
+    PushPullToolCmd, RedoCmd, ReorderAssetCmd, ReprojectSplinePointAttachmentCmd, ResetCameraCmd,
+    ReverseSplineCmd, RevolveCmd, RotateSplinePointAttachmentCmd, SaveActiveAsAssetCmd,
+    SaveProjectAsCmd, SaveProjectCmd, ScaleSelectionCmd, SelectAllCmd, SelectLinkedCmd,
+    SeparateSelectionCmd, SetAssetCollectionCmd, SetDecalTransformCmd, SetSelectionDomainCmd,
+    SetSplineClosedCmd, SetSplineHandlesCmd, SlideSplinePointAttachmentCmd, SubdivideSelectionCmd,
+    SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd, ToggleCommandPaletteCmd,
+    ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd, ToggleSettingsCmd,
+    ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, UndoCmd, UnwrapAutoCmd,
+    UvPackIslandsCmd, UvProjectFromViewCmd, WeldCmd,
 };
 pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename};
 
@@ -102,9 +109,9 @@ pub use viewport::{
     LogicalRect, PhysicalViewport, unproject_cursor_or_vertex_snap,
     unproject_to_surface_or_cursor_plane,
 };
-pub use viewport_query::{
-    AttachmentValidity, SurfaceAttachment, ViewportQueryBuffer, ViewportQuerySample,
-};
+pub use viewport_query::{ViewportQueryBuffer, ViewportQuerySample};
+
+pub type AttachmentValidity = SurfaceAttachmentStatus;
 
 pub use modal::{ModalConstraint, ModalError, ModalKind, ModalOp};
 

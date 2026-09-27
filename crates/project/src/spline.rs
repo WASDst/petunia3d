@@ -6,6 +6,8 @@ use glam::DVec3;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::surface_attachment::{SurfaceAttachment, SurfaceAttachmentError};
+
 pub use petunia_mesh::PathFrame as SplineFrame;
 
 const POSITION_EPSILON_SQUARED: f64 = 1.0e-18;
@@ -37,6 +39,8 @@ pub struct SplinePoint {
     /// Vetor relativo ao ponto de controle.
     pub handle_out: [f64; 3],
     pub handle_mode: SplineHandleMode,
+    #[serde(default)]
+    pub attachment: Option<SurfaceAttachment>,
 }
 
 impl SplinePoint {
@@ -47,6 +51,7 @@ impl SplinePoint {
             handle_in: [0.0; 3],
             handle_out: [0.0; 3],
             handle_mode: SplineHandleMode::Broken,
+            attachment: None,
         }
     }
 
@@ -62,6 +67,7 @@ impl SplinePoint {
             handle_in,
             handle_out,
             handle_mode,
+            attachment: None,
         }
     }
 
@@ -129,6 +135,12 @@ impl SplinePoint {
                 self.handle_out = (-DVec3::from_array(self.handle_in)).to_array();
             }
         }
+        if self
+            .attachment
+            .is_some_and(|attachment| !attachment.is_well_formed())
+        {
+            self.attachment = None;
+        }
     }
 }
 
@@ -191,6 +203,9 @@ impl SplineResource {
         let point = self
             .point_mut(point_id)
             .ok_or(SplineError::PointNotFound(point_id))?;
+        if point.attachment.is_some() {
+            return Err(SplineError::AttachedPointRequiresSurfaceEdit(point_id));
+        }
         if point.position != position {
             point.position = position;
             self.bump_revision();
@@ -214,6 +229,27 @@ impl SplineResource {
         point.handle_in = handle_in;
         point.handle_out = handle_out;
         if before != (point.handle_in, point.handle_out, point.handle_mode) {
+            self.bump_revision();
+        }
+        Ok(())
+    }
+
+    pub fn set_attachment(
+        &mut self,
+        point_id: Uuid,
+        attachment: Option<SurfaceAttachment>,
+        resolved_position: [f64; 3],
+    ) -> Result<(), SplineError> {
+        let resolved_position = finite_vec(resolved_position)?.to_array();
+        if attachment.is_some_and(|attachment| !attachment.is_well_formed()) {
+            return Err(SplineError::InvalidAttachment);
+        }
+        let point = self
+            .point_mut(point_id)
+            .ok_or(SplineError::PointNotFound(point_id))?;
+        if point.attachment != attachment || point.position != resolved_position {
+            point.attachment = attachment;
+            point.position = resolved_position;
             self.bump_revision();
         }
         Ok(())
@@ -346,6 +382,12 @@ impl SplineResource {
                 return Err(SplineError::DuplicatePoint(point.id));
             }
             validate_point_data(point)?;
+            if point
+                .attachment
+                .is_some_and(|attachment| !attachment.is_well_formed())
+            {
+                return Err(SplineError::InvalidAttachment);
+            }
         }
         Ok(())
     }
@@ -763,6 +805,14 @@ pub enum SplineError {
     DegenerateSpline,
     #[error("spline evaluation exceeds the safety point limit")]
     EvaluationLimitExceeded,
+    #[error("surface attachment data is invalid")]
+    InvalidAttachment,
+    #[error("spline point is not attached to a surface: {0}")]
+    PointNotAttached(Uuid),
+    #[error("attached spline point requires a surface edit: {0}")]
+    AttachedPointRequiresSurfaceEdit(Uuid),
+    #[error(transparent)]
+    Attachment(#[from] SurfaceAttachmentError),
 }
 
 fn validate_point_data(point: &SplinePoint) -> Result<(), SplineError> {
@@ -1066,5 +1116,25 @@ mod tests {
         let json = serde_json::to_string(&spline).unwrap();
         let restored: SplineResource = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, spline);
+    }
+
+    #[test]
+    fn legacy_spline_json_without_attachment_defaults_to_detached_points() {
+        let spline = SplineResource::from_polyline(
+            "Legacy path",
+            &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+            false,
+        );
+        let mut value = serde_json::to_value(&spline).unwrap();
+        for point in value["points"].as_array_mut().unwrap() {
+            point.as_object_mut().unwrap().remove("attachment");
+        }
+        let restored: SplineResource = serde_json::from_value(value).unwrap();
+        assert!(
+            restored
+                .points
+                .iter()
+                .all(|point| point.attachment.is_none())
+        );
     }
 }

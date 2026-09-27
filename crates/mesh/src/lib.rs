@@ -320,6 +320,32 @@ impl Mesh {
         triangles
     }
 
+    /// Identidade estável da conectividade e da triangulação autoral.
+    /// Posições só participam quando mudam a decomposição de uma face côncava.
+    pub fn topology_fingerprint(&self) -> u64 {
+        let mut fingerprint = 0xcbf2_9ce4_8422_2325_u64;
+        let mix = |value: u64, next: u64| {
+            let value = value ^ next;
+            value.wrapping_mul(0x100_0000_01b3)
+        };
+        fingerprint = mix(fingerprint, self.verts.len() as u64);
+        fingerprint = mix(fingerprint, self.faces.len() as u64);
+        for (face_index, face) in self.faces.iter().enumerate() {
+            fingerprint = mix(fingerprint, face.verts.len() as u64);
+            for &vertex in &face.verts {
+                fingerprint = mix(fingerprint, u64::from(vertex));
+            }
+            let triangles = self.face_triangle_corners(face_index);
+            fingerprint = mix(fingerprint, triangles.len() as u64);
+            for triangle in triangles {
+                for corner in triangle {
+                    fingerprint = mix(fingerprint, corner as u64);
+                }
+            }
+        }
+        fingerprint
+    }
+
     /// (pos, normal, cor, uv) por triângulo com normais facetadas (flat).
     pub fn to_triangles(&self) -> Vec<Tri> {
         self.to_triangles_smooth(false)
@@ -432,13 +458,44 @@ impl Mesh {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Face, Mesh, triangulate::ear_clip};
+    use crate::{Face, Mesh, triangulate::ear_clip, triangulate::ray_tri_hit};
+    use glam::Vec3;
 
     #[test]
     fn cube_has_8_verts_6_faces() {
         let m = Mesh::cube(2.0);
         assert_eq!(m.verts.len(), 8);
         assert_eq!(m.faces.len(), 6);
+    }
+
+    #[test]
+    fn ray_triangle_hit_reports_stable_barycentric_coordinates() {
+        let a = Vec3::new(0.0, 0.0, 0.0);
+        let b = Vec3::new(2.0, 0.0, 0.0);
+        let c = Vec3::new(0.0, 0.0, 2.0);
+        let hit = ray_tri_hit(Vec3::new(0.5, 2.0, 0.25), -Vec3::Y, a, b, c).unwrap();
+        let reconstructed =
+            a * hit.barycentric[0] + b * hit.barycentric[1] + c * hit.barycentric[2];
+        assert!((hit.distance - 2.0).abs() < 1.0e-6);
+        assert!((hit.barycentric.iter().sum::<f32>() - 1.0).abs() < 1.0e-6);
+        assert!(reconstructed.distance(Vec3::new(0.5, 0.0, 0.25)) < 1.0e-6);
+        assert!(ray_tri_hit(Vec3::ZERO, Vec3::NAN, a, b, c).is_none());
+    }
+
+    #[test]
+    fn topology_fingerprint_ignores_attributes_but_tracks_connectivity() {
+        let mut mesh = Mesh::plane(2.0);
+        let fingerprint = mesh.topology_fingerprint();
+        for vertex in &mut mesh.verts {
+            vertex.pos[1] += 3.0;
+            vertex.color = [0.1, 0.2, 0.3];
+        }
+        mesh.faces[0].uv.fill([0.25, 0.75]);
+        mesh.faces[0].selected = true;
+        assert_eq!(mesh.topology_fingerprint(), fingerprint);
+
+        mesh.faces[0].verts.swap(1, 2);
+        assert_ne!(mesh.topology_fingerprint(), fingerprint);
     }
 
     #[test]

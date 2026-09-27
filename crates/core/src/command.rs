@@ -2,7 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use petunia_mesh::Mesh;
-use petunia_project::{ProjectChanges, SplineError, SplineHandleMode, SplinePoint, SplineResource};
+use petunia_project::{
+    ProjectChanges, SplineError, SplineHandleMode, SplinePoint, SplineResource, SurfaceAttachment,
+    SurfaceAttachmentError, SurfaceAttachmentStatus, detach_surface_attachment_keep_world,
+    evaluate_surface_attachment, reproject_surface_attachment_to_target, slide_surface_attachment,
+};
 
 use crate::camera::ViewPreset;
 use crate::docs::DocsTopic;
@@ -28,6 +32,8 @@ pub enum CommandError {
     Execution(String),
     #[error(transparent)]
     Spline(#[from] SplineError),
+    #[error(transparent)]
+    SurfaceAttachment(#[from] SurfaceAttachmentError),
 }
 
 /// Trait central de comando executável contra o estado do editor (`AppState`).
@@ -4180,7 +4186,9 @@ impl Command for MoveSplinePointCmd {
         let point = spline
             .point(self.point_id)
             .ok_or("Spline point not found")?;
-        if self.position.iter().any(|component| !component.is_finite()) {
+        if point.attachment.is_some() {
+            Err("Attached points must be edited with surface attachment commands")
+        } else if self.position.iter().any(|component| !component.is_finite()) {
             Err("Spline point position is not finite")
         } else if point.position == self.position {
             Err("Spline point position is unchanged")
@@ -4389,8 +4397,8 @@ impl Command for ConvertSplineToPolylineCmd {
         let spline = state
             .project
             .project
-            .get_spline(self.spline_id)
-            .ok_or("Spline not found")?;
+            .resolved_spline(self.spline_id)
+            .map_err(|_| "Spline or one of its surface attachments is invalid")?;
         if !self.spacing.is_finite() || self.spacing <= 0.0 {
             Err("Spline sample spacing is invalid")
         } else if !self.tolerance.is_finite() || self.tolerance <= 0.0 {
@@ -4403,12 +4411,387 @@ impl Command for ConvertSplineToPolylineCmd {
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state
+        let mut spline = state.project.project.resolved_spline(self.spline_id)?;
+        spline.convert_to_polyline(self.spacing, self.tolerance)?;
+        *state
             .project
             .project
             .get_spline_mut(self.spline_id)
-            .ok_or(SplineError::SplineNotFound(self.spline_id))?
-            .convert_to_polyline(self.spacing, self.tolerance)?;
+            .ok_or(SplineError::SplineNotFound(self.spline_id))? = spline;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AttachSplinePointCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+    pub attachment: SurfaceAttachment,
+}
+
+impl Command for AttachSplinePointCmd {
+    fn label(&self) -> &'static str {
+        "attach spline point"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let point = spline_point_for_attachment(state, self.spline_id, self.point_id)?;
+        ensure_attachment_target_editable(state, &self.attachment)?;
+        let frame = evaluate_surface_attachment(&state.project.project, &self.attachment)
+            .map_err(|_| "Surface attachment cannot be evaluated")?;
+        let mut attachment = self.attachment;
+        attachment.last_world_position = frame.position;
+        let position = frame.position.map(f64::from);
+        if point.attachment == Some(attachment) && point.position == position {
+            Err("Spline point attachment is unchanged")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let position =
+            evaluate_surface_attachment(&state.project.project, &self.attachment)?.position;
+        let mut attachment = self.attachment;
+        attachment.last_world_position = position;
+        set_spline_point_attachment(
+            &mut state.project.project,
+            self.spline_id,
+            self.point_id,
+            Some(attachment),
+            position,
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DetachSplinePointCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+}
+
+impl Command for DetachSplinePointCmd {
+    fn label(&self) -> &'static str {
+        "detach spline point"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        spline_point_attachment(state, self.spline_id, self.point_id).map(|_| ())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let attachment = spline_point_attachment_for_execute(
+            &state.project.project,
+            self.spline_id,
+            self.point_id,
+        )?;
+        let position = detach_surface_attachment_keep_world(&state.project.project, &attachment)?;
+        set_spline_point_attachment(
+            &mut state.project.project,
+            self.spline_id,
+            self.point_id,
+            None,
+            position,
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SlideSplinePointAttachmentCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+    pub ray_origin: [f32; 3],
+    pub ray_direction: [f32; 3],
+    pub max_distance: f32,
+}
+
+impl Command for SlideSplinePointAttachmentCmd {
+    fn label(&self) -> &'static str {
+        "slide spline point attachment"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        ensure_attachment_ray(self.ray_origin, self.ray_direction, self.max_distance)?;
+        let attachment = spline_point_attachment(state, self.spline_id, self.point_id)?;
+        ensure_attachment_target_editable(state, &attachment)?;
+        let projected = slide_surface_attachment(
+            &state.project.project,
+            &attachment,
+            self.ray_origin,
+            self.ray_direction,
+            self.max_distance,
+        )
+        .map_err(|_| "Slide ray did not hit the attached surface")?;
+        if projected == attachment {
+            Err("Spline point attachment is unchanged")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let attachment = spline_point_attachment_for_execute(
+            &state.project.project,
+            self.spline_id,
+            self.point_id,
+        )?;
+        let projected = slide_surface_attachment(
+            &state.project.project,
+            &attachment,
+            self.ray_origin,
+            self.ray_direction,
+            self.max_distance,
+        )?;
+        let position = evaluate_surface_attachment(&state.project.project, &projected)?.position;
+        set_spline_point_attachment(
+            &mut state.project.project,
+            self.spline_id,
+            self.point_id,
+            Some(projected),
+            position,
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ReprojectSplinePointAttachmentCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+    pub target_id: uuid::Uuid,
+    pub ray_origin: [f32; 3],
+    pub ray_direction: [f32; 3],
+    pub max_distance: f32,
+}
+
+impl Command for ReprojectSplinePointAttachmentCmd {
+    fn label(&self) -> &'static str {
+        "reproject spline point attachment"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        ensure_attachment_ray(self.ray_origin, self.ray_direction, self.max_distance)?;
+        let point = spline_point_for_attachment(state, self.spline_id, self.point_id)?;
+        let attachment = point
+            .attachment
+            .ok_or("Spline point is not surface-attached")?;
+        if !attachment.is_well_formed() {
+            return Err("Surface attachment data is invalid");
+        }
+        ensure_target_editable(state, self.target_id)?;
+        let projected = reproject_surface_attachment_to_target(
+            &state.project.project,
+            &attachment,
+            self.target_id,
+            self.ray_origin,
+            self.ray_direction,
+            self.max_distance,
+        )
+        .map_err(|_| "Reprojection ray did not hit the requested surface")?;
+        let position = evaluate_surface_attachment(&state.project.project, &projected)
+            .map_err(|_| "Reprojected attachment cannot be evaluated")?
+            .position
+            .map(f64::from);
+        if projected == attachment && position == point.position {
+            Err("Spline point attachment is unchanged")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let attachment = spline_point_attachment_for_execute(
+            &state.project.project,
+            self.spline_id,
+            self.point_id,
+        )?;
+        let projected = reproject_surface_attachment_to_target(
+            &state.project.project,
+            &attachment,
+            self.target_id,
+            self.ray_origin,
+            self.ray_direction,
+            self.max_distance,
+        )?;
+        let position = evaluate_surface_attachment(&state.project.project, &projected)?.position;
+        set_spline_point_attachment(
+            &mut state.project.project,
+            self.spline_id,
+            self.point_id,
+            Some(projected),
+            position,
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RotateSplinePointAttachmentCmd {
+    pub spline_id: uuid::Uuid,
+    pub point_id: uuid::Uuid,
+    pub delta_radians: f32,
+}
+
+impl Command for RotateSplinePointAttachmentCmd {
+    fn label(&self) -> &'static str {
+        "rotate spline point attachment"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        if !self.delta_radians.is_finite() {
+            return Err("Attachment rotation is not finite");
+        }
+        let attachment = spline_point_attachment(state, self.spline_id, self.point_id)?;
+        ensure_attachment_target_editable(state, &attachment)?;
+        let rotated = attachment
+            .rotated(self.delta_radians)
+            .map_err(|_| "Attachment rotation is invalid")?;
+        if rotated == attachment {
+            return Err("Attachment rotation is unchanged");
+        }
+        evaluate_surface_attachment(&state.project.project, &rotated)
+            .map(|_| ())
+            .map_err(|_| "Rotated attachment cannot be evaluated")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let attachment = spline_point_attachment_for_execute(
+            &state.project.project,
+            self.spline_id,
+            self.point_id,
+        )?;
+        let rotated = attachment.rotated(self.delta_radians)?;
+        let position = evaluate_surface_attachment(&state.project.project, &rotated)?.position;
+        set_spline_point_attachment(
+            &mut state.project.project,
+            self.spline_id,
+            self.point_id,
+            Some(rotated),
+            position,
+        )?;
+        Ok(())
+    }
+}
+
+fn spline_point_for_attachment(
+    state: &AppState,
+    spline_id: uuid::Uuid,
+    point_id: uuid::Uuid,
+) -> Result<&SplinePoint, &'static str> {
+    state
+        .project
+        .project
+        .get_spline(spline_id)
+        .ok_or("Spline not found")?
+        .point(point_id)
+        .ok_or("Spline point not found")
+}
+
+fn spline_point_attachment(
+    state: &AppState,
+    spline_id: uuid::Uuid,
+    point_id: uuid::Uuid,
+) -> Result<SurfaceAttachment, &'static str> {
+    spline_point_for_attachment(state, spline_id, point_id)?
+        .attachment
+        .ok_or("Spline point is not surface-attached")
+}
+
+fn spline_point_attachment_for_execute(
+    project: &petunia_project::Project,
+    spline_id: uuid::Uuid,
+    point_id: uuid::Uuid,
+) -> Result<SurfaceAttachment, SplineError> {
+    project
+        .get_spline(spline_id)
+        .ok_or(SplineError::SplineNotFound(spline_id))?
+        .point(point_id)
+        .ok_or(SplineError::PointNotFound(point_id))?
+        .attachment
+        .ok_or(SplineError::PointNotAttached(point_id))
+}
+
+fn set_spline_point_attachment(
+    project: &mut petunia_project::Project,
+    spline_id: uuid::Uuid,
+    point_id: uuid::Uuid,
+    attachment: Option<SurfaceAttachment>,
+    position: [f32; 3],
+) -> Result<(), SplineError> {
+    project
+        .get_spline_mut(spline_id)
+        .ok_or(SplineError::SplineNotFound(spline_id))?
+        .set_attachment(point_id, attachment, position.map(f64::from))
+}
+
+fn ensure_attachment_target_editable(
+    state: &AppState,
+    attachment: &SurfaceAttachment,
+) -> Result<(), &'static str> {
+    match attachment.status(&state.project.project) {
+        SurfaceAttachmentStatus::Valid => ensure_target_editable(state, attachment.target),
+        SurfaceAttachmentStatus::NeedsReattach => Err("Surface attachment needs reattachment"),
+        SurfaceAttachmentStatus::MissingTarget => Err("Surface attachment target is missing"),
+        SurfaceAttachmentStatus::Invalid => Err("Surface attachment data is invalid"),
+    }
+}
+
+fn ensure_target_editable(state: &AppState, target: uuid::Uuid) -> Result<(), &'static str> {
+    let asset = state
+        .project
+        .project
+        .assets
+        .iter()
+        .find(|asset| asset.id == target)
+        .ok_or("Surface attachment target is missing")?;
+    if asset.locked {
+        Err("Surface attachment target is locked")
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_attachment_ray(
+    origin: [f32; 3],
+    direction: [f32; 3],
+    max_distance: f32,
+) -> Result<(), &'static str> {
+    let direction_length_squared = direction
+        .iter()
+        .map(|component| component * component)
+        .sum::<f32>();
+    if origin
+        .iter()
+        .chain(&direction)
+        .any(|component| !component.is_finite())
+        || direction_length_squared <= 1.0e-16
+        || !max_distance.is_finite()
+        || max_distance <= 0.0
+    {
+        Err("Surface attachment ray is invalid")
+    } else {
         Ok(())
     }
 }

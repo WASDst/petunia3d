@@ -34,8 +34,18 @@ pub fn face_normal_of(verts: &[Vertex], idx: &[u32]) -> Vec3 {
     }
 }
 
-/// Möller–Trumbore: retorna `t` do raio se atingir o triângulo.
-pub fn ray_tri(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<f32> {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RayTriangleHit {
+    pub distance: f32,
+    pub barycentric: [f32; 3],
+}
+
+/// Möller–Trumbore com distância e coordenadas baricêntricas.
+pub fn ray_tri_hit(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<RayTriangleHit> {
+    if !origin.is_finite() || !dir.is_finite() || !a.is_finite() || !b.is_finite() || !c.is_finite()
+    {
+        return None;
+    }
     let e1 = b - a;
     let e2 = c - a;
     let p = dir.cross(e2);
@@ -55,7 +65,15 @@ pub fn ray_tri(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<f32
         return None;
     }
     let t = e2.dot(q) * inv;
-    (t > 1e-6).then_some(t)
+    (t > 1e-6 && t.is_finite()).then_some(RayTriangleHit {
+        distance: t,
+        barycentric: [1.0 - u - v, u, v],
+    })
+}
+
+/// Compatibilidade para callers que precisam apenas da distância do raio.
+pub fn ray_tri(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Option<f32> {
+    ray_tri_hit(origin, dir, a, b, c).map(|hit| hit.distance)
 }
 
 // ---------------------------------------------------------------------------

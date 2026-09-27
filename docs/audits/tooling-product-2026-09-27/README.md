@@ -9,9 +9,10 @@
 > **Regra de execução:** corrigir incrementalmente; este dossiê não autoriza
 > reescrita total nem reabertura da UI Baseline V1
 
-> **Estado pós-auditoria:** os gates G0–G3 estão registrados separadamente. O G3
-> eleva `HA-01` a `PARTIALLY_COMPLIANT` com a fundação headless de Spline Core;
-> attachment, UI, Profile persistente, generators e Hair continuam pendentes.
+> **Estado pós-auditoria:** os gates G0–G4 estão registrados separadamente. O G3
+> eleva `HA-01` com Spline Core e o G4 eleva `HA-02` a
+> `PARTIALLY_COMPLIANT` com SurfaceAttachment headless; UI, Profile persistente,
+> consumers restantes, generators e Hair continuam pendentes.
 
 ## 1. Veredito executivo
 
@@ -100,7 +101,8 @@ compartilhadas ampliaria exatamente esses gargalos.
 | RV-01 | Invalidação genérica marca topologia/posição para UV, seleção e pintura | P1 | BROKEN |
 | CA-01 | Cache de modifiers não inclui revisão/conteúdo da malha de origem | P1 | BROKEN |
 | AX-01 | F6/Shift+F6 e cobertura teclado/leitor de tela são incompletos | P1 | MISSING |
-| HA-01 | Spline persistente e SurfaceAttachment compartilhados ainda não existem | P1 | MISSING |
+| HA-01 | Spline Core já é persistente/transacional; overlay, Profile e generators ainda faltam | P1 | PARTIALLY_COMPLIANT |
+| HA-02 | SurfaceAttachment já possui authoring/query/Commands; transforms hierárquicos, UI e consumers restantes faltam | P1 | PARTIALLY_COMPLIANT |
 
 O catálogo completo, com evidência física, impacto e correção sugerida, está em
 [`findings.md`](./findings.md).
@@ -148,6 +150,8 @@ produto nem substitutos para os critérios do caderno.
   fechamento do upload regional Paint→Slint/WGPU, sem rebuild geométrico.
 - [`g3-spline-core-remediation-2026-09-27.md`](./g3-spline-core-remediation-2026-09-27.md) —
   fundação persistente/transacional de splines e frames compartilhados com Sweep.
+- [`g4-surface-attachment-remediation-2026-09-27.md`](./g4-surface-attachment-remediation-2026-09-27.md) —
+  attachment persistente, queries geométricas e Commands de pontos de spline.
 
 ## 6. Fontes canônicas principais
 

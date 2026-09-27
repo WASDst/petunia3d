@@ -334,11 +334,29 @@ mod tests {
     fn save_load_roundtrip() {
         let mut p = Project::new();
         p.add("Plane", Mesh::plane(1.0));
-        let spline = crate::SplineResource::from_polyline(
+        let mut spline = crate::SplineResource::from_polyline(
             "Cable path",
             &[[0.0, 0.0, 0.0], [1.0, 0.5, 0.0], [2.0, 0.0, 0.0]],
             false,
         );
+        let target = p.assets[1].id;
+        let hit = crate::project_ray_to_surface_target(
+            &p,
+            target,
+            [0.0, 2.0, 0.0],
+            [0.0, -1.0, 0.0],
+            10.0,
+        )
+        .unwrap()
+        .unwrap();
+        let point_id = spline.points[0].id;
+        spline
+            .set_attachment(
+                point_id,
+                Some(hit.attachment),
+                hit.frame.position.map(f64::from),
+            )
+            .unwrap();
         let spline_id = spline.id;
         p.add_spline(spline).unwrap();
         let dir = std::env::temp_dir();

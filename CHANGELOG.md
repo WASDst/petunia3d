@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Gate G4 — Fundação Headless de SurfaceAttachment (27/09/2026)
+- **Âncora geométrica persistente**: pontos de spline podem referenciar target, triângulo real de render/picking e coordenadas baricêntricas, com offset normal, orientação tangente e round-trip `.petunia` retrocompatível.
+- **Estados sem reprojeção silenciosa**: conectividade incompatível produz `NeedsReattach`, alvo removido produz `MissingTarget` e detach preserva o último ponto mundial conhecido.
+- **Queries e transações**: raycast/frame/UV seam, slide, rotate e reprojeção explícita são compartilhados no domínio; Commands tipados integram Undo/Redo e rejeitam no-op, target bloqueado e move mundial ambíguo.
+- **Escopo honesto**: a fundação opera sobre a mesh autoral; transforms parent/child, outputs avaliados de modifiers, migração de Decal, UI Slint, Profile/generators e Hair permanecem em gates posteriores.
+
 ### Gate G3 — Fundação Headless de Spline Core (27/09/2026)
 - **Authoring persistente**: `SplineResource` adiciona polyline/Bézier, paths abertos/fechados, control points com IDs/handles, revisão própria e round-trip `.petunia` retrocompatível.
 - **Avaliação compartilhada**: comprimento de arco, tangentes, resampling e frames de transporte paralelo em `f64` passam a alimentar tanto splines quanto o Sweep existente, removendo RMF duplicado.
