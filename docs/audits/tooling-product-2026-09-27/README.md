@@ -1,9 +1,9 @@
 # Petunia3D — Dossiê de ferramentas, produto e evolução técnica
 
 > **Data do snapshot:** 2026-09-27  
-> **Revisão Git de referência:** `819ab77` (`main`)  
-> **Escopo observado:** revisão acima mais alterações locais não commitadas em
-> `render-wgpu` e `ui-slint`  
+> **Revisão Git final de referência:** `05b2ead` (`main`)
+> **Escopo observado:** implementação Slint/WGPU publicada nessa revisão; a
+> auditoria começou em `819ab77` e acompanhou o delta até o checkpoint final
 > **Natureza:** auditoria operacional derivada; não substitui o Livro Vivo em
 > `docs/bible/`  
 > **Regra de execução:** corrigir incrementalmente; este dossiê não autoriza
@@ -138,10 +138,10 @@ produto nem substitutos para os critérios do caderno.
 
 - [`docs/bible/foundations/02-workflow-modelagem-shape-first.md`](../../bible/foundations/02-workflow-modelagem-shape-first.md)
 - [`docs/bible/foundations/05-viewport-shading-modos-visualizacao.md`](../../bible/foundations/05-viewport-shading-modos-visualizacao.md)
-- [`docs/bible/foundations/19-performance-orcamentos-profiling.md`](../../bible/foundations/19-performance-orcamentos-profiling.md)
-- [`docs/bible/foundations/34-representacao-ownership-rust-safety.md`](../../bible/foundations/34-representacao-ownership-rust-safety.md)
+- [`docs/bible/foundations/19-concorrencia-memoria-caches-performance.md`](../../bible/foundations/19-concorrencia-memoria-caches-performance.md)
+- [`docs/bible/foundations/34-arquitetura-modular-rust-safety.md`](../../bible/foundations/34-arquitetura-modular-rust-safety.md)
 - [`docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md`](../../bible/foundations/36-ui-baseline-temas-plugin-panels.md)
-- [`docs/bible/foundations/38-fluxo-low-poly-hair-guides-clumps.md`](../../bible/foundations/38-fluxo-low-poly-hair-guides-clumps.md)
+- [`docs/bible/foundations/38-pos-v1-low-poly-hair-mesh-morphs-character.md`](../../bible/foundations/38-pos-v1-low-poly-hair-mesh-morphs-character.md)
 - [`docs/bible/specs/p3d-158-surface-attachment-foundation.md`](../../bible/specs/p3d-158-surface-attachment-foundation.md)
 - [`docs/bible/specs/p3d-161-spline-core.md`](../../bible/specs/p3d-161-spline-core.md)
 
