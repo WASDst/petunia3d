@@ -31,11 +31,11 @@ Total de comandos registrados no motor: **98**.
 | `file.export_glb` | **Export GLB** | `File` | Não | ImportExport | Export scene to binary glTF format |
 | `file.export_obj` | **Export OBJ** | `File` | Não | ImportExport | Export active mesh to Wavefront OBJ format |
 | `file.import_obj` | **Import OBJ** | `File` | Não | ImportExport | Import 3D mesh from Wavefront OBJ file |
-| `file.new` | **New Project** | `File` | Sim | GettingStarted | Create a blank 3D project |
+| `file.new` | **New Project** | `File` | Não | GettingStarted | Create a blank 3D project |
 | `file.open` | **Open Project** | `File` | Não | GettingStarted | Open a Petunia3D project from disk |
-| `file.save` | **Save Project** | `File` | Sim | GettingStarted | Save active project to disk |
+| `file.save` | **Save Project** | `File` | Não | GettingStarted | Save active project to disk |
 | `file.save_as` | **Save Project As** | `File` | Não | — | Save active project to a new file |
-| `file.save_asset` | **Save Active Model as Asset** | `File` | Sim | Assets | Save active mesh to project asset library |
+| `file.save_asset` | **Save Active Model as Asset** | `File` | Não | Assets | Save active mesh to project asset library |
 | `help.documentation` | **Documentation** | `Help` | Não | GettingStarted | Open official documentation online |
 | `model.add_capsule` | **Add Capsule** | `Model` | Não | Modeling | Add a capsule primitive |
 | `model.add_circle` | **Add Circle** | `Model` | Não | Modeling | Add a circle/disc primitive |

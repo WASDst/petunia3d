@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use petunia_mesh::Mesh;
+use petunia_project::ProjectChanges;
 
 use crate::camera::ViewPreset;
 use crate::docs::DocsTopic;
@@ -40,6 +41,15 @@ pub trait Command: Send + Sync {
         true
     }
 
+    /// Domínios persistentes alterados quando a execução termina com sucesso.
+    fn changes(&self) -> ProjectChanges {
+        if self.is_destructive() {
+            ProjectChanges::GEOMETRY
+        } else {
+            ProjectChanges::NONE
+        }
+    }
+
     /// Valida disponibilidade contextual do comando contra o estado atual (P3D-100).
     /// Retorna Ok(()) se puder ser executado, ou Err("razão legível") quando desabilitado.
     fn can_execute(&self, _state: &AppState) -> Result<(), &'static str> {
@@ -58,6 +68,10 @@ impl<T: ?Sized + Command> Command for Box<T> {
 
     fn is_destructive(&self) -> bool {
         (**self).is_destructive()
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        (**self).changes()
     }
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
@@ -237,12 +251,13 @@ impl CommandDispatcher {
                 "Confirm or cancel the active operation first".into(),
             ));
         }
-        if cmd.is_destructive() {
-            state.freeze_active_primitive();
-        }
+        let changes = cmd.changes();
         state.project.project.history_selection = state.session.selection.assets.clone();
         let original_selection = state.session.selection.clone();
         let original = cmd.is_destructive().then(|| state.project.project.clone());
+        if cmd.is_destructive() {
+            state.freeze_active_primitive_for_command();
+        }
         if let Err(error) = cmd.execute(state) {
             if let Some(original) = original {
                 state.project.project = original;
@@ -261,11 +276,7 @@ impl CommandDispatcher {
             state.mark_document_dirty();
         }
         state.sync_selection();
-        if cmd.is_destructive() {
-            state.emit_mesh_changed();
-        } else {
-            state.project.project.bump_selection();
-        }
+        state.emit_project_changed(changes);
         state.mark_dirty();
         Ok(())
     }
@@ -1432,6 +1443,10 @@ impl Command for ReorderAssetCmd {
         "reorder asset"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NONE
+    }
+
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
         let len = state.project.assets.len();
         if self.from >= len || self.to >= len || self.from == self.to {
@@ -1493,8 +1508,6 @@ impl Command for InstantiateAssetCmd {
         let name = instance.name.clone();
         state.project.assets.push(instance);
         state.project.active = state.project.assets.len() - 1;
-        state.sync_selection();
-        state.emit_mesh_changed();
         state.set_status(format!("Instantiated '{}'", name));
         Ok(())
     }
@@ -1571,7 +1584,6 @@ impl Command for DeleteSelectionCmd {
                 .retain(|asset| !selected.contains(&asset.id) || asset.locked);
             state.project.active = usize::MAX;
             state.session.selection.assets.clear();
-            state.sync_selection();
             state.set_status("Deleted selected objects");
             return Ok(());
         }
@@ -1624,7 +1636,6 @@ impl Command for DuplicateSelectionCmd {
             state.session.selection.assets = copies.iter().map(|asset| asset.id).collect();
             state.project.assets.extend(copies);
             state.project.active = state.project.assets.len() - 1;
-            state.sync_selection();
             state.set_status("Duplicated selected objects");
             return Ok(());
         }
@@ -1677,14 +1688,12 @@ impl Command for SelectAllCmd {
                 .last()
                 .and_then(|id| state.project.assets.iter().position(|a| a.id == *id))
                 .unwrap_or(usize::MAX);
-            state.sync_selection();
             return Ok(());
         }
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.select_all();
-        state.sync_selection();
         Ok(())
     }
 }
@@ -1721,7 +1730,6 @@ impl Command for ClearSelectionCmd {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.deselect_all();
-        state.sync_selection();
         Ok(())
     }
 }
@@ -1764,14 +1772,12 @@ impl Command for InvertSelectionCmd {
                 .and_then(|id| state.project.assets.iter().position(|a| a.id == *id))
                 .unwrap_or(usize::MAX);
             state.session.selection.assets = ids;
-            state.sync_selection();
             return Ok(());
         }
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.invert_selection();
-        state.sync_selection();
         Ok(())
     }
 }
@@ -1885,7 +1891,6 @@ impl Command for SeparateSelectionCmd {
         let new_name = format!("{}_sep", orig_name);
         state.project.add(&new_name, sep_mesh);
         state.set_status(format!("Separated selection into {}", new_name));
-        state.sync_selection();
         Ok(())
     }
 }
@@ -2048,6 +2053,10 @@ pub struct FlipNormalsCmd;
 impl Command for FlipNormalsCmd {
     fn label(&self) -> &'static str {
         "flip_normals"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS
     }
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
@@ -2229,7 +2238,6 @@ impl Command for SelectLinkedCmd {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.select_linked();
-        state.sync_selection();
         Ok(())
     }
 }
@@ -2257,7 +2265,6 @@ impl Command for BoxSelectCmd {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.box_select(self.p0, self.p1, &self.view_proj, self.add);
-        state.sync_selection();
         Ok(())
     }
 }
@@ -2271,6 +2278,10 @@ pub struct ToggleLockAssetCmd {
 impl Command for ToggleLockAssetCmd {
     fn label(&self) -> &'static str {
         "toggle lock"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NONE
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -2299,6 +2310,10 @@ pub struct ToggleVisibilityAssetCmd {
 impl Command for ToggleVisibilityAssetCmd {
     fn label(&self) -> &'static str {
         "toggle visibility"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NONE
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -2330,6 +2345,10 @@ impl Command for SetAssetCollectionCmd {
         "set collection"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NONE
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         let Some(asset) = state.project.assets.get_mut(self.asset_index) else {
             return Err(CommandError::InvalidAssetIndex(self.asset_index));
@@ -2354,6 +2373,10 @@ pub struct ToggleCollectionVisibilityCmd {
 impl Command for ToggleCollectionVisibilityCmd {
     fn label(&self) -> &'static str {
         "toggle collection visibility"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NONE
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -2386,6 +2409,10 @@ pub struct ToggleCollectionLockCmd {
 impl Command for ToggleCollectionLockCmd {
     fn label(&self) -> &'static str {
         "toggle collection lock"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NONE
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -2422,6 +2449,10 @@ impl Command for NewProjectCmd {
         "new project"
     }
 
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         crate::project_service::ProjectService::new_project(state);
         Ok(())
@@ -2435,6 +2466,10 @@ pub struct SaveProjectCmd;
 impl Command for SaveProjectCmd {
     fn label(&self) -> &'static str {
         "save project"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
     }
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
@@ -2560,6 +2595,10 @@ pub struct SaveActiveAsAssetCmd;
 impl Command for SaveActiveAsAssetCmd {
     fn label(&self) -> &'static str {
         "save active as asset"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
     }
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
@@ -2997,6 +3036,10 @@ impl Default for ScaleSelectionCmd {
 impl Command for ScaleSelectionCmd {
     fn label(&self) -> &'static str {
         "scale"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS
     }
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
@@ -3483,6 +3526,10 @@ impl Command for UnwrapAutoCmd {
         "auto uv"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
@@ -3491,8 +3538,6 @@ impl Command for UnwrapAutoCmd {
             .unwrap_auto()
             .map_err(|e| CommandError::Execution(e.to_string()))?;
         state.set_status(format!("Auto UV ({charts} charts)"));
-        state.emit_mesh_changed();
-        state.mark_dirty();
         Ok(())
     }
 }
@@ -3513,14 +3558,16 @@ impl Command for UvPackIslandsCmd {
         "pack uv"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let n = mesh.pack_uv_islands(self.padding);
         state.set_status(format!("Packed {n} UV islands"));
-        state.emit_mesh_changed();
-        state.mark_dirty();
         Ok(())
     }
 }
@@ -3533,6 +3580,10 @@ impl Command for UvProjectFromViewCmd {
         "project from view"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         let origin = state.camera.eye();
         let forward = state.camera.forward();
@@ -3543,8 +3594,6 @@ impl Command for UvProjectFromViewCmd {
         };
         mesh.project_from_view(right, up, origin);
         state.set_status("Projected UVs from view");
-        state.emit_mesh_changed();
-        state.mark_dirty();
         Ok(())
     }
 }
@@ -3555,6 +3604,10 @@ pub struct UvProjectFromReferenceCmd;
 impl Command for UvProjectFromReferenceCmd {
     fn label(&self) -> &'static str {
         "project from reference"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -3588,8 +3641,6 @@ impl Command for UvProjectFromReferenceCmd {
         };
         mesh.project_from_view(right, up, origin);
         state.set_status("Projected UVs from reference");
-        state.emit_mesh_changed();
-        state.mark_dirty();
         Ok(())
     }
 }
@@ -3602,15 +3653,15 @@ impl Command for UvStitchCmd {
         "uv stitch"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let before = state.project.clone();
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let count = mesh.stitch_uv(&state.session.uv_selected);
-        state.project.undo.checkpoint("uv stitch", &before);
-        state.emit_mesh_changed();
-        state.mark_dirty();
         state.set_status(format!("Stitched {count} UV seam edge(s)"));
         Ok(())
     }
@@ -3632,15 +3683,15 @@ impl Command for UvRelaxCmd {
         "uv relax"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let before = state.project.clone();
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let count = mesh.relax_uv(&state.session.uv_selected, self.iterations);
-        state.project.undo.checkpoint("uv relax", &before);
-        state.emit_mesh_changed();
-        state.mark_dirty();
         state.set_status(format!("Relaxed {count} UV face(s)"));
         Ok(())
     }
@@ -3652,6 +3703,10 @@ pub struct PaintBakeReferenceCmd;
 impl Command for PaintBakeReferenceCmd {
     fn label(&self) -> &'static str {
         "bake reference"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS | ProjectChanges::TEXTURES
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -3718,8 +3773,6 @@ impl Command for PaintBakeReferenceCmd {
         }
 
         state.set_status("Baked reference image into texture");
-        state.emit_mesh_changed();
-        state.mark_dirty();
         Ok(())
     }
 }
@@ -3818,15 +3871,58 @@ impl Command for DissolveCmd {
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let before = state.project.clone();
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.dissolve_selected();
-        state.project.undo.checkpoint("dissolve", &before);
-        state.sync_selection();
         state.set_status("Dissolved selected geometry");
-        state.emit_mesh_changed();
+        Ok(())
+    }
+}
+
+/// Comando contextual usado pelo Delete da viewport em domínio de componente.
+/// Tenta preservar a superfície por dissolve; quando a topologia não muda,
+/// aplica delete explícito como fallback na mesma transação.
+#[derive(Debug, Clone, Default)]
+pub struct DeleteOrDissolveSelectionCmd;
+
+impl Command for DeleteOrDissolveSelectionCmd {
+    fn label(&self) -> &'static str {
+        "delete/dissolve selection"
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+        if !mesh.selected_edges.is_empty()
+            || mesh.faces.iter().any(|face| face.selected)
+            || mesh.verts.iter().any(|vertex| vertex.selected)
+        {
+            Ok(())
+        } else {
+            Err("Select edges, faces, or points to delete")
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let Some(mesh) = state.project.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let counts = (
+            mesh.verts.len(),
+            mesh.faces.len(),
+            mesh.selected_edges.len(),
+        );
+        mesh.dissolve_selected();
+        if counts
+            == (
+                mesh.verts.len(),
+                mesh.faces.len(),
+                mesh.selected_edges.len(),
+            )
+        {
+            mesh.delete_selected();
+        }
+        state.set_status("Dissolved/deleted selection");
         Ok(())
     }
 }
@@ -3852,16 +3948,12 @@ impl Command for MakeFaceCmd {
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let before = state.project.clone();
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         match mesh.make_face_from_selection() {
             Ok(()) => {
-                state.project.undo.checkpoint("make_face", &before);
-                state.sync_selection();
                 state.set_status("Face created from selection");
-                state.emit_mesh_changed();
                 Ok(())
             }
             Err(err) => {
@@ -3887,6 +3979,10 @@ impl Command for SetDecalTransformCmd {
         "set decal transform"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::TEXTURES
+    }
+
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
         let Some(asset) = state.project.active() else {
             return Err("No active asset");
@@ -3906,23 +4002,27 @@ impl Command for SetDecalTransformCmd {
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         let active = state.project.active;
-        if let Some(asset) = state.project.assets.get_mut(active)
+        let changed = if let Some(asset) = state.project.assets.get_mut(active)
             && let Some(stack) = asset.paint_stack.as_mut()
             && stack.set_decal_transform(
                 self.layer_id,
                 self.center_uv,
                 self.scale_uv,
                 self.rotation_rad,
-            )
-        {
-            state.mark_dirty();
-            state.render.mark_dirty();
-            Ok(())
+            ) {
+            true
         } else {
-            Err(CommandError::Execution(
+            false
+        };
+        if !changed {
+            return Err(CommandError::Execution(
                 "Failed to update decal transform".into(),
-            ))
+            ));
         }
+        state.project.project.composite_paint_stack(active);
+        state.render.canvas_dirty = true;
+        state.mark_dirty();
+        Ok(())
     }
 }
 
@@ -3938,6 +4038,10 @@ impl Command for BakeDecalCmd {
         "bake decal to raster"
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::TEXTURES
+    }
+
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
         let Some(asset) = state.project.active() else {
             return Err("No active asset");
@@ -3957,6 +4061,7 @@ impl Command for BakeDecalCmd {
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         let active = state.project.active;
+        let mut baked = false;
         if let Some(asset) = state.project.assets.get_mut(active)
             && let Some(stack) = asset.paint_stack.as_mut()
         {
@@ -3966,12 +4071,16 @@ impl Command for BakeDecalCmd {
                 .map(|c| (c.w, c.h))
                 .unwrap_or((512, 512));
             if stack.bake_decal_to_raster(self.layer_id, target_w, target_h) {
-                state.mark_dirty();
-                state.render.mark_dirty();
-                state.set_status("Decalque convertido para camada raster".to_string());
-                return Ok(());
+                baked = true;
             }
         }
-        Err(CommandError::Execution("Failed to bake decal".into()))
+        if !baked {
+            return Err(CommandError::Execution("Failed to bake decal".into()));
+        }
+        state.project.project.composite_paint_stack(active);
+        state.render.canvas_dirty = true;
+        state.mark_dirty();
+        state.set_status("Decalque convertido para camada raster".to_string());
+        Ok(())
     }
 }

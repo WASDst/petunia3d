@@ -57,16 +57,22 @@ impl AppState {
         let Some(preview) = self.session.tools.mesh_preview.take() else {
             return;
         };
-        if cancel || !preview.changed {
+        let restored = cancel || !preview.changed;
+        if restored {
+            let revision_clock = self.project.project.revision_clock();
             self.project.project = preview.original;
+            self.project
+                .project
+                .rebase_revisions_after_restore(revision_clock);
             self.session.selection = preview.selection;
         } else {
             self.project
-                .undo
-                .checkpoint(preview.label, &preview.original);
+                .checkpoint_snapshot(preview.label, &preview.original);
         }
         self.session.tools.cut_session = None;
         self.sync_selection();
-        self.emit_mesh_changed();
+        if restored {
+            self.emit_mesh_changed();
+        }
     }
 }

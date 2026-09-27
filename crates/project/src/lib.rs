@@ -5,6 +5,61 @@ use petunia_mesh::Mesh;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Domínios persistentes que uma operação alterou.
+///
+/// O bitset mantém a invalidação independente de toolkit e permite que o owner
+/// transacional avance somente as revisões realmente afetadas.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProjectChanges(u16);
+
+impl ProjectChanges {
+    pub const NONE: Self = Self(0);
+    pub const TOPOLOGY: Self = Self(1 << 0);
+    pub const POSITIONS: Self = Self(1 << 1);
+    pub const SELECTION: Self = Self(1 << 2);
+    pub const UVS: Self = Self(1 << 3);
+    pub const MATERIALS: Self = Self(1 << 4);
+    pub const TEXTURES: Self = Self(1 << 5);
+    pub const TRANSFORMS: Self = Self(1 << 6);
+    pub const NORMALS: Self = Self(1 << 7);
+    pub const COLORS: Self = Self(1 << 8);
+    pub const GEOMETRY: Self =
+        Self(Self::TOPOLOGY.0 | Self::POSITIONS.0 | Self::NORMALS.0 | Self::UVS.0 | Self::COLORS.0);
+    pub const ALL: Self = Self(
+        Self::GEOMETRY.0
+            | Self::SELECTION.0
+            | Self::MATERIALS.0
+            | Self::TEXTURES.0
+            | Self::TRANSFORMS.0,
+    );
+
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl std::ops::BitOr for ProjectChanges {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl std::ops::BitOrAssign for ProjectChanges {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
 pub mod animation;
 pub mod autosave;
 pub mod export;
@@ -294,14 +349,68 @@ impl Asset {
         h
     }
 
+    fn source_mesh_hash(&self) -> u64 {
+        let mut hash = 0xcbf29ce484222325_u64;
+        let mix = |mut value: u64, next: u64| {
+            value ^= next;
+            value.wrapping_mul(0x100000001b3)
+        };
+        hash = mix(hash, self.mesh.verts.len() as u64);
+        hash = mix(hash, self.mesh.faces.len() as u64);
+        for vertex in &self.mesh.verts {
+            for component in vertex.pos {
+                hash = mix(hash, component.to_bits() as u64);
+            }
+            for component in vertex.color {
+                hash = mix(hash, component.to_bits() as u64);
+            }
+            hash = mix(hash, vertex.selected as u64);
+        }
+        for face in &self.mesh.faces {
+            hash = mix(hash, face.verts.len() as u64);
+            for &index in &face.verts {
+                hash = mix(hash, index as u64);
+            }
+            hash = mix(hash, face.uv.len() as u64);
+            for uv in &face.uv {
+                hash = mix(hash, uv[0].to_bits() as u64);
+                hash = mix(hash, uv[1].to_bits() as u64);
+            }
+            hash = mix(hash, face.selected as u64);
+            hash = mix(hash, face.material_slot.unwrap_or(usize::MAX) as u64);
+        }
+        let mut selected_edges: Vec<_> = self.mesh.selected_edges.iter().copied().collect();
+        selected_edges.sort_unstable();
+        hash = mix(hash, 0x5345_4c45_4447_4553);
+        hash = mix(hash, selected_edges.len() as u64);
+        for (a, b) in selected_edges {
+            hash = mix(hash, a as u64);
+            hash = mix(hash, b as u64);
+        }
+        let mut seams: Vec<_> = self.mesh.uv_seams.iter().copied().collect();
+        seams.sort_unstable();
+        hash = mix(hash, 0x5556_5345_414d_5300);
+        hash = mix(hash, seams.len() as u64);
+        for (a, b) in seams {
+            hash = mix(hash, a as u64);
+            hash = mix(hash, b as u64);
+        }
+        let mut pinned: Vec<_> = self.mesh.uv_pinned.iter().copied().collect();
+        pinned.sort_unstable();
+        hash = mix(hash, 0x5556_5049_4e53_0000);
+        hash = mix(hash, pinned.len() as u64);
+        for (face_index, corner_index) in pinned {
+            hash = mix(hash, face_index as u64);
+            hash = mix(hash, corner_index as u64);
+        }
+        hash
+    }
+
     /// Avalia a pilha de modifiers sem alterar a malha-base.
     /// Render, preview e export usam este resultado; edição continua operando
     /// sobre `mesh`, preservando a natureza não destrutiva da pilha.
     pub fn evaluated_mesh(&self) -> Mesh {
-        let key = (
-            self.mesh.verts.len() as u64 * 1_000_003 + self.mesh.faces.len() as u64,
-            self.modifier_hash(),
-        );
+        let key = (self.source_mesh_hash(), self.modifier_hash());
         if let Some((k0, k1, cached)) = &self.eval_cache
             && (*k0, *k1) == key
         {
@@ -328,10 +437,7 @@ impl Asset {
 
     /// Cache-aware evaluation. Callers with `&mut Asset` reuse the last result.
     pub fn evaluated_mesh_cached(&mut self) -> &Mesh {
-        let key = (
-            self.mesh.verts.len() as u64 * 1_000_003 + self.mesh.faces.len() as u64,
-            self.modifier_hash(),
-        );
+        let key = (self.source_mesh_hash(), self.modifier_hash());
         let miss = self
             .eval_cache
             .as_ref()
@@ -653,6 +759,12 @@ pub struct Project {
     pub texture_revision: u64,
     #[serde(default)]
     pub transform_revision: u64,
+    #[serde(default)]
+    pub normal_revision: u64,
+    #[serde(default)]
+    pub uv_revision: u64,
+    #[serde(default)]
+    pub color_revision: u64,
 }
 
 impl Project {
@@ -686,12 +798,66 @@ impl Default for Project {
             animations: Vec::new(),
             topology_revision: 0,
             position_revision: 0,
+            normal_revision: 0,
             selection_revision: 0,
+            uv_revision: 0,
+            color_revision: 0,
             material_revision: 0,
             texture_revision: 0,
             transform_revision: 0,
         }
     }
+}
+
+fn canvas_heap_bytes(canvas: &Canvas) -> usize {
+    canvas.pixels.capacity()
+}
+
+fn string_vec_heap_bytes(capacity: usize, values: &[String]) -> usize {
+    capacity
+        .saturating_mul(std::mem::size_of::<String>())
+        .saturating_add(values.iter().fold(0usize, |bytes, value| {
+            bytes.saturating_add(value.capacity())
+        }))
+}
+
+fn mesh_heap_bytes(mesh: &Mesh) -> usize {
+    let mut bytes = mesh
+        .verts
+        .capacity()
+        .saturating_mul(std::mem::size_of::<petunia_mesh::Vertex>());
+    bytes = bytes.saturating_add(
+        mesh.faces
+            .capacity()
+            .saturating_mul(std::mem::size_of::<petunia_mesh::Face>()),
+    );
+    for face in &mesh.faces {
+        bytes = bytes.saturating_add(
+            face.verts
+                .capacity()
+                .saturating_mul(std::mem::size_of::<u32>()),
+        );
+        bytes = bytes.saturating_add(
+            face.uv
+                .capacity()
+                .saturating_mul(std::mem::size_of::<[f32; 2]>()),
+        );
+    }
+    bytes = bytes.saturating_add(
+        mesh.selected_edges
+            .capacity()
+            .saturating_mul(std::mem::size_of::<(u32, u32)>() + 1),
+    );
+    bytes = bytes.saturating_add(
+        mesh.uv_seams
+            .capacity()
+            .saturating_mul(std::mem::size_of::<(u32, u32)>() + 1),
+    );
+    bytes.saturating_add(
+        mesh.uv_pinned
+            .capacity()
+            .saturating_mul(std::mem::size_of::<(usize, usize)>() + 1),
+    )
 }
 
 impl Project {
@@ -701,8 +867,17 @@ impl Project {
     pub fn bump_positions(&mut self) {
         self.position_revision = self.position_revision.wrapping_add(1);
     }
+    pub fn bump_normals(&mut self) {
+        self.normal_revision = self.normal_revision.wrapping_add(1);
+    }
     pub fn bump_selection(&mut self) {
         self.selection_revision = self.selection_revision.wrapping_add(1);
+    }
+    pub fn bump_uvs(&mut self) {
+        self.uv_revision = self.uv_revision.wrapping_add(1);
+    }
+    pub fn bump_colors(&mut self) {
+        self.color_revision = self.color_revision.wrapping_add(1);
     }
     pub fn bump_materials(&mut self) {
         self.material_revision = self.material_revision.wrapping_add(1);
@@ -710,27 +885,292 @@ impl Project {
     pub fn bump_textures(&mut self) {
         self.texture_revision = self.texture_revision.wrapping_add(1);
     }
+    pub fn bump_transforms(&mut self) {
+        self.transform_revision = self.transform_revision.wrapping_add(1);
+    }
 
-    /// Approximate owned payload size for history eviction (meshes + textures).
+    pub fn bump_changes(&mut self, changes: ProjectChanges) {
+        if changes.contains(ProjectChanges::TOPOLOGY) {
+            self.bump_topology();
+        }
+        if changes.contains(ProjectChanges::POSITIONS) {
+            self.bump_positions();
+        }
+        if changes.contains(ProjectChanges::NORMALS) {
+            self.bump_normals();
+        }
+        if changes.contains(ProjectChanges::SELECTION) {
+            self.bump_selection();
+        }
+        if changes.contains(ProjectChanges::UVS) {
+            self.bump_uvs();
+        }
+        if changes.contains(ProjectChanges::COLORS) {
+            self.bump_colors();
+        }
+        if changes.contains(ProjectChanges::MATERIALS) {
+            self.bump_materials();
+        }
+        if changes.contains(ProjectChanges::TEXTURES) {
+            self.bump_textures();
+        }
+        if changes.contains(ProjectChanges::TRANSFORMS) {
+            self.bump_transforms();
+        }
+    }
+
+    /// Keeps cache revisions monotonic when undo/redo restores an older snapshot.
+    pub fn revision_clock(&self) -> [u64; 9] {
+        [
+            self.topology_revision,
+            self.position_revision,
+            self.normal_revision,
+            self.selection_revision,
+            self.uv_revision,
+            self.color_revision,
+            self.material_revision,
+            self.texture_revision,
+            self.transform_revision,
+        ]
+    }
+
+    pub fn rebase_revisions_after_restore(&mut self, previous: [u64; 9]) {
+        self.topology_revision = self.topology_revision.max(previous[0]);
+        self.position_revision = self.position_revision.max(previous[1]);
+        self.normal_revision = self.normal_revision.max(previous[2]);
+        self.selection_revision = self.selection_revision.max(previous[3]);
+        self.uv_revision = self.uv_revision.max(previous[4]);
+        self.color_revision = self.color_revision.max(previous[5]);
+        self.material_revision = self.material_revision.max(previous[6]);
+        self.texture_revision = self.texture_revision.max(previous[7]);
+        self.transform_revision = self.transform_revision.max(previous[8]);
+    }
+
+    /// Rebuilds the derived texture cache for one asset from its canonical
+    /// paint stack and mirrors it to the assigned material albedo channel.
+    pub fn composite_paint_stack(&mut self, asset_index: usize) -> bool {
+        let Some(asset) = self.assets.get(asset_index) else {
+            return false;
+        };
+        let Some(stack) = asset.paint_stack.as_ref() else {
+            return false;
+        };
+        let (width, height) = asset
+            .texture
+            .as_ref()
+            .map(|canvas| (canvas.w, canvas.h))
+            .unwrap_or((256, 256));
+        let material_id = asset.material_id;
+        let mut composed = Canvas::new(width, height, [0, 0, 0, 0]);
+        stack.composite(&mut composed);
+
+        if let Some(asset) = self.assets.get_mut(asset_index) {
+            asset.texture = Some(composed.clone());
+        }
+        if let Some(material_id) = material_id
+            && let Some(material) = self.get_material_mut(material_id)
+        {
+            material.albedo_texture = Some(composed);
+        }
+        true
+    }
+
+    /// Approximate retained size of an owned history snapshot.
+    ///
+    /// Uses allocation capacities from the already-cloned snapshot, so history
+    /// budgeting accounts for the dominant heap payloads rather than only the
+    /// shallow `Project` header.
     pub fn estimated_bytes(&self) -> usize {
         let mut n = std::mem::size_of::<Self>();
+        n = n.saturating_add(self.name.capacity());
+        n = n.saturating_add(
+            self.assets
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Asset>()),
+        );
         for asset in &self.assets {
-            n = n.saturating_add(asset.mesh.verts.len().saturating_mul(32));
-            n = n.saturating_add(asset.mesh.faces.len().saturating_mul(48));
+            n = n.saturating_add(asset.name.capacity());
+            n = n.saturating_add(asset.collection.as_ref().map_or(0, String::capacity));
+            n = n.saturating_add(
+                asset
+                    .tags
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<String>()),
+            );
+            n = asset
+                .tags
+                .iter()
+                .fold(n, |bytes, tag| bytes.saturating_add(tag.capacity()));
+            n = n.saturating_add(
+                asset
+                    .modifiers
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<ModifierInstance>()),
+            );
+            n = n.saturating_add(mesh_heap_bytes(&asset.mesh));
             if let Some(tex) = asset.texture.as_ref() {
-                n = n.saturating_add(tex.pixels.len());
+                n = n.saturating_add(canvas_heap_bytes(tex));
             }
             if let Some(stack) = asset.paint_stack.as_ref() {
+                n = n.saturating_add(
+                    stack
+                        .layers
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<PaintLayer>()),
+                );
                 for layer in &stack.layers {
+                    n = n.saturating_add(layer.name.capacity());
                     if let Some(cv) = layer.canvas() {
-                        n = n.saturating_add(cv.pixels.len());
+                        n = n.saturating_add(canvas_heap_bytes(cv));
                     }
                 }
             }
+            if let Some(skin) = asset.skin_data.as_ref() {
+                n = n.saturating_add(
+                    skin.vertex_weights
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<VertexSkinWeight>()),
+                );
+            }
+            if let Some((_, _, mesh)) = asset.eval_cache.as_ref() {
+                n = n.saturating_add(mesh_heap_bytes(mesh));
+            }
         }
+        n = n.saturating_add(
+            self.history_selection
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Uuid>()),
+        );
+        n = n.saturating_add(
+            self.palette
+                .capacity()
+                .saturating_mul(std::mem::size_of::<[f32; 3]>()),
+        );
+        n = n.saturating_add(string_vec_heap_bytes(
+            self.collections.capacity(),
+            &self.collections,
+        ));
+        n = n.saturating_add(
+            self.annotations
+                .capacity()
+                .saturating_mul(std::mem::size_of::<AnnotationItem>()),
+        );
+        for annotation in &self.annotations {
+            n = n.saturating_add(annotation.name.capacity());
+            n = n.saturating_add(annotation.group.as_ref().map_or(0, String::capacity));
+            n = n.saturating_add(
+                annotation
+                    .strokes
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<AnnotationStroke>()),
+            );
+            for stroke in &annotation.strokes {
+                n = n.saturating_add(
+                    stroke
+                        .points
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<[f32; 3]>()),
+                );
+            }
+        }
+        n = n.saturating_add(string_vec_heap_bytes(
+            self.annotation_groups.capacity(),
+            &self.annotation_groups,
+        ));
+        n = n.saturating_add(
+            self.measurements
+                .capacity()
+                .saturating_mul(std::mem::size_of::<MeasurementItem>()),
+        );
+        for measurement in &self.measurements {
+            n = n.saturating_add(measurement.name.capacity());
+        }
+        n = n.saturating_add(
+            self.materials
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Material>()),
+        );
         for mat in &self.materials {
-            if let Some(tex) = mat.albedo_texture.as_ref() {
-                n = n.saturating_add(tex.pixels.len());
+            n = n.saturating_add(mat.name.capacity());
+            for texture in [
+                mat.albedo_texture.as_ref(),
+                mat.normal_texture.as_ref(),
+                mat.roughness_texture.as_ref(),
+                mat.metallic_texture.as_ref(),
+                mat.emission_texture.as_ref(),
+                mat.height_texture.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                n = n.saturating_add(canvas_heap_bytes(texture));
+            }
+        }
+        n = n.saturating_add(
+            self.lights
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Light>()),
+        );
+        for light in &self.lights {
+            n = n.saturating_add(light.name.capacity());
+        }
+        n = n.saturating_add(
+            self.skeletons
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Skeleton>()),
+        );
+        for skeleton in &self.skeletons {
+            n = n.saturating_add(skeleton.name.capacity());
+            n = n.saturating_add(
+                skeleton
+                    .bones
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Bone>()),
+            );
+            for bone in &skeleton.bones {
+                n = n.saturating_add(bone.name.capacity());
+            }
+        }
+        n = n.saturating_add(
+            self.animations
+                .capacity()
+                .saturating_mul(std::mem::size_of::<AnimationAsset>()),
+        );
+        for animation in &self.animations {
+            n = n.saturating_add(animation.name.capacity());
+            n = n.saturating_add(animation.preset.as_ref().map_or(0, String::capacity));
+            n = n.saturating_add(string_vec_heap_bytes(
+                animation.tags.capacity(),
+                &animation.tags,
+            ));
+            n = n.saturating_add(animation.clip.name.capacity());
+            n = n.saturating_add(
+                animation
+                    .clip
+                    .tracks
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<BoneTrack>()),
+            );
+            for track in &animation.clip.tracks {
+                n = n.saturating_add(track.bone_name.capacity());
+                n = n.saturating_add(
+                    track
+                        .translations
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<Keyframe<[f32; 3]>>()),
+                );
+                n = n.saturating_add(
+                    track
+                        .rotations
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<Keyframe<[f32; 4]>>()),
+                );
+                n = n.saturating_add(
+                    track
+                        .scales
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<Keyframe<[f32; 3]>>()),
+                );
             }
         }
         n.max(1)
@@ -761,7 +1201,10 @@ impl Project {
             animations: Vec::new(),
             topology_revision: 0,
             position_revision: 0,
+            normal_revision: 0,
             selection_revision: 0,
+            uv_revision: 0,
+            color_revision: 0,
             material_revision: 0,
             texture_revision: 0,
             transform_revision: 0,
@@ -1102,5 +1545,47 @@ mod tests {
 
         p.remove_measurement(m_id);
         assert!(p.measurements.is_empty());
+    }
+
+    #[test]
+    fn evaluated_mesh_cache_tracks_source_content_not_only_counts() {
+        let mut asset = Asset::new("Cached", Mesh::cube(2.0));
+        let original = asset.evaluated_mesh_cached().verts[0].pos;
+
+        asset.mesh.verts[0].pos[0] += 3.0;
+        let updated = asset.evaluated_mesh_cached().verts[0].pos;
+
+        assert_ne!(updated, original);
+        assert_eq!(updated, asset.mesh.verts[0].pos);
+    }
+
+    #[test]
+    fn project_changes_advance_only_declared_revisions() {
+        let mut project = Project::new();
+        project.bump_changes(ProjectChanges::UVS | ProjectChanges::TEXTURES);
+
+        assert_eq!(project.uv_revision, 1);
+        assert_eq!(project.texture_revision, 1);
+        assert_eq!(project.topology_revision, 0);
+        assert_eq!(project.position_revision, 0);
+        assert_eq!(project.normal_revision, 0);
+        assert_eq!(project.selection_revision, 0);
+        assert_eq!(project.color_revision, 0);
+        assert_eq!(project.material_revision, 0);
+        assert_eq!(project.transform_revision, 0);
+    }
+
+    #[test]
+    fn restored_revision_clock_advances_only_the_published_domain() {
+        let previous = [4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let mut restored = Project::new();
+
+        restored.rebase_revisions_after_restore(previous);
+        assert_eq!(restored.revision_clock(), previous);
+
+        restored.bump_changes(ProjectChanges::UVS);
+        let mut expected = previous;
+        expected[4] += 1;
+        assert_eq!(restored.revision_clock(), expected);
     }
 }

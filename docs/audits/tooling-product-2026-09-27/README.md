@@ -133,6 +133,9 @@ produto nem substitutos para os critérios do caderno.
   sequência recomendada para shape-first e Hair.
 - [`verification.md`](./verification.md) — método, comandos, resultados e limites
   da auditoria.
+- [`g0-remediation-2026-09-27.md`](./g0-remediation-2026-09-27.md) — fechamento
+  do primeiro conjunto prioritário: transações, revisões, histórico e cache de
+  modifiers.
 
 ## 6. Fontes canônicas principais
 

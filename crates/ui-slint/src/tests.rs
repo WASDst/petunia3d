@@ -18,6 +18,17 @@ fn visible_edge_points(bridge: &SlintUiBridge<PlaceholderViewport>) -> Vec<((u32
         .collect()
 }
 
+fn active_paint_stack(
+    bridge: &SlintUiBridge<PlaceholderViewport>,
+) -> petunia_project::PaintLayerStack {
+    bridge
+        .state
+        .project
+        .active()
+        .and_then(|asset| asset.paint_stack.clone())
+        .expect("active paint stack")
+}
+
 #[test]
 fn view_model_uses_domain_context_without_ui_dependencies() {
     let state = AppState::default();
@@ -2173,6 +2184,51 @@ fn paint_layer_panel_adds_removes_reorders_and_composites() {
 }
 
 #[test]
+fn paint_layer_mutations_are_single_entry_roundtrips() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
+
+    let before_add = active_paint_stack(&bridge);
+    assert!(bridge.add_paint_layer());
+    let after_add = active_paint_stack(&bridge);
+    assert_ne!(after_add, before_add);
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert!(bridge.state.undo());
+    assert_eq!(active_paint_stack(&bridge), before_add);
+    assert!(bridge.state.redo());
+    assert_eq!(active_paint_stack(&bridge), after_add);
+
+    let layer_id = after_add.layers[1].id.to_string();
+    let before_opacity = active_paint_stack(&bridge);
+    assert!(bridge.set_paint_layer_opacity(&layer_id, 0.35));
+    let after_opacity = active_paint_stack(&bridge);
+    assert_eq!(bridge.state.project.undo.depth(), (2, 0));
+    assert!(bridge.state.undo());
+    assert_eq!(active_paint_stack(&bridge), before_opacity);
+    assert!(bridge.state.redo());
+    assert_eq!(active_paint_stack(&bridge), after_opacity);
+
+    let before_reorder = active_paint_stack(&bridge);
+    assert!(bridge.move_paint_layer(&layer_id, -1));
+    let after_reorder = active_paint_stack(&bridge);
+    assert_eq!(bridge.state.project.undo.depth(), (3, 0));
+    assert!(bridge.state.undo());
+    assert_eq!(active_paint_stack(&bridge), before_reorder);
+    assert!(bridge.state.redo());
+    assert_eq!(active_paint_stack(&bridge), after_reorder);
+
+    let before_remove = active_paint_stack(&bridge);
+    assert!(bridge.remove_paint_layer(&layer_id));
+    let after_remove = active_paint_stack(&bridge);
+    assert_eq!(bridge.state.project.undo.depth(), (4, 0));
+    assert!(bridge.state.undo());
+    assert_eq!(active_paint_stack(&bridge), before_remove);
+    assert!(bridge.state.redo());
+    assert_eq!(active_paint_stack(&bridge), after_remove);
+}
+
+#[test]
 fn paint_layer_panel_refuses_to_remove_the_last_layer() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
@@ -2229,6 +2285,8 @@ fn decal_layer_transform_and_bake_workflow() {
     let decal_id = vm.paint_layers.last().unwrap().id.clone();
 
     // Mutate decal transform / Modifica transformação do decalque
+    let transform_revision_before = bridge.state.project.project.texture_revision;
+    let history_before_transform = bridge.state.project.undo.depth().0;
     bridge.apply(UiIntent::SetDecalTransform {
         layer_id: decal_id.clone(),
         center_u: 0.7,
@@ -2237,6 +2295,14 @@ fn decal_layer_transform_and_bake_workflow() {
         scale_v: 0.4,
         rotation_deg: 45.0,
     });
+    assert_eq!(
+        bridge.state.project.project.texture_revision,
+        transform_revision_before + 1
+    );
+    assert_eq!(
+        bridge.state.project.undo.depth(),
+        (history_before_transform + 1, 0)
+    );
 
     let vm = bridge.view_model();
     assert!(vm.active_layer_is_decal);
@@ -2247,7 +2313,17 @@ fn decal_layer_transform_and_bake_workflow() {
     assert!((vm.decal_rotation_deg - 45.0).abs() < 1e-3);
 
     // Bake decal to raster / Converte decalque para raster
+    let bake_revision_before = bridge.state.project.project.texture_revision;
+    let history_before_bake = bridge.state.project.undo.depth().0;
     bridge.apply(UiIntent::BakeActiveDecal);
+    assert_eq!(
+        bridge.state.project.project.texture_revision,
+        bake_revision_before + 1
+    );
+    assert_eq!(
+        bridge.state.project.undo.depth(),
+        (history_before_bake + 1, 0)
+    );
     let vm = bridge.view_model();
     assert!(
         !vm.active_layer_is_decal,
@@ -2333,6 +2409,35 @@ fn test_decal_live_interactive_drag_manipulator_and_preview_commands() {
     assert!(bridge.active_layer_is_decal());
     bridge.apply(UiIntent::BakeActiveDecal);
     assert!(!bridge.active_layer_is_decal());
+}
+
+#[test]
+fn decal_drag_commits_once_and_cancel_restores_without_history() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert!(bridge.add_decal_layer());
+    let history_before = bridge.state.project.undo.depth().0;
+    let before = bridge.active_decal().expect("decal before drag");
+
+    assert!(bridge.decal_drag_begin(512.0, 384.0, true, false));
+    assert!(bridge.decal_drag_to(512.0, 334.0, true, false));
+    assert!(bridge.decal_drag_end());
+    let after = bridge.active_decal().expect("decal after drag");
+    assert_ne!(after, before);
+    assert_eq!(bridge.state.project.undo.depth(), (history_before + 1, 0));
+
+    assert!(bridge.state.undo());
+    assert_eq!(bridge.active_decal().expect("decal after undo"), before);
+    assert!(bridge.state.redo());
+    assert_eq!(bridge.active_decal().expect("decal after redo"), after);
+
+    let depth_before_cancel = bridge.state.project.undo.depth();
+    assert!(bridge.decal_drag_begin(512.0, 384.0, false, true));
+    assert!(bridge.decal_drag_to(562.0, 384.0, false, true));
+    assert_ne!(bridge.active_decal().expect("decal preview"), after);
+    assert!(bridge.cancel_decal_drag());
+    assert_eq!(bridge.active_decal().expect("decal after cancel"), after);
+    assert_eq!(bridge.state.project.undo.depth(), depth_before_cancel);
 }
 
 #[test]
@@ -4580,6 +4685,36 @@ fn paint_2d_stroke_flow_and_undo() {
         .and_then(|t| t.get(128, 128))
         .expect("pixel");
     assert_eq!(redone_color[0], 255);
+}
+
+#[test]
+fn paint_2d_fill_is_one_undoable_transaction() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
+    bridge.apply(UiIntent::SetPaintColor([1.0, 0.0, 0.0]));
+    bridge.apply(UiIntent::SetActiveTool("fill".into()));
+    let before = bridge.state.project.active().unwrap().texture.clone();
+    let before_stack = active_paint_stack(&bridge);
+    let history_before = bridge.state.project.undo.depth().0;
+
+    bridge.apply(UiIntent::Paint2dStroke {
+        norm_x: 0.5,
+        norm_y: 0.5,
+        phase: 0,
+    });
+    let after = bridge.state.project.active().unwrap().texture.clone();
+    let after_stack = active_paint_stack(&bridge);
+    assert_ne!(after, before);
+    assert_ne!(after_stack, before_stack);
+    assert_eq!(bridge.state.project.undo.depth(), (history_before + 1, 0));
+
+    assert!(bridge.state.undo());
+    assert_eq!(bridge.state.project.active().unwrap().texture, before);
+    assert_eq!(active_paint_stack(&bridge), before_stack);
+    assert!(bridge.state.redo());
+    assert_eq!(bridge.state.project.active().unwrap().texture, after);
+    assert_eq!(active_paint_stack(&bridge), after_stack);
 }
 
 #[test]
@@ -7123,6 +7258,13 @@ fn test_primitives_created_at_3d_cursor() {
 #[test]
 fn test_profile_interactive_volume_flow() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let initial_asset_ids: Vec<_> = bridge
+        .state
+        .project
+        .assets
+        .iter()
+        .map(|asset| asset.id)
+        .collect();
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
 
     // Draw a square profile
@@ -7173,6 +7315,17 @@ fn test_profile_interactive_volume_flow() {
     );
     assert_eq!(bridge.state.profile.points.len(), 4);
     assert!(bridge.state.profile.closed);
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .assets
+            .iter()
+            .map(|asset| asset.id)
+            .collect::<Vec<_>>(),
+        initial_asset_ids
+    );
+    assert_eq!(bridge.state.project.undo.depth(), (0, 0));
 
     // 4. Enter Revolve volume preview
     assert!(bridge.enter_profile_volume("revolve"));
@@ -7190,6 +7343,28 @@ fn test_profile_interactive_volume_flow() {
     assert!(bridge.state.profile.points.is_empty());
     let active = bridge.state.project.active().expect("active profile asset");
     assert_eq!(active.name, "Profile");
+    let committed_id = active.id;
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert!(bridge.state.undo());
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .assets
+            .iter()
+            .map(|asset| asset.id)
+            .collect::<Vec<_>>(),
+        initial_asset_ids
+    );
+    assert!(bridge.state.redo());
+    assert!(
+        bridge
+            .state
+            .project
+            .assets
+            .iter()
+            .any(|asset| asset.id == committed_id && asset.name == "Profile")
+    );
 }
 
 #[test]
@@ -7645,10 +7820,54 @@ fn test_delete_and_dissolve_selection() {
     }
 
     // Delete or dissolve selected face
-    let initial_faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let before_topology: Vec<_> = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .faces
+        .iter()
+        .map(|face| face.verts.clone())
+        .collect();
+    let history_before = bridge.state.project.undo.depth().0;
     assert!(bridge.delete_or_dissolve_selection());
-    let after_faces = bridge.state.project.active_mesh().unwrap().faces.len();
-    assert!(after_faces < initial_faces);
+    let after_topology: Vec<_> = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .faces
+        .iter()
+        .map(|face| face.verts.clone())
+        .collect();
+    assert!(after_topology.len() < before_topology.len());
+    assert_eq!(bridge.state.project.undo.depth(), (history_before + 1, 0));
+    assert!(bridge.state.undo());
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .iter()
+            .map(|face| face.verts.clone())
+            .collect::<Vec<_>>(),
+        before_topology
+    );
+    assert!(bridge.state.redo());
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .iter()
+            .map(|face| face.verts.clone())
+            .collect::<Vec<_>>(),
+        after_topology
+    );
 
     // In Object Mode, Delete deletes the active asset
     bridge.state.set_selection_domain(SelectionDomain::Object);

@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Gate G0 — Integridade Transacional, Revisões e Cache (27/09/2026)
+- **Transações e Undo/Redo**: `CommandDispatcher` passa a ser o owner único do lifecycle de comandos destrutivos; Paint, decal, delete/dissolve e Profile Volume usam snapshots anteriores e um único roundtrip, com cancelamento sem histórico.
+- **Revisões Granulares**: novos domínios para topologia, posições, normais, seleção, UV, cores, materiais, texturas e transforms reduzem invalidações indevidas e permanecem monotônicos após restore.
+- **Histórico e Cache**: orçamento de Undo considera dados heap do projeto; cache de modifiers identifica todo o conteúdo da malha fonte, não apenas contagens.
+- **Domínio Headless**: composição derivada da pilha de Paint pertence ao projeto, tornando comandos de decal completos sem pós-processamento na UI.
+
 ### Melhorias de Modelagem, Primitivas, Área de Transferência e Visualização de Viewport (27/09/2026)
 - **Ciclo de Vida de Primitivas & Descarte de Card Sem Trava**:
   - Finalização e confirmação automática da sessão de criação de primitivas (`finalize_primitive_session`) ao clicar fora em espaço vazio ou selecionar objetos/elementos no viewport, ao arrastar gizmos ou ao acionar atalhos/ferramentas.

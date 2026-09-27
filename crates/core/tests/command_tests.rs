@@ -5,11 +5,12 @@
 use petunia_core::ProjectService;
 use petunia_core::command::{
     AddPrimitiveCmd, BakeDecalCmd, BoxSelectCmd, ClearSelectionCmd, CommandDispatcher,
-    CommandError, DeleteAssetCmd, DeleteSelectionCmd, DuplicateAssetCmd, DuplicateSelectionCmd,
-    ExtrudeIndividualCmd, FlipDiagonalCmd, FlipNormalsCmd, InvertSelectionCmd, MergeCenterCmd,
-    PrimitiveKind, ReorderAssetCmd, RevolveCmd, SelectAllCmd, SelectLinkedCmd,
-    SetAssetCollectionCmd, SetDecalTransformCmd, SubdivideSelectionCmd, ToggleCollectionLockCmd,
-    ToggleCollectionVisibilityCmd, ToggleLockAssetCmd, ToggleVisibilityAssetCmd,
+    CommandError, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeleteSelectionCmd, DissolveCmd,
+    DuplicateAssetCmd, DuplicateSelectionCmd, ExtrudeIndividualCmd, FlipDiagonalCmd,
+    FlipNormalsCmd, InvertSelectionCmd, MergeCenterCmd, PrimitiveKind, ReorderAssetCmd, RevolveCmd,
+    SelectAllCmd, SelectLinkedCmd, SetAssetCollectionCmd, SetDecalTransformCmd,
+    SubdivideSelectionCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
+    ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UvRelaxCmd, UvStitchCmd,
 };
 use petunia_core::state::{ASSET_NAME_MAX_LEN, AppState, AssetRenameError, EditMode};
 
@@ -247,6 +248,136 @@ fn test_selection_commands_are_non_destructive() {
 
     // Seleção não é destrutiva: undo() retorna false porque nenhuma operação destrutiva foi feita
     assert!(!state.undo());
+}
+
+#[test]
+fn selection_command_advances_only_selection_revision() {
+    let mut state = AppState::default();
+    state.set_edit_mode(EditMode::Edit);
+    state.sync_selection();
+    let before = state.project.project.revision_clock();
+
+    state.dispatch(&SelectAllCmd).expect("select all");
+    let after = state.project.project.revision_clock();
+
+    assert_eq!(after[0], before[0], "topology revision");
+    assert_eq!(after[1], before[1], "position revision");
+    assert_eq!(after[2], before[2], "normal revision");
+    assert_eq!(after[3], before[3] + 1, "selection revision");
+    assert_eq!(after[4], before[4], "uv revision");
+    assert_eq!(after[5], before[5], "color revision");
+    assert_eq!(after[6], before[6], "material revision");
+    assert_eq!(after[7], before[7], "texture revision");
+    assert_eq!(after[8], before[8], "transform revision");
+    assert_eq!(state.project.undo.depth(), (0, 0));
+}
+
+#[test]
+fn uv_commands_commit_once_and_advance_only_uv_revision() {
+    for command in [
+        &UvStitchCmd as &dyn petunia_core::command::Command,
+        &UvRelaxCmd { iterations: 2 } as &dyn petunia_core::command::Command,
+    ] {
+        let mut state = AppState::default();
+        state.sync_selection();
+        let before = state.project.project.revision_clock();
+
+        state.dispatch(command).expect("uv command");
+        let after = state.project.project.revision_clock();
+
+        assert_eq!(state.project.undo.depth(), (1, 0), "{}", command.label());
+        assert_eq!(after[0], before[0], "{} topology", command.label());
+        assert_eq!(after[1], before[1], "{} positions", command.label());
+        assert_eq!(after[2], before[2], "{} normals", command.label());
+        assert_eq!(after[3], before[3], "{} selection", command.label());
+        assert_eq!(after[4], before[4] + 1, "{} uv", command.label());
+        assert_eq!(after[5], before[5], "{} colors", command.label());
+        assert_eq!(after[6], before[6], "{} materials", command.label());
+        assert_eq!(after[7], before[7], "{} textures", command.label());
+        assert_eq!(after[8], before[8], "{} transforms", command.label());
+    }
+}
+
+#[test]
+fn flip_normals_advances_only_normal_revision() {
+    let mut state = AppState::default();
+    state.sync_selection();
+    let before = state.project.project.revision_clock();
+
+    state.dispatch(&FlipNormalsCmd).expect("flip normals");
+    let after = state.project.project.revision_clock();
+
+    assert_eq!(state.project.undo.depth(), (1, 0));
+    for index in [0, 1, 3, 4, 5, 6, 7, 8] {
+        assert_eq!(after[index], before[index], "revision index {index}");
+    }
+    assert_eq!(after[2], before[2] + 1);
+}
+
+#[test]
+fn dissolve_and_contextual_delete_each_commit_one_roundtrip() {
+    for contextual in [false, true] {
+        let mut state = AppState::default();
+        state.set_edit_mode(EditMode::Edit);
+        let edge = {
+            let face = &state.project.active_mesh().unwrap().faces[0];
+            let a = face.verts[0];
+            let b = face.verts[1];
+            (a.min(b), a.max(b))
+        };
+        state
+            .project
+            .active_mesh_mut()
+            .unwrap()
+            .selected_edges
+            .insert(edge);
+        state.sync_selection();
+        let before_faces = state.project.active_mesh().unwrap().faces.len();
+        let before_depth = state.project.undo.depth().0;
+
+        if contextual {
+            state
+                .dispatch(&DeleteOrDissolveSelectionCmd)
+                .expect("contextual delete");
+        } else {
+            state.dispatch(&DissolveCmd).expect("dissolve");
+        }
+        let after_faces = state.project.active_mesh().unwrap().faces.len();
+
+        assert!(after_faces < before_faces);
+        assert_eq!(state.project.undo.depth(), (before_depth + 1, 0));
+        assert!(state.undo());
+        assert_eq!(
+            state.project.active_mesh().unwrap().faces.len(),
+            before_faces
+        );
+        assert!(state.redo());
+        assert_eq!(
+            state.project.active_mesh().unwrap().faces.len(),
+            after_faces
+        );
+    }
+}
+
+#[test]
+fn project_history_budget_uses_deep_snapshot_size() {
+    let mut state = AppState::default();
+    state.project.active_mut().unwrap().texture =
+        Some(petunia_project::Canvas::new(256, 256, [12, 34, 56, 255]));
+    let snapshot_bytes = state.project.project.estimated_bytes();
+    assert!(snapshot_bytes > std::mem::size_of::<petunia_project::Project>() + 256 * 256 * 4);
+
+    state
+        .project
+        .undo
+        .set_byte_budget(snapshot_bytes.saturating_add(1));
+    state.checkpoint("first deep snapshot");
+    state.project.active_mut().unwrap().name = "Changed".into();
+    state.checkpoint("second deep snapshot");
+
+    let metrics = state.project.history_metrics();
+    assert_eq!(metrics.history_entries, 1);
+    assert!(metrics.largest_entry >= snapshot_bytes);
 }
 
 #[test]

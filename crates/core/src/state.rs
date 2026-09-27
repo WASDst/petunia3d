@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use glam::Vec3;
 use petunia_commands::UndoStack;
 use petunia_config::{I18n, Keybinds};
-use petunia_project::Project;
+use petunia_project::{Project, ProjectChanges};
 use uuid::Uuid;
 
 use super::camera::Camera;
@@ -359,6 +359,12 @@ impl ProjectState {
         let snap = self.project.clone();
         let bytes = snap.estimated_bytes();
         self.undo.checkpoint_sized(label, &snap, bytes);
+        self.is_dirty = true;
+    }
+
+    pub fn checkpoint_snapshot(&mut self, label: &str, snapshot: &Project) {
+        self.undo
+            .checkpoint_sized(label, snapshot, snapshot.estimated_bytes());
         self.is_dirty = true;
     }
 
@@ -913,7 +919,7 @@ impl EditorSession {
         }
     }
 
-    pub fn sync_selection(&mut self, project: &Project, events: &mut EventBus) {
+    pub fn sync_selection(&mut self, project: &Project, events: &mut EventBus) -> bool {
         let mut sel = Selection::default();
         if let Some(a) = project.assets.get(project.active) {
             sel.asset = Some(a.id);
@@ -945,8 +951,12 @@ impl EditorSession {
                 .collect();
             sel.edges = a.mesh.selected_edges.iter().copied().collect();
         }
+        if self.selection == sel {
+            return false;
+        }
         self.selection = sel.clone();
         events.emit(AppEvent::SelectionChanged(sel));
+        true
     }
 }
 
@@ -1658,6 +1668,16 @@ impl AppState {
 
     /// Congela transparentemente a primitiva paramétrica do asset ativo em malha estática.
     pub fn freeze_active_primitive(&mut self) -> bool {
+        if self.freeze_active_primitive_for_command() {
+            self.emit_mesh_changed();
+            self.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn freeze_active_primitive_for_command(&mut self) -> bool {
         let Some(asset) = self.project.active_mut() else {
             return false;
         };
@@ -1665,8 +1685,6 @@ impl AppState {
             if let Some(session) = self.session.primitive_session.take() {
                 self.session.last_primitive = Some(session.descriptor);
             }
-            self.emit_mesh_changed();
-            self.mark_dirty();
             true
         } else {
             false
@@ -1934,13 +1952,16 @@ impl AppState {
         }
         let cur = self.project.project.clone();
         let bytes = cur.estimated_bytes();
-        if let Some(prev) = self.project.undo.undo_sized(cur, bytes) {
+        let revision_clock = cur.revision_clock();
+        if let Some(mut prev) = self.project.undo.undo_sized(cur, bytes) {
+            prev.rebase_revisions_after_restore(revision_clock);
             self.session.selection.assets = prev.history_selection.clone();
             self.project.palette = prev.palette.clone();
             self.project.project = prev;
             self.project.is_dirty = !self.project.undo.is_clean();
             self.sync_selection();
             self.session.tools.uv_selected.clear();
+            self.emit_project_changed(ProjectChanges::ALL);
             self.mark_dirty();
             true
         } else {
@@ -1962,13 +1983,16 @@ impl AppState {
         }
         let cur = self.project.project.clone();
         let bytes = cur.estimated_bytes();
-        if let Some(next) = self.project.undo.redo_sized(cur, bytes) {
+        let revision_clock = cur.revision_clock();
+        if let Some(mut next) = self.project.undo.redo_sized(cur, bytes) {
+            next.rebase_revisions_after_restore(revision_clock);
             self.session.selection.assets = next.history_selection.clone();
             self.project.palette = next.palette.clone();
             self.project.project = next;
             self.project.is_dirty = !self.project.undo.is_clean();
             self.sync_selection();
             self.session.tools.uv_selected.clear();
+            self.emit_project_changed(ProjectChanges::ALL);
             self.mark_dirty();
             true
         } else {
@@ -1977,20 +2001,81 @@ impl AppState {
     }
 
     pub fn emit_mesh_changed(&mut self) {
-        let id = self.project.assets.get(self.project.active).map(|a| a.id);
-        self.project.project.bump_topology();
-        self.project.project.bump_positions();
-        if let Some(asset_id) = id {
-            self.events.emit(AppEvent::MeshChanged { asset_id });
-        }
-        self.mark_dirty();
+        self.emit_project_changed(ProjectChanges::GEOMETRY);
     }
 
-    pub fn sync_selection(&mut self) {
-        self.session
+    pub fn emit_positions_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::POSITIONS);
+    }
+
+    pub fn emit_normals_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::NORMALS);
+    }
+
+    pub fn emit_uv_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::UVS);
+    }
+
+    pub fn emit_color_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::COLORS);
+    }
+
+    pub fn emit_material_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::MATERIALS);
+    }
+
+    pub fn emit_texture_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::TEXTURES);
+    }
+
+    pub fn emit_transform_changed(&mut self) {
+        self.emit_project_changed(ProjectChanges::TRANSFORMS);
+    }
+
+    pub fn emit_project_changed(&mut self, changes: ProjectChanges) {
+        if changes.is_empty() {
+            return;
+        }
+        self.project.project.bump_changes(changes);
+        self.notify_project_changed(changes);
+    }
+
+    fn notify_project_changed(&mut self, changes: ProjectChanges) {
+        let id = self.project.assets.get(self.project.active).map(|a| a.id);
+        if changes.intersects(
+            ProjectChanges::GEOMETRY
+                | ProjectChanges::UVS
+                | ProjectChanges::TRANSFORMS
+                | ProjectChanges::MATERIALS,
+        ) && let Some(asset_id) = id
+        {
+            self.events.emit(AppEvent::MeshChanged { asset_id });
+        }
+        if changes.contains(ProjectChanges::TEXTURES)
+            && let Some(asset_id) = id
+        {
+            self.events.emit(AppEvent::TextureChanged { asset_id });
+        }
+        let reason = if changes.intersects(ProjectChanges::TEXTURES | ProjectChanges::MATERIALS) {
+            DirtyReason::MaterialEdit
+        } else if changes.contains(ProjectChanges::TRANSFORMS) {
+            DirtyReason::TransformModal
+        } else {
+            DirtyReason::GeometryEdit
+        };
+        self.render.mark_dirty_reason(reason);
+    }
+
+    pub fn sync_selection(&mut self) -> bool {
+        let changed = self
+            .session
             .sync_selection(&self.project.project, &mut self.events);
         self.project.project.history_selection = self.session.selection.assets.clone();
-        self.mark_dirty();
+        if changed {
+            self.project.project.bump_selection();
+            self.render.mark_dirty_reason(DirtyReason::Selection);
+        }
+        changed
     }
 
     /// Shared object selection authority for Parts, viewport and automation.
@@ -2279,7 +2364,7 @@ impl AppState {
             .undo
             .checkpoint_sized("Set Origin to Geometry", &prev, prev.estimated_bytes());
         self.mark_document_dirty();
-        self.emit_mesh_changed();
+        self.emit_transform_changed();
         self.set_status("Origin set to geometry center.");
         Ok(())
     }
@@ -2317,7 +2402,7 @@ impl AppState {
             .undo
             .checkpoint_sized("Set Origin to Bottom", &prev, prev.estimated_bytes());
         self.mark_document_dirty();
-        self.emit_mesh_changed();
+        self.emit_transform_changed();
         self.set_status("Origin set to bottom.");
         Ok(())
     }
@@ -2342,7 +2427,7 @@ impl AppState {
             prev.estimated_bytes(),
         );
         self.mark_document_dirty();
-        self.emit_mesh_changed();
+        self.emit_transform_changed();
         self.set_status("Origin set to 3D Cursor.");
         Ok(())
     }
@@ -2371,7 +2456,7 @@ impl AppState {
             prev.estimated_bytes(),
         );
         self.mark_document_dirty();
-        self.emit_mesh_changed();
+        self.emit_transform_changed();
         self.set_status("Origin set to selection.");
         Ok(())
     }
@@ -2411,7 +2496,7 @@ impl AppState {
             .undo
             .checkpoint_sized("Geometry to Origin", &prev, prev.estimated_bytes());
         self.mark_document_dirty();
-        self.emit_mesh_changed();
+        self.emit_project_changed(ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS);
         self.set_status("Geometry centered at origin.");
         Ok(())
     }
@@ -2633,14 +2718,10 @@ impl AppState {
         }
         if n > 0 {
             if let Some(before) = before {
-                self.project.undo.checkpoint("paint", &before);
+                self.project.checkpoint_snapshot("paint", &before);
             }
-            let id = self.project.assets.get(self.project.active).map(|a| a.id);
-            if let Some(asset_id) = id {
-                self.events.emit(AppEvent::TextureChanged { asset_id });
-            }
+            self.emit_color_changed();
             self.ui.status = format!("paint: {n} verts");
-            self.mark_dirty();
         }
     }
 
@@ -2660,33 +2741,50 @@ impl AppState {
         let Some(original) = self.session.tools.paint_stroke.take() else {
             return;
         };
-        if cancel {
-            self.project.project = original;
-        } else {
-            let verts_changed = original
-                .active_mesh()
-                .zip(self.project.active_mesh())
-                .is_some_and(|(a, b)| {
-                    a.verts
-                        .iter()
-                        .zip(&b.verts)
-                        .any(|(a, b)| a.color != b.color)
+        let colors_changed = original.assets.len() != self.project.assets.len()
+            || original
+                .assets
+                .iter()
+                .zip(self.project.assets.iter())
+                .any(|(before, after)| {
+                    before.mesh.verts.len() != after.mesh.verts.len()
+                        || before
+                            .mesh
+                            .verts
+                            .iter()
+                            .zip(&after.mesh.verts)
+                            .any(|(before, after)| before.color != after.color)
                 });
-            // Stroke só de textura também gera 1 nível (compara pixels).
-            let tex_changed =
-                original
-                    .assets
-                    .iter()
-                    .zip(self.project.assets.iter())
-                    .any(|(a, b)| {
-                        a.texture.as_ref().map(|c| &c.pixels)
-                            != b.texture.as_ref().map(|c| &c.pixels)
-                    });
-            if verts_changed || tex_changed {
-                self.project.undo.checkpoint("Paint stroke", &original);
+        let paint_changed = original.assets.len() != self.project.assets.len()
+            || original
+                .assets
+                .iter()
+                .zip(self.project.assets.iter())
+                .any(|(before, after)| {
+                    before.texture != after.texture || before.paint_stack != after.paint_stack
+                });
+        let mut changes = ProjectChanges::NONE;
+        if colors_changed {
+            changes |= ProjectChanges::COLORS;
+        }
+        if paint_changed {
+            changes |= ProjectChanges::TEXTURES;
+        }
+        if cancel {
+            let revision_clock =
+                (!changes.is_empty()).then(|| self.project.project.revision_clock());
+            self.project.project = original;
+            if let Some(revision_clock) = revision_clock {
+                self.project
+                    .project
+                    .rebase_revisions_after_restore(revision_clock);
+            }
+            self.emit_project_changed(changes);
+        } else {
+            if !changes.is_empty() {
+                self.project.checkpoint_snapshot("Paint stroke", &original);
             }
         }
-        self.emit_mesh_changed();
     }
 
     /// Vértice mais próximo do raio (pick em perspectiva e ortográfica).

@@ -580,6 +580,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_drag_target: Option<ProfileHitTarget>,
     pub profile_selected_node: Option<usize>,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
+    profile_volume_original: Option<Project>,
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
     pub clipboard: Option<GeometryClipboard>,
@@ -782,6 +783,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_drag_target: None,
             profile_selected_node: None,
             profile_preview_asset_id: None,
+            profile_volume_original: None,
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
             clipboard: None,
@@ -1330,8 +1332,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         scale_uv: [scale_u, scale_v],
                         rotation_rad: rotation_deg.to_radians(),
                     });
-                    petunia_module_paint::PaintModule::composite_active(&mut self.state);
-                    self.state.emit_mesh_changed();
                 }
             }
             UiIntent::BakeActiveDecal => {
@@ -2481,7 +2481,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             )
         };
         self.state.set_status(message);
-        self.state.emit_mesh_changed();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2498,7 +2498,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.active_material_slot = count as i32;
         self.state
             .set_status(format!("Created Material {}", count + 1));
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2516,7 +2516,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.active_material_slot = new_idx as i32;
         self.state
             .set_status(format!("Duplicated material to slot {new_idx}"));
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2543,9 +2543,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let material_id = self.state.project.project.materials[slot].id;
         self.state.checkpoint("remove material");
         self.state.project.project.remove_material(material_id);
-        self.state.project.project.bump_materials();
         self.active_material_slot = (slot as i32 - 1).max(0);
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2565,8 +2564,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         material.base_color[1] = green.clamp(0.0, 1.0);
         material.base_color[2] = blue.clamp(0.0, 1.0);
         material.base_color[3] = 1.0;
-        self.state.project.project.bump_materials();
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2595,8 +2593,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         }
         material.validate();
-        self.state.project.project.bump_materials();
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2618,8 +2615,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         material.profile = profile;
-        self.state.project.project.bump_materials();
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2639,8 +2635,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         material.alpha_mode = mode;
-        self.state.project.project.bump_materials();
-        self.state.mark_dirty();
+        self.state.emit_material_changed();
         true
     }
 
@@ -2664,9 +2659,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 255,
             ],
         ));
-        self.state.project.project.bump_materials();
-        self.state.project.project.bump_textures();
-        self.state.mark_dirty();
+        self.state.emit_project_changed(
+            petunia_project::ProjectChanges::MATERIALS | petunia_project::ProjectChanges::TEXTURES,
+        );
         true
     }
 
@@ -2687,9 +2682,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         material.albedo_texture = None;
-        self.state.project.project.bump_materials();
-        self.state.project.project.bump_textures();
-        self.state.mark_dirty();
+        self.state.emit_project_changed(
+            petunia_project::ProjectChanges::MATERIALS | petunia_project::ProjectChanges::TEXTURES,
+        );
         true
     }
 
@@ -3562,6 +3557,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         };
 
+        if self.profile_volume_mode.is_none() {
+            self.state.project.project.history_selection =
+                self.state.session.selection.assets.clone();
+            self.profile_volume_original = Some(self.state.project.project.clone());
+        }
         self.profile_volume_mode = Some(mode);
         self.update_profile_volume_preview();
         self.state.set_status(match mode {
@@ -3622,12 +3622,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_none() {
             return false;
         }
+        let had_preview = self.profile_preview_asset_id.is_some();
+        let Some(original) = self.profile_volume_original.take() else {
+            self.state
+                .set_status("Profile volume transaction has no initial snapshot");
+            return false;
+        };
 
         if let Some(id) = self.profile_preview_asset_id.take() {
             if let Some(asset) = self.state.project.assets.iter_mut().find(|a| a.id == id) {
                 asset.name = "Profile".to_string();
             }
-            self.state.checkpoint("draw profile");
         } else if let Some(mode) = self.profile_volume_mode {
             let mesh_res = match mode {
                 petunia_module_model::ProfileVolumeMode::Extrude => {
@@ -3644,10 +3649,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             };
             if let Ok(mesh) = mesh_res {
-                self.state.checkpoint("draw profile");
                 self.state.project.add("Profile", mesh);
             }
         }
+        self.state
+            .project
+            .checkpoint_snapshot("draw profile", &original);
 
         self.state.profile.clear();
         self.profile_volume_mode = None;
@@ -3655,7 +3662,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.sync_viewport_context();
         self.state.session.tools.active_tool = "select".to_string();
         self.state.sync_selection();
-        self.state.emit_mesh_changed();
+        if !had_preview {
+            self.state.emit_mesh_changed();
+        }
         self.state.mark_dirty();
         self.state.set_status(self.state.t("profile.generated"));
         true
@@ -3664,11 +3673,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn cancel_profile_volume(&mut self) -> bool {
         let had_preview =
             self.profile_preview_asset_id.is_some() || self.profile_volume_mode.is_some();
-        if let Some(id) = self.profile_preview_asset_id.take() {
-            self.state.project.remove_by_id(id);
+        self.profile_preview_asset_id = None;
+        if let Some(mut original) = self.profile_volume_original.take() {
+            let revision_clock = self.state.project.project.revision_clock();
+            original.rebase_revisions_after_restore(revision_clock);
+            self.state.session.selection.assets = original.history_selection.clone();
+            self.state.project.project = original;
             self.state.sync_selection();
             self.state.emit_mesh_changed();
-            self.state.mark_dirty();
         }
         self.profile_volume_mode = None;
         if had_preview {
@@ -4346,7 +4358,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         decal.scale_uv = [scale_uv[0].clamp(0.01, 5.0), scale_uv[1].clamp(0.01, 5.0)];
         decal.rotation_rad = rotation_rad;
         petunia_module_paint::PaintModule::composite_active(&mut self.state);
-        self.state.emit_mesh_changed();
         self.state.mark_dirty();
         true
     }
@@ -4355,6 +4366,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Some(decal) = self.active_decal() else {
             return false;
         };
+        self.state.begin_paint_stroke();
         self.decal_drag_initial = Some((
             x,
             y,
@@ -4362,7 +4374,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             decal.scale_uv,
             decal.rotation_rad.to_degrees(),
         ));
-        self.decal_drag_to(x, y, is_shift, is_ctrl)
+        if self.decal_drag_to(x, y, is_shift, is_ctrl) {
+            true
+        } else {
+            self.decal_drag_initial = None;
+            self.state.finish_paint_stroke(true);
+            false
+        }
     }
 
     pub fn decal_drag_to(&mut self, x: f32, y: f32, is_shift: bool, is_ctrl: bool) -> bool {
@@ -4410,9 +4428,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn decal_drag_end(&mut self) -> bool {
         if self.decal_drag_initial.take().is_some() {
-            self.state.checkpoint("decal transform");
+            self.state.finish_paint_stroke(false);
             self.state.set_status("Decal transform committed");
-            self.state.mark_dirty();
             true
         } else {
             false
@@ -4420,10 +4437,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn cancel_decal_drag(&mut self) -> bool {
-        if let Some((_, _, init_center, init_scale, init_rot)) = self.decal_drag_initial.take() {
-            self.set_active_decal_transform(init_center, init_scale, init_rot.to_radians());
+        if self.decal_drag_initial.take().is_some() {
+            self.state.finish_paint_stroke(true);
             self.state.set_status("Decal transform cancelled");
-            self.state.mark_dirty();
             true
         } else {
             false
@@ -4520,7 +4536,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 color_start,
                 color_end,
             );
-            self.state.emit_mesh_changed();
+            self.state.emit_texture_changed();
             self.state.mark_dirty();
             self.state.set_status("Gradient committed");
             return true;
@@ -4546,7 +4562,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 strength,
             },
         );
-        self.state.emit_mesh_changed();
+        self.state.emit_texture_changed();
         self.state.mark_dirty();
         self.state
             .set_status(format!("Shape committed ({brush:?})"));
@@ -4749,7 +4765,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             color_start,
                             color_end,
                         );
-                        self.state.emit_mesh_changed();
+                        self.state.emit_texture_changed();
                         self.state.mark_dirty();
                         self.state.set_status("Gradient applied");
                         return true;
@@ -4789,14 +4805,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 if tool == "fill" {
                     let scope = self.state.session.tools.fill_scope;
+                    self.state.begin_paint_stroke();
                     petunia_module_paint::PaintModule::canvas_fill_scoped(
                         &mut self.state,
                         None,
                         Some((px, py)),
                         scope,
                     );
+                    self.state.finish_paint_stroke(false);
                     self.state.set_status(format!("Filled canvas ({scope:?})"));
-                    self.state.mark_dirty();
                     return true;
                 }
                 self.state.begin_paint_stroke();
@@ -5755,7 +5772,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.checkpoint("move uv");
         petunia_module_uv::UvModule::move_selected(&mut self.state, du, dv);
-        self.state.emit_mesh_changed();
         self.state
             .set_status(format!("UV moved by ({du:.3}, {dv:.3})"));
         true
@@ -5768,7 +5784,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.checkpoint("scale uv");
         petunia_module_uv::UvModule::scale_selected(&mut self.state, factor);
-        self.state.emit_mesh_changed();
         self.state.set_status(format!("UV scaled ×{factor:.3}"));
         true
     }
@@ -5780,7 +5795,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.checkpoint("rotate uv");
         petunia_module_uv::UvModule::rotate_selected(&mut self.state, degrees.to_radians());
-        self.state.emit_mesh_changed();
         self.state.set_status(format!("UV rotated {degrees:.1}°"));
         true
     }
@@ -5808,8 +5822,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(format!(
                 "UV seams on selected edges toggled ({count} total)"
             ));
-            self.state.emit_mesh_changed();
-            self.state.mark_dirty();
+            self.state.emit_uv_changed();
             return true;
         }
 
@@ -5840,8 +5853,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.set_status(format!(
             "UV seams on the selected face toggled ({count} total)"
         ));
-        self.state.emit_mesh_changed();
-        self.state.mark_dirty();
+        self.state.emit_uv_changed();
         true
     }
 
@@ -5859,8 +5871,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             mesh.uv_seams.clear();
         }
         self.state.set_status("UV: all seams cleared");
-        self.state.emit_mesh_changed();
-        self.state.mark_dirty();
+        self.state.emit_uv_changed();
         true
     }
 
@@ -5892,8 +5903,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let count = mesh.uv_pinned.len();
         self.state
             .set_status(format!("UV pins toggled ({count} pinned corners total)"));
-        self.state.emit_mesh_changed();
-        self.state.mark_dirty();
+        self.state.emit_uv_changed();
         true
     }
 
@@ -5911,8 +5921,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             mesh.clear_all_pins();
         }
         self.state.set_status("UV: all pinned vertices cleared");
-        self.state.emit_mesh_changed();
-        self.state.mark_dirty();
+        self.state.emit_uv_changed();
         true
     }
 
@@ -5926,6 +5935,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         mutate: impl FnOnce(&mut petunia_project::paint_layers::PaintLayerStack) -> bool,
     ) -> bool {
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
+        let before = self.state.project.project.clone();
         let active = self.state.project.active;
         let Some(asset) = self.state.project.assets.get_mut(active) else {
             return false;
@@ -5936,9 +5946,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !mutate(stack) {
             return false;
         }
-        self.state.checkpoint(label);
+        self.state.project.checkpoint_snapshot(label, &before);
         petunia_module_paint::PaintModule::composite_active(&mut self.state);
-        self.state.emit_mesh_changed();
         self.state.mark_dirty();
         true
     }
@@ -7293,27 +7302,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if !has_selection_now {
                 return false;
             }
-
-            let before = mesh.clone();
-            let initial_verts_len = mesh.verts.len();
-            let initial_faces_len = mesh.faces.len();
-            let initial_edges_len = mesh.selected_edges.len();
-
-            mesh.dissolve_selected();
-
-            if mesh.verts.len() == initial_verts_len
-                && mesh.faces.len() == initial_faces_len
-                && mesh.selected_edges.len() == initial_edges_len
-            {
-                mesh.delete_selected();
-            }
-
-            self.state.checkpoint("delete/dissolve selection");
-            let _ = before;
-            self.state.emit_mesh_changed();
-            self.state.mark_dirty();
-            self.state.set_status("Dissolved/deleted selection");
-            true
+            self.state.sync_selection();
+            self.state
+                .dispatch(&petunia_core::DeleteOrDissolveSelectionCmd)
+                .is_ok()
         } else {
             self.apply(UiIntent::DeleteActiveAsset);
             true
@@ -7606,24 +7598,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             self.state.sync_selection();
 
-            let res = self.state.dispatch(&petunia_core::DuplicateSelectionCmd);
-            if res.is_err()
-                && let Some(mesh) = self.state.project.active_mesh_mut()
-            {
-                mesh.duplicate_selected();
-            }
-            self.state.emit_mesh_changed();
-            self.state.mark_dirty();
-            self.state.set_status("Duplicated selection");
-            true
+            self.state
+                .dispatch(&petunia_core::DuplicateSelectionCmd)
+                .is_ok()
         } else {
-            let _ = self
-                .state
-                .dispatch(&petunia_core::DuplicateAssetCmd { asset_index: None });
-            self.state.emit_mesh_changed();
-            self.state.mark_dirty();
-            self.state.set_status("Duplicated object");
-            true
+            self.state
+                .dispatch(&petunia_core::DuplicateAssetCmd { asset_index: None })
+                .is_ok()
         }
     }
 
@@ -8060,8 +8041,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "shade_smooth" => {
                     if let Some(mesh) = self.state.project.active_mesh_mut() {
                         mesh.recalculate_normals();
-                        self.state.emit_mesh_changed();
-                        self.state.mark_dirty();
+                        self.state.emit_normals_changed();
                         self.state.set_status("Normais recalculadas (suave)");
                         true
                     } else {
@@ -8070,8 +8050,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 "shade_flat" => {
                     if let Some(_mesh) = self.state.project.active_mesh_mut() {
-                        self.state.emit_mesh_changed();
-                        self.state.mark_dirty();
+                        self.state.emit_normals_changed();
                         self.state.set_status("Sombreamento facetado ativo");
                         true
                     } else {
@@ -8932,36 +8911,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         match id {
             "uv.unwrap" => self.state.dispatch_command("uv.unwrap_auto"),
             "uv.pack_islands" => self.state.dispatch_command("uv.pack_islands"),
-            "uv.stitch" => {
-                let res = self.state.dispatch_command("uv.stitch");
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
-                res
-            }
-            "uv.relax" => {
-                let res = self.state.dispatch_command("uv.relax");
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
-                res
-            }
-            "model.connect" => {
-                let res = self.state.dispatch_command("model.connect");
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
-                res
-            }
-            "model.spin" => {
-                let res = self.state.dispatch_command("model.spin");
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
-                res
-            }
-            "model.dissolve" => {
-                let res = self.state.dispatch_command("model.dissolve");
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
-                res
-            }
+            "uv.stitch" => self.state.dispatch_command("uv.stitch"),
+            "uv.relax" => self.state.dispatch_command("uv.relax"),
+            "model.connect" => self.state.dispatch_command("model.connect"),
+            "model.spin" => self.state.dispatch_command("model.spin"),
+            "model.dissolve" => self.state.dispatch_command("model.dissolve"),
             "uv.equalize_texel_density" => {
                 self.uv_equalize_texel_density();
                 Ok(())
@@ -9831,8 +9785,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.edit_mode() == petunia_core::EditMode::Edit {
             if let Some(mesh) = self.state.project.active_mesh_mut() {
                 mesh.translate_selected(delta.to_array());
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
+                self.state.emit_positions_changed();
                 self.state
                     .set_status(format!("Nudge [{dx:+.2}, {dy:+.2}, {dz:+.2}]"));
                 return true;
@@ -9843,8 +9796,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 v.pos[1] += dy;
                 v.pos[2] += dz;
             }
-            self.state.emit_mesh_changed();
-            self.state.mark_dirty();
+            self.state.emit_positions_changed();
             self.state
                 .set_status(format!("Nudge [{dx:+.2}, {dy:+.2}, {dz:+.2}]"));
             return true;

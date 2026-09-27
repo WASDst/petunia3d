@@ -78,7 +78,10 @@ pub fn fingerprint_scene(
     h = mix(h, project.materials.len() as u64);
     h = mix(h, project.topology_revision);
     h = mix(h, project.position_revision);
+    h = mix(h, project.normal_revision);
     h = mix(h, project.selection_revision);
+    h = mix(h, project.uv_revision);
+    h = mix(h, project.color_revision);
     h = mix(h, project.material_revision);
     h = mix(h, project.texture_revision);
     h = mix(h, project.transform_revision);
@@ -142,7 +145,10 @@ pub fn fingerprint_scene(
         );
         let unrevisioned = project.topology_revision == 0
             && project.position_revision == 0
+            && project.normal_revision == 0
             && project.selection_revision == 0
+            && project.uv_revision == 0
+            && project.color_revision == 0
             && project.texture_revision == 0
             && project.material_revision == 0;
         if unrevisioned {
@@ -160,8 +166,30 @@ pub fn fingerprint_scene(
                 for &i in &f.verts {
                     h = mix(h, i as u64);
                 }
+                for uv in &f.uv {
+                    h = hash_f32(h, uv[0]);
+                    h = hash_f32(h, uv[1]);
+                }
                 h = mix(h, f.selected as u64);
                 h = mix(h, f.material_slot.unwrap_or(usize::MAX) as u64);
+            }
+            let mut selected_edges: Vec<_> = asset.mesh.selected_edges.iter().copied().collect();
+            selected_edges.sort_unstable();
+            for (a, b) in selected_edges {
+                h = mix(h, a as u64);
+                h = mix(h, b as u64);
+            }
+            let mut seams: Vec<_> = asset.mesh.uv_seams.iter().copied().collect();
+            seams.sort_unstable();
+            for (a, b) in seams {
+                h = mix(h, a as u64);
+                h = mix(h, b as u64);
+            }
+            let mut pins: Vec<_> = asset.mesh.uv_pinned.iter().copied().collect();
+            pins.sort_unstable();
+            for (face, corner) in pins {
+                h = mix(h, face as u64);
+                h = mix(h, corner as u64);
             }
             if let Some(canvas) = asset.texture.as_ref() {
                 h = mix(h, canvas.w as u64);
@@ -267,11 +295,33 @@ mod tests {
     }
 
     #[test]
+    fn direct_uv_change_invalidates_unrevisioned_legacy_project() {
+        let mut project = cube_project();
+        let before = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+        project.assets[0].mesh.faces[0].uv[0] = [0.25, 0.75];
+        let after = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+        assert_ne!(before.mesh, after.mesh);
+    }
+
+    #[test]
     fn visibility_change_invalidates() {
         let mut p = cube_project();
         let a = fingerprint_scene(&p, &[], flags(Shading::MaterialPreview));
         p.assets[0].visible = false;
         let b = fingerprint_scene(&p, &[], flags(Shading::MaterialPreview));
         assert_ne!(a.mesh, b.mesh);
+    }
+
+    #[test]
+    fn uv_revision_changes_mesh_fingerprint_without_geometry_revisions() {
+        let mut project = cube_project();
+        project.bump_topology();
+        let before = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+
+        project.bump_uvs();
+        let after = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+
+        assert_ne!(before.mesh, after.mesh);
+        assert_eq!(project.position_revision, 0);
     }
 }

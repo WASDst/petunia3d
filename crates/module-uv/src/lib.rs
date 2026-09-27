@@ -21,13 +21,14 @@ impl UvModule {
             m.project_planar();
         }
         state.uv_selected.clear();
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     /// Move UVs das faces selecionadas (ou todas se vazio), preservando vértices fixados (pinned).
     pub fn move_selected(state: &mut AppState, du: f32, dv: f32) {
         let sel_empty = state.session.uv_selected.is_empty();
         let uv_selected = &state.session.uv_selected;
+        let mut changed = false;
         if let Some(m) = state.project.active_mesh_mut() {
             for (fi, f) in m.faces.iter_mut().enumerate() {
                 if sel_empty || uv_selected.contains(&fi) {
@@ -39,7 +40,10 @@ impl UvModule {
                     }
                 }
             }
-            state.mark_dirty();
+            changed = true;
+        }
+        if changed {
+            state.emit_uv_changed();
         }
     }
 
@@ -47,6 +51,7 @@ impl UvModule {
     pub fn scale_selected(state: &mut AppState, s: f32) {
         let sel_empty = state.session.uv_selected.is_empty();
         let uv_selected = &state.session.uv_selected;
+        let mut changed = false;
         if let Some(m) = state.project.active_mesh_mut() {
             let mut c = [0.0f32; 2];
             let mut n = 0;
@@ -74,7 +79,10 @@ impl UvModule {
                     }
                 }
             }
-            state.mark_dirty();
+            changed = true;
+        }
+        if changed {
+            state.emit_uv_changed();
         }
     }
 
@@ -83,6 +91,7 @@ impl UvModule {
         let sel_empty = state.session.uv_selected.is_empty();
         let uv_selected = &state.session.uv_selected;
         let (sin_a, cos_a) = angle_rad.sin_cos();
+        let mut changed = false;
 
         if let Some(m) = state.project.active_mesh_mut() {
             let mut c = [0.0f32; 2];
@@ -114,7 +123,10 @@ impl UvModule {
                     }
                 }
             }
-            state.mark_dirty();
+            changed = true;
+        }
+        if changed {
+            state.emit_uv_changed();
         }
     }
 
@@ -124,7 +136,7 @@ impl UvModule {
         if let Some(m) = state.project.active_mesh_mut() {
             m.pin_selected_faces_uv(&state.session.uv_selected);
         }
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     /// Desfixa (unpin) todos os vértices UV das faces selecionadas.
@@ -133,7 +145,7 @@ impl UvModule {
         if let Some(m) = state.project.active_mesh_mut() {
             m.unpin_selected_faces_uv(&state.session.uv_selected);
         }
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     /// Alterna estado de fixação (pin/unpin) das faces selecionadas.
@@ -144,7 +156,7 @@ impl UvModule {
         } else {
             false
         };
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
         res
     }
 
@@ -154,7 +166,7 @@ impl UvModule {
         if let Some(m) = state.project.active_mesh_mut() {
             m.clear_all_pins();
         }
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     /// Executa projeção cúbica (Box Mapping) sobre o asset ativo (P3D-064).
@@ -164,7 +176,7 @@ impl UvModule {
             m.project_cube();
         }
         state.uv_selected.clear();
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     /// Executa unwrap automático genérico usando o provider xatlas (P1-06 / P3D-064).
@@ -200,7 +212,7 @@ impl UvModule {
         } else {
             0
         };
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
         state.set_status(format!("Equalized texel density on {modified} island(s)"));
         Ok(modified)
     }
@@ -219,7 +231,7 @@ impl UvModule {
                 m.mark_seam(a, b);
             }
         }
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     pub fn clear_selected_seams(state: &mut AppState) {
@@ -230,7 +242,7 @@ impl UvModule {
                 m.clear_seam(a, b);
             }
         }
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 
     /// Costura as arestas de costura (seams) no espaço UV das faces selecionadas (ou todas se nada selecionado).
@@ -243,7 +255,7 @@ impl UvModule {
         } else {
             0
         };
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
         state.set_status(format!("Stitched {count} UV seam edge(s)"));
         Ok(count)
     }
@@ -258,7 +270,7 @@ impl UvModule {
         } else {
             0
         };
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
         state.set_status(format!("Relaxed {count} UV face(s)"));
         Ok(count)
     }
@@ -280,7 +292,7 @@ impl UvModule {
         if let Some(m) = state.project.active_mesh_mut() {
             m.normalize_texel_density(texture_w, target);
         }
-        state.emit_mesh_changed();
+        state.emit_uv_changed();
     }
 }
 

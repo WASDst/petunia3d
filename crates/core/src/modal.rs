@@ -3,7 +3,7 @@
 
 use glam::{EulerRot, Quat, Vec3};
 use petunia_mesh::Mesh;
-use petunia_project::Project;
+use petunia_project::{Project, ProjectChanges};
 
 use crate::{AppState, EditMode, Selection};
 
@@ -680,7 +680,14 @@ impl AppState {
             modal.changed = changed;
         }
         self.sync_selection();
-        self.emit_mesh_changed();
+        let mut changes = match modal_kind {
+            ModalKind::Move | ModalKind::Rotate | ModalKind::Scale => ProjectChanges::POSITIONS,
+            _ => ProjectChanges::GEOMETRY,
+        };
+        if is_object_mode || is_edit_pivot {
+            changes |= ProjectChanges::TRANSFORMS;
+        }
+        self.emit_project_changed(changes);
         Ok(())
     }
 
@@ -688,6 +695,7 @@ impl AppState {
         let Some(modal) = self.modal.take() else {
             return false;
         };
+        let mut restored_changes = None;
         if modal.changed {
             self.project.undo.checkpoint_sized(
                 modal.kind.label(),
@@ -696,13 +704,28 @@ impl AppState {
             );
             self.mark_document_dirty();
         } else {
+            let revision_clock = self.project.project.revision_clock();
+            let previewed = revision_clock != modal.original.revision_clock();
             self.project.project = modal.original;
             self.session.selection = modal.selection;
+            if previewed {
+                self.project
+                    .project
+                    .rebase_revisions_after_restore(revision_clock);
+                restored_changes = Some(match modal.kind {
+                    ModalKind::Move | ModalKind::Rotate | ModalKind::Scale => {
+                        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+                    }
+                    _ => ProjectChanges::GEOMETRY,
+                });
+            }
         }
         self.pointer_session = None;
         self.pending_modal = None;
         self.locked_axes = [false; 3];
-        self.emit_mesh_changed();
+        if let Some(changes) = restored_changes {
+            self.emit_project_changed(changes);
+        }
         true
     }
 
@@ -712,13 +735,23 @@ impl AppState {
         let Some(modal) = self.modal.take() else {
             return false;
         };
+        let revision_clock = self.project.project.revision_clock();
         self.project.project = modal.original;
+        self.project
+            .project
+            .rebase_revisions_after_restore(revision_clock);
         self.session.selection = modal.selection;
         self.locked_axes = [false; 3];
         self.events.emit(crate::AppEvent::SelectionChanged(
             self.session.selection.clone(),
         ));
-        self.emit_mesh_changed();
+        let changes = match modal.kind {
+            ModalKind::Move | ModalKind::Rotate | ModalKind::Scale => {
+                ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+            }
+            _ => ProjectChanges::GEOMETRY,
+        };
+        self.emit_project_changed(changes);
         true
     }
 }

@@ -47,7 +47,7 @@ impl PaintModule {
 
     /// Preenche a seleção de vértices (ou toda a malha se nada estiver selecionado) com a cor atual.
     pub fn fill_selection(state: &mut AppState) -> usize {
-        let before = state.project.clone();
+        let before = state.project.project.clone();
         let col = state.paint_color;
         let mut n = 0;
         if let Some(m) = state.project.active_mesh_mut() {
@@ -60,8 +60,8 @@ impl PaintModule {
             }
         }
         if n > 0 {
-            state.project.undo.checkpoint("fill", &before);
-            state.emit_mesh_changed();
+            state.project.checkpoint_snapshot("fill", &before);
+            state.emit_color_changed();
         }
         n
     }
@@ -94,7 +94,7 @@ impl PaintModule {
             }
         }
         if affected > 0 {
-            state.emit_mesh_changed();
+            state.emit_color_changed();
             state.mark_dirty();
         }
         affected
@@ -213,35 +213,26 @@ impl PaintModule {
                 stack.composite_tiles(cv, dirty_tiles);
             }
         } else {
-            let composed = state.project.assets.get(active_idx).and_then(|a| {
-                a.paint_stack.as_ref().map(|stack| {
-                    let mut base = Canvas::new(w, h, [0, 0, 0, 0]);
-                    stack.composite(&mut base);
-                    base
-                })
-            });
-            if let Some(cv) = composed
-                && let Some(o) = state.project.assets.get_mut(active_idx)
-            {
-                o.texture = Some(cv);
-            }
+            state.project.project.composite_paint_stack(active_idx);
         }
-        let mat_id = state
-            .project
-            .assets
-            .get(active_idx)
-            .and_then(|a| a.material_id);
-        if let Some(mid) = mat_id
-            && let Some(tex) = state
+        if partial {
+            let mat_id = state
                 .project
                 .assets
                 .get(active_idx)
-                .and_then(|a| a.texture.clone())
-            && let Some(mat) = state.project.project.get_material_mut(mid)
-        {
-            mat.albedo_texture = Some(tex);
+                .and_then(|a| a.material_id);
+            if let Some(mid) = mat_id
+                && let Some(tex) = state
+                    .project
+                    .assets
+                    .get(active_idx)
+                    .and_then(|a| a.texture.clone())
+                && let Some(mat) = state.project.project.get_material_mut(mid)
+            {
+                mat.albedo_texture = Some(tex);
+            }
         }
-        state.project.project.bump_textures();
+        state.emit_texture_changed();
         state.render.canvas_dirty = true;
         state.mark_dirty();
     }
@@ -1480,6 +1471,27 @@ impl Module for PaintModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vertex_fill_advances_only_color_revision_and_is_undoable() {
+        let mut state = AppState::new("en");
+        state.paint_color = [0.1, 0.7, 0.3];
+        let before = state.project.project.revision_clock();
+        let original = state.project.active_mesh().unwrap().verts[0].color;
+
+        assert!(PaintModule::fill_selection(&mut state) > 0);
+        let after = state.project.project.revision_clock();
+        assert_eq!(state.project.undo.depth(), (1, 0));
+        for index in [0, 1, 2, 3, 4, 6, 7, 8] {
+            assert_eq!(after[index], before[index], "revision index {index}");
+        }
+        assert_eq!(after[5], before[5] + 1);
+        assert!(state.undo());
+        assert_eq!(
+            state.project.active_mesh().unwrap().verts[0].color,
+            original
+        );
+    }
 
     #[test]
     fn vertex_eyedropper_updates_both_paint_paths() {

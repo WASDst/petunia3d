@@ -113,7 +113,7 @@ impl Workspace {
 }
 
 /// Seleção atual (sincronizada entre viewport e UV via eventos).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Selection {
     pub asset: Option<Uuid>,
     /// Ordered object selection; `asset` is the active object.
