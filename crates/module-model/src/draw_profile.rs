@@ -9,9 +9,17 @@ use petunia_mesh::Mesh;
 
 use super::Tool;
 
+/// Modo interativo de geração de volume a partir do perfil 2D.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileVolumeMode {
+    Extrude,
+    Revolve,
+    Sweep,
+}
+
 /// Converte cursor NDC em coords 2D do plano do perfil (com snap opcional).
 pub fn profile_screen_to_plane(state: &AppState, nx: f32, ny: f32) -> Option<[f32; 2]> {
-    let (origin, dir) = state.camera.ray(nx, ny);
+    let (origin, dir) = state.session.camera.ray(nx, ny);
     let p = &state.profile;
     let n = glam::Vec3::from(p.normal);
     let denom = dir.dot(n);
@@ -64,12 +72,130 @@ pub fn profile_add_point(state: &mut AppState, nx: f32, ny: f32) {
     state.mark_dirty();
 }
 
-/// Captura o frame 2D alinhado ao plano do chão (XZ, normal +Y).
+/// Inicia a inserção de um nó que pode se tornar Bézier se houver arraste contínuo.
+pub fn profile_begin_drag_node(state: &mut AppState, nx: f32, ny: f32) -> bool {
+    if state.profile.closed {
+        return false;
+    }
+    let Some([x, y]) = profile_screen_to_plane(state, nx, ny) else {
+        return false;
+    };
+    let n = state.profile.points.len();
+    if n >= 3 {
+        let f = state.profile.points[0];
+        if (f[0] - x).hypot(f[1] - y) < 0.25 {
+            state.profile.closed = true;
+            state.set_status(state.t("profile.closed"));
+            state.mark_dirty();
+            return true;
+        }
+    }
+    if state.profile.points.len() >= 512 {
+        state.set_status("max 512 pts".to_string());
+        return false;
+    }
+    state.profile.points.push([x, y]);
+    state
+        .profile
+        .nodes
+        .push(petunia_mesh::curve::BezierNode::new([x, y]));
+    state.mark_dirty();
+    true
+}
+
+/// Atualiza as alças tangentes do último nó durante o arraste do ponteiro.
+/// `break_tangent` (Alt) quebra a simetria criando uma quina (Sharp) com alça assimétrica.
+pub fn profile_update_drag_handle(
+    state: &mut AppState,
+    nx: f32,
+    ny: f32,
+    break_tangent: bool,
+) -> bool {
+    if state.profile.closed || state.profile.nodes.is_empty() {
+        return false;
+    }
+    let Some([curr_x, curr_y]) = profile_screen_to_plane(state, nx, ny) else {
+        return false;
+    };
+    let last_idx = state.profile.nodes.len() - 1;
+    let anchor = state.profile.nodes[last_idx].point;
+    let dx = curr_x - anchor[0];
+    let dy = curr_y - anchor[1];
+    if dx.hypot(dy) > 0.02 {
+        let node = &mut state.profile.nodes[last_idx];
+        node.kind = if break_tangent {
+            petunia_mesh::curve::BezierNodeKind::Sharp
+        } else {
+            petunia_mesh::curve::BezierNodeKind::Symmetric
+        };
+        node.handle_out = Some([dx, dy]);
+        node.handle_in = if break_tangent {
+            None
+        } else {
+            Some([-dx, -dy])
+        };
+        state.mark_dirty();
+        return true;
+    }
+    false
+}
+
+/// Alinha a câmera ortogonalmente e perpendicular ao plano de trabalho do perfil.
+pub fn profile_align_camera_to_workplane(state: &mut AppState) {
+    let normal = glam::Vec3::from(state.profile.normal).normalize_or_zero();
+    let origin = glam::Vec3::from(state.profile.origin);
+    state.session.camera.target = origin;
+    state
+        .session
+        .camera
+        .set_projection(petunia_core::Projection::Ortho);
+
+    // Se a normal for próxima de +Y (Ground)
+    if (normal - glam::Vec3::Y).length_squared() < 1e-3 {
+        state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Top);
+    } else if (normal + glam::Vec3::Y).length_squared() < 1e-3 {
+        state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Bottom);
+    } else if (normal - glam::Vec3::Z).length_squared() < 1e-3 {
+        state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Front);
+    } else if (normal + glam::Vec3::Z).length_squared() < 1e-3 {
+        state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Back);
+    } else if (normal - glam::Vec3::X).length_squared() < 1e-3 {
+        state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Right);
+    } else if (normal + glam::Vec3::X).length_squared() < 1e-3 {
+        state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Left);
+    } else if normal.length_squared() > 1e-4 {
+        let pitch = normal.y.clamp(-1.0, 1.0).asin();
+        let yaw = normal.x.atan2(normal.z);
+        state.session.camera.pitch = pitch;
+        state.session.camera.yaw = yaw;
+    }
+    state.camera = state.session.camera.clone();
+}
+
+/// Captura o frame 2D alinhado ao plano do chão (XZ, normal +Y) centrado no 3D Cursor.
 pub fn profile_capture_ground(state: &mut AppState) {
     state.profile.right = [1.0, 0.0, 0.0];
     state.profile.up = [0.0, 0.0, -1.0];
     state.profile.normal = [0.0, 1.0, 0.0];
-    state.profile.origin = [0.0, 0.0, 0.0];
+    state.profile.origin = state.session.cursor_3d;
     state.profile.points.clear();
     state.profile.nodes.clear();
     state.profile.closed = false;
@@ -129,12 +255,12 @@ pub fn profile_capture_face(state: &mut AppState) -> bool {
     true
 }
 
-/// Captura o frame 2D da câmera atual (plano de vista perpendicular ao olhar).
+/// Captura o frame 2D da câmera atual centrado no 3D Cursor.
 pub fn profile_capture_view(state: &mut AppState) {
-    let right = state.camera.right().to_array();
-    let up = state.camera.up().to_array();
-    let origin = state.camera.target.to_array();
-    let normal = (-state.camera.forward()).to_array();
+    let right = state.session.camera.right().to_array();
+    let up = state.session.camera.up().to_array();
+    let origin = state.session.cursor_3d;
+    let normal = (-state.session.camera.forward()).to_array();
     state.profile.right = right;
     state.profile.up = up;
     state.profile.origin = origin;
@@ -159,7 +285,7 @@ pub fn profile_capture_auto(state: &mut AppState) {
         profile_capture_face(state);
         return;
     }
-    let fwd = state.camera.forward();
+    let fwd = state.session.camera.forward();
     if fwd.x.abs() > 0.95 || fwd.y.abs() > 0.95 || fwd.z.abs() > 0.95 {
         profile_capture_view(state);
     } else {
@@ -187,24 +313,27 @@ pub fn profile_workplane_label(state: &AppState) -> &'static str {
     }
 }
 
-pub fn generate_extrude(state: &mut AppState) {
-    let p: ProfileState = state.profile.clone();
+/// Constrói a malha 3D de extrusão a partir do ProfileState sem alterar o projeto ou descartar pontos.
+pub fn build_extrude_mesh(p: &ProfileState) -> Result<Mesh, String> {
     let effective = p.effective_points();
     if effective.len() < 3 || !p.closed {
-        state.set_status(state.t("profile.need_closed"));
-        return;
+        return Err("profile requires at least 3 points and must be closed".to_string());
     }
-    match Mesh::from_polygon(&effective, p.depth.max(0.05)) {
-        Ok(mut m) => {
-            // leva do frame XY/Z-local para o mundo
-            let r = glam::Vec3::from(p.right);
-            let u = glam::Vec3::from(p.up);
-            let o = glam::Vec3::from(p.origin);
-            let n = glam::Vec3::from(p.normal);
-            for v in &mut m.verts {
-                let q = glam::Vec3::from(v.pos);
-                v.pos = (o + r * q.x + u * q.y + n * q.z).to_array();
-            }
+    let mut m = Mesh::from_polygon(&effective, p.depth.max(0.05)).map_err(|e| e.to_string())?;
+    let r = glam::Vec3::from(p.right);
+    let u = glam::Vec3::from(p.up);
+    let o = glam::Vec3::from(p.origin);
+    let n = glam::Vec3::from(p.normal);
+    for v in &mut m.verts {
+        let q = glam::Vec3::from(v.pos);
+        v.pos = (o + r * q.x + u * q.y + n * q.z).to_array();
+    }
+    Ok(m)
+}
+
+pub fn generate_extrude(state: &mut AppState) {
+    match build_extrude_mesh(&state.profile) {
+        Ok(m) => {
             state.checkpoint("draw profile");
             state.project.add("Profile", m);
             state.profile.clear();
@@ -216,29 +345,33 @@ pub fn generate_extrude(state: &mut AppState) {
     }
 }
 
-pub fn generate_revolve(state: &mut AppState) {
-    let p = state.profile.clone();
+/// Constrói a malha 3D de revolução a partir do ProfileState sem alterar o projeto ou descartar pontos.
+pub fn build_revolve_mesh(p: &ProfileState) -> Result<Mesh, String> {
     let effective = p.effective_points();
     if effective.len() < 2 {
-        state.set_status(state.t("profile.need_points"));
-        return;
+        return Err("profile requires at least 2 points for revolve".to_string());
     }
-    // perfil aberto vale para revolve (não exige closed)
     let angle = if p.revolve_angle <= 0.0 {
         360.0
     } else {
         p.revolve_angle
     };
-    match Mesh::revolve_angle(&effective, p.revolve_segments.max(3), angle) {
-        Ok(mut m) => {
-            let r = glam::Vec3::from(p.right);
-            let u = glam::Vec3::from(p.up);
-            let n = glam::Vec3::from(p.normal);
-            let o = glam::Vec3::from(p.origin);
-            for v in &mut m.verts {
-                let q = glam::Vec3::from(v.pos);
-                v.pos = (o + r * q.x + u * q.y + n * q.z).to_array();
-            }
+    let mut m = Mesh::revolve_angle(&effective, p.revolve_segments.max(3), angle)
+        .map_err(|e| e.to_string())?;
+    let r = glam::Vec3::from(p.right);
+    let u = glam::Vec3::from(p.up);
+    let n = glam::Vec3::from(p.normal);
+    let o = glam::Vec3::from(p.origin);
+    for v in &mut m.verts {
+        let q = glam::Vec3::from(v.pos);
+        v.pos = (o + r * q.x + u * q.y + n * q.z).to_array();
+    }
+    Ok(m)
+}
+
+pub fn generate_revolve(state: &mut AppState) {
+    match build_revolve_mesh(&state.profile) {
+        Ok(m) => {
             state.checkpoint("revolve profile");
             state.project.add("Revolved", m);
             state.profile.clear();
@@ -316,20 +449,14 @@ pub fn extract_sweep_path_from_mesh(mesh: &Mesh) -> Option<(Vec<glam::Vec3>, boo
     }
 }
 
-/// Gera uma malha por varredura 3D (Sweep) do perfil 2D ao longo de um caminho guia 3D.
-pub fn generate_sweep(state: &mut AppState) {
-    let p = state.profile.clone();
+/// Constrói a malha 3D de sweep a partir do ProfileState sem alterar o projeto ou descartar pontos.
+pub fn build_sweep_mesh(p: &ProfileState, mesh_guide: Option<&Mesh>) -> Result<Mesh, String> {
     let effective = p.effective_points();
     if effective.len() < 2 {
-        state.set_status(state.t("profile.need_points"));
-        return;
+        return Err("profile requires at least 2 points for sweep".to_string());
     }
 
-    let extracted = state
-        .project
-        .active_mesh()
-        .and_then(extract_sweep_path_from_mesh);
-
+    let extracted = mesh_guide.and_then(extract_sweep_path_from_mesh);
     let (path, closed_path) = if let Some((path_pts, is_closed)) = extracted {
         (path_pts, is_closed)
     } else {
@@ -356,7 +483,13 @@ pub fn generate_sweep(state: &mut AppState) {
         miter_limit: 3.0,
     };
 
-    match Mesh::from_sweep(&effective, &path, options) {
+    Mesh::from_sweep(&effective, &path, options).map_err(|e| e.to_string())
+}
+
+/// Gera uma malha por varredura 3D (Sweep) do perfil 2D ao longo de um caminho guia 3D.
+pub fn generate_sweep(state: &mut AppState) {
+    let guide = state.project.active_mesh().cloned();
+    match build_sweep_mesh(&state.profile, guide.as_ref()) {
         Ok(m) => {
             state.checkpoint("sweep profile");
             state.project.add("Sweep", m);

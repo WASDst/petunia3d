@@ -66,6 +66,25 @@ pub struct ModifierRowModel {
     pub can_move_down: bool,
 }
 
+/// Slot de imagem de referência no Gerenciador de Referências (P3D-013).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReferenceSlotViewModel {
+    pub axis: String,
+    pub axis_tag: String,
+    pub title: String,
+    pub has_image: bool,
+    pub image_name: String,
+    pub dimensions: String,
+    pub visible: bool,
+    pub locked: bool,
+    pub opacity: f32,
+    pub size: f32,
+    pub offset: f32,
+    pub rotation: f32,
+    pub fine_open: bool,
+    pub thumbnail: Option<slint::Image>,
+}
+
 /// Mapeamento dinâmico de atalhos para tooltips da UI derivado do keymap ativo.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShortcutsModel {
@@ -350,6 +369,10 @@ pub struct ShellViewModel {
     pub boolean_operand_name: String,
     pub boolean_ready: bool,
     pub boolean_keep_parts: bool,
+    // Reference Image Manager (P3D-013)
+    pub reference_manager_open: bool,
+    pub reference_slots: Vec<ReferenceSlotViewModel>,
+    pub reference_total_count: i32,
     // Primitive Creation / Last Operation / Parametric Re-editing
     pub primitive_active: bool,
     pub active_asset_is_parametric: bool,
@@ -616,6 +639,8 @@ pub struct ShellViewModel {
     pub profile_smoothness: f32,
     pub profile_has_curves: bool,
     pub profile_workplane: String,
+    pub profile_volume_mode: String,
+    pub profile_revolve_angle: f32,
     pub paint_show_uv_overlay: bool,
     pub uv_show_texture: bool,
     pub tool_activation: String,
@@ -1018,9 +1043,67 @@ impl ShellViewModel {
             )
         };
 
+        let canonical_slots = [
+            (petunia_core::RefAxis::Front, "+Z", "Front"),
+            (petunia_core::RefAxis::Back, "-Z", "Back"),
+            (petunia_core::RefAxis::Left, "-X", "Left"),
+            (petunia_core::RefAxis::Right, "+X", "Right"),
+            (petunia_core::RefAxis::Top, "+Y", "Top"),
+            (petunia_core::RefAxis::Bottom, "-Y", "Bottom"),
+        ];
+
+        let reference_slots = canonical_slots
+            .iter()
+            .map(|(axis, tag, name)| {
+                let matching = state.project.refs.iter().find(|r| {
+                    r.axis == *axis
+                        || (*axis == petunia_core::RefAxis::Right
+                            && r.axis == petunia_core::RefAxis::Side)
+                });
+                if let Some(r) = matching {
+                    ReferenceSlotViewModel {
+                        axis: format!("{axis:?}").to_lowercase(),
+                        axis_tag: tag.to_string(),
+                        title: format!("{tag} · {name}"),
+                        has_image: true,
+                        image_name: r.name.clone(),
+                        dimensions: format!("{}×{}px", r.width, r.height),
+                        visible: r.visible,
+                        locked: r.locked,
+                        opacity: r.opacity,
+                        size: r.size,
+                        offset: r.offset,
+                        rotation: r.rotation,
+                        fine_open: false,
+                        thumbnail: None,
+                    }
+                } else {
+                    ReferenceSlotViewModel {
+                        axis: format!("{axis:?}").to_lowercase(),
+                        axis_tag: tag.to_string(),
+                        title: format!("{tag} · {name}"),
+                        has_image: false,
+                        image_name: String::new(),
+                        dimensions: String::new(),
+                        visible: true,
+                        locked: false,
+                        opacity: 0.6,
+                        size: 4.0,
+                        offset: -3.0,
+                        rotation: 0.0,
+                        fine_open: false,
+                        thumbnail: None,
+                    }
+                }
+            })
+            .collect();
+
         Self {
             workspace: state.workspace,
             selection_domain: state.selection_domain(),
+            reference_manager_open: false,
+            reference_slots,
+            reference_total_count: state.project.refs.len() as i32,
             inspector_visible: true,
             shortcuts: ShortcutsModel::from_keybinds(&state.ui.keybinds),
             saved: !state.is_document_dirty(),
@@ -1433,6 +1516,12 @@ impl ShellViewModel {
                 .iter()
                 .any(|n| n.handle_in.is_some() || n.handle_out.is_some()),
             profile_workplane: petunia_module_model::profile_workplane_label(state).to_string(),
+            profile_volume_mode: "none".to_string(),
+            profile_revolve_angle: if state.profile.revolve_angle <= 0.0 {
+                360.0
+            } else {
+                state.profile.revolve_angle
+            },
             paint_show_uv_overlay: false,
             uv_show_texture: true,
             tool_activation: "drag".to_string(),

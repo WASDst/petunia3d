@@ -83,6 +83,23 @@ export struct ModifierEntry {
     can-move-down: bool,
 }
 
+export struct ReferenceSlotData {
+    axis: string,
+    axis-tag: string,
+    title: string,
+    has-image: bool,
+    image-name: string,
+    dimensions: string,
+    visible: bool,
+    locked: bool,
+    opacity: float,
+    size: float,
+    offset: float,
+    rotation: float,
+    fine-open: bool,
+    thumbnail: image,
+}
+
 export struct MeasureTag {
     text: string,
     x: float,
@@ -2742,6 +2759,259 @@ component ModifiersBody inherits VerticalLayout {
     }
 }
 
+component ReferenceSlotCard inherits Rectangle {
+    in property <ReferenceSlotData> slot;
+    callback pick-image();
+    callback remove-image();
+    callback align-view();
+    callback toggle-visible();
+    callback toggle-lock();
+    callback set-param(string, float);
+
+    border-radius: 6px;
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: slot.has-image ? DesignTokens.border-strong : DesignTokens.border;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        // Header: Badge + Title + Align + Quick Tools
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: space-between;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: center;
+
+                Rectangle {
+                    width: 28px;
+                    height: 20px;
+                    border-radius: 4px;
+                    background: DesignTokens.accent.transparentize(0.8);
+                    Text {
+                        text: slot.axis-tag;
+                        color: DesignTokens.accent;
+                        font-size: 10px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: slot.title;
+                    color: DesignTokens.text-primary;
+                    font-size: 12px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: center;
+
+                // Align View button
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: align-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    align-touch := TouchArea {
+                        clicked => { root.align-view(); }
+                    }
+                    IconDisplay {
+                        icon: IconSet.Camera;
+                        size: 13px;
+                        stroke: DesignTokens.text-secondary;
+                    }
+                }
+
+                // Visibility
+                if slot.has-image: Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: vis-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    vis-touch := TouchArea {
+                        clicked => { root.toggle-visible(); }
+                    }
+                    IconDisplay {
+                        icon: slot.visible ? IconSet.Eye : IconSet.EyeOff;
+                        size: 13px;
+                        stroke: slot.visible ? DesignTokens.accent : DesignTokens.text-muted;
+                    }
+                }
+
+                // Lock
+                if slot.has-image: Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: lock-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    lock-touch := TouchArea {
+                        clicked => { root.toggle-lock(); }
+                    }
+                    IconDisplay {
+                        icon: slot.locked ? IconSet.Lock : IconSet.LockOpen;
+                        size: 13px;
+                        stroke: slot.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                    }
+                }
+
+                // Remove
+                if slot.has-image: Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: remove-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    remove-touch := TouchArea {
+                        clicked => { root.remove-image(); }
+                    }
+                    IconDisplay {
+                        icon: IconSet.Trash2;
+                        size: 13px;
+                        stroke: DesignTokens.danger;
+                    }
+                }
+            }
+        }
+
+        // Body: Thumbnail box (left) and Parameters (right)
+        HorizontalLayout {
+            spacing: 12px;
+
+            // Thumbnail / Load Box
+            Rectangle {
+                width: 120px;
+                height: 100px;
+                border-radius: 4px;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: thumb-touch.has-hover ? DesignTokens.accent : DesignTokens.border;
+                clip: true;
+
+                thumb-touch := TouchArea {
+                    clicked => { root.pick-image(); }
+                }
+
+                if slot.has-image: Image {
+                    width: 100%;
+                    height: 100%;
+                    source: slot.thumbnail;
+                    image-fit: contain;
+                }
+
+                if !slot.has-image: VerticalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    IconDisplay {
+                        icon: IconSet.Plus;
+                        size: 16px;
+                        stroke: DesignTokens.text-muted;
+                    }
+                    Text {
+                        text: "Load Image";
+                        color: DesignTokens.text-secondary;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+
+            // Sliders & Info
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                alignment: center;
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: slot.image-name != "" ? slot.image-name : "reference";
+                        color: DesignTokens.text-primary;
+                        font-size: 11px;
+                        font-weight: 600;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: slot.dimensions;
+                        color: DesignTokens.text-muted;
+                        font-size: 10px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "Opacity: \{round(slot.opacity * 100)}%";
+                        color: DesignTokens.text-secondary;
+                        font-size: 10px;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    Slider {
+                        horizontal-stretch: 1;
+                        minimum: 0.05;
+                        maximum: 1.0;
+                        value: slot.opacity;
+                        changed(v) => { root.set-param("opacity", v); }
+                    }
+                }
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "Size: \{round(slot.size * 10) / 10}";
+                        color: DesignTokens.text-secondary;
+                        font-size: 10px;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    Slider {
+                        horizontal-stretch: 1;
+                        minimum: 0.5;
+                        maximum: 20.0;
+                        value: slot.size;
+                        changed(v) => { root.set-param("size", v); }
+                    }
+                }
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: "Offset: \{round(slot.offset * 10) / 10}";
+                        color: DesignTokens.text-secondary;
+                        font-size: 10px;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    Slider {
+                        horizontal-stretch: 1;
+                        minimum: -10.0;
+                        maximum: 10.0;
+                        value: slot.offset;
+                        changed(v) => { root.set-param("offset", v); }
+                    }
+                }
+
+                if !slot.has-image: Text {
+                    text: "No reference image loaded. Click the box to load blueprints or photo references.";
+                    color: DesignTokens.text-muted;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
 export component PetuniaSlintShell inherits Window {
     out property <float> viewport-region-width: viewport-region.width / 1px;
     out property <float> viewport-region-height: viewport-region.height / 1px;
@@ -2770,6 +3040,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> scene-drawer-visible: false;
     in-out property <bool> scene-drawer-pinned: false;
     in-out property <bool> settings-visible: false;
+    in-out property <bool> reference-manager-visible: false;
+    in-out property <[ReferenceSlotData]> reference-slots: [];
+    in-out property <int> reference-total-count: 0;
     in-out property <string> active-keymap-id: "petunia-default";
     in-out property <bool> saved: true;
     in-out property <image> viewport-image;
@@ -3272,6 +3545,8 @@ export component PetuniaSlintShell inherits Window {
     in-out property <float> profile-smoothness: 0.02;
     in-out property <bool> profile-has-curves: false;
     in-out property <string> profile-workplane: "Ground";
+    in-out property <string> profile-volume-mode: "none";
+    in-out property <float> profile-revolve-angle: 360.0;
     in-out property <bool> paint-show-uv: false;
     in-out property <bool> uv-show-texture: true;
     in-out property <bool> pivot-menu-open: false;
@@ -3404,9 +3679,18 @@ export component PetuniaSlintShell inherits Window {
     callback ui-scale-set(float);
     callback language-changed(string);
     callback tool-modal-cancel;
-    callback loop-cut-scrubbed(float);
+    callback loop-cut-scrubbed(float, float);
     callback loop-cut-slide-committed(string) -> bool;
     callback loop-cut-count-committed(string);
+    callback reference-manager-toggle();
+    callback reference-manager-closed();
+    callback reference-slot-pick(string);
+    callback reference-slot-remove(string);
+    callback reference-slot-align(string);
+    callback reference-slot-toggle-visible(string);
+    callback reference-slot-toggle-lock(string);
+    callback reference-slot-set-param(string, string, float);
+    callback reference-clear-all();
     callback uv-editor-clicked(float, float, bool);
     callback uv-moved(float, float);
     callback uv-scaled(float);
@@ -3452,6 +3736,13 @@ export component PetuniaSlintShell inherits Window {
     callback profile-set-workplane-ground();
     callback profile-set-workplane-face();
     callback profile-set-workplane-view();
+    callback profile-enter-extrude();
+    callback profile-enter-revolve();
+    callback profile-enter-sweep();
+    callback profile-volume-confirm();
+    callback profile-volume-cancel();
+    callback profile-revolve-angle-set(string) -> bool;
+    callback viewport-profile-drag-handle(float, float, bool);
     callback toggle-paint-show-uv();
     callback toggle-uv-show-texture();
     callback primitive-param-float(string, float);
@@ -3600,11 +3891,16 @@ export component PetuniaSlintShell inherits Window {
                     root.settings-closed();
                     return accept;
                 }
+                if root.reference-manager-visible {
+                    root.reference-manager-visible = false;
+                    root.reference-manager-closed();
+                    return accept;
+                }
                 viewport-touch.clear-gesture();
                 root.escape-requested();
                 return accept;
             }
-            if !root.command-search-visible && !root.settings-visible {
+            if !root.command-search-visible && !root.settings-visible && !root.reference-manager-visible {
                 let key-name = event.text == Key.Tab ? "Tab" :
                     event.text == Key.Return ? "Enter" :
                     event.text == Key.Backspace ? "Backspace" :
@@ -3794,6 +4090,14 @@ export component PetuniaSlintShell inherits Window {
                             shortcut: root.shortcuts.search;
                             description: "Quick search and execute any command, tool or setting";
                             clicked => { root.search-requested(); }
+                        }
+                        TopAction {
+                            icon: IconSet.Image;
+                            semantic-label: "Reference Images";
+                            shortcut: "F4";
+                            description: "Open Reference Image Manager to load blueprints and background references";
+                            active: root.reference-manager-visible;
+                            clicked => { root.reference-manager-toggle(); }
                         }
                         TopAction {
                             icon: IconSet.Settings;
@@ -4323,6 +4627,8 @@ export component PetuniaSlintShell inherits Window {
                         property <bool> is-gizmo-drag: false;
                         property <bool> is-keyboard-transform-drag: false;
                         property <bool> is-profile-depth-drag: false;
+                        property <bool> is-profile-volume-drag: false;
+                        property <bool> is-profile-draw-drag: false;
                         property <bool> consume-click: false;
                         property <bool> tool-drag-fine: false;
                         property <bool> loop-selection: false;
@@ -4338,6 +4644,8 @@ export component PetuniaSlintShell inherits Window {
                             self.pending-box-select = false;
                             self.is-tool-drag = false;
                             self.is-profile-depth-drag = false;
+                            self.is-profile-volume-drag = false;
+                            self.is-profile-draw-drag = false;
                             self.is-loop-drag = false;
                             self.is-loop-place = false;
                             self.pending-slice = false;
@@ -4393,11 +4701,15 @@ export component PetuniaSlintShell inherits Window {
                                 pending-transform = false;
                                 pending-box-select = false;
                                 if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
-                                    if root.profile-closed {
+                                    if root.profile-volume-mode != "none" {
+                                        is-profile-volume-drag = true;
+                                        tool-drag-fine = event.modifiers.shift;
+                                    } else if root.profile-closed {
                                         is-profile-depth-drag = true;
                                         tool-drag-fine = event.modifiers.shift;
                                     } else {
                                         consume-click = true;
+                                        is-profile-draw-drag = true;
                                         root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
                                     }
                                 } else if event.button == PointerEventButton.middle
@@ -4546,6 +4858,22 @@ export component PetuniaSlintShell inherits Window {
                                     root.tool-modal-scrubbed((self.mouse-y - last-y) / 1px, tool-drag-fine, self.mouse-x / 1px, self.mouse-y / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
+                                } else if is-profile-volume-drag {
+                                    moved-since-down = true;
+                                    if root.profile-volume-mode == "extrude" {
+                                        let delta = (last-y - self.mouse-y) / 1px * (tool-drag-fine ? 0.005 : 0.02);
+                                        root.profile-depth-set("\{max(0.05, root.profile-depth + delta)}");
+                                    } else if root.profile-volume-mode == "revolve" {
+                                        let delta = (self.mouse-x - last-x) / 1px * (tool-drag-fine ? 0.2 : 1.0);
+                                        root.profile-revolve-angle-set("\{max(1.0, min(360.0, root.profile-revolve-angle + delta))}");
+                                    }
+                                    last-x = self.mouse-x;
+                                    last-y = self.mouse-y;
+                                } else if is-profile-draw-drag {
+                                    if abs(self.mouse-x - last-x) > 3px || abs(self.mouse-y - last-y) > 3px {
+                                        moved-since-down = true;
+                                        root.viewport-profile-drag-handle(self.mouse-x / self.width, self.mouse-y / self.height, event.modifiers.alt);
+                                    }
                                 } else if is-profile-depth-drag {
                                     moved-since-down = true;
                                     let delta = (last-y - self.mouse-y) / 1px * (tool-drag-fine ? 0.005 : 0.02);
@@ -4554,7 +4882,7 @@ export component PetuniaSlintShell inherits Window {
                                     last-y = self.mouse-y;
                                 } else if is-loop-drag {
                                     moved-since-down = true;
-                                    root.loop-cut-scrubbed((self.mouse-x - last-x) / 1px);
+                                    root.loop-cut-scrubbed((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
                                 } else if is-loop-place {
@@ -4589,6 +4917,8 @@ export component PetuniaSlintShell inherits Window {
                                 is-orbit = false;
                                 is-pan = false;
                                 is-profile-depth-drag = false;
+                                is-profile-volume-drag = false;
+                                is-profile-draw-drag = false;
                                 if is-transform {
                                     root.viewport-transform-end();
                                     is-transform = false;
@@ -4646,7 +4976,9 @@ export component PetuniaSlintShell inherits Window {
                         scroll-event(event) => {
                             if root.active-tool == "loop_cut" {
                                 root.loop-cut-count-committed("\{root.loop-cut-cuts + (event.delta-y > 0px ? 1 : -1)}");
-                            } else if !root.tool-modal-active && !root.profile-active && root.active-tool != "slice" && root.active-tool != "loop_cut" {
+                            } else if root.tool-modal-active {
+                                root.tool-modal-scrubbed((event.delta-y > 0px ? -15.0 : 15.0), event.modifiers.shift, self.mouse-x / 1px, self.mouse-y / 1px);
+                            } else if !root.profile-active && root.active-tool != "slice" {
                                 root.viewport-zoom(event.delta-y / 1px);
                             }
                             accept
@@ -5508,11 +5840,58 @@ export component PetuniaSlintShell inherits Window {
                                 scrubbed(delta, fine) => { root.profile-smoothness-set("\{root.profile-smoothness + delta * (fine ? 0.002 : 0.01)}"); }
                             }
                         }
-                        if root.profile-point-count >= 2: HorizontalLayout {
+                        if root.profile-volume-mode == "none" && root.profile-point-count >= 2: HorizontalLayout {
                             spacing: 5px; height: 28px;
-                            Rectangle { horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border; Text { text: root.label-profile-revolve; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; } TouchArea { clicked => { root.profile-revolve(); } } }
-                            Rectangle { horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border; Text { text: root.label-profile-sweep; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; } TouchArea { clicked => { root.profile-sweep(); } } }
-                            if root.profile-closed: Rectangle { horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.accent; Text { text: root.label-profile-generate; color: DesignTokens.canvas; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; } TouchArea { clicked => { root.profile-generate(); } } }
+                            Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                Text { text: root.label-profile-revolve; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
+                                TouchArea { clicked => { root.profile-enter-revolve(); } }
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                Text { text: root.label-profile-sweep; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
+                                TouchArea { clicked => { root.profile-enter-sweep(); } }
+                            }
+                            if root.profile-closed: Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.accent;
+                                Text { text: root.label-profile-generate; color: DesignTokens.canvas; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                TouchArea { clicked => { root.profile-enter-extrude(); } }
+                            }
+                        }
+                        if root.profile-volume-mode != "none": VerticalLayout {
+                            spacing: 6px;
+                            Rectangle {
+                                height: 24px; border-radius: 4px; background: DesignTokens.accent.transparentize(0.85);
+                                border-width: 1px; border-color: DesignTokens.accent;
+                                Text {
+                                    text: root.profile-volume-mode == "extrude" ? "Extrude Preview (Live)" :
+                                          (root.profile-volume-mode == "revolve" ? "Revolve Preview (Live)" : "Sweep Preview (Live)");
+                                    color: DesignTokens.accent; font-size: 10px; font-weight: 700;
+                                    horizontal-alignment: center; vertical-alignment: center;
+                                }
+                            }
+                            if root.profile-volume-mode == "revolve": HorizontalLayout {
+                                spacing: 5px; height: 28px;
+                                Text { text: "Angle"; color: DesignTokens.text-secondary; font-size: 10px; width: 56px; vertical-alignment: center; }
+                                NumericField {
+                                    label: ""; value: root.profile-revolve-angle; horizontal-stretch: 1; step: 5.0;
+                                    text-committed(text) => { root.profile-revolve-angle-set(text); }
+                                    scrubbed(delta, fine) => { root.profile-revolve-angle-set("\{root.profile-revolve-angle + delta * (fine ? 1.0 : 5.0)}"); }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px; height: 28px;
+                                Rectangle {
+                                    horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.accent;
+                                    Text { text: "Confirm (Enter)"; color: DesignTokens.canvas; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.profile-volume-confirm(); } }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
+                                    Text { text: "Cancel (Esc)"; color: DesignTokens.text-muted; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.profile-volume-cancel(); } }
+                                }
+                            }
                         }
                         HorizontalLayout {
                             spacing: 5px; height: 26px;
@@ -9956,6 +10335,134 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Overlay: Reference Image Manager Modal (P3D-013)
+        if reference-manager-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            background: DesignTokens.scrim;
+
+            TouchArea {
+                clicked => {
+                    root.reference-manager-visible = false;
+                    root.reference-manager-closed();
+                }
+            }
+
+            Rectangle {
+                width: min(780px, parent.width - 40px);
+                height: min(600px, parent.height - 40px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: 8px;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                drop-shadow-blur: 16px;
+                drop-shadow-color: DesignTokens.shadow;
+                drop-shadow-offset-y: 6px;
+
+                TouchArea { clicked => {} }
+
+                VerticalLayout {
+                    padding: 0px;
+                    spacing: 0px;
+
+                    // Header
+                    Rectangle {
+                        height: 48px;
+                        background: DesignTokens.surface;
+                        border-top-left-radius: 8px;
+                        border-top-right-radius: 8px;
+
+                        HorizontalLayout {
+                            padding-left: 16px;
+                            padding-right: 16px;
+                            alignment: space-between;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: center;
+                                IconDisplay {
+                                    icon: IconSet.Image;
+                                    size: 16px;
+                                    stroke: DesignTokens.accent;
+                                }
+                                Text {
+                                    text: "Reference Images · P3D-013";
+                                    color: DesignTokens.text-primary;
+                                    font-size: 14px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "(\{root.reference-total-count} active)";
+                                    color: DesignTokens.text-muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: center;
+
+                                Rectangle {
+                                    height: 26px;
+                                    background: DesignTokens.surface-raised;
+                                    border-radius: 4px;
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    TouchArea {
+                                        clicked => { root.reference-clear-all(); }
+                                    }
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+                                        spacing: 4px;
+                                        alignment: center;
+                                        IconDisplay { icon: IconSet.Trash2; size: 12px; stroke: DesignTokens.text-secondary; }
+                                        Text { text: "Clear All"; color: DesignTokens.text-secondary; font-size: 11px; vertical-alignment: center; }
+                                    }
+                                }
+
+                                TopAction {
+                                    icon: IconSet.X;
+                                    semantic-label: "Close reference manager";
+                                    clicked => {
+                                        root.reference-manager-visible = false;
+                                        root.reference-manager-closed();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            padding: 14px;
+                            spacing: 10px;
+
+                            for slot[index] in root.reference-slots: ReferenceSlotCard {
+                                slot: slot;
+                                pick-image => { root.reference-slot-pick(slot.axis); }
+                                remove-image => { root.reference-slot-remove(slot.axis); }
+                                align-view => { root.reference-slot-align(slot.axis); }
+                                toggle-visible => { root.reference-slot-toggle-visible(slot.axis); }
+                                toggle-lock => { root.reference-slot-toggle-lock(slot.axis); }
+                                set-param(param, val) => { root.reference-slot-set-param(slot.axis, param, val); }
                             }
                         }
                     }

@@ -124,6 +124,7 @@ impl WgpuViewport {
     pub fn render_frame(
         &mut self,
         project: &Project,
+        refs: &[petunia_core::ReferenceImage],
         camera: &Camera,
         state: ViewportRenderState,
     ) -> Result<slint::Image, &'static str> {
@@ -146,7 +147,7 @@ impl WgpuViewport {
             &self.device,
             &self.queue,
             project,
-            &[],
+            refs,
             camera,
             state.shading,
             state.xray,
@@ -199,7 +200,7 @@ impl WgpuViewport {
                 multiview_mask: None,
             });
 
-            self.renderer.render(&mut rpass, &[]);
+            self.renderer.render(&mut rpass, refs);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -234,10 +235,11 @@ impl PetuniaViewport for WgpuViewport {
     fn render_frame(
         &mut self,
         project: &Project,
+        refs: &[petunia_core::ReferenceImage],
         camera: &Camera,
         state: ViewportRenderState,
     ) -> Option<slint::Image> {
-        WgpuViewport::render_frame(self, project, camera, state).ok()
+        WgpuViewport::render_frame(self, project, refs, camera, state).ok()
     }
 }
 
@@ -262,6 +264,7 @@ mod tests {
                 let camera = Camera::default();
                 let img = viewport.render_frame(
                     &project,
+                    &[],
                     &camera,
                     ViewportRenderState {
                         shading: Shading::Solid,
@@ -297,11 +300,14 @@ mod tests {
         let project = Project::new();
         let camera = Camera::default();
         let state = ViewportRenderState::default();
-        viewport.render_frame(&project, &camera, state).unwrap();
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
         let rebuilt = viewport.renderer.mesh_rebuilds();
         viewport
             .render_frame(
                 &project,
+                &[],
                 &camera,
                 ViewportRenderState {
                     hover: petunia_core::HoverTarget::Face(0),

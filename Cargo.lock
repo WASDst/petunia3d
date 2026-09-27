@@ -5839,6 +5839,7 @@ version = "0.1.0"
 dependencies = [
  "glam 0.27.0",
  "i-slint-backend-testing",
+ "image",
  "lucide-slint",
  "petunia_config",
  "petunia_core",

@@ -643,6 +643,29 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_themes(theme_entries.as_slice().into());
     window.set_inspector_width(vm.inspector_width);
     window.set_asset_library_height(vm.asset_library_height);
+    window.set_reference_manager_visible(vm.reference_manager_open);
+    window.set_reference_total_count(vm.reference_total_count);
+    let ref_slots: Vec<ReferenceSlotData> = vm
+        .reference_slots
+        .iter()
+        .map(|s| ReferenceSlotData {
+            axis: s.axis.as_str().into(),
+            axis_tag: s.axis_tag.as_str().into(),
+            title: s.title.as_str().into(),
+            has_image: s.has_image,
+            image_name: s.image_name.as_str().into(),
+            dimensions: s.dimensions.as_str().into(),
+            visible: s.visible,
+            locked: s.locked,
+            opacity: s.opacity,
+            size: s.size,
+            offset: s.offset,
+            rotation: s.rotation,
+            fine_open: s.fine_open,
+            thumbnail: s.thumbnail.clone().unwrap_or_default(),
+        })
+        .collect();
+    window.set_reference_slots(std::rc::Rc::new(slint::VecModel::from(ref_slots)).into());
     window.set_uv_layout_commands(vm.uv_editor.layout_commands.as_str().into());
     window.set_uv_seam_commands(vm.uv_editor.seam_commands.as_str().into());
     window.set_uv_pinned_commands(vm.uv_editor.pinned_commands.as_str().into());
@@ -721,6 +744,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_smoothness(vm.profile_smoothness);
     window.set_profile_has_curves(vm.profile_has_curves);
     window.set_profile_workplane(vm.profile_workplane.as_str().into());
+    window.set_profile_volume_mode(vm.profile_volume_mode.as_str().into());
+    window.set_profile_revolve_angle(vm.profile_revolve_angle);
     window.set_paint_show_uv(vm.paint_show_uv_overlay);
     window.set_uv_show_texture(vm.uv_show_texture);
     window.set_tool_activation(vm.tool_activation.as_str().into());
@@ -1660,6 +1685,23 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_viewport_select(move |x, y, extend, loop_select| {
         if let Ok(mut bridge) = viewport_select_bridge.lock() {
             bridge.select_viewport_ext(x, y, extend, loop_select);
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let viewport_profile_drag_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_profile_drag_handle(move |x, y, break_tangent| {
+        if let Ok(mut bridge) = viewport_profile_drag_bridge.lock()
+            && bridge.profile_update_drag_handle(x, y, break_tangent)
+        {
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -3023,9 +3065,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let loop_scrub_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_loop_cut_scrubbed(move |delta| {
+    window.on_loop_cut_scrubbed(move |delta_x, delta_y| {
         if let Ok(mut bridge) = loop_scrub_bridge.lock() {
-            bridge.scrub_loop_cut(delta, false);
+            bridge.scrub_loop_cut_2d(delta_x, delta_y, false);
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -3159,8 +3201,101 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         };
         if let Ok(mut bridge) = profile_depth_bridge.lock() {
             let accepted = bridge.set_profile_depth(depth);
+            if accepted && let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+            accepted
+        } else {
+            false
+        }
+    });
+
+    let profile_enter_extrude_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_enter_extrude(move || {
+        if let Ok(mut bridge) = profile_enter_extrude_bridge.lock() {
+            bridge.enter_profile_volume("extrude");
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let profile_enter_revolve_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_enter_revolve(move || {
+        if let Ok(mut bridge) = profile_enter_revolve_bridge.lock() {
+            bridge.enter_profile_volume("revolve");
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let profile_enter_sweep_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_enter_sweep(move || {
+        if let Ok(mut bridge) = profile_enter_sweep_bridge.lock() {
+            bridge.enter_profile_volume("sweep");
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let profile_volume_confirm_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_volume_confirm(move || {
+        if let Ok(mut bridge) = profile_volume_confirm_bridge.lock() {
+            bridge.commit_profile_volume();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let profile_volume_cancel_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_volume_cancel(move || {
+        if let Ok(mut bridge) = profile_volume_cancel_bridge.lock() {
+            bridge.cancel_profile_volume();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let profile_revolve_angle_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_revolve_angle_set(move |text| {
+        let Ok(angle) = numeric::parse_numeric(text.as_str()) else {
+            return false;
+        };
+        if let Ok(mut bridge) = profile_revolve_angle_bridge.lock() {
+            let accepted = bridge.set_profile_revolve_angle(angle);
+            if accepted && let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
             }
             accepted
         } else {
@@ -3220,6 +3355,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             let accepted = bridge.set_profile_wall_thickness(thickness);
             if accepted && let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
             }
             accepted
         } else {
@@ -4369,6 +4507,154 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_bake_active_decal(move || {
         if let Ok(mut bridge) = bake_decal_bridge.lock() {
             bridge.apply(UiIntent::BakeActiveDecal);
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let ref_toggle_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_manager_toggle(move || {
+        if let Ok(mut bridge) = ref_toggle_bridge.lock() {
+            bridge.toggle_reference_manager();
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let ref_close_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_manager_closed(move || {
+        if let Ok(mut bridge) = ref_close_bridge.lock() {
+            bridge.close_reference_manager();
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let ref_pick_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_slot_pick(move |axis| {
+        let bridge = Arc::clone(&ref_pick_bridge);
+        let window_weak = window_weak.clone();
+        let axis = axis.to_string();
+        let _ = slint::spawn_local(async move {
+            let service = files::FileDialogService::new();
+            let Some(path) = service.open_reference_image().await else {
+                return;
+            };
+            let file_name = path
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_else(|| "reference".to_string());
+            let Ok((width, height, rgba)) = files::load_image_rgba(&path) else {
+                return;
+            };
+            if let Ok(mut bridge) = bridge.lock() {
+                bridge.load_reference_slot(&axis, file_name, width, height, rgba);
+                let vm = bridge.view_model();
+                let new_frame = bridge.render_viewport();
+                if let Some(window) = window_weak.upgrade() {
+                    sync_window_properties(&window, &vm);
+                    if let Some(frame) = new_frame {
+                        window.set_viewport_image(frame);
+                    }
+                }
+            }
+        });
+    });
+
+    let ref_remove_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_slot_remove(move |axis| {
+        if let Ok(mut bridge) = ref_remove_bridge.lock() {
+            bridge.remove_reference_slot(axis.as_str());
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let ref_align_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_slot_align(move |axis| {
+        if let Ok(mut bridge) = ref_align_bridge.lock() {
+            bridge.align_reference_view(axis.as_str());
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let ref_vis_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_slot_toggle_visible(move |axis| {
+        if let Ok(mut bridge) = ref_vis_bridge.lock() {
+            bridge.toggle_reference_visible(axis.as_str());
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let ref_lock_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_slot_toggle_lock(move |axis| {
+        if let Ok(mut bridge) = ref_lock_bridge.lock() {
+            bridge.toggle_reference_lock(axis.as_str());
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let ref_param_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_slot_set_param(move |axis, param, val| {
+        if let Ok(mut bridge) = ref_param_bridge.lock() {
+            bridge.set_reference_param(axis.as_str(), param.as_str(), val);
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let ref_clear_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_reference_clear_all(move || {
+        if let Ok(mut bridge) = ref_clear_bridge.lock() {
+            bridge.clear_all_references();
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {

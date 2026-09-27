@@ -277,6 +277,7 @@ impl PetuniaViewport for Software3dViewport {
     fn render_frame(
         &mut self,
         project: &Project,
+        _refs: &[petunia_core::ReferenceImage],
         camera: &Camera,
         state: ViewportRenderState,
     ) -> Option<slint::Image> {
@@ -575,7 +576,7 @@ mod tests {
         let project = Project::default();
         let camera = Camera::default();
 
-        let image = viewport.render_frame(&project, &camera, ViewportRenderState::default());
+        let image = viewport.render_frame(&project, &[], &camera, ViewportRenderState::default());
         assert!(image.is_some());
         let img = image.expect("image");
         assert_eq!(img.size().width, 320);
@@ -592,7 +593,7 @@ mod tests {
         let project = Project::default();
         let camera = Camera::default();
         let image = viewport
-            .render_frame(&project, &camera, ViewportRenderState::default())
+            .render_frame(&project, &[], &camera, ViewportRenderState::default())
             .expect("frame");
         assert_eq!(image.size().width, 200);
         assert_eq!(image.size().height, 150);
@@ -608,15 +609,15 @@ mod tests {
         let camera = Camera::default();
 
         viewport.set_selection_domain(SelectionDomain::Vertex);
-        let frame_v = viewport.render_frame(&project, &camera, ViewportRenderState::default());
+        let frame_v = viewport.render_frame(&project, &[], &camera, ViewportRenderState::default());
         assert!(frame_v.is_some());
 
         viewport.set_selection_domain(SelectionDomain::Edge);
-        let frame_e = viewport.render_frame(&project, &camera, ViewportRenderState::default());
+        let frame_e = viewport.render_frame(&project, &[], &camera, ViewportRenderState::default());
         assert!(frame_e.is_some());
 
         viewport.set_selection_domain(SelectionDomain::Face);
-        let frame_f = viewport.render_frame(&project, &camera, ViewportRenderState::default());
+        let frame_f = viewport.render_frame(&project, &[], &camera, ViewportRenderState::default());
         assert!(frame_f.is_some());
     }
 
@@ -635,14 +636,14 @@ mod tests {
             selection_thickness: 2.0,
             ..ViewportRenderState::default()
         };
-        viewport.render_frame(&project, &camera, style);
+        viewport.render_frame(&project, &[], &camera, style);
         let red = viewport.color_buffer.clone();
         style.selection_rgb = [32, 160, 255];
-        viewport.render_frame(&project, &camera, style);
+        viewport.render_frame(&project, &[], &camera, style);
         assert_ne!(viewport.color_buffer, red);
         let blue = viewport.color_buffer.clone();
         style.selection_thickness = 5.0;
-        viewport.render_frame(&project, &camera, style);
+        viewport.render_frame(&project, &[], &camera, style);
         assert_ne!(viewport.color_buffer, blue);
     }
 
@@ -658,14 +659,14 @@ mod tests {
             xray_opacity: 0.15,
             ..ViewportRenderState::default()
         };
-        viewport.render_frame(&project, &camera, state);
+        viewport.render_frame(&project, &[], &camera, state);
         let transparent = viewport.color_buffer.clone();
         state.xray_opacity = 0.85;
-        viewport.render_frame(&project, &camera, state);
+        viewport.render_frame(&project, &[], &camera, state);
         assert_ne!(viewport.color_buffer, transparent);
         let mostly_opaque = viewport.color_buffer.clone();
         state.xray = false;
-        viewport.render_frame(&project, &camera, state);
+        viewport.render_frame(&project, &[], &camera, state);
         assert_ne!(viewport.color_buffer, mostly_opaque);
     }
 }

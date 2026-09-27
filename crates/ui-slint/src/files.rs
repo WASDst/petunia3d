@@ -122,6 +122,68 @@ impl FileDialogService {
             .await
             .map(|file| file.path().to_path_buf())
     }
+
+    /// Seleciona uma imagem de referência do disco.
+    pub async fn open_reference_image(&self) -> Option<PathBuf> {
+        rfd::AsyncFileDialog::new()
+            .add_filter("Image", &["png", "jpg", "jpeg", "webp", "bmp"])
+            .pick_file()
+            .await
+            .map(|file| file.path().to_path_buf())
+    }
+}
+
+/// Carrega e decodifica uma imagem em RGBA8 até no máximo 2048x2048.
+pub fn load_image_rgba(path: &std::path::Path) -> Result<(u32, u32, Vec<u8>), String> {
+    let img = image::open(path).map_err(|e| e.to_string())?;
+    let mut rgba = img.to_rgba8();
+    const MAX: u32 = 2048;
+    if rgba.width() > MAX || rgba.height() > MAX {
+        let (w, h) = (rgba.width(), rgba.height());
+        let s = (MAX as f32 / w.max(h) as f32).min(1.0);
+        rgba = image::imageops::resize(
+            &rgba,
+            ((w as f32 * s) as u32).max(1),
+            ((h as f32 * s) as u32).max(1),
+            image::imageops::FilterType::Lanczos3,
+        );
+    }
+    Ok((rgba.width(), rgba.height(), rgba.into_raw()))
+}
+
+/// Gera uma [`slint::Image`] de miniatura a partir de um buffer de pixels RGBA.
+pub fn create_thumbnail_image(width: u32, height: u32, rgba: &[u8]) -> Option<slint::Image> {
+    if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {
+        return None;
+    }
+    const THUMB_MAX: u32 = 180;
+    let s = (THUMB_MAX as f32 / width.max(height) as f32).min(1.0);
+    let target_w = ((width as f32 * s) as u32).max(1);
+    let target_h = ((height as f32 * s) as u32).max(1);
+
+    let mut buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(target_w, target_h);
+    let out_bytes = buf.make_mut_bytes();
+
+    if target_w == width && target_h == height {
+        let len = out_bytes.len().min(rgba.len());
+        out_bytes[..len].copy_from_slice(&rgba[..len]);
+    } else {
+        for y in 0..target_h {
+            let src_y = (((y as f32) / (target_h as f32)) * (height as f32)) as u32;
+            for x in 0..target_w {
+                let src_x = (((x as f32) / (target_w as f32)) * (width as f32)) as u32;
+                let src_idx = ((src_y * width + src_x) * 4) as usize;
+                let dst_idx = ((y * target_w + x) * 4) as usize;
+                if src_idx + 3 < rgba.len() && dst_idx + 3 < out_bytes.len() {
+                    out_bytes[dst_idx] = rgba[src_idx];
+                    out_bytes[dst_idx + 1] = rgba[src_idx + 1];
+                    out_bytes[dst_idx + 2] = rgba[src_idx + 2];
+                    out_bytes[dst_idx + 3] = rgba[src_idx + 3];
+                }
+            }
+        }
+    }
+    Some(slint::Image::from_rgba8(buf))
 }
 
 #[cfg(test)]

@@ -68,7 +68,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>0</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -84,7 +85,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (48 atalhos)
+### Perfil: `3ds-max` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -124,7 +125,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>W</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -137,7 +139,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `blender` (48 atalhos)
+### Perfil: `blender` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -177,7 +179,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -190,7 +193,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `blender-notebook` (48 atalhos)
+### Perfil: `blender-notebook` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -230,7 +233,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -243,7 +247,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `cinema-4d` (48 atalhos)
+### Perfil: `cinema-4d` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -283,7 +287,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>E</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -296,7 +301,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `maya` (48 atalhos)
+### Perfil: `maya` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -336,7 +341,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>Q</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>W</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -349,7 +355,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `petunia-notebook` (48 atalhos)
+### Perfil: `petunia-notebook` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -389,7 +395,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>F4</kbd> |
 | `model.select_vertex` | <kbd>F1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
@@ -402,7 +409,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
 
-### Perfil: `petunia-simple` (48 atalhos)
+### Perfil: `petunia-simple` (49 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -442,7 +449,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
-| `model.subdivide` | <kbd>W</kbd> |
+| `model.subdivide` | <kbd>Alt+W</kbd> |
+| `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |

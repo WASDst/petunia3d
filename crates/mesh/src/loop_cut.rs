@@ -174,6 +174,9 @@ impl LoopRing {
     pub fn edge_count(&self) -> usize {
         self.edges.len()
     }
+    pub fn edges(&self) -> &[Edge] {
+        &self.edges
+    }
 
     fn validate(&self, mesh: &Mesh) -> Result<(), LoopCutError> {
         for face in &self.faces {

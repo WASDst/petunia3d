@@ -16,8 +16,14 @@ impl AssetsModule {
         }
     }
 
-    pub fn add_primitive(state: &mut AppState, name: &str, mesh: Mesh) {
+    pub fn add_primitive(state: &mut AppState, name: &str, mut mesh: Mesh) {
         state.checkpoint("add asset");
+        let cursor = state.session.cursor_3d;
+        for v in &mut mesh.verts {
+            v.pos[0] += cursor[0];
+            v.pos[1] += cursor[1];
+            v.pos[2] += cursor[2];
+        }
         state.project.add(name, mesh);
         let id = state.project.assets[state.project.active].id;
         state

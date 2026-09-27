@@ -23,6 +23,7 @@ pub enum OverlayId {
     MenuBar,
     PivotMenu,
     MicroInspector,
+    ReferenceManager,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

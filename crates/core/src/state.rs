@@ -1579,6 +1579,7 @@ impl AppState {
         name: Option<String>,
     ) -> bool {
         use crate::primitive_session::PrimitiveDescriptorExt;
+        self.set_selection_domain(SelectionDomain::Object);
         self.finalize_primitive_session();
         let original_selection = self.session.selection.clone();
         let cursor_offset = self.session.cursor_3d;
@@ -3053,13 +3054,16 @@ impl AppState {
         position: Option<[f32; 3]>,
     ) -> bool {
         if let Some(pos) = self.project.assets.iter().position(|a| a.id == asset_id) {
+            self.set_selection_domain(SelectionDomain::Object);
             let mut new_asset = self.project.assets[pos].duplicate();
             let target_pos = position.unwrap_or(self.session.cursor_3d);
+            let center = new_asset.mesh.selection_center();
             for v in &mut new_asset.mesh.verts {
-                v.pos[0] += target_pos[0];
-                v.pos[1] += target_pos[1];
-                v.pos[2] += target_pos[2];
+                v.pos[0] += target_pos[0] - center[0];
+                v.pos[1] += target_pos[1] - center[1];
+                v.pos[2] += target_pos[2] - center[2];
             }
+            new_asset.origin = Some(target_pos);
             let name = new_asset.name.clone();
             self.checkpoint("instantiate asset");
             self.project.assets.push(new_asset);

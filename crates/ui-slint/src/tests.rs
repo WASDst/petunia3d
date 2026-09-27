@@ -7090,3 +7090,390 @@ fn test_loop_selection_edge_face_vertex_and_double_click() {
         assert!(mesh.faces.iter().any(|f| f.selected));
     }
 }
+
+#[test]
+fn test_primitives_created_at_3d_cursor() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let cursor_pos = [5.0, 3.0, -4.0];
+    bridge.state.session.cursor_3d = cursor_pos;
+
+    // Add Cube primitive
+    bridge.apply(UiIntent::AddPrimitive(petunia_core::PrimitiveKind::Cube));
+    let asset = bridge.state.project.active().expect("cube asset created");
+
+    // Compute center of bounding box
+    let mut min = [f32::MAX; 3];
+    let mut max = [f32::MIN; 3];
+    for v in &asset.mesh.verts {
+        for i in 0..3 {
+            min[i] = min[i].min(v.pos[i]);
+            max[i] = max[i].max(v.pos[i]);
+        }
+    }
+    let center = [
+        (min[0] + max[0]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+        (min[2] + max[2]) * 0.5,
+    ];
+    assert!((center[0] - cursor_pos[0]).abs() < 1e-3);
+    assert!((center[1] - cursor_pos[1]).abs() < 1e-3);
+    assert!((center[2] - cursor_pos[2]).abs() < 1e-3);
+}
+
+#[test]
+fn test_profile_interactive_volume_flow() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+
+    // Draw a square profile
+    for pt in [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]] {
+        bridge.state.profile.points.push(pt);
+        bridge
+            .state
+            .profile
+            .nodes
+            .push(petunia_mesh::curve::BezierNode::new(pt));
+    }
+    bridge.state.profile.closed = true;
+
+    // 1. Enter interactive Extrude volume preview
+    assert!(bridge.enter_profile_volume("extrude"));
+    assert_eq!(
+        bridge.profile_volume_mode,
+        Some(petunia_module_model::ProfileVolumeMode::Extrude)
+    );
+    assert!(bridge.profile_preview_asset_id.is_some());
+    assert_eq!(bridge.view_model().profile_volume_mode, "extrude");
+
+    // Check that preview asset exists in project
+    let preview_id = bridge.profile_preview_asset_id.unwrap();
+    let preview_asset = bridge
+        .state
+        .project
+        .assets
+        .iter()
+        .find(|a| a.id == preview_id);
+    assert!(preview_asset.is_some());
+    assert_eq!(preview_asset.unwrap().name, "Profile Preview");
+
+    // 2. Adjust depth interactively
+    bridge.set_profile_depth(2.5);
+    assert_eq!(bridge.state.profile.depth, 2.5);
+
+    // 3. Cancel volume: preview removed, profile kept!
+    assert!(bridge.cancel_profile_volume());
+    assert!(bridge.profile_volume_mode.is_none());
+    assert!(
+        bridge
+            .state
+            .project
+            .assets
+            .iter()
+            .all(|a| a.id != preview_id)
+    );
+    assert_eq!(bridge.state.profile.points.len(), 4);
+    assert!(bridge.state.profile.closed);
+
+    // 4. Enter Revolve volume preview
+    assert!(bridge.enter_profile_volume("revolve"));
+    assert_eq!(
+        bridge.profile_volume_mode,
+        Some(petunia_module_model::ProfileVolumeMode::Revolve)
+    );
+    assert!(bridge.set_profile_revolve_angle(180.0));
+    assert_eq!(bridge.state.profile.revolve_angle, 180.0);
+
+    // 5. Confirm volume: asset finalized to "Profile", tool switched to select
+    assert!(bridge.commit_profile_volume());
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    assert!(bridge.profile_volume_mode.is_none());
+    assert!(bridge.state.profile.points.is_empty());
+    let active = bridge.state.project.active().expect("active profile asset");
+    assert_eq!(active.name, "Profile");
+}
+
+#[test]
+fn test_profile_bezier_handle_interactive_dragging() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+
+    // Click at center
+    bridge.select_viewport_ext(0.5, 0.5, false, false);
+    assert_eq!(bridge.state.profile.nodes.len(), 1);
+
+    // Drag handle symmetrically (0.6, 0.5)
+    let updated = bridge.profile_update_drag_handle(0.6, 0.5, false);
+    assert!(updated);
+    let node = &bridge.state.profile.nodes[0];
+    assert!(node.handle_out.is_some());
+    assert!(node.handle_in.is_some());
+    assert_eq!(node.kind, petunia_mesh::curve::BezierNodeKind::Symmetric);
+
+    // Preview commands should contain tangent handles
+    let cmds = bridge.profile_preview_commands();
+    assert!(!cmds.is_empty());
+
+    // Drag handle with Alt (break tangent)
+    let updated_sharp = bridge.profile_update_drag_handle(0.65, 0.55, true);
+    assert!(updated_sharp);
+    let sharp_node = &bridge.state.profile.nodes[0];
+    assert_eq!(sharp_node.kind, petunia_mesh::curve::BezierNodeKind::Sharp);
+}
+
+#[test]
+fn test_profile_align_camera_to_workplane() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.profile.normal = [0.0, 1.0, 0.0];
+    bridge.state.profile.origin = [1.0, 2.0, 3.0];
+
+    petunia_module_model::profile_align_camera_to_workplane(&mut bridge.state);
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+    assert_eq!(
+        bridge.state.session.camera.target,
+        glam::Vec3::new(1.0, 2.0, 3.0)
+    );
+}
+
+#[test]
+fn test_blender_numpad_viewport_navigation() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // Numpad 1: Front
+    assert!(bridge.route_shortcut("Numpad1", false, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Ctrl+Numpad 1: Back
+    assert!(bridge.route_shortcut("Numpad1", true, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Numpad 3: Right
+    assert!(bridge.route_shortcut("KP_3", false, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Ctrl+Numpad 3: Left
+    assert!(bridge.route_shortcut("KP_3", true, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Numpad 7: Top
+    assert!(bridge.route_shortcut("Numpad 7", false, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Ctrl+Numpad 7: Bottom
+    assert!(bridge.route_shortcut("Numpad 7", true, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Numpad 9: Opposite
+    assert!(bridge.route_shortcut("Numpad9", false, false, false));
+
+    // Numpad 5: Toggle Ortho / Perspective
+    let proj_before = bridge.state.session.camera.proj;
+    assert!(bridge.route_shortcut("Numpad5", false, false, false));
+    assert_ne!(bridge.state.session.camera.proj, proj_before);
+
+    // Numpad 0: Perspective / Camera
+    assert!(bridge.route_shortcut("Numpad0", false, false, false));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Perspective
+    );
+
+    // Numpad .: Frame selected
+    assert!(bridge.route_shortcut("Numpad .", false, false, false));
+
+    // Numpad /: Toggle isolate
+    assert!(!bridge.state.session.isolate_active);
+    assert!(bridge.route_shortcut("Numpad /", false, false, false));
+    assert!(bridge.state.session.isolate_active);
+    assert!(bridge.route_shortcut("Numpad /", false, false, false));
+    assert!(!bridge.state.session.isolate_active);
+}
+
+#[test]
+fn test_smart_contextual_selection_mode_switching() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // Start in Face mode
+    bridge.apply(UiIntent::SetSelectionDomain(
+        petunia_core::SelectionDomain::Face,
+    ));
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Face
+    );
+
+    // 1. Creating a primitive switches automatically to Object mode
+    bridge.apply(UiIntent::AddPrimitive(petunia_core::PrimitiveKind::Sphere));
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Object
+    );
+
+    // 2. Instantiating a library asset switches automatically to Object mode
+    let asset_id = bridge.state.project.assets[0].id.to_string();
+    bridge.apply(UiIntent::SetSelectionDomain(
+        petunia_core::SelectionDomain::Edge,
+    ));
+    assert!(bridge.place_asset(&asset_id));
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Object
+    );
+
+    // 3. Activating Extrude from Object mode switches to Face mode and auto-selects all faces
+    bridge.apply(UiIntent::SetSelectionDomain(
+        petunia_core::SelectionDomain::Object,
+    ));
+    let has_mesh = bridge.state.project.active_mesh().is_some();
+    assert!(has_mesh);
+    bridge.execute_shortcut_tool("model.extrude");
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Face
+    );
+    let faces_selected = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .faces
+        .iter()
+        .all(|f| f.selected);
+    assert!(faces_selected);
+
+    // 4. Activating Bevel from Object mode switches to Edge mode
+    bridge.apply(UiIntent::SetSelectionDomain(
+        petunia_core::SelectionDomain::Object,
+    ));
+    bridge.execute_shortcut_tool("model.bevel");
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Edge
+    );
+
+    // 5. Activating Loop Cut from Object mode switches to Edge mode
+    bridge.apply(UiIntent::SetSelectionDomain(
+        petunia_core::SelectionDomain::Object,
+    ));
+    bridge.execute_shortcut_tool("model.loop_cut");
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Edge
+    );
+}
+
+#[test]
+fn test_reference_manager_operations_and_f4_shortcut() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // Initial state: closed
+    assert!(!bridge.view_model().reference_manager_open);
+
+    // F4 toggles reference manager
+    assert!(bridge.route_shortcut("F4", false, false, false));
+    assert!(bridge.view_model().reference_manager_open);
+
+    // Close and open methods
+    assert!(bridge.close_reference_manager());
+    assert!(!bridge.view_model().reference_manager_open);
+    assert!(bridge.open_reference_manager());
+    assert!(bridge.view_model().reference_manager_open);
+
+    // Add a reference image to project.refs
+    let dummy_rgba = vec![255u8; 16 * 16 * 4];
+    let mut ref_img =
+        petunia_core::ReferenceImage::from_rgba("Test Ref".to_string(), 16, 16, dummy_rgba);
+    ref_img.axis = petunia_core::RefAxis::Front;
+    bridge.state.project.refs.push(ref_img);
+
+    let vm = bridge.view_model();
+    assert_eq!(vm.reference_total_count, 1);
+    assert_eq!(vm.reference_slots.len(), 6);
+    assert!(vm.reference_slots[0].has_image); // Slot 0 is Front
+    assert!(!vm.reference_slots[1].has_image); // Slot 1 is Back
+
+    // Toggle visibility of Front slot
+    assert!(bridge.toggle_reference_visible("front"));
+    assert!(!bridge.state.project.refs[0].visible);
+    assert!(bridge.toggle_reference_visible("front"));
+    assert!(bridge.state.project.refs[0].visible);
+
+    // Toggle lock
+    assert!(bridge.toggle_reference_lock("front"));
+    assert!(bridge.state.project.refs[0].locked);
+    assert!(bridge.toggle_reference_lock("front"));
+    assert!(!bridge.state.project.refs[0].locked);
+
+    // Set parameters
+    assert!(bridge.set_reference_param("front", "opacity", 0.8));
+    assert!((bridge.state.project.refs[0].opacity - 0.8).abs() < 1e-4);
+    assert!(bridge.set_reference_param("front", "size", 5.0));
+    assert!((bridge.state.project.refs[0].size - 5.0).abs() < 1e-4);
+    assert!(bridge.set_reference_param("front", "offset", 1.5));
+    assert!((bridge.state.project.refs[0].offset - 1.5).abs() < 1e-4);
+    assert!(bridge.set_reference_param("front", "rotation", 45.0));
+    assert!((bridge.state.project.refs[0].rotation - 45.0).abs() < 1e-4);
+
+    // Align view to reference slot 0 (Front)
+    assert!(bridge.align_reference_view("front"));
+    assert_eq!(
+        bridge.state.session.camera.proj,
+        petunia_core::Projection::Ortho
+    );
+
+    // Clear all references
+    assert!(bridge.clear_all_references());
+    assert!(bridge.state.project.refs.is_empty());
+    assert_eq!(bridge.view_model().reference_total_count, 0);
+
+    // Escape closes reference manager first
+    bridge.open_reference_manager();
+    assert!(bridge.handle_escape());
+    assert!(!bridge.view_model().reference_manager_open);
+}
+
+#[test]
+fn test_loop_cut_2d_scrubbing_and_candidate_detection() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.set_edit_mode(petunia_core::EditMode::Edit);
+    bridge.resize_viewport(800, 600);
+
+    let _seed = {
+        let mesh = bridge.state.project.active_mesh_mut().unwrap();
+        let face = mesh.faces[0].verts.clone();
+        let edge = (face[0], face[1]);
+        mesh.selected_edges.insert(edge);
+        edge
+    };
+    assert!(bridge.begin_loop_cut());
+    assert!(bridge.loop_cut.is_some());
+
+    // 2D scrubbing updates slide
+    assert!(bridge.scrub_loop_cut_2d(50.0, -20.0, false));
+    let slide = bridge.loop_cut.as_ref().unwrap().slide;
+    assert_ne!(slide, 0.0);
+
+    assert!(bridge.commit_loop_cut());
+    assert!(bridge.loop_cut.is_none());
+}

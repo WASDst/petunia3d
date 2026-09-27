@@ -414,6 +414,7 @@ pub trait PetuniaViewport: Send {
     fn render_frame(
         &mut self,
         _project: &Project,
+        _refs: &[petunia_core::ReferenceImage],
         _camera: &Camera,
         _state: ViewportRenderState,
     ) -> Option<slint::Image> {
@@ -474,10 +475,11 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
     fn render_frame(
         &mut self,
         project: &Project,
+        refs: &[petunia_core::ReferenceImage],
         camera: &Camera,
         state: ViewportRenderState,
     ) -> Option<slint::Image> {
-        (**self).render_frame(project, camera, state)
+        (**self).render_frame(project, refs, camera, state)
     }
 }
 /// Sessão de manipulação interativa de decalque 3D: (origem_x, origem_y, center_uv_inicial, scale_uv_inicial, rot_deg_inicial).
@@ -573,6 +575,11 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub micro_inspector_pos: [f32; 2],
     pub paint_show_uv_overlay: bool,
     pub uv_show_texture: bool,
+    pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
+    pub profile_drag_anchor: Option<[f32; 2]>,
+    pub profile_preview_asset_id: Option<uuid::Uuid>,
+    pub reference_manager_open: bool,
+    pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
 }
 
 /// Menu de contexto do Outliner aberto sobre uma linha do painel Parts,
@@ -752,6 +759,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             micro_inspector_pos: [512.0, 384.0],
             paint_show_uv_overlay: false,
             uv_show_texture: true,
+            profile_volume_mode: None,
+            profile_drag_anchor: None,
+            profile_preview_asset_id: None,
+            reference_manager_open: false,
+            reference_thumbnails: std::collections::HashMap::new(),
             position: [
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
@@ -963,6 +975,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .set_status(format!("Modo de seleção: {:?}", domain));
             }
             UiIntent::AddPrimitive(kind) => {
+                self.state.set_selection_domain(SelectionDomain::Object);
+                self.sync_viewport_context();
                 self.state.begin_primitive(kind, None);
                 self.state
                     .set_status(format!("Added {}", kind.default_name()));
@@ -1057,9 +1071,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     }
                     "draw_profile" => {
                         petunia_module_model::profile_capture_auto(&mut self.state);
+                        petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                         let wp = petunia_module_model::profile_workplane_label(&self.state);
                         self.state.set_status(format!(
-                            "Sketch/Profile on {wp}: click to add points, click first point to close, then drag Depth or press Enter"
+                            "Sketch/Profile on {wp}: click to add points, click-drag for Bezier curves, then choose Extrude / Revolve / Sweep"
                         ));
                     }
                     "loop_cut" => {
@@ -1372,6 +1387,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ProfileSetWorkplaneFace => {
                 if petunia_module_model::profile_capture_face(&mut self.state) {
+                    petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                     self.state.set_status("Profile Workplane: Active Face");
                 } else {
                     self.state.set_status("No face selected; using Ground (XZ)");
@@ -1458,6 +1474,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         self.viewport.render_frame(
             &self.state.project,
+            &self.state.project.refs,
             &self.state.session.camera,
             render_state,
         )
@@ -2029,18 +2046,43 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Posiciona o 3D Cursor na viewport dado um ponto normalizado (ou clique na tela).
     pub fn place_cursor_3d(&mut self, norm_x: f32, norm_y: f32) -> bool {
-        let nx = norm_x * 2.0 - 1.0;
-        let ny = 1.0 - norm_y * 2.0;
+        let nx = norm_x.clamp(0.0, 1.0) * 2.0 - 1.0;
+        let ny = 1.0 - norm_y.clamp(0.0, 1.0) * 2.0;
 
         let (origin, dir) = self.state.session.camera.ray(nx, ny);
-        let target_pos = if let Some((_face, hit_pos)) = pick_face_hit(&self.state, origin, dir) {
+
+        // 1. Snapping magnético a vértices de todas as malhas visíveis
+        let mut best_vertex = None;
+        let mut min_vert_dist = 0.35_f32;
+        for asset in &self.state.project.assets {
+            if !asset.visible {
+                continue;
+            }
+            for v in &asset.mesh.verts {
+                let p = v.vec();
+                let v_rel = p - origin;
+                let t = v_rel.dot(dir);
+                if t > 0.0 {
+                    let proj = origin + dir * t;
+                    let dist = (p - proj).length();
+                    if dist < min_vert_dist {
+                        min_vert_dist = dist;
+                        best_vertex = Some(p);
+                    }
+                }
+            }
+        }
+
+        let target_pos = if let Some(v_pos) = best_vertex {
+            v_pos
+        } else if let Some((_face, hit_pos)) = pick_face_hit(&self.state, origin, dir) {
             hit_pos
         } else if dir.y.abs() > 1e-4 {
             let t = -origin.y / dir.y;
             if t > 0.0 {
                 origin + dir * t
             } else {
-                let plane_t = (self.state.session.camera.target.y - origin.y) / dir.y;
+                let plane_t = (self.state.session.cursor_3d[1] - origin.y) / dir.y;
                 if plane_t > 0.0 {
                     origin + dir * plane_t
                 } else {
@@ -2212,20 +2254,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 petunia_core::HoverTarget::Edge(a, b) => Some((a, b)),
                 _ => None,
             };
-            let next = match self.pick_target_for_domain(
-                SelectionDomain::Edge,
-                normalized_x,
-                normalized_y,
-            ) {
-                petunia_core::HoverTarget::Edge(a, b) => {
-                    self.state.project.active_mesh().and_then(|mesh| {
-                        petunia_core::LoopRing::discover(mesh, (a, b))
-                            .ok()
-                            .map(|ring| (mesh.clone(), ring, (a, b)))
-                    })
-                }
-                _ => None,
-            };
+            let next = self.pick_loop_cut_candidate(normalized_x, normalized_y);
             self.loop_cut_hover_source = next.as_ref().map(|(mesh, _, _)| mesh.clone());
             self.loop_cut_hover_ring = next.as_ref().map(|(_, ring, _)| ring.clone());
             let next_edge = next.map(|(_, _, edge)| edge);
@@ -2248,6 +2277,115 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.session.tools.hover = next;
         true
+    }
+
+    fn pick_loop_cut_candidate(
+        &self,
+        normalized_x: f32,
+        normalized_y: f32,
+    ) -> Option<(petunia_core::Mesh, petunia_core::LoopRing, (u32, u32))> {
+        let mesh = self.state.project.active_mesh()?;
+        let (width, height) = (self.viewport_size[0], self.viewport_size[1]);
+        if width <= 1.0 || height <= 1.0 {
+            return None;
+        }
+        let cursor_px = [normalized_x * width, normalized_y * height];
+        let camera = &self.state.session.camera;
+        let view_proj = camera.view_proj();
+
+        let project_pos = |p: glam::Vec3| -> Option<[f32; 2]> {
+            let ndc = view_proj.project_point3(p);
+            if !ndc.is_finite() || ndc.z < -1.0 || ndc.z > 1.0 {
+                return None;
+            }
+            Some([(ndc.x * 0.5 + 0.5) * width, (0.5 - ndc.y * 0.5) * height])
+        };
+
+        let dist_to_segment = |pt: [f32; 2], a: [f32; 2], b: [f32; 2]| -> f32 {
+            let ab = [b[0] - a[0], b[1] - a[1]];
+            let ap = [pt[0] - a[0], pt[1] - a[1]];
+            let len_sq = ab[0] * ab[0] + ab[1] * ab[1];
+            if len_sq <= 1e-4 {
+                let dx = pt[0] - a[0];
+                let dy = pt[1] - a[1];
+                return (dx * dx + dy * dy).sqrt();
+            }
+            let t = ((ap[0] * ab[0] + ap[1] * ab[1]) / len_sq).clamp(0.0, 1.0);
+            let proj = [a[0] + t * ab[0], a[1] + t * ab[1]];
+            let dx = pt[0] - proj[0];
+            let dy = pt[1] - proj[1];
+            (dx * dx + dy * dy).sqrt()
+        };
+
+        // 1. Testa se o cursor está sobre uma Face (Blender Quad Selection)
+        if let petunia_core::HoverTarget::Face(face_idx) =
+            self.pick_target_for_domain(SelectionDomain::Face, normalized_x, normalized_y)
+            && let Some(face) = mesh.faces.get(face_idx)
+            && face.verts.len() == 4
+        {
+            let v_indices = [face.verts[0], face.verts[1], face.verts[2], face.verts[3]];
+            let mut proj_verts = [None; 4];
+            for i in 0..4 {
+                if let Some(v) = mesh.verts.get(v_indices[i] as usize) {
+                    proj_verts[i] = project_pos(v.vec());
+                }
+            }
+            if proj_verts.iter().all(|p| p.is_some()) {
+                let p = [
+                    proj_verts[0].unwrap(),
+                    proj_verts[1].unwrap(),
+                    proj_verts[2].unwrap(),
+                    proj_verts[3].unwrap(),
+                ];
+                let d0 = dist_to_segment(cursor_px, p[0], p[1]);
+                let d1 = dist_to_segment(cursor_px, p[1], p[2]);
+                let d2 = dist_to_segment(cursor_px, p[2], p[3]);
+                let d3 = dist_to_segment(cursor_px, p[3], p[0]);
+
+                let mut candidates = [
+                    (d0, (v_indices[0], v_indices[1])),
+                    (d1, (v_indices[1], v_indices[2])),
+                    (d2, (v_indices[2], v_indices[3])),
+                    (d3, (v_indices[3], v_indices[0])),
+                ];
+                candidates.sort_by(|a, b| {
+                    a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                for (_, seed) in candidates {
+                    if let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed) {
+                        return Some((mesh.clone(), ring, seed));
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback de proximidade de aresta (24px de tolerância)
+        let mut best_candidate: Option<(f32, (u32, u32))> = None;
+        for (a, b) in mesh.edges_unique() {
+            let (Some(va), Some(vb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize))
+            else {
+                continue;
+            };
+            let (Some(pa), Some(pb)) = (project_pos(va.vec()), project_pos(vb.vec())) else {
+                continue;
+            };
+            let dist = dist_to_segment(cursor_px, pa, pb);
+            if dist < 24.0
+                && best_candidate
+                    .as_ref()
+                    .is_none_or(|(best_d, _)| dist < *best_d)
+            {
+                best_candidate = Some((dist, (a, b)));
+            }
+        }
+
+        if let Some((_, seed)) = best_candidate
+            && let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed)
+        {
+            return Some((mesh.clone(), ring, seed));
+        }
+
+        None
     }
 
     fn refresh_loop_cut_hover_preview(&self) -> bool {
@@ -2870,7 +3008,56 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         } else {
             let [x, y] = self.pointer_position;
-            let _ = write!(commands, "L {:.2} {:.2}", x, y);
+            let _ = write!(commands, "L {:.2} {:.2} ", x, y);
+        }
+
+        // Alças tangentes e marcadores de nós Bézier
+        for node in &profile.nodes {
+            let p_anchor = project_pt(node.point);
+            if let (Some(anchor_scr), Some(h_out)) = (p_anchor, node.handle_out) {
+                let out_pt = [node.point[0] + h_out[0], node.point[1] + h_out[1]];
+                if let Some(out_scr) = project_pt(out_pt) {
+                    let _ = write!(
+                        commands,
+                        "M {:.2} {:.2} L {:.2} {:.2} ",
+                        anchor_scr[0], anchor_scr[1], out_scr[0], out_scr[1]
+                    );
+                    let _ = write!(
+                        commands,
+                        "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
+                        out_scr[0] - 2.5,
+                        out_scr[1] - 2.5,
+                        out_scr[0] + 2.5,
+                        out_scr[1] - 2.5,
+                        out_scr[0] + 2.5,
+                        out_scr[1] + 2.5,
+                        out_scr[0] - 2.5,
+                        out_scr[1] + 2.5
+                    );
+                }
+            }
+            if let (Some(anchor_scr), Some(h_in)) = (p_anchor, node.handle_in) {
+                let in_pt = [node.point[0] + h_in[0], node.point[1] + h_in[1]];
+                if let Some(in_scr) = project_pt(in_pt) {
+                    let _ = write!(
+                        commands,
+                        "M {:.2} {:.2} L {:.2} {:.2} ",
+                        anchor_scr[0], anchor_scr[1], in_scr[0], in_scr[1]
+                    );
+                    let _ = write!(
+                        commands,
+                        "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
+                        in_scr[0] - 2.5,
+                        in_scr[1] - 2.5,
+                        in_scr[0] + 2.5,
+                        in_scr[1] - 2.5,
+                        in_scr[0] + 2.5,
+                        in_scr[1] + 2.5,
+                        in_scr[0] - 2.5,
+                        in_scr[1] + 2.5
+                    );
+                }
+            }
         }
 
         commands
@@ -2921,6 +3108,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.profile.depth = depth.clamp(0.01, 1000.0);
         self.state.mark_dirty();
+        if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Extrude) {
+            self.update_profile_volume_preview();
+        }
         true
     }
 
@@ -2932,6 +3122,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         petunia_module_model::profile_set_wall_thickness(&mut self.state, thickness);
+        if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Extrude) {
+            self.update_profile_volume_preview();
+        }
+        true
+    }
+
+    pub fn set_profile_revolve_angle(&mut self, angle_deg: f32) -> bool {
+        if !angle_deg.is_finite() || angle_deg <= 0.0 {
+            return false;
+        }
+        self.state.profile.revolve_angle = angle_deg.clamp(1.0, 360.0);
+        self.state.mark_dirty();
+        if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Revolve) {
+            self.update_profile_volume_preview();
+        }
         true
     }
 
@@ -2943,6 +3148,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         petunia_module_model::profile_set_curve_smoothness(&mut self.state, smoothness);
+        if self.profile_volume_mode.is_some() {
+            self.update_profile_volume_preview();
+        }
         true
     }
 
@@ -2951,6 +3159,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         petunia_module_model::profile_smooth_curves(&mut self.state);
+        if self.profile_volume_mode.is_some() {
+            self.update_profile_volume_preview();
+        }
         true
     }
 
@@ -2959,50 +3170,209 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         petunia_module_model::profile_clear_curves(&mut self.state);
+        if self.profile_volume_mode.is_some() {
+            self.update_profile_volume_preview();
+        }
         true
     }
 
-    pub fn generate_profile_extrude(&mut self) -> bool {
-        if self.state.session.tools.active_tool != "draw_profile" || !self.state.profile.closed {
+    pub fn profile_update_drag_handle(
+        &mut self,
+        norm_x: f32,
+        norm_y: f32,
+        break_tangent: bool,
+    ) -> bool {
+        if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
-        let asset_count = self.state.project.assets.len();
-        petunia_module_model::draw_profile::generate_extrude(&mut self.state);
-        let generated = self.state.project.assets.len() > asset_count;
-        if generated {
-            self.state.session.tools.active_tool = "select".to_string();
+        let ndc_x = norm_x.clamp(0.0, 1.0) * 2.0 - 1.0;
+        let ndc_y = 1.0 - norm_y.clamp(0.0, 1.0) * 2.0;
+        let updated = petunia_module_model::profile_update_drag_handle(
+            &mut self.state,
+            ndc_x,
+            ndc_y,
+            break_tangent,
+        );
+        if updated {
+            self.state.mark_dirty();
+            if self.profile_volume_mode.is_some() {
+                self.update_profile_volume_preview();
+            }
         }
-        generated
+        updated
+    }
+
+    pub fn enter_profile_volume(&mut self, mode_str: &str) -> bool {
+        if self.state.session.tools.active_tool != "draw_profile" {
+            return false;
+        }
+        let mode = match mode_str {
+            "extrude" => {
+                if !self.state.profile.closed && self.state.profile.points.len() >= 3 {
+                    self.state.profile.closed = true;
+                }
+                if !self.state.profile.closed {
+                    self.state
+                        .set_status("Extrude requires a closed profile (at least 3 points)");
+                    return false;
+                }
+                petunia_module_model::ProfileVolumeMode::Extrude
+            }
+            "revolve" => {
+                if self.state.profile.points.len() < 2 {
+                    self.state.set_status("Revolve requires at least 2 points");
+                    return false;
+                }
+                petunia_module_model::ProfileVolumeMode::Revolve
+            }
+            "sweep" => {
+                if self.state.profile.points.len() < 2 {
+                    self.state.set_status("Sweep requires at least 2 points");
+                    return false;
+                }
+                petunia_module_model::ProfileVolumeMode::Sweep
+            }
+            _ => return false,
+        };
+
+        self.profile_volume_mode = Some(mode);
+        self.update_profile_volume_preview();
+        self.state.set_status(match mode {
+            petunia_module_model::ProfileVolumeMode::Extrude => "Interactive Extrude: drag vertically to adjust depth, Enter to confirm, Esc to cancel",
+            petunia_module_model::ProfileVolumeMode::Revolve => "Interactive Revolve: drag horizontally to adjust angle, Enter to confirm, Esc to cancel",
+            petunia_module_model::ProfileVolumeMode::Sweep => "Interactive Sweep: Enter to confirm, Esc to cancel",
+        });
+        true
+    }
+
+    pub fn update_profile_volume_preview(&mut self) -> bool {
+        let Some(mode) = self.profile_volume_mode else {
+            return false;
+        };
+
+        let mesh_res = match mode {
+            petunia_module_model::ProfileVolumeMode::Extrude => {
+                petunia_module_model::build_extrude_mesh(&self.state.profile)
+            }
+            petunia_module_model::ProfileVolumeMode::Revolve => {
+                petunia_module_model::build_revolve_mesh(&self.state.profile)
+            }
+            petunia_module_model::ProfileVolumeMode::Sweep => {
+                petunia_module_model::build_sweep_mesh(
+                    &self.state.profile,
+                    self.state.project.active_mesh(),
+                )
+            }
+        };
+
+        match mesh_res {
+            Ok(mesh) => {
+                if let Some(id) = self.profile_preview_asset_id {
+                    if let Some(asset) = self.state.project.assets.iter_mut().find(|a| a.id == id) {
+                        asset.mesh = mesh;
+                    } else {
+                        self.state.project.add("Profile Preview", mesh);
+                        self.profile_preview_asset_id =
+                            self.state.project.assets.last().map(|a| a.id);
+                    }
+                } else {
+                    self.state.project.add("Profile Preview", mesh);
+                    self.profile_preview_asset_id = self.state.project.assets.last().map(|a| a.id);
+                }
+                self.state.sync_selection();
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                true
+            }
+            Err(e) => {
+                self.state.set_status(format!("Volume preview error: {e}"));
+                false
+            }
+        }
+    }
+
+    pub fn commit_profile_volume(&mut self) -> bool {
+        if self.profile_volume_mode.is_none() {
+            return false;
+        }
+
+        if let Some(id) = self.profile_preview_asset_id.take() {
+            if let Some(asset) = self.state.project.assets.iter_mut().find(|a| a.id == id) {
+                asset.name = "Profile".to_string();
+            }
+            self.state.checkpoint("draw profile");
+        } else if let Some(mode) = self.profile_volume_mode {
+            let mesh_res = match mode {
+                petunia_module_model::ProfileVolumeMode::Extrude => {
+                    petunia_module_model::build_extrude_mesh(&self.state.profile)
+                }
+                petunia_module_model::ProfileVolumeMode::Revolve => {
+                    petunia_module_model::build_revolve_mesh(&self.state.profile)
+                }
+                petunia_module_model::ProfileVolumeMode::Sweep => {
+                    petunia_module_model::build_sweep_mesh(
+                        &self.state.profile,
+                        self.state.project.active_mesh(),
+                    )
+                }
+            };
+            if let Ok(mesh) = mesh_res {
+                self.state.checkpoint("draw profile");
+                self.state.project.add("Profile", mesh);
+            }
+        }
+
+        self.state.profile.clear();
+        self.profile_volume_mode = None;
+        self.state.set_selection_domain(SelectionDomain::Object);
+        self.sync_viewport_context();
+        self.state.session.tools.active_tool = "select".to_string();
+        self.state.sync_selection();
+        self.state.emit_mesh_changed();
+        self.state.mark_dirty();
+        self.state.set_status(self.state.t("profile.generated"));
+        true
+    }
+
+    pub fn cancel_profile_volume(&mut self) -> bool {
+        let had_preview =
+            self.profile_preview_asset_id.is_some() || self.profile_volume_mode.is_some();
+        if let Some(id) = self.profile_preview_asset_id.take() {
+            self.state.project.remove_by_id(id);
+            self.state.sync_selection();
+            self.state.emit_mesh_changed();
+            self.state.mark_dirty();
+        }
+        self.profile_volume_mode = None;
+        if had_preview {
+            self.state
+                .set_status("Geração de volume cancelada. Perfil 2D mantido.");
+        }
+        had_preview
+    }
+
+    pub fn generate_profile_extrude(&mut self) -> bool {
+        if self.enter_profile_volume("extrude") {
+            self.commit_profile_volume()
+        } else {
+            false
+        }
     }
 
     pub fn generate_profile_revolve(&mut self) -> bool {
-        if self.state.session.tools.active_tool != "draw_profile"
-            || self.state.profile.points.len() < 2
-        {
-            return false;
+        if self.enter_profile_volume("revolve") {
+            self.commit_profile_volume()
+        } else {
+            false
         }
-        let asset_count = self.state.project.assets.len();
-        petunia_module_model::draw_profile::generate_revolve(&mut self.state);
-        let generated = self.state.project.assets.len() > asset_count;
-        if generated {
-            self.state.session.tools.active_tool = "select".to_string();
-        }
-        generated
     }
 
     pub fn generate_profile_sweep(&mut self) -> bool {
-        if self.state.session.tools.active_tool != "draw_profile"
-            || self.state.profile.points.len() < 2
-        {
-            return false;
+        if self.enter_profile_volume("sweep") {
+            self.commit_profile_volume()
+        } else {
+            false
         }
-        let asset_count = self.state.project.assets.len();
-        petunia_module_model::draw_profile::generate_sweep(&mut self.state);
-        let generated = self.state.project.assets.len() > asset_count;
-        if generated {
-            self.state.session.tools.active_tool = "select".to_string();
-        }
-        generated
     }
 
     pub fn adjust_loop_cut_hover_count(&mut self, delta: i32) -> bool {
@@ -4457,10 +4827,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "z" => ViewPreset::Front,
             _ => return false,
         };
+        self.set_view_preset(preset)
+    }
+
+    /// Define diretamente o preset de visualização da câmera e notifica o estado.
+    pub fn set_view_preset(&mut self, preset: petunia_core::ViewPreset) -> bool {
         self.state.session.camera.set_preset(preset);
         self.state.set_status(format!("View: {}", preset.title()));
         self.state.mark_dirty();
         true
+    }
+
+    /// Alterna a visualização para a vista oposta (ex: Front -> Back, Top -> Bottom).
+    pub fn toggle_view_opposite(&mut self) -> bool {
+        use petunia_core::ViewPreset;
+        let next = match self.state.session.camera.view_preset() {
+            Some(ViewPreset::Front) => ViewPreset::Back,
+            Some(ViewPreset::Back) => ViewPreset::Front,
+            Some(ViewPreset::Right) => ViewPreset::Left,
+            Some(ViewPreset::Left) => ViewPreset::Right,
+            Some(ViewPreset::Top) => ViewPreset::Bottom,
+            Some(ViewPreset::Bottom) => ViewPreset::Top,
+            _ => {
+                self.state.session.camera.yaw = (self.state.session.camera.yaw
+                    + std::f32::consts::PI)
+                    .rem_euclid(std::f32::consts::TAU);
+                self.state.mark_dirty();
+                return true;
+            }
+        };
+        self.set_view_preset(next)
     }
 
     /// Redimensiona o dock de contexto pelo divisor vertical.
@@ -4473,6 +4869,201 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Redimensiona a Asset Library pelo divisor horizontal.
     pub fn set_asset_library_height(&mut self, height: f32) -> bool {
         self.state.ui.set_shell_asset_library_height(height)
+    }
+
+    /// Abre a modal do Gerenciador de Referências (P3D-013).
+    pub fn open_reference_manager(&mut self) -> bool {
+        self.reference_manager_open = true;
+        self.overlays.push(OverlayEntry {
+            id: OverlayId::ReferenceManager,
+            kind: OverlayKind::Modal,
+            pinned: false,
+            dismiss_on_escape: true,
+            dismiss_on_click_away: true,
+        });
+        self.state.set_status("Reference Sets · P3D-013");
+        true
+    }
+
+    /// Fecha a modal do Gerenciador de Referências.
+    pub fn close_reference_manager(&mut self) -> bool {
+        self.reference_manager_open = false;
+        self.overlays.remove(OverlayId::ReferenceManager);
+        true
+    }
+
+    /// Alterna a visibilidade da modal do Gerenciador de Referências.
+    pub fn toggle_reference_manager(&mut self) -> bool {
+        if self.reference_manager_open {
+            self.close_reference_manager()
+        } else {
+            self.open_reference_manager()
+        }
+    }
+
+    /// Carrega uma imagem de referência para o slot correspondente (ou custom).
+    pub fn load_reference_slot(
+        &mut self,
+        axis_str: &str,
+        name: String,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) -> bool {
+        let axis = match axis_str.to_lowercase().as_str() {
+            "front" => petunia_core::RefAxis::Front,
+            "back" => petunia_core::RefAxis::Back,
+            "left" => petunia_core::RefAxis::Left,
+            "right" => petunia_core::RefAxis::Right,
+            "top" => petunia_core::RefAxis::Top,
+            "bottom" => petunia_core::RefAxis::Bottom,
+            _ => petunia_core::RefAxis::Front,
+        };
+        let axis_key = axis_str.to_lowercase();
+        self.reference_thumbnails.insert(axis_key, (width, height, rgba.clone()));
+        if axis_str == "custom" {
+            petunia_core::project_service::ProjectService::add_reference_image(
+                &mut self.state,
+                name,
+                width,
+                height,
+                rgba,
+            );
+        } else {
+            petunia_core::project_service::ProjectService::set_reference_slot(
+                &mut self.state,
+                axis,
+                name,
+                width,
+                height,
+                rgba,
+            );
+        }
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Remove a imagem de referência associada ao slot indicado.
+    pub fn remove_reference_slot(&mut self, axis_str: &str) -> bool {
+        let axis = match axis_str.to_lowercase().as_str() {
+            "front" => petunia_core::RefAxis::Front,
+            "back" => petunia_core::RefAxis::Back,
+            "left" => petunia_core::RefAxis::Left,
+            "right" => petunia_core::RefAxis::Right,
+            "top" => petunia_core::RefAxis::Top,
+            "bottom" => petunia_core::RefAxis::Bottom,
+            _ => return false,
+        };
+        self.reference_thumbnails.remove(&axis_str.to_lowercase());
+        if let Some(idx) = self.state.project.refs.iter().position(|r| {
+            r.axis == axis
+                || (axis == petunia_core::RefAxis::Right && r.axis == petunia_core::RefAxis::Side)
+        }) {
+            petunia_core::project_service::ProjectService::remove_reference(&mut self.state, idx);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Alinha a câmera do viewport à vista ortográfica correspondente ao slot.
+    pub fn align_reference_view(&mut self, axis_str: &str) -> bool {
+        let preset = match axis_str.to_lowercase().as_str() {
+            "front" => petunia_core::ViewPreset::Front,
+            "back" => petunia_core::ViewPreset::Back,
+            "left" => petunia_core::ViewPreset::Left,
+            "right" => petunia_core::ViewPreset::Right,
+            "top" => petunia_core::ViewPreset::Top,
+            "bottom" => petunia_core::ViewPreset::Bottom,
+            _ => return false,
+        };
+        self.state.session.camera.set_preset(preset);
+        self.state
+            .set_status(format!("View aligned to {}", preset.title()));
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Alterna a visibilidade da imagem de referência no slot.
+    pub fn toggle_reference_visible(&mut self, axis_str: &str) -> bool {
+        let axis = match axis_str.to_lowercase().as_str() {
+            "front" => petunia_core::RefAxis::Front,
+            "back" => petunia_core::RefAxis::Back,
+            "left" => petunia_core::RefAxis::Left,
+            "right" => petunia_core::RefAxis::Right,
+            "top" => petunia_core::RefAxis::Top,
+            "bottom" => petunia_core::RefAxis::Bottom,
+            _ => return false,
+        };
+        if let Some(r) = self.state.project.refs.iter_mut().find(|r| {
+            r.axis == axis
+                || (axis == petunia_core::RefAxis::Right && r.axis == petunia_core::RefAxis::Side)
+        }) {
+            r.visible = !r.visible;
+            self.state.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Alterna o bloqueio de edição/transformação da imagem de referência.
+    pub fn toggle_reference_lock(&mut self, axis_str: &str) -> bool {
+        let axis = match axis_str.to_lowercase().as_str() {
+            "front" => petunia_core::RefAxis::Front,
+            "back" => petunia_core::RefAxis::Back,
+            "left" => petunia_core::RefAxis::Left,
+            "right" => petunia_core::RefAxis::Right,
+            "top" => petunia_core::RefAxis::Top,
+            "bottom" => petunia_core::RefAxis::Bottom,
+            _ => return false,
+        };
+        if let Some(r) = self.state.project.refs.iter_mut().find(|r| {
+            r.axis == axis
+                || (axis == petunia_core::RefAxis::Right && r.axis == petunia_core::RefAxis::Side)
+        }) {
+            r.locked = !r.locked;
+            self.state.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Ajusta um parâmetro de calibração fina da referência (opacity, size, offset, rotation).
+    pub fn set_reference_param(&mut self, axis_str: &str, param: &str, val: f32) -> bool {
+        let axis = match axis_str.to_lowercase().as_str() {
+            "front" => petunia_core::RefAxis::Front,
+            "back" => petunia_core::RefAxis::Back,
+            "left" => petunia_core::RefAxis::Left,
+            "right" => petunia_core::RefAxis::Right,
+            "top" => petunia_core::RefAxis::Top,
+            "bottom" => petunia_core::RefAxis::Bottom,
+            _ => return false,
+        };
+        if let Some(r) = self.state.project.refs.iter_mut().find(|r| {
+            r.axis == axis
+                || (axis == petunia_core::RefAxis::Right && r.axis == petunia_core::RefAxis::Side)
+        }) {
+            match param {
+                "opacity" => r.opacity = val.clamp(0.0, 1.0),
+                "size" => r.size = val.clamp(0.1, 50.0),
+                "offset" => r.offset = val.clamp(-50.0, 50.0),
+                "rotation" => r.rotation = val.clamp(-180.0, 180.0),
+                _ => return false,
+            }
+            self.state.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Limpa todas as referências da cena.
+    pub fn clear_all_references(&mut self) -> bool {
+        petunia_core::project_service::ProjectService::clear_references(&mut self.state);
+        self.reference_thumbnails.clear();
+        true
     }
 
     /// Abre, troca ou fecha um menu da barra superior.
@@ -5532,6 +6123,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Ajusta o slide do loop cut em 2D considerando a projeção em tela da direção de corte.
+    pub fn scrub_loop_cut_2d(&mut self, delta_x: f32, delta_y: f32, fine: bool) -> bool {
+        let step = if fine { 0.0025 } else { 0.01 };
+        let Some(session) = self.loop_cut.as_mut() else {
+            return false;
+        };
+        let effective_delta = if let Some(first_edge) = session.ring.edges().first() {
+            if let (Some(va), Some(vb)) = (
+                session.source.verts.get(first_edge.0 as usize),
+                session.source.verts.get(first_edge.1 as usize),
+            ) {
+                let vp = self.state.session.camera.view_proj();
+                let pa = vp.project_point3(va.vec());
+                let pb = vp.project_point3(vb.vec());
+                let screen_dir = glam::Vec2::new(pb.x - pa.x, pb.y - pa.y);
+                if screen_dir.length_squared() > 1e-4 {
+                    let norm_dir = screen_dir.normalize();
+                    let mouse_delta = glam::Vec2::new(delta_x, -delta_y);
+                    mouse_delta.dot(norm_dir)
+                } else {
+                    delta_x - delta_y
+                }
+            } else {
+                delta_x - delta_y
+            }
+        } else {
+            delta_x - delta_y
+        };
+        session.slide = (session.slide + effective_delta * step).clamp(-1.0, 1.0);
+        self.apply_loop_cut_preview()
+    }
+
     /// Ajusta o slide do loop cut e reconstrói a pré-visualização.
     pub fn scrub_loop_cut(&mut self, delta_x: f32, fine: bool) -> bool {
         let step = if fine { 0.0025 } else { 0.01 };
@@ -6415,6 +7038,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Ok(asset) = uuid::Uuid::parse_str(id) else {
             return false;
         };
+        self.state.set_selection_domain(SelectionDomain::Object);
+        self.sync_viewport_context();
         if !self.state.instantiate_asset_by_id(asset, None) {
             self.state.set_status("Asset not found in project library");
             return false;
@@ -6830,6 +7455,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Abre a sessão modal de uma ferramenta paramétrica com preview próprio.
     pub fn begin_tool_modal(&mut self, kind: ToolModalKind) -> bool {
+        if self.state.selection_domain() == SelectionDomain::Object {
+            match kind {
+                ToolModalKind::Extrude
+                | ToolModalKind::ExtrudeIndividual
+                | ToolModalKind::Inset => {
+                    self.state.set_selection_domain(SelectionDomain::Face);
+                    self.sync_viewport_context();
+                    if let Some(mesh) = self.state.project.active_mesh_mut()
+                        && !mesh.faces.iter().any(|f| f.selected)
+                        && !mesh.faces.is_empty()
+                    {
+                        mesh.select_all();
+                    }
+                }
+                ToolModalKind::Bevel => {
+                    self.state.set_selection_domain(SelectionDomain::Edge);
+                    self.sync_viewport_context();
+                    if let Some(mesh) = self.state.project.active_mesh_mut()
+                        && mesh.selected_edges.is_empty()
+                        && !mesh.edges_unique().is_empty()
+                    {
+                        mesh.select_all();
+                    }
+                }
+                _ => {}
+            }
+        }
         match self.state.begin_modal(kind.modal_kind()) {
             Ok(()) => {
                 self.tool_modal = Some(kind);
@@ -7022,11 +7674,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let loop_select = loop_select || is_double_click;
 
         if self.state.session.tools.active_tool == "draw_profile" {
-            petunia_module_model::draw_profile::profile_add_point(
-                &mut self.state,
-                normalized_x,
-                normalized_y,
-            );
+            let ndc_x = normalized_x.clamp(0.0, 1.0) * 2.0 - 1.0;
+            let ndc_y = 1.0 - normalized_y.clamp(0.0, 1.0) * 2.0;
+            petunia_module_model::draw_profile::profile_add_point(&mut self.state, ndc_x, ndc_y);
             return;
         }
         if self.instant_transform && self.state.session.tools.modal.is_some() {
@@ -7219,6 +7869,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut cancelled = self.cancel_paint_stroke();
         cancelled |= self.cancel_tool_modal();
         cancelled |= self.cancel_loop_cut();
+        if self.profile_volume_mode.is_some() {
+            cancelled |= self.cancel_profile_volume();
+        }
         if self.state.session.tools.active_tool == "loop_cut" {
             self.state.session.tools.active_tool = "select".to_string();
             self.loop_cut_hover_ring = None;
@@ -7277,6 +7930,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.session.tools.hover = petunia_core::HoverTarget::None;
             self.state.mark_dirty();
             self.state.set_status("Loop Cut cancelled");
+            return true;
+        }
+        if self.profile_volume_mode.is_some() {
+            self.cancel_profile_volume();
             return true;
         }
         if self.state.session.tools.active_tool == "draw_profile" {
@@ -7486,6 +8143,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn execute_shortcut_tool(&mut self, id: &str) {
+        if self.state.selection_domain() == SelectionDomain::Object {
+            match id {
+                "model.extrude" | "model.extrude_individual" | "model.inset" => {
+                    self.state.set_selection_domain(SelectionDomain::Face);
+                    self.sync_viewport_context();
+                    if let Some(mesh) = self.state.project.active_mesh_mut()
+                        && !mesh.faces.iter().any(|f| f.selected)
+                        && !mesh.faces.is_empty()
+                    {
+                        mesh.select_all();
+                    }
+                }
+                "model.bevel" => {
+                    self.state.set_selection_domain(SelectionDomain::Edge);
+                    self.sync_viewport_context();
+                    if let Some(mesh) = self.state.project.active_mesh_mut()
+                        && mesh.selected_edges.is_empty()
+                        && !mesh.edges_unique().is_empty()
+                    {
+                        mesh.select_all();
+                    }
+                }
+                "model.loop_cut" => {
+                    self.state.set_selection_domain(SelectionDomain::Edge);
+                    self.sync_viewport_context();
+                }
+                _ => {}
+            }
+        }
+
         let now = std::time::Instant::now();
         let interval_ms = self.preferences.double_tap_interval_ms;
 
@@ -7536,6 +8223,134 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if text == "Enter" && !ctrl && !alt {
             return self.confirm_active_operation();
+        }
+        if text == "F4" && !ctrl && !alt && !shift {
+            return self.toggle_reference_manager();
+        }
+        if self.state.session.tools.modal.is_none()
+            && self.drag.is_none()
+            && self.rename_draft.is_none()
+        {
+            // Atalhos de navegação da viewport (estilo Blender / Teclado Numérico)
+            if (ctrl || alt)
+                && (text == "KP_1"
+                    || text == "Numpad1"
+                    || text == "Keypad1"
+                    || text == "NumPad1"
+                    || text == "Numpad 1")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Back);
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_1"
+                    || text == "Numpad1"
+                    || text == "Keypad1"
+                    || text == "NumPad1"
+                    || text == "Numpad 1")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Front);
+            }
+            if (ctrl || alt)
+                && (text == "KP_3"
+                    || text == "Numpad3"
+                    || text == "Keypad3"
+                    || text == "NumPad3"
+                    || text == "Numpad 3")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Left);
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_3"
+                    || text == "Numpad3"
+                    || text == "Keypad3"
+                    || text == "NumPad3"
+                    || text == "Numpad 3")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Right);
+            }
+            if (ctrl || alt)
+                && (text == "KP_7"
+                    || text == "Numpad7"
+                    || text == "Keypad7"
+                    || text == "NumPad7"
+                    || text == "Numpad 7")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Bottom);
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_7"
+                    || text == "Numpad7"
+                    || text == "Keypad7"
+                    || text == "NumPad7"
+                    || text == "Numpad 7")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Top);
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_9"
+                    || text == "Numpad9"
+                    || text == "Keypad9"
+                    || text == "NumPad9"
+                    || text == "Numpad 9")
+            {
+                return self.toggle_view_opposite();
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_5"
+                    || text == "Numpad5"
+                    || text == "Keypad5"
+                    || text == "NumPad5"
+                    || text == "Numpad 5")
+            {
+                self.apply(UiIntent::ToggleProjection);
+                return true;
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_0"
+                    || text == "Numpad0"
+                    || text == "Keypad0"
+                    || text == "NumPad0"
+                    || text == "Numpad 0")
+            {
+                return self.set_view_preset(petunia_core::ViewPreset::Persp);
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_Decimal"
+                    || text == "NumpadDecimal"
+                    || text == "KeypadDecimal"
+                    || text == "Numpad ."
+                    || text == "KP_.")
+            {
+                let _ = self.state.dispatch_command("view.frame_selection");
+                return true;
+            }
+            if !ctrl
+                && !alt
+                && !shift
+                && (text == "KP_Divide"
+                    || text == "NumpadDivide"
+                    || text == "KeypadDivide"
+                    || text == "Numpad /"
+                    || text == "KP_/")
+            {
+                self.state.toggle_isolate();
+                self.state.mark_dirty();
+                return true;
+            }
         }
         if (text == "Insert" || text.eq_ignore_ascii_case("d"))
             && !ctrl
@@ -8044,8 +8859,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return self.commit_knife();
         }
+        if self.profile_volume_mode.is_some() {
+            return self.commit_profile_volume();
+        }
         if self.state.session.tools.active_tool == "draw_profile" && self.state.profile.closed {
-            return self.generate_profile_extrude();
+            return self.enter_profile_volume("extrude");
         }
         if self.drag.is_some() {
             return self.end_viewport_transform();
@@ -8953,6 +9771,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         vm.profile_workplane =
             petunia_module_model::profile_workplane_label(&self.state).to_string();
+        vm.profile_volume_mode = match self.profile_volume_mode {
+            Some(petunia_module_model::ProfileVolumeMode::Extrude) => "extrude".to_string(),
+            Some(petunia_module_model::ProfileVolumeMode::Revolve) => "revolve".to_string(),
+            Some(petunia_module_model::ProfileVolumeMode::Sweep) => "sweep".to_string(),
+            None => "none".to_string(),
+        };
+        vm.profile_revolve_angle = if self.state.profile.revolve_angle <= 0.0 {
+            360.0
+        } else {
+            self.state.profile.revolve_angle
+        };
         vm.slice_trim = self.slice_trim;
         vm.bevel_clamp_overlap = self.state.tools.bevel_clamp_overlap;
         vm.bevel_affect_vertices = self.state.tools.bevel_affect_vertices;
@@ -9253,6 +10082,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.settings_visible = self.settings_visible;
         vm.command_search_visible = self.command_search_visible;
         vm.scene_drawer_visible = self.scene_drawer_visible;
+        vm.reference_manager_open = self.reference_manager_open;
+        for slot in &mut vm.reference_slots {
+            if let Some((w, h, rgba)) = self.reference_thumbnails.get(&slot.axis) {
+                slot.thumbnail = files::create_thumbnail_image(*w, *h, rgba);
+            }
+        }
         vm.active_keymap_id = self.state.ui.active_keymap_id.clone();
         vm
     }
@@ -9297,6 +10132,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             OverlayId::MenuBar => self.menu_open = None,
             OverlayId::PivotMenu => self.pivot_menu_open = false,
             OverlayId::MicroInspector => self.micro_inspector_open = false,
+            OverlayId::ReferenceManager => self.reference_manager_open = false,
         }
     }
 }
@@ -9367,8 +10203,12 @@ pub fn run() -> Result<(), slint::PlatformError> {
         hover: state.session.tools.hover,
         boolean_operand: state.session.tools.boolean_operand,
     };
-    if let Some(frame) = viewport.render_frame(&state.project, &state.session.camera, render_state)
-    {
+    if let Some(frame) = viewport.render_frame(
+        &state.project,
+        &state.project.refs,
+        &state.session.camera,
+        render_state,
+    ) {
         window.set_viewport_image(frame);
     }
     window.set_has_gpu_viewport(true);
