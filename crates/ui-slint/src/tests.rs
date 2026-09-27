@@ -6997,3 +6997,96 @@ fn test_tools_and_viewport_settings_toggles() {
     bridge.apply(UiIntent::ToggleProjection);
     assert_eq!(bridge.view_model().is_orthographic, !initial_ortho);
 }
+
+#[test]
+fn test_slice_mouse_click_and_space_commit_and_multi_cut() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    bridge.apply(UiIntent::SetActiveTool("slice".to_string()));
+    assert_eq!(bridge.state.session.tools.active_tool, "slice");
+
+    // Pressing Enter or Space before dragging does not panic or cancel, provides status guidance
+    assert!(!bridge.route_shortcut("Enter", false, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "slice");
+    assert!(bridge.state.ui.status.contains("Slice:"));
+
+    // First cut drag (vertical)
+    assert!(bridge.begin_slice(400.0, 200.0));
+    assert!(bridge.update_slice(400.0, 400.0));
+    assert!(bridge.slice_anchor.is_some());
+    let faces_before = bridge.state.project.active_mesh().unwrap().faces.len();
+
+    // Second cut drag far away from handles (horizontal) auto-commits the first cut!
+    assert!(bridge.begin_slice(300.0, 300.0));
+    assert!(bridge.update_slice(500.0, 300.0));
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert_eq!(bridge.state.session.tools.active_tool, "slice");
+    assert!(bridge.slice_anchor.is_some());
+
+    // Confirm second cut using Space bar
+    assert!(bridge.route_shortcut("Space", false, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    assert!(bridge.slice_anchor.is_none());
+    assert_eq!(bridge.state.project.undo.depth(), (2, 0));
+    let faces_after = bridge.state.project.active_mesh().unwrap().faces.len();
+    assert!(faces_after > faces_before);
+}
+
+#[test]
+fn test_context_menu_escape_and_actions_dissolve_and_slice() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.view_model().context_menu_open);
+
+    // Escape closes context menu immediately
+    assert!(bridge.handle_escape());
+    assert!(!bridge.view_model().context_menu_open);
+
+    // Click away closes context menu
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.view_model().context_menu_open);
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.view_model().context_menu_open);
+
+    // Context menu action: slice
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.context_menu_action("slice"));
+    assert_eq!(bridge.state.session.tools.active_tool, "slice");
+    assert!(!bridge.view_model().context_menu_open);
+
+    // Context menu action: dissolve
+    bridge.open_viewport_context_menu(200.0, 150.0);
+    assert!(bridge.context_menu_action("dissolve"));
+    assert!(!bridge.view_model().context_menu_open);
+}
+
+#[test]
+fn test_loop_selection_edge_face_vertex_and_double_click() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+
+    // 1. Edge domain loop selection
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge));
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        let (a, b) = mesh.edges_unique()[0];
+        let count = mesh.select_edge_loop((a, b), false);
+        assert!(count > 0);
+        assert!(!mesh.selected_edges.is_empty());
+    }
+
+    // 2. Vertex domain loop selection
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Vertex));
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        let count = mesh.select_vertex_loop(0, false);
+        assert!(count > 0);
+        assert!(mesh.verts.iter().any(|v| v.selected));
+    }
+
+    // 3. Face domain loop selection
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face));
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        let count = mesh.select_face_loop(0, None, false);
+        assert!(count > 0);
+        assert!(mesh.faces.iter().any(|f| f.selected));
+    }
+}

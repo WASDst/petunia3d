@@ -5688,43 +5688,52 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Abre o plano de corte (Slice) ancorado no ponto pressionado.
     pub fn begin_slice(&mut self, x: f32, y: f32) -> bool {
-        let original_mesh = if let Some(session) = &self.state.session.tools.cut_session {
-            if let Some(active) = self.state.project.active_mesh_mut() {
-                *active = session.source.clone();
-            }
-            session.source.clone()
-        } else {
-            let Some(mesh) = self.state.project.active_mesh().cloned() else {
-                self.state.set_status("Slice: no active mesh");
-                return false;
-            };
-            mesh
-        };
-        let mut session = petunia_core::CutSession::new(original_mesh);
-        session.fill_cap = self.slice_trim;
-        self.state.session.tools.cut_session = Some(session);
-
+        let mut adjusting_existing = false;
         let mut anchor_pt = [x, y];
         if let Some(old_anchor) = self.slice_anchor {
             let d_anchor = (x - old_anchor[0]).hypot(y - old_anchor[1]);
             let d_end = (x - self.pointer_position[0]).hypot(y - self.pointer_position[1]);
             if d_anchor <= 28.0 {
+                adjusting_existing = true;
                 anchor_pt = self.pointer_position;
                 self.pointer_position = [x, y];
             } else if d_end <= 28.0 {
+                adjusting_existing = true;
                 anchor_pt = old_anchor;
                 self.pointer_position = [x, y];
             } else {
+                if self.state.session.tools.cut_session.is_some() {
+                    self.commit_slice();
+                }
                 self.pointer_position = [x, y];
             }
         } else {
             self.pointer_position = [x, y];
         }
 
+        if adjusting_existing {
+            if let Some(session) = &self.state.session.tools.cut_session
+                && let Some(active) = self.state.project.active_mesh_mut()
+            {
+                *active = session.source.clone();
+            }
+            if let Some(session) = self.state.session.tools.cut_session.as_mut() {
+                session.fill_cap = self.slice_trim;
+            }
+        } else {
+            let Some(mesh) = self.state.project.active_mesh().cloned() else {
+                self.state.set_status("Slice: no active mesh");
+                return false;
+            };
+            let mut session = petunia_core::CutSession::new(mesh);
+            session.fill_cap = self.slice_trim;
+            self.state.session.tools.cut_session = Some(session);
+        }
+
         self.state.session.tools.active_tool = "slice".to_string();
         self.slice_anchor = Some(anchor_pt);
         self.state.set_status(
-            "Slice: arraste para ajustar · T: Trim/Split · Enter para confirmar · Esc para cancelar",
+            "Slice: arraste para ajustar · T: Trim/Split · Enter/Clique para confirmar · Esc para cancelar",
         );
         true
     }
@@ -5791,6 +5800,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.slice_anchor.is_none() && self.state.session.tools.active_tool != "slice" {
             return false;
         }
+        if self.slice_anchor.is_none() {
+            self.state
+                .set_status("Slice: clique e arraste para traçar a linha de corte");
+            return false;
+        }
         let Some(session) = self.state.session.tools.cut_session.take() else {
             self.slice_anchor = None;
             return false;
@@ -5811,6 +5825,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.sync_selection();
         self.state.emit_mesh_changed();
+        self.state.mark_dirty();
         self.state.set_status("Slice applied");
         true
     }
@@ -5836,6 +5851,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.sync_selection();
         self.state.emit_mesh_changed();
+        self.state.mark_dirty();
         self.state.set_status("Slice cancelled");
         true
     }
@@ -6613,6 +6629,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let _ = self.execute_core_command("model.merge");
                     true
                 }
+                "dissolve" => {
+                    let _ = self.execute_core_command("model.dissolve");
+                    true
+                }
+                "slice" => {
+                    self.apply(UiIntent::SetActiveTool("slice".to_string()));
+                    true
+                }
                 "flip_normals" => {
                     let _ = self.execute_core_command("model.flip_normals");
                     true
@@ -6985,11 +7009,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return;
         }
         let now = std::time::Instant::now();
+        let max_interval = (self.preferences.double_tap_interval_ms as u128).clamp(300, 800);
         let is_double_click = if let Some((last_pos, last_time)) = self.last_viewport_click {
             let dt = now.duration_since(last_time).as_millis();
             let dx = normalized_x - last_pos[0];
             let dy = normalized_y - last_pos[1];
-            (40..=400).contains(&dt) && (dx * dx + dy * dy) < 0.0025
+            (30..=max_interval).contains(&dt) && (dx * dx + dy * dy) < 0.01
         } else {
             false
         };
@@ -7142,9 +7167,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             Target::Face(face) => {
+                let nearest_edge = if loop_select {
+                    match self.pick_target_for_domain(
+                        SelectionDomain::Edge,
+                        normalized_x,
+                        normalized_y,
+                    ) {
+                        petunia_core::HoverTarget::Edge(ea, eb) => Some((ea, eb)),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
                     if loop_select {
-                        let count = mesh.select_face_loop(face, None, extend);
+                        let count = mesh.select_face_loop(face, nearest_edge, extend);
                         self.state
                             .set_status(format!("Selected face loop ({count} faces)"));
                     } else {
@@ -7205,16 +7242,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn handle_escape(&mut self) -> bool {
-        if self.micro_inspector_open {
-            self.micro_inspector_open = false;
-            self.overlays.remove(OverlayId::MicroInspector);
-            self.state.mark_dirty();
+        if self.close_context_menu() {
             return true;
         }
         if self.close_menu() {
             return true;
         }
-        if self.close_context_menu() {
+        if self.micro_inspector_open {
+            self.micro_inspector_open = false;
+            self.overlays.remove(OverlayId::MicroInspector);
+            self.state.mark_dirty();
             return true;
         }
         if self.cancel_rename() {
@@ -7511,13 +7548,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.apply(UiIntent::ToggleEditPivot);
             return true;
         }
-        if (text == " " || text == "Space")
-            && !ctrl
-            && !alt
-            && !shift
-            && self.state.session.tools.modal.is_none()
-            && self.drag.is_none()
-        {
+        if (text == " " || text == "Space") && !ctrl && !alt && !shift {
+            if self.state.session.tools.active_tool == "slice"
+                && (self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some())
+            {
+                return self.commit_slice();
+            }
+            if (self.state.session.tools.active_tool == "cut"
+                || self.state.session.tools.active_tool == "knife")
+                && self.state.session.tools.cut_session.is_some()
+            {
+                return self.commit_knife();
+            }
+            if self.tool_modal.is_some() || self.loop_cut.is_some() || self.drag.is_some() {
+                return self.confirm_active_operation();
+            }
             return self.toggle_micro_inspector();
         }
         if alt && !ctrl && !shift {
@@ -7991,9 +8036,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "loop_cut" {
             return self.place_loop_cut_hover();
         }
-        if self.state.session.tools.active_tool == "slice"
-            && (self.slice_anchor.is_some() || self.state.session.tools.cut_session.is_some())
-        {
+        if self.state.session.tools.active_tool == "slice" {
             return self.commit_slice();
         }
         if self.state.session.tools.active_tool == "cut"
