@@ -18,6 +18,8 @@ use super::state::{ReferenceImage, Shading};
 pub struct SceneFingerprint {
     /// Geometria + materiais + seleção + flags de sombreamento.
     pub mesh: u64,
+    /// Conteúdo/revisão das texturas, separado dos buffers de geometria.
+    pub textures: u64,
     /// Layout/transform de quads de referência (não pixels; pixels têm hash próprio).
     pub refs_layout: u64,
 }
@@ -83,7 +85,6 @@ pub fn fingerprint_scene(
     h = mix(h, project.uv_revision);
     h = mix(h, project.color_revision);
     h = mix(h, project.material_revision);
-    h = mix(h, project.texture_revision);
     h = mix(h, project.transform_revision);
 
     for mat in &project.materials {
@@ -149,7 +150,6 @@ pub fn fingerprint_scene(
             && project.selection_revision == 0
             && project.uv_revision == 0
             && project.color_revision == 0
-            && project.texture_revision == 0
             && project.material_revision == 0;
         if unrevisioned {
             for v in &asset.mesh.verts {
@@ -191,16 +191,30 @@ pub fn fingerprint_scene(
                 h = mix(h, face as u64);
                 h = mix(h, corner as u64);
             }
-            if let Some(canvas) = asset.texture.as_ref() {
-                h = mix(h, canvas.w as u64);
-                h = mix(h, canvas.h as u64);
-                h = mix(h, canvas.pixels.len() as u64);
-                h = hash_bytes(h, &canvas.pixels);
-            }
-        } else if let Some(canvas) = asset.texture.as_ref() {
+        }
+        if let Some(canvas) = asset.texture.as_ref() {
             h = mix(h, canvas.w as u64);
             h = mix(h, canvas.h as u64);
             h = mix(h, canvas.pixels.len() as u64);
+        }
+    }
+
+    let mut textures: u64 = 0xcbf29ce484222325;
+    textures = mix(textures, project.texture_revision);
+    for material in &project.materials {
+        textures = hash_bytes(textures, material.id.as_bytes());
+        if let Some(canvas) = material.albedo_texture.as_ref() {
+            textures = mix(textures, canvas.w as u64);
+            textures = mix(textures, canvas.h as u64);
+            textures = mix(textures, canvas.pixels.len() as u64);
+        }
+    }
+    for asset in &project.assets {
+        textures = hash_bytes(textures, asset.id.as_bytes());
+        if let Some(canvas) = asset.texture.as_ref() {
+            textures = mix(textures, canvas.w as u64);
+            textures = mix(textures, canvas.h as u64);
+            textures = mix(textures, canvas.pixels.len() as u64);
         }
     }
 
@@ -220,6 +234,7 @@ pub fn fingerprint_scene(
 
     SceneFingerprint {
         mesh: h,
+        textures,
         refs_layout: r,
     }
 }
@@ -228,6 +243,7 @@ pub fn fingerprint_scene(
 mod tests {
     use super::*;
     use petunia_mesh::{Face, Mesh, Vertex};
+    use petunia_project::Canvas;
 
     fn cube_project() -> Project {
         let mut p = Project::new();
@@ -323,5 +339,43 @@ mod tests {
 
         assert_ne!(before.mesh, after.mesh);
         assert_eq!(project.position_revision, 0);
+    }
+
+    #[test]
+    fn texture_revision_invalidates_texture_without_rebuilding_mesh() {
+        let mut project = cube_project();
+        project.assets[0].texture = Some(Canvas::new(16, 16, [0, 0, 0, 255]));
+        let before = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+
+        project.assets[0]
+            .texture
+            .as_mut()
+            .unwrap()
+            .set(3, 4, [255, 0, 0, 255]);
+        project.bump_textures();
+        let after = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+
+        assert_eq!(before.mesh, after.mesh);
+        assert_ne!(before.textures, after.textures);
+    }
+
+    #[test]
+    fn direct_texture_mutation_requires_revision_publication() {
+        let mut project = cube_project();
+        project.assets[0].texture = Some(Canvas::new(8, 8, [0, 0, 0, 255]));
+        let before = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+
+        project.assets[0]
+            .texture
+            .as_mut()
+            .unwrap()
+            .set(1, 2, [0, 255, 0, 255]);
+        let unpublished = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+        project.bump_textures();
+        let published = fingerprint_scene(&project, &[], flags(Shading::MaterialPreview));
+
+        assert_eq!(before, unpublished);
+        assert_eq!(before.mesh, published.mesh);
+        assert_ne!(before.textures, published.textures);
     }
 }

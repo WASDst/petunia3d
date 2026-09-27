@@ -229,6 +229,10 @@ impl PetuniaViewport for WgpuViewport {
         self.selection_domain = domain;
     }
 
+    fn queue_texture_updates(&mut self, updates: Vec<petunia_core::TextureUpdate>) {
+        self.renderer.queue_texture_updates(updates);
+    }
+
     fn draws_component_guides(&self) -> bool {
         true
     }
@@ -247,6 +251,8 @@ impl PetuniaViewport for WgpuViewport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use petunia_core::{TextureDirtyRect, TextureUpdate};
+    use petunia_project::Canvas;
     use petunia_render::Shading;
 
     #[test]
@@ -317,5 +323,66 @@ mod tests {
             )
             .unwrap();
         assert_eq!(viewport.renderer.mesh_rebuilds(), rebuilt);
+    }
+
+    #[test]
+    fn regional_texture_update_avoids_mesh_rebuild_and_full_upload() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(320, 240) else {
+            return;
+        };
+        let mut project = Project::new();
+        let asset_id = project.assets[0].id;
+        project.assets[0].texture = Some(Canvas::new(64, 64, [0, 0, 0, 255]));
+        let camera = Camera::default();
+        let state = ViewportRenderState {
+            shading: Shading::MaterialPreview,
+            ..ViewportRenderState::default()
+        };
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        let mesh_rebuilds = viewport.renderer.mesh_rebuilds();
+        let full_uploads = viewport.renderer.full_texture_uploads();
+        let upload_calls = viewport.renderer.texture_upload_calls();
+        let uploaded_bytes = viewport.renderer.texture_bytes_uploaded();
+        let partial_uploads = viewport.renderer.partial_texture_uploads();
+
+        let region = TextureDirtyRect {
+            x: 7,
+            y: 11,
+            width: 4,
+            height: 3,
+        };
+        for y in region.y..region.y + region.height {
+            for x in region.x..region.x + region.width {
+                project.assets[0]
+                    .texture
+                    .as_mut()
+                    .unwrap()
+                    .set(x, y, [255, 0, 0, 255]);
+            }
+        }
+        project.bump_textures();
+        viewport.queue_texture_updates(vec![TextureUpdate {
+            asset_id,
+            canvas_width: 64,
+            canvas_height: 64,
+            regions: Some(vec![region]),
+        }]);
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+
+        assert_eq!(viewport.renderer.mesh_rebuilds(), mesh_rebuilds);
+        assert_eq!(viewport.renderer.full_texture_uploads(), full_uploads);
+        assert_eq!(viewport.renderer.texture_upload_calls(), upload_calls + 1);
+        assert_eq!(
+            viewport.renderer.texture_bytes_uploaded(),
+            uploaded_bytes + region.byte_len()
+        );
+        assert_eq!(
+            viewport.renderer.partial_texture_uploads(),
+            partial_uploads + 1
+        );
     }
 }

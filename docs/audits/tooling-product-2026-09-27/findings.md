@@ -1,5 +1,9 @@
 # Catálogo técnico de achados
 
+> Este catálogo preserva as evidências do snapshot original. Remediações e
+> estados correntes são documentados pelos gates `g0`, `g1` e `g2` no mesmo
+> diretório; `PA-04` está fechado no frontend Slint/WGPU de produção pelo G2.
+
 ## 1. Critério de severidade
 
 | Nível | Critério |
@@ -301,6 +305,10 @@ hash evita upload quando nada mudou, mas não torna a alteração incremental.
 **Correção recomendada:** revisão monotônica elimina hash O(n); `DirtyRects`
 define uploads parciais com alinhamento de rows quando necessário. Consolidar
 retângulos adjacentes e limitar quantidade por frame.
+
+**Remediação posterior:** `g2-paint-gpu-remediation-2026-09-27.md` implementa
+esse fluxo no frontend oficial, mantendo fallback integral apenas nos casos em
+que a região não é conhecida ou o recurso precisa ser criado/redimensionado.
 
 ## 6. Input, UI e acessibilidade
 

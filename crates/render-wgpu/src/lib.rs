@@ -8,7 +8,7 @@ use wgpu::util::DeviceExt;
 
 use petunia_core::Camera;
 use petunia_core::RefAxis;
-use petunia_core::{FingerprintFlags, SceneFingerprint, fingerprint_scene};
+use petunia_core::{FingerprintFlags, SceneFingerprint, TextureUpdate, fingerprint_scene};
 use petunia_project::Project;
 use petunia_render::Shading;
 
@@ -187,13 +187,12 @@ struct RefGpu {
     bind_group: wgpu::BindGroup,
 }
 
-/// Slot de textura do canvas de um asset (paridade com o backend GL:
-/// recria em resize, re-upload só com conteúdo novo via hash).
+/// Slot de textura do canvas de um asset, revisionado pelo documento.
 struct AssetTexGpu {
     asset_id: uuid::Uuid,
     width: u32,
     height: u32,
-    hash: std::cell::Cell<u64>,
+    revision: u64,
     texture: wgpu::Texture,
     #[allow(dead_code)]
     view: wgpu::TextureView,
@@ -260,6 +259,12 @@ pub struct Renderer {
     last_selection_view_proj: Option<[f32; 16]>,
     mesh_rebuilds: u64,
     skipped_frames: u64,
+    pending_texture_updates: Vec<TextureUpdate>,
+    texture_upload_scratch: Vec<u8>,
+    texture_upload_calls: u64,
+    texture_bytes_uploaded: u64,
+    full_texture_uploads: u64,
+    partial_texture_uploads: u64,
 }
 
 /// Seleção: cor chapada, sem iluminação, com alpha. A seleção precisa ser
@@ -1147,6 +1152,12 @@ impl Renderer {
             last_selection_view_proj: None,
             mesh_rebuilds: 0,
             skipped_frames: 0,
+            pending_texture_updates: Vec::new(),
+            texture_upload_scratch: Vec::new(),
+            texture_upload_calls: 0,
+            texture_bytes_uploaded: 0,
+            full_texture_uploads: 0,
+            partial_texture_uploads: 0,
         }
     }
 
@@ -1158,6 +1169,26 @@ impl Renderer {
     /// Quantos `update()` pularam reconstrução por fingerprint idêntico.
     pub fn skipped_frames(&self) -> u64 {
         self.skipped_frames
+    }
+
+    pub fn texture_upload_calls(&self) -> u64 {
+        self.texture_upload_calls
+    }
+
+    pub fn texture_bytes_uploaded(&self) -> u64 {
+        self.texture_bytes_uploaded
+    }
+
+    pub fn full_texture_uploads(&self) -> u64 {
+        self.full_texture_uploads
+    }
+
+    pub fn partial_texture_uploads(&self) -> u64 {
+        self.partial_texture_uploads
+    }
+
+    pub fn queue_texture_updates(&mut self, updates: Vec<TextureUpdate>) {
+        self.pending_texture_updates.extend(updates);
     }
 
     /// Invalida o cache manualmente (ex. após troca de backend ou teste).
@@ -1305,8 +1336,22 @@ impl Renderer {
             },
         );
         let mesh_changed = self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh);
+        let texture_changed = self.last_fingerprint.map(|f| f.textures) != Some(fp.textures);
         let refs_changed = self.last_fingerprint.map(|f| f.refs_layout) != Some(fp.refs_layout);
+        let texture_updates = std::mem::take(&mut self.pending_texture_updates);
+        let samples_textures = textured || shading.samples_material();
         if !mesh_changed && !refs_changed {
+            if texture_changed || !texture_updates.is_empty() {
+                self.sync_asset_textures(
+                    device,
+                    queue,
+                    scene,
+                    samples_textures,
+                    &texture_updates,
+                    texture_changed && texture_updates.is_empty(),
+                );
+            }
+            self.last_fingerprint = Some(fp);
             if hover_changed || camera_changed || domain_changed {
                 self.update_selection_layer(device, scene, camera, edit_domain, hover);
             }
@@ -1478,7 +1523,14 @@ impl Renderer {
 
         self.mesh_count = mv.len() as u32;
         self.mesh_ranges = mesh_ranges;
-        self.sync_asset_textures(device, queue, scene, textured);
+        self.sync_asset_textures(
+            device,
+            queue,
+            scene,
+            samples_textures,
+            &texture_updates,
+            texture_changed && texture_updates.is_empty(),
+        );
         self.mesh_vb = if mv.is_empty() {
             None
         } else {
@@ -1814,14 +1866,17 @@ impl Renderer {
         }
     }
 
-    /// Garante slots de textura dos assets com canvas (paridade GL):
-    /// recria em resize, re-upload só com conteúdo novo (hash), poda saídos.
+    /// Garante slots de textura dos assets com canvas, consumindo dirty regions
+    /// declaradas pelo domínio. Sem declaração, uma mudança de fingerprint usa
+    /// upload integral conservador para preservar call sites legados.
     fn sync_asset_textures(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         scene: &Project,
         textured: bool,
+        updates: &[TextureUpdate],
+        force_full_without_updates: bool,
     ) {
         use petunia_project::Canvas;
         if !textured {
@@ -1847,12 +1902,21 @@ impl Renderer {
                 .iter()
                 .any(|(id, cv)| *id == slot.asset_id && cv.w == slot.width && cv.h == slot.height)
         });
+        let declared_updates = !updates.is_empty();
+        let mut upload_calls = 0_u64;
+        let mut uploaded_bytes = 0_u64;
+        let mut full_uploads = 0_u64;
+        let mut partial_uploads = 0_u64;
+        let mut scratch = std::mem::take(&mut self.texture_upload_scratch);
+
         for (id, cv) in wanted {
             let (w, h, pixels) = (cv.w, cv.h, &cv.pixels);
-            let hash = fnv1a_hash(pixels);
-            if let Some(slot) = self.asset_tex.iter().find(|s| s.asset_id == id) {
-                if slot.hash.get() != hash {
-                    slot.hash.set(hash);
+            if let Some(slot) = self.asset_tex.iter_mut().find(|slot| slot.asset_id == id) {
+                let update = updates.iter().find(|update| update.asset_id == id);
+                let full_upload = update.is_some_and(TextureUpdate::is_full)
+                    || force_full_without_updates
+                    || (!declared_updates && slot.revision != scene.texture_revision);
+                if full_upload {
                     queue.write_texture(
                         wgpu::TexelCopyTextureInfo {
                             texture: &slot.texture,
@@ -1872,7 +1936,50 @@ impl Renderer {
                             depth_or_array_layers: 1,
                         },
                     );
+                    upload_calls += 1;
+                    uploaded_bytes += pixels.len() as u64;
+                    full_uploads += 1;
+                } else if let Some(regions) = update.and_then(|update| update.regions.as_ref()) {
+                    for &region in regions {
+                        let Some(region) = region.clipped(w, h) else {
+                            continue;
+                        };
+                        scratch.clear();
+                        scratch.reserve(region.byte_len() as usize);
+                        for row in region.y..region.y + region.height {
+                            let start = ((row * w + region.x) * 4) as usize;
+                            let end = start + (region.width * 4) as usize;
+                            scratch.extend_from_slice(&pixels[start..end]);
+                        }
+                        queue.write_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &slot.texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d {
+                                    x: region.x,
+                                    y: region.y,
+                                    z: 0,
+                                },
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            &scratch,
+                            wgpu::TexelCopyBufferLayout {
+                                offset: 0,
+                                bytes_per_row: Some(4 * region.width),
+                                rows_per_image: Some(region.height),
+                            },
+                            wgpu::Extent3d {
+                                width: region.width,
+                                height: region.height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                        upload_calls += 1;
+                        uploaded_bytes += region.byte_len();
+                        partial_uploads += 1;
+                    }
                 }
+                slot.revision = scene.texture_revision;
                 continue;
             }
             let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -1927,12 +2034,20 @@ impl Renderer {
                 asset_id: id,
                 width: w,
                 height: h,
-                hash: std::cell::Cell::new(hash),
+                revision: scene.texture_revision,
                 texture,
                 view,
                 bind_group,
             });
+            upload_calls += 1;
+            uploaded_bytes += pixels.len() as u64;
+            full_uploads += 1;
         }
+        self.texture_upload_calls += upload_calls;
+        self.texture_bytes_uploaded += uploaded_bytes;
+        self.full_texture_uploads += full_uploads;
+        self.partial_texture_uploads += partial_uploads;
+        self.texture_upload_scratch = scratch;
     }
 
     /// Upload dos pixels + opacidade por ref (chamado todo frame; wgpu ignora se igual via hash cache).

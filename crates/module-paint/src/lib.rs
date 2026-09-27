@@ -29,7 +29,7 @@ pub use petunia_core::{BrushSettings, BrushType};
 ///
 /// A lista é normalizada antes de sair do módulo: índices ordenados, únicos e
 /// limitados às dimensões do canvas. Ela é o contrato entre mutação, compositor
-/// parcial e, futuramente, upload parcial da textura.
+/// parcial e upload parcial da textura.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DirtyTiles {
     indices: Vec<u32>,
@@ -287,9 +287,36 @@ impl PaintModule {
         if partial {
             Self::sync_material_tiles(state, active_idx, dirty_tiles);
         }
-        state.emit_texture_changed();
+        if partial {
+            state.emit_texture_changed_regions(Self::dirty_tile_regions(dirty_tiles, w, h));
+        } else {
+            state.emit_texture_changed();
+        }
         state.render.canvas_dirty = true;
         state.mark_dirty();
+    }
+
+    fn dirty_tile_regions(
+        dirty_tiles: &[u32],
+        canvas_width: u32,
+        canvas_height: u32,
+    ) -> Vec<petunia_core::TextureDirtyRect> {
+        use petunia_project::paint_layers::TILE_SIZE;
+
+        let tiles_x = canvas_width.div_ceil(TILE_SIZE).max(1);
+        dirty_tiles
+            .iter()
+            .filter_map(|&tile| {
+                let x = (tile % tiles_x) * TILE_SIZE;
+                let y = (tile / tiles_x) * TILE_SIZE;
+                (x < canvas_width && y < canvas_height).then_some(petunia_core::TextureDirtyRect {
+                    x,
+                    y,
+                    width: (x + TILE_SIZE).min(canvas_width) - x,
+                    height: (y + TILE_SIZE).min(canvas_height) - y,
+                })
+            })
+            .collect()
     }
 
     fn sync_material_tiles(state: &mut AppState, active_idx: usize, dirty_tiles: &[u32]) {
@@ -2219,6 +2246,18 @@ mod tests {
             .material(&state.project.project)
             .expect("material associado");
         assert_eq!(material.albedo_texture.as_ref(), asset.texture.as_ref());
+        let updates = state.render.take_texture_updates();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].asset_id, asset.id);
+        assert_eq!(
+            (updates[0].canvas_width, updates[0].canvas_height),
+            (64, 64)
+        );
+        if let Some(regions) = updates[0].regions.as_ref() {
+            assert!(regions.len() <= dirty.len());
+        } else {
+            assert_eq!(dirty.len(), 4);
+        }
     }
 
     #[test]

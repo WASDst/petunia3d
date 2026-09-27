@@ -419,6 +419,8 @@ pub trait PetuniaViewport: Send {
     fn update(&mut self, dt_seconds: f32);
     fn set_workspace(&mut self, workspace: Workspace);
     fn set_selection_domain(&mut self, domain: SelectionDomain);
+    /// Entrega invalidações transitórias de textura ao backend antes do frame.
+    fn queue_texture_updates(&mut self, _updates: Vec<petunia_core::TextureUpdate>) {}
     /// O backend desenha alvos não selecionados com depth test próprio.
     fn draws_component_guides(&self) -> bool {
         false
@@ -478,6 +480,10 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn set_selection_domain(&mut self, domain: SelectionDomain) {
         (**self).set_selection_domain(domain);
+    }
+
+    fn queue_texture_updates(&mut self, updates: Vec<petunia_core::TextureUpdate>) {
+        (**self).queue_texture_updates(updates);
     }
 
     fn draws_component_guides(&self) -> bool {
@@ -1511,6 +1517,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             hover: self.state.session.tools.hover,
             boolean_operand: self.state.session.tools.boolean_operand,
         };
+        self.viewport
+            .queue_texture_updates(self.state.render.take_texture_updates());
         self.viewport.render_frame(
             &self.state.project,
             &self.state.project.refs,

@@ -1,5 +1,11 @@
 # Matriz Implementation-vs-Spec
 
+> Esta matriz preserva o snapshot original da auditoria. O estado pós-remediação
+> dos gates concluídos está registrado em `g0-remediation-2026-09-27.md`,
+> `g1-paint-remediation-2026-09-27.md` e
+> `g2-paint-gpu-remediation-2026-09-27.md`; em especial, `PA-04` passa a
+> `COMPLIANT` no frontend Slint/WGPU de produção após o G2.
+
 ## 1. Legenda obrigatória
 
 | Estado | Uso nesta auditoria |

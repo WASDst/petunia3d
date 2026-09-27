@@ -1442,10 +1442,101 @@ pub fn workspace_index(workspace: Workspace) -> usize {
 }
 
 /// 5. RECURSOS E TELEMETRIA DA GPU: contadores de renderização e sinalizadores de buffer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextureDirtyRect {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl TextureDirtyRect {
+    pub fn clipped(self, canvas_width: u32, canvas_height: u32) -> Option<Self> {
+        let x = self.x.min(canvas_width);
+        let y = self.y.min(canvas_height);
+        let right = self.x.saturating_add(self.width).min(canvas_width);
+        let bottom = self.y.saturating_add(self.height).min(canvas_height);
+        (x < right && y < bottom).then_some(Self {
+            x,
+            y,
+            width: right - x,
+            height: bottom - y,
+        })
+    }
+
+    pub fn byte_len(self) -> u64 {
+        u64::from(self.width) * u64::from(self.height) * 4
+    }
+}
+
+/// Invalidação transitória de textura; nunca é serializada no documento.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextureUpdate {
+    pub asset_id: Uuid,
+    pub canvas_width: u32,
+    pub canvas_height: u32,
+    /// `None` exige upload integral; `Some` contém regiões parciais.
+    pub regions: Option<Vec<TextureDirtyRect>>,
+}
+
+impl TextureUpdate {
+    pub fn is_full(&self) -> bool {
+        self.regions.is_none()
+    }
+}
+
+fn normalize_texture_regions(
+    regions: impl IntoIterator<Item = TextureDirtyRect>,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Vec<TextureDirtyRect> {
+    let mut horizontal: Vec<_> = regions
+        .into_iter()
+        .filter_map(|region| region.clipped(canvas_width, canvas_height))
+        .collect();
+    horizontal.sort_unstable_by_key(|region| (region.y, region.height, region.x, region.width));
+    let mut merged: Vec<TextureDirtyRect> = Vec::with_capacity(horizontal.len());
+    for region in horizontal {
+        if let Some(previous) = merged.last_mut()
+            && previous.y == region.y
+            && previous.height == region.height
+            && region.x <= previous.x.saturating_add(previous.width)
+        {
+            let right = previous
+                .x
+                .saturating_add(previous.width)
+                .max(region.x.saturating_add(region.width));
+            previous.width = right - previous.x;
+        } else {
+            merged.push(region);
+        }
+    }
+
+    merged.sort_unstable_by_key(|region| (region.x, region.width, region.y, region.height));
+    let mut vertical: Vec<TextureDirtyRect> = Vec::with_capacity(merged.len());
+    for region in merged {
+        if let Some(previous) = vertical.last_mut()
+            && previous.x == region.x
+            && previous.width == region.width
+            && region.y <= previous.y.saturating_add(previous.height)
+        {
+            let bottom = previous
+                .y
+                .saturating_add(previous.height)
+                .max(region.y.saturating_add(region.height));
+            previous.height = bottom - previous.y;
+        } else {
+            vertical.push(region);
+        }
+    }
+    vertical
+}
+
 #[derive(Debug, Clone)]
 pub struct RenderResources {
     pub dirty: bool,
     pub canvas_dirty: bool,
+    texture_updates: Vec<TextureUpdate>,
     pub backend_name: String,
     pub stats: RenderStats,
     /// Último motivo registrado (diagnóstico dev; não afeta decisão de redraw).
@@ -1463,6 +1554,7 @@ impl RenderResources {
         Self {
             dirty: true,
             canvas_dirty: true,
+            texture_updates: Vec::new(),
             backend_name: String::new(),
             stats: RenderStats::default(),
             last_dirty_reason: None,
@@ -1481,6 +1573,86 @@ impl RenderResources {
 
     pub fn consume_dirty(&mut self) -> bool {
         std::mem::replace(&mut self.dirty, false)
+    }
+
+    pub fn mark_texture_full(&mut self, asset_id: Uuid, canvas_width: u32, canvas_height: u32) {
+        if let Some(update) = self
+            .texture_updates
+            .iter_mut()
+            .find(|update| update.asset_id == asset_id)
+        {
+            update.canvas_width = canvas_width;
+            update.canvas_height = canvas_height;
+            update.regions = None;
+            return;
+        }
+        self.texture_updates.push(TextureUpdate {
+            asset_id,
+            canvas_width,
+            canvas_height,
+            regions: None,
+        });
+    }
+
+    pub fn mark_texture_regions(
+        &mut self,
+        asset_id: Uuid,
+        canvas_width: u32,
+        canvas_height: u32,
+        regions: impl IntoIterator<Item = TextureDirtyRect>,
+    ) {
+        let regions = normalize_texture_regions(regions, canvas_width, canvas_height);
+        if regions.is_empty() {
+            return;
+        }
+        if let Some(update) = self
+            .texture_updates
+            .iter_mut()
+            .find(|update| update.asset_id == asset_id)
+        {
+            if update.canvas_width != canvas_width || update.canvas_height != canvas_height {
+                update.canvas_width = canvas_width;
+                update.canvas_height = canvas_height;
+                update.regions = None;
+                return;
+            }
+            if let Some(existing) = update.regions.as_mut() {
+                existing.extend(regions);
+                *existing = normalize_texture_regions(
+                    std::mem::take(existing),
+                    canvas_width,
+                    canvas_height,
+                );
+                if existing.as_slice()
+                    == [TextureDirtyRect {
+                        x: 0,
+                        y: 0,
+                        width: canvas_width,
+                        height: canvas_height,
+                    }]
+                {
+                    update.regions = None;
+                }
+            }
+            return;
+        }
+        let full_canvas = regions.as_slice()
+            == [TextureDirtyRect {
+                x: 0,
+                y: 0,
+                width: canvas_width,
+                height: canvas_height,
+            }];
+        self.texture_updates.push(TextureUpdate {
+            asset_id,
+            canvas_width,
+            canvas_height,
+            regions: (!full_canvas).then_some(regions),
+        });
+    }
+
+    pub fn take_texture_updates(&mut self) -> Vec<TextureUpdate> {
+        std::mem::take(&mut self.texture_updates)
     }
 }
 
@@ -2028,6 +2200,14 @@ impl AppState {
         self.emit_project_changed(ProjectChanges::TEXTURES);
     }
 
+    pub fn emit_texture_changed_regions(&mut self, regions: Vec<TextureDirtyRect>) {
+        if regions.is_empty() {
+            return;
+        }
+        self.project.project.bump_changes(ProjectChanges::TEXTURES);
+        self.notify_project_changed_with_texture_regions(ProjectChanges::TEXTURES, Some(regions));
+    }
+
     pub fn emit_transform_changed(&mut self) {
         self.emit_project_changed(ProjectChanges::TRANSFORMS);
     }
@@ -2041,6 +2221,14 @@ impl AppState {
     }
 
     fn notify_project_changed(&mut self, changes: ProjectChanges) {
+        self.notify_project_changed_with_texture_regions(changes, None);
+    }
+
+    fn notify_project_changed_with_texture_regions(
+        &mut self,
+        changes: ProjectChanges,
+        texture_regions: Option<Vec<TextureDirtyRect>>,
+    ) {
         let id = self.project.assets.get(self.project.active).map(|a| a.id);
         if changes.intersects(
             ProjectChanges::GEOMETRY
@@ -2055,6 +2243,63 @@ impl AppState {
             && let Some(asset_id) = id
         {
             self.events.emit(AppEvent::TextureChanged { asset_id });
+        }
+        if changes.contains(ProjectChanges::TEXTURES) {
+            if let Some(regions) = texture_regions {
+                let active_asset = self.project.assets.get(self.project.active);
+                let active_id = active_asset.map(|asset| asset.id);
+                let active_material_id = active_asset.and_then(|asset| asset.material_id);
+                let textures: Vec<_> = self
+                    .project
+                    .assets
+                    .iter()
+                    .filter(|asset| {
+                        Some(asset.id) == active_id
+                            || (active_material_id.is_some()
+                                && asset.material_id == active_material_id
+                                && asset.texture.is_none())
+                    })
+                    .filter_map(|asset| {
+                        asset
+                            .texture
+                            .as_ref()
+                            .or_else(|| {
+                                asset
+                                    .material(&self.project.project)
+                                    .and_then(|material| material.albedo_texture.as_ref())
+                            })
+                            .map(|canvas| (asset.id, canvas.w, canvas.h))
+                    })
+                    .collect();
+                for (asset_id, width, height) in textures {
+                    self.render.mark_texture_regions(
+                        asset_id,
+                        width,
+                        height,
+                        regions.iter().copied(),
+                    );
+                }
+            } else {
+                let textures: Vec<_> = self
+                    .project
+                    .assets
+                    .iter()
+                    .filter_map(|asset| {
+                        asset
+                            .texture
+                            .as_ref()
+                            .or_else(|| {
+                                asset
+                                    .material(&self.project.project)
+                                    .and_then(|material| material.albedo_texture.as_ref())
+                            })
+                            .map(|canvas| (asset.id, canvas.w, canvas.h))
+                    })
+                    .collect();
+                for (asset_id, width, height) in textures {
+                    self.render.mark_texture_full(asset_id, width, height);
+                }
+            }
         }
         let reason = if changes.intersects(ProjectChanges::TEXTURES | ProjectChanges::MATERIALS) {
             DirtyReason::MaterialEdit

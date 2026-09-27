@@ -25,7 +25,7 @@ Este pacote aplica incrementalmente os contratos já definidos pelo Livro Vivo:
 Referências normativas principais:
 
 - `docs/bible/foundations/12-baseline-funcional-roadmap-escopo.md`;
-- `docs/bible/foundations/14-workspace-paint-camadas-uv-integrado.md`;
+- `docs/bible/foundations/29-geometry-renderer-uv-painting-rust.md`;
 - `docs/bible/foundations/19-concorrencia-memoria-caches-performance.md`;
 - `docs/bible/foundations/34-arquitetura-modular-rust-safety.md`;
 - `docs/bible/foundations/44-pos-v1-surface-paint-toolbox.md`.

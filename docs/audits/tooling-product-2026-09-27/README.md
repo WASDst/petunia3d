@@ -140,6 +140,8 @@ produto nem substitutos para os critérios do caderno.
   modifiers.
 - [`g1-paint-remediation-2026-09-27.md`](./g1-paint-remediation-2026-09-27.md) —
   remediação do stroke, batch simétrico, composição por tiles e canvas 2D nativo.
+- [`g2-paint-gpu-remediation-2026-09-27.md`](./g2-paint-gpu-remediation-2026-09-27.md) —
+  fechamento do upload regional Paint→Slint/WGPU, sem rebuild geométrico.
 
 ## 6. Fontes canônicas principais
 

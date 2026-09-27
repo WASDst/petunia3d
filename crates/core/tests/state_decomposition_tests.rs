@@ -5,10 +5,11 @@
 use petunia_core::events::EventBus;
 use petunia_core::modal::ModalKind;
 use petunia_core::state::{
-    AppState, EditMode, EditorSession, ProjectState, RenderResources, ToolState, UiState,
+    AppState, EditMode, EditorSession, ProjectState, RenderResources, TextureDirtyRect, ToolState,
+    UiState,
 };
 use petunia_mesh::Mesh;
-use petunia_project::Project;
+use petunia_project::{Canvas, Project};
 
 #[test]
 fn test_project_state_isolated_lifecycle() {
@@ -109,6 +110,119 @@ fn test_render_resources_isolated_lifecycle() {
 
     render.mark_dirty();
     assert!(render.dirty);
+}
+
+#[test]
+fn texture_updates_clip_deduplicate_and_full_update_dominates() {
+    let project = Project::new();
+    let asset_id = project.assets[0].id;
+    let mut render = RenderResources::new();
+    let region = TextureDirtyRect {
+        x: 48,
+        y: 48,
+        width: 32,
+        height: 32,
+    };
+
+    render.mark_texture_regions(asset_id, 64, 64, [region, region]);
+    let partial = render.take_texture_updates();
+    assert_eq!(partial.len(), 1);
+    assert_eq!(
+        partial[0].regions.as_deref(),
+        Some(
+            [TextureDirtyRect {
+                x: 48,
+                y: 48,
+                width: 16,
+                height: 16,
+            }]
+            .as_slice()
+        )
+    );
+
+    render.mark_texture_regions(asset_id, 64, 64, [region]);
+    render.mark_texture_full(asset_id, 64, 64);
+    render.mark_texture_regions(asset_id, 64, 64, [region]);
+    let full = render.take_texture_updates();
+    assert_eq!(full.len(), 1);
+    assert!(full[0].is_full());
+
+    render.mark_texture_regions(
+        asset_id,
+        64,
+        64,
+        [
+            TextureDirtyRect {
+                x: 0,
+                y: 0,
+                width: 32,
+                height: 64,
+            },
+            TextureDirtyRect {
+                x: 32,
+                y: 0,
+                width: 32,
+                height: 64,
+            },
+        ],
+    );
+    assert!(render.take_texture_updates()[0].is_full());
+}
+
+#[test]
+fn regional_texture_event_bumps_revision_and_publishes_transient_update() {
+    let mut state = AppState::new("en");
+    let active = state.project.active;
+    let asset_id = state.project.assets[active].id;
+    state.project.assets[active].texture = Some(Canvas::new(64, 32, [0, 0, 0, 255]));
+    let revision = state.project.project.texture_revision;
+
+    state.emit_texture_changed_regions(vec![TextureDirtyRect {
+        x: 8,
+        y: 4,
+        width: 12,
+        height: 6,
+    }]);
+
+    assert_eq!(state.project.project.texture_revision, revision + 1);
+    assert_eq!(
+        state.render.take_texture_updates(),
+        vec![petunia_core::TextureUpdate {
+            asset_id,
+            canvas_width: 64,
+            canvas_height: 32,
+            regions: Some(vec![TextureDirtyRect {
+                x: 8,
+                y: 4,
+                width: 12,
+                height: 6,
+            }]),
+        }]
+    );
+}
+
+#[test]
+fn regional_texture_event_reaches_assets_inheriting_shared_material() {
+    let mut state = AppState::new("en");
+    let active = state.project.active;
+    let material_id = state.project.assets[active].material_id.unwrap();
+    state.project.assets[active].texture = Some(Canvas::new(32, 32, [0, 0, 0, 255]));
+    state.project.materials[0].albedo_texture = Some(Canvas::new(32, 32, [0, 0, 0, 255]));
+    let mut sibling = petunia_project::Asset::new("Sibling", Mesh::cube(1.0));
+    sibling.material_id = Some(material_id);
+    let sibling_id = sibling.id;
+    state.project.assets.push(sibling);
+
+    state.emit_texture_changed_regions(vec![TextureDirtyRect {
+        x: 4,
+        y: 5,
+        width: 6,
+        height: 7,
+    }]);
+
+    let updates = state.render.take_texture_updates();
+    assert_eq!(updates.len(), 2);
+    assert!(updates.iter().any(|update| update.asset_id == sibling_id));
 }
 
 #[test]

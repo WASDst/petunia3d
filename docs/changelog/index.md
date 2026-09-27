@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Gate G2 — Upload Regional de Textura WGPU (27/09/2026)
+- **Dirty regions transitórias**: tiles alterados atravessam Core e o contrato neutro de viewport sem persistir estado de GPU no documento.
+- **Upload proporcional**: o WGPU elimina o FNV integral por stroke, combina regiões contíguas e envia somente as linhas RGBA afetadas, com fallback integral seguro para criação, resize e invalidações sem região.
+- **Cache desacoplado**: revisões de textura não invalidam buffers de geometria; fingerprints e telemetria separam rebuilds, chamadas e bytes de upload.
+
 ### Gate G1 — Stroke e Composição Incremental de Paint (27/09/2026)
 - **Stroke determinístico**: `StrokeSampler` neutro preserva a distância residual entre pointer events; PAINT 2D e 3D passam a respeitar `BrushSettings::spacing` independentemente da taxa de eventos.
 - **Batch e Dirty Tiles**: dabs de uma amostra, inclusive simetrias 2D/3D, são agregados antes de uma única composição e publicação de revisão; a stack deixa de ser clonada no caminho parcial.
