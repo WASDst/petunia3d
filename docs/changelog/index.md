@@ -5,6 +5,24 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Melhorias de Modelagem, Primitivas, Área de Transferência e Visualização de Viewport (27/09/2026)
+- **Ciclo de Vida de Primitivas & Descarte de Card Sem Trava**:
+  - Finalização e confirmação automática da sessão de criação de primitivas (`finalize_primitive_session`) ao clicar fora em espaço vazio ou selecionar objetos/elementos no viewport, ao arrastar gizmos ou ao acionar atalhos/ferramentas.
+  - Eliminação de sobreposição e bloqueio mútuo de cliques entre o card de propriedades da primitiva e o Operation HUD na viewport.
+- **Dissolução e Exclusão Contextual (`Delete` / `Backspace`)**:
+  - Em Edit Mode (`Point`, `Edge`, `Face`), acionar `Delete` ou `Backspace` tenta primeiramente a dissolução limpa (`mesh.dissolve_selected()`) para evitar furos na malha; caso a topologia não permita dissolução (ex.: face isolada ou borda aberta), executa a remoção (`mesh.delete_selected()`).
+  - Em Object Mode, aciona a exclusão do asset ativo da cena.
+- **Área de Transferência Geométrica e Duplicação (`Ctrl+C`, `Ctrl+V`, `Ctrl+D`)**:
+  - `Ctrl+C` e `Ctrl+V` em sub-elementos (vértices, arestas, faces selecionadas ou sob hover) copiam a geometria isolada e colam como um novo objeto independente na cena nomeado `{objeto}_part`.
+  - `Ctrl+C` e `Ctrl+V` em Object Mode copiam o objeto inteiro e colam uma duplicata (`{objeto}_copy`).
+  - `Ctrl+D` / `Shift+D` duplica contextualmente a geometria selecionada dentro da malha ativa em Edit Mode e o asset completo em Object Mode.
+- **Opções de Extrusão e Alternância de Modo no Card de Ferramentas**:
+  - Exibição de ações de extrusão por Região (`model.extrude`) e Faces Individuais (`model.extrude_individual`) no card de ferramentas.
+  - Alternância dinâmica entre Região e Faces Individuais durante o modal interativo preservando o deslocamento atual, além de botões para presets rápidos (+0.2, +0.5, +1.0 e Inverter sinal).
+- **Correção de Z-Fighting e Wireframe em Malhas Densas**:
+  - Remoção de offsets arbitrários manuais de coordenadas de vértices em Y (`+0.001`), eliminando arestas soltas, quebras e cintilações em superfícies verticais ou anguladas.
+  - Aplicação de viés de profundidade canônico em espaço de projeção (`clip.z -= 0.0001 * clip.w`) no vertex shader de linhas (`LINE_WGSL`), mantendo a visualização nítida em qualquer densidade e ângulo.
+
 ### Sprint E: Finalização Canônica dos Workspaces MODEL, PAINT e UV (26/09/2026)
 - **Workspace MODEL**:
   - **Dissolução Limpa de Topologia (`model.dissolve` / `X`)**: Implementação de dissolução não-destrutiva de faces, arestas e vértices coplanares ou de grau 2/fan, preservando a contiguidade 2-manifold da malha. Registrado no catálogo de comandos e atalhos globais.

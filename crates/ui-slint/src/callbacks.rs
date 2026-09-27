@@ -764,6 +764,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_active_language(vm.active_language.as_str().into());
     window.set_ui_scale(vm.ui_scale);
     window.set_tool_modal_active(vm.tool_modal_active);
+    window.set_tool_modal_id(vm.tool_modal_id.as_str().into());
     window.set_tool_options_active(vm.tool_options_active);
     window.set_tool_options_title(vm.tool_options_title.as_str().into());
     window.set_tool_options_hint(vm.tool_options_hint.as_str().into());
@@ -2184,6 +2185,23 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_tool_modal_cancel(move || {
         if let Ok(mut bridge) = tool_cancel_bridge.lock() {
             bridge.cancel_tool_modal();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let extrude_mode_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_tool_modal_toggle_extrude_mode(move || {
+        if let Ok(mut bridge) = extrude_mode_bridge.lock()
+            && bridge.switch_extrude_mode()
+        {
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -3954,7 +3972,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_delete_requested(move || {
         if let Ok(mut bridge) = delete_bridge.lock() {
-            bridge.apply(UiIntent::DeleteActiveAsset);
+            bridge.delete_or_dissolve_selection();
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -4078,7 +4096,39 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_duplicate_requested(move || {
         if let Ok(mut bridge) = dup_bridge.lock() {
-            bridge.apply(UiIntent::DuplicateActiveAsset);
+            bridge.duplicate_selection();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let copy_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_copy_requested(move || {
+        if let Ok(mut bridge) = copy_bridge.lock() {
+            bridge.copy_selection();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let paste_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paste_requested(move || {
+        if let Ok(mut bridge) = paste_bridge.lock() {
+            bridge.paste_clipboard();
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {

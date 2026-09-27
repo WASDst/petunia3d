@@ -7601,3 +7601,145 @@ fn test_profile_shortcut_and_shelf_extrude() {
     let asset = bridge.state.project.active().expect("active mesh");
     assert_eq!(asset.name, "Profile");
 }
+
+#[test]
+fn test_primitive_session_dismisses_on_viewport_click_and_operations() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // Add primitive cube
+    bridge.apply(UiIntent::AddPrimitive(petunia_core::PrimitiveKind::Cube));
+    assert!(bridge.state.primitive_session_valid());
+
+    // Verify Operation HUD is suppressed while primitive session is active to prevent overlapping cards
+    let vm = bridge.view_model();
+    assert!(vm.primitive_active);
+    assert!(!vm.operation_hud_active);
+
+    // Clicking anywhere in viewport finalizes primitive session
+    bridge.select_viewport_ext(0.1, 0.1, false, false);
+    assert!(!bridge.state.primitive_session_valid());
+    let vm_after = bridge.view_model();
+    assert!(!vm_after.primitive_active);
+
+    // Adding another primitive and initiating a tool modal also finalizes the session
+    bridge.apply(UiIntent::AddPrimitive(
+        petunia_core::PrimitiveKind::Cylinder,
+    ));
+    assert!(bridge.state.primitive_session_valid());
+    bridge.begin_tool_modal(ToolModalKind::Extrude);
+    assert!(!bridge.state.primitive_session_valid());
+}
+
+#[test]
+fn test_delete_and_dissolve_selection() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // Enter Edit Mode with Face domain
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    if let Some(mesh) = bridge.state.project.active_mesh_mut()
+        && let Some(face) = mesh.faces.get_mut(0)
+    {
+        face.selected = true;
+    }
+
+    // Delete or dissolve selected face
+    let initial_faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    assert!(bridge.delete_or_dissolve_selection());
+    let after_faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    assert!(after_faces < initial_faces);
+
+    // In Object Mode, Delete deletes the active asset
+    bridge.state.set_selection_domain(SelectionDomain::Object);
+    let initial_assets = bridge.state.project.assets.len();
+    assert!(bridge.delete_or_dissolve_selection());
+    assert_eq!(bridge.state.project.assets.len(), initial_assets - 1);
+}
+
+#[test]
+fn test_copy_paste_geometry_and_assets() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // Select face in Edit Mode
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    if let Some(mesh) = bridge.state.project.active_mesh_mut()
+        && let Some(face) = mesh.faces.get_mut(0)
+    {
+        face.selected = true;
+    }
+
+    // Copy selected face
+    assert!(bridge.copy_selection());
+    assert!(bridge.clipboard.is_some());
+
+    // Paste creates a separate object named {base}_part
+    let initial_assets = bridge.state.project.assets.len();
+    assert!(bridge.paste_clipboard());
+    assert_eq!(bridge.state.project.assets.len(), initial_assets + 1);
+    let new_asset = bridge.state.project.active().unwrap();
+    assert!(new_asset.name.ends_with("_part"));
+    assert_eq!(bridge.state.selection_domain(), SelectionDomain::Object);
+
+    // In Object Mode, copy active asset and paste
+    assert!(bridge.copy_selection());
+    assert!(bridge.paste_clipboard());
+    let pasted_asset = bridge.state.project.active().unwrap();
+    assert!(pasted_asset.name.ends_with("_copy"));
+}
+
+#[test]
+fn test_duplicate_selection_and_assets() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // In Edit Mode, duplicate duplicates selection in mesh
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    if let Some(mesh) = bridge.state.project.active_mesh_mut()
+        && let Some(face) = mesh.faces.get_mut(0)
+    {
+        face.selected = true;
+    }
+    let initial_faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    assert!(bridge.duplicate_selection());
+    let after_faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    assert!(after_faces > initial_faces);
+
+    // In Object Mode, duplicate duplicates active asset
+    bridge.state.set_selection_domain(SelectionDomain::Object);
+    let initial_assets = bridge.state.project.assets.len();
+    assert!(bridge.duplicate_selection());
+    assert_eq!(bridge.state.project.assets.len(), initial_assets + 1);
+}
+
+#[test]
+fn test_extrude_mode_switch_and_presets() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+
+    // Select face
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    if let Some(mesh) = bridge.state.project.active_mesh_mut()
+        && let Some(face) = mesh.faces.get_mut(0)
+    {
+        face.selected = true;
+    }
+
+    // Begin extrude modal
+    assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
+    assert_eq!(bridge.tool_modal, Some(ToolModalKind::Extrude));
+    bridge.set_tool_modal_value(0.5);
+
+    // Switch extrude mode between Region and Individual Faces
+    assert!(bridge.switch_extrude_mode());
+    assert_eq!(bridge.tool_modal, Some(ToolModalKind::ExtrudeIndividual));
+    assert_eq!(bridge.tool_modal_value, 0.5);
+
+    assert!(bridge.switch_extrude_mode());
+    assert_eq!(bridge.tool_modal, Some(ToolModalKind::Extrude));
+    assert_eq!(bridge.tool_modal_value, 0.5);
+
+    bridge.cancel_tool_modal();
+    assert_eq!(bridge.tool_modal, None);
+}

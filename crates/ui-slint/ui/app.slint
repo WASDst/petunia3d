@@ -3562,6 +3562,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> tool-options-active: false;
     in-out property <string> tool-options-title: "";
     in-out property <string> tool-options-hint: "";
+    in-out property <string> tool-modal-id: "";
     in-out property <string> tool-modal-title: "";
     in-out property <string> tool-modal-label: "";
     in-out property <float> tool-modal-value: 0.0;
@@ -3758,6 +3759,9 @@ export component PetuniaSlintShell inherits Window {
     callback slice-cancel();
     callback toggle-bevel-clamp-overlap;
     callback toggle-bevel-affect-vertices;
+    callback tool-modal-toggle-extrude-mode();
+    callback copy-requested();
+    callback paste-requested();
     callback inspector-width-changed(float);
     callback asset-library-height-changed(float);
     callback rename-committed(string);
@@ -5746,6 +5750,98 @@ export component PetuniaSlintShell inherits Window {
                         collapsed: root.tool-properties-collapsed;
                         collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
 
+                        if root.tool-modal-id == "extrude" || root.tool-modal-id == "extrude_individual": VerticalLayout {
+                            spacing: 6px;
+                            HorizontalLayout {
+                                spacing: 4px;
+                                height: 24px;
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 4px;
+                                    background: root.tool-modal-id == "extrude" ? DesignTokens.accent : DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: root.tool-modal-id == "extrude" ? DesignTokens.accent : DesignTokens.border;
+                                    Text {
+                                        text: "Region";
+                                        color: root.tool-modal-id == "extrude" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                        font-size: 10px;
+                                        font-weight: 600;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                    TouchArea {
+                                        clicked => {
+                                            if root.tool-modal-id == "extrude_individual" {
+                                                root.tool-modal-toggle-extrude-mode();
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 4px;
+                                    background: root.tool-modal-id == "extrude_individual" ? DesignTokens.accent : DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: root.tool-modal-id == "extrude_individual" ? DesignTokens.accent : DesignTokens.border;
+                                    Text {
+                                        text: "Individual";
+                                        color: root.tool-modal-id == "extrude_individual" ? DesignTokens.canvas : DesignTokens.text-primary;
+                                        font-size: 10px;
+                                        font-weight: 600;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                    TouchArea {
+                                        clicked => {
+                                            if root.tool-modal-id == "extrude" {
+                                                root.tool-modal-toggle-extrude-mode();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 4px;
+                                height: 22px;
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 3px;
+                                    background: DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    Text { text: "+0.2"; color: DesignTokens.text-secondary; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.tool-modal-text-committed("0.2"); } }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 3px;
+                                    background: DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    Text { text: "+0.5"; color: DesignTokens.text-secondary; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.tool-modal-text-committed("0.5"); } }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 3px;
+                                    background: DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    Text { text: "+1.0"; color: DesignTokens.text-secondary; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.tool-modal-text-committed("1.0"); } }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 3px;
+                                    background: DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    Text { text: "Invert"; color: DesignTokens.text-secondary; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.tool-modal-text-committed("\{-root.tool-modal-value}"); } }
+                                }
+                            }
+                        }
+
                         HorizontalLayout {
                             spacing: 6px;
                             height: 28px;
@@ -6113,12 +6209,37 @@ export component PetuniaSlintShell inherits Window {
                         Text { text: "Enter confirm · Esc cancel"; color: DesignTokens.text-muted; font-size: 9px; }
                     }
 
-                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "knife" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d"): ToolCard {
+                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "knife" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d"): ToolCard {
                         x: 14px;
                         y: 58px;
                         title: root.tool-options-title != "" ? root.tool-options-title : "Tool Options";
                         collapsed: root.tool-properties-collapsed;
                         collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
+
+                        if root.active-tool == "extrude": VerticalLayout {
+                            spacing: 6px;
+                            HorizontalLayout {
+                                spacing: 4px;
+                                height: 26px;
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 4px;
+                                    background: DesignTokens.accent;
+                                    Text { text: "Extrude Region (E)"; color: DesignTokens.canvas; font-size: 10px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.command-executed("model.extrude"); } }
+                                }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    border-radius: 4px;
+                                    background: DesignTokens.surface;
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    Text { text: "Individual (Alt+E)"; color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.command-executed("model.extrude_individual"); } }
+                                }
+                            }
+                            Text { text: "Click and drag or press E / Alt+E to extrude selected faces"; color: DesignTokens.text-muted; font-size: 9px; wrap: word-wrap; }
+                        }
 
                         // Common adjustments row (Snap, Proportional Editing and Pivot) / Linha de ajustes comuns (Snap, Proportional Editing e Pivot)
                         if root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale": HorizontalLayout {

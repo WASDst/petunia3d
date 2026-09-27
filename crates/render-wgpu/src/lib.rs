@@ -475,6 +475,8 @@ struct Out {
 fn vs_main(in: In) -> Out {
     var o: Out;
     o.clip = cam.view_proj * vec4<f32>(in.pos, 1.0);
+    // Depth bias in clip space: pull lines slightly toward near plane to eliminate z-fighting with coplanar faces
+    o.clip.z -= 0.0001 * o.clip.w;
     o.color = in.color;
     return o;
 }
@@ -1454,26 +1456,19 @@ impl Renderer {
                 // mostram faces limpas e só a camada de seleção destaca arestas.
                 for (a, b, _sel) in mesh.to_edges() {
                     let c = [0.05, 0.05, 0.06];
-                    lv.push(LineVertex {
-                        pos: [a[0], a[1] + 0.001, a[2]],
-                        color: c,
-                    });
-                    lv.push(LineVertex {
-                        pos: [b[0], b[1] + 0.001, b[2]],
-                        color: c,
-                    });
+                    lv.push(LineVertex { pos: a, color: c });
+                    lv.push(LineVertex { pos: b, color: c });
                 }
             }
             if show_triangulation {
                 let diag_c = [0.3, 0.65, 0.95];
-                let lift = if is_wire { 0.0 } else { 0.0012 };
                 for (a, b) in mesh.triangulation_wireframe() {
                     lv.push(LineVertex {
-                        pos: [a[0], a[1] + lift, a[2]],
+                        pos: a,
                         color: diag_c,
                     });
                     lv.push(LineVertex {
-                        pos: [b[0], b[1] + lift, b[2]],
+                        pos: b,
                         color: diag_c,
                     });
                 }

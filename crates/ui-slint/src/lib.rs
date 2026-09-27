@@ -582,6 +582,14 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
+    pub clipboard: Option<GeometryClipboard>,
+}
+
+/// Dados da área de transferência de geometria.
+#[derive(Clone, Debug)]
+pub enum GeometryClipboard {
+    Mesh(petunia_core::Mesh),
+    Asset(Box<petunia_project::Asset>),
 }
 
 /// Alvo de hit-test para manipulação interativa de nós e alças do perfil 2D.
@@ -776,6 +784,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_preview_asset_id: None,
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
+            clipboard: None,
             position: [
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
@@ -1981,11 +1990,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         if let Some(session) = &self.state.session.primitive_session {
             let name = session.descriptor.kind().default_name();
-            vm.operation_hud_active = true;
-            vm.operation_hud_title = format!("Add {name}");
-            vm.operation_hud_subject = "Primitive".to_string();
-            vm.operation_hud_lines = vec!["Adjust parameters in panel".to_string()];
-            vm.operation_hud_hint = "Enter Confirm · Esc Cancel".to_string();
+            vm.operation_hud_active = false;
             vm.context_hint = format!("Add {name} · Enter Confirm · Esc Cancel");
             return;
         }
@@ -3983,6 +3988,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Inicia o arrasto no handle do gizmo, restringindo a transformação ao eixo ou plano.
     pub fn begin_gizmo_drag(&mut self, x: f32, y: f32) -> bool {
+        if self.state.primitive_session_valid() {
+            self.state.finalize_primitive_session();
+        }
         let Some(target) = self.gizmo_target_at(x, y) else {
             return false;
         };
@@ -7225,6 +7233,422 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.cancel_primitive()
     }
 
+    /// Exclui ou dissolve elementos selecionados ou o ativo ativo se em Object Mode.
+    pub fn delete_or_dissolve_selection(&mut self) -> bool {
+        if self.state.session.tools.active_tool == "draw_profile" {
+            if let Some(idx) = self.profile_selected_node
+                && idx < self.state.profile.nodes.len()
+            {
+                self.state.profile.nodes.remove(idx);
+                if idx < self.state.profile.points.len() {
+                    self.state.profile.points.remove(idx);
+                }
+                if self.state.profile.nodes.len() < 3 {
+                    self.state.profile.closed = false;
+                }
+                self.profile_selected_node = None;
+                self.profile_drag_target = None;
+                self.state.mark_dirty();
+                if self.profile_volume_mode.is_some() {
+                    self.update_profile_volume_preview();
+                }
+                return true;
+            }
+            return false;
+        }
+
+        if self.state.selection_domain() != SelectionDomain::Object {
+            let hover = self.state.hover;
+            let Some(mesh) = self.state.project.active_mesh_mut() else {
+                return false;
+            };
+
+            let has_selection = mesh.verts.iter().any(|v| v.selected)
+                || mesh.faces.iter().any(|f| f.selected)
+                || !mesh.selected_edges.is_empty();
+
+            if !has_selection {
+                match hover {
+                    petunia_core::HoverTarget::Edge(a, b) => {
+                        mesh.selected_edges.insert((a.min(b), a.max(b)));
+                    }
+                    petunia_core::HoverTarget::Vertex(v) => {
+                        if let Some(vert) = mesh.verts.get_mut(v as usize) {
+                            vert.selected = true;
+                        }
+                    }
+                    petunia_core::HoverTarget::Face(f) => {
+                        if let Some(face) = mesh.faces.get_mut(f) {
+                            face.selected = true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            let has_selection_now = mesh.verts.iter().any(|v| v.selected)
+                || mesh.faces.iter().any(|f| f.selected)
+                || !mesh.selected_edges.is_empty();
+
+            if !has_selection_now {
+                return false;
+            }
+
+            let before = mesh.clone();
+            let initial_verts_len = mesh.verts.len();
+            let initial_faces_len = mesh.faces.len();
+            let initial_edges_len = mesh.selected_edges.len();
+
+            mesh.dissolve_selected();
+
+            if mesh.verts.len() == initial_verts_len
+                && mesh.faces.len() == initial_faces_len
+                && mesh.selected_edges.len() == initial_edges_len
+            {
+                mesh.delete_selected();
+            }
+
+            self.state.checkpoint("delete/dissolve selection");
+            let _ = before;
+            self.state.emit_mesh_changed();
+            self.state.mark_dirty();
+            self.state.set_status("Dissolved/deleted selection");
+            true
+        } else {
+            self.apply(UiIntent::DeleteActiveAsset);
+            true
+        }
+    }
+
+    /// Copia para a área de transferência a geometria selecionada (ou ativo em Object Mode).
+    pub fn copy_selection(&mut self) -> bool {
+        if self.state.selection_domain() != SelectionDomain::Object {
+            let Some(mesh) = self.state.project.active_mesh() else {
+                return false;
+            };
+
+            let sel_faces: Vec<&petunia_mesh::Face> =
+                mesh.faces.iter().filter(|f| f.selected).collect();
+            if !sel_faces.is_empty() {
+                let mut vert_map: std::collections::HashMap<u32, u32> =
+                    std::collections::HashMap::new();
+                let mut new_verts = Vec::new();
+                for f in &sel_faces {
+                    for &v in &f.verts {
+                        if !vert_map.contains_key(&v)
+                            && let Some(src_v) = mesh.verts.get(v as usize)
+                        {
+                            let new_idx = new_verts.len() as u32;
+                            vert_map.insert(v, new_idx);
+                            new_verts.push(src_v.clone());
+                        }
+                    }
+                }
+                let mut new_faces = Vec::new();
+                for f in &sel_faces {
+                    let mut remapped_verts = Vec::new();
+                    for &v in &f.verts {
+                        if let Some(&new_v) = vert_map.get(&v) {
+                            remapped_verts.push(new_v);
+                        }
+                    }
+                    let mut new_face = (*f).clone();
+                    new_face.verts = remapped_verts;
+                    new_faces.push(new_face);
+                }
+                let sub_mesh = petunia_mesh::Mesh {
+                    verts: new_verts,
+                    faces: new_faces,
+                    ..Default::default()
+                };
+                self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                self.state.set_status("Copied selected faces to clipboard");
+                return true;
+            }
+
+            if !mesh.selected_edges.is_empty() {
+                let mut vert_indices = std::collections::HashSet::new();
+                for &(a, b) in &mesh.selected_edges {
+                    vert_indices.insert(a);
+                    vert_indices.insert(b);
+                }
+                let mut vert_map: std::collections::HashMap<u32, u32> =
+                    std::collections::HashMap::new();
+                let mut new_verts = Vec::new();
+                for &v in &vert_indices {
+                    if let Some(src_v) = mesh.verts.get(v as usize) {
+                        let new_idx = new_verts.len() as u32;
+                        vert_map.insert(v, new_idx);
+                        new_verts.push(src_v.clone());
+                    }
+                }
+                let mut new_faces = Vec::new();
+                for f in &mesh.faces {
+                    if f.verts.iter().all(|v| vert_indices.contains(v)) {
+                        let mut remapped = Vec::new();
+                        for &v in &f.verts {
+                            if let Some(&new_v) = vert_map.get(&v) {
+                                remapped.push(new_v);
+                            }
+                        }
+                        let mut new_f = f.clone();
+                        new_f.verts = remapped;
+                        new_faces.push(new_f);
+                    }
+                }
+                let mut new_selected_edges = std::collections::HashSet::new();
+                for &(a, b) in &mesh.selected_edges {
+                    if let (Some(&na), Some(&nb)) = (vert_map.get(&a), vert_map.get(&b)) {
+                        new_selected_edges.insert((na.min(nb), na.max(nb)));
+                    }
+                }
+                let sub_mesh = petunia_mesh::Mesh {
+                    verts: new_verts,
+                    faces: new_faces,
+                    selected_edges: new_selected_edges,
+                    ..Default::default()
+                };
+                self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                self.state.set_status("Copied selected edges to clipboard");
+                return true;
+            }
+
+            let sel_verts: Vec<(usize, &petunia_mesh::Vertex)> = mesh
+                .verts
+                .iter()
+                .enumerate()
+                .filter(|(_, v)| v.selected)
+                .collect();
+            if !sel_verts.is_empty() {
+                let vert_indices: std::collections::HashSet<u32> =
+                    sel_verts.iter().map(|(i, _)| *i as u32).collect();
+                let mut vert_map: std::collections::HashMap<u32, u32> =
+                    std::collections::HashMap::new();
+                let mut new_verts = Vec::new();
+                for (i, v) in &sel_verts {
+                    let new_idx = new_verts.len() as u32;
+                    vert_map.insert(*i as u32, new_idx);
+                    new_verts.push((*v).clone());
+                }
+                let mut new_faces = Vec::new();
+                for f in &mesh.faces {
+                    if f.verts.iter().all(|v| vert_indices.contains(v)) {
+                        let mut remapped = Vec::new();
+                        for &v in &f.verts {
+                            if let Some(&new_v) = vert_map.get(&v) {
+                                remapped.push(new_v);
+                            }
+                        }
+                        let mut new_f = f.clone();
+                        new_f.verts = remapped;
+                        new_faces.push(new_f);
+                    }
+                }
+                let sub_mesh = petunia_mesh::Mesh {
+                    verts: new_verts,
+                    faces: new_faces,
+                    ..Default::default()
+                };
+                self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                self.state
+                    .set_status("Copied selected vertices to clipboard");
+                return true;
+            }
+
+            match self.state.hover {
+                petunia_core::HoverTarget::Face(f_idx) => {
+                    if let Some(f) = mesh.faces.get(f_idx) {
+                        let mut new_verts = Vec::new();
+                        let mut remapped = Vec::new();
+                        for (new_i, &v) in f.verts.iter().enumerate() {
+                            if let Some(src_v) = mesh.verts.get(v as usize) {
+                                new_verts.push(src_v.clone());
+                                remapped.push(new_i as u32);
+                            }
+                        }
+                        let mut new_f = f.clone();
+                        new_f.verts = remapped;
+                        let sub_mesh = petunia_mesh::Mesh {
+                            verts: new_verts,
+                            faces: vec![new_f],
+                            ..Default::default()
+                        };
+                        self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                        self.state.set_status("Copied hovered face to clipboard");
+                        return true;
+                    }
+                }
+                petunia_core::HoverTarget::Edge(a, b) => {
+                    if let (Some(va), Some(vb)) =
+                        (mesh.verts.get(a as usize), mesh.verts.get(b as usize))
+                    {
+                        let mut new_edges = std::collections::HashSet::new();
+                        new_edges.insert((0, 1));
+                        let sub_mesh = petunia_mesh::Mesh {
+                            verts: vec![va.clone(), vb.clone()],
+                            selected_edges: new_edges,
+                            ..Default::default()
+                        };
+                        self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                        self.state.set_status("Copied hovered edge to clipboard");
+                        return true;
+                    }
+                }
+                petunia_core::HoverTarget::Vertex(v_idx) => {
+                    if let Some(v) = mesh.verts.get(v_idx as usize) {
+                        let sub_mesh = petunia_mesh::Mesh {
+                            verts: vec![v.clone()],
+                            ..Default::default()
+                        };
+                        self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                        self.state.set_status("Copied hovered vertex to clipboard");
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+
+            false
+        } else {
+            let Some(asset) = self.state.project.active() else {
+                return false;
+            };
+            self.clipboard = Some(GeometryClipboard::Asset(Box::new(asset.clone())));
+            self.state
+                .set_status(format!("Copied '{}' to clipboard", asset.name));
+            true
+        }
+    }
+
+    /// Cola a geometria da área de transferência como um novo objeto separado.
+    pub fn paste_clipboard(&mut self) -> bool {
+        let Some(clipboard_data) = self.clipboard.clone() else {
+            return false;
+        };
+        match clipboard_data {
+            GeometryClipboard::Mesh(mut mesh) => {
+                let base_name = self
+                    .state
+                    .project
+                    .active()
+                    .map(|a| a.name.clone())
+                    .unwrap_or_else(|| "part".to_string());
+                let new_name = format!("{base_name}_part");
+
+                mesh.select_all();
+
+                self.state
+                    .checkpoint(&format!("paste geometry: {new_name}"));
+                self.state.project.add(&new_name, mesh);
+                let new_index = self.state.project.assets.len() - 1;
+                self.state.set_selection_domain(SelectionDomain::Object);
+                self.state.select_object(Some(new_index), false);
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                self.state
+                    .set_status(format!("Pasted separate object '{new_name}'"));
+                true
+            }
+            GeometryClipboard::Asset(asset) => {
+                let mut copy = asset.duplicate();
+                copy.name = format!("{}_copy", asset.name);
+                for v in &mut copy.mesh.verts {
+                    v.pos[0] += 0.5;
+                }
+                let copy_name = copy.name.clone();
+                self.state.checkpoint(&format!("paste asset: {copy_name}"));
+                self.state.project.assets.push(copy);
+                let new_index = self.state.project.assets.len() - 1;
+                self.state.set_selection_domain(SelectionDomain::Object);
+                self.state.select_object(Some(new_index), false);
+                self.state.emit_mesh_changed();
+                self.state.mark_dirty();
+                self.state
+                    .set_status(format!("Pasted object '{copy_name}'"));
+                true
+            }
+        }
+    }
+
+    /// Duplica a seleção: elementos na malha em Edit Mode, ou ativo em Object Mode.
+    pub fn duplicate_selection(&mut self) -> bool {
+        if self.state.selection_domain() != SelectionDomain::Object {
+            let hover = self.state.hover;
+            if let Some(mesh) = self.state.project.active_mesh_mut() {
+                let has_selection = mesh.verts.iter().any(|v| v.selected)
+                    || mesh.faces.iter().any(|f| f.selected)
+                    || !mesh.selected_edges.is_empty();
+                if !has_selection {
+                    match hover {
+                        petunia_core::HoverTarget::Face(f) => {
+                            if let Some(face) = mesh.faces.get_mut(f) {
+                                face.selected = true;
+                            }
+                        }
+                        petunia_core::HoverTarget::Edge(a, b) => {
+                            mesh.selected_edges.insert((a.min(b), a.max(b)));
+                            if let Some(va) = mesh.verts.get_mut(a as usize) {
+                                va.selected = true;
+                            }
+                            if let Some(vb) = mesh.verts.get_mut(b as usize) {
+                                vb.selected = true;
+                            }
+                        }
+                        petunia_core::HoverTarget::Vertex(v) => {
+                            if let Some(vert) = mesh.verts.get_mut(v as usize) {
+                                vert.selected = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                mesh.sync_vert_selection_from_faces();
+            }
+            self.state.sync_selection();
+
+            let res = self.state.dispatch(&petunia_core::DuplicateSelectionCmd);
+            if res.is_err()
+                && let Some(mesh) = self.state.project.active_mesh_mut()
+            {
+                mesh.duplicate_selected();
+            }
+            self.state.emit_mesh_changed();
+            self.state.mark_dirty();
+            self.state.set_status("Duplicated selection");
+            true
+        } else {
+            let _ = self
+                .state
+                .dispatch(&petunia_core::DuplicateAssetCmd { asset_index: None });
+            self.state.emit_mesh_changed();
+            self.state.mark_dirty();
+            self.state.set_status("Duplicated object");
+            true
+        }
+    }
+
+    /// Alterna o modo de extrusão entre Região e Faces Individuais mantendo a distância.
+    pub fn switch_extrude_mode(&mut self) -> bool {
+        let Some(current) = self.tool_modal else {
+            return false;
+        };
+        let new_kind = match current {
+            ToolModalKind::Extrude => ToolModalKind::ExtrudeIndividual,
+            ToolModalKind::ExtrudeIndividual => ToolModalKind::Extrude,
+            _ => return false,
+        };
+        let current_value = self.tool_modal_value;
+        let _ = self.state.cancel_modal();
+        if self.begin_tool_modal(new_kind) {
+            self.tool_modal_value = current_value;
+            let _ = self.state.update_modal(glam::Vec3::ZERO, current_value);
+            self.state.mark_dirty();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Um clique de faca na viewport: primeiro ponto ancora, segundo corta.
     ///
     /// O ponto vem de `AppState::pick_edge`, então a faca corta a aresta que o
@@ -7817,6 +8241,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Abre a sessão modal de uma ferramenta paramétrica com preview próprio.
     pub fn begin_tool_modal(&mut self, kind: ToolModalKind) -> bool {
+        if self.state.primitive_session_valid() {
+            self.state.finalize_primitive_session();
+        }
         if self.state.selection_domain() == SelectionDomain::Object {
             match kind {
                 ToolModalKind::Extrude
@@ -8066,6 +8493,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if self.state.session.tools.active_tool == "slice" {
             return;
+        }
+        if self.state.primitive_session_valid() {
+            self.state.finalize_primitive_session();
         }
         let ndc_x = normalized_x.clamp(0.0, 1.0) * 2.0 - 1.0;
         let ndc_y = 1.0 - normalized_y.clamp(0.0, 1.0) * 2.0;
@@ -8452,6 +8882,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn execute_core_command(&mut self, id: &str) -> Result<(), petunia_core::CommandError> {
         self.command_search_visible = false;
         self.overlays.remove(OverlayId::CommandPalette);
+        if self.state.primitive_session_valid()
+            && id != "primitive.confirm"
+            && id != "primitive.cancel"
+        {
+            self.state.finalize_primitive_session();
+        }
+        if id == "model.delete" {
+            self.delete_or_dissolve_selection();
+            return Ok(());
+        }
+        if id == "model.duplicate" {
+            self.duplicate_selection();
+            return Ok(());
+        }
+        if id == "edit.copy" {
+            self.copy_selection();
+            return Ok(());
+        }
+        if id == "edit.paste" {
+            self.paste_clipboard();
+            return Ok(());
+        }
         if id == "model.extrude"
             && self.state.session.tools.active_tool == "draw_profile"
             && (self.state.profile.closed || self.state.profile.points.len() >= 3)
@@ -8460,26 +8912,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.commit_profile_volume();
             } else {
                 self.enter_profile_volume("extrude");
-            }
-            return Ok(());
-        }
-        if id == "model.delete"
-            && self.state.session.tools.active_tool == "draw_profile"
-            && let Some(idx) = self.profile_selected_node
-            && idx < self.state.profile.nodes.len()
-        {
-            self.state.profile.nodes.remove(idx);
-            if idx < self.state.profile.points.len() {
-                self.state.profile.points.remove(idx);
-            }
-            if self.state.profile.nodes.len() < 3 {
-                self.state.profile.closed = false;
-            }
-            self.profile_selected_node = None;
-            self.profile_drag_target = None;
-            self.state.mark_dirty();
-            if self.profile_volume_mode.is_some() {
-                self.update_profile_volume_preview();
             }
             return Ok(());
         }
@@ -8619,6 +9051,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if text == "F4" && !ctrl && !alt && !shift {
             return self.toggle_reference_manager();
+        }
+        if ctrl && !shift && !alt && text.eq_ignore_ascii_case("c") {
+            return self.copy_selection();
+        }
+        if ctrl && !shift && !alt && text.eq_ignore_ascii_case("v") {
+            return self.paste_clipboard();
+        }
+        if ((ctrl && !shift) || (shift && !ctrl)) && !alt && text.eq_ignore_ascii_case("d") {
+            return self.duplicate_selection();
+        }
+        if (text == "Delete" || text == "Backspace") && !ctrl && !alt && !shift {
+            if self.state.session.tools.modal.is_some() && !self.modal_text.is_empty() {
+                self.modal_text.pop();
+                if self.modal_text.is_empty() {
+                    let [x, y] = self.pointer_position;
+                    self.update_viewport_transform(x, y);
+                } else {
+                    self.preview_modal_text();
+                }
+                return true;
+            }
+            return self.delete_or_dissolve_selection();
         }
         if self.state.session.tools.modal.is_none()
             && self.drag.is_none()
