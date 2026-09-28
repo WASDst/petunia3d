@@ -9,10 +9,10 @@
 > **Regra de execução:** corrigir incrementalmente; este dossiê não autoriza
 > reescrita total nem reabertura da UI Baseline V1
 
-> **Estado pós-auditoria:** os gates G0–G4 estão registrados separadamente. O G3
-> eleva `HA-01` com Spline Core e o G4 eleva `HA-02` a
-> `PARTIALLY_COMPLIANT` com SurfaceAttachment headless; UI, Profile persistente,
-> consumers restantes, generators e Hair continuam pendentes.
+> **Estado pós-auditoria:** os gates G0–G6 estão registrados separadamente.
+> Spline, SurfaceAttachment, Profile/Sweep persistentes e o authoring visual de
+> Profile no Slint já possuem checkpoints próprios; consumers restantes,
+> acessibilidade avançada e Hair continuam pendentes.
 
 ## 1. Veredito executivo
 
@@ -152,6 +152,10 @@ produto nem substitutos para os critérios do caderno.
   fundação persistente/transacional de splines e frames compartilhados com Sweep.
 - [`g4-surface-attachment-remediation-2026-09-27.md`](./g4-surface-attachment-remediation-2026-09-27.md) —
   attachment persistente, queries geométricas e Commands de pontos de spline.
+- [`g5-profile-sweep-remediation-2026-09-27.md`](./g5-profile-sweep-remediation-2026-09-27.md) —
+  Profile/Sweep persistentes, cache derivado e Bake transacional.
+- [`g6-profile-visual-authoring-remediation-2026-09-27.md`](./g6-profile-visual-authoring-remediation-2026-09-27.md) —
+  editor Profile Slint migrado para IDs persistentes e gestos com Undo único.
 
 ## 6. Fontes canônicas principais
 

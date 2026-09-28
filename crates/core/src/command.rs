@@ -4078,6 +4078,58 @@ impl Command for CreateSplineCmd {
     }
 }
 
+/// Substitui o conteúdo autoral de uma spline preservando seu identificador.
+///
+/// É usado por edições compostas (primitivas 2D e suavização em lote) para que
+/// uma ação do usuário produza exatamente uma entrada de Undo.
+#[derive(Debug, Clone)]
+pub struct UpdateSplineCmd {
+    pub spline: SplineResource,
+}
+
+impl Command for UpdateSplineCmd {
+    fn label(&self) -> &'static str {
+        "update spline"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let project = &state.project.project;
+        let current = project
+            .get_spline(self.spline.id)
+            .ok_or("Spline not found")?;
+        if current == &self.spline {
+            return Err("Spline data is unchanged");
+        }
+        self.spline
+            .validate_authoring()
+            .map_err(|_| "Spline data is invalid")?;
+        if let Some(profile) = project
+            .profiles
+            .iter()
+            .find(|profile| profile.spline_id == self.spline.id)
+        {
+            profile
+                .validate_authoring(&self.spline)
+                .map_err(|_| "Profile spline data is invalid")?;
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let spline = state
+            .project
+            .project
+            .get_spline_mut(self.spline.id)
+            .ok_or(SplineError::SplineNotFound(self.spline.id))?;
+        *spline = self.spline.clone();
+        Ok(())
+    }
+}
+
 /// Cria a curva planar e seu Profile persistente em uma única transação.
 #[derive(Debug, Clone)]
 pub struct CreateProfileCmd {
@@ -4117,6 +4169,51 @@ impl Command for CreateProfileCmd {
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         state.project.project.add_spline(self.spline.clone())?;
         state.project.project.add_profile(self.profile.clone())?;
+        Ok(())
+    }
+}
+
+/// Atualiza metadados e workplane de um Profile sem trocar sua spline.
+#[derive(Debug, Clone)]
+pub struct UpdateProfileCmd {
+    pub profile: ProfileResource,
+}
+
+impl Command for UpdateProfileCmd {
+    fn label(&self) -> &'static str {
+        "update profile"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let project = &state.project.project;
+        let current = project
+            .get_profile(self.profile.id)
+            .ok_or("Profile not found")?;
+        if current.spline_id != self.profile.spline_id {
+            return Err("Profile spline cannot be replaced");
+        }
+        if current == &self.profile {
+            return Err("Profile data is unchanged");
+        }
+        let spline = project
+            .get_spline(self.profile.spline_id)
+            .ok_or("Profile spline not found")?;
+        self.profile
+            .validate_authoring(spline)
+            .map_err(|_| "Profile data is invalid")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let profile = state
+            .project
+            .project
+            .get_profile_mut(self.profile.id)
+            .ok_or(ProfileError::ProfileNotFound(self.profile.id))?;
+        *profile = self.profile.clone();
         Ok(())
     }
 }

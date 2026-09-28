@@ -50,6 +50,7 @@ pub struct SectionStateModel {
     pub y: f32,
     pub pin_open: bool,
     pub pinned_asset: Option<String>,
+    pub open: bool,
 }
 
 /// Linha funcional da pilha Mirror/Symmetry no Inspector MODEL.

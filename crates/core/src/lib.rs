@@ -78,7 +78,8 @@ pub use command::{
     SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
     ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd,
     ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, UndoCmd,
-    UnwrapAutoCmd, UpdateSweepGeneratorCmd, UvPackIslandsCmd, UvProjectFromViewCmd, WeldCmd,
+    UnwrapAutoCmd, UpdateProfileCmd, UpdateSplineCmd, UpdateSweepGeneratorCmd, UvPackIslandsCmd,
+    UvProjectFromViewCmd, WeldCmd,
 };
 pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename};
 

@@ -455,6 +455,7 @@ fn floating_material_card_anchors_at_state_position() {
         y: 100.0,
         pin_open: false,
         pinned_asset: "".into(),
+        open: true,
     }]));
     shell.set_section_states(states.into());
 
@@ -495,6 +496,7 @@ fn floating_card_clamp_uses_real_card_size_on_all_four_borders() {
         y: 100.0,
         pin_open: false,
         pinned_asset: "".into(),
+        open: true,
     }]));
     shell.set_section_states(states.into());
 
@@ -570,6 +572,7 @@ fn dragging_floating_card_header_reports_clamped_move() {
         y: 100.0,
         pin_open: false,
         pinned_asset: "".into(),
+        open: true,
     }]));
     shell.set_section_states(states.into());
 

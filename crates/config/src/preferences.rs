@@ -47,6 +47,10 @@ impl InspectorSectionId {
 }
 
 /// Dock/float/pin state of one Inspector section, persisted per module.
+fn default_open() -> bool {
+    true
+}
+
 /// Estado de dock/flutuação/pin de uma seção do Inspector, persistido por módulo.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -69,6 +73,10 @@ pub struct SectionLayout {
     /// Guardado como texto porque `config` não pode depender de `project`/`uuid`
     /// (direção de dependência: o domínio detém a identidade, config só persiste).
     pub pinned_asset: Option<String>,
+    /// Whether the section is expanded/visible (`true`) or collapsed into a pill (`false`).
+    /// Se a seção está expandida/visível (`true`) ou recolhida em pílula (`false`).
+    #[serde(default = "default_open")]
+    pub open: bool,
 }
 
 impl Default for SectionLayout {
@@ -79,6 +87,7 @@ impl Default for SectionLayout {
             y: 56.0,
             pin_open: false,
             pinned_asset: None,
+            open: true,
         }
     }
 }
@@ -275,6 +284,7 @@ mod tests {
                     y: 200.0,
                     pin_open: true,
                     pinned_asset: None,
+                    open: true,
                 },
             )]),
         };
@@ -320,6 +330,7 @@ mod tests {
                 y: 120.0,
                 pin_open: true,
                 pinned_asset: Some("01234567-89ab-cdef-0123-456789abcdef".to_string()),
+                open: true,
             },
         );
         preferences.save_to_path(&path).unwrap();
@@ -350,6 +361,7 @@ mod tests {
                     y: 20.0 * index as f32,
                     pin_open: index % 2 == 1,
                     pinned_asset: None,
+                    open: true,
                 },
             );
         }

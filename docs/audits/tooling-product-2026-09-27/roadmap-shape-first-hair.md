@@ -489,7 +489,10 @@ feature pós-V1.
 
 `G3` está `PARTIALLY_COMPLIANT`: a fundação headless de Profile persistente,
 Sweep por `ProfileId + SplineId`, cache derivado, persistência e Bake
-transacional foi entregue. O gate não fecha enquanto o Profile transitório da
-UI Slint não for migrado para os IDs persistentes, o overlay/editor acessível
-não existir e os parâmetros restantes de S3 não forem implementados. Evidência:
-`g5-profile-sweep-remediation-2026-09-27.md`.
+transacional foi entregue. O delta visual subsequente também foi executado: o
+Profile Slint edita a spline persistente por IDs estáveis, preserva o recurso ao
+sair da ferramenta e consolida cada gesto em uma entrada de Undo. Permanecem a
+navegação acessível entre pontos/handles, generators vivos de Extrude/Revolve e
+os parâmetros restantes de S3. Evidências:
+`g5-profile-sweep-remediation-2026-09-27.md` e
+`g6-profile-visual-authoring-remediation-2026-09-27.md`.

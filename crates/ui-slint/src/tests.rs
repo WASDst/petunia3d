@@ -29,6 +29,24 @@ fn active_paint_stack(
         .expect("active paint stack")
 }
 
+fn active_profile_spline(
+    bridge: &SlintUiBridge<PlaceholderViewport>,
+) -> &petunia_core::SplineResource {
+    let profile_id = bridge.active_profile_id.expect("active profile id");
+    let profile = bridge
+        .state
+        .project
+        .project
+        .get_profile(profile_id)
+        .expect("active profile");
+    bridge
+        .state
+        .project
+        .project
+        .get_spline(profile.spline_id)
+        .expect("active profile spline")
+}
+
 #[test]
 fn view_model_uses_domain_context_without_ui_dependencies() {
     let state = AppState::default();
@@ -2135,18 +2153,24 @@ fn profile_tool_draws_closes_and_generates_transactionally() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
     for point in [[0.35, 0.35], [0.65, 0.35], [0.65, 0.65], [0.35, 0.65]] {
-        petunia_module_model::draw_profile::profile_add_point(
-            &mut bridge.state,
-            point[0],
-            point[1],
-        );
+        bridge.select_viewport_ext(point[0], point[1], false, false);
+        bridge.profile_pointer_up();
     }
     assert!(bridge.close_profile());
-    assert!(bridge.state.profile.closed);
+    assert!(active_profile_spline(&bridge).closed);
+    let profile_id = bridge.active_profile_id.expect("profile id");
     assert!(bridge.generate_profile_extrude());
     assert_eq!(bridge.state.session.tools.active_tool, "select");
     assert!(bridge.state.project.active_mesh().is_some());
-    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert!(
+        bridge
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .is_some()
+    );
+    assert_eq!(bridge.state.project.undo.depth(), (6, 0));
 }
 
 #[test]
@@ -5040,8 +5064,8 @@ fn profile_2d_rectangle_and_circle_primitives() {
         width: 3.0,
         height: 2.0,
     });
-    assert_eq!(bridge.state.session.profile.points.len(), 4);
-    assert!(bridge.state.session.profile.closed);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 4);
+    assert!(active_profile_spline(&bridge).closed);
 
     // Generate mesh from rectangle profile
     bridge.generate_profile_extrude();
@@ -5053,8 +5077,8 @@ fn profile_2d_rectangle_and_circle_primitives() {
         radius: 1.5,
         segments: 12,
     });
-    assert_eq!(bridge.state.session.profile.points.len(), 12);
-    assert!(bridge.state.session.profile.closed);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 12);
+    assert!(active_profile_spline(&bridge).closed);
 }
 
 #[test]
@@ -6262,7 +6286,7 @@ fn test_merge_down_paint_layer() {
 fn test_profile_revolve_custom_angle() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::SetActiveTool("draw_profile".to_string()));
-    bridge.state.profile.points = vec![[0.0, 0.0], [1.0, 0.5], [0.5, 1.0]];
+    bridge.add_profile_rectangle(1.0, 2.0);
     bridge.state.profile.revolve_angle = 180.0;
     bridge.state.profile.revolve_segments = 8;
 
@@ -6289,7 +6313,17 @@ fn test_profile_bezier_smoothing_and_wall_thickness() {
 
     // Ajusta espessura de parede (perfil oco)
     assert!(bridge.set_profile_wall_thickness(0.5));
-    assert_eq!(bridge.state.profile.wall_thickness, 0.5);
+    let profile_id = bridge.active_profile_id.expect("profile id");
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .unwrap()
+            .wall_thickness,
+        0.5
+    );
 
     // Ativa suavização Bézier
     assert!(bridge.profile_smooth_curves());
@@ -6297,7 +6331,7 @@ fn test_profile_bezier_smoothing_and_wall_thickness() {
     assert!(vm_smoothed.profile_has_curves);
 
     // Pontos efetivos devem conter laço externo e laço interno
-    let effective = bridge.state.profile.effective_points();
+    let effective = bridge.active_profile_state().unwrap().effective_points();
     assert!(effective.len() > 8);
 
     // Gera extrusão com sucesso
@@ -7318,16 +7352,9 @@ fn test_profile_interactive_volume_flow() {
         .collect();
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
 
-    // Draw a square profile
-    for pt in [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]] {
-        bridge.state.profile.points.push(pt);
-        bridge
-            .state
-            .profile
-            .nodes
-            .push(petunia_mesh::curve::BezierNode::new(pt));
-    }
-    bridge.state.profile.closed = true;
+    // Draw a square profile as persistent Profile + Spline resources.
+    assert!(bridge.add_profile_rectangle(2.0, 2.0));
+    let profile_id = bridge.active_profile_id.expect("profile id");
 
     // 1. Enter interactive Extrude volume preview
     assert!(bridge.enter_profile_volume("extrude"));
@@ -7364,8 +7391,8 @@ fn test_profile_interactive_volume_flow() {
             .iter()
             .all(|a| a.id != preview_id)
     );
-    assert_eq!(bridge.state.profile.points.len(), 4);
-    assert!(bridge.state.profile.closed);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 4);
+    assert!(active_profile_spline(&bridge).closed);
     assert_eq!(
         bridge
             .state
@@ -7376,7 +7403,7 @@ fn test_profile_interactive_volume_flow() {
             .collect::<Vec<_>>(),
         initial_asset_ids
     );
-    assert_eq!(bridge.state.project.undo.depth(), (0, 0));
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
 
     // 4. Enter Revolve volume preview
     assert!(bridge.enter_profile_volume("revolve"));
@@ -7392,10 +7419,18 @@ fn test_profile_interactive_volume_flow() {
     assert_eq!(bridge.state.session.tools.active_tool, "select");
     assert!(bridge.profile_volume_mode.is_none());
     assert!(bridge.state.profile.points.is_empty());
+    assert!(
+        bridge
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .is_some()
+    );
     let active = bridge.state.project.active().expect("active profile asset");
     assert_eq!(active.name, "Profile");
     let committed_id = active.id;
-    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert_eq!(bridge.state.project.undo.depth(), (2, 0));
     assert!(bridge.state.undo());
     assert_eq!(
         bridge
@@ -7406,6 +7441,14 @@ fn test_profile_interactive_volume_flow() {
             .map(|asset| asset.id)
             .collect::<Vec<_>>(),
         initial_asset_ids
+    );
+    assert!(
+        bridge
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .is_some()
     );
     assert!(bridge.state.redo());
     assert!(
@@ -7426,15 +7469,16 @@ fn test_profile_bezier_handle_interactive_dragging() {
 
     // Click at center
     bridge.select_viewport_ext(0.5, 0.5, false, false);
-    assert_eq!(bridge.state.profile.nodes.len(), 1);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 1);
+    let point_id = active_profile_spline(&bridge).points[0].id;
 
     // Drag handle symmetrically (0.6, 0.5)
     let updated = bridge.profile_update_drag_handle(0.6, 0.5, false);
     assert!(updated);
-    let node = &bridge.state.profile.nodes[0];
-    assert!(node.handle_out.is_some());
-    assert!(node.handle_in.is_some());
-    assert_eq!(node.kind, petunia_mesh::curve::BezierNodeKind::Symmetric);
+    let point = active_profile_spline(&bridge).point(point_id).unwrap();
+    assert_ne!(point.handle_out, [0.0; 3]);
+    assert_ne!(point.handle_in, [0.0; 3]);
+    assert_eq!(point.handle_mode, petunia_core::SplineHandleMode::Mirrored);
 
     // Preview commands should contain tangent handles
     let cmds = bridge.profile_preview_commands();
@@ -7443,8 +7487,71 @@ fn test_profile_bezier_handle_interactive_dragging() {
     // Drag handle with Alt (break tangent)
     let updated_sharp = bridge.profile_update_drag_handle(0.65, 0.55, true);
     assert!(updated_sharp);
-    let sharp_node = &bridge.state.profile.nodes[0];
-    assert_eq!(sharp_node.kind, petunia_mesh::curve::BezierNodeKind::Sharp);
+    let point = active_profile_spline(&bridge).point(point_id).unwrap();
+    assert_eq!(point.handle_mode, petunia_core::SplineHandleMode::Broken);
+    bridge.profile_pointer_up();
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+}
+
+#[test]
+fn profile_authoring_persists_and_insert_drag_is_one_undo_entry() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+
+    bridge.select_viewport_ext(0.5, 0.5, false, false);
+    assert!(bridge.profile_update_drag_handle(0.6, 0.5, false));
+    bridge.profile_pointer_up();
+    let profile_id = bridge.active_profile_id.expect("profile id");
+    let spline_id = bridge
+        .state
+        .project
+        .project
+        .get_profile(profile_id)
+        .unwrap()
+        .spline_id;
+    let point_id = bridge
+        .state
+        .project
+        .project
+        .get_spline(spline_id)
+        .unwrap()
+        .points[0]
+        .id;
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+    assert!(
+        bridge
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .is_some()
+    );
+    assert!(bridge.state.project.project.get_spline(spline_id).is_some());
+    assert!(bridge.active_profile_id.is_none());
+
+    assert!(bridge.state.undo());
+    assert!(
+        bridge
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .is_none()
+    );
+    assert!(bridge.state.redo());
+    let point = bridge
+        .state
+        .project
+        .project
+        .get_spline(spline_id)
+        .unwrap()
+        .point(point_id)
+        .unwrap();
+    assert_eq!(point.handle_mode, petunia_core::SplineHandleMode::Mirrored);
+    assert_ne!(point.handle_out, [0.0; 3]);
 }
 
 #[test]
@@ -7712,50 +7819,63 @@ fn test_profile_point_and_handle_interactive_manipulation() {
 
     // Create a 2D Rectangle (starts closed with 4 nodes)
     bridge.add_profile_rectangle(2.0, 2.0);
-    assert_eq!(bridge.state.profile.nodes.len(), 4);
-    assert!(bridge.state.profile.closed);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 4);
+    assert!(active_profile_spline(&bridge).closed);
+    let point_id = active_profile_spline(&bridge).points[0].id;
 
     // Project anchor 0 to screen
-    let p0 = bridge.state.profile.nodes[0].point;
+    let profile_state = bridge.active_profile_state().unwrap();
+    let p0 = profile_state.nodes[0].point;
     let matrix = bridge.state.session.camera.view_proj();
-    let pt3d = bridge.state.profile.to_3d_point(p0);
+    let pt3d = profile_state.to_3d_point(p0);
     let clip = matrix * pt3d.extend(1.0);
     let scr_x = (clip.x / clip.w * 0.5 + 0.5) * 800.0;
     let scr_y = (0.5 - clip.y / clip.w * 0.5) * 600.0;
 
     // 1. Hit test on anchor 0
     let hit = bridge.hit_test_profile(scr_x, scr_y);
-    assert_eq!(hit, Some(ProfileHitTarget::Anchor(0)));
+    assert_eq!(hit, Some(ProfileHitTarget::Anchor(point_id)));
 
     // 2. Pointer down on anchor 0
     assert!(bridge.profile_pointer_down(scr_x, scr_y, false));
-    assert_eq!(bridge.profile_selected_node, Some(0));
+    assert_eq!(bridge.profile_selected_point, Some(point_id));
     assert_eq!(
         bridge.profile_drag_target,
-        Some(ProfileHitTarget::Anchor(0))
+        Some(ProfileHitTarget::Anchor(point_id))
     );
 
     // 3. Pointer move to drag anchor 0
-    let old_pt = bridge.state.profile.nodes[0].point;
+    let old_pt = active_profile_spline(&bridge)
+        .point(point_id)
+        .unwrap()
+        .position;
     assert!(bridge.profile_pointer_move(scr_x + 30.0, scr_y + 30.0, false));
-    let new_pt = bridge.state.profile.nodes[0].point;
+    let new_pt = active_profile_spline(&bridge)
+        .point(point_id)
+        .unwrap()
+        .position;
     assert_ne!(old_pt, new_pt);
-    assert_eq!(bridge.state.profile.points[0], new_pt);
 
     // 4. Pointer up ends drag
     bridge.profile_pointer_up();
     assert_eq!(bridge.profile_drag_target, None);
-    assert_eq!(bridge.profile_selected_node, Some(0));
+    assert_eq!(bridge.profile_selected_point, Some(point_id));
+    assert_eq!(bridge.state.project.undo.depth(), (2, 0));
 
     // 5. Alt-drag anchor to pull out handles
     assert!(bridge.profile_pointer_down(scr_x + 30.0, scr_y + 30.0, true));
     assert_eq!(
         bridge.profile_drag_target,
-        Some(ProfileHitTarget::HandleOut(0))
+        Some(ProfileHitTarget::HandleOut(point_id))
     );
     assert!(bridge.profile_pointer_move(scr_x + 60.0, scr_y + 40.0, true));
-    let node0 = &bridge.state.profile.nodes[0];
-    assert!(node0.handle_out.is_some());
+    assert_ne!(
+        active_profile_spline(&bridge)
+            .point(point_id)
+            .unwrap()
+            .handle_out,
+        [0.0; 3]
+    );
     bridge.profile_pointer_up();
 
     // 6. Preview commands render anchor boxes and handle markers
@@ -7765,8 +7885,8 @@ fn test_profile_point_and_handle_interactive_manipulation() {
 
     // 7. Delete selected node with delete key / command
     let _ = bridge.execute_core_command("model.delete");
-    assert_eq!(bridge.state.profile.nodes.len(), 3);
-    assert_eq!(bridge.profile_selected_node, None);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 3);
+    assert_eq!(bridge.profile_selected_point, None);
 }
 
 #[test]
@@ -7776,7 +7896,7 @@ fn test_profile_extrude_card_depth_and_generate() {
 
     // Add 2D Circle
     bridge.add_profile_circle(1.0, 16);
-    assert!(bridge.state.profile.closed);
+    assert!(active_profile_spline(&bridge).closed);
     assert_eq!(bridge.profile_volume_mode, None);
 
     // Changing depth in the card automatically enters interactive extrude mode with live preview
@@ -7809,7 +7929,7 @@ fn test_profile_shortcut_and_shelf_extrude() {
 
     // Add 2D rectangle
     bridge.add_profile_rectangle(2.0, 1.5);
-    assert!(bridge.state.profile.closed);
+    assert!(active_profile_spline(&bridge).closed);
     assert_eq!(bridge.profile_volume_mode, None);
 
     // Triggering "model.extrude" via shortcut or shelf button enters extrude preview
@@ -8139,4 +8259,58 @@ fn test_slider_and_preference_responsiveness() {
     assert!((bridge.state.project.refs[0].opacity - 0.65).abs() < 1e-4);
     assert!(bridge.set_reference_param("front", "size", 7.5));
     assert!((bridge.state.project.refs[0].size - 7.5).abs() < 1e-4);
+}
+
+#[test]
+fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
+    use petunia_config::InspectorSectionId;
+
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // Verify default states: all sections open, docked, not pinned
+    let parts_idx = crate::section_layout::section_index(InspectorSectionId::Parts);
+    let transform_idx = crate::section_layout::section_index(InspectorSectionId::Transform);
+    assert!(bridge.section_layouts[parts_idx].open);
+    assert!(bridge.section_layouts[parts_idx].docked);
+    assert!(!bridge.section_layouts[parts_idx].pin_open);
+
+    // 1. Float the Parts section
+    bridge.set_section_docked(InspectorSectionId::Parts, false);
+    bridge.move_section_float(InspectorSectionId::Parts, 250.0, 180.0);
+    bridge.commit_section_float();
+    assert!(!bridge.section_layouts[parts_idx].docked);
+    assert_eq!(bridge.section_layouts[parts_idx].x, 250.0);
+    assert_eq!(bridge.section_layouts[parts_idx].y, 180.0);
+
+    // 2. Pin the floating section
+    bridge.set_section_pin_open(InspectorSectionId::Parts, true);
+    assert!(bridge.section_layouts[parts_idx].pin_open);
+
+    // 3. Close the floating section to pill
+    bridge.set_section_open(InspectorSectionId::Parts, false);
+    assert!(!bridge.section_layouts[parts_idx].open);
+
+    // In view model, open reflects closed state
+    let vm = bridge.view_model();
+    assert!(!vm.section_states[parts_idx].open);
+    assert!(!vm.section_states[parts_idx].docked);
+
+    // 4. Toggle open via pill click: restores open state
+    assert!(bridge.toggle_section_open(InspectorSectionId::Parts));
+    assert!(bridge.section_layouts[parts_idx].open);
+    // Pin remains preserved
+    assert!(bridge.section_layouts[parts_idx].pin_open);
+
+    // 5. Test Transform section docking and pill toggling
+    bridge.set_section_open(InspectorSectionId::Transform, false);
+    assert!(!bridge.section_layouts[transform_idx].open);
+    assert!(bridge.section_layouts[transform_idx].docked);
+
+    // Toggling re-opens
+    assert!(bridge.toggle_section_open(InspectorSectionId::Transform));
+    assert!(bridge.section_layouts[transform_idx].open);
+
+    // Re-docking Parts section
+    bridge.set_section_docked(InspectorSectionId::Parts, true);
+    assert!(bridge.section_layouts[parts_idx].docked);
 }

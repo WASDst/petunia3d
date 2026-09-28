@@ -15,7 +15,8 @@ use petunia_core::command::{
     RotateSplinePointAttachmentCmd, SelectAllCmd, SelectLinkedCmd, SetAssetCollectionCmd,
     SetDecalTransformCmd, SetSplineClosedCmd, SetSplineHandlesCmd, SlideSplinePointAttachmentCmd,
     SubdivideSelectionCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
-    ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UpdateSweepGeneratorCmd, UvRelaxCmd, UvStitchCmd,
+    ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UpdateProfileCmd, UpdateSplineCmd,
+    UpdateSweepGeneratorCmd, UvRelaxCmd, UvStitchCmd,
 };
 use petunia_core::state::{ASSET_NAME_MAX_LEN, AppState, AssetRenameError, DirtyReason, EditMode};
 use petunia_core::{
@@ -573,6 +574,76 @@ fn persistent_profile_sweep_and_bake_are_transactional() {
             .project
             .get_path_generator(generator_id)
             .is_none()
+    );
+}
+
+#[test]
+fn profile_draft_and_batch_updates_are_single_entry_roundtrips() {
+    let mut state = AppState::default();
+    let mut spline = SplineResource::new("Draft curve", SplineInterpolation::CubicBezier);
+    spline.add_point(SplinePoint::new([0.0, 0.0, 0.0])).unwrap();
+    let spline_id = spline.id;
+    let profile = ProfileResource::new("Draft", spline_id, ProfileWorkplane::default());
+    let profile_id = profile.id;
+    state
+        .dispatch(&CreateProfileCmd { spline, profile })
+        .unwrap();
+    assert_eq!(state.project.undo.depth(), (1, 0));
+
+    let mut updated_spline = state.project.project.get_spline(spline_id).unwrap().clone();
+    updated_spline
+        .add_point(SplinePoint::new([1.0, 0.0, 0.0]))
+        .unwrap();
+    state
+        .dispatch(&UpdateSplineCmd {
+            spline: updated_spline,
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth(), (2, 0));
+
+    let mut updated_profile = state
+        .project
+        .project
+        .get_profile(profile_id)
+        .unwrap()
+        .clone();
+    updated_profile.wall_thickness = 0.25;
+    updated_profile.revision = updated_profile.revision.wrapping_add(1);
+    state
+        .dispatch(&UpdateProfileCmd {
+            profile: updated_profile,
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth(), (3, 0));
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_profile(profile_id)
+            .unwrap()
+            .wall_thickness,
+        0.25
+    );
+
+    assert!(state.undo());
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_profile(profile_id)
+            .unwrap()
+            .wall_thickness,
+        0.0
+    );
+    assert!(state.redo());
+    assert_eq!(
+        state
+            .project
+            .project
+            .get_profile(profile_id)
+            .unwrap()
+            .wall_thickness,
+        0.25
     );
 }
 

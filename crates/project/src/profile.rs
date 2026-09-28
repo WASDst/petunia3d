@@ -115,12 +115,6 @@ impl ProfileResource {
         spline
             .validate_authoring()
             .map_err(|_| ProfileError::InvalidSpline)?;
-        if !spline.closed {
-            return Err(ProfileError::SplineMustBeClosed);
-        }
-        if spline.points.len() < 3 {
-            return Err(ProfileError::NeedsThreePoints);
-        }
         self.workplane.try_normalized()?;
         if !self.wall_thickness.is_finite() || self.wall_thickness < 0.0 {
             return Err(ProfileError::InvalidWallThickness);
@@ -242,7 +236,11 @@ mod tests {
     }
 
     #[test]
-    fn profile_requires_a_closed_planar_unattached_spline() {
+    fn profile_accepts_open_authoring_drafts_but_requires_planar_unattached_points() {
+        let draft = SplineResource::new("Draft curve", crate::SplineInterpolation::CubicBezier);
+        let draft_profile = ProfileResource::new("Draft", draft.id, ProfileWorkplane::default());
+        assert!(draft_profile.validate_authoring(&draft).is_ok());
+
         let mut spline = SplineResource::from_polyline(
             "Profile curve",
             &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],

@@ -300,6 +300,12 @@ fn validate_dependencies(
     }
     generator.sweep_parameters().validate()?;
     profile.validate_authoring(profile_spline)?;
+    if !profile_spline.closed {
+        return Err(PathGeneratorError::ProfileMustBeClosed);
+    }
+    if profile_spline.points.len() < 3 {
+        return Err(PathGeneratorError::ProfileNeedsThreePoints);
+    }
     if profile.wall_thickness > 0.0 {
         return Err(PathGeneratorError::ProfileThicknessUnsupported);
     }
@@ -457,6 +463,8 @@ pub enum PathGeneratorError {
     InvalidVertexBudget,
     #[error("profile needs at least three points")]
     ProfileNeedsThreePoints,
+    #[error("profile must be closed")]
+    ProfileMustBeClosed,
     #[error("path needs at least two points")]
     PathNeedsTwoPoints,
     #[error("hollow profiles are not supported by Sweep yet")]
@@ -626,6 +634,23 @@ mod tests {
             .evaluate(&project, generator_id, PathGeneratorQuality::Final)
             .unwrap();
         assert_eq!((cache.hits(), cache.misses()), (1, 2));
+    }
+
+    #[test]
+    fn open_profile_draft_is_valid_authoring_but_not_a_sweep_dependency() {
+        let (mut project, generator_id) = project_with_sweep();
+        let profile_id = project.get_path_generator(generator_id).unwrap().profile_id;
+        let spline_id = project.get_profile(profile_id).unwrap().spline_id;
+        project
+            .get_spline_mut(spline_id)
+            .unwrap()
+            .set_closed(false)
+            .unwrap();
+
+        let error = PathGeneratorEvaluationCache::default()
+            .evaluate(&project, generator_id, PathGeneratorQuality::Final)
+            .unwrap_err();
+        assert_eq!(error, PathGeneratorError::ProfileMustBeClosed);
     }
 
     #[test]

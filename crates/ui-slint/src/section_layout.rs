@@ -52,6 +52,18 @@ pub fn set_docked(layouts: &mut SectionLayouts, id: InspectorSectionId, docked: 
     layouts[section_index(id)].docked = docked;
 }
 
+/// Abre (`true`) ou fecha (`false`) uma seção (ex.: recolhe na régua de pílulas).
+pub fn set_open(layouts: &mut SectionLayouts, id: InspectorSectionId, open: bool) {
+    layouts[section_index(id)].open = open;
+}
+
+/// Alterna estado aberto/fechado de uma seção.
+pub fn toggle_open(layouts: &mut SectionLayouts, id: InspectorSectionId) -> bool {
+    let idx = section_index(id);
+    layouts[idx].open = !layouts[idx].open;
+    layouts[idx].open
+}
+
 /// Move a floating card; coordinates go through [`SectionLayout::sanitized`].
 /// Move um card flutuante; coordenadas passam por [`SectionLayout::sanitized`].
 pub fn move_floating(layouts: &mut SectionLayouts, id: InspectorSectionId, x: f32, y: f32) {
@@ -155,6 +167,7 @@ mod tests {
                 y: 100.0,
                 pin_open: false,
                 pinned_asset: None,
+                open: true,
             },
         );
         let layouts = restore_section_layouts(&preferences);

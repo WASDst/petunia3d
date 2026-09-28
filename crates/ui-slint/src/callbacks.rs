@@ -927,17 +927,36 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             y: state.y,
             pin_open: state.pin_open,
             pinned_asset: state.pinned_asset.as_deref().unwrap_or_default().into(),
+            open: state.open,
         })
         .collect();
     window.set_section_states(std::rc::Rc::new(slint::VecModel::from(section_states)).into());
     for state in &vm.section_states {
         match state.id.as_str() {
-            "parts" => window.set_parts_docked(state.docked),
-            "transform" => window.set_transform_docked(state.docked),
-            "material" => window.set_material_docked(state.docked),
-            "object" => window.set_object_docked(state.docked),
-            "modifiers" => window.set_modifiers_docked(state.docked),
-            "quick_actions" => window.set_quick_actions_docked(state.docked),
+            "parts" => {
+                window.set_parts_docked(state.docked);
+                window.set_model_parts_open(state.open);
+            }
+            "transform" => {
+                window.set_transform_docked(state.docked);
+                window.set_model_transform_open(state.open);
+            }
+            "material" => {
+                window.set_material_docked(state.docked);
+                window.set_model_material_open(state.open);
+            }
+            "object" => {
+                window.set_object_docked(state.docked);
+                window.set_model_object_open(state.open);
+            }
+            "modifiers" => {
+                window.set_modifiers_docked(state.docked);
+                window.set_model_modifiers_open(state.open);
+            }
+            "quick_actions" => {
+                window.set_quick_actions_docked(state.docked);
+                window.set_quick_actions_section_open(state.open);
+            }
             _ => {}
         }
     }
@@ -4567,6 +4586,71 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
             }
+        }
+    });
+
+    let section_close_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_section_close_requested(move |id| {
+        if let (Ok(mut bridge), Some(window)) = (section_close_bridge.lock(), window_weak.upgrade())
+        {
+            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
+                bridge.set_section_open(section, false);
+            }
+            sync_window_properties(&window, &bridge.view_model());
+        }
+    });
+
+    let section_toggle_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_section_open_toggled(move |id| {
+        if let (Ok(mut bridge), Some(window)) =
+            (section_toggle_bridge.lock(), window_weak.upgrade())
+        {
+            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
+                bridge.toggle_section_open(section);
+            }
+            sync_window_properties(&window, &bridge.view_model());
+        }
+    });
+
+    let section_pill_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_section_pill_clicked(move |id| {
+        if let (Ok(mut bridge), Some(window)) = (section_pill_bridge.lock(), window_weak.upgrade())
+        {
+            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
+                let idx = crate::section_layout::section_index(section);
+                let current_open = bridge.section_layouts[idx].open;
+                if current_open {
+                    // Toggle para fechar (recolhe na pílula)
+                    bridge.set_section_open(section, false);
+                } else {
+                    // Abre o módulo
+                    bridge.set_section_open(section, true);
+                    let is_docked = bridge.section_layouts[idx].docked;
+                    let is_collapsed = window.get_inspector_collapsed();
+                    // Se estiver em modo flutuante ou se a barra lateral estiver colapsada,
+                    // abre flutuando na viewport ao lado da pílula se coordenadas forem padrão
+                    if !is_docked || is_collapsed {
+                        if is_docked {
+                            bridge.set_section_docked(section, false);
+                        }
+                        let win_w = window.get_window_width();
+                        let win_h = window.get_window_height();
+                        let insp_w = window.get_inspector_width();
+                        let card_x = (win_w - insp_w - 70.0).max(10.0);
+                        let card_y = (60.0 + 44.0 * idx as f32).min((win_h - 250.0).max(10.0));
+                        if bridge.section_layouts[idx].x <= 15.0
+                            && bridge.section_layouts[idx].y <= 60.0
+                        {
+                            bridge.move_section_float(section, card_x, card_y);
+                            bridge.commit_section_float();
+                        }
+                    }
+                }
+            }
+            sync_window_properties(&window, &bridge.view_model());
         }
     });
 

@@ -28,7 +28,7 @@ use petunia_config::keybinds::Mods2;
 use petunia_core::PivotPoint;
 use petunia_core::PrimitiveDescriptorExt;
 use petunia_core::{AppState, Camera, SelectionDomain, Workspace};
-use petunia_project::{AlphaMode, Project, ShaderProfile};
+use petunia_project::{AlphaMode, Project, ProjectChanges, ShaderProfile};
 use slint::ComponentHandle;
 
 slint::include_modules!();
@@ -597,11 +597,12 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub micro_inspector_pos: [f32; 2],
     pub paint_show_uv_overlay: bool,
     pub uv_show_texture: bool,
+    pub active_profile_id: Option<uuid::Uuid>,
     pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
-    pub profile_drag_anchor: Option<[f32; 2]>,
     pub profile_drag_target: Option<ProfileHitTarget>,
-    pub profile_selected_node: Option<usize>,
+    pub profile_selected_point: Option<uuid::Uuid>,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
+    profile_edit_gesture: Option<ProfileEditGesture>,
     profile_volume_original: Option<Project>,
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
@@ -618,9 +619,17 @@ pub enum GeometryClipboard {
 /// Alvo de hit-test para manipulação interativa de nós e alças do perfil 2D.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProfileHitTarget {
-    Anchor(usize),
-    HandleOut(usize),
-    HandleIn(usize),
+    Anchor(uuid::Uuid),
+    HandleOut(uuid::Uuid),
+    HandleIn(uuid::Uuid),
+}
+
+#[derive(Debug, Clone)]
+struct ProfileEditGesture {
+    spline_id: uuid::Uuid,
+    point_id: uuid::Uuid,
+    point_before: Option<petunia_core::SplinePoint>,
+    revision_before: u64,
 }
 
 /// Menu de contexto do Outliner aberto sobre uma linha do painel Parts,
@@ -802,11 +811,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             micro_inspector_pos: [512.0, 384.0],
             paint_show_uv_overlay: false,
             uv_show_texture: true,
+            active_profile_id: None,
             profile_volume_mode: None,
-            profile_drag_anchor: None,
             profile_drag_target: None,
-            profile_selected_node: None,
+            profile_selected_point: None,
             profile_preview_asset_id: None,
+            profile_edit_gesture: None,
             profile_volume_original: None,
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
@@ -1089,11 +1099,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection = val;
             }
             UiIntent::SetActiveTool(tool) => {
-                if self.state.session.tools.active_tool == "draw_profile"
-                    && tool != "draw_profile"
-                    && !self.state.profile.points.is_empty()
+                if self.state.session.tools.active_tool == "draw_profile" && tool != "draw_profile"
                 {
+                    self.profile_pointer_up();
                     self.state.profile.clear();
+                    self.active_profile_id = None;
+                    self.profile_selected_point = None;
+                    self.profile_drag_target = None;
+                    self.profile_edit_gesture = None;
                 }
                 self.state.session.tools.active_tool = tool.clone();
                 self.state.set_status(format!("Ferramenta ativa: {tool}"));
@@ -1117,6 +1130,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         }
                     }
                     "draw_profile" => {
+                        self.active_profile_id = None;
+                        self.profile_selected_point = None;
+                        self.profile_drag_target = None;
+                        self.profile_edit_gesture = None;
                         petunia_module_model::profile_capture_auto(&mut self.state);
                         petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                         let wp = petunia_module_model::profile_workplane_label(&self.state);
@@ -1426,11 +1443,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.mark_dirty();
             }
             UiIntent::ProfileSetWorkplaneGround => {
+                self.profile_pointer_up();
+                self.cancel_profile_volume();
+                self.active_profile_id = None;
+                self.profile_selected_point = None;
                 petunia_module_model::profile_capture_ground(&mut self.state);
                 self.state.mark_dirty();
                 self.state.set_status("Profile Workplane: Ground (XZ)");
             }
             UiIntent::ProfileSetWorkplaneFace => {
+                self.profile_pointer_up();
+                self.cancel_profile_volume();
+                self.active_profile_id = None;
+                self.profile_selected_point = None;
                 if petunia_module_model::profile_capture_face(&mut self.state) {
                     petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                     self.state.set_status("Profile Workplane: Active Face");
@@ -1440,6 +1465,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.mark_dirty();
             }
             UiIntent::ProfileSetWorkplaneView => {
+                self.profile_pointer_up();
+                self.cancel_profile_volume();
+                self.active_profile_id = None;
+                self.profile_selected_point = None;
                 petunia_module_model::profile_capture_view(&mut self.state);
                 self.state.mark_dirty();
                 self.state.set_status("Profile Workplane: Camera View");
@@ -1860,11 +1889,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "draw_profile" {
             vm.operation_hud_active = true;
             vm.operation_hud_title = "Profile".to_string();
-            vm.operation_hud_lines = vec![format!("{} point(s)", self.state.profile.points.len())];
-            vm.operation_hud_hint = if self.state.profile.closed {
-                "Generate Volume or Revolve · Esc cancels".to_string()
+            vm.operation_hud_lines =
+                vec![format!("{} point(s)", self.active_profile_point_count())];
+            vm.operation_hud_hint = if self.active_profile_closed() {
+                "Generate Volume or Revolve · Esc finishes editing".to_string()
             } else {
-                "Click to add points · Click first point to close · Esc cancels".to_string()
+                "Click to add points · Click first point to close · Esc finishes editing"
+                    .to_string()
             };
             vm.context_hint = vm.operation_hud_hint.clone();
             return;
@@ -2985,8 +3016,269 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    fn active_profile_resources(
+        &self,
+    ) -> Option<(
+        &petunia_core::ProfileResource,
+        &petunia_core::SplineResource,
+    )> {
+        let profile = self
+            .active_profile_id
+            .and_then(|id| self.state.project.project.get_profile(id))?;
+        let spline = self.state.project.project.get_spline(profile.spline_id)?;
+        Some((profile, spline))
+    }
+
+    fn active_profile_state(&self) -> Option<petunia_core::ProfileState> {
+        let (profile, spline) = self.active_profile_resources()?;
+        let mut state = self.state.profile.clone();
+        state.points = spline
+            .points
+            .iter()
+            .map(|point| [point.position[0] as f32, point.position[1] as f32])
+            .collect();
+        state.nodes = spline
+            .points
+            .iter()
+            .map(|point| {
+                let handle_in = [point.handle_in[0] as f32, point.handle_in[1] as f32];
+                let handle_out = [point.handle_out[0] as f32, point.handle_out[1] as f32];
+                petunia_mesh::curve::BezierNode {
+                    point: [point.position[0] as f32, point.position[1] as f32],
+                    handle_in: (handle_in != [0.0; 2]).then_some(handle_in),
+                    handle_out: (handle_out != [0.0; 2]).then_some(handle_out),
+                    kind: match point.handle_mode {
+                        petunia_core::SplineHandleMode::Broken => {
+                            petunia_mesh::curve::BezierNodeKind::Sharp
+                        }
+                        petunia_core::SplineHandleMode::Aligned => {
+                            petunia_mesh::curve::BezierNodeKind::Smooth
+                        }
+                        petunia_core::SplineHandleMode::Mirrored => {
+                            petunia_mesh::curve::BezierNodeKind::Symmetric
+                        }
+                    },
+                }
+            })
+            .collect();
+        state.origin = profile.workplane.origin.map(|value| value as f32);
+        state.right = profile.workplane.right.map(|value| value as f32);
+        state.up = profile.workplane.up.map(|value| value as f32);
+        state.normal = profile.workplane.normal.map(|value| value as f32);
+        state.closed = spline.closed;
+        state.wall_thickness = profile.wall_thickness as f32;
+        Some(state)
+    }
+
+    fn active_profile_point_count(&self) -> usize {
+        self.active_profile_resources()
+            .map_or(0, |(_, spline)| spline.points.len())
+    }
+
+    fn active_profile_closed(&self) -> bool {
+        self.active_profile_resources()
+            .is_some_and(|(_, spline)| spline.closed)
+    }
+
+    fn active_profile_has_curves(&self) -> bool {
+        self.active_profile_resources().is_some_and(|(_, spline)| {
+            spline.interpolation == petunia_core::SplineInterpolation::CubicBezier
+                && spline
+                    .points
+                    .iter()
+                    .any(|point| point.handle_in != [0.0; 3] || point.handle_out != [0.0; 3])
+        })
+    }
+
+    fn draft_profile_workplane(&self) -> petunia_core::ProfileWorkplane {
+        petunia_core::ProfileWorkplane {
+            origin: self.state.profile.origin.map(f64::from),
+            right: self.state.profile.right.map(f64::from),
+            up: self.state.profile.up.map(f64::from),
+            normal: self.state.profile.normal.map(f64::from),
+        }
+        .try_normalized()
+        .unwrap_or_default()
+    }
+
+    fn profile_screen_to_plane(&self, ndc_x: f32, ndc_y: f32) -> Option<[f64; 2]> {
+        let workplane = self.active_profile_resources().map_or_else(
+            || self.draft_profile_workplane(),
+            |(profile, _)| profile.workplane,
+        );
+        let (ray_origin, ray_direction) = self.state.session.camera.ray(ndc_x, ndc_y);
+        let normal = glam::Vec3::from_array(workplane.normal.map(|value| value as f32));
+        let denominator = ray_direction.dot(normal);
+        if denominator.abs() < 1.0e-6 {
+            return None;
+        }
+        let origin = glam::Vec3::from_array(workplane.origin.map(|value| value as f32));
+        let distance = (origin - ray_origin).dot(normal) / denominator;
+        if distance < 0.0 && self.state.session.camera.proj == petunia_core::Projection::Perspective
+        {
+            return None;
+        }
+        let offset = ray_origin + ray_direction * distance - origin;
+        let right = glam::Vec3::from_array(workplane.right.map(|value| value as f32));
+        let up = glam::Vec3::from_array(workplane.up.map(|value| value as f32));
+        let mut point = [f64::from(offset.dot(right)), f64::from(offset.dot(up))];
+        if self.state.profile.snap {
+            point[0] = (point[0] * 4.0).round() / 4.0;
+            point[1] = (point[1] * 4.0).round() / 4.0;
+        }
+        Some(point)
+    }
+
+    fn update_profile_handle(
+        &mut self,
+        point_id: uuid::Uuid,
+        incoming: bool,
+        cursor: [f64; 2],
+        break_tangent: bool,
+        new_node_drag: bool,
+    ) -> bool {
+        let Some(spline_id) = self
+            .profile_edit_gesture
+            .as_ref()
+            .map(|gesture| gesture.spline_id)
+        else {
+            return false;
+        };
+        let Some(spline) = self.state.project.project.get_spline_mut(spline_id) else {
+            return false;
+        };
+        let Some(point) = spline.point(point_id).cloned() else {
+            return false;
+        };
+        let handle = [
+            cursor[0] - point.position[0],
+            cursor[1] - point.position[1],
+            0.0,
+        ];
+        if handle[0].hypot(handle[1]) <= 0.02 {
+            return false;
+        }
+        let mode = if break_tangent {
+            petunia_core::SplineHandleMode::Broken
+        } else if new_node_drag {
+            petunia_core::SplineHandleMode::Mirrored
+        } else {
+            point.handle_mode
+        };
+        let (mut handle_in, mut handle_out) = (point.handle_in, point.handle_out);
+        if incoming {
+            handle_in = handle;
+            match mode {
+                petunia_core::SplineHandleMode::Broken => {}
+                petunia_core::SplineHandleMode::Mirrored => {
+                    handle_out = handle.map(|component| -component);
+                }
+                petunia_core::SplineHandleMode::Aligned => {
+                    let length = glam::DVec3::from_array(handle_out)
+                        .length()
+                        .max(glam::DVec3::from_array(handle).length());
+                    handle_out =
+                        (-glam::DVec3::from_array(handle).normalize_or_zero() * length).to_array();
+                }
+            }
+        } else {
+            handle_out = handle;
+            match mode {
+                petunia_core::SplineHandleMode::Broken => {}
+                petunia_core::SplineHandleMode::Mirrored => {
+                    handle_in = handle.map(|component| -component);
+                }
+                petunia_core::SplineHandleMode::Aligned => {
+                    let length = glam::DVec3::from_array(handle_in)
+                        .length()
+                        .max(glam::DVec3::from_array(handle).length());
+                    handle_in =
+                        (-glam::DVec3::from_array(handle).normalize_or_zero() * length).to_array();
+                }
+            }
+        }
+        if spline
+            .set_handles(point_id, handle_in, handle_out, mode)
+            .is_err()
+        {
+            return false;
+        }
+        spline.interpolation = petunia_core::SplineInterpolation::CubicBezier;
+        true
+    }
+
+    fn add_profile_point(&mut self, ndc_x: f32, ndc_y: f32) -> bool {
+        if self.state.session.tools.active_tool != "draw_profile" {
+            return false;
+        }
+        let Some(position) = self.profile_screen_to_plane(ndc_x, ndc_y) else {
+            return false;
+        };
+        if self.active_profile_closed() {
+            return false;
+        }
+        if self.active_profile_point_count() >= 512 {
+            self.state.set_status("max 512 pts");
+            return false;
+        }
+
+        let point = petunia_core::SplinePoint::new([position[0], position[1], 0.0]);
+        let point_id = point.id;
+        let (spline_id, revision_before) =
+            if let Some((_, spline)) = self.active_profile_resources() {
+                let spline_id = spline.id;
+                let revision_before = spline.revision;
+                if let Err(error) = self.state.dispatch(&petunia_core::AddSplinePointCmd {
+                    spline_id,
+                    index: None,
+                    point,
+                }) {
+                    self.state.set_status(error.to_string());
+                    return false;
+                }
+                (spline_id, revision_before)
+            } else {
+                let mut spline = petunia_core::SplineResource::new(
+                    "Profile curve",
+                    petunia_core::SplineInterpolation::CubicBezier,
+                );
+                if spline.add_point(point).is_err() {
+                    return false;
+                }
+                let mut profile = petunia_core::ProfileResource::new(
+                    "Profile",
+                    spline.id,
+                    self.draft_profile_workplane(),
+                );
+                profile.wall_thickness = f64::from(self.state.profile.wall_thickness.max(0.0));
+                let profile_id = profile.id;
+                let spline_id = spline.id;
+                if let Err(error) = self
+                    .state
+                    .dispatch(&petunia_core::CreateProfileCmd { spline, profile })
+                {
+                    self.state.set_status(error.to_string());
+                    return false;
+                }
+                self.active_profile_id = Some(profile_id);
+                (spline_id, 0)
+            };
+
+        self.profile_selected_point = Some(point_id);
+        self.profile_drag_target = Some(ProfileHitTarget::HandleOut(point_id));
+        self.profile_edit_gesture = Some(ProfileEditGesture {
+            spline_id,
+            point_id,
+            point_before: None,
+            revision_before,
+        });
+        true
+    }
+
     fn profile_preview_commands(&self) -> String {
-        let profile = &self.state.profile;
+        let Some(profile) = self.active_profile_state() else {
+            return String::new();
+        };
         let points = profile.tessellated_points();
         if points.is_empty() || self.viewport_size[0] <= 1.0 || self.viewport_size[1] <= 1.0 {
             return String::new();
@@ -3058,9 +3350,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
 
         // Alças tangentes e marcadores de nós Bézier
-        for (i, node) in profile.nodes.iter().enumerate() {
+        let Some((_, spline)) = self.active_profile_resources() else {
+            return String::new();
+        };
+        for (node, spline_point) in profile.nodes.iter().zip(&spline.points) {
             let p_anchor = project_pt(node.point);
-            let is_selected = self.profile_selected_node == Some(i);
+            let is_selected = self.profile_selected_point == Some(spline_point.id);
 
             if let (Some(anchor_scr), Some(h_out)) = (p_anchor, node.handle_out) {
                 let out_pt = [node.point[0] + h_out[0], node.point[1] + h_out[1]];
@@ -3125,42 +3420,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
 
-        // Se nodes estiver vazio mas houver points
-        if profile.nodes.is_empty() {
-            for (i, &pt) in profile.points.iter().enumerate() {
-                if let Some(anchor_scr) = project_pt(pt) {
-                    let is_selected = self.profile_selected_node == Some(i);
-                    let s = if is_selected { 5.0 } else { 3.0 };
-                    let _ = write!(
-                        commands,
-                        "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
-                        anchor_scr[0] - s,
-                        anchor_scr[1] - s,
-                        anchor_scr[0] + s,
-                        anchor_scr[1] - s,
-                        anchor_scr[0] + s,
-                        anchor_scr[1] + s,
-                        anchor_scr[0] - s,
-                        anchor_scr[1] + s
-                    );
-                }
-            }
-        }
-
         commands
     }
 
     pub fn close_profile(&mut self) -> bool {
-        if self.state.session.tools.active_tool != "draw_profile" || self.state.profile.closed {
+        if self.state.session.tools.active_tool != "draw_profile" || self.active_profile_closed() {
             return false;
         }
-        if self.state.profile.points.len() < 3 {
+        let Some((_, spline)) = self.active_profile_resources() else {
+            self.state
+                .set_status("Profile requires at least three points");
+            return false;
+        };
+        if spline.points.len() < 3 {
             self.state
                 .set_status("Profile requires at least three points");
             return false;
         }
-        self.state.profile.closed = true;
-        self.state.mark_dirty();
+        let spline_id = spline.id;
+        if let Err(error) = self.state.dispatch(&petunia_core::SetSplineClosedCmd {
+            spline_id,
+            closed: true,
+        }) {
+            self.state.set_status(error.to_string());
+            return false;
+        }
         self.state
             .set_status("Profile closed: choose Generate Volume or Revolve");
         true
@@ -3195,7 +3479,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.profile.depth = depth.clamp(0.01, 1000.0);
         self.state.mark_dirty();
-        if self.state.profile.closed {
+        if self.active_profile_closed() {
             if self.profile_volume_mode.is_none() {
                 self.enter_profile_volume("extrude");
             } else if self.profile_volume_mode
@@ -3214,7 +3498,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return false;
         }
-        petunia_module_model::profile_set_wall_thickness(&mut self.state, thickness);
+        let thickness = thickness.clamp(0.0, 1000.0);
+        self.state.profile.wall_thickness = thickness;
+        if let Some((profile, _)) = self.active_profile_resources() {
+            let mut profile = profile.clone();
+            if (profile.wall_thickness - f64::from(thickness)).abs() <= f64::EPSILON {
+                return false;
+            }
+            profile.wall_thickness = f64::from(thickness);
+            profile.revision = profile.revision.wrapping_add(1);
+            if let Err(error) = self
+                .state
+                .dispatch(&petunia_core::UpdateProfileCmd { profile })
+            {
+                self.state.set_status(error.to_string());
+                return false;
+            }
+        } else {
+            self.state.mark_dirty();
+        }
         if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Extrude) {
             self.update_profile_volume_preview();
         }
@@ -3251,7 +3553,35 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
-        petunia_module_model::profile_smooth_curves(&mut self.state);
+        let Some((_, spline)) = self.active_profile_resources() else {
+            return false;
+        };
+        let mut updated = spline.clone();
+        let mut path = petunia_mesh::curve::BezierPath {
+            nodes: self
+                .active_profile_state()
+                .map_or_else(Vec::new, |profile| profile.nodes),
+            closed: spline.closed,
+        };
+        path.auto_smooth(0.25);
+        updated.interpolation = petunia_core::SplineInterpolation::CubicBezier;
+        for (point, node) in updated.points.iter_mut().zip(path.nodes) {
+            let handle_in = node.handle_in.unwrap_or([0.0; 2]);
+            let handle_out = node.handle_out.unwrap_or([0.0; 2]);
+            point.handle_in = [f64::from(handle_in[0]), f64::from(handle_in[1]), 0.0];
+            point.handle_out = [f64::from(handle_out[0]), f64::from(handle_out[1]), 0.0];
+            point.handle_mode = petunia_core::SplineHandleMode::Aligned;
+        }
+        updated.revision = updated.revision.wrapping_add(1);
+        if let Err(error) = self
+            .state
+            .dispatch(&petunia_core::UpdateSplineCmd { spline: updated })
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
+        self.state
+            .set_status("Profile curves smoothed (Cubic Bézier)");
         if self.profile_volume_mode.is_some() {
             self.update_profile_volume_preview();
         }
@@ -3262,7 +3592,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
-        petunia_module_model::profile_clear_curves(&mut self.state);
+        let Some((_, spline)) = self.active_profile_resources() else {
+            return false;
+        };
+        let mut updated = spline.clone();
+        updated.interpolation = petunia_core::SplineInterpolation::Polyline;
+        for point in &mut updated.points {
+            point.handle_in = [0.0; 3];
+            point.handle_out = [0.0; 3];
+            point.handle_mode = petunia_core::SplineHandleMode::Broken;
+        }
+        updated.revision = updated.revision.wrapping_add(1);
+        if let Err(error) = self
+            .state
+            .dispatch(&petunia_core::UpdateSplineCmd { spline: updated })
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
+        self.state.set_status("Profile corners sharpened");
         if self.profile_volume_mode.is_some() {
             self.update_profile_volume_preview();
         }
@@ -3278,16 +3626,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
+        let Some(gesture) = self.profile_edit_gesture.as_ref() else {
+            return false;
+        };
+        let point_id = gesture.point_id;
         let ndc_x = norm_x.clamp(0.0, 1.0) * 2.0 - 1.0;
         let ndc_y = 1.0 - norm_y.clamp(0.0, 1.0) * 2.0;
-        let updated = petunia_module_model::profile_update_drag_handle(
-            &mut self.state,
-            ndc_x,
-            ndc_y,
-            break_tangent,
-        );
+        let Some(point) = self.profile_screen_to_plane(ndc_x, ndc_y) else {
+            return false;
+        };
+        let updated = self.update_profile_handle(point_id, false, point, break_tangent, true);
         if updated {
-            self.state.mark_dirty();
+            self.state.emit_project_changed(ProjectChanges::SPLINES);
             if self.profile_volume_mode.is_some() {
                 self.update_profile_volume_preview();
             }
@@ -3300,10 +3650,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return None;
         }
-        let profile = &self.state.profile;
-        if (profile.nodes.is_empty() && profile.points.is_empty())
-            || self.viewport_size[0] <= 1.0
-            || self.viewport_size[1] <= 1.0
+        let Some(profile) = self.active_profile_state() else {
+            return None;
+        };
+        let Some((_, spline)) = self.active_profile_resources() else {
+            return None;
+        };
+        if profile.points.is_empty() || self.viewport_size[0] <= 1.0 || self.viewport_size[1] <= 1.0
         {
             return None;
         }
@@ -3325,7 +3678,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut best_target = None;
         let mut best_dist = hit_radius;
 
-        for (i, node) in profile.nodes.iter().enumerate() {
+        for (node, spline_point) in profile.nodes.iter().zip(&spline.points) {
             // Test handle_out
             if let Some(h_out) = node.handle_out {
                 let out_pt = [node.point[0] + h_out[0], node.point[1] + h_out[1]];
@@ -3333,7 +3686,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
                     if dist < best_dist {
                         best_dist = dist;
-                        best_target = Some(ProfileHitTarget::HandleOut(i));
+                        best_target = Some(ProfileHitTarget::HandleOut(spline_point.id));
                     }
                 }
             }
@@ -3344,7 +3697,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
                     if dist < best_dist {
                         best_dist = dist;
-                        best_target = Some(ProfileHitTarget::HandleIn(i));
+                        best_target = Some(ProfileHitTarget::HandleIn(spline_point.id));
                     }
                 }
             }
@@ -3353,20 +3706,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
                 if dist < best_dist {
                     best_dist = dist;
-                    best_target = Some(ProfileHitTarget::Anchor(i));
-                }
-            }
-        }
-
-        // Se nodes estiver vazio mas houver points
-        if profile.nodes.is_empty() {
-            for (i, &pt) in profile.points.iter().enumerate() {
-                if let Some(scr) = project_pt(pt) {
-                    let dist = (scr[0] - screen_x).hypot(scr[1] - screen_y);
-                    if dist < best_dist {
-                        best_dist = dist;
-                        best_target = Some(ProfileHitTarget::Anchor(i));
-                    }
+                    best_target = Some(ProfileHitTarget::Anchor(spline_point.id));
                 }
             }
         }
@@ -3379,58 +3719,66 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
-        // Garante que nodes espelhe points caso tenha sido inicializado apenas com points
-        if self.state.profile.nodes.len() != self.state.profile.points.len()
-            && !self.state.profile.points.is_empty()
-        {
-            self.state.profile.nodes = self
-                .state
-                .profile
-                .points
-                .iter()
-                .map(|&p| petunia_mesh::curve::BezierNode::new(p))
-                .collect();
-        }
         if let Some(target) = self.hit_test_profile(screen_x, screen_y) {
+            let point_id = match target {
+                ProfileHitTarget::Anchor(id)
+                | ProfileHitTarget::HandleOut(id)
+                | ProfileHitTarget::HandleIn(id) => id,
+            };
+            let Some((spline_id, spline_closed, point_count, point_index, point_before, revision)) =
+                self.active_profile_resources().and_then(|(_, spline)| {
+                    let point_index = spline
+                        .points
+                        .iter()
+                        .position(|point| point.id == point_id)?;
+                    Some((
+                        spline.id,
+                        spline.closed,
+                        spline.points.len(),
+                        point_index,
+                        spline.point(point_id).cloned(),
+                        spline.revision,
+                    ))
+                })
+            else {
+                return false;
+            };
             match target {
-                ProfileHitTarget::Anchor(idx) => {
+                ProfileHitTarget::Anchor(id) => {
                     // Fecha perfil se clicar no primeiro nó de um perfil aberto com >= 3 pontos
-                    if !self.state.profile.closed && self.state.profile.nodes.len() >= 3 && idx == 0
-                    {
-                        self.state.profile.closed = true;
-                        self.profile_selected_node = Some(0);
+                    if !spline_closed && point_count >= 3 && point_index == 0 {
+                        self.profile_selected_point = Some(id);
                         self.profile_drag_target = None;
-                        self.state.set_status(self.state.t("profile.closed"));
-                        self.state.mark_dirty();
-                        return true;
+                        return self.close_profile();
                     }
-                    self.profile_selected_node = Some(idx);
+                    self.profile_selected_point = Some(id);
                     if alt {
-                        if self.state.profile.nodes[idx].handle_out.is_none() {
-                            self.state.profile.nodes[idx].kind =
-                                petunia_mesh::curve::BezierNodeKind::Symmetric;
-                            self.state.profile.nodes[idx].handle_out = Some([0.0, 0.0]);
-                            self.state.profile.nodes[idx].handle_in = Some([0.0, 0.0]);
-                        }
-                        self.profile_drag_target = Some(ProfileHitTarget::HandleOut(idx));
+                        self.profile_drag_target = Some(ProfileHitTarget::HandleOut(id));
                     } else {
-                        self.profile_drag_target = Some(ProfileHitTarget::Anchor(idx));
+                        self.profile_drag_target = Some(ProfileHitTarget::Anchor(id));
                     }
                 }
-                ProfileHitTarget::HandleOut(idx) => {
-                    self.profile_selected_node = Some(idx);
-                    self.profile_drag_target = Some(ProfileHitTarget::HandleOut(idx));
+                ProfileHitTarget::HandleOut(id) => {
+                    self.profile_selected_point = Some(id);
+                    self.profile_drag_target = Some(ProfileHitTarget::HandleOut(id));
                 }
-                ProfileHitTarget::HandleIn(idx) => {
-                    self.profile_selected_node = Some(idx);
-                    self.profile_drag_target = Some(ProfileHitTarget::HandleIn(idx));
+                ProfileHitTarget::HandleIn(id) => {
+                    self.profile_selected_point = Some(id);
+                    self.profile_drag_target = Some(ProfileHitTarget::HandleIn(id));
                 }
             }
+            self.profile_edit_gesture = Some(ProfileEditGesture {
+                spline_id,
+                point_id,
+                point_before,
+                revision_before: revision,
+            });
             self.state.mark_dirty();
             return true;
         }
         self.profile_drag_target = None;
-        self.profile_selected_node = None;
+        self.profile_selected_point = None;
+        self.profile_edit_gesture = None;
         self.state.mark_dirty();
         false
     }
@@ -3450,125 +3798,119 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let ndc_x = nx * 2.0 - 1.0;
         let ndc_y = 1.0 - ny * 2.0;
 
-        let Some([curr_x, curr_y]) =
-            petunia_module_model::profile_screen_to_plane(&self.state, ndc_x, ndc_y)
-        else {
+        let Some(point) = self.profile_screen_to_plane(ndc_x, ndc_y) else {
             return false;
         };
 
         match target {
-            ProfileHitTarget::Anchor(idx) => {
-                if idx < self.state.profile.nodes.len() {
-                    self.state.profile.nodes[idx].point = [curr_x, curr_y];
-                    if idx < self.state.profile.points.len() {
-                        self.state.profile.points[idx] = [curr_x, curr_y];
-                    }
-                    self.state.mark_dirty();
-                    if self.profile_volume_mode.is_some() {
-                        self.update_profile_volume_preview();
-                    }
-                    return true;
+            ProfileHitTarget::Anchor(point_id) => {
+                let Some(gesture) = self.profile_edit_gesture.as_ref() else {
+                    return false;
+                };
+                let Some(spline) = self.state.project.project.get_spline_mut(gesture.spline_id)
+                else {
+                    return false;
+                };
+                if spline
+                    .move_point(point_id, [point[0], point[1], 0.0])
+                    .is_err()
+                {
+                    return false;
                 }
             }
-            ProfileHitTarget::HandleOut(idx) => {
-                if idx < self.state.profile.nodes.len() {
-                    let anchor = self.state.profile.nodes[idx].point;
-                    let dx = curr_x - anchor[0];
-                    let dy = curr_y - anchor[1];
-                    let node = &mut self.state.profile.nodes[idx];
-                    if alt {
-                        node.kind = petunia_mesh::curve::BezierNodeKind::Sharp;
-                        node.handle_out = Some([dx, dy]);
-                    } else {
-                        match node.kind {
-                            petunia_mesh::curve::BezierNodeKind::Sharp => {
-                                node.handle_out = Some([dx, dy]);
-                            }
-                            petunia_mesh::curve::BezierNodeKind::Symmetric => {
-                                node.handle_out = Some([dx, dy]);
-                                node.handle_in = Some([-dx, -dy]);
-                            }
-                            petunia_mesh::curve::BezierNodeKind::Smooth => {
-                                let len = dx.hypot(dy);
-                                node.handle_out = Some([dx, dy]);
-                                if len > 1e-4 {
-                                    if let Some(in_h) = node.handle_in {
-                                        let in_len = in_h[0].hypot(in_h[1]);
-                                        node.handle_in =
-                                            Some([-dx / len * in_len, -dy / len * in_len]);
-                                    } else {
-                                        node.handle_in = Some([-dx, -dy]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    self.state.mark_dirty();
-                    if self.profile_volume_mode.is_some() {
-                        self.update_profile_volume_preview();
-                    }
-                    return true;
+            ProfileHitTarget::HandleOut(point_id) => {
+                if !self.update_profile_handle(point_id, false, point, alt, false) {
+                    return false;
                 }
             }
-            ProfileHitTarget::HandleIn(idx) => {
-                if idx < self.state.profile.nodes.len() {
-                    let anchor = self.state.profile.nodes[idx].point;
-                    let dx = curr_x - anchor[0];
-                    let dy = curr_y - anchor[1];
-                    let node = &mut self.state.profile.nodes[idx];
-                    if alt {
-                        node.kind = petunia_mesh::curve::BezierNodeKind::Sharp;
-                        node.handle_in = Some([dx, dy]);
-                    } else {
-                        match node.kind {
-                            petunia_mesh::curve::BezierNodeKind::Sharp => {
-                                node.handle_in = Some([dx, dy]);
-                            }
-                            petunia_mesh::curve::BezierNodeKind::Symmetric => {
-                                node.handle_in = Some([dx, dy]);
-                                node.handle_out = Some([-dx, -dy]);
-                            }
-                            petunia_mesh::curve::BezierNodeKind::Smooth => {
-                                let len = dx.hypot(dy);
-                                node.handle_in = Some([dx, dy]);
-                                if len > 1e-4 {
-                                    if let Some(out_h) = node.handle_out {
-                                        let out_len = out_h[0].hypot(out_h[1]);
-                                        node.handle_out =
-                                            Some([-dx / len * out_len, -dy / len * out_len]);
-                                    } else {
-                                        node.handle_out = Some([-dx, -dy]);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    self.state.mark_dirty();
-                    if self.profile_volume_mode.is_some() {
-                        self.update_profile_volume_preview();
-                    }
-                    return true;
+            ProfileHitTarget::HandleIn(point_id) => {
+                if !self.update_profile_handle(point_id, true, point, alt, false) {
+                    return false;
                 }
             }
         }
-        false
+        self.state.emit_project_changed(ProjectChanges::SPLINES);
+        if self.profile_volume_mode.is_some() {
+            self.update_profile_volume_preview();
+        }
+        true
     }
 
     /// Conclui o arraste de um nó ou alça.
     pub fn profile_pointer_up(&mut self) {
-        self.profile_drag_target = None;
+        let target = self.profile_drag_target.take();
+        let Some(gesture) = self.profile_edit_gesture.take() else {
+            return;
+        };
+        let Some(point_before) = gesture.point_before else {
+            return;
+        };
+        let Some(point_after) = self
+            .state
+            .project
+            .project
+            .get_spline(gesture.spline_id)
+            .and_then(|spline| spline.point(gesture.point_id))
+            .cloned()
+        else {
+            return;
+        };
+        let Some(spline) = self.state.project.project.get_spline_mut(gesture.spline_id) else {
+            return;
+        };
+        if let Some(point) = spline.point_mut(gesture.point_id) {
+            *point = point_before.clone();
+        }
+        spline.revision = gesture.revision_before;
+
+        let result = match target {
+            Some(ProfileHitTarget::Anchor(_)) if point_after.position != point_before.position => {
+                self.state.dispatch(&petunia_core::MoveSplinePointCmd {
+                    spline_id: gesture.spline_id,
+                    point_id: gesture.point_id,
+                    position: point_after.position,
+                })
+            }
+            Some(ProfileHitTarget::HandleOut(_) | ProfileHitTarget::HandleIn(_))
+                if point_after.handle_in != point_before.handle_in
+                    || point_after.handle_out != point_before.handle_out
+                    || point_after.handle_mode != point_before.handle_mode =>
+            {
+                self.state.dispatch(&petunia_core::SetSplineHandlesCmd {
+                    spline_id: gesture.spline_id,
+                    point_id: gesture.point_id,
+                    handle_in: point_after.handle_in,
+                    handle_out: point_after.handle_out,
+                    mode: point_after.handle_mode,
+                })
+            }
+            _ => Ok(()),
+        };
+        if let Err(error) = result {
+            self.state.set_status(error.to_string());
+        }
+        if self.profile_volume_mode.is_some() {
+            self.update_profile_volume_preview();
+        }
     }
 
     pub fn enter_profile_volume(&mut self, mode_str: &str) -> bool {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
+        self.profile_pointer_up();
+        let Some(profile_state) = self.active_profile_state() else {
+            self.state
+                .set_status("Draw a profile before generating volume");
+            return false;
+        };
         let mode = match mode_str {
             "extrude" => {
-                if !self.state.profile.closed && self.state.profile.points.len() >= 3 {
-                    self.state.profile.closed = true;
+                if !profile_state.closed && profile_state.points.len() >= 3 && !self.close_profile()
+                {
+                    return false;
                 }
-                if !self.state.profile.closed {
+                if !self.active_profile_closed() {
                     self.state
                         .set_status("Extrude requires a closed profile (at least 3 points)");
                     return false;
@@ -3576,14 +3918,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 petunia_module_model::ProfileVolumeMode::Extrude
             }
             "revolve" => {
-                if self.state.profile.points.len() < 2 {
+                if profile_state.points.len() < 2 {
                     self.state.set_status("Revolve requires at least 2 points");
                     return false;
                 }
                 petunia_module_model::ProfileVolumeMode::Revolve
             }
             "sweep" => {
-                if self.state.profile.points.len() < 2 {
+                if profile_state.points.len() < 2 {
                     self.state.set_status("Sweep requires at least 2 points");
                     return false;
                 }
@@ -3611,19 +3953,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Some(mode) = self.profile_volume_mode else {
             return false;
         };
+        let Some(profile) = self.active_profile_state() else {
+            return false;
+        };
 
         let mesh_res = match mode {
             petunia_module_model::ProfileVolumeMode::Extrude => {
-                petunia_module_model::build_extrude_mesh(&self.state.profile)
+                petunia_module_model::build_extrude_mesh(&profile)
             }
             petunia_module_model::ProfileVolumeMode::Revolve => {
-                petunia_module_model::build_revolve_mesh(&self.state.profile)
+                petunia_module_model::build_revolve_mesh(&profile)
             }
             petunia_module_model::ProfileVolumeMode::Sweep => {
-                petunia_module_model::build_sweep_mesh(
-                    &self.state.profile,
-                    self.state.project.active_mesh(),
-                )
+                petunia_module_model::build_sweep_mesh(&profile, self.state.project.active_mesh())
             }
         };
 
@@ -3669,16 +4011,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 asset.name = "Profile".to_string();
             }
         } else if let Some(mode) = self.profile_volume_mode {
+            let Some(profile) = self.active_profile_state() else {
+                return false;
+            };
             let mesh_res = match mode {
                 petunia_module_model::ProfileVolumeMode::Extrude => {
-                    petunia_module_model::build_extrude_mesh(&self.state.profile)
+                    petunia_module_model::build_extrude_mesh(&profile)
                 }
                 petunia_module_model::ProfileVolumeMode::Revolve => {
-                    petunia_module_model::build_revolve_mesh(&self.state.profile)
+                    petunia_module_model::build_revolve_mesh(&profile)
                 }
                 petunia_module_model::ProfileVolumeMode::Sweep => {
                     petunia_module_model::build_sweep_mesh(
-                        &self.state.profile,
+                        &profile,
                         self.state.project.active_mesh(),
                     )
                 }
@@ -3692,6 +4037,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .checkpoint_snapshot("draw profile", &original);
 
         self.state.profile.clear();
+        self.active_profile_id = None;
+        self.profile_selected_point = None;
+        self.profile_drag_target = None;
+        self.profile_edit_gesture = None;
         self.profile_volume_mode = None;
         self.state.set_selection_domain(SelectionDomain::Object);
         self.sync_viewport_context();
@@ -6270,9 +6619,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     y: layout.y,
                     pin_open: layout.pin_open,
                     pinned_asset: layout.pinned_asset.clone(),
+                    open: layout.open,
                 }
             })
             .collect()
+    }
+
+    /// Abre ou fecha uma seção do Inspector (persistido).
+    pub fn set_section_open(&mut self, section: petunia_config::InspectorSectionId, open: bool) {
+        section_layout::set_open(&mut self.section_layouts, section, open);
+        self.persist_section_layouts();
+        self.state.mark_dirty();
+    }
+
+    /// Alterna estado aberto/fechado de uma seção do Inspector (persistido).
+    pub fn toggle_section_open(&mut self, section: petunia_config::InspectorSectionId) -> bool {
+        let open = section_layout::toggle_open(&mut self.section_layouts, section);
+        self.persist_section_layouts();
+        self.state.mark_dirty();
+        open
     }
 
     pub fn set_snap_target(&mut self, target_str: &str) -> bool {
@@ -6292,11 +6657,73 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    fn replace_profile_shape(&mut self, name: &str, points: Vec<[f64; 3]>) -> bool {
+        if points.len() < 3 || points.iter().flatten().any(|value| !value.is_finite()) {
+            return false;
+        }
+        if let Some((_, spline)) = self.active_profile_resources() {
+            let mut spline = spline.clone();
+            spline.points = points
+                .into_iter()
+                .map(petunia_core::SplinePoint::new)
+                .collect();
+            spline.closed = true;
+            spline.interpolation = petunia_core::SplineInterpolation::Polyline;
+            spline.revision = spline.revision.wrapping_add(1);
+            if let Err(error) = self
+                .state
+                .dispatch(&petunia_core::UpdateSplineCmd { spline })
+            {
+                self.state.set_status(error.to_string());
+                return false;
+            }
+        } else {
+            let spline = petunia_core::SplineResource::from_polyline(name, &points, true);
+            let mut profile =
+                petunia_core::ProfileResource::new(name, spline.id, self.draft_profile_workplane());
+            profile.wall_thickness = f64::from(self.state.profile.wall_thickness.max(0.0));
+            let profile_id = profile.id;
+            if let Err(error) = self
+                .state
+                .dispatch(&petunia_core::CreateProfileCmd { spline, profile })
+            {
+                self.state.set_status(error.to_string());
+                return false;
+            }
+            self.active_profile_id = Some(profile_id);
+        }
+        self.profile_selected_point = None;
+        self.profile_drag_target = None;
+        self.profile_edit_gesture = None;
+        self.state.session.tools.active_tool = "draw_profile".to_string();
+        true
+    }
+
     pub fn add_profile_rectangle(&mut self, width: f32, height: f32) -> bool {
         self.cancel_profile_volume();
-        self.profile_selected_node = None;
-        self.profile_drag_target = None;
-        petunia_module_model::profile_set_rectangle(&mut self.state, width, height);
+        let width = if width.is_finite() && width > 0.0 {
+            width
+        } else {
+            2.0
+        };
+        let height = if height.is_finite() && height > 0.0 {
+            height
+        } else {
+            1.5
+        };
+        let half_width = f64::from(width) * 0.5;
+        let half_height = f64::from(height) * 0.5;
+        if !self.replace_profile_shape(
+            "Rectangle Profile",
+            vec![
+                [-half_width, -half_height, 0.0],
+                [half_width, -half_height, 0.0],
+                [half_width, half_height, 0.0],
+                [-half_width, half_height, 0.0],
+            ],
+        ) {
+            return false;
+        }
         self.state.render.mark_dirty();
         self.state.set_status(format!(
             "Perfil retangular ({width:.1} x {height:.1}) criado"
@@ -6306,9 +6733,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn add_profile_circle(&mut self, radius: f32, segments: usize) -> bool {
         self.cancel_profile_volume();
-        self.profile_selected_node = None;
-        self.profile_drag_target = None;
-        petunia_module_model::profile_set_circle(&mut self.state, radius, segments);
+        let radius = if radius.is_finite() && radius > 0.0 {
+            radius
+        } else {
+            1.0
+        };
+        let segments = segments.clamp(6, 64);
+        let points = (0..segments)
+            .map(|index| {
+                let angle = std::f64::consts::TAU * index as f64 / segments as f64;
+                [
+                    f64::from(radius) * angle.cos(),
+                    f64::from(radius) * angle.sin(),
+                    0.0,
+                ]
+            })
+            .collect();
+        if !self.replace_profile_shape("Circle Profile", points) {
+            return false;
+        }
         self.state.render.mark_dirty();
         self.state.set_status(format!(
             "Perfil circular (raio {radius:.1}, {segments} seg) criado"
@@ -7282,28 +7725,34 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.cancel_primitive()
     }
 
+    fn delete_selected_profile_point(&mut self) -> bool {
+        self.profile_pointer_up();
+        let Some(point_id) = self.profile_selected_point else {
+            return false;
+        };
+        let Some((_, spline)) = self.active_profile_resources() else {
+            return false;
+        };
+        let spline_id = spline.id;
+        if let Err(error) = self.state.dispatch(&petunia_core::DeleteSplinePointCmd {
+            spline_id,
+            point_id,
+        }) {
+            self.state.set_status(error.to_string());
+            return false;
+        }
+        self.profile_selected_point = None;
+        self.profile_drag_target = None;
+        if self.profile_volume_mode.is_some() {
+            self.update_profile_volume_preview();
+        }
+        true
+    }
+
     /// Exclui ou dissolve elementos selecionados ou o ativo ativo se em Object Mode.
     pub fn delete_or_dissolve_selection(&mut self) -> bool {
         if self.state.session.tools.active_tool == "draw_profile" {
-            if let Some(idx) = self.profile_selected_node
-                && idx < self.state.profile.nodes.len()
-            {
-                self.state.profile.nodes.remove(idx);
-                if idx < self.state.profile.points.len() {
-                    self.state.profile.points.remove(idx);
-                }
-                if self.state.profile.nodes.len() < 3 {
-                    self.state.profile.closed = false;
-                }
-                self.profile_selected_node = None;
-                self.profile_drag_target = None;
-                self.state.mark_dirty();
-                if self.profile_volume_mode.is_some() {
-                    self.update_profile_volume_preview();
-                }
-                return true;
-            }
-            return false;
+            return self.delete_selected_profile_point();
         }
 
         if self.state.selection_domain() != SelectionDomain::Object {
@@ -7989,26 +8438,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 "delete" => {
                     if self.state.session.tools.active_tool == "draw_profile" {
-                        if let Some(idx) = self.profile_selected_node
-                            && idx < self.state.profile.nodes.len()
-                        {
-                            self.state.profile.nodes.remove(idx);
-                            if idx < self.state.profile.points.len() {
-                                self.state.profile.points.remove(idx);
-                            }
-                            if self.state.profile.nodes.len() < 3 {
-                                self.state.profile.closed = false;
-                            }
-                            self.profile_selected_node = None;
-                            self.profile_drag_target = None;
-                            self.state.mark_dirty();
-                            if self.profile_volume_mode.is_some() {
-                                self.update_profile_volume_preview();
-                            }
-                            true
-                        } else {
-                            false
-                        }
+                        self.delete_selected_profile_point()
                     } else if self.state.selection_domain().is_component() {
                         let _ = self.execute_core_command("model.delete");
                         true
@@ -8023,7 +8453,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 "extrude" => {
                     if self.state.session.tools.active_tool == "draw_profile"
-                        && (self.state.profile.closed || self.state.profile.points.len() >= 3)
+                        && (self.active_profile_closed() || self.active_profile_point_count() >= 3)
                     {
                         if self.profile_volume_mode
                             == Some(petunia_module_model::ProfileVolumeMode::Extrude)
@@ -8498,7 +8928,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "draw_profile" {
             let ndc_x = normalized_x.clamp(0.0, 1.0) * 2.0 - 1.0;
             let ndc_y = 1.0 - normalized_y.clamp(0.0, 1.0) * 2.0;
-            petunia_module_model::draw_profile::profile_add_point(&mut self.state, ndc_x, ndc_y);
+            self.add_profile_point(ndc_x, ndc_y);
             return;
         }
         if self.instant_transform && self.state.session.tools.modal.is_some() {
@@ -8762,10 +9192,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return true;
         }
         if self.state.session.tools.active_tool == "draw_profile" {
+            self.profile_pointer_up();
             self.state.profile.clear();
+            self.active_profile_id = None;
+            self.profile_selected_point = None;
+            self.profile_drag_target = None;
+            self.profile_edit_gesture = None;
             self.state.session.tools.active_tool = "select".to_string();
             self.state.mark_dirty();
-            self.state.set_status("Profile cancelled");
+            self.state.set_status("Profile editing finished");
             return true;
         }
         if self.cancel_primitive() {
@@ -8939,7 +9374,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if id == "model.extrude"
             && self.state.session.tools.active_tool == "draw_profile"
-            && (self.state.profile.closed || self.state.profile.points.len() >= 3)
+            && (self.active_profile_closed() || self.active_profile_point_count() >= 3)
         {
             if self.profile_volume_mode == Some(petunia_module_model::ProfileVolumeMode::Extrude) {
                 self.commit_profile_volume();
@@ -9552,7 +9987,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             "model.extrude" => {
                 if self.state.session.tools.active_tool == "draw_profile"
-                    && (self.state.profile.closed || self.state.profile.points.len() >= 3)
+                    && (self.active_profile_closed() || self.active_profile_point_count() >= 3)
                 {
                     if self.profile_volume_mode
                         == Some(petunia_module_model::ProfileVolumeMode::Extrude)
@@ -9572,23 +10007,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.execute_shortcut_tool("model.bevel");
             }
             "model.delete" => {
-                if self.state.session.tools.active_tool == "draw_profile"
-                    && let Some(idx) = self.profile_selected_node
-                    && idx < self.state.profile.nodes.len()
-                {
-                    self.state.profile.nodes.remove(idx);
-                    if idx < self.state.profile.points.len() {
-                        self.state.profile.points.remove(idx);
-                    }
-                    if self.state.profile.nodes.len() < 3 {
-                        self.state.profile.closed = false;
-                    }
-                    self.profile_selected_node = None;
-                    self.profile_drag_target = None;
-                    self.state.mark_dirty();
-                    if self.profile_volume_mode.is_some() {
-                        self.update_profile_volume_preview();
-                    }
+                if self.state.session.tools.active_tool == "draw_profile" {
+                    self.delete_selected_profile_point();
                 } else {
                     self.apply(UiIntent::DeleteActiveAsset);
                 }
@@ -9757,7 +10177,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_some() {
             return self.commit_profile_volume();
         }
-        if self.state.session.tools.active_tool == "draw_profile" && self.state.profile.closed {
+        if self.state.session.tools.active_tool == "draw_profile" && self.active_profile_closed() {
             return self.enter_profile_volume("extrude");
         }
         if self.drag.is_some() {
@@ -10649,17 +11069,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.loop_cut_preview_commands = self.loop_cut_hover_preview_commands();
         }
         vm.profile_active = self.state.session.tools.active_tool == "draw_profile";
-        vm.profile_point_count = self.state.profile.points.len() as i32;
-        vm.profile_closed = self.state.profile.closed;
+        vm.profile_point_count = self.active_profile_point_count() as i32;
+        vm.profile_closed = self.active_profile_closed();
         vm.profile_depth = self.state.profile.depth;
-        vm.profile_wall_thickness = self.state.profile.wall_thickness;
+        vm.profile_wall_thickness = self
+            .active_profile_resources()
+            .map_or(self.state.profile.wall_thickness, |(profile, _)| {
+                profile.wall_thickness as f32
+            });
         vm.profile_smoothness = self.state.profile.curve_smoothness;
-        vm.profile_has_curves = self
-            .state
-            .profile
-            .nodes
-            .iter()
-            .any(|n| n.handle_in.is_some() || n.handle_out.is_some());
+        vm.profile_has_curves = self.active_profile_has_curves();
         if vm.profile_active {
             vm.profile_preview_commands = self.profile_preview_commands();
         }
