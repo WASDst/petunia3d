@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Iconografia vetorial Petunia oficial e temas configuráveis (28/09/2026)
+- **Integração nativa no shell Slint**: Os 249 ícones vetoriais SVG oficiais criados para o Petunia3D foram compilados em catálogo declarativo dinâmico (`PetuniaIcons` em `petunia_icons.slint`), fornecendo suporte unificado a duas variantes estéticas: `outline` (traço) e `filled` (preenchido).
+- **Troca dinâmica e reatividade imediata**: Alternância de estilo em tempo de execução via seletor em Configurações -> Aparência, com preview dos dois estilos e callback reativo conectado ao singleton global Slint sem reinicialização.
+- **Persistência em preferências**: Adicionado campo `icon_theme` em `UserPreferences` (`preferences.toml`) com valor padrão `"outline"` e sanitização segura em caso de dados desconhecidos.
+- **Adoção em controles de produto**: Primitivas 3D, shelf de modelagem, operações booleanas, modos de shading, ferramentas de transformação, domínios de seleção, top bar, cabeçalhos do Inspector e pílulas recolhidas atualizados para consumir os ícones de `PetuniaIcons`.
+
 ### Gate G4 — Fundação Headless de SurfaceAttachment (27/09/2026)
 - **Âncora geométrica persistente**: pontos de spline podem referenciar target, triângulo real de render/picking e coordenadas baricêntricas, com offset normal, orientação tangente e round-trip `.petunia` retrocompatível.
 - **Estados sem reprojeção silenciosa**: conectividade incompatível produz `NeedsReattach`, alvo removido produz `MissingTarget` e detach preserva o último ponto mundial conhecido.

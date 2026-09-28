@@ -763,6 +763,10 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         .set_label_multiselection_measure_tag(vm.label_multiselection_measure_tag.as_str().into());
     window.set_active_language(vm.active_language.as_str().into());
     window.set_ui_scale(vm.ui_scale);
+    window.set_icon_theme(vm.icon_theme.as_str().into());
+    window
+        .global::<crate::PetuniaIcons>()
+        .set_filled(vm.icon_theme == "filled");
     window.set_tool_modal_active(vm.tool_modal_active);
     window.set_tool_modal_id(vm.tool_modal_id.as_str().into());
     window.set_tool_options_active(vm.tool_options_active);
@@ -2068,6 +2072,20 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_ui_scale_set(move |scale| {
         if let Ok(mut bridge) = ui_scale_bridge.lock() {
             if bridge.set_ui_scale(scale) {
+                persist_user_preferences(&mut bridge);
+            }
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let icon_theme_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_icon_theme_set(move |theme| {
+        if let Ok(mut bridge) = icon_theme_bridge.lock() {
+            if bridge.set_icon_theme(theme.as_str()) {
                 persist_user_preferences(&mut bridge);
             }
             let vm = bridge.view_model();

@@ -115,6 +115,10 @@ impl SectionLayout {
     }
 }
 
+fn default_icon_theme() -> String {
+    "outline".to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UserPreferences {
@@ -138,6 +142,10 @@ pub struct UserPreferences {
     pub multiselection_measure_tag: bool,
     /// Perfil ativo de atalhos de teclado ("petunia-default", "blender", "maya", "3ds-max", etc.).
     pub active_keymap_id: String,
+    /// Tema dos ícones da interface ("outline" ou "filled").
+    /// Icon theme of the user interface ("outline" or "filled").
+    #[serde(default = "default_icon_theme")]
+    pub icon_theme: String,
     /// Dock/float/pin por módulo do Inspector, chaveado por `InspectorSectionId::as_str`.
     /// Chaves desconhecidas são descartadas ao carregar; módulos ausentes usam o padrão.
     /// Dock/float/pin per Inspector module, keyed by `InspectorSectionId::as_str`.
@@ -158,6 +166,7 @@ impl Default for UserPreferences {
             reduced_motion: false,
             multiselection_measure_tag: true,
             active_keymap_id: "petunia-default".to_string(),
+            icon_theme: "outline".to_string(),
             section_layouts: BTreeMap::new(),
         }
     }
@@ -190,6 +199,9 @@ impl UserPreferences {
         }
         if preferences.active_keymap_id.is_empty() {
             preferences.active_keymap_id = "petunia-default".to_string();
+        }
+        if !matches!(preferences.icon_theme.as_str(), "outline" | "filled") {
+            preferences.icon_theme = "outline".to_string();
         }
         let mut seen = HashSet::new();
         preferences
@@ -275,6 +287,7 @@ mod tests {
             reduced_motion: false,
             multiselection_measure_tag: true,
             active_keymap_id: "blender".to_string(),
+            icon_theme: "outline".to_string(),
             double_tap_interval_ms: 300,
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),

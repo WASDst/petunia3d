@@ -5547,6 +5547,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Define o estilo do tema de ícones ("outline" ou "filled").
+    pub fn set_icon_theme(&mut self, theme: &str) -> bool {
+        let theme_normalized = match theme {
+            "filled" => "filled",
+            _ => "outline",
+        };
+        if self.preferences.icon_theme == theme_normalized {
+            return false;
+        }
+        self.preferences.icon_theme = theme_normalized.to_string();
+        self.state.mark_dirty();
+        true
+    }
+
     /// O modo Instant / Modo Livre com mouse está ativo?
     pub fn is_instant_tool_mode(&self) -> bool {
         self.keyboard_tool_modal_active
@@ -11172,6 +11186,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             translated(petunia_config::text_id::PREFERENCES_MULTISELECTION_MEASURE);
         vm.active_language = self.state.ui.i18n.lang.clone();
         vm.ui_scale = self.preferences.ui_scale;
+        vm.icon_theme = self.preferences.icon_theme.clone();
         if let Some(kind) = self.tool_modal {
             let (minimum, maximum) = kind.bounds();
             vm.tool_modal_active = true;

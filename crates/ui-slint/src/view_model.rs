@@ -268,6 +268,7 @@ pub struct ShellViewModel {
     pub scene_stats: String,
     pub uv_stats: String,
     pub current_theme: String,
+    pub icon_theme: String,
     pub is_orthographic: bool,
     pub is_wireframe: bool,
     pub shading_mode: String,
@@ -1151,6 +1152,11 @@ impl ShellViewModel {
             scene_stats,
             uv_stats,
             current_theme: state.ui.active_theme_id.clone(),
+            icon_theme: if state.ui.active_icon_pack_id.contains("filled") {
+                "filled".to_string()
+            } else {
+                "outline".to_string()
+            },
             is_orthographic: state.session.camera.proj == petunia_core::Projection::Ortho,
             is_wireframe: state.session.show_wireframe_overlay,
             shading_mode: state.shading.id().to_string(),

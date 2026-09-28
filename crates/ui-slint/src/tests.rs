@@ -8314,3 +8314,42 @@ fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
     bridge.set_section_docked(InspectorSectionId::Parts, true);
     assert!(bridge.section_layouts[parts_idx].docked);
 }
+
+#[test]
+fn bridge_set_icon_theme_switches_between_outline_and_filled() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert_eq!(bridge.preferences.icon_theme, "outline");
+    assert_eq!(bridge.view_model().icon_theme, "outline");
+
+    // Switch to filled
+    assert!(bridge.set_icon_theme("filled"));
+    assert_eq!(bridge.preferences.icon_theme, "filled");
+    assert_eq!(bridge.view_model().icon_theme, "filled");
+
+    // Redundant switch returns false
+    assert!(!bridge.set_icon_theme("filled"));
+
+    // Switch back to outline
+    assert!(bridge.set_icon_theme("outline"));
+    assert_eq!(bridge.preferences.icon_theme, "outline");
+    assert_eq!(bridge.view_model().icon_theme, "outline");
+
+    // Invalid string normalizes to outline
+    bridge.set_icon_theme("filled");
+    assert_eq!(bridge.preferences.icon_theme, "filled");
+    assert!(bridge.set_icon_theme("unknown-mode"));
+    assert_eq!(bridge.preferences.icon_theme, "outline");
+    assert_eq!(bridge.view_model().icon_theme, "outline");
+}
+
+#[test]
+fn bridge_restores_icon_theme_from_preferences() {
+    let mut preferences = petunia_config::UserPreferences::default();
+    preferences.icon_theme = "filled".to_string();
+
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.restore_section_layouts(&preferences);
+
+    assert_eq!(bridge.preferences.icon_theme, "filled");
+    assert_eq!(bridge.view_model().icon_theme, "filled");
+}
