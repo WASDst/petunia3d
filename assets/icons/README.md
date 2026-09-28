@@ -18,6 +18,7 @@ Arte de ícones não registrada fica em `assets/legacy-icon-art/`.
 3. **`tabler/`**: Pacote vetorial baseado na suíte Tabler Icons.
 4. **`iconoir/`**: Pacote minimalista baseado na biblioteca Iconoir.
 5. **`lucide/`**: Pacote limpo e moderno baseado em Lucide Icons.
+6. **`petunia-outline/` e `petunia-filled/`**: Família original em SVG com IDs semânticos idênticos nas duas variantes. Consulte a [galeria, catálogo, gerador e matriz de cobertura](petunia-dual/README.md). Os assets estão prontos para um resolver de `IconId`; o shell Slint ainda referencia SVGs estáticos.
 
 ## Criação de Pacotes Customizados
 
