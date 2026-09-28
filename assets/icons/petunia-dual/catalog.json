@@ -1,0 +1,1496 @@
+[
+  {
+    "id": "add_primitive",
+    "group": "Primitives",
+    "label": "Add Primitive",
+    "status": "current"
+  },
+  {
+    "id": "annotate",
+    "group": "Interface",
+    "label": "Annotate",
+    "status": "current"
+  },
+  {
+    "id": "asset_library",
+    "group": "Viewport & scene",
+    "label": "Asset Library",
+    "status": "current"
+  },
+  {
+    "id": "axis_gizmo",
+    "group": "Viewport & scene",
+    "label": "Axis Gizmo",
+    "status": "current"
+  },
+  {
+    "id": "backface_culling",
+    "group": "Interface",
+    "label": "Backface Culling",
+    "status": "current"
+  },
+  {
+    "id": "bake_decal",
+    "group": "Painting",
+    "label": "Bake Decal",
+    "status": "current"
+  },
+  {
+    "id": "bake_reference",
+    "group": "Painting",
+    "label": "Bake Reference",
+    "status": "current"
+  },
+  {
+    "id": "bevel",
+    "group": "Mesh modeling",
+    "label": "Round Edge",
+    "status": "current"
+  },
+  {
+    "id": "bone",
+    "group": "Future roadmap",
+    "label": "Bone",
+    "status": "planned"
+  },
+  {
+    "id": "boolean_cut",
+    "group": "Mesh modeling",
+    "label": "Cut",
+    "status": "current"
+  },
+  {
+    "id": "boolean_fuse",
+    "group": "Mesh modeling",
+    "label": "Fuse",
+    "status": "current"
+  },
+  {
+    "id": "boolean_intersect",
+    "group": "Mesh modeling",
+    "label": "Intersect",
+    "status": "current"
+  },
+  {
+    "id": "boolean_join",
+    "group": "Mesh modeling",
+    "label": "Join",
+    "status": "current"
+  },
+  {
+    "id": "bounding_box",
+    "group": "Selection & transform",
+    "label": "Bounding Box",
+    "status": "current"
+  },
+  {
+    "id": "camera",
+    "group": "Viewport & scene",
+    "label": "Camera",
+    "status": "current"
+  },
+  {
+    "id": "capsule",
+    "group": "Primitives",
+    "label": "Capsule",
+    "status": "current"
+  },
+  {
+    "id": "chevron_down",
+    "group": "Interface",
+    "label": "Down",
+    "status": "current"
+  },
+  {
+    "id": "chevron_left",
+    "group": "Interface",
+    "label": "Previous",
+    "status": "current"
+  },
+  {
+    "id": "chevron_right",
+    "group": "Interface",
+    "label": "Next",
+    "status": "current"
+  },
+  {
+    "id": "chevron_up",
+    "group": "Interface",
+    "label": "Up",
+    "status": "current"
+  },
+  {
+    "id": "circle",
+    "group": "Primitives",
+    "label": "Circle",
+    "status": "current"
+  },
+  {
+    "id": "close",
+    "group": "Interface",
+    "label": "Close",
+    "status": "current"
+  },
+  {
+    "id": "cloth",
+    "group": "Future roadmap",
+    "label": "Cloth",
+    "status": "planned"
+  },
+  {
+    "id": "collection",
+    "group": "Viewport & scene",
+    "label": "Collection",
+    "status": "current"
+  },
+  {
+    "id": "command_palette",
+    "group": "Production & extension",
+    "label": "Command Palette",
+    "status": "current"
+  },
+  {
+    "id": "cone",
+    "group": "Primitives",
+    "label": "Cone",
+    "status": "current"
+  },
+  {
+    "id": "connect",
+    "group": "Mesh modeling",
+    "label": "Connect",
+    "status": "current"
+  },
+  {
+    "id": "cube",
+    "group": "Primitives",
+    "label": "Cube",
+    "status": "current"
+  },
+  {
+    "id": "cursor_3d",
+    "group": "Selection & transform",
+    "label": "3D Cursor",
+    "status": "current"
+  },
+  {
+    "id": "cylinder",
+    "group": "Primitives",
+    "label": "Cylinder",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_01",
+    "group": "Properties",
+    "label": "Tool",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_02",
+    "group": "Properties",
+    "label": "Render",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_03",
+    "group": "Properties",
+    "label": "Output",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_04",
+    "group": "Properties",
+    "label": "View Layer",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_05",
+    "group": "Properties",
+    "label": "Scene",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_06",
+    "group": "Properties",
+    "label": "World",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_07",
+    "group": "Properties",
+    "label": "Collection",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_08",
+    "group": "Properties",
+    "label": "Object",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_09",
+    "group": "Properties",
+    "label": "Modifier",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_10",
+    "group": "Properties",
+    "label": "Data",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_11",
+    "group": "Properties",
+    "label": "Material",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_12",
+    "group": "Properties",
+    "label": "Texture",
+    "status": "current"
+  },
+  {
+    "id": "data_tab_13",
+    "group": "Properties",
+    "label": "Particles",
+    "status": "planned"
+  },
+  {
+    "id": "data_tab_14",
+    "group": "Properties",
+    "label": "Rig",
+    "status": "planned"
+  },
+  {
+    "id": "data_tab_15",
+    "group": "Properties",
+    "label": "Paint",
+    "status": "current"
+  },
+  {
+    "id": "delete",
+    "group": "Interface",
+    "label": "Delete",
+    "status": "current"
+  },
+  {
+    "id": "delete_layer",
+    "group": "Painting",
+    "label": "Delete Layer",
+    "status": "current"
+  },
+  {
+    "id": "deselect_all",
+    "group": "Selection & transform",
+    "label": "Deselect All",
+    "status": "current"
+  },
+  {
+    "id": "dissolve",
+    "group": "Mesh modeling",
+    "label": "Dissolve",
+    "status": "current"
+  },
+  {
+    "id": "draw_profile",
+    "group": "Shape-first",
+    "label": "Draw Profile",
+    "status": "current"
+  },
+  {
+    "id": "duplicate",
+    "group": "Interface",
+    "label": "Duplicate",
+    "status": "current"
+  },
+  {
+    "id": "export",
+    "group": "Interface",
+    "label": "Export",
+    "status": "current"
+  },
+  {
+    "id": "export_glb",
+    "group": "Production & extension",
+    "label": "Export GLB",
+    "status": "current"
+  },
+  {
+    "id": "export_obj",
+    "group": "Production & extension",
+    "label": "Export OBJ",
+    "status": "current"
+  },
+  {
+    "id": "extrude",
+    "group": "Mesh modeling",
+    "label": "Extrude",
+    "status": "current"
+  },
+  {
+    "id": "extrude_individual",
+    "group": "Mesh modeling",
+    "label": "Extrude Individual",
+    "status": "current"
+  },
+  {
+    "id": "eye",
+    "group": "Interface",
+    "label": "Visible",
+    "status": "current"
+  },
+  {
+    "id": "eye_hidden",
+    "group": "Interface",
+    "label": "Hidden",
+    "status": "current"
+  },
+  {
+    "id": "file",
+    "group": "Interface",
+    "label": "File",
+    "status": "current"
+  },
+  {
+    "id": "filter",
+    "group": "Interface",
+    "label": "Filter",
+    "status": "current"
+  },
+  {
+    "id": "flip_diagonal",
+    "group": "Mesh modeling",
+    "label": "Flip Diagonal",
+    "status": "current"
+  },
+  {
+    "id": "flip_normals",
+    "group": "Mesh modeling",
+    "label": "Flip Normals",
+    "status": "current"
+  },
+  {
+    "id": "folder",
+    "group": "Interface",
+    "label": "Folder",
+    "status": "current"
+  },
+  {
+    "id": "frame_all",
+    "group": "Viewport & scene",
+    "label": "Frame All",
+    "status": "current"
+  },
+  {
+    "id": "frame_selection",
+    "group": "Viewport & scene",
+    "label": "Frame Selection",
+    "status": "current"
+  },
+  {
+    "id": "generate_volume",
+    "group": "Shape-first",
+    "label": "Generate Volume",
+    "status": "current"
+  },
+  {
+    "id": "grid_overlay",
+    "group": "Viewport & scene",
+    "label": "Grid",
+    "status": "current"
+  },
+  {
+    "id": "grid_view",
+    "group": "Interface",
+    "label": "Grid View",
+    "status": "current"
+  },
+  {
+    "id": "grow_selection",
+    "group": "Selection & transform",
+    "label": "Grow Selection",
+    "status": "current"
+  },
+  {
+    "id": "hair",
+    "group": "Future roadmap",
+    "label": "Hair",
+    "status": "planned"
+  },
+  {
+    "id": "help",
+    "group": "Interface",
+    "label": "Help",
+    "status": "current"
+  },
+  {
+    "id": "hierarchy",
+    "group": "Viewport & scene",
+    "label": "Scene Hierarchy",
+    "status": "current"
+  },
+  {
+    "id": "icosphere",
+    "group": "Primitives",
+    "label": "Icosphere",
+    "status": "current"
+  },
+  {
+    "id": "import",
+    "group": "Interface",
+    "label": "Import",
+    "status": "current"
+  },
+  {
+    "id": "inset",
+    "group": "Mesh modeling",
+    "label": "Inset",
+    "status": "current"
+  },
+  {
+    "id": "invert_selection",
+    "group": "Selection & transform",
+    "label": "Invert Selection",
+    "status": "current"
+  },
+  {
+    "id": "isolate",
+    "group": "Viewport & scene",
+    "label": "Isolate",
+    "status": "current"
+  },
+  {
+    "id": "jump_end",
+    "group": "Interface",
+    "label": "Jump to End",
+    "status": "current"
+  },
+  {
+    "id": "jump_start",
+    "group": "Interface",
+    "label": "Jump to Start",
+    "status": "current"
+  },
+  {
+    "id": "keyframe",
+    "group": "Future roadmap",
+    "label": "Keyframe",
+    "status": "planned"
+  },
+  {
+    "id": "knife",
+    "group": "Mesh modeling",
+    "label": "Knife",
+    "status": "current"
+  },
+  {
+    "id": "list_view",
+    "group": "Interface",
+    "label": "List View",
+    "status": "current"
+  },
+  {
+    "id": "lock",
+    "group": "Interface",
+    "label": "Lock",
+    "status": "current"
+  },
+  {
+    "id": "loop_cut",
+    "group": "Mesh modeling",
+    "label": "Loop Cut",
+    "status": "current"
+  },
+  {
+    "id": "make_face",
+    "group": "Mesh modeling",
+    "label": "Make Face",
+    "status": "current"
+  },
+  {
+    "id": "material",
+    "group": "UV & materials",
+    "label": "Material",
+    "status": "current"
+  },
+  {
+    "id": "maximize",
+    "group": "Painting",
+    "label": "Maximize",
+    "status": "current"
+  },
+  {
+    "id": "measure",
+    "group": "Interface",
+    "label": "Measure",
+    "status": "current"
+  },
+  {
+    "id": "merge",
+    "group": "Mesh modeling",
+    "label": "Merge Center",
+    "status": "current"
+  },
+  {
+    "id": "metallic",
+    "group": "UV & materials",
+    "label": "Metallic",
+    "status": "current"
+  },
+  {
+    "id": "minimize",
+    "group": "Interface",
+    "label": "Minimize",
+    "status": "current"
+  },
+  {
+    "id": "minus",
+    "group": "Interface",
+    "label": "Remove",
+    "status": "current"
+  },
+  {
+    "id": "mirror",
+    "group": "Mesh modeling",
+    "label": "Mirror",
+    "status": "current"
+  },
+  {
+    "id": "mode_edit",
+    "group": "Selection & transform",
+    "label": "Edit Mode",
+    "status": "current"
+  },
+  {
+    "id": "mode_object",
+    "group": "Selection & transform",
+    "label": "Object Mode",
+    "status": "current"
+  },
+  {
+    "id": "modifier",
+    "group": "Mesh modeling",
+    "label": "Modifier",
+    "status": "current"
+  },
+  {
+    "id": "more_vert",
+    "group": "Interface",
+    "label": "More Options",
+    "status": "current"
+  },
+  {
+    "id": "move",
+    "group": "Selection & transform",
+    "label": "Move",
+    "status": "current"
+  },
+  {
+    "id": "new_file",
+    "group": "Interface",
+    "label": "New Project",
+    "status": "current"
+  },
+  {
+    "id": "new_layer",
+    "group": "Painting",
+    "label": "New Layer",
+    "status": "current"
+  },
+  {
+    "id": "normal_map",
+    "group": "UV & materials",
+    "label": "Normal Map",
+    "status": "current"
+  },
+  {
+    "id": "normals_overlay",
+    "group": "Mesh modeling",
+    "label": "Normals Overlay",
+    "status": "current"
+  },
+  {
+    "id": "object_mesh",
+    "group": "Primitives",
+    "label": "Object Mesh",
+    "status": "current"
+  },
+  {
+    "id": "opacity",
+    "group": "UV & materials",
+    "label": "Opacity",
+    "status": "current"
+  },
+  {
+    "id": "open_project",
+    "group": "Interface",
+    "label": "Open Project",
+    "status": "current"
+  },
+  {
+    "id": "orbit",
+    "group": "Viewport & scene",
+    "label": "Orbit",
+    "status": "current"
+  },
+  {
+    "id": "orientation_global",
+    "group": "Selection & transform",
+    "label": "Global Axes",
+    "status": "current"
+  },
+  {
+    "id": "origin",
+    "group": "Selection & transform",
+    "label": "Origin",
+    "status": "current"
+  },
+  {
+    "id": "output",
+    "group": "Production & extension",
+    "label": "Output",
+    "status": "current"
+  },
+  {
+    "id": "overlays",
+    "group": "Viewport & scene",
+    "label": "Overlays",
+    "status": "current"
+  },
+  {
+    "id": "pack_islands",
+    "group": "UV & materials",
+    "label": "Pack Islands",
+    "status": "current"
+  },
+  {
+    "id": "paint",
+    "group": "Painting",
+    "label": "Paint",
+    "status": "current"
+  },
+  {
+    "id": "paint_2d",
+    "group": "Painting",
+    "label": "Paint in 2D",
+    "status": "current"
+  },
+  {
+    "id": "paint_3d",
+    "group": "Painting",
+    "label": "Paint on Model",
+    "status": "current"
+  },
+  {
+    "id": "paint_brush",
+    "group": "Painting",
+    "label": "Paint Brush",
+    "status": "current"
+  },
+  {
+    "id": "paint_clone",
+    "group": "Painting",
+    "label": "Clone Brush",
+    "status": "current"
+  },
+  {
+    "id": "paint_decal",
+    "group": "Painting",
+    "label": "Decal",
+    "status": "current"
+  },
+  {
+    "id": "paint_eraser",
+    "group": "Painting",
+    "label": "Eraser",
+    "status": "current"
+  },
+  {
+    "id": "paint_fill",
+    "group": "Painting",
+    "label": "Fill",
+    "status": "current"
+  },
+  {
+    "id": "paint_layer",
+    "group": "Painting",
+    "label": "Paint Layer",
+    "status": "current"
+  },
+  {
+    "id": "paint_line",
+    "group": "Painting",
+    "label": "Paint Line",
+    "status": "current"
+  },
+  {
+    "id": "paint_mask",
+    "group": "Painting",
+    "label": "Layer Mask",
+    "status": "current"
+  },
+  {
+    "id": "paint_palette",
+    "group": "Painting",
+    "label": "Color Palette",
+    "status": "current"
+  },
+  {
+    "id": "paint_picker",
+    "group": "Painting",
+    "label": "Eyedropper",
+    "status": "current"
+  },
+  {
+    "id": "paint_rect",
+    "group": "Painting",
+    "label": "Paint Rectangle",
+    "status": "current"
+  },
+  {
+    "id": "paint_smudge",
+    "group": "Painting",
+    "label": "Smudge",
+    "status": "current"
+  },
+  {
+    "id": "pan",
+    "group": "Viewport & scene",
+    "label": "Pan",
+    "status": "current"
+  },
+  {
+    "id": "particles",
+    "group": "Future roadmap",
+    "label": "Particles",
+    "status": "planned"
+  },
+  {
+    "id": "parts",
+    "group": "Shape-first",
+    "label": "Parts",
+    "status": "current"
+  },
+  {
+    "id": "pause",
+    "group": "Interface",
+    "label": "Pause",
+    "status": "current"
+  },
+  {
+    "id": "pin",
+    "group": "Interface",
+    "label": "Pin",
+    "status": "current"
+  },
+  {
+    "id": "pivot_median",
+    "group": "Selection & transform",
+    "label": "Median Pivot",
+    "status": "current"
+  },
+  {
+    "id": "plane",
+    "group": "Primitives",
+    "label": "Plane",
+    "status": "current"
+  },
+  {
+    "id": "play",
+    "group": "Interface",
+    "label": "Play",
+    "status": "current"
+  },
+  {
+    "id": "plugin",
+    "group": "Production & extension",
+    "label": "Plugin",
+    "status": "current"
+  },
+  {
+    "id": "plus",
+    "group": "Interface",
+    "label": "Add",
+    "status": "current"
+  },
+  {
+    "id": "primitives",
+    "group": "Primitives",
+    "label": "Primitives",
+    "status": "current"
+  },
+  {
+    "id": "profile_closed",
+    "group": "Shape-first",
+    "label": "Closed Profile",
+    "status": "current"
+  },
+  {
+    "id": "project_from_reference",
+    "group": "UV & materials",
+    "label": "Project From Reference",
+    "status": "current"
+  },
+  {
+    "id": "project_from_view",
+    "group": "UV & materials",
+    "label": "Project From View",
+    "status": "current"
+  },
+  {
+    "id": "proportional_editing",
+    "group": "Selection & transform",
+    "label": "Proportional Editing",
+    "status": "current"
+  },
+  {
+    "id": "pushpull",
+    "group": "Mesh modeling",
+    "label": "Push/Pull",
+    "status": "current"
+  },
+  {
+    "id": "redo",
+    "group": "Interface",
+    "label": "Redo",
+    "status": "current"
+  },
+  {
+    "id": "reference_image",
+    "group": "Shape-first",
+    "label": "Reference Image",
+    "status": "current"
+  },
+  {
+    "id": "reference_manager",
+    "group": "Shape-first",
+    "label": "Reference Manager",
+    "status": "current"
+  },
+  {
+    "id": "refresh",
+    "group": "Interface",
+    "label": "Refresh",
+    "status": "current"
+  },
+  {
+    "id": "relax",
+    "group": "UV & materials",
+    "label": "Relax",
+    "status": "current"
+  },
+  {
+    "id": "render",
+    "group": "Production & extension",
+    "label": "Render",
+    "status": "current"
+  },
+  {
+    "id": "revolve",
+    "group": "Mesh modeling",
+    "label": "Revolve",
+    "status": "current"
+  },
+  {
+    "id": "revolve_profile",
+    "group": "Mesh modeling",
+    "label": "Revolve Profile",
+    "status": "current"
+  },
+  {
+    "id": "rotate",
+    "group": "Selection & transform",
+    "label": "Rotate",
+    "status": "current"
+  },
+  {
+    "id": "roughness",
+    "group": "UV & materials",
+    "label": "Roughness",
+    "status": "current"
+  },
+  {
+    "id": "save",
+    "group": "Interface",
+    "label": "Save Project",
+    "status": "current"
+  },
+  {
+    "id": "save_as",
+    "group": "Interface",
+    "label": "Save As",
+    "status": "current"
+  },
+  {
+    "id": "save_asset",
+    "group": "Viewport & scene",
+    "label": "Save Asset",
+    "status": "current"
+  },
+  {
+    "id": "scale",
+    "group": "Selection & transform",
+    "label": "Scale",
+    "status": "current"
+  },
+  {
+    "id": "script",
+    "group": "Production & extension",
+    "label": "Lua Script",
+    "status": "current"
+  },
+  {
+    "id": "search",
+    "group": "Interface",
+    "label": "Search",
+    "status": "current"
+  },
+  {
+    "id": "select",
+    "group": "Selection & transform",
+    "label": "Select",
+    "status": "current"
+  },
+  {
+    "id": "select_all",
+    "group": "Selection & transform",
+    "label": "Select All",
+    "status": "current"
+  },
+  {
+    "id": "select_box",
+    "group": "Selection & transform",
+    "label": "Box Select",
+    "status": "current"
+  },
+  {
+    "id": "select_brush",
+    "group": "Selection & transform",
+    "label": "Brush Select",
+    "status": "current"
+  },
+  {
+    "id": "select_edge",
+    "group": "Selection & transform",
+    "label": "Select Edge",
+    "status": "current"
+  },
+  {
+    "id": "select_face",
+    "group": "Selection & transform",
+    "label": "Select Face",
+    "status": "current"
+  },
+  {
+    "id": "select_lasso",
+    "group": "Selection & transform",
+    "label": "Lasso Select",
+    "status": "current"
+  },
+  {
+    "id": "select_linked",
+    "group": "Selection & transform",
+    "label": "Select Linked",
+    "status": "current"
+  },
+  {
+    "id": "select_vertex",
+    "group": "Selection & transform",
+    "label": "Select Point",
+    "status": "current"
+  },
+  {
+    "id": "selection_center",
+    "group": "Selection & transform",
+    "label": "Selection Center",
+    "status": "current"
+  },
+  {
+    "id": "separate",
+    "group": "Mesh modeling",
+    "label": "Separate Selection",
+    "status": "current"
+  },
+  {
+    "id": "settings",
+    "group": "Interface",
+    "label": "Settings",
+    "status": "current"
+  },
+  {
+    "id": "shade_flat",
+    "group": "Viewport & scene",
+    "label": "Shade Flat",
+    "status": "current"
+  },
+  {
+    "id": "shade_smooth",
+    "group": "Viewport & scene",
+    "label": "Shade Smooth",
+    "status": "current"
+  },
+  {
+    "id": "shader",
+    "group": "UV & materials",
+    "label": "Shader",
+    "status": "current"
+  },
+  {
+    "id": "shading_material",
+    "group": "Viewport & scene",
+    "label": "Material Preview",
+    "status": "current"
+  },
+  {
+    "id": "shading_rendered",
+    "group": "Viewport & scene",
+    "label": "Rendered Preview",
+    "status": "current"
+  },
+  {
+    "id": "shading_solid",
+    "group": "Viewport & scene",
+    "label": "Solid Shading",
+    "status": "current"
+  },
+  {
+    "id": "shading_wireframe",
+    "group": "Viewport & scene",
+    "label": "Wireframe",
+    "status": "current"
+  },
+  {
+    "id": "shape_layer",
+    "group": "Shape-first",
+    "label": "Shape Layer",
+    "status": "current"
+  },
+  {
+    "id": "shrink_selection",
+    "group": "Selection & transform",
+    "label": "Shrink Selection",
+    "status": "current"
+  },
+  {
+    "id": "slice",
+    "group": "Mesh modeling",
+    "label": "Slice",
+    "status": "current"
+  },
+  {
+    "id": "snap_magnet",
+    "group": "Selection & transform",
+    "label": "Magnet Snap",
+    "status": "current"
+  },
+  {
+    "id": "sphere",
+    "group": "Primitives",
+    "label": "Sphere",
+    "status": "current"
+  },
+  {
+    "id": "spin",
+    "group": "Mesh modeling",
+    "label": "Spin",
+    "status": "current"
+  },
+  {
+    "id": "step_backward",
+    "group": "Interface",
+    "label": "Step Backward",
+    "status": "current"
+  },
+  {
+    "id": "step_forward",
+    "group": "Interface",
+    "label": "Step Forward",
+    "status": "current"
+  },
+  {
+    "id": "stitch",
+    "group": "UV & materials",
+    "label": "Stitch",
+    "status": "current"
+  },
+  {
+    "id": "stop",
+    "group": "Interface",
+    "label": "Stop",
+    "status": "current"
+  },
+  {
+    "id": "subdivide",
+    "group": "Mesh modeling",
+    "label": "Subdivide",
+    "status": "current"
+  },
+  {
+    "id": "symmetrize",
+    "group": "Mesh modeling",
+    "label": "Symmetrize",
+    "status": "current"
+  },
+  {
+    "id": "symmetry_axis",
+    "group": "Shape-first",
+    "label": "Symmetry Axis",
+    "status": "current"
+  },
+  {
+    "id": "texture",
+    "group": "UV & materials",
+    "label": "Texture",
+    "status": "current"
+  },
+  {
+    "id": "thickness",
+    "group": "Shape-first",
+    "label": "Thickness",
+    "status": "current"
+  },
+  {
+    "id": "timeline",
+    "group": "Future roadmap",
+    "label": "Timeline",
+    "status": "planned"
+  },
+  {
+    "id": "tool_bevel",
+    "group": "Mesh modeling",
+    "label": "Tool Bevel",
+    "status": "current"
+  },
+  {
+    "id": "tool_connect",
+    "group": "Mesh modeling",
+    "label": "Tool Connect",
+    "status": "current"
+  },
+  {
+    "id": "tool_dissolve",
+    "group": "Mesh modeling",
+    "label": "Tool Dissolve",
+    "status": "current"
+  },
+  {
+    "id": "tool_duplicate",
+    "group": "Interface",
+    "label": "Tool Duplicate",
+    "status": "current"
+  },
+  {
+    "id": "tool_extrude",
+    "group": "Mesh modeling",
+    "label": "Tool Extrude",
+    "status": "current"
+  },
+  {
+    "id": "tool_inset",
+    "group": "Mesh modeling",
+    "label": "Tool Inset",
+    "status": "current"
+  },
+  {
+    "id": "tool_knife",
+    "group": "Mesh modeling",
+    "label": "Tool Knife",
+    "status": "current"
+  },
+  {
+    "id": "tool_loopcut",
+    "group": "Mesh modeling",
+    "label": "Tool Loopcut",
+    "status": "current"
+  },
+  {
+    "id": "tool_merge",
+    "group": "Mesh modeling",
+    "label": "Tool Merge",
+    "status": "current"
+  },
+  {
+    "id": "tool_position",
+    "group": "Selection & transform",
+    "label": "Tool Position",
+    "status": "current"
+  },
+  {
+    "id": "tool_profile",
+    "group": "Shape-first",
+    "label": "Tool Profile",
+    "status": "current"
+  },
+  {
+    "id": "tool_pushpull",
+    "group": "Mesh modeling",
+    "label": "Tool Pushpull",
+    "status": "current"
+  },
+  {
+    "id": "tool_rotate",
+    "group": "Selection & transform",
+    "label": "Tool Rotate",
+    "status": "current"
+  },
+  {
+    "id": "tool_scale",
+    "group": "Selection & transform",
+    "label": "Tool Scale",
+    "status": "current"
+  },
+  {
+    "id": "tool_slice",
+    "group": "Mesh modeling",
+    "label": "Tool Slice",
+    "status": "current"
+  },
+  {
+    "id": "tool_spin",
+    "group": "Mesh modeling",
+    "label": "Tool Spin",
+    "status": "current"
+  },
+  {
+    "id": "tool_subdivide",
+    "group": "Mesh modeling",
+    "label": "Tool Subdivide",
+    "status": "current"
+  },
+  {
+    "id": "tool_transform",
+    "group": "Selection & transform",
+    "label": "Tool Transform",
+    "status": "current"
+  },
+  {
+    "id": "torus",
+    "group": "Primitives",
+    "label": "Torus",
+    "status": "current"
+  },
+  {
+    "id": "trace_silhouette",
+    "group": "Shape-first",
+    "label": "Trace Silhouette",
+    "status": "current"
+  },
+  {
+    "id": "transform",
+    "group": "Selection & transform",
+    "label": "Universal Transform",
+    "status": "current"
+  },
+  {
+    "id": "trash",
+    "group": "Interface",
+    "label": "Trash",
+    "status": "current"
+  },
+  {
+    "id": "undo",
+    "group": "Interface",
+    "label": "Undo",
+    "status": "current"
+  },
+  {
+    "id": "unlock",
+    "group": "Interface",
+    "label": "Unlock",
+    "status": "current"
+  },
+  {
+    "id": "unwrap_auto",
+    "group": "UV & materials",
+    "label": "Unwrap Auto",
+    "status": "current"
+  },
+  {
+    "id": "uv_checker",
+    "group": "UV & materials",
+    "label": "UV Checker",
+    "status": "current"
+  },
+  {
+    "id": "uv_editor",
+    "group": "UV & materials",
+    "label": "UV Editor",
+    "status": "current"
+  },
+  {
+    "id": "uv_island",
+    "group": "UV & materials",
+    "label": "UV Island",
+    "status": "current"
+  },
+  {
+    "id": "uv_move",
+    "group": "UV & materials",
+    "label": "Move UV",
+    "status": "current"
+  },
+  {
+    "id": "uv_pack",
+    "group": "UV & materials",
+    "label": "Pack Islands",
+    "status": "current"
+  },
+  {
+    "id": "uv_project_reference",
+    "group": "UV & materials",
+    "label": "Project From Reference",
+    "status": "current"
+  },
+  {
+    "id": "uv_project_view",
+    "group": "UV & materials",
+    "label": "Project From View",
+    "status": "current"
+  },
+  {
+    "id": "uv_relax",
+    "group": "UV & materials",
+    "label": "Relax UVs",
+    "status": "current"
+  },
+  {
+    "id": "uv_rotate",
+    "group": "UV & materials",
+    "label": "Rotate UV",
+    "status": "current"
+  },
+  {
+    "id": "uv_scale",
+    "group": "UV & materials",
+    "label": "Scale UV",
+    "status": "current"
+  },
+  {
+    "id": "uv_seam",
+    "group": "UV & materials",
+    "label": "UV Seam",
+    "status": "current"
+  },
+  {
+    "id": "uv_stitch",
+    "group": "UV & materials",
+    "label": "Stitch Seams",
+    "status": "current"
+  },
+  {
+    "id": "uv_unwrap",
+    "group": "UV & materials",
+    "label": "Unwrap",
+    "status": "current"
+  },
+  {
+    "id": "view_back",
+    "group": "Viewport & scene",
+    "label": "Back View",
+    "status": "current"
+  },
+  {
+    "id": "view_bottom",
+    "group": "Viewport & scene",
+    "label": "Bottom View",
+    "status": "current"
+  },
+  {
+    "id": "view_front",
+    "group": "Viewport & scene",
+    "label": "Front View",
+    "status": "current"
+  },
+  {
+    "id": "view_left",
+    "group": "Viewport & scene",
+    "label": "Left View",
+    "status": "current"
+  },
+  {
+    "id": "view_lit",
+    "group": "Viewport & scene",
+    "label": "View Lit",
+    "status": "current"
+  },
+  {
+    "id": "view_material",
+    "group": "Viewport & scene",
+    "label": "View Material",
+    "status": "current"
+  },
+  {
+    "id": "view_orthographic",
+    "group": "Viewport & scene",
+    "label": "Orthographic View",
+    "status": "current"
+  },
+  {
+    "id": "view_perspective",
+    "group": "Viewport & scene",
+    "label": "Perspective View",
+    "status": "current"
+  },
+  {
+    "id": "view_right",
+    "group": "Viewport & scene",
+    "label": "Right View",
+    "status": "current"
+  },
+  {
+    "id": "view_solid",
+    "group": "Viewport & scene",
+    "label": "View Solid",
+    "status": "current"
+  },
+  {
+    "id": "view_top",
+    "group": "Viewport & scene",
+    "label": "Top View",
+    "status": "current"
+  },
+  {
+    "id": "view_wire",
+    "group": "Viewport & scene",
+    "label": "View Wire",
+    "status": "current"
+  },
+  {
+    "id": "warning",
+    "group": "Interface",
+    "label": "Warning",
+    "status": "current"
+  },
+  {
+    "id": "wedge",
+    "group": "Primitives",
+    "label": "Wedge",
+    "status": "current"
+  },
+  {
+    "id": "weld",
+    "group": "Mesh modeling",
+    "label": "Merge by Distance",
+    "status": "current"
+  },
+  {
+    "id": "wire_overlay",
+    "group": "Viewport & scene",
+    "label": "Wire Overlay",
+    "status": "current"
+  },
+  {
+    "id": "xray",
+    "group": "Viewport & scene",
+    "label": "X-Ray",
+    "status": "current"
+  },
+  {
+    "id": "zoom",
+    "group": "Viewport & scene",
+    "label": "Zoom",
+    "status": "current"
+  }
+]
