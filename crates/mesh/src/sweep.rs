@@ -6,7 +6,7 @@
 
 use glam::{DVec3, Vec3};
 
-use super::{Face, Mesh, Vertex, compute_parallel_transport_frames, triangulate};
+use super::{Face, Mesh, Vertex, compute_parallel_transport_frames};
 
 /// Opções de configuração para a operação de Sweep.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -258,35 +258,47 @@ pub fn generate_sweep(
         }
     }
 
-    // 3. Gera tampas de início e fim se aplicável
+    // 3. Gera tampas de início e fim se aplicável (quads para 4 pontos, n-gons para > 4)
     if !options.closed_path && num_profile >= 3 && (options.cap_start || options.cap_end) {
-        let Ok(tris) = triangulate::ear_clip(profile) else {
-            return Ok(mesh);
-        };
-        if options.cap_start {
-            for &[a, b, c] in &tris {
-                let idx_a = a as u32;
-                let idx_b = b as u32;
-                let idx_c = c as u32;
-                // Tampa inicial com normal voltada para trás (ordem invertida c, b, a)
+        if num_profile == 4 {
+            if options.cap_start {
                 mesh.push_face(Face::with_uv(
-                    vec![idx_c, idx_b, idx_a],
-                    vec![profile[c], profile[b], profile[a]],
+                    vec![3, 2, 1, 0],
+                    vec![profile[3], profile[2], profile[1], profile[0]],
                 ));
             }
-        }
-
-        if options.cap_end {
-            let off = ((num_path - 1) * num_profile) as u32;
-            for &[a, b, c] in &tris {
-                let idx_a = off + a as u32;
-                let idx_b = off + b as u32;
-                let idx_c = off + c as u32;
-                // Tampa final com normal voltada para a frente (ordem a, b, c)
+            if options.cap_end {
+                let off = ((num_path - 1) * num_profile) as u32;
                 mesh.push_face(Face::with_uv(
-                    vec![idx_a, idx_b, idx_c],
-                    vec![profile[a], profile[b], profile[c]],
+                    vec![off, off + 1, off + 2, off + 3],
+                    vec![profile[0], profile[1], profile[2], profile[3]],
                 ));
+            }
+        } else if num_profile == 3 {
+            if options.cap_start {
+                mesh.push_face(Face::with_uv(
+                    vec![2, 1, 0],
+                    vec![profile[2], profile[1], profile[0]],
+                ));
+            }
+            if options.cap_end {
+                let off = ((num_path - 1) * num_profile) as u32;
+                mesh.push_face(Face::with_uv(
+                    vec![off, off + 1, off + 2],
+                    vec![profile[0], profile[1], profile[2]],
+                ));
+            }
+        } else {
+            if options.cap_start {
+                let start_verts: Vec<u32> = (0..num_profile as u32).rev().collect();
+                let start_uvs: Vec<[f32; 2]> = profile.iter().rev().copied().collect();
+                mesh.push_face(Face::with_uv(start_verts, start_uvs));
+            }
+            if options.cap_end {
+                let off = ((num_path - 1) * num_profile) as u32;
+                let end_verts: Vec<u32> = (off..off + num_profile as u32).collect();
+                let end_uvs: Vec<[f32; 2]> = profile.to_vec();
+                mesh.push_face(Face::with_uv(end_verts, end_uvs));
             }
         }
     }

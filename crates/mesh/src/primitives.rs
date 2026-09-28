@@ -900,28 +900,50 @@ impl Mesh {
         Ok(m)
     }
 
-    /// Malha a partir de polígono 2D (ear clipping) extrudado em +Z.
+    /// Malha a partir de polígono 2D extrudado em +Z.
+    /// Gera quads quando o polígono tem 4 pontos (ex.: retângulos), triângulos para 3 pontos,
+    /// e n-gons para > 4 pontos no authoring, sem granular em triângulos desnecessários.
     pub fn from_polygon(points: &[[f32; 2]], depth: f32) -> Result<Self, String> {
-        let tris = triangulate::ear_clip(points)?;
         let n = points.len();
+        if n < 3 {
+            return Err("polígono precisa de ao menos 3 pontos".to_string());
+        }
+        let area = triangulate::polygon_area(points);
+        if area.abs() < 1e-9 {
+            return Err("área do polígono degenerada".to_string());
+        }
+        // Garante orientação CCW para o perfil no plano XY
+        let mut pts = points.to_vec();
+        if area < 0.0 {
+            pts.reverse();
+        }
         let mut m = Mesh::default();
-        for &[x, y] in points {
+        for &[x, y] in &pts {
             m.verts.push(Vertex::new(x, y, 0.0));
         }
-        for &[x, y] in points {
-            m.verts.push(Vertex::new(x, y, depth.max(0.01)));
+        let d = depth.max(0.01);
+        for &[x, y] in &pts {
+            m.verts.push(Vertex::new(x, y, d));
         }
         let off = n as u32;
-        for &[a, b, c] in &tris {
-            // base (normal -Z) e tampa (+Z)
-            m.push_face(Face::new(vec![c as u32, b as u32, a as u32]));
-            m.push_face(Face::new(vec![
-                off + a as u32,
-                off + b as u32,
-                off + c as u32,
-            ]));
+
+        if n == 4 {
+            // base: normal -Z (ordem horária: 3, 2, 1, 0) -> QUAD
+            m.push_face(Face::new(vec![3, 2, 1, 0]));
+            // tampa: normal +Z (ordem anti-horária: off, off+1, off+2, off+3) -> QUAD
+            m.push_face(Face::new(vec![off, off + 1, off + 2, off + 3]));
+        } else if n == 3 {
+            m.push_face(Face::new(vec![2, 1, 0]));
+            m.push_face(Face::new(vec![off, off + 1, off + 2]));
+        } else {
+            // N-gon caps no authoring (conforme bible 03)
+            let base_verts: Vec<u32> = (0..n as u32).rev().collect();
+            m.push_face(Face::new(base_verts));
+            let top_verts: Vec<u32> = (off..off + n as u32).collect();
+            m.push_face(Face::new(top_verts));
         }
-        // laterais: segue a ordem do polígono (assume CCW após ear_clip)
+
+        // laterais: segue a ordem do polígono (todos quads)
         for k in 0..n {
             let k2 = (k + 1) % n;
             m.push_face(Face::new(vec![

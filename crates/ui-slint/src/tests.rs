@@ -8344,12 +8344,65 @@ fn bridge_set_icon_theme_switches_between_outline_and_filled() {
 
 #[test]
 fn bridge_restores_icon_theme_from_preferences() {
-    let mut preferences = petunia_config::UserPreferences::default();
-    preferences.icon_theme = "filled".to_string();
+    let preferences = petunia_config::UserPreferences {
+        icon_theme: "filled".to_string(),
+        ..Default::default()
+    };
 
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.restore_section_layouts(&preferences);
 
     assert_eq!(bridge.preferences.icon_theme, "filled");
     assert_eq!(bridge.view_model().icon_theme, "filled");
+}
+
+#[test]
+fn test_2d_generated_object_has_quads_and_deleting_face_preserves_segment() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+
+    // 1. Gera um objeto 2D retangular extrudado
+    petunia_module_model::draw_profile::profile_set_rectangle(&mut bridge.state, 2.0, 1.5);
+    bridge.state.profile.depth = 1.0;
+    petunia_module_model::draw_profile::generate_extrude(&mut bridge.state);
+
+    let active_mesh = bridge.state.project.active_mesh().expect("malha gerada");
+    assert_eq!(active_mesh.faces.len(), 6, "deve ter 6 faces");
+    for (i, face) in active_mesh.faces.iter().enumerate() {
+        assert_eq!(
+            face.verts.len(),
+            4,
+            "Face {i} deve ser um QUAD (4 vértices), e não um triângulo",
+        );
+    }
+
+    // 2. Muda para o domínio de seleção de Face (Face mode)
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face));
+    assert_eq!(bridge.state.selection_domain(), SelectionDomain::Face);
+
+    // 3. Seleciona apenas a face do topo (face 1)
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        mesh.deselect_all();
+        mesh.faces[1].selected = true;
+        mesh.sync_vert_selection_from_faces();
+    }
+
+    // 4. Executa o comando de deletar
+    let delete_ok = bridge.delete_or_dissolve_selection();
+    assert!(delete_ok, "deleção deve suceder");
+
+    // 5. Verifica que apenas a face selecionada foi deletada (restando 5 faces)
+    // e que o restante do segmento (as 4 paredes laterais e o fundo) permanece intacto
+    let remaining_mesh = bridge.state.project.active_mesh().expect("malha restante");
+    assert_eq!(
+        remaining_mesh.faces.len(),
+        5,
+        "apenas a face selecionada deve ser deletada, mantendo o restante do segmento (5 faces)"
+    );
+    for face in &remaining_mesh.faces {
+        assert_eq!(
+            face.verts.len(),
+            4,
+            "as faces restantes continuam sendo quads"
+        );
+    }
 }

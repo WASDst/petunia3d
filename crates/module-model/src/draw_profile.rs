@@ -337,6 +337,7 @@ pub fn generate_extrude(state: &mut AppState) {
             state.checkpoint("draw profile");
             state.project.add("Profile", m);
             state.profile.clear();
+            state.session.tools.active_tool = "select".to_string();
             state.sync_selection();
             state.emit_mesh_changed();
             state.set_status(state.t("profile.generated"));
@@ -375,6 +376,7 @@ pub fn generate_revolve(state: &mut AppState) {
             state.checkpoint("revolve profile");
             state.project.add("Revolved", m);
             state.profile.clear();
+            state.session.tools.active_tool = "select".to_string();
             state.sync_selection();
             state.emit_mesh_changed();
             state.set_status(state.t("profile.generated"));
@@ -494,6 +496,7 @@ pub fn generate_sweep(state: &mut AppState) {
             state.checkpoint("sweep profile");
             state.project.add("Sweep", m);
             state.profile.clear();
+            state.session.tools.active_tool = "select".to_string();
             state.sync_selection();
             state.emit_mesh_changed();
             state.set_status(state.t("profile.generated"));

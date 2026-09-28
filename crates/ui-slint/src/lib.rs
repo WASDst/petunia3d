@@ -3650,12 +3650,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return None;
         }
-        let Some(profile) = self.active_profile_state() else {
-            return None;
-        };
-        let Some((_, spline)) = self.active_profile_resources() else {
-            return None;
-        };
+        let profile = self.active_profile_state()?;
+        let (_, spline) = self.active_profile_resources()?;
         if profile.points.is_empty() || self.viewport_size[0] <= 1.0 || self.viewport_size[1] <= 1.0
         {
             return None;
@@ -7765,7 +7761,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Exclui ou dissolve elementos selecionados ou o ativo ativo se em Object Mode.
     pub fn delete_or_dissolve_selection(&mut self) -> bool {
-        if self.state.session.tools.active_tool == "draw_profile" {
+        if self.state.session.tools.active_tool == "draw_profile"
+            && self.profile_selected_point.is_some()
+        {
             return self.delete_selected_profile_point();
         }
 
@@ -7806,9 +7804,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return false;
             }
             self.state.sync_selection();
-            self.state
-                .dispatch(&petunia_core::DeleteOrDissolveSelectionCmd)
-                .is_ok()
+            if self.state.selection_domain() == SelectionDomain::Face
+                || self
+                    .state
+                    .project
+                    .active_mesh()
+                    .is_some_and(|m| m.faces.iter().any(|f| f.selected))
+            {
+                self.state
+                    .dispatch(&petunia_core::DeleteSelectionCmd)
+                    .is_ok()
+            } else {
+                self.state
+                    .dispatch(&petunia_core::DeleteOrDissolveSelectionCmd)
+                    .is_ok()
+            }
         } else {
             self.apply(UiIntent::DeleteActiveAsset);
             true
@@ -10023,6 +10033,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.delete" => {
                 if self.state.session.tools.active_tool == "draw_profile" {
                     self.delete_selected_profile_point();
+                } else if self.state.selection_domain().is_component() {
+                    self.delete_or_dissolve_selection();
                 } else {
                     self.apply(UiIntent::DeleteActiveAsset);
                 }

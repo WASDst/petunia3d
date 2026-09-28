@@ -1877,6 +1877,11 @@ impl Mesh {
                         self.selected_edges.insert((a.min(b), a.max(b)));
                     }
                 }
+            } else if sel_faces.len() == 1 {
+                // Uma única face não tem faces adjacentes selecionadas para fundir.
+                // Não deve passar para dissolve_vertices (que dissolveria todos os vértices
+                // dessa face e destruiria as faces vizinhas do segmento).
+                return;
             }
         }
 

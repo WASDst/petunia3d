@@ -3921,6 +3921,13 @@ impl Command for DeleteOrDissolveSelectionCmd {
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        // Se houver faces selecionadas, o usuário quer deletar as faces!
+        // Deleta diretamente a face selecionada sem alterar a topologia das faces vizinhas.
+        if mesh.faces.iter().any(|face| face.selected) {
+            mesh.delete_selected();
+            state.set_status("Deleted selected faces");
+            return Ok(());
+        }
         let counts = (
             mesh.verts.len(),
             mesh.faces.len(),

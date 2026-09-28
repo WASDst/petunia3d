@@ -898,4 +898,64 @@ mod tests {
         let area1 = islands[1].area();
         assert!((area0 - area1).abs() < 0.1, "area0={area0}, area1={area1}");
     }
+
+    #[test]
+    fn from_polygon_creates_quads_not_triangles() {
+        let square = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+        let m = Mesh::from_polygon(&square, 2.0).expect("from_polygon");
+        // Uma caixa extrudada de 4 pontos deve ter exatamente 6 faces
+        assert_eq!(m.faces.len(), 6, "uma caixa de 4 pontos deve ter 6 faces");
+        // Todas as 6 faces (topo, base e 4 laterais) devem ser QUADS
+        for (i, f) in m.faces.iter().enumerate() {
+            assert_eq!(
+                f.verts.len(),
+                4,
+                "face {i} deve ser um quad (4 vértices), mas tem {}",
+                f.verts.len()
+            );
+        }
+    }
+
+    #[test]
+    fn delete_selected_face_keeps_adjacent_segment_intact() {
+        let square = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+        let mut m = Mesh::from_polygon(&square, 2.0).expect("from_polygon");
+        assert_eq!(m.faces.len(), 6);
+
+        // Seleciona a face do topo
+        m.faces[1].selected = true;
+        m.sync_vert_selection_from_faces();
+
+        // Deleta a face selecionada
+        m.delete_selected();
+
+        // Apenas a face selecionada deve sumir; as 5 faces restantes devem continuar intactas
+        assert_eq!(
+            m.faces.len(),
+            5,
+            "apenas 1 face deve ser excluída, restando 5"
+        );
+        for f in &m.faces {
+            assert_eq!(f.verts.len(), 4, "as faces restantes continuam sendo quads");
+        }
+    }
+
+    #[test]
+    fn dissolve_single_face_does_not_destroy_neighbor_faces() {
+        let square = [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]];
+        let mut m = Mesh::from_polygon(&square, 2.0).expect("from_polygon");
+        assert_eq!(m.faces.len(), 6);
+
+        // Seleciona apenas 1 face e simula sincronização de vértices
+        m.faces[0].selected = true;
+        m.sync_vert_selection_from_faces();
+
+        // dissolve_selected em 1 face isolada não deve fundir com nada nem dissolver os vértices
+        m.dissolve_selected();
+        assert_eq!(
+            m.faces.len(),
+            6,
+            "dissolver 1 única face isolada não deve deletar nem destruir faces vizinhas"
+        );
+    }
 }
