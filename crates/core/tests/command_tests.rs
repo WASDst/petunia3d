@@ -4,23 +4,56 @@
 
 use petunia_core::ProjectService;
 use petunia_core::command::{
-    AddPrimitiveCmd, AddSplinePointCmd, AttachSplinePointCmd, BakeDecalCmd, BoxSelectCmd,
-    ClearSelectionCmd, CommandDispatcher, CommandError, ConvertSplineToPolylineCmd,
-    CreateSplineCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeleteSelectionCmd,
-    DeleteSplineCmd, DeleteSplinePointCmd, DetachSplinePointCmd, DissolveCmd, DuplicateAssetCmd,
+    AddPrimitiveCmd, AddSplinePointCmd, AttachSplinePointCmd, BakeDecalCmd, BakePathGeneratorCmd,
+    BoxSelectCmd, ClearSelectionCmd, CommandDispatcher, CommandError, ConvertSplineToPolylineCmd,
+    CreatePathGeneratorCmd, CreateProfileCmd, CreateSplineCmd, DeleteAssetCmd,
+    DeleteOrDissolveSelectionCmd, DeleteProfileCmd, DeleteSelectionCmd, DeleteSplineCmd,
+    DeleteSplinePointCmd, DetachSplinePointCmd, DissolveCmd, DuplicateAssetCmd,
     DuplicateSelectionCmd, ExtrudeIndividualCmd, FlipDiagonalCmd, FlipNormalsCmd,
     InvertSelectionCmd, MergeCenterCmd, MoveSplinePointCmd, PrimitiveKind, ReorderAssetCmd,
     ReprojectSplinePointAttachmentCmd, ReverseSplineCmd, RevolveCmd,
     RotateSplinePointAttachmentCmd, SelectAllCmd, SelectLinkedCmd, SetAssetCollectionCmd,
     SetDecalTransformCmd, SetSplineClosedCmd, SetSplineHandlesCmd, SlideSplinePointAttachmentCmd,
     SubdivideSelectionCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
-    ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UvRelaxCmd, UvStitchCmd,
+    ToggleLockAssetCmd, ToggleVisibilityAssetCmd, UpdateSweepGeneratorCmd, UvRelaxCmd, UvStitchCmd,
 };
 use petunia_core::state::{ASSET_NAME_MAX_LEN, AppState, AssetRenameError, DirtyReason, EditMode};
 use petunia_core::{
-    SplineHandleMode, SplineInterpolation, SplinePoint, SplineResource, SurfaceAttachmentStatus,
-    project_ray_to_surface_target,
+    PathGenerator, PathGeneratorEvaluationCache, PathGeneratorQuality, ProfileResource,
+    ProfileWorkplane, SplineHandleMode, SplineInterpolation, SplinePoint, SplineResource,
+    SurfaceAttachmentStatus, SweepGeneratorParameters, project_ray_to_surface_target,
 };
+
+fn sweep_fixture() -> (
+    SplineResource,
+    ProfileResource,
+    SplineResource,
+    PathGenerator,
+) {
+    let profile_spline = SplineResource::from_polyline(
+        "Square curve",
+        &[
+            [-0.5, -0.5, 0.0],
+            [0.5, -0.5, 0.0],
+            [0.5, 0.5, 0.0],
+            [-0.5, 0.5, 0.0],
+        ],
+        true,
+    );
+    let profile = ProfileResource::new("Square", profile_spline.id, ProfileWorkplane::default());
+    let path = SplineResource::from_polyline(
+        "Guide",
+        &[[0.0, 0.0, 0.0], [0.0, 0.0, 2.0], [1.0, 0.0, 3.0]],
+        false,
+    );
+    let generator = PathGenerator::sweep(
+        "Square sweep",
+        path.id,
+        profile.id,
+        SweepGeneratorParameters::default(),
+    );
+    (profile_spline, profile, path, generator)
+}
 
 #[test]
 fn test_add_primitive_commands_and_undo_redo() {
@@ -278,6 +311,7 @@ fn selection_command_advances_only_selection_revision() {
     assert_eq!(after[7], before[7], "texture revision");
     assert_eq!(after[8], before[8], "transform revision");
     assert_eq!(after[9], before[9], "spline revision");
+    assert_eq!(after[10], before[10], "procedural revision");
     assert_eq!(state.project.undo.depth(), (0, 0));
 }
 
@@ -305,6 +339,7 @@ fn uv_commands_commit_once_and_advance_only_uv_revision() {
         assert_eq!(after[7], before[7], "{} textures", command.label());
         assert_eq!(after[8], before[8], "{} transforms", command.label());
         assert_eq!(after[9], before[9], "{} splines", command.label());
+        assert_eq!(after[10], before[10], "{} procedural", command.label());
     }
 }
 
@@ -318,7 +353,7 @@ fn flip_normals_advances_only_normal_revision() {
     let after = state.project.project.revision_clock();
 
     assert_eq!(state.project.undo.depth(), (1, 0));
-    for index in [0, 1, 3, 4, 5, 6, 7, 8, 9] {
+    for index in [0, 1, 3, 4, 5, 6, 7, 8, 9, 10] {
         assert_eq!(after[index], before[index], "revision index {index}");
     }
     assert_eq!(after[2], before[2] + 1);
@@ -346,6 +381,7 @@ fn spline_create_move_undo_redo_is_transactional_and_domain_scoped() {
         assert_eq!(after_create[index], before[index], "revision index {index}");
     }
     assert_eq!(after_create[9], before[9] + 1);
+    assert_eq!(after_create[10], before[10]);
 
     state
         .dispatch(&MoveSplinePointCmd {
@@ -408,6 +444,135 @@ fn spline_create_move_undo_redo_is_transactional_and_domain_scoped() {
             .unwrap()
             .position,
         [1.0, 1.0, 0.0]
+    );
+}
+
+#[test]
+fn persistent_profile_sweep_and_bake_are_transactional() {
+    let mut state = AppState::default();
+    let initial_assets = state.project.assets.len();
+    let (profile_spline, profile, path, generator) = sweep_fixture();
+    let profile_spline_id = profile_spline.id;
+    let profile_id = profile.id;
+    let path_id = path.id;
+    let generator_id = generator.id;
+
+    state
+        .dispatch(&CreateProfileCmd {
+            spline: profile_spline,
+            profile,
+        })
+        .unwrap();
+    assert_eq!(state.project.profiles.len(), 1);
+    assert_eq!(state.render.last_dirty_reason, Some(DirtyReason::CurveEdit));
+    assert_eq!(state.project.project.revision_clock()[9], 1);
+    assert_eq!(state.project.project.revision_clock()[10], 1);
+
+    state.dispatch(&CreateSplineCmd { spline: path }).unwrap();
+    state
+        .dispatch(&CreatePathGeneratorCmd { generator })
+        .unwrap();
+    assert_eq!(state.project.path_generators.len(), 1);
+    assert_eq!(state.render.last_dirty_reason, Some(DirtyReason::CurveEdit));
+
+    let depth_before_blocked_delete = state.project.undo.depth();
+    assert!(
+        state
+            .dispatch(&DeleteSplineCmd { spline_id: path_id })
+            .is_err()
+    );
+    assert_eq!(state.project.undo.depth(), depth_before_blocked_delete);
+    assert!(state.dispatch(&DeleteProfileCmd { profile_id }).is_err());
+    assert_eq!(state.project.undo.depth(), depth_before_blocked_delete);
+
+    let mut parameters = state
+        .project
+        .project
+        .get_path_generator(generator_id)
+        .unwrap()
+        .sweep_parameters();
+    parameters.miter = false;
+    state
+        .dispatch(&UpdateSweepGeneratorCmd {
+            generator_id,
+            parameters,
+        })
+        .unwrap();
+    let depth_after_update = state.project.undo.depth();
+    assert!(
+        state
+            .dispatch(&UpdateSweepGeneratorCmd {
+                generator_id,
+                parameters,
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.undo.depth(), depth_after_update);
+
+    let expected = {
+        let mut cache = PathGeneratorEvaluationCache::default();
+        state
+            .project
+            .project
+            .evaluate_path_generator(generator_id, PathGeneratorQuality::Final, &mut cache)
+            .unwrap()
+            .mesh
+            .clone()
+    };
+    state
+        .dispatch(&BakePathGeneratorCmd {
+            generator_id,
+            asset_name: "Editable sweep".to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(state.project.assets.len(), initial_assets + 1);
+    assert!(
+        state
+            .project
+            .project
+            .get_path_generator(generator_id)
+            .is_none()
+    );
+    assert!(state.project.project.get_profile(profile_id).is_some());
+    assert!(
+        state
+            .project
+            .project
+            .get_spline(profile_spline_id)
+            .is_some()
+    );
+    assert!(state.project.project.get_spline(path_id).is_some());
+    let baked = state.project.active().unwrap();
+    assert_eq!(baked.name, "Editable sweep");
+    assert_eq!(baked.mesh.vert_count(), expected.vert_count());
+    assert_eq!(baked.mesh.tri_count(), expected.tri_count());
+    assert!(
+        baked
+            .mesh
+            .verts
+            .iter()
+            .zip(&expected.verts)
+            .all(|(left, right)| left.pos == right.pos)
+    );
+
+    assert!(state.undo());
+    assert_eq!(state.project.assets.len(), initial_assets);
+    assert!(
+        state
+            .project
+            .project
+            .get_path_generator(generator_id)
+            .is_some()
+    );
+    assert!(state.redo());
+    assert_eq!(state.project.assets.len(), initial_assets + 1);
+    assert!(
+        state
+            .project
+            .project
+            .get_path_generator(generator_id)
+            .is_none()
     );
 }
 

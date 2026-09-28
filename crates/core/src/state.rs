@@ -2302,7 +2302,10 @@ impl AppState {
                 }
             }
         }
-        let reason = if changes == ProjectChanges::SPLINES {
+        let reason = if changes == ProjectChanges::SPLINES
+            || changes == ProjectChanges::PROCEDURAL
+            || changes == (ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL)
+        {
             DirtyReason::CurveEdit
         } else if changes.intersects(ProjectChanges::TEXTURES | ProjectChanges::MATERIALS) {
             DirtyReason::MaterialEdit

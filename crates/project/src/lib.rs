@@ -24,6 +24,7 @@ impl ProjectChanges {
     pub const NORMALS: Self = Self(1 << 7);
     pub const COLORS: Self = Self(1 << 8);
     pub const SPLINES: Self = Self(1 << 9);
+    pub const PROCEDURAL: Self = Self(1 << 10);
     pub const GEOMETRY: Self =
         Self(Self::TOPOLOGY.0 | Self::POSITIONS.0 | Self::NORMALS.0 | Self::UVS.0 | Self::COLORS.0);
     pub const ALL: Self = Self(
@@ -32,7 +33,8 @@ impl ProjectChanges {
             | Self::MATERIALS.0
             | Self::TEXTURES.0
             | Self::TRANSFORMS.0
-            | Self::SPLINES.0,
+            | Self::SPLINES.0
+            | Self::PROCEDURAL.0,
     );
 
     pub const fn contains(self, other: Self) -> bool {
@@ -74,7 +76,9 @@ pub mod model_library;
 pub mod package;
 pub mod paint_layers;
 pub mod palette;
+pub mod path_generator;
 pub mod pipeline;
+pub mod profile;
 pub mod rig;
 pub mod spline;
 pub mod surface_attachment;
@@ -100,11 +104,17 @@ pub use paint_layers::{
     blend_pixels,
 };
 pub use palette::{export_gpl, export_hex, import_gpl, import_hex, preset_gameboy, preset_pico8};
+pub use path_generator::{
+    MAX_GENERATED_VERTICES, PathGenerator, PathGeneratorDependencies, PathGeneratorDiagnostics,
+    PathGeneratorError, PathGeneratorEvaluation, PathGeneratorEvaluationCache, PathGeneratorKind,
+    PathGeneratorQuality, PathGeneratorWarning, SweepGeneratorParameters,
+};
 pub use pipeline::{
     BatchExportReport, DeliveryPipeline, ExportOptions, ExportReport, FileFormat,
     FormatCapabilities, FormatExporter, FormatImporter, ImportOptions, ImportPayload,
     PipelineError,
 };
+pub use profile::{ProfileError, ProfileResource, ProfileWorkplane};
 pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight};
 pub use spline::{
     ArcLengthTable, SplineError, SplineEvaluationCache, SplineFrame, SplineHandleMode,
@@ -786,6 +796,12 @@ pub struct Project {
     /// permanecer após todos os campos V1 existentes para não deslocar postcard.
     #[serde(default)]
     pub splines: Vec<SplineResource>,
+    #[serde(default)]
+    pub procedural_revision: u64,
+    #[serde(default)]
+    pub profiles: Vec<ProfileResource>,
+    #[serde(default)]
+    pub path_generators: Vec<PathGenerator>,
 }
 
 impl Project {
@@ -802,6 +818,8 @@ impl Default for Project {
             name: default_project_name(),
             assets: Vec::new(),
             splines: Vec::new(),
+            profiles: Vec::new(),
+            path_generators: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -828,6 +846,7 @@ impl Default for Project {
             texture_revision: 0,
             transform_revision: 0,
             spline_revision: 0,
+            procedural_revision: 0,
         }
     }
 }
@@ -914,6 +933,9 @@ impl Project {
     pub fn bump_splines(&mut self) {
         self.spline_revision = self.spline_revision.wrapping_add(1);
     }
+    pub fn bump_procedural(&mut self) {
+        self.procedural_revision = self.procedural_revision.wrapping_add(1);
+    }
 
     pub fn bump_changes(&mut self, changes: ProjectChanges) {
         if changes.contains(ProjectChanges::TOPOLOGY) {
@@ -946,10 +968,13 @@ impl Project {
         if changes.contains(ProjectChanges::SPLINES) {
             self.bump_splines();
         }
+        if changes.contains(ProjectChanges::PROCEDURAL) {
+            self.bump_procedural();
+        }
     }
 
     /// Keeps cache revisions monotonic when undo/redo restores an older snapshot.
-    pub fn revision_clock(&self) -> [u64; 10] {
+    pub fn revision_clock(&self) -> [u64; 11] {
         [
             self.topology_revision,
             self.position_revision,
@@ -961,10 +986,11 @@ impl Project {
             self.texture_revision,
             self.transform_revision,
             self.spline_revision,
+            self.procedural_revision,
         ]
     }
 
-    pub fn rebase_revisions_after_restore(&mut self, previous: [u64; 10]) {
+    pub fn rebase_revisions_after_restore(&mut self, previous: [u64; 11]) {
         self.topology_revision = self.topology_revision.max(previous[0]);
         self.position_revision = self.position_revision.max(previous[1]);
         self.normal_revision = self.normal_revision.max(previous[2]);
@@ -975,6 +1001,7 @@ impl Project {
         self.texture_revision = self.texture_revision.max(previous[7]);
         self.transform_revision = self.transform_revision.max(previous[8]);
         self.spline_revision = self.spline_revision.max(previous[9]);
+        self.procedural_revision = self.procedural_revision.max(previous[10]);
     }
 
     /// Rebuilds the derived texture cache for one asset from its canonical
@@ -1080,6 +1107,22 @@ impl Project {
                     .capacity()
                     .saturating_mul(std::mem::size_of::<SplinePoint>()),
             );
+        }
+        n = n.saturating_add(
+            self.profiles
+                .capacity()
+                .saturating_mul(std::mem::size_of::<ProfileResource>()),
+        );
+        for profile in &self.profiles {
+            n = n.saturating_add(profile.name.capacity());
+        }
+        n = n.saturating_add(
+            self.path_generators
+                .capacity()
+                .saturating_mul(std::mem::size_of::<PathGenerator>()),
+        );
+        for generator in &self.path_generators {
+            n = n.saturating_add(generator.name.capacity());
         }
         n = n.saturating_add(
             self.history_selection
@@ -1231,6 +1274,8 @@ impl Project {
             name: default_project_name(),
             assets: vec![cube],
             splines: Vec::new(),
+            profiles: Vec::new(),
+            path_generators: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1255,6 +1300,7 @@ impl Project {
             texture_revision: 0,
             transform_revision: 0,
             spline_revision: 0,
+            procedural_revision: 0,
         }
     }
 
@@ -1478,9 +1524,144 @@ impl Project {
         Ok(spline)
     }
 
-    pub fn remove_spline(&mut self, id: Uuid) -> Option<SplineResource> {
-        let index = self.splines.iter().position(|spline| spline.id == id)?;
-        Some(self.splines.remove(index))
+    pub fn remove_spline(&mut self, id: Uuid) -> Result<SplineResource, SplineError> {
+        if let Some(profile) = self.profiles.iter().find(|profile| profile.spline_id == id) {
+            return Err(SplineError::SplineUsedByProfile(profile.id));
+        }
+        if let Some(generator) = self
+            .path_generators
+            .iter()
+            .find(|generator| generator.path_id == id)
+        {
+            return Err(SplineError::SplineUsedByGenerator(generator.id));
+        }
+        let index = self
+            .splines
+            .iter()
+            .position(|spline| spline.id == id)
+            .ok_or(SplineError::SplineNotFound(id))?;
+        Ok(self.splines.remove(index))
+    }
+
+    // ---- Shape-first Profiles and Path Generators (P3D-160/P3D-168) ----
+
+    pub fn add_profile(&mut self, profile: ProfileResource) -> Result<Uuid, ProfileError> {
+        if self
+            .profiles
+            .iter()
+            .any(|existing| existing.id == profile.id)
+        {
+            return Err(ProfileError::DuplicateProfile(profile.id));
+        }
+        if let Some(existing) = self
+            .profiles
+            .iter()
+            .find(|existing| existing.spline_id == profile.spline_id)
+        {
+            return Err(ProfileError::SplineAlreadyOwned(existing.id));
+        }
+        let spline = self
+            .get_spline(profile.spline_id)
+            .ok_or(ProfileError::SplineNotFound(profile.spline_id))?;
+        profile.validate_authoring(spline)?;
+        let id = profile.id;
+        self.profiles.push(profile);
+        Ok(id)
+    }
+
+    pub fn get_profile(&self, id: Uuid) -> Option<&ProfileResource> {
+        self.profiles.iter().find(|profile| profile.id == id)
+    }
+
+    pub fn get_profile_mut(&mut self, id: Uuid) -> Option<&mut ProfileResource> {
+        self.profiles.iter_mut().find(|profile| profile.id == id)
+    }
+
+    pub fn remove_profile(&mut self, id: Uuid) -> Result<ProfileResource, ProfileError> {
+        if let Some(generator) = self
+            .path_generators
+            .iter()
+            .find(|generator| generator.profile_id == id)
+        {
+            return Err(ProfileError::ProfileInUse(generator.id));
+        }
+        let index = self
+            .profiles
+            .iter()
+            .position(|profile| profile.id == id)
+            .ok_or(ProfileError::ProfileNotFound(id))?;
+        Ok(self.profiles.remove(index))
+    }
+
+    pub fn add_path_generator(
+        &mut self,
+        generator: PathGenerator,
+    ) -> Result<Uuid, PathGeneratorError> {
+        if self
+            .path_generators
+            .iter()
+            .any(|existing| existing.id == generator.id)
+        {
+            return Err(PathGeneratorError::DuplicateGenerator(generator.id));
+        }
+        path_generator::validate_path_generator(self, &generator)?;
+        let id = generator.id;
+        self.path_generators.push(generator);
+        Ok(id)
+    }
+
+    pub fn get_path_generator(&self, id: Uuid) -> Option<&PathGenerator> {
+        self.path_generators
+            .iter()
+            .find(|generator| generator.id == id)
+    }
+
+    pub fn get_path_generator_mut(&mut self, id: Uuid) -> Option<&mut PathGenerator> {
+        self.path_generators
+            .iter_mut()
+            .find(|generator| generator.id == id)
+    }
+
+    pub fn validate_path_generator(&self, id: Uuid) -> Result<(), PathGeneratorError> {
+        let generator = self
+            .get_path_generator(id)
+            .ok_or(PathGeneratorError::GeneratorNotFound(id))?;
+        self.validate_path_generator_candidate(generator)
+    }
+
+    pub fn validate_path_generator_candidate(
+        &self,
+        generator: &PathGenerator,
+    ) -> Result<(), PathGeneratorError> {
+        path_generator::validate_path_generator(self, generator)
+    }
+
+    pub fn set_sweep_generator_parameters(
+        &mut self,
+        id: Uuid,
+        parameters: SweepGeneratorParameters,
+    ) -> Result<bool, PathGeneratorError> {
+        self.get_path_generator_mut(id)
+            .ok_or(PathGeneratorError::GeneratorNotFound(id))?
+            .set_sweep_parameters(parameters)
+    }
+
+    pub fn remove_path_generator(&mut self, id: Uuid) -> Result<PathGenerator, PathGeneratorError> {
+        let index = self
+            .path_generators
+            .iter()
+            .position(|generator| generator.id == id)
+            .ok_or(PathGeneratorError::GeneratorNotFound(id))?;
+        Ok(self.path_generators.remove(index))
+    }
+
+    pub fn evaluate_path_generator<'a>(
+        &self,
+        id: Uuid,
+        quality: PathGeneratorQuality,
+        cache: &'a mut PathGeneratorEvaluationCache,
+    ) -> Result<&'a PathGeneratorEvaluation, PathGeneratorError> {
+        cache.evaluate(self, id, quality)
     }
 
     // ---- Material Management (P3D-050) ----
@@ -1538,6 +1719,23 @@ impl Project {
                 spline_ids.insert(spline.id);
             }
             spline.validate();
+        }
+        let mut profile_ids = std::collections::HashSet::with_capacity(self.profiles.len());
+        for profile in &mut self.profiles {
+            if !profile_ids.insert(profile.id) {
+                profile.id = Uuid::new_v4();
+                profile_ids.insert(profile.id);
+            }
+            profile.validate_loaded();
+        }
+        let mut generator_ids =
+            std::collections::HashSet::with_capacity(self.path_generators.len());
+        for generator in &mut self.path_generators {
+            if !generator_ids.insert(generator.id) {
+                generator.id = Uuid::new_v4();
+                generator_ids.insert(generator.id);
+            }
+            generator.validate_loaded();
         }
         for mat in &mut self.materials {
             mat.validate();
@@ -1668,11 +1866,12 @@ mod tests {
         assert_eq!(project.material_revision, 0);
         assert_eq!(project.transform_revision, 0);
         assert_eq!(project.spline_revision, 0);
+        assert_eq!(project.procedural_revision, 0);
     }
 
     #[test]
     fn restored_revision_clock_advances_only_the_published_domain() {
-        let previous = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+        let previous = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
         let mut restored = Project::new();
 
         restored.rebase_revisions_after_restore(previous);

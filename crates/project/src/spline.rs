@@ -419,7 +419,7 @@ impl SplineResource {
             )
     }
 
-    fn geometry_fingerprint(&self) -> u128 {
+    pub fn geometry_fingerprint(&self) -> u128 {
         const FNV_OFFSET: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
         const FNV_PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
 
@@ -777,6 +777,10 @@ pub enum SplineError {
     DuplicateSpline(Uuid),
     #[error("spline was not found: {0}")]
     SplineNotFound(Uuid),
+    #[error("spline is owned by profile: {0}")]
+    SplineUsedByProfile(Uuid),
+    #[error("spline is used as path by generator: {0}")]
+    SplineUsedByGenerator(Uuid),
     #[error("spline needs at least two points")]
     NeedsTwoPoints,
     #[error("a closed spline needs at least three points")]

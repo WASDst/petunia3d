@@ -3,9 +3,11 @@ use std::sync::Arc;
 
 use petunia_mesh::Mesh;
 use petunia_project::{
-    ProjectChanges, SplineError, SplineHandleMode, SplinePoint, SplineResource, SurfaceAttachment,
-    SurfaceAttachmentError, SurfaceAttachmentStatus, detach_surface_attachment_keep_world,
-    evaluate_surface_attachment, reproject_surface_attachment_to_target, slide_surface_attachment,
+    PathGenerator, PathGeneratorError, PathGeneratorEvaluationCache, PathGeneratorQuality,
+    ProfileError, ProfileResource, ProjectChanges, SplineError, SplineHandleMode, SplinePoint,
+    SplineResource, SurfaceAttachment, SurfaceAttachmentError, SurfaceAttachmentStatus,
+    SweepGeneratorParameters, detach_surface_attachment_keep_world, evaluate_surface_attachment,
+    reproject_surface_attachment_to_target, slide_surface_attachment,
 };
 
 use crate::camera::ViewPreset;
@@ -34,6 +36,10 @@ pub enum CommandError {
     Spline(#[from] SplineError),
     #[error(transparent)]
     SurfaceAttachment(#[from] SurfaceAttachmentError),
+    #[error(transparent)]
+    Profile(#[from] ProfileError),
+    #[error(transparent)]
+    PathGenerator(#[from] PathGeneratorError),
 }
 
 /// Trait central de comando executável contra o estado do editor (`AppState`).
@@ -4072,6 +4078,267 @@ impl Command for CreateSplineCmd {
     }
 }
 
+/// Cria a curva planar e seu Profile persistente em uma única transação.
+#[derive(Debug, Clone)]
+pub struct CreateProfileCmd {
+    pub spline: SplineResource,
+    pub profile: ProfileResource,
+}
+
+impl Command for CreateProfileCmd {
+    fn label(&self) -> &'static str {
+        "create profile"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let project = &state.project.project;
+        if project.get_spline(self.spline.id).is_some() {
+            return Err("Profile spline id already exists");
+        }
+        if project.get_profile(self.profile.id).is_some() {
+            return Err("Profile id already exists");
+        }
+        if project
+            .profiles
+            .iter()
+            .any(|profile| profile.spline_id == self.spline.id)
+        {
+            return Err("Profile spline is already owned");
+        }
+        self.profile
+            .validate_authoring(&self.spline)
+            .map_err(|_| "Profile data is invalid")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state.project.project.add_spline(self.spline.clone())?;
+        state.project.project.add_profile(self.profile.clone())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DeleteProfileCmd {
+    pub profile_id: uuid::Uuid,
+}
+
+impl Command for DeleteProfileCmd {
+    fn label(&self) -> &'static str {
+        "delete profile"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let project = &state.project.project;
+        let profile = project
+            .get_profile(self.profile_id)
+            .ok_or("Profile not found")?;
+        if project
+            .path_generators
+            .iter()
+            .any(|generator| generator.profile_id == self.profile_id)
+        {
+            return Err("Profile is used by a path generator");
+        }
+        if project
+            .path_generators
+            .iter()
+            .any(|generator| generator.path_id == profile.spline_id)
+        {
+            return Err("Profile spline is used as a generator path");
+        }
+        if project
+            .profiles
+            .iter()
+            .any(|other| other.id != profile.id && other.spline_id == profile.spline_id)
+        {
+            return Err("Profile spline has another owner");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let profile = state.project.project.remove_profile(self.profile_id)?;
+        state.project.project.remove_spline(profile.spline_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CreatePathGeneratorCmd {
+    pub generator: PathGenerator,
+}
+
+impl Command for CreatePathGeneratorCmd {
+    fn label(&self) -> &'static str {
+        "create path generator"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let project = &state.project.project;
+        if project.get_path_generator(self.generator.id).is_some() {
+            return Err("Path generator id already exists");
+        }
+        project
+            .validate_path_generator_candidate(&self.generator)
+            .map_err(|_| "Path generator data or dependencies are invalid")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .add_path_generator(self.generator.clone())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct UpdateSweepGeneratorCmd {
+    pub generator_id: uuid::Uuid,
+    pub parameters: SweepGeneratorParameters,
+}
+
+impl Command for UpdateSweepGeneratorCmd {
+    fn label(&self) -> &'static str {
+        "update sweep generator"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        self.parameters
+            .validate()
+            .map_err(|_| "Sweep generator parameters are invalid")?;
+        let generator = state
+            .project
+            .project
+            .get_path_generator(self.generator_id)
+            .ok_or("Path generator not found")?;
+        if generator.sweep_parameters() == self.parameters {
+            Err("Sweep generator parameters are unchanged")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        if state
+            .project
+            .project
+            .set_sweep_generator_parameters(self.generator_id, self.parameters)?
+        {
+            Ok(())
+        } else {
+            Err(CommandError::Execution(
+                "Sweep generator parameters are unchanged".into(),
+            ))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DeletePathGeneratorCmd {
+    pub generator_id: uuid::Uuid,
+}
+
+impl Command for DeletePathGeneratorCmd {
+    fn label(&self) -> &'static str {
+        "delete path generator"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        state
+            .project
+            .project
+            .get_path_generator(self.generator_id)
+            .map(|_| ())
+            .ok_or("Path generator not found")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .remove_path_generator(self.generator_id)?;
+        Ok(())
+    }
+}
+
+/// Materializa a saída procedural em uma malha estática e remove o gerador vivo.
+#[derive(Debug, Clone)]
+pub struct BakePathGeneratorCmd {
+    pub generator_id: uuid::Uuid,
+    pub asset_name: String,
+}
+
+impl Command for BakePathGeneratorCmd {
+    fn label(&self) -> &'static str {
+        "bake path generator"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::GEOMETRY | ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        state
+            .project
+            .project
+            .validate_path_generator(self.generator_id)
+            .map_err(|_| "Path generator or one of its dependencies is invalid")
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let mut cache = PathGeneratorEvaluationCache::default();
+        let evaluation = state.project.project.evaluate_path_generator(
+            self.generator_id,
+            PathGeneratorQuality::Final,
+            &mut cache,
+        )?;
+        let mesh = evaluation.mesh.clone();
+        let vertices = evaluation.diagnostics.vertices;
+        let triangles = evaluation.diagnostics.triangles;
+        let fallback_name = state
+            .project
+            .project
+            .get_path_generator(self.generator_id)
+            .map(|generator| generator.name.clone())
+            .ok_or(PathGeneratorError::GeneratorNotFound(self.generator_id))?;
+        let asset_name = if self.asset_name.trim().is_empty() {
+            fallback_name
+        } else {
+            self.asset_name.trim().to_string()
+        };
+        state.project.project.add(&asset_name, mesh);
+        state
+            .project
+            .project
+            .remove_path_generator(self.generator_id)?;
+        state.set_status(format!(
+            "Baked {asset_name}: {vertices} vertices, {triangles} triangles"
+        ));
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct DeleteSplineCmd {
     pub spline_id: uuid::Uuid,
@@ -4087,20 +4354,30 @@ impl Command for DeleteSplineCmd {
     }
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        state
-            .project
-            .project
+        let project = &state.project.project;
+        project
             .get_spline(self.spline_id)
             .map(|_| ())
-            .ok_or("Spline not found")
+            .ok_or("Spline not found")?;
+        if project
+            .profiles
+            .iter()
+            .any(|profile| profile.spline_id == self.spline_id)
+        {
+            return Err("Spline is owned by a profile");
+        }
+        if project
+            .path_generators
+            .iter()
+            .any(|generator| generator.path_id == self.spline_id)
+        {
+            return Err("Spline is used by a path generator");
+        }
+        Ok(())
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state
-            .project
-            .project
-            .remove_spline(self.spline_id)
-            .ok_or(SplineError::SplineNotFound(self.spline_id))?;
+        state.project.project.remove_spline(self.spline_id)?;
         Ok(())
     }
 }

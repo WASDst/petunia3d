@@ -484,3 +484,12 @@ Fixtures mínimas:
 Essa ordem pavimenta Hair ao melhorar imediatamente Profile, Sweep,
 Draw-on-Face, decals e Path Paint, evitando infraestrutura exclusiva para uma
 feature pós-V1.
+
+### Checkpoint operacional de 2026-09-27
+
+`G3` está `PARTIALLY_COMPLIANT`: a fundação headless de Profile persistente,
+Sweep por `ProfileId + SplineId`, cache derivado, persistência e Bake
+transacional foi entregue. O gate não fecha enquanto o Profile transitório da
+UI Slint não for migrado para os IDs persistentes, o overlay/editor acessível
+não existir e os parâmetros restantes de S3 não forem implementados. Evidência:
+`g5-profile-sweep-remediation-2026-09-27.md`.
