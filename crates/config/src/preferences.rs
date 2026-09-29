@@ -48,7 +48,7 @@ impl InspectorSectionId {
 
 /// Dock/float/pin state of one Inspector section, persisted per module.
 fn default_open() -> bool {
-    true
+    false
 }
 
 /// Estado de dock/flutuação/pin de uma seção do Inspector, persistido por módulo.
@@ -87,7 +87,7 @@ impl Default for SectionLayout {
             y: 56.0,
             pin_open: false,
             pinned_asset: None,
-            open: true,
+            open: false,
         }
     }
 }

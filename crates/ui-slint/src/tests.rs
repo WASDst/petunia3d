@@ -8267,10 +8267,10 @@ fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
 
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
 
-    // Verify default states: all sections open, docked, not pinned
+    // Verify default states: rail-first (collapsed to pill), docked, not pinned
     let parts_idx = crate::section_layout::section_index(InspectorSectionId::Parts);
     let transform_idx = crate::section_layout::section_index(InspectorSectionId::Transform);
-    assert!(bridge.section_layouts[parts_idx].open);
+    assert!(!bridge.section_layouts[parts_idx].open);
     assert!(bridge.section_layouts[parts_idx].docked);
     assert!(!bridge.section_layouts[parts_idx].pin_open);
 
@@ -8286,7 +8286,7 @@ fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
     bridge.set_section_pin_open(InspectorSectionId::Parts, true);
     assert!(bridge.section_layouts[parts_idx].pin_open);
 
-    // 3. Close the floating section to pill
+    // 3. Keep the floating section collapsed to its pill
     bridge.set_section_open(InspectorSectionId::Parts, false);
     assert!(!bridge.section_layouts[parts_idx].open);
 
