@@ -984,6 +984,26 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.shade_smooth",
+                "Shade Smooth",
+                "Interpolate normals across faces of the active object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            SetShadeSmoothCmd { smooth: true },
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.shade_flat",
+                "Shade Flat",
+                "Use faceted normals on the active object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            SetShadeSmoothCmd { smooth: false },
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.flip_diagonal",
                 "Flip Diagonal",
                 "Flip quad internal diagonal or triangle edge",
@@ -2098,6 +2118,57 @@ impl Command for FlipNormalsCmd {
         };
         mesh.flip_normals();
         state.set_status("Flipped normals");
+        Ok(())
+    }
+}
+
+/// Define sombreamento suave (`smooth = true`) ou facetado do asset ativo.
+/// A escolha é persistida por objeto e honrada pelo renderer (cap. 05).
+#[derive(Debug, Clone, Copy)]
+pub struct SetShadeSmoothCmd {
+    pub smooth: bool,
+}
+
+impl Command for SetShadeSmoothCmd {
+    fn label(&self) -> &'static str {
+        if self.smooth {
+            "shade smooth"
+        } else {
+            "shade flat"
+        }
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let asset = state.project.active().ok_or("No active mesh")?;
+        if state.project.is_smooth_shaded(asset.id) == self.smooth {
+            Err(if self.smooth {
+                "Object is already smooth shaded"
+            } else {
+                "Object is already flat shaded"
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let id = state
+            .project
+            .active()
+            .map(|asset| asset.id)
+            .ok_or(CommandError::NoActiveAsset)?;
+        if !state.project.project.set_smooth_shaded(id, self.smooth) {
+            return Err(CommandError::NoChange("shading already set".into()));
+        }
+        state.set_status(if self.smooth {
+            "Smooth shading"
+        } else {
+            "Flat shading"
+        });
         Ok(())
     }
 }

@@ -1372,8 +1372,8 @@ impl Renderer {
         // luz da cena. `smooth` é ortogonal: normais suavizadas por vértice.
         let is_wire = !shading.fills_faces();
         let unlit = false;
-        let smooth = false;
         for obj in &scene.assets {
+            let smooth = scene.is_smooth_shaded(obj.id);
             if !obj.visible {
                 continue;
             }

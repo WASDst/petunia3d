@@ -119,6 +119,7 @@ impl LegacyProjectWithSplines {
             procedural_revision: 0,
             profiles: Vec::new(),
             path_generators: Vec::new(),
+            smooth_shaded_assets: Vec::new(),
         }
     }
 }
@@ -186,6 +187,7 @@ impl LegacyProjectBeforeSplines {
             procedural_revision: 0,
             profiles: Vec::new(),
             path_generators: Vec::new(),
+            smooth_shaded_assets: Vec::new(),
         }
     }
 }
@@ -799,8 +801,15 @@ mod tests {
     fn canvas_pixels_serialize_as_compact_base64() {
         let canvas = crate::Canvas::new(8, 8, [1, 2, 3, 4]);
         let json = serde_json::to_string(&canvas).unwrap();
-        assert!(json.contains("\"pixels\":\""), "esperado string base64: {json}");
-        assert!(json.len() < 8 * 8 * 4 * 2, "JSON deve ser compacto: {} bytes", json.len());
+        assert!(
+            json.contains("\"pixels\":\""),
+            "esperado string base64: {json}"
+        );
+        assert!(
+            json.len() < 8 * 8 * 4 * 2,
+            "JSON deve ser compacto: {} bytes",
+            json.len()
+        );
         let back: crate::Canvas = serde_json::from_str(&json).unwrap();
         assert_eq!(back, canvas);
     }
@@ -841,7 +850,10 @@ mod tests {
         }
         let bytes = encode_zip(&p).unwrap();
         let back = load_bytes(&bytes).unwrap();
-        assert_eq!(back.assets[1].texture.as_ref().unwrap().pixels, noise.pixels);
+        assert_eq!(
+            back.assets[1].texture.as_ref().unwrap().pixels,
+            noise.pixels
+        );
     }
 
     #[test]

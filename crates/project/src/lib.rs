@@ -880,9 +880,43 @@ pub struct Project {
     pub profiles: Vec<ProfileResource>,
     #[serde(default)]
     pub path_generators: Vec<PathGenerator>,
+    /// Assets com sombreamento suave (normais interpoladas). Ausente = flat,
+    /// o padrão do cap. 05. Fica no projeto — não no `Asset` — para não deslocar
+    /// o layout postcard legado, que embute `Vec<Asset>`.
+    #[serde(default)]
+    pub smooth_shaded_assets: Vec<Uuid>,
 }
 
 impl Project {
+    /// O asset usa sombreamento suave (Shade Smooth)?
+    pub fn is_smooth_shaded(&self, asset_id: Uuid) -> bool {
+        self.smooth_shaded_assets.contains(&asset_id)
+    }
+
+    /// Define Flat/Smooth de um asset. Retorna `true` quando algo mudou.
+    /// Avança apenas a revisão de normais.
+    pub fn set_smooth_shaded(&mut self, asset_id: Uuid, smooth: bool) -> bool {
+        if !self.assets.iter().any(|asset| asset.id == asset_id) {
+            return false;
+        }
+        let changed = if smooth {
+            if self.is_smooth_shaded(asset_id) {
+                false
+            } else {
+                self.smooth_shaded_assets.push(asset_id);
+                true
+            }
+        } else {
+            let before = self.smooth_shaded_assets.len();
+            self.smooth_shaded_assets.retain(|id| *id != asset_id);
+            self.smooth_shaded_assets.len() != before
+        };
+        if changed {
+            self.bump_normals();
+        }
+        changed
+    }
+
     /// Primeira luz habilitada da cena, se houver.
     pub fn active_light(&self) -> Option<&Light> {
         self.lights.iter().find(|light| light.enabled)
@@ -898,6 +932,7 @@ impl Default for Project {
             splines: Vec::new(),
             profiles: Vec::new(),
             path_generators: Vec::new(),
+            smooth_shaded_assets: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1354,6 +1389,7 @@ impl Project {
             splines: Vec::new(),
             profiles: Vec::new(),
             path_generators: Vec::new(),
+            smooth_shaded_assets: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1790,6 +1826,13 @@ impl Project {
     /// Normaliza projeto vindo de arquivo (M2/M3): malhas válidas,
     /// no mínimo 1 asset, `active` dentro dos limites e materiais íntegros (P3D-050).
     pub fn validate(&mut self) {
+        // Remove ids de sombreamento suave que não apontam mais para um asset.
+        let asset_ids: std::collections::HashSet<Uuid> =
+            self.assets.iter().map(|asset| asset.id).collect();
+        self.smooth_shaded_assets
+            .retain(|id| asset_ids.contains(id));
+        self.smooth_shaded_assets.sort_unstable();
+        self.smooth_shaded_assets.dedup();
         let mut spline_ids = std::collections::HashSet::with_capacity(self.splines.len());
         for spline in &mut self.splines {
             if !spline_ids.insert(spline.id) {

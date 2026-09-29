@@ -467,7 +467,10 @@ fn persistent_profile_sweep_and_bake_are_transactional() {
         .unwrap();
     assert_eq!(state.project.profiles.len(), 1);
     assert_eq!(state.render.last_dirty_reason, Some(DirtyReason::CurveEdit));
-    assert_eq!(state.project.project.revision_clock()[9], clock_before[9] + 1);
+    assert_eq!(
+        state.project.project.revision_clock()[9],
+        clock_before[9] + 1
+    );
     assert_eq!(
         state.project.project.revision_clock()[10],
         clock_before[10] + 1
@@ -2070,4 +2073,37 @@ fn failed_dispatch_restores_primitive_creation_session() {
         assert!(state.session.primitive_session.is_some());
         assert_eq!(state.session.last_primitive, last);
     }
+}
+
+#[test]
+fn shade_smooth_is_per_object_transactional_and_persistent() {
+    use petunia_core::command::SetShadeSmoothCmd;
+    let mut state = AppState::default();
+    let id = state.project.active().unwrap().id;
+    assert!(!state.project.project.is_smooth_shaded(id));
+    let normals_before = state.project.project.normal_revision;
+
+    state
+        .dispatch(&SetShadeSmoothCmd { smooth: true })
+        .unwrap();
+    assert!(state.project.project.is_smooth_shaded(id));
+    assert!(state.project.project.normal_revision > normals_before);
+    // Repetir é no-op: sem entrada de histórico.
+    let depth = state.project.undo.depth();
+    assert!(state.dispatch(&SetShadeSmoothCmd { smooth: true }).is_err());
+    assert_eq!(state.project.undo.depth(), depth);
+
+    // Persistência por objeto.
+    let bytes = petunia_project::format::encode_zip(&state.project.project).unwrap();
+    let back = petunia_project::format::load_bytes(&bytes).unwrap();
+    assert!(back.is_smooth_shaded(id));
+
+    assert!(state.undo());
+    assert!(!state.project.project.is_smooth_shaded(id));
+    assert!(state.redo());
+    assert!(state.project.project.is_smooth_shaded(id));
+    state
+        .dispatch(&SetShadeSmoothCmd { smooth: false })
+        .unwrap();
+    assert!(!state.project.project.is_smooth_shaded(id));
 }

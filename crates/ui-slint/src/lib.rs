@@ -8524,25 +8524,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     true
                 }
                 "mark_seam" => self.toggle_selected_uv_seams(),
-                "shade_smooth" => {
-                    if let Some(mesh) = self.state.project.active_mesh_mut() {
-                        mesh.recalculate_normals();
-                        self.state.emit_normals_changed();
-                        self.state.set_status("Normais recalculadas (suave)");
-                        true
-                    } else {
-                        false
-                    }
-                }
-                "shade_flat" => {
-                    if let Some(_mesh) = self.state.project.active_mesh_mut() {
-                        self.state.emit_normals_changed();
-                        self.state.set_status("Sombreamento facetado ativo");
-                        true
-                    } else {
-                        false
-                    }
-                }
+                "shade_smooth" => self.execute_core_command("model.shade_smooth").is_ok(),
+                "shade_flat" => self.execute_core_command("model.shade_flat").is_ok(),
                 "boolean_operand" => {
                     if let Some(active) = self.state.project.active() {
                         self.state.session.tools.boolean_operand = Some(active.id);
