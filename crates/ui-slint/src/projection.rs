@@ -1415,8 +1415,8 @@ pub(crate) fn compute_asset_overlay(
     let Some(asset) = state.project.assets.get(index) else {
         return SelectionOverlayModel::default();
     };
-    let evaluated = asset.evaluated_mesh();
-    let mesh = &evaluated;
+    let evaluated = asset.evaluated_mesh_ref();
+    let mesh = &*evaluated;
     if mesh.verts.is_empty() {
         return SelectionOverlayModel::default();
     }

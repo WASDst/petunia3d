@@ -577,33 +577,46 @@ impl ArcLengthTable {
             });
         }
 
-        for index in 0..self.positions.len() {
-            let next = (index + 1) % self.positions.len();
-            if next == 0 && !self.closed {
-                break;
-            }
-            let start_distance = self.cumulative_lengths[index];
-            let end_distance = if next == 0 {
+        // Busca binária pelo primeiro segmento cujo fim alcança `distance`
+        // (as distâncias acumuladas são não decrescentes): O(log n) por amostra.
+        let count = self.positions.len();
+        let segments = if self.closed { count } else { count - 1 };
+        let end_of = |index: usize| {
+            let next = (index + 1) % count;
+            if next == 0 {
                 self.total_length
             } else {
                 self.cumulative_lengths[next]
-            };
-            if distance <= end_distance {
-                let segment_length = end_distance - start_distance;
-                let parameter = if segment_length > f64::EPSILON {
-                    (distance - start_distance) / segment_length
-                } else {
-                    0.0
-                };
-                let tangent = (self.positions[next] - self.positions[index]).normalize();
-                return Ok(SplineSample {
-                    position: self.positions[index]
-                        .lerp(self.positions[next], parameter)
-                        .to_array(),
-                    tangent: tangent.to_array(),
-                    distance,
-                });
             }
+        };
+        let (mut low, mut high) = (0usize, segments);
+        while low < high {
+            let mid = low + (high - low) / 2;
+            if end_of(mid) < distance {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        if low < segments {
+            let index = low;
+            let next = (index + 1) % count;
+            let start_distance = self.cumulative_lengths[index];
+            let end_distance = end_of(index);
+            let segment_length = end_distance - start_distance;
+            let parameter = if segment_length > f64::EPSILON {
+                (distance - start_distance) / segment_length
+            } else {
+                0.0
+            };
+            let tangent = (self.positions[next] - self.positions[index]).normalize();
+            return Ok(SplineSample {
+                position: self.positions[index]
+                    .lerp(self.positions[next], parameter)
+                    .to_array(),
+                tangent: tangent.to_array(),
+                distance,
+            });
         }
         Err(SplineError::DegenerateSpline)
     }

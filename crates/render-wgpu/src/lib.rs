@@ -1378,7 +1378,7 @@ impl Renderer {
                 continue;
             }
             let range_start = mv.len() as u32;
-            let mesh = obj.evaluated_mesh();
+            let mesh = obj.evaluated_mesh_ref();
             if !is_wire {
                 let (mat_profile, mat_color, has_emission, emission_color) =
                     if let Some(mat) = obj.material(scene) {
@@ -1613,7 +1613,7 @@ impl Renderer {
         let mut sel_tri: Vec<SelectionVertex> = Vec::new();
         let mut sel_line: Vec<SelectionVertex> = Vec::new();
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh();
+            let mesh = asset.evaluated_mesh_ref();
             let domain = edit_domain;
             // Seleção: laranja quente com alpha, como Blender/C4D. Legível
             // sobre qualquer shading porque o shader não aplica luz.
@@ -1720,7 +1720,7 @@ impl Renderer {
         let hover_line = [0.49f32, 0.86, 1.0, 0.85];
         let hover_tri = [0.49f32, 0.86, 1.0, 0.18];
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh();
+            let mesh = asset.evaluated_mesh_ref();
             match hover {
                 petunia_core::HoverTarget::Vertex(index) => {
                     if let Some(vertex) = mesh.verts.get(index as usize) {

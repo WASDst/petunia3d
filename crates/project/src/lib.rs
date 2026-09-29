@@ -490,10 +490,29 @@ impl Asset {
         hash
     }
 
+    /// Há algum modifier habilitado que altere a malha avaliada?
+    pub fn has_enabled_modifiers(&self) -> bool {
+        self.modifiers.iter().any(|modifier| modifier.enabled)
+    }
+
+    /// Malha avaliada emprestada quando não há modifiers (caso comum: zero
+    /// cópia e zero hash) e calculada quando há. Preferir esta API em caminhos
+    /// por frame (render, seleção, picking).
+    pub fn evaluated_mesh_ref(&self) -> std::borrow::Cow<'_, Mesh> {
+        if self.has_enabled_modifiers() {
+            std::borrow::Cow::Owned(self.evaluated_mesh())
+        } else {
+            std::borrow::Cow::Borrowed(&self.mesh)
+        }
+    }
+
     /// Avalia a pilha de modifiers sem alterar a malha-base.
     /// Render, preview e export usam este resultado; edição continua operando
     /// sobre `mesh`, preservando a natureza não destrutiva da pilha.
     pub fn evaluated_mesh(&self) -> Mesh {
+        if !self.has_enabled_modifiers() {
+            return self.mesh.clone();
+        }
         let key = (self.source_mesh_hash(), self.modifier_hash());
         if let Some((k0, k1, cached)) = &self.eval_cache
             && (*k0, *k1) == key

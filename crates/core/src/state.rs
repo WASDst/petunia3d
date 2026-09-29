@@ -312,7 +312,10 @@ impl Default for ProjectState {
 
 impl ProjectState {
     pub fn new() -> Self {
-        let p = Project::new();
+        let mut p = Project::new();
+        // Nunca deixar todas as revisões em 0: o fingerprint da cena recorre a
+        // um hash O(V+F) por frame enquanto o projeto estiver "sem revisão".
+        p.bump_changes(ProjectChanges::ALL);
         let pal = p.palette.clone();
         Self {
             project: p,
@@ -328,7 +331,8 @@ impl ProjectState {
     }
 
     pub fn reset(&mut self) {
-        let p = Project::new();
+        let mut p = Project::new();
+        p.bump_changes(ProjectChanges::ALL);
         self.palette = p.palette.clone();
         self.project = p;
         self.undo.clear();

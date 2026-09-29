@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use petunia_mesh::Mesh;
+use petunia_project::ProjectChanges;
 use petunia_project::{
     BatchExportReport, DeliveryPipeline, ExportOptions, ExportReport, FileFormat, ImportOptions,
     PipelineError, export, format, palette,
@@ -67,6 +68,9 @@ impl ProjectService {
         let p = format::load(path).map_err(|e| ProjectServiceError::Format(e.to_string()))?;
         state.project.palette = p.palette.clone();
         state.project.project = p;
+        // Arquivos carregados começam com revisões em 0; avançar evita o hash
+        // de conteúdo por frame do fingerprint (ver `ProjectState::new`).
+        state.project.project.bump_changes(ProjectChanges::ALL);
         state.project.undo.clear();
         state.session.tools.uv_selected.clear();
         state.project.project_path = Some(path.to_string_lossy().to_string());
@@ -130,6 +134,9 @@ impl ProjectService {
             format::load(snapshot_path).map_err(|e| ProjectServiceError::Format(e.to_string()))?;
         state.project.palette = p.palette.clone();
         state.project.project = p;
+        // Arquivos carregados começam com revisões em 0; avançar evita o hash
+        // de conteúdo por frame do fingerprint (ver `ProjectState::new`).
+        state.project.project.bump_changes(ProjectChanges::ALL);
         state.project.undo.clear();
         state.session.tools.uv_selected.clear();
         state.project.project_path = original_path.map(|p| p.to_string_lossy().to_string());
