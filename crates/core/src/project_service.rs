@@ -355,6 +355,7 @@ impl ProjectService {
             existing.width = width;
             existing.height = height;
             existing.rgba = rgba;
+            existing.bump_revision();
         } else {
             let mut img = ReferenceImage::from_rgba(name.clone(), width, height, rgba);
             img.axis = axis;

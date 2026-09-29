@@ -114,11 +114,27 @@ pub struct ReferenceImage {
     pub locked: bool,
     pub rotation: f32,
     pub xray: bool,
+    /// Identidade monotônica do conteúdo de `rgba` (nunca 0). Trocar os pixels
+    /// exige `bump_revision()`; o renderer usa isto em vez de varrer os bytes.
+    pub revision: u64,
 }
 
 impl ReferenceImage {
+    /// Próxima revisão global de conteúdo (única por processo, começa em 1).
+    pub fn next_revision() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Marca que `rgba` foi substituído.
+    pub fn bump_revision(&mut self) {
+        self.revision = Self::next_revision();
+    }
+
     pub fn from_rgba(name: String, width: u32, height: u32, rgba: Vec<u8>) -> Self {
         Self {
+            revision: Self::next_revision(),
             name,
             width,
             height,

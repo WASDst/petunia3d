@@ -1892,6 +1892,7 @@ fn test_project_from_reference_and_bake_commands() {
         locked: false,
         rotation: 0.0,
         xray: false,
+        revision: petunia_core::ReferenceImage::next_revision(),
     });
 
     // 3. Project from reference with active reference image
