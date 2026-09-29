@@ -201,7 +201,7 @@ impl ToolModalKind {
             Self::Extrude => "Extrude",
             Self::ExtrudeIndividual => "Extrude Individual",
             Self::Inset => "Inset",
-            Self::Bevel => "Bevel",
+            Self::Bevel => "Round Edge",
             Self::PushPull => "Push/Pull",
             Self::ScaleSelection => "Scale",
         }
@@ -1980,7 +1980,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 petunia_core::ModalKind::Extrude => "Extrude",
                 petunia_core::ModalKind::ExtrudeIndividual => "Extrude Individual",
                 petunia_core::ModalKind::Inset => "Inset",
-                petunia_core::ModalKind::Bevel => "Bevel",
+                petunia_core::ModalKind::Bevel => "Round Edge",
                 petunia_core::ModalKind::PushPull => "Push/Pull",
             };
             let mut lines = Vec::new();
@@ -7341,9 +7341,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.tools.bevel_clamp_overlap = !self.state.tools.bevel_clamp_overlap;
         let enabled = self.state.tools.bevel_clamp_overlap;
         self.state.set_status(if enabled {
-            "Bevel: Clamp Overlap ativado"
+            "Round Edge: Clamp Overlap ativado"
         } else {
-            "Bevel: Clamp Overlap desativado"
+            "Round Edge: Clamp Overlap desativado"
         });
         self.state.render.mark_dirty();
         enabled
@@ -7353,9 +7353,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.tools.bevel_affect_vertices = !self.state.tools.bevel_affect_vertices;
         let enabled = self.state.tools.bevel_affect_vertices;
         self.state.set_status(if enabled {
-            "Bevel: Point (Vertex) Mode ativado"
+            "Round Edge: Point (Vertex) Mode ativado"
         } else {
-            "Bevel: Point (Vertex) Mode desativado"
+            "Round Edge: Point (Vertex) Mode desativado"
         });
         self.state.render.mark_dirty();
         enabled

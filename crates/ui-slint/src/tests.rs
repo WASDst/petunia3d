@@ -6876,8 +6876,15 @@ fn test_model_connect_spin_dissolve_commands() {
     // 1. Dissolve
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     if let Some(mesh) = bridge.state.project.active_mesh_mut() {
-        mesh.faces[0].selected = true;
-        mesh.faces[1].selected = true;
+        // Duas faces que compartilham uma aresta (as faces 0 e 1 do cubo são opostas).
+        let (a, b) = mesh
+            .edges_unique()
+            .into_iter()
+            .find(|&(a, b)| mesh.edge_faces(a, b).len() == 2)
+            .expect("cube has shared edges");
+        for face in mesh.edge_faces(a, b) {
+            mesh.faces[face].selected = true;
+        }
     }
     assert!(bridge.execute_core_command("model.dissolve").is_ok());
 

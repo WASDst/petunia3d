@@ -458,6 +458,7 @@ fn persistent_profile_sweep_and_bake_are_transactional() {
     let path_id = path.id;
     let generator_id = generator.id;
 
+    let clock_before = state.project.project.revision_clock();
     state
         .dispatch(&CreateProfileCmd {
             spline: profile_spline,
@@ -466,8 +467,11 @@ fn persistent_profile_sweep_and_bake_are_transactional() {
         .unwrap();
     assert_eq!(state.project.profiles.len(), 1);
     assert_eq!(state.render.last_dirty_reason, Some(DirtyReason::CurveEdit));
-    assert_eq!(state.project.project.revision_clock()[9], 1);
-    assert_eq!(state.project.project.revision_clock()[10], 1);
+    assert_eq!(state.project.project.revision_clock()[9], clock_before[9] + 1);
+    assert_eq!(
+        state.project.project.revision_clock()[10],
+        clock_before[10] + 1
+    );
 
     state.dispatch(&CreateSplineCmd { spline: path }).unwrap();
     state
