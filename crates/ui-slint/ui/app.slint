@@ -5349,8 +5349,8 @@ export component PetuniaSlintShell inherits Window {
 
                                 ViewportSvgButton { glyph: PetuniaIcons.view-wire; label: root.label-view-wireframe; shortcut: root.shortcuts.view-wireframe; description: "Display mesh edges with transparent wireframe surfaces"; active: root.shading-mode == "wireframe"; clicked => { root.shading-mode-set("wireframe"); } }
                                 ViewportSvgButton { glyph: PetuniaIcons.view-solid; label: root.label-view-solid; shortcut: root.shortcuts.view-solid; description: "Standard matte shaded surfaces with basic directional lighting"; active: root.shading-mode == "solid"; clicked => { root.shading-mode-set("solid"); } }
-                                ViewportSvgButton { glyph: PetuniaIcons.view-material; label: root.label-view-material; shortcut: root.shortcuts.view-material; description: "Preview PBR surface materials, roughness and base colors"; active: root.shading-mode == "material"; clicked => { root.shading-mode-set("material"); } }
-                                ViewportSvgButton { glyph: PetuniaIcons.view-lit; label: root.label-view-lit; shortcut: root.shortcuts.view-lit; description: "Full raytraced or realistic real-time lighting with shadows"; active: root.shading-mode == "rendered"; clicked => { root.shading-mode-set("rendered"); } }
+                                ViewportSvgButton { glyph: PetuniaIcons.view-material; label: root.label-view-material; shortcut: root.shortcuts.view-material; description: "Preview base color, texture and emission with a simple directional light"; active: root.shading-mode == "material"; clicked => { root.shading-mode-set("material"); } }
+                                ViewportSvgButton { glyph: PetuniaIcons.view-lit; label: root.label-view-lit; shortcut: root.shortcuts.view-lit; description: "Lit preview with a single directional light (no shadows or ray tracing)"; active: root.shading-mode == "rendered"; clicked => { root.shading-mode-set("rendered"); } }
 
                                 Rectangle { width: 1px; height: 18px; background: DesignTokens.border; }
 
@@ -10834,16 +10834,16 @@ export component PetuniaSlintShell inherits Window {
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 
-                                    Text { text: "Status de Localização (Wave 7 / P3D-157)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Status de Localização"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface;
                                         border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 6px;
-                                            Text { text: "✓ 100% dos TextIds cobertos em pt-BR e en"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
-                                            Text { text: "✓ Zero strings em hardcode na interface"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
+                                            Text { text: "Cobertura parcial: menus e tooltips traduzidos; várias mensagens de status ainda misturam português e inglês."; color: DesignTokens.warning; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Migração de textos literais para TextId em andamento."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                             Text { text: "✓ Fallback automático para inglês quando chave não encontrada"; color: DesignTokens.text-secondary; font-size: 10px; }
-                                            Text { text: "✓ Vocabulário canônico: Point, Round Edge, Fuse, Cut, Connect"; color: DesignTokens.text-muted; font-size: 10px; }
+                                            Text { text: "Vocabulário canônico alvo: Point, Round Edge, Fuse, Cut, Connect."; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }
@@ -11016,7 +11016,7 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 3: VerticalLayout {
                                     spacing: 12px;
 
-                                    Text { text: "Acessibilidade & Inclusão (WCAG 2.2 AA)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Acessibilidade & Inclusão"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
 
                                     Rectangle {
                                         height: 32px; border-radius: 4px;
@@ -11053,14 +11053,14 @@ export component PetuniaSlintShell inherits Window {
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 
-                                    Text { text: "Tecnologia Assistiva (Screen Readers & AccessKit)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Tecnologia Assistiva"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 6px;
-                                            Text { text: "✓ Árvore de acessibilidade AccessKit ativada por padrão"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
-                                            Text { text: "✓ Controles mapeados com accessible-role e accessible-label"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
-                                            Text { text: "✓ Navegação por foco via Tab / Shift+Tab e ativação por Enter / Barra de espaço"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "Leitor de tela: rótulos e papéis existem só em parte dos controles; conformidade WCAG ainda não foi auditada."; color: DesignTokens.warning; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Teclado: atalhos globais funcionam; foco por Tab entre controles ainda é parcial."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
+                                            Text { text: "Recursos ativos: alto contraste (tema), escala de UI, movimento reduzido e eixos sem depender de cor."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }
@@ -11173,28 +11173,13 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 6: VerticalLayout {
                                     spacing: 12px;
 
-                                    Text { text: "Gerenciador de Extensões & Plugins (P3D-160)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
-                                    Text { text: "Diretório de plugins: ~/.config/petunia3d/plugins/"; color: DesignTokens.text-muted; font-size: 10px; font-family: "monospace"; }
-
+                                    Text { text: "Extensões & Plugins"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 8px;
-                                            HorizontalLayout {
-                                                Text { text: "core.exporter.gltf — Exportador GLTF / GLB nativo"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
-                                            }
-                                            HorizontalLayout {
-                                                Text { text: "core.importer.obj — Importador Wavefront OBJ"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
-                                            }
-                                            HorizontalLayout {
-                                                Text { text: "core.tools.uvpack — Empacotador de Ilhas UV"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
-                                            }
+                                            Text { text: "Nenhuma extensão é carregada por esta interface nesta versão."; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Importar OBJ e exportar glTF são recursos nativos, acessíveis pelo menu Arquivo."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }
@@ -11203,16 +11188,14 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 7: VerticalLayout {
                                     spacing: 12px;
 
-                                    Text { text: "Model Context Protocol (MCP) & IA Colaborativa"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Automação (MCP)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
 
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 8px;
-                                            Text { text: "Protocolo: Model Context Protocol v1.0 / Google Antigravity SDK"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                            Text { text: "• Status: Servidor MCP integrado e ativo para ferramentas do Petunia3D"; color: DesignTokens.success; font-size: 10px; font-weight: 600; }
-                                            Text { text: "• Segurança: Princípio do menor privilégio, zero vazamento de segredos"; color: DesignTokens.text-secondary; font-size: 10px; }
-                                            Text { text: "• Journal: Todas as mutações do documento são transacionais e auditáveis"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "O servidor MCP é um componente separado; esta tela não o inicia nem monitora seu estado."; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Mutações do documento passam por comandos transacionais com Undo/Redo."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }

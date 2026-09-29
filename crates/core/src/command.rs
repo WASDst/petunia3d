@@ -4155,7 +4155,10 @@ impl Command for UpdateSplineCmd {
             .project
             .get_spline_mut(self.spline.id)
             .ok_or(SplineError::SplineNotFound(self.spline.id))?;
+        // A revisão pertence ao recurso, não ao chamador: sempre avança uma vez.
+        let next_revision = spline.revision.wrapping_add(1);
         *spline = self.spline.clone();
+        spline.revision = next_revision;
         Ok(())
     }
 }
@@ -4243,7 +4246,9 @@ impl Command for UpdateProfileCmd {
             .project
             .get_profile_mut(self.profile.id)
             .ok_or(ProfileError::ProfileNotFound(self.profile.id))?;
+        let next_revision = profile.revision.wrapping_add(1);
         *profile = self.profile.clone();
+        profile.revision = next_revision;
         Ok(())
     }
 }

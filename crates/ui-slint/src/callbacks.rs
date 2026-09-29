@@ -284,6 +284,34 @@ impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
     }
 }
 
+/// Escala do sistema capturada na primeira aplicação (bits de f32; 0 = ainda não lida).
+static SYSTEM_SCALE_FACTOR_BITS: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(0);
+
+/// Aplica a preferência de escala de UI (100–200 %) sobre a escala do sistema.
+///
+/// A escala do sistema é lida uma única vez; depois o fator efetivo é
+/// `sistema × preferência`. Só despacha o evento quando o fator muda, então é
+/// seguro chamar a cada sincronização de propriedades.
+pub(crate) fn apply_ui_scale(window: &PetuniaSlintShell, preference: f32) {
+    use std::sync::atomic::Ordering;
+    let slint_window = window.window();
+    let mut system = f32::from_bits(SYSTEM_SCALE_FACTOR_BITS.load(Ordering::Relaxed));
+    if !(system.is_finite() && system > 0.0) {
+        system = slint_window.scale_factor();
+        if !(system.is_finite() && system > 0.0) {
+            return;
+        }
+        SYSTEM_SCALE_FACTOR_BITS.store(system.to_bits(), Ordering::Relaxed);
+    }
+    let target = system * preference.clamp(1.0, 2.0);
+    if (slint_window.scale_factor() - target).abs() > 0.001 {
+        slint_window.dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged {
+            scale_factor: target,
+        });
+    }
+}
+
 pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewModel) {
     window.set_active_workspace(vm.workspace_label().into());
     window.set_saved(vm.saved);
@@ -759,6 +787,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         .set_label_multiselection_measure_tag(vm.label_multiselection_measure_tag.as_str().into());
     window.set_active_language(vm.active_language.as_str().into());
     window.set_ui_scale(vm.ui_scale);
+    apply_ui_scale(window, vm.ui_scale);
     window.set_icon_theme(vm.icon_theme.as_str().into());
     window
         .global::<crate::PetuniaIcons>()

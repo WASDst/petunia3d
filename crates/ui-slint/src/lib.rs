@@ -3506,7 +3506,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return false;
             }
             profile.wall_thickness = f64::from(thickness);
-            profile.revision = profile.revision.wrapping_add(1);
             if let Err(error) = self
                 .state
                 .dispatch(&petunia_core::UpdateProfileCmd { profile })
@@ -3572,7 +3571,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             point.handle_out = [f64::from(handle_out[0]), f64::from(handle_out[1]), 0.0];
             point.handle_mode = petunia_core::SplineHandleMode::Aligned;
         }
-        updated.revision = updated.revision.wrapping_add(1);
         if let Err(error) = self
             .state
             .dispatch(&petunia_core::UpdateSplineCmd { spline: updated })
@@ -3602,7 +3600,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             point.handle_out = [0.0; 3];
             point.handle_mode = petunia_core::SplineHandleMode::Broken;
         }
-        updated.revision = updated.revision.wrapping_add(1);
         if let Err(error) = self
             .state
             .dispatch(&petunia_core::UpdateSplineCmd { spline: updated })
@@ -6675,7 +6672,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .collect();
             spline.closed = true;
             spline.interpolation = petunia_core::SplineInterpolation::Polyline;
-            spline.revision = spline.revision.wrapping_add(1);
             if let Err(error) = self
                 .state
                 .dispatch(&petunia_core::UpdateSplineCmd { spline })
