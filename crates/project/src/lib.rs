@@ -138,7 +138,66 @@ pub struct Canvas {
     pub w: u32,
     pub h: u32,
     /// RGBA8 row-major, origem em cima.
+    #[serde(with = "pixel_bytes")]
     pub pixels: Vec<u8>,
+}
+
+/// Serialização compacta de pixels: base64 em formatos legíveis (JSON, ~1,33×)
+/// e bytes crus em binários (postcard). A leitura aceita também o array de
+/// números dos arquivos antigos, então projetos existentes continuam abrindo.
+mod pixel_bytes {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use serde::de::{self, SeqAccess, Visitor};
+    use serde::{Deserializer, Serializer};
+    use std::fmt;
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&STANDARD.encode(bytes))
+        } else {
+            serializer.serialize_bytes(bytes)
+        }
+    }
+
+    struct BytesVisitor;
+
+    impl<'de> Visitor<'de> for BytesVisitor {
+        type Value = Vec<u8>;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("base64 string, byte array or sequence of u8")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Vec<u8>, E> {
+            STANDARD.decode(v).map_err(E::custom)
+        }
+
+        fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
+            Ok(v.to_vec())
+        }
+
+        fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> Result<Vec<u8>, E> {
+            Ok(v)
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
+            let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(0).min(1 << 24));
+            while let Some(byte) = seq.next_element::<u8>()? {
+                out.push(byte);
+            }
+            Ok(out)
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_any(BytesVisitor)
+        } else {
+            // Postcard não é auto-descritivo: `serialize_bytes` grava
+            // varint + bytes, idêntico ao layout de `Vec<u8>` antigo.
+            deserializer.deserialize_seq(BytesVisitor)
+        }
+    }
 }
 
 impl Canvas {

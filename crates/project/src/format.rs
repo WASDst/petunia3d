@@ -29,7 +29,9 @@ const ZIP_MAGIC: [u8; 2] = [0x50, 0x4B]; // "PK"
 const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_UNCOMPRESSED_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_ZIP_ENTRIES: usize = 4096;
-const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
+/// Limite do `document.json`. Igual ao limite total descomprimido: quem grava
+/// e quem lê usam o mesmo teto, então nenhum save bem-sucedido é irrecuperável.
+const MAX_JSON_BYTES: usize = MAX_UNCOMPRESSED_BYTES as usize;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PetuniaFile {
@@ -227,7 +229,7 @@ pub fn encode_zip(project: &Project) -> Result<Vec<u8>, ProjectError> {
         .into_bytes();
     let document_json =
         serde_json::to_vec(project).map_err(|e| ProjectError::Format(e.to_string()))?;
-    if document_json.len() as u64 > MAX_UNCOMPRESSED_BYTES {
+    if document_json.len() > MAX_JSON_BYTES {
         return Err(ProjectError::TooLarge(document_json.len() as u64));
     }
 
@@ -791,6 +793,55 @@ mod tests {
         assert_eq!(loaded.name, "Original Intact");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn canvas_pixels_serialize_as_compact_base64() {
+        let canvas = crate::Canvas::new(8, 8, [1, 2, 3, 4]);
+        let json = serde_json::to_string(&canvas).unwrap();
+        assert!(json.contains("\"pixels\":\""), "esperado string base64: {json}");
+        assert!(json.len() < 8 * 8 * 4 * 2, "JSON deve ser compacto: {} bytes", json.len());
+        let back: crate::Canvas = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, canvas);
+    }
+
+    #[test]
+    fn canvas_pixels_legacy_number_array_still_loads() {
+        let json = r#"{"w":2,"h":1,"pixels":[1,2,3,4,5,6,7,8]}"#;
+        let canvas: crate::Canvas = serde_json::from_str(json).unwrap();
+        assert_eq!(canvas.pixels, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn canvas_pixels_postcard_layout_is_unchanged() {
+        let canvas = crate::Canvas::new(4, 4, [9, 8, 7, 6]);
+        let bytes = postcard::to_allocvec(&canvas).unwrap();
+        let back: crate::Canvas = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(back, canvas);
+        let mut legacy = Vec::new();
+        legacy.extend(postcard::to_allocvec(&canvas.w).unwrap());
+        legacy.extend(postcard::to_allocvec(&canvas.h).unwrap());
+        legacy.extend(postcard::to_allocvec(&canvas.pixels).unwrap());
+        assert_eq!(bytes, legacy);
+    }
+
+    #[test]
+    fn saved_project_with_large_textures_reloads() {
+        // Regressão D-01: o save aceitava até 256 MiB de JSON, mas o loader
+        // recusava mais de 32 MiB. Um projeto de várias texturas grandes
+        // precisa sobreviver a save -> load.
+        let mut p = Project::new();
+        p.add("Plane", Mesh::plane(1.0));
+        let mut noise = crate::Canvas::new(1024, 1024, [0, 0, 0, 255]);
+        for (i, byte) in noise.pixels.iter_mut().enumerate() {
+            *byte = (i.wrapping_mul(2654435761) >> 13) as u8;
+        }
+        for asset in p.assets.iter_mut().skip(1).take(1) {
+            asset.texture = Some(noise.clone());
+        }
+        let bytes = encode_zip(&p).unwrap();
+        let back = load_bytes(&bytes).unwrap();
+        assert_eq!(back.assets[1].texture.as_ref().unwrap().pixels, noise.pixels);
     }
 
     #[test]

@@ -20,6 +20,7 @@ tobj = { workspace = true }
 gltf-json = { workspace = true }
 gltf = "1"
 zip = { workspace = true }
+base64 = "0.22"
 
 [dev-dependencies]
 gltf = "1"
