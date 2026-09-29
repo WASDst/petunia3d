@@ -358,7 +358,7 @@ impl ProjectState {
     pub fn checkpoint(&mut self, label: &str) {
         let snap = self.project.clone();
         let bytes = snap.estimated_bytes();
-        self.undo.checkpoint_sized(label, &snap, bytes);
+        self.undo.push_sized(label, snap, bytes);
         self.is_dirty = true;
     }
 

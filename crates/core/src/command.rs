@@ -32,6 +32,10 @@ pub enum CommandError {
     UnknownCommand(String),
     #[error("Erro ao executar comando: {0}")]
     Execution(String),
+    /// O comando rodou mas não alterou nada: o dispatcher desfaz qualquer
+    /// efeito colateral e **não** grava entrada de histórico nem avança revisões.
+    #[error("Nada a alterar: {0}")]
+    NoChange(String),
     #[error(transparent)]
     Spline(#[from] SplineError),
     #[error(transparent)]
@@ -269,6 +273,12 @@ impl CommandDispatcher {
         state.project.project.history_selection = state.session.selection.assets.clone();
         let original_selection = state.session.selection.clone();
         let original = cmd.is_destructive().then(|| state.project.project.clone());
+        // A sessão de criação de primitiva é consumida ao congelar; guardá-la
+        // permite restaurar o estado de sessão junto com o projeto se falhar.
+        let original_primitive_session = (
+            state.session.primitive_session.clone(),
+            state.session.last_primitive.clone(),
+        );
         if cmd.is_destructive() {
             state.freeze_active_primitive_for_command();
         }
@@ -276,6 +286,10 @@ impl CommandDispatcher {
             if let Some(original) = original {
                 state.project.project = original;
                 state.session.selection = original_selection;
+                (
+                    state.session.primitive_session,
+                    state.session.last_primitive,
+                ) = original_primitive_session;
                 state.sync_selection();
             }
             return Err(error);
@@ -283,10 +297,7 @@ impl CommandDispatcher {
 
         if let Some(original) = original {
             let bytes = original.estimated_bytes();
-            state
-                .project
-                .undo
-                .checkpoint_sized(cmd.label(), &original, bytes);
+            state.project.undo.push_sized(cmd.label(), original, bytes);
             state.mark_document_dirty();
         }
         state.sync_selection();
@@ -3676,6 +3687,9 @@ impl Command for UvStitchCmd {
             return Err(CommandError::NoActiveAsset);
         };
         let count = mesh.stitch_uv(&state.session.uv_selected);
+        if count == 0 {
+            return Err(CommandError::NoChange("no UV seam edge to stitch".into()));
+        }
         state.set_status(format!("Stitched {count} UV seam edge(s)"));
         Ok(())
     }
@@ -3706,6 +3720,9 @@ impl Command for UvRelaxCmd {
             return Err(CommandError::NoActiveAsset);
         };
         let count = mesh.relax_uv(&state.session.uv_selected, self.iterations);
+        if count == 0 {
+            return Err(CommandError::NoChange("no UV face to relax".into()));
+        }
         state.set_status(format!("Relaxed {count} UV face(s)"));
         Ok(())
     }
@@ -3888,7 +3905,13 @@ impl Command for DissolveCmd {
         let Some(mesh) = state.project.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        let (verts, faces) = (mesh.verts.len(), mesh.faces.len());
         mesh.dissolve_selected();
+        if mesh.verts.len() == verts && mesh.faces.len() == faces {
+            return Err(CommandError::NoChange(
+                "selection could not be dissolved".into(),
+            ));
+        }
         state.set_status("Dissolved selected geometry");
         Ok(())
     }
@@ -4486,6 +4509,38 @@ impl Command for DeleteSplineCmd {
     }
 }
 
+/// Um Profile exige spline planar e sem attachment. Comandos que editam uma
+/// spline pertencente a um Profile aplicam a edição numa cópia e validam o
+/// resultado, para que nenhum caminho (não só `UpdateSplineCmd`) quebre o generator.
+fn validate_profile_edit(
+    project: &petunia_project::Project,
+    spline_id: uuid::Uuid,
+    apply: impl FnOnce(&mut SplineResource) -> Result<(), SplineError>,
+) -> Result<(), &'static str> {
+    let Some(profile) = project
+        .profiles
+        .iter()
+        .find(|profile| profile.spline_id == spline_id)
+    else {
+        return Ok(());
+    };
+    let mut spline = project
+        .get_spline(spline_id)
+        .ok_or("Spline not found")?
+        .clone();
+    apply(&mut spline).map_err(|_| "Spline edit is invalid")?;
+    profile
+        .validate_authoring(&spline)
+        .map_err(|_| "Edit would break the Profile (must stay planar and unattached)")
+}
+
+fn spline_owned_by_profile(project: &petunia_project::Project, spline_id: uuid::Uuid) -> bool {
+    project
+        .profiles
+        .iter()
+        .any(|profile| profile.spline_id == spline_id)
+}
+
 #[derive(Debug, Clone)]
 pub struct AddSplinePointCmd {
     pub spline_id: uuid::Uuid,
@@ -4525,7 +4580,9 @@ impl Command for AddSplinePointCmd {
         {
             return Err("Spline point data is not finite");
         }
-        Ok(())
+        validate_profile_edit(&state.project.project, self.spline_id, |spline| {
+            spline.insert_point(index, self.point.clone())
+        })
     }
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
@@ -4574,7 +4631,9 @@ impl Command for MoveSplinePointCmd {
         } else if point.position == self.position {
             Err("Spline point position is unchanged")
         } else {
-            Ok(())
+            validate_profile_edit(&state.project.project, self.spline_id, |spline| {
+                spline.move_point(self.point_id, self.position)
+            })
         }
     }
 
@@ -4661,7 +4720,9 @@ impl Command for SetSplineHandlesCmd {
         {
             Err("Spline handles are unchanged")
         } else {
-            Ok(())
+            validate_profile_edit(&state.project.project, self.spline_id, |spline| {
+                spline.set_handles(self.point_id, self.handle_in, self.handle_out, self.mode)
+            })
         }
     }
 
@@ -4821,6 +4882,9 @@ impl Command for AttachSplinePointCmd {
 
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
         let point = spline_point_for_attachment(state, self.spline_id, self.point_id)?;
+        if spline_owned_by_profile(&state.project.project, self.spline_id) {
+            return Err("Profile splines cannot be attached to a surface");
+        }
         ensure_attachment_target_editable(state, &self.attachment)?;
         let frame = evaluate_surface_attachment(&state.project.project, &self.attachment)
             .map_err(|_| "Surface attachment cannot be evaluated")?;
