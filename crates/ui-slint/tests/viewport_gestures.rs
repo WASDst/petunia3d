@@ -191,6 +191,8 @@ fn viewport_shortcut_drag_parametric_hover_and_navigation_gesture() {
     assert_eq!(popover_closes.get(), 0, "slider não deve fechar o popover");
 
     shell.set_shading_popover_open(false);
+    shell.set_model_parts_open(true);
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(300));
     let parts_search = ElementHandle::find_by_accessible_label(&shell, "Search parts")
         .find(|element| element.accessible_role() == Some(AccessibleRole::Search))
         .expect("busca acessível de Parts");
@@ -438,177 +440,104 @@ fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
 }
 
 #[test]
-fn floating_material_card_anchors_at_state_position() {
-    use petunia_ui_slint::SectionState;
+fn inspector_rail_collapsed_by_default_and_expands_on_hover() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
-    shell.set_label_tab_material("Material".into());
-    shell.set_label_material_assign("AssignX".into());
-    shell.set_material_docked(false);
-    let states = std::rc::Rc::new(slint::VecModel::from(vec![SectionState {
-        id: "material".into(),
-        docked: false,
-        x: 200.0,
-        y: 100.0,
-        pin_open: false,
-        pinned_asset: "".into(),
-        open: true,
-    }]));
-    shell.set_section_states(states.into());
 
-    // Floating card anchors exactly at (200, 100) / Card flutuante ancora exatamente em (200, 100).
-    let cards: Vec<_> = ElementHandle::find_by_accessible_label(&shell, "Material")
-        .filter(|element| element.accessible_role() == Some(AccessibleRole::Groupbox))
-        .collect();
-    assert_eq!(cards.len(), 1, "um único card flutuante de Material");
-    let pos = cards[0].absolute_position();
+    // By default, no sections are pinned open, and nothing is hovered -> flyout closed.
     assert!(
-        (pos.x - 200.0).abs() < 2.0 && (pos.y - 100.0).abs() < 2.0,
-        "card deve ancorar em (200, 100), veio ({}, {})",
-        pos.x,
-        pos.y
+        !shell.get_inspector_flyout_open(),
+        "flyout deve iniciar fechado/recolhido no rail de 56px"
     );
-    // Content exists in a single copy (floating only, no docked duplicate) / Conteúdo existe em uma única cópia (só flutuante, sem duplicata ancorada).
-    let assigns: Vec<_> = ElementHandle::find_by_accessible_label(&shell, "AssignX")
-        .filter(|element| element.accessible_role() == Some(AccessibleRole::Button))
-        .collect();
-    assert_eq!(assigns.len(), 1, "Assign deve existir em cópia única");
+
+    // Hovering over an inspector section opens the flyout for peek-on-hover.
+    shell.set_hovered_inspector_section("material".into());
+    assert!(
+        shell.get_inspector_flyout_open(),
+        "passar mouse sobre uma seção deve abrir o flyout para visualização rápida"
+    );
+
+    // Leaving hover closes the flyout again.
+    shell.set_hovered_inspector_section("".into());
+    assert!(
+        !shell.get_inspector_flyout_open(),
+        "remover o hover deve fechar o flyout automaticamente"
+    );
+
+    // Hovering over the rail directly also expands the flyout.
+    shell.set_rail_hovered(true);
+    assert!(
+        shell.get_inspector_flyout_open(),
+        "hover sobre o rail deve abrir o flyout"
+    );
+    shell.set_rail_hovered(false);
+    assert!(
+        !shell.get_inspector_flyout_open(),
+        "sair do rail deve fechar o flyout"
+    );
 }
 
 #[test]
-fn floating_card_clamp_uses_real_card_size_on_all_four_borders() {
-    use petunia_ui_slint::SectionState;
+fn inspector_pinned_section_keeps_flyout_open_without_hover() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
-    shell.set_label_tab_material("Material".into());
-    shell.set_material_docked(false);
-    shell.set_inspector_width(320.0);
-    let states = std::rc::Rc::new(slint::VecModel::from(vec![SectionState {
-        id: "material".into(),
-        docked: false,
-        x: 200.0,
-        y: 100.0,
-        pin_open: false,
-        pinned_asset: "".into(),
-        open: true,
-    }]));
-    shell.set_section_states(states.into());
 
-    let moves = Rc::new(RefCell::new(Vec::new()));
-    let moves_callback = Rc::clone(&moves);
-    shell.on_section_moved(move |_, x, y| {
-        moves_callback.borrow_mut().push((x, y));
-    });
+    assert!(!shell.get_inspector_flyout_open());
 
-    let drag = |shell: &PetuniaSlintShell, from: LogicalPosition, to: LogicalPosition| {
-        move_pointer(shell, from.x, from.y);
-        shell.window().dispatch_event(WindowEvent::PointerPressed {
-            position: from,
-            button: PointerEventButton::Left,
-        });
-        move_pointer(shell, to.x, to.y);
-        shell.window().dispatch_event(WindowEvent::PointerReleased {
-            position: to,
-            button: PointerEventButton::Left,
-        });
-    };
-
-    // Borda direita/inferior: o clamp usa a largura e a altura reais do card.
-    drag(
-        &shell,
-        LogicalPosition::new(300.0, 120.0),
-        LogicalPosition::new(5000.0, 5000.0),
-    );
-    let (right, bottom) = *moves.borrow().last().expect("arrasto na borda");
-    let card = ElementHandle::find_by_accessible_label(&shell, "Material")
-        .find(|element| element.accessible_role() != Some(AccessibleRole::Button))
-        .expect("card flutuante");
-    let card_size = card.size();
+    // Pinning open a section keeps the flyout open even without hovering.
+    shell.set_model_material_open(true);
     assert!(
-        (right - (1280.0 - card_size.width)).abs() < 4.0,
-        "x deve travar em container - largura do card, veio {right}"
-    );
-    assert!(
-        (bottom - (800.0 - card_size.height)).abs() < 4.0,
-        "y deve travar em container - altura do card, veio {bottom}"
+        shell.get_inspector_flyout_open(),
+        "seção fixada (pin) deve manter o painel aberto sem necessidade de hover"
     );
 
-    // Borda esquerda/superior: o mesmo arrasto, agora a partir do card colado.
-    // O header começa 10px abaixo do topo do card (padding do conteúdo).
-    let card_pos = ElementHandle::find_by_accessible_label(&shell, "Material")
-        .find(|element| element.accessible_role() != Some(AccessibleRole::Button))
-        .expect("card flutuante")
-        .absolute_position();
-    drag(
-        &shell,
-        LogicalPosition::new(card_pos.x + 40.0, card_pos.y + 16.0),
-        LogicalPosition::new(0.0, 0.0),
+    // Unpinning minimizes it back to rail if not hovered.
+    shell.set_model_material_open(false);
+    assert!(
+        !shell.get_inspector_flyout_open(),
+        "desafixar (unpin) sem hover deve recolher o painel de volta para o rail"
     );
-    let (left, top) = *moves.borrow().last().expect("arrasto no canto");
-    assert!(left.abs() < 4.0, "x trava em 0, veio {left}");
-    assert!(top.abs() < 4.0, "y trava em 0, veio {top}");
 }
 
 #[test]
-fn dragging_floating_card_header_reports_clamped_move() {
-    use petunia_ui_slint::SectionState;
+fn inspector_pill_and_pin_callbacks_dispatch() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
-    shell.set_label_tab_material("Material".into());
-    shell.set_material_docked(false);
-    let states = std::rc::Rc::new(slint::VecModel::from(vec![SectionState {
-        id: "material".into(),
-        docked: false,
-        x: 200.0,
-        y: 100.0,
-        pin_open: false,
-        pinned_asset: "".into(),
-        open: true,
-    }]));
-    shell.set_section_states(states.into());
 
-    let moves = Rc::new(RefCell::new(Vec::new()));
-    let moves_callback = Rc::clone(&moves);
-    shell.on_section_moved(move |id, x, y| {
-        moves_callback.borrow_mut().push((id.to_string(), x, y));
+    let pill_clicked = Rc::new(RefCell::new(Vec::new()));
+    let pill_clicked_clone = Rc::clone(&pill_clicked);
+    shell.on_section_pill_clicked(move |id| {
+        pill_clicked_clone.borrow_mut().push(id.to_string());
     });
-    let commits = Rc::new(Cell::new(0usize));
-    let commits_callback = Rc::clone(&commits);
-    shell.on_section_move_committed(move |id| {
-        assert_eq!(id, "material");
-        commits_callback.set(commits_callback.get() + 1);
+
+    let pin_toggled = Rc::new(RefCell::new(Vec::new()));
+    let pin_toggled_clone = Rc::clone(&pin_toggled);
+    shell.on_section_pin_open_toggled(move |id| {
+        pin_toggled_clone.borrow_mut().push(id.to_string());
     });
-    // Press no meio do header do card, arrasta +50px à direita, solta.
-    let start = LogicalPosition::new(300.0, 120.0);
-    move_pointer(&shell, start.x, start.y);
-    shell.window().dispatch_event(WindowEvent::PointerPressed {
-        position: start,
-        button: PointerEventButton::Left,
+
+    let open_toggled = Rc::new(RefCell::new(Vec::new()));
+    let open_toggled_clone = Rc::clone(&open_toggled);
+    shell.on_section_open_toggled(move |id| {
+        open_toggled_clone.borrow_mut().push(id.to_string());
     });
-    move_pointer(&shell, 350.0, 120.0);
-    shell.window().dispatch_event(WindowEvent::PointerReleased {
-        position: LogicalPosition::new(350.0, 120.0),
-        button: PointerEventButton::Left,
-    });
-    assert_eq!(commits.get(), 1, "soltar o ponteiro confirma uma vez");
-    let moves = moves.borrow();
-    assert!(!moves.is_empty(), "arrasto deve emitir section-moved");
-    let (id, x, y) = moves.last().unwrap();
-    assert_eq!(id, "material");
-    assert!(
-        (x - 250.0).abs() < 3.0,
-        "x deve acompanhar o arrasto, veio {x}"
-    );
-    assert!((y - 100.0).abs() < 3.0, "y deve ficar parado, veio {y}");
+
+    shell.invoke_section_pill_clicked("material".into());
+    shell.invoke_section_pin_open_toggled("transform".into());
+    shell.invoke_section_open_toggled("parts".into());
+
+    assert_eq!(*pill_clicked.borrow(), vec!["material"]);
+    assert_eq!(*pin_toggled.borrow(), vec!["transform"]);
+    assert_eq!(*open_toggled.borrow(), vec!["parts"]);
 }
 
 #[test]

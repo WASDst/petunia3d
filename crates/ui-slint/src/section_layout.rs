@@ -270,7 +270,7 @@ mod tests {
                 "quick_actions"
             ]
         );
-        assert!(vm.section_states.iter().all(|state| state.docked));
+        assert!(vm.section_states.iter().all(|state| !state.pin_open));
     }
 
     #[test]

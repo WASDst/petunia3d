@@ -45,11 +45,7 @@ pub struct MaterialOptionModel {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SectionStateModel {
     pub id: String,
-    pub docked: bool,
-    pub x: f32,
-    pub y: f32,
     pub pin_open: bool,
-    pub pinned_asset: Option<String>,
     pub open: bool,
 }
 

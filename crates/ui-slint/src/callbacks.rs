@@ -2,7 +2,7 @@
 // Registro de callbacks da UI Slint e sincronização de propriedades do shell.
 
 use petunia_core::{SelectionDomain, Workspace};
-use slint::{ComponentHandle, Model};
+use slint::ComponentHandle;
 use std::sync::{Arc, Mutex};
 
 use crate::overlay::OverlayId;
@@ -461,11 +461,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_search_parts(vm.label_search_parts.as_str().into());
     window.set_label_inspector(vm.label_inspector.as_str().into());
     window.set_label_resize_panel_width(vm.label_resize_panel_width.as_str().into());
-    window.set_label_section_dock(vm.label_section_dock.as_str().into());
-    window.set_label_section_drag(vm.label_section_drag.as_str().into());
     window.set_label_section_pin_open(vm.label_section_pin_open.as_str().into());
-    window.set_label_section_pin_asset(vm.label_section_pin_asset.as_str().into());
-    window.set_label_section_unpin_asset(vm.label_section_unpin_asset.as_str().into());
     window.set_label_expand_inspector(vm.label_expand_inspector.as_str().into());
     window.set_label_collapse_inspector(vm.label_collapse_inspector.as_str().into());
     window.set_label_tab_parts(vm.label_tab_parts.as_str().into());
@@ -926,11 +922,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         .iter()
         .map(|state| SectionState {
             id: state.id.as_str().into(),
-            docked: state.docked,
-            x: state.x,
-            y: state.y,
             pin_open: state.pin_open,
-            pinned_asset: state.pinned_asset.as_deref().unwrap_or_default().into(),
             open: state.open,
         })
         .collect();
@@ -938,27 +930,21 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     for state in &vm.section_states {
         match state.id.as_str() {
             "parts" => {
-                window.set_parts_docked(state.docked);
                 window.set_model_parts_open(state.open);
             }
             "transform" => {
-                window.set_transform_docked(state.docked);
                 window.set_model_transform_open(state.open);
             }
             "material" => {
-                window.set_material_docked(state.docked);
                 window.set_model_material_open(state.open);
             }
             "object" => {
-                window.set_object_docked(state.docked);
                 window.set_model_object_open(state.open);
             }
             "modifiers" => {
-                window.set_modifiers_docked(state.docked);
                 window.set_model_modifiers_open(state.open);
             }
             "quick_actions" => {
-                window.set_quick_actions_docked(state.docked);
                 window.set_quick_actions_section_open(state.open);
             }
             _ => {}
@@ -4532,88 +4518,15 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             window.set_quick_actions_section_open(next[5]);
         }
     });
-    let section_moved_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_moved(move |id, x, y| {
-        let Ok(mut bridge) = section_moved_bridge.lock() else {
-            return;
-        };
-        let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) else {
-            return;
-        };
-        bridge.move_section_float(section, x, y);
-        // Live drag must stay O(1): patch the one row of the model instead of
-        // rebuilding the whole view model and persisting preferences per event.
-        // O arraste vivo precisa ser O(1): atualiza só a linha do modelo em vez
-        // de reconstruir o view model e persistir a cada evento.
-        if let Some(window) = window_weak.upgrade() {
-            let index = crate::section_layout::section_index(section);
-            let model = window.get_section_states();
-            if let Some(mut state) = model.row_data(index) {
-                state.x = x;
-                state.y = y;
-                model.set_row_data(index, state);
-            }
-        }
-    });
-    let section_commit_bridge = Arc::clone(&bridge);
-    window.on_section_move_committed(move |_id| {
-        if let Ok(mut bridge) = section_commit_bridge.lock() {
-            bridge.commit_section_float();
-        }
-    });
-    let section_dock_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_dock_toggled(move |id| {
-        if let Ok(mut bridge) = section_dock_bridge.lock() {
-            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                let docked =
-                    bridge.section_layouts[crate::section_layout::section_index(section)].docked;
-                bridge.set_section_docked(section, !docked);
-            }
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &bridge.view_model());
-            }
-        }
-    });
     let section_pin_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_section_pin_open_toggled(move |id| {
-        if let Ok(mut bridge) = section_pin_bridge.lock() {
+        if let (Ok(mut bridge), Some(window)) = (section_pin_bridge.lock(), window_weak.upgrade()) {
             if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                let pin_open =
-                    bridge.section_layouts[crate::section_layout::section_index(section)].pin_open;
-                bridge.set_section_pin_open(section, !pin_open);
-            }
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &bridge.view_model());
-            }
-        }
-    });
-    let section_asset_pin_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_asset_pin_changed(move |id, asset| {
-        if let Ok(mut bridge) = section_asset_pin_bridge.lock() {
-            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                let asset = asset.as_str();
-                bridge.set_section_pinned_asset(
-                    section,
-                    (!asset.is_empty()).then(|| asset.to_string()),
-                );
-            }
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &bridge.view_model());
-            }
-        }
-    });
-
-    let section_close_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_close_requested(move |id| {
-        if let (Ok(mut bridge), Some(window)) = (section_close_bridge.lock(), window_weak.upgrade())
-        {
-            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                bridge.set_section_open(section, false);
+                let idx = crate::section_layout::section_index(section);
+                let current_pin = bridge.section_layouts[idx].pin_open;
+                bridge.set_section_pin_open(section, !current_pin);
+                bridge.set_section_open(section, !current_pin);
             }
             sync_window_properties(&window, &bridge.view_model());
         }
@@ -4640,33 +4553,8 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
                 let idx = crate::section_layout::section_index(section);
                 let current_open = bridge.section_layouts[idx].open;
-                if current_open {
-                    // Toggle para fechar (recolhe na pílula)
-                    bridge.set_section_open(section, false);
-                } else {
-                    // Abre o módulo
-                    bridge.set_section_open(section, true);
-                    let is_docked = bridge.section_layouts[idx].docked;
-                    let is_collapsed = window.get_inspector_collapsed();
-                    // Se estiver em modo flutuante ou se a barra lateral estiver colapsada,
-                    // abre flutuando na viewport ao lado da pílula se coordenadas forem padrão
-                    if !is_docked || is_collapsed {
-                        if is_docked {
-                            bridge.set_section_docked(section, false);
-                        }
-                        let win_w = window.get_window_width();
-                        let win_h = window.get_window_height();
-                        let insp_w = window.get_inspector_width();
-                        let card_x = (win_w - insp_w - 70.0).max(10.0);
-                        let card_y = (60.0 + 44.0 * idx as f32).min((win_h - 250.0).max(10.0));
-                        if bridge.section_layouts[idx].x <= 15.0
-                            && bridge.section_layouts[idx].y <= 60.0
-                        {
-                            bridge.move_section_float(section, card_x, card_y);
-                            bridge.commit_section_float();
-                        }
-                    }
-                }
+                bridge.set_section_pin_open(section, !current_open);
+                bridge.set_section_open(section, !current_open);
             }
             sync_window_properties(&window, &bridge.view_model());
         }

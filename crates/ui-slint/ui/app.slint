@@ -65,11 +65,7 @@ export struct QuickActionEntry {
 
 export struct SectionState {
     id: string,
-    docked: bool,
-    x: float,
-    y: float,
     pin-open: bool,
-    pinned-asset: string,
     open: bool,
 }
 
@@ -253,37 +249,6 @@ component RichTooltip inherits Rectangle {
             color: DesignTokens.text-muted;
             font-size: 9px;
             wrap: word-wrap;
-        }
-    }
-}
-
-/// Divisor vertical: arrasta na horizontal e devolve a largura desejada.
-component SplitterVertical inherits Rectangle {
-    in property <length> value;
-    in property <float> direction: 1.0;
-    callback moved(length);
-
-    width: 6px;
-    height: 100%;
-    background: touch-area.has-hover || touch-area.pressed ? DesignTokens.accent : transparent;
-    accessible-role: slider;
-    accessible-label: "Resize panel width";
-    accessible-value: 50;
-
-    touch-area := TouchArea {
-        property <length> start-value;
-        property <length> start-x;
-
-        pointer-event(event) => {
-            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
-                self.start-value = root.value;
-                self.start-x = self.mouse-x;
-            }
-        }
-        moved => {
-            if self.pressed {
-                root.moved(self.start-value + root.direction * (self.mouse-x - self.start-x));
-            }
         }
     }
 }
@@ -1222,13 +1187,9 @@ component InspectorSection inherits Rectangle {
     in property <bool> open: true;
     in property <string> section-id: "";
     in property <bool> pin-open: false;
-    in property <bool> can-float: false;
-    in property <bool> can-close: false;
     callback toggled;
     callback toggle-all;
     callback pin-toggled(string);
-    callback float-requested(string);
-    callback close-requested(string);
     toggle-all => { root.toggled(); }
 
     width: 100%;
@@ -1316,7 +1277,7 @@ component InspectorSection inherits Rectangle {
                 }
             }
 
-            if root.can-float: Rectangle {
+            Rectangle {
                 width: 22px;
                 height: 22px;
                 border-radius: 4px;
@@ -1338,52 +1299,6 @@ component InspectorSection inherits Rectangle {
                     }
                 }
             }
-
-            if root.can-float: Rectangle {
-                width: 22px;
-                height: 22px;
-                border-radius: 4px;
-                background: float-touch.has-hover ? DesignTokens.surface-hover : transparent;
-                accessible-role: button;
-                accessible-label: "Float into viewport";
-                IconDisplay {
-                    icon: IconSet.ExternalLink;
-                    size: 11px;
-                    stroke: DesignTokens.text-secondary;
-                }
-                float-touch := TouchArea {
-                    clicked => { root.float-requested(root.section-id); }
-                    Tooltip {
-                        VerticalLayout {
-                            padding: 6px;
-                            Text { text: "Float into viewport"; color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; }
-                        }
-                    }
-                }
-            }
-
-            if root.can-close: Rectangle {
-                width: 22px;
-                height: 22px;
-                border-radius: 4px;
-                background: close-touch.has-hover ? DesignTokens.surface-hover : transparent;
-                accessible-role: button;
-                accessible-label: "Collapse to pill";
-                IconDisplay {
-                    icon: IconSet.X;
-                    size: 11px;
-                    stroke: DesignTokens.text-secondary;
-                }
-                close-touch := TouchArea {
-                    clicked => { root.close-requested(root.section-id); }
-                    Tooltip {
-                        VerticalLayout {
-                            padding: 6px;
-                            Text { text: "Collapse to pill"; color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; }
-                        }
-                    }
-                }
-            }
         }
 
         if root.open: Rectangle {
@@ -1393,11 +1308,11 @@ component InspectorSection inherits Rectangle {
 
         VerticalLayout {
             visible: root.open;
-            vertical-stretch: 0;
             @children
         }
     }
 }
+
 
 /// Pílula de ícone do rail colapsado do Inspector: 36px, separada das
 /// vizinhas, com hover visível e Tooltip com o nome da seção.
@@ -1407,7 +1322,10 @@ component InspectorPill inherits Rectangle {
     in property <string> semantic-label;
     in property <string> description: "";
     in property <bool> active: false;
+    in property <string> section-id: "";
+    out property <bool> has-hover: pill-touch.has-hover;
     callback clicked;
+    callback hovered(string);
 
     accessible-role: button;
     accessible-label: root.semantic-label;
@@ -1435,198 +1353,25 @@ component InspectorPill inherits Rectangle {
 
     pill-touch := TouchArea {
         clicked => { root.clicked(); }
+        changed has-hover => {
+            if self.has-hover {
+                root.hovered(root.section-id);
+            }
+        }
         Tooltip {
             RichTooltip {
                 title: root.semantic-label;
                 description: root.description;
-                hint: "Click to expand section";
+                hint: root.active ? "Click to unpin section" : "Click to pin section open";
             }
         }
     }
 }
+
 
 /// Floating Inspector section card: drag header to move, pin to keep open or
 /// to an asset, dock button returns it to the column. Body via @children so
 /// each section is defined once and instantiated docked + floating.
-component FloatSectionCard inherits Rectangle {
-    in property <string> section-id;
-    in property <string> title;
-    in property <float> card-x;
-    in property <float> card-y;
-    in property <length> card-width: 320px;
-    in property <bool> pin-open: false;
-    in property <string> pinned-asset: "";
-    in property <string> active-asset-id: "";
-    in property <string> dock-label: "Dock";
-    in property <string> drag-label: "Drag to move";
-    in property <string> pin-open-label: "Keep open";
-    in property <string> pin-asset-label: "Pin to active part";
-    in property <string> unpin-asset-label: "Unpin";
-    in property <length> container-width: 1280px;
-    in property <length> container-height: 800px;
-    callback moved(string, float, float);
-    callback move-committed(string);
-    callback dock-requested(string);
-    callback pin-open-toggled(string);
-    callback asset-pin-changed(string, string);
-    callback close-requested(string);
-
-    accessible-role: groupbox;
-    accessible-label: root.title;
-    width: root.card-width;
-    // Hug the content: a bare Rectangle child of a non-layout parent would
-    // stretch to the whole window, hiding the viewport behind the card.
-    // Ajusta ao conteúdo: um Rectangle solto em pai sem layout esticaria pela
-    // janela inteira, escondendo a viewport atrás do card.
-    height: card-content.min-height;
-    border-radius: 8px;
-    background: DesignTokens.surface-raised.with-alpha(0.94);
-    border-width: 1px;
-    border-color: DesignTokens.border-strong;
-    drop-shadow-blur: 14px;
-    drop-shadow-color: #00000090;
-    drop-shadow-offset-y: 4px;
-
-    card-content := VerticalLayout {
-        padding: 10px;
-        spacing: 8px;
-
-        card-header := HorizontalLayout {
-            spacing: 4px;
-            height: 24px;
-
-            drag-touch := TouchArea {
-                horizontal-stretch: 1;
-                property <length> grab-dx: 0px;
-                property <length> grab-dy: 0px;
-                property <length> last-x: 0px;
-                property <length> last-y: 0px;
-                accessible-role: button;
-                accessible-label: root.drag-label;
-                pointer-event(event) => {
-                    if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
-                        self.grab-dx = self.mouse-x;
-                        self.grab-dy = self.mouse-y;
-                        self.last-x = self.mouse-x;
-                        self.last-y = self.mouse-y;
-                    }
-                    if event.button == PointerEventButton.left && event.kind == PointerEventKind.up {
-                        root.move-committed(root.section-id);
-                    }
-                }
-                moved => {
-                    if self.pressed {
-                        // Clamp against the real card size: a fixed margin let a
-                        // wide Inspector card stick to the right/bottom edge.
-                        // Clamp pelo tamanho real do card: margem fixa deixava
-                        // um card largo encostar na borda direita/inferior.
-                        root.moved(
-                            root.section-id,
-                            max(0px, min(root.card-x * 1px + self.mouse-x - self.last-x, root.container-width - root.card-width)) / 1px,
-                            max(0px, min(root.card-y * 1px + self.mouse-y - self.last-y, root.container-height - root.height)) / 1px
-                        );
-                        self.last-x = self.mouse-x;
-                        self.last-y = self.mouse-y;
-                    }
-                }
-                HorizontalLayout {
-                    spacing: 6px;
-                    alignment: start;
-                    IconDisplay { icon: IconSet.MoreHorizontal; size: 14px; stroke: DesignTokens.text-muted; }
-                    Text {
-                        text: root.title;
-                        color: DesignTokens.text-primary;
-                        font-size: 12px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
-                    if root.pinned-asset != "": IconDisplay { icon: IconSet.Pin; size: 11px; stroke: DesignTokens.accent; }
-                }
-            }
-
-            Rectangle {
-                width: 24px; height: 24px; border-radius: 4px;
-                background: root.pin-open ? DesignTokens.accent : transparent;
-                accessible-role: button;
-                accessible-label: root.pin-open-label;
-                IconDisplay {
-                    icon: IconSet.Pin;
-                    size: 12px;
-                    stroke: root.pin-open ? DesignTokens.canvas : DesignTokens.text-secondary;
-                }
-                TouchArea {
-                    clicked => { root.pin-open-toggled(root.section-id); }
-                    Tooltip {
-                        VerticalLayout {
-                            padding: 8px; spacing: 2px;
-                            Text { text: root.pin-open-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 24px; height: 24px; border-radius: 4px;
-                background: root.pinned-asset != "" ? DesignTokens.accent : transparent;
-                accessible-role: button;
-                accessible-label: root.pinned-asset != "" ? root.unpin-asset-label : root.pin-asset-label;
-                IconDisplay {
-                    icon: IconSet.Crosshair;
-                    size: 12px;
-                    stroke: root.pinned-asset != "" ? DesignTokens.canvas : DesignTokens.text-secondary;
-                }
-                TouchArea {
-                    clicked => {
-                        root.asset-pin-changed(root.section-id, root.pinned-asset != "" ? "" : root.active-asset-id);
-                    }
-                    Tooltip {
-                        VerticalLayout {
-                            padding: 8px; spacing: 2px;
-                            Text { text: root.pinned-asset != "" ? root.unpin-asset-label : root.pin-asset-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 24px; height: 24px; border-radius: 4px;
-                background: transparent;
-                accessible-role: button;
-                accessible-label: root.dock-label;
-                IconDisplay { icon: IconSet.PanelLeft; size: 12px; stroke: DesignTokens.text-secondary; }
-                TouchArea {
-                    clicked => { root.dock-requested(root.section-id); }
-                    Tooltip {
-                        VerticalLayout {
-                            padding: 8px; spacing: 2px;
-                            Text { text: root.dock-label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 24px; height: 24px; border-radius: 4px;
-                background: close-card-touch.has-hover ? DesignTokens.surface-hover : transparent;
-                accessible-role: button;
-                accessible-label: "Collapse to pill";
-                IconDisplay { icon: IconSet.X; size: 12px; stroke: DesignTokens.text-secondary; }
-                close-card-touch := TouchArea {
-                    clicked => { root.close-requested(root.section-id); }
-                    Tooltip {
-                        VerticalLayout {
-                            padding: 8px; spacing: 2px;
-                            Text { text: "Collapse to pill"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; }
-                        }
-                    }
-                }
-            }
-        }
-
-        @children
-    }
-}
-
 /// Corpo da seção Transform: definido uma vez, instanciado ancorado + flutuante.
 /// Transform section body: defined once, instantiated docked + floating.
 component TransformBody inherits VerticalLayout {
@@ -3168,10 +2913,10 @@ export component PetuniaSlintShell inherits Window {
 
     in-out property <string> active-workspace: "MODEL";
     in-out property <bool> inspector-visible: true;
-    in-out property <bool> model-parts-open: true;
-    in-out property <bool> model-transform-open: true;
+    in-out property <bool> model-parts-open: false;
+    in-out property <bool> model-transform-open: false;
     in-out property <bool> model-material-open: false;
-    in-out property <bool> model-object-open: true;
+    in-out property <bool> model-object-open: false;
     in-out property <bool> model-modifiers-open: false;
     in-out property <bool> parts-docked: true;
     in-out property <bool> transform-docked: true;
@@ -3179,7 +2924,21 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> object-docked: true;
     in-out property <bool> modifiers-docked: true;
     in-out property <bool> quick-actions-docked: true;
-    in-out property <bool> inspector-collapsed: false;
+    in-out property <bool> inspector-collapsed: true;
+    in-out property <string> hovered-inspector-section: "";
+    in-out property <bool> flyout-hovered: false;
+    in-out property <bool> rail-hovered: false;
+    in-out property <bool> inspector-flyout-open: (
+        root.hovered-inspector-section != "" ||
+        root.flyout-hovered ||
+        root.rail-hovered ||
+        root.model-parts-open ||
+        root.model-transform-open ||
+        root.model-material-open ||
+        root.model-object-open ||
+        root.model-modifiers-open ||
+        root.quick-actions-section-open
+    );
     in-out property <bool> compact-shell: false;
     in-out property <bool> command-search-visible: false;
     in-out property <bool> scene-drawer-visible: false;
@@ -3290,7 +3049,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <float> xray-opacity: 0.42;
     in-out property <bool> shading-popover-open: false;
     property <bool> tool-properties-collapsed: false;
-    in-out property <bool> quick-actions-section-open: true;
+    in-out property <bool> quick-actions-section-open: false;
     in-out property <string> operation-preview-commands: "";
     // Cordão pontilhado pivô→mouse da ferramenta de manipulação ativa.
     // Só existe durante a sessão (arrasto/modal); fora dela é "" e some.
@@ -7541,170 +7300,31 @@ export component PetuniaSlintShell inherits Window {
                             }
                         }
                     }
-                }
-
-                if inspector-visible && !compact-shell && !inspector-collapsed: SplitterVertical {
-                    value: root.inspector-width;
-                    direction: -1.0;
-                    moved(width) => { root.inspector-width-changed(width / 1px); }
-                }
-
-                if inspector-visible && !compact-shell: Rectangle {
-                    width: inspector-collapsed ? 56px : inspector-width;
-                    y: 0;
-                    height: 100%;
-                    background: transparent;
-
-                    if inspector-collapsed: Rectangle {
-                        x: 0;
-                        width: 56px;
-                        height: 100%;
-                        background: DesignTokens.surface-raised.with-alpha(0.9);
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        border-radius: 8px;
-
-                        VerticalLayout {
-                            padding: 10px;
-                            spacing: 10px;
-                            alignment: start;
-
-                            // Toggle sidebar collapse / expand
-                            Rectangle {
-                                width: 36px;
-                                height: 26px;
-                                border-radius: 6px;
-                                background: expand-touch.has-hover ? DesignTokens.surface-hover : transparent;
-                                accessible-role: button;
-                                accessible-label: root.label-expand-inspector;
-                                IconDisplay {
-                                    icon: IconSet.PanelLeft;
-                                    size: 14px;
-                                    stroke: DesignTokens.text-secondary;
-                                }
-                                expand-touch := TouchArea {
-                                    clicked => { root.inspector-collapsed = !root.inspector-collapsed; }
-                                    Tooltip {
-                                        VerticalLayout {
-                                            padding: 6px;
-                                            Text { text: "Expand sidebar"; color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; }
-                                        }
-                                    }
-                                }
-                            }
-
-                            InspectorPill {
-                                icon: IconSet.Layers3;
-                                icon-svg: PetuniaIcons.parts;
-                                semantic-label: root.label-tab-parts;
-                                description: "Manage scene parts, groups and hierarchy";
-                                active: root.model-parts-open;
-                                clicked => {
-                                    root.section-pill-clicked("parts");
-                                }
-                            }
-                            InspectorPill {
-                                icon: IconSet.Move3d;
-                                icon-svg: PetuniaIcons.transform;
-                                semantic-label: root.label-tab-transform;
-                                description: "Position, rotation and scale coordinates";
-                                active: root.model-transform-open;
-                                clicked => {
-                                    root.section-pill-clicked("transform");
-                                }
-                            }
-                            InspectorPill {
-                                icon: IconSet.Paintbrush;
-                                icon-svg: PetuniaIcons.material;
-                                semantic-label: root.label-tab-material;
-                                description: "Surface shaders, colors and textures";
-                                active: root.model-material-open;
-                                clicked => {
-                                    root.section-pill-clicked("material");
-                                }
-                            }
-                            InspectorPill {
-                                icon: IconSet.Box;
-                                icon-svg: PetuniaIcons.object-mesh;
-                                semantic-label: root.label-tab-object;
-                                description: "Object metadata, visibility and display options";
-                                active: root.model-object-open;
-                                clicked => {
-                                    root.section-pill-clicked("object");
-                                }
-                            }
-                            InspectorPill {
-                                icon: IconSet.Settings;
-                                icon-svg: PetuniaIcons.modifier;
-                                semantic-label: root.label-tab-modifiers;
-                                description: "Generative and deformer modifier stack";
-                                active: root.model-modifiers-open;
-                                clicked => {
-                                    root.section-pill-clicked("modifiers");
-                                }
-                            }
-                            InspectorPill {
-                                icon: IconSet.Zap;
-                                icon-svg: PetuniaIcons.tool-profile;
-                                semantic-label: root.label-quick-actions;
-                                description: "Quick actions and modeling tools";
-                                active: root.quick-actions-section-open;
-                                clicked => {
-                                    root.section-pill-clicked("quick_actions");
-                                }
-                            }
-                        }
-                    }
-
-                    if !inspector-collapsed: Rectangle {
-                        width: 100%;
-                        height: 100%;
+                
+                    // Inspector Flyout flutuante sobre a Viewport (Peek-on-Hover e Pin/Unpin)
+                    if inspector-visible && !compact-shell: inspector-flyout := Rectangle {
+                        visible: root.inspector-flyout-open || self.opacity > 0.01;
+                        x: parent.width - (root.inspector-flyout-open ? (self.width + 6px) : 0px);
+                        y: 8px;
+                        width: min(320px, parent.width - 60px);
+                        height: parent.height - 16px;
                         background: transparent;
-                        border-width: 0px;
+                        opacity: root.inspector-flyout-open ? 1.0 : 0.0;
 
-                        VerticalLayout {
-                            padding-left: 6px;
-                            padding-right: 14px;
-                            padding-top: 8px;
-                            padding-bottom: 12px;
-                            spacing: 8px;
+                        animate opacity { duration: root.reduced-motion ? 0ms : 150ms; easing: ease-out; }
+                        animate x { duration: root.reduced-motion ? 0ms : 180ms; easing: ease-out; }
 
-                            // Mini barra flutuante de controle do Inspector
-                            HorizontalLayout {
-                                height: 26px;
-                                alignment: end;
-                                spacing: 6px;
-
-                                Rectangle {
-                                    width: 28px;
-                                    height: 24px;
-                                    border-radius: 6px;
-                                    background: collapse-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
-                                    border-width: 1px;
-                                    border-color: DesignTokens.border;
-                                    drop-shadow-blur: 8px;
-                                    drop-shadow-color: #00000044;
-                                    drop-shadow-offset-y: 2px;
-                                    accessible-role: button;
-                                    accessible-label: root.label-expand-inspector;
-                                    IconDisplay {
-                                        icon: IconSet.PanelRight;
-                                        size: 13px;
-                                        stroke: DesignTokens.text-secondary;
-                                    }
-                                    collapse-touch := TouchArea {
-                                        clicked => { root.inspector-collapsed = true; }
-                                        Tooltip {
-                                            VerticalLayout {
-                                                padding: 6px;
-                                                Text { text: "Recolher painel lateral"; color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; }
-                                            }
-                                        }
-                                    }
+                        flyout-touch := TouchArea {
+                            changed has-hover => {
+                                root.flyout-hovered = self.has-hover;
+                                if !self.has-hover && !root.rail-hovered {
+                                    root.hovered-inspector-section = "";
                                 }
                             }
+                            pointer-event(_e) => { }
+                        }
 
-                            ScrollView {
+                        ScrollView {
                             vertical-stretch: 1;
                             horizontal-scrollbar-policy: always-off;
                             vertical-scrollbar-policy: as-needed;
@@ -7718,18 +7338,14 @@ export component PetuniaSlintShell inherits Window {
                             vertical-stretch: 0;
 
                             InspectorSection {
-                                visible: root.parts-docked && root.model-parts-open;
+                                visible: root.model-parts-open || root.hovered-inspector-section == "parts";
                                 title: root.label-parts;
                                 section-id: "parts";
-                                open: root.model-parts-open;
+                                open: root.model-parts-open || root.hovered-inspector-section == "parts";
                                 pin-open: root.section-states.length > 0 ? root.section-states[0].pin-open : false;
-                                can-float: true;
-                                can-close: true;
                                 toggled => { root.section-open-toggled("parts"); }
                                 toggle-all => { root.toggle-all-sections(); }
                                 pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                float-requested(id) => { root.section-dock-toggled(id); }
-                                close-requested(id) => { root.section-close-requested(id); }
 
                                 PartsBody {
                                     search-label: root.label-search-parts;
@@ -7763,18 +7379,14 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if selection-domain == "OBJECT": InspectorSection {
-                                visible: root.transform-docked && root.model-transform-open;
+                                visible: root.model-transform-open || root.hovered-inspector-section == "transform";
                                 title: root.label-tab-transform;
                                 section-id: "transform";
-                                open: root.model-transform-open;
+                                open: root.model-transform-open || root.hovered-inspector-section == "transform";
                                 pin-open: root.section-states.length > 1 ? root.section-states[1].pin-open : false;
-                                can-float: true;
-                                can-close: true;
                                 toggled => { root.section-open-toggled("transform"); }
                                 toggle-all => { root.toggle-all-sections(); }
                                 pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                float-requested(id) => { root.section-dock-toggled(id); }
-                                close-requested(id) => { root.section-close-requested(id); }
 
                                     TransformBody {
                                         field-hint: root.label-numeric-field-hint;
@@ -7795,18 +7407,14 @@ export component PetuniaSlintShell inherits Window {
                                     }
                             }
                             InspectorSection {
-                                visible: root.material-docked && root.model-material-open;
+                                visible: root.model-material-open || root.hovered-inspector-section == "material";
                                 title: root.label-tab-material;
                                 section-id: "material";
-                                open: root.model-material-open;
+                                open: root.model-material-open || root.hovered-inspector-section == "material";
                                 pin-open: root.section-states.length > 2 ? root.section-states[2].pin-open : false;
-                                can-float: true;
-                                can-close: true;
                                 toggled => { root.section-open-toggled("material"); }
                                 toggle-all => { root.toggle-all-sections(); }
                                 pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                float-requested(id) => { root.section-dock-toggled(id); }
-                                close-requested(id) => { root.section-close-requested(id); }
 
                                 MaterialBody {
                                     active-name: root.active-material-name;
@@ -7863,18 +7471,14 @@ export component PetuniaSlintShell inherits Window {
                                 }
                             }
                             InspectorSection {
-                                visible: root.object-docked && root.model-object-open;
+                                visible: root.model-object-open || root.hovered-inspector-section == "object";
                                 title: root.label-tab-object;
                                 section-id: "object";
-                                open: root.model-object-open;
+                                open: root.model-object-open || root.hovered-inspector-section == "object";
                                 pin-open: root.section-states.length > 3 ? root.section-states[3].pin-open : false;
-                                can-float: true;
-                                can-close: true;
                                 toggled => { root.section-open-toggled("object"); }
                                 toggle-all => { root.toggle-all-sections(); }
                                 pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                float-requested(id) => { root.section-dock-toggled(id); }
-                                close-requested(id) => { root.section-close-requested(id); }
                                 ObjectBody {
                                     has-selection: root.object-has-selection;
                                     object-name: root.object-name;
@@ -7916,18 +7520,14 @@ export component PetuniaSlintShell inherits Window {
                                 }
                             }
                              InspectorSection {
-                                 visible: root.modifiers-docked && root.model-modifiers-open;
-                                 title: root.label-tab-modifiers;
-                                 section-id: "modifiers";
-                                 open: root.model-modifiers-open;
-                                 pin-open: root.section-states.length > 4 ? root.section-states[4].pin-open : false;
-                                 can-float: true;
-                                 can-close: true;
-                                 toggled => { root.section-open-toggled("modifiers"); }
-                                 toggle-all => { root.toggle-all-sections(); }
-                                 pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                 float-requested(id) => { root.section-dock-toggled(id); }
-                                 close-requested(id) => { root.section-close-requested(id); }
+                                visible: root.model-modifiers-open || root.hovered-inspector-section == "modifiers";
+                                title: root.label-tab-modifiers;
+                                section-id: "modifiers";
+                                open: root.model-modifiers-open || root.hovered-inspector-section == "modifiers";
+                                pin-open: root.section-states.length > 4 ? root.section-states[4].pin-open : false;
+                                toggled => { root.section-open-toggled("modifiers"); }
+                                toggle-all => { root.toggle-all-sections(); }
+                                pin-toggled(id) => { root.section-pin-open-toggled(id); }
                                  ModifiersBody {
                                      rows: root.modifier-rows;
                                      add-mirror-label: root.label-modifier-add-mirror;
@@ -7946,19 +7546,15 @@ export component PetuniaSlintShell inherits Window {
                                      modifier-direction-changed(id, direction) => { root.modifier-direction-changed(id, direction); }
                                  }
                              }
-                             if root.quick-actions-docked: InspectorSection {
-                                 visible: root.quick-actions-section-open;
-                                 title: root.label-quick-actions;
-                                 section-id: "quick_actions";
-                                 open: root.quick-actions-section-open;
-                                 pin-open: root.section-states.length > 5 ? root.section-states[5].pin-open : false;
-                                 can-float: true;
-                                 can-close: true;
-                                 toggled => { root.section-open-toggled("quick_actions"); }
-                                 toggle-all => { root.toggle-all-sections(); }
-                                 pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                 float-requested(id) => { root.section-dock-toggled(id); }
-                                 close-requested(id) => { root.section-close-requested(id); }
+                             InspectorSection {
+                                visible: root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions";
+                                title: root.label-quick-actions;
+                                section-id: "quick_actions";
+                                open: root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions";
+                                pin-open: root.section-states.length > 5 ? root.section-states[5].pin-open : false;
+                                toggled => { root.section-open-toggled("quick_actions"); }
+                                toggle-all => { root.toggle-all-sections(); }
+                                pin-toggled(id) => { root.section-pin-open-toggled(id); }
                                  QuickActionsBody {
                                      title-label: root.label-quick-actions;
                                      customize-open <=> root.quick-actions-open;
@@ -9466,31 +9062,90 @@ export component PetuniaSlintShell inherits Window {
 
                         }
                     }
-                }
+                    }
+}
 
-                        // Alça de recolhimento: faixa de proximidade na borda
-                        // esquerda revela a alça; clique recolhe o painel.
-                        Rectangle {
-                            x: 0px;
-                            y: 0px;
-                            width: 14px;
-                            height: 100%;
-                            background: transparent;
+                if inspector-visible && !compact-shell: Rectangle {
+                    width: 56px;
+                    height: 100%;
+                    background: DesignTokens.surface-raised.with-alpha(0.9);
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    border-radius: 8px;
 
-                            inspector-handle-touch := TouchArea {
-                                clicked => { root.inspector-collapsed = true; }
+                    rail-touch := TouchArea {
+                        changed has-hover => {
+                            root.rail-hovered = self.has-hover;
+                            if !self.has-hover && !root.flyout-hovered {
+                                root.hovered-inspector-section = "";
                             }
+                        }
+                    }
 
-                            Rectangle {
-                                x: 4px;
-                                y: (parent.height - self.height) / 2;
-                                width: 6px;
-                                height: 44px;
-                                border-radius: 3px;
-                                background: inspector-handle-touch.has-hover ? DesignTokens.accent : DesignTokens.border;
-                                opacity: inspector-handle-touch.has-hover ? 1 : 0;
-                                animate opacity { duration: root.reduced-motion ? 0ms : 120ms; }
-                            }
+                    VerticalLayout {
+                        padding: 10px;
+                        spacing: 10px;
+                        alignment: start;
+
+                        InspectorPill {
+                            section-id: "parts";
+                            icon: IconSet.Layers3;
+                            icon-svg: PetuniaIcons.parts;
+                            semantic-label: root.label-tab-parts;
+                            description: "Manage scene parts, groups and hierarchy";
+                            active: root.model-parts-open;
+                            clicked => { root.section-pill-clicked("parts"); }
+                            hovered(id) => { root.hovered-inspector-section = id; }
+                        }
+                        InspectorPill {
+                            section-id: "transform";
+                            icon: IconSet.Move3d;
+                            icon-svg: PetuniaIcons.transform;
+                            semantic-label: root.label-tab-transform;
+                            description: "Position, rotation and scale coordinates";
+                            active: root.model-transform-open;
+                            clicked => { root.section-pill-clicked("transform"); }
+                            hovered(id) => { root.hovered-inspector-section = id; }
+                        }
+                        InspectorPill {
+                            section-id: "material";
+                            icon: IconSet.Paintbrush;
+                            icon-svg: PetuniaIcons.material;
+                            semantic-label: root.label-tab-material;
+                            description: "Surface shaders, colors and textures";
+                            active: root.model-material-open;
+                            clicked => { root.section-pill-clicked("material"); }
+                            hovered(id) => { root.hovered-inspector-section = id; }
+                        }
+                        InspectorPill {
+                            section-id: "object";
+                            icon: IconSet.Box;
+                            icon-svg: PetuniaIcons.object-mesh;
+                            semantic-label: root.label-tab-object;
+                            description: "Object metadata, visibility and display options";
+                            active: root.model-object-open;
+                            clicked => { root.section-pill-clicked("object"); }
+                            hovered(id) => { root.hovered-inspector-section = id; }
+                        }
+                        InspectorPill {
+                            section-id: "modifiers";
+                            icon: IconSet.Settings;
+                            icon-svg: PetuniaIcons.modifier;
+                            semantic-label: root.label-tab-modifiers;
+                            description: "Generative and deformer modifier stack";
+                            active: root.model-modifiers-open;
+                            clicked => { root.section-pill-clicked("modifiers"); }
+                            hovered(id) => { root.hovered-inspector-section = id; }
+                        }
+                        InspectorPill {
+                            section-id: "quick_actions";
+                            icon: IconSet.Zap;
+                            icon-svg: PetuniaIcons.tool-profile;
+                            semantic-label: root.label-quick-actions;
+                            description: "Quick actions and modeling tools";
+                            active: root.quick-actions-section-open;
+                            clicked => { root.section-pill-clicked("quick_actions"); }
+                            hovered(id) => { root.hovered-inspector-section = id; }
                         }
                     }
                 }
@@ -9821,205 +9476,6 @@ export component PetuniaSlintShell inherits Window {
                         }
                     }
                 }
-            }
-        }
-
-        // Floating Inspector cards (Fase 2): one card per undocked section,
-        // absolutely positioned at window level, above the docked column.
-        for float-state in root.section-states: FloatSectionCard {
-            visible: !float-state.docked && float-state.open;
-            x: float-state.x * 1px;
-            y: float-state.y * 1px;
-            section-id: float-state.id;
-            title: float-state.id == "parts" ? root.label-parts : (float-state.id == "transform" ? root.label-tab-transform : (float-state.id == "object" ? root.label-tab-object : (float-state.id == "modifiers" ? root.label-tab-modifiers : (float-state.id == "quick_actions" ? root.label-quick-actions : (float-state.id == "material" ? root.label-tab-material : float-state.id)))));
-            card-x: float-state.x;
-            card-y: float-state.y;
-            card-width: root.inspector-width;
-            container-width: root.width;
-            container-height: root.height;
-            pin-open: float-state.pin-open;
-            pinned-asset: float-state.pinned-asset;
-            active-asset-id: root.object-id;
-            dock-label: root.label-section-dock;
-            drag-label: root.label-section-drag;
-            pin-open-label: root.label-section-pin-open;
-            pin-asset-label: root.label-section-pin-asset;
-            unpin-asset-label: root.label-section-unpin-asset;
-            moved(id, x, y) => { root.section-moved(id, x, y); }
-            move-committed(id) => { root.section-move-committed(id); }
-            dock-requested(id) => { root.section-dock-toggled(id); }
-            pin-open-toggled(id) => { root.section-pin-open-toggled(id); }
-            asset-pin-changed(id, asset) => { root.section-asset-pin-changed(id, asset); }
-            close-requested(id) => { root.section-close-requested(id); }
-            if float-state.id == "transform": TransformBody {
-                field-hint: root.label-numeric-field-hint;
-                pos-x: root.pos-x;
-                pos-y: root.pos-y;
-                pos-z: root.pos-z;
-                rot-x: root.rot-x;
-                rot-y: root.rot-y;
-                rot-z: root.rot-z;
-                scale-x: root.scale-x;
-                scale-y: root.scale-y;
-                scale-z: root.scale-z;
-                scrubbed(kind, axis, delta, fine) => { root.transform-scrubbed(kind, axis, delta, fine); }
-                scrub-started(kind) => { root.transform-scrub-started(kind); }
-                scrub-finished => { root.transform-scrub-finished(); }
-                text-committed(kind, axis, text) => { root.transform-text-committed(kind, axis, text) }
-                scrub-cancelled => { root.transform-scrub-cancelled(); }
-            }
-            if float-state.id == "modifiers": ModifiersBody {
-                rows: root.modifier-rows;
-                add-mirror-label: root.label-modifier-add-mirror;
-                add-symmetry-label: root.label-modifier-add-symmetry;
-                apply-label: root.label-modifier-apply;
-                direction-label: root.label-modifier-direction;
-                neg-to-pos-label: root.label-modifier-negative-to-positive;
-                pos-to-neg-label: root.label-modifier-positive-to-negative;
-                empty-label: root.label-modifiers-empty;
-                modifier-add(kind) => { root.modifier-add(kind); }
-                modifier-toggle(id, enabled) => { root.modifier-toggle(id, enabled); }
-                modifier-remove(id) => { root.modifier-remove(id); }
-                modifier-move(id, direction) => { root.modifier-move(id, direction); }
-                modifier-apply(id) => { root.modifier-apply(id); }
-                modifier-axis-changed(id, axis) => { root.modifier-axis-changed(id, axis); }
-                modifier-direction-changed(id, direction) => { root.modifier-direction-changed(id, direction); }
-            }
-            if float-state.id == "object": ObjectBody {
-                has-selection: root.object-has-selection;
-                object-name: root.object-name;
-                object-id: root.object-id;
-                object-visible: root.object-visible;
-                object-locked: root.object-locked;
-                object-verts: root.object-verts;
-                object-faces: root.object-faces;
-                object-tris: root.object-tris;
-                no-selection-label: root.label-object-no-selection;
-                verts-label: root.label-stats-verts;
-                faces-label: root.label-stats-faces;
-                tris-label: root.label-stats-tris;
-                duplicate-label: root.label-duplicate;
-                delete-label: root.label-delete;
-                is-parametric: root.active-asset-is-parametric;
-                primitive-kind: root.primitive-kind;
-                primitive-radius: root.primitive-radius;
-                primitive-radius-b: root.primitive-radius-b;
-                primitive-height: root.primitive-height;
-                primitive-depth: root.primitive-depth;
-                primitive-width: root.primitive-width;
-                primitive-sides: root.primitive-sides;
-                primitive-rings: root.primitive-rings;
-                primitive-subdiv: root.primitive-subdiv;
-                primitive-cap-top: root.primitive-cap-top;
-                primitive-cap-bottom: root.primitive-cap-bottom;
-                primitive-fill-disc: root.primitive-fill-disc;
-                label-parametric-primitive: root.label-parametric-primitive;
-                label-freeze-primitive: root.label-freeze-primitive;
-                label-freeze-primitive-hint: root.label-freeze-primitive-hint;
-                scene-toggle-visibility(id) => { root.scene-toggle-visibility(id); }
-                scene-toggle-lock(id) => { root.scene-toggle-lock(id); }
-                duplicate-requested => { root.duplicate-requested(); }
-                delete-requested => { root.delete-requested(); }
-                primitive-param-float(param, val) => { root.primitive-param-float(param, val); }
-                primitive-param-bool(param, val) => { root.primitive-param-bool(param, val); }
-                freeze-primitive-requested => { root.freeze-primitive-requested(); }
-            }
-            if float-state.id == "material": MaterialBody {
-    active-name: root.active-material-name;
-    active-slot <=> root.active-material-slot;
-    slots: root.material-slots;
-    profile: root.material-profile;
-    base-color: root.material-base-color;
-    palette: root.material-palette;
-    roughness: root.material-roughness;
-    metallic: root.material-metallic;
-    emission-strength: root.material-emission-strength;
-    advanced-open <=> root.material-advanced-open;
-    normal-scale: root.material-normal-scale;
-    alpha-mode: root.material-alpha-mode;
-    alpha-cutoff: root.material-alpha-cutoff;
-    has-albedo: root.material-has-albedo;
-    albedo-text-label: root.material-albedo-label;
-    assign-label: root.label-material-assign;
-    new-label: root.label-material-new;
-    duplicate-label: root.label-material-duplicate;
-    remove-label: root.label-material-remove;
-    profile-label: root.label-material-profile;
-    profile-pbr-label: root.label-material-profile-pbr;
-    profile-unlit-label: root.label-material-profile-unlit;
-    profile-toon-label: root.label-material-profile-toon;
-    profile-glass-label: root.label-material-profile-glass;
-    profile-emissive-label: root.label-material-profile-emissive;
-    base-color-label: root.label-material-base-color;
-    roughness-label: root.label-material-roughness;
-    metallic-label: root.label-material-metallic;
-    emission-label: root.label-material-emission-strength;
-    advanced-label: root.label-material-advanced;
-    normal-scale-label: root.label-material-normal-scale;
-    alpha-mode-label: root.label-material-alpha-mode;
-    alpha-opaque-label: root.label-material-alpha-opaque;
-    alpha-mask-label: root.label-material-alpha-mask;
-    alpha-blend-label: root.label-material-alpha-blend;
-    alpha-cutoff-label: root.label-material-alpha-cutoff;
-    albedo-label: root.label-material-texture-albedo;
-    create-texture-label: root.label-material-create-texture;
-    clear-texture-label: root.label-material-clear-texture;
-    no-texture-label: root.label-material-no-texture;
-    assign-material-slot(slot) => { root.assign-material-slot(slot); }
-    create-material => { root.create-material(); }
-    duplicate-material(slot) => { root.duplicate-material(slot); }
-    remove-material(slot) => { root.remove-material(slot); }
-    material-slot-selected(index) => { root.material-slot-selected(index); }
-    material-base-color-changed(r, g, b) => { root.material-base-color-changed(r, g, b); }
-    material-scalar-committed(field, slot, text) => { root.material-scalar-committed(field, slot, text) }
-    material-profile-changed(index) => { root.material-profile-changed(index); }
-    material-alpha-mode-changed(index) => { root.material-alpha-mode-changed(index); }
-    material-albedo-create => { root.material-albedo-create(); }
-    material-albedo-clear => { root.material-albedo-clear(); }
-}
-
-            if float-state.id == "parts": PartsBody {
-                search-label: root.label-search-parts;
-                selected-only-label: root.label-selected-parts-only;
-                sort-label: root.label-sort-parts;
-                query <=> root.parts-query;
-                selected-only <=> root.parts-selected-only;
-                sort-by-name <=> root.parts-sort-by-name;
-                items: root.parts-items;
-                total-count: root.scene-items.length;
-                row-size-label: root.label-parts-row-size;
-                row-height <=> root.parts-row-height;
-                list-label: root.label-parts;
-                hide-label: root.label-hide-part;
-                show-label: root.label-show-part;
-                lock-label: root.label-lock-part;
-                unlock-label: root.label-unlock-part;
-                rename-active: root.rename-active;
-                rename-value: root.rename-value;
-                query-changed(query) => { root.parts-query-changed(query); }
-                selected-only-changed(enabled) => { root.parts-selected-only-changed(enabled); }
-                sort-changed(enabled) => { root.parts-sort-changed(enabled); }
-                row-height-changed(value) => { root.parts-row-height-changed(value); }
-                scene-select(id, extend) => { root.scene-select(id, extend); }
-                scene-toggle-visibility(id) => { root.scene-toggle-visibility(id); }
-                scene-toggle-lock(id) => { root.scene-toggle-lock(id); }
-                scene-context-requested(id, x, y) => { root.scene-context-requested(id, x, y); }
-                rename-edited(text) => { root.rename-edited(text); }
-                rename-committed(text) => { root.rename-committed(text); }
-            }
-            if float-state.id == "quick_actions": QuickActionsBody {
-                title-label: root.label-quick-actions;
-                customize-open <=> root.quick-actions-open;
-                actions: root.quick-actions;
-                candidates: root.quick-action-candidates;
-                customize-label: root.label-quick-action-customize;
-                remove-label: root.label-quick-action-remove;
-                add-label: root.label-quick-action-add;
-                reset-label: root.label-quick-action-reset;
-                done-label: root.label-quick-action-done;
-                action-executed(id) => { root.quick-action-executed(id); }
-                action-toggled(id) => { root.quick-action-toggled(id); }
-                actions-reset => { root.quick-actions-reset(); }
             }
         }
 

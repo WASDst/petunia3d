@@ -8293,7 +8293,7 @@ fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
     // In view model, open reflects closed state
     let vm = bridge.view_model();
     assert!(!vm.section_states[parts_idx].open);
-    assert!(!vm.section_states[parts_idx].docked);
+    assert!(vm.section_states[parts_idx].pin_open);
 
     // 4. Toggle open via pill click: restores open state
     assert!(bridge.toggle_section_open(InspectorSectionId::Parts));

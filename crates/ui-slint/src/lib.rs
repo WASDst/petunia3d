@@ -6624,11 +6624,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let layout = &self.section_layouts[section_layout::section_index(*id)];
                 SectionStateModel {
                     id: id.as_str().to_string(),
-                    docked: layout.docked,
-                    x: layout.x,
-                    y: layout.y,
                     pin_open: layout.pin_open,
-                    pinned_asset: layout.pinned_asset.clone(),
                     open: layout.open,
                 }
             })
