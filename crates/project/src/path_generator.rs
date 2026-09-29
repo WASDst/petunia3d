@@ -408,8 +408,19 @@ fn sampled_positions(
     spacing: f64,
     tolerance: f64,
 ) -> Result<Vec<[f64; 3]>, PathGeneratorError> {
+    // Uma curva Bézier cujos handles são todos nulos é geometricamente uma
+    // polilinha (ex.: Rectangle e cantos vivos do editor de Profile). Reamostrar
+    // por espaçamento cortaria os cantos; usar os vértices preserva a forma.
+    let is_degenerate_bezier = spline.interpolation == SplineInterpolation::CubicBezier
+        && spline
+            .points
+            .iter()
+            .all(|point| point.handle_in == [0.0; 3] && point.handle_out == [0.0; 3]);
     match spline.interpolation {
         SplineInterpolation::Polyline => {
+            Ok(spline.points.iter().map(|point| point.position).collect())
+        }
+        SplineInterpolation::CubicBezier if is_degenerate_bezier => {
             Ok(spline.points.iter().map(|point| point.position).collect())
         }
         SplineInterpolation::CubicBezier => Ok(spline
@@ -489,6 +500,27 @@ pub enum PathGeneratorError {
 mod tests {
     use super::*;
     use crate::{ProfileWorkplane, SplineResource};
+
+    #[test]
+    fn zero_handle_bezier_keeps_its_corners() {
+        let mut square = SplineResource::from_polyline(
+            "Square bezier",
+            &[
+                [-0.5, -0.5, 0.0],
+                [0.5, -0.5, 0.0],
+                [0.5, 0.5, 0.0],
+                [-0.5, 0.5, 0.0],
+            ],
+            true,
+        );
+        square.interpolation = SplineInterpolation::CubicBezier;
+        // Espaçamento que não divide o perímetro: reamostrar cortaria cantos.
+        let sampled = sampled_positions(&square, 0.37, 1e-3).unwrap();
+        assert_eq!(sampled.len(), 4);
+        for corner in [[-0.5, -0.5, 0.0], [0.5, 0.5, 0.0]] {
+            assert!(sampled.contains(&corner));
+        }
+    }
 
     fn project_with_sweep() -> (Project, Uuid) {
         let mut project = Project::default();
