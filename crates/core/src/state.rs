@@ -185,6 +185,8 @@ pub struct ProfileState {
     /// o cursor ou o plano do mundo mais paralelo à vista. Escolha explícita
     /// (Chão/Face/Vista) trava o plano até voltar para Auto.
     pub workplane_locked: bool,
+    /// Preferência do usuário: no plano automático sem face, favorecer o chão.
+    pub workplane_prefer_ground: bool,
 }
 
 impl ProfileState {
@@ -201,7 +203,11 @@ impl ProfileState {
             self.revolve_angle
         };
         let wall_thickness = self.wall_thickness;
-        let (workplane_kind, workplane_locked) = (self.workplane_kind, self.workplane_locked);
+        let (workplane_kind, workplane_locked, workplane_prefer_ground) = (
+            self.workplane_kind,
+            self.workplane_locked,
+            self.workplane_prefer_ground,
+        );
         let curve_smoothness = if self.curve_smoothness <= 0.0 {
             0.02
         } else {
@@ -215,6 +221,7 @@ impl ProfileState {
             curve_smoothness,
             workplane_kind,
             workplane_locked,
+            workplane_prefer_ground,
             ..Default::default()
         };
     }

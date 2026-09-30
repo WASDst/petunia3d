@@ -94,9 +94,16 @@ Autoridade adicional: [capítulo 01](../bible/foundations/01-visao-ux-referencia
 
 - Plano a partir de 3 pontos ou de face + aresta, e plano médio entre faces
   paralelas (Plasticity); "plano pelo ponto sob o cursor" em vez do 3D Cursor.
-- Em perspectiva comum (inclinação de ~29°), a regra do eixo dominante escolhe
-  um plano **vertical**, como no Modo/C4D; se o teste com usuários mostrar
-  surpresa, considerar viés para o chão (SketchUp). Decisão a validar na Onda 6.
+- ~~Em perspectiva comum, a regra do eixo dominante escolhe um plano vertical~~ →
+  resolvido por preferência (2026-09-30, pedido do responsável do produto):
+  Configurações → "Plano automático favorece o chão"
+  (`UserPreferences::workplane_prefer_ground`, padrão desligado = estilo
+  Modo/C4D). Ligada, o chão vence sempre que a câmera está inclinada ao menos
+  20° (`GROUND_BIAS_MIN_PITCH_DEGREES`); abaixo disso o chão ficaria "de lado"
+  e volta o plano vertical. A face sob o cursor continua vencendo nos dois
+  modos. Testes `ground_preference_wins_unless_the_camera_is_almost_level`,
+  `workplane_ground_preference_is_a_setting`. O padrão a manter ainda deve ser
+  validado com usuários (Onda 6).
 - Pré-seleção de regiões fechadas no Draw (Onda 4) e da ferramenta Move com snap
   antes do arrasto.
 - O caminho legado `module-model::profile_screen_to_plane` (egui) mantém a grade

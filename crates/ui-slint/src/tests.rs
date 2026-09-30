@@ -2331,6 +2331,39 @@ fn auto_workplane_uses_the_face_under_the_cursor_on_the_first_click() {
 }
 
 #[test]
+fn workplane_ground_preference_is_a_setting() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    assert!(!vm.workplane_prefer_ground);
+    assert!(!vm.label_workplane_prefer_ground.is_empty());
+    assert!(!vm.label_workplane_prefer_ground_hint.is_empty());
+
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Persp);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert_eq!(bridge.view_model().profile_workplane, "View");
+
+    assert!(bridge.set_workplane_prefer_ground(true));
+    assert!(!bridge.set_workplane_prefer_ground(true), "sem mudança");
+    assert!(bridge.preferences.workplane_prefer_ground);
+    bridge.apply(UiIntent::ProfileSetWorkplaneAuto);
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+    assert!(bridge.view_model().workplane_prefer_ground);
+
+    // Preferências carregadas do disco chegam ao estado do desenho.
+    let mut restored = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let preferences = petunia_config::UserPreferences {
+        workplane_prefer_ground: true,
+        ..Default::default()
+    };
+    restored.restore_section_layouts(&preferences);
+    assert!(restored.state.profile.workplane_prefer_ground);
+}
+
+#[test]
 fn locked_workplane_ignores_the_face_under_the_cursor() {
     let mut bridge = front_view_bridge_with_cube();
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));

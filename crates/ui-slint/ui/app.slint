@@ -3518,6 +3518,9 @@ export component PetuniaSlintShell inherits Window {
     in property <string> label-drag-threshold;
     in property <string> label-click-move-click;
     in property <string> label-click-move-click-hint;
+    in-out property <bool> workplane-prefer-ground: false;
+    in property <string> label-workplane-prefer-ground;
+    in property <string> label-workplane-prefer-ground-hint;
     in-out property <bool> multiselection-measure-tag: true;
     in-out property <bool> tool-modal-active: false;
     in-out property <bool> tool-options-active: false;
@@ -3639,6 +3642,7 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-ctrl-scroll(float);
     callback drag-threshold-set(float);
     callback click-move-click-set(bool);
+    callback workplane-prefer-ground-set(bool);
     callback double-tap-interval-released(int);
     callback multiselection-measure-tag-set(bool);
     callback asset-query-changed(string);
@@ -11224,6 +11228,24 @@ export component PetuniaSlintShell inherits Window {
                                         TouchArea { clicked => { root.click-move-click-set(!root.click-move-click); } }
                                     }
                                     Text { text: root.label-click-move-click-hint; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
+
+                                    Rectangle {
+                                        height: 30px; border-radius: 4px;
+                                        background: root.workplane-prefer-ground ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.workplane-prefer-ground ? DesignTokens.focus-ring : DesignTokens.border;
+                                        accessible-role: checkbox;
+                                        accessible-checkable: true;
+                                        accessible-checked: root.workplane-prefer-ground;
+                                        accessible-label: root.label-workplane-prefer-ground;
+                                        accessible-description: root.label-workplane-prefer-ground-hint;
+                                        accessible-action-default => { root.workplane-prefer-ground-set(!root.workplane-prefer-ground); }
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: root.label-workplane-prefer-ground; color: root.workplane-prefer-ground ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.workplane-prefer-ground-set(!root.workplane-prefer-ground); } }
+                                    }
+                                    Text { text: root.label-workplane-prefer-ground-hint; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 

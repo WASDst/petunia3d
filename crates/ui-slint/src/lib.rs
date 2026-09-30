@@ -6762,6 +6762,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .set_drag_threshold_px(preferences.drag_threshold_px);
         self.tool_session
             .set_click_move_click(preferences.click_move_click);
+        self.state.profile.workplane_prefer_ground = preferences.workplane_prefer_ground;
         if !preferences.active_keymap_id.is_empty() {
             self.state.ui.active_keymap_id = preferences.active_keymap_id.clone();
             self.state.ui.keybinds =
@@ -10204,6 +10205,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Plano automático do Draw: favorecer o chão (SketchUp) ou a vista (Modo/C4D).
+    pub fn set_workplane_prefer_ground(&mut self, enabled: bool) -> bool {
+        if self.preferences.workplane_prefer_ground == enabled {
+            return false;
+        }
+        self.preferences.workplane_prefer_ground = enabled;
+        self.state.profile.workplane_prefer_ground = enabled;
+        self.state.mark_dirty();
+        true
+    }
+
     pub fn route_shortcut(&mut self, text: &str, ctrl: bool, shift: bool, alt: bool) -> bool {
         if (text == "Escape" || text == "Esc") && !ctrl && !alt && !shift {
             return self.handle_escape();
@@ -11811,6 +11823,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.tool_gesture_latched = self.tool_session.is_latched();
         vm.drag_threshold_px = self.preferences.drag_threshold_px;
         vm.click_move_click = self.preferences.click_move_click;
+        vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
+        vm.label_workplane_prefer_ground =
+            translated(petunia_config::text_id::PREFERENCES_WORKPLANE_PREFER_GROUND);
+        vm.label_workplane_prefer_ground_hint =
+            translated(petunia_config::text_id::PREFERENCES_WORKPLANE_PREFER_GROUND_HINT);
         vm.label_drag_threshold = translated(petunia_config::text_id::PREFERENCES_DRAG_THRESHOLD);
         vm.label_click_move_click =
             translated(petunia_config::text_id::PREFERENCES_CLICK_MOVE_CLICK);

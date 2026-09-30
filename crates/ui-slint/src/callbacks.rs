@@ -799,6 +799,11 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_last_operation_hint(vm.label_last_operation_hint.as_str().into());
     window.set_drag_threshold_px(vm.drag_threshold_px);
     window.set_click_move_click(vm.click_move_click);
+    window.set_workplane_prefer_ground(vm.workplane_prefer_ground);
+    window.set_label_workplane_prefer_ground(vm.label_workplane_prefer_ground.as_str().into());
+    window.set_label_workplane_prefer_ground_hint(
+        vm.label_workplane_prefer_ground_hint.as_str().into(),
+    );
     window.set_label_drag_threshold(vm.label_drag_threshold.as_str().into());
     window.set_label_click_move_click(vm.label_click_move_click.as_str().into());
     window.set_label_click_move_click_hint(vm.label_click_move_click_hint.as_str().into());
@@ -2599,6 +2604,19 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_click_move_click_set(move |enabled| {
         if let Ok(mut bridge) = click_move_click_bridge.lock()
             && bridge.set_click_move_click(enabled)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let workplane_ground_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_workplane_prefer_ground_set(move |enabled| {
+        if let Ok(mut bridge) = workplane_ground_bridge.lock()
+            && bridge.set_workplane_prefer_ground(enabled)
         {
             persist_user_preferences(&mut bridge);
             if let Some(window) = window_weak.upgrade() {

@@ -269,13 +269,22 @@ pub fn profile_capture_face_index(state: &mut AppState, face: usize) -> bool {
     true
 }
 
-/// Plano do mundo mais paralelo à tela, pelo 3D Cursor (Workplane automático
-/// do Modo/C4D). Olhando de cima vira o chão; de frente ou de lado, o plano
-/// vertical correspondente. A câmera não é movida.
+/// Abaixo desta inclinação da câmera (graus), o chão fica "de lado" demais
+/// para desenhar com precisão, mesmo com a preferência de favorecer o chão.
+pub const GROUND_BIAS_MIN_PITCH_DEGREES: f32 = 20.0;
+
+/// Plano do mundo pelo 3D Cursor para o plano automático, sem mover a câmera.
+///
+/// Padrão (Workplane automático do Modo/C4D): o plano mais paralelo à tela;
+/// de cima vira o chão, de frente ou de lado o plano vertical. Com
+/// `workplane_prefer_ground` (estilo SketchUp), o chão vence sempre que a
+/// câmera está inclinada ao menos [`GROUND_BIAS_MIN_PITCH_DEGREES`].
 pub fn profile_capture_world_plane_for_view(state: &mut AppState) {
     let forward = state.session.camera.forward();
     let dominant = forward.abs().max_element();
-    if (forward.y.abs() - dominant).abs() < 1e-6 {
+    let ground_bias = state.profile.workplane_prefer_ground
+        && forward.y.abs() >= GROUND_BIAS_MIN_PITCH_DEGREES.to_radians().sin();
+    if ground_bias || (forward.y.abs() - dominant).abs() < 1e-6 {
         profile_capture_ground(state);
         return;
     }
@@ -744,6 +753,32 @@ mod tests {
                 (state.session.camera.yaw, state.session.camera.pitch)
             );
         }
+    }
+
+    #[test]
+    fn ground_preference_wins_unless_the_camera_is_almost_level() {
+        let mut state = AppState::default();
+        state.session.camera.set_preset(ViewPreset::Persp);
+        profile_capture_world_plane_for_view(&mut state);
+        assert_eq!(
+            state.profile.workplane_kind,
+            WorkplaneKind::View,
+            "padrão: plano mais de frente para a vista"
+        );
+
+        state.profile.workplane_prefer_ground = true;
+        profile_capture_world_plane_for_view(&mut state);
+        assert_eq!(state.profile.workplane_kind, WorkplaneKind::Ground);
+
+        // Câmera quase na horizontal (10° < 20°): o chão ficaria de lado.
+        state.session.camera.set_preset(ViewPreset::Front);
+        state.session.camera.pitch = 10.0_f32.to_radians();
+        profile_capture_world_plane_for_view(&mut state);
+        assert_eq!(state.profile.workplane_kind, WorkplaneKind::View);
+
+        // A preferência sobrevive ao fim do perfil.
+        state.profile.clear();
+        assert!(state.profile.workplane_prefer_ground);
     }
 
     #[test]

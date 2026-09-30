@@ -144,6 +144,10 @@ pub struct UserPreferences {
     /// Clicar numa alça a faz seguir o ponteiro até o próximo clique, sem
     /// segurar o botão (alternativa a arrastar, WCAG 2.2 — 2.5.7).
     pub click_move_click: bool,
+    /// Plano automático do Draw sem face sob o cursor: `true` usa o chão, a
+    /// menos que a câmera esteja quase na horizontal; `false` usa o plano do
+    /// mundo mais de frente para a vista.
+    pub workplane_prefer_ground: bool,
     /// Diferenciação não-cromática de eixos para acessibilidade e daltonismo.
     pub colorblind_axes: bool,
     /// Redução de movimento para usuários com sensibilidade vestibular / labirintite.
@@ -174,6 +178,7 @@ impl Default for UserPreferences {
             double_tap_interval_ms: 350,
             drag_threshold_px: default_drag_threshold_px(),
             click_move_click: false,
+            workplane_prefer_ground: false,
             colorblind_axes: false,
             reduced_motion: false,
             multiselection_measure_tag: true,
@@ -308,6 +313,7 @@ mod tests {
             double_tap_interval_ms: 300,
             drag_threshold_px: 6.0,
             click_move_click: true,
+            workplane_prefer_ground: true,
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),
                 SectionLayout {

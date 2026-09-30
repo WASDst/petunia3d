@@ -872,6 +872,8 @@ conflict_title = "Conflito de atalhos detectado"
 conflict_shared = "compartilha o atalho com"
 
 [preferences]
+workplane_prefer_ground = "Plano automático favorece o chão"
+workplane_prefer_ground_hint = "Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D)."
 snap_radius = "Raio do snap (px)"
 colorblind_axes = "Diferenciação não-cromática de eixos (Rótulos X, Y, Z)"
 reduced_motion = "Redução de movimento (desativa animações do viewport)"

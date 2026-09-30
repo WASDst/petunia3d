@@ -9,6 +9,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - **A câmera nunca se move sozinha**: ativar o Draw ou escolher o plano Face não troca mais a vista nem a projeção; o novo botão "Olhar para o plano" faz isso sob comando.
 - **Plano automático**: no 1º clique de um perfil novo, a face sob o cursor vira o plano (Draw on Face); sem face, o plano do mundo mais paralelo à vista, pelo 3D Cursor.
 - **Plano travado**: Chão, Face e Vista travam o plano até voltar para Auto; o card mostra a pílula Auto e textos traduzidos (en/pt-BR).
+- **Preferência de plano automático**: Configurações → "Plano automático favorece o chão". Ligada (estilo SketchUp), o desenho sem face sob o cursor vai para o chão, a menos que a câmera esteja quase na horizontal (< 20°); desligada (padrão, estilo Modo/Cinema 4D), usa o plano do mundo mais de frente para a vista.
 - **Pré-seleção no Draw**: o hover mostra a face que viraria o plano (marcador "Na face") e, depois, o ponto encaixado que o clique criaria.
 - **Escopo honesto**: plano por 3 pontos/face + aresta, regiões no hover e imprint na face hospedeira ficam para a Onda 4; a regra do eixo dominante em perspectiva será validada com usuários. Matriz em `docs/development/snap-inference-gap-matrix.md`.
 
