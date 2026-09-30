@@ -3486,6 +3486,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <int> profile-point-count: 0;
     in-out property <bool> profile-closed: false;
     in-out property <string> profile-preview-commands: "";
+    in-out property <string> region-hover-commands: "";
     in-out property <float> profile-depth: 1.0;
     in-out property <float> profile-wall-thickness: 0.0;
     in-out property <float> profile-smoothness: 0.02;
@@ -4502,6 +4503,15 @@ export component PetuniaSlintShell inherits Window {
                         fill: transparent;
                         stroke: DesignTokens.selection-active;
                         stroke-width: 2px;
+                    }
+                    // Região fechada sob o cursor (Draw/Push-Pull): tinta translúcida.
+                    if root.region-hover-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.region-hover-commands;
+                        fill-rule: evenodd;
+                        fill: DesignTokens.selection.transparentize(0.78);
+                        stroke: DesignTokens.selection;
+                        stroke-width: 1.5px;
                     }
                     Path {
                         fit: ImageFit.preserve;

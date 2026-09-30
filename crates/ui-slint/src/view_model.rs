@@ -533,6 +533,8 @@ pub struct ShellViewModel {
     pub label_profile_plane_view: String,
     pub label_profile_look_at_plane: String,
     pub profile_workplane_locked: bool,
+    /// Região de perfil em hover (caminho SVG em px da viewport).
+    pub region_hover_commands: String,
     pub label_profile_generate: String,
     pub label_profile_revolve: String,
     pub label_profile_sweep: String,
@@ -1438,6 +1440,7 @@ impl ShellViewModel {
             label_profile_plane_view: String::new(),
             label_profile_look_at_plane: String::new(),
             profile_workplane_locked: false,
+            region_hover_commands: String::new(),
             label_profile_generate: String::new(),
             label_profile_revolve: String::new(),
             label_profile_sweep: String::new(),

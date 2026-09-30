@@ -907,3 +907,6 @@ axis_y = "Paralelo ao eixo Y"
 axis_z = "Paralelo ao eixo Z"
 on_face = "Na face"
 grid = "Grade"
+
+[draw]
+shape_name = "Forma"

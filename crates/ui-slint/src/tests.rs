@@ -2363,6 +2363,88 @@ fn workplane_ground_preference_is_a_setting() {
     assert!(restored.state.profile.workplane_prefer_ground);
 }
 
+/// Desenha um quadrado fechado na face frontal do cubo padrão (vista Front)
+/// e depois inclina a câmera, para a normal da face ter componente na tela.
+fn bridge_with_square_on_front_face() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    for point in [[0.46, 0.46], [0.54, 0.46], [0.54, 0.54], [0.46, 0.54]] {
+        bridge.select_viewport_ext(point[0], point[1], false, false);
+        bridge.profile_pointer_up();
+    }
+    assert!(bridge.close_profile());
+    assert_eq!(bridge.view_model().profile_workplane, "Face");
+    // Gira em torno do centro da face, que continua no centro da tela.
+    bridge.state.session.camera.target = glam::Vec3::new(0.0, 0.0, 1.0);
+    bridge.state.session.camera.yaw = 0.35;
+    bridge.state.session.camera.pitch = 0.25;
+    bridge
+}
+
+#[test]
+fn draw_tool_highlights_a_closed_region_on_hover() {
+    let mut bridge = bridge_with_square_on_front_face();
+    // Perfil fechado: o hover sobre a região mostra a tinta da região.
+    bridge.hover_component(0.5, 0.5);
+    assert!(bridge.region_hover.is_some());
+    assert!(!bridge.view_model().region_hover_commands.is_empty());
+    bridge.hover_component(0.9, 0.9);
+    assert!(bridge.view_model().region_hover_commands.is_empty());
+}
+
+#[test]
+fn push_pull_drag_on_a_region_imprints_and_extrudes_in_one_undo() {
+    let mut bridge = bridge_with_square_on_front_face();
+    let faces_before = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth_before = bridge.state.project.undo.depth().0;
+    bridge.activate_parametric_tool(ToolModalKind::PushPull);
+
+    let [width, height] = bridge.viewport_size;
+    let center = [width * 0.5, height * 0.5];
+    assert!(bridge.hover_component(0.5, 0.5));
+    assert!(!bridge.view_model().region_hover_commands.is_empty());
+
+    bridge.tool_pointer(0, center[0], center[1], false, false);
+    bridge.tool_pointer(1, center[0] + 30.0, center[1] - 60.0, false, false);
+    assert!(
+        bridge.state.session.tools.modal.is_some(),
+        "gesto de região aberto"
+    );
+    bridge.tool_pointer(2, center[0] + 30.0, center[1] - 60.0, false, false);
+    assert!(bridge.state.session.tools.modal.is_none());
+
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    // Anel (2) + face interna + 4 paredes.
+    assert_eq!(mesh.faces.len(), faces_before + 6);
+    assert_eq!(bridge.state.project.undo.depth().0, depth_before + 1);
+    assert!(
+        bridge.last_operation.is_some(),
+        "ajustável na Última operação"
+    );
+    assert_eq!(bridge.state.session.tools.active_tool, "push_pull");
+
+    assert!(bridge.state.undo());
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces_before
+    );
+}
+
+#[test]
+fn escape_during_a_region_push_restores_the_face() {
+    let mut bridge = bridge_with_square_on_front_face();
+    let before = bridge.state.project.active_mesh().unwrap().clone();
+    bridge.activate_parametric_tool(ToolModalKind::PushPull);
+    let [width, height] = bridge.viewport_size;
+    bridge.tool_pointer(0, width * 0.5, height * 0.5, false, false);
+    bridge.tool_pointer(1, width * 0.5 + 20.0, height * 0.5 - 50.0, false, false);
+    assert!(bridge.state.session.tools.modal.is_some());
+    assert!(bridge.route_shortcut("Escape", false, false, false));
+    let after = bridge.state.project.active_mesh().unwrap();
+    assert_eq!(after.faces.len(), before.faces.len());
+    assert_eq!(after.verts.len(), before.verts.len());
+}
+
 #[test]
 fn locked_workplane_ignores_the_face_under_the_cursor() {
     let mut bridge = front_view_bridge_with_cube();

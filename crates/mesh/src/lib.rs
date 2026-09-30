@@ -220,11 +220,13 @@ impl Mesh {
     }
 }
 
+pub mod arrangement;
 mod bevel;
 pub mod boolean;
 mod connect;
 pub mod curve;
 pub mod half_edge;
+pub mod imprint;
 pub mod knife;
 pub mod loop_cut;
 pub mod obj;

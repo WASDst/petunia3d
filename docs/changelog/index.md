@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Regiões e Push/Pull do DRAW — Onda 4, parte 1 (30/09/2026)
+- **Regiões fechadas como no Plasticity**: perfis que se cruzam no mesmo plano formam regiões (arranjo planar com furos); a região sob o cursor recebe tinta translúcida no Draw e no Push/Pull.
+- **Push/Pull na região**: arrastar uma região com Push/Pull gera volume na hora, com o mesmo gesto das outras ferramentas (valor segue o cursor, digitação vence o mouse, "Última operação" ajustável).
+- **Draw on Face**: uma região desenhada dentro de uma face é gravada nela (imprint); puxar para fora soma volume, empurrar para dentro cria um rebaixo. No vazio, a região vira um sólido fechado num objeto novo ("Forma").
+- **Um gesto, um Undo**: imprint e extrusão entram como uma única entrada de histórico; `Esc` restaura o documento exatamente; reajustar a "Última operação" não duplica o imprint.
+- **Escopo honesto**: pill DRAW e trilho de forma (parte 2), imprint de região que cruza arestas ou tem furos sobre face, e extrusão negativa de região solta ficam pendentes. Matriz em `docs/development/draw-regions-gap-matrix.md`.
+
 ### Pré-seleção e plano de trabalho — Onda 3, parte 2 (30/09/2026)
 - **A câmera nunca se move sozinha**: ativar o Draw ou escolher o plano Face não troca mais a vista nem a projeção; o novo botão "Olhar para o plano" faz isso sob comando.
 - **Plano automático**: no 1º clique de um perfil novo, a face sob o cursor vira o plano (Draw on Face); sem face, o plano do mundo mais paralelo à vista, pelo 3D Cursor.

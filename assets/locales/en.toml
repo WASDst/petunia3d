@@ -905,3 +905,6 @@ axis_y = "Along Y axis"
 axis_z = "Along Z axis"
 on_face = "On face"
 grid = "Grid"
+
+[draw]
+shape_name = "Shape"

@@ -22,6 +22,7 @@ pub mod project_service;
 pub mod proportional;
 pub mod queries;
 pub mod recent_projects;
+pub mod region_push;
 pub mod render_revision;
 pub mod schema_contracts;
 pub mod selection;
@@ -101,6 +102,7 @@ pub use primitive_session::{
     CircleFill, PrimitiveCreationSession, PrimitiveDescriptor, PrimitiveDescriptorExt,
 };
 pub use proportional::{ProportionalFalloff, ProportionalSettings, calculate_falloff_weight};
+pub use region_push::{RegionHit, RegionPlane, RegionPlanes, RegionPushError, region_at_ray};
 pub use selection::{SelectMode, Selection, SelectionDomain, Workspace};
 pub use snap::{
     SnapElement, SnapQuery, SnapResult, SnapSettings, SnapTarget, snap_point, snap_point_to_edges,

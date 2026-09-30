@@ -427,6 +427,19 @@ pub struct LastOperation {
     normal: Vec3,
     history_depth: (usize, usize),
     revision_clock: [u64; 11],
+    /// Documento logo após o prelúdio (imprint/forma nova), para reaplicar o
+    /// gesto sem refazer a detecção de região.
+    prelude: Option<PreludeState>,
+}
+
+/// Documento após o prelúdio de um gesto; comparado por identidade.
+#[derive(Debug, Clone)]
+struct PreludeState(std::sync::Arc<(petunia_project::Project, crate::Selection)>);
+
+impl PartialEq for PreludeState {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 impl LastOperation {
@@ -465,6 +478,9 @@ impl AppState {
     /// Confirma a operação modal ativa como um gesto e devolve a "Última
     /// operação" ajustável. `None` quando nada mudou (sem entrada de Undo).
     pub fn commit_modal_gesture(&mut self) -> Option<LastOperation> {
+        let prelude = self
+            .modal_prelude_state()
+            .map(|state| PreludeState(std::sync::Arc::new(state)));
         let modal = self.modal.as_ref()?;
         let changed = modal.changed();
         let (kind, constraint, value, components, normal) = (
@@ -483,6 +499,7 @@ impl AppState {
             normal,
             history_depth: self.project.undo.depth(),
             revision_clock: self.project.project.revision_clock(),
+            prelude,
         })
     }
 
@@ -529,7 +546,16 @@ impl AppState {
         translation: Vec3,
         scalar: f32,
     ) -> Result<(), ModalError> {
-        self.begin_modal(last.kind)?;
+        if let Some(prelude) = &last.prelude {
+            let before = self.project.project.clone();
+            let before_selection = self.session.selection.clone();
+            let (after, selection) = prelude.0.as_ref().clone();
+            self.project.project = after;
+            self.session.selection = selection;
+            self.begin_modal_after_prelude(last.kind, before, before_selection)?;
+        } else {
+            self.begin_modal(last.kind)?;
+        }
         if last.constraint != ModalConstraint::Free {
             self.set_modal_constraint(last.constraint)?;
         }

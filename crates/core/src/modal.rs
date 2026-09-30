@@ -96,6 +96,10 @@ pub struct ModalOp {
     changed: bool,
     /// Alvo em que o último update encaixou de fato (não apenas "snap ligado").
     snap: Option<SnapKind>,
+    /// Estado de antes de um prelúdio (imprint de região, forma nova) feito
+    /// fora do histórico: o gesto inteiro vira uma entrada de Undo e Esc
+    /// restaura exatamente este estado (constituição 11).
+    before_prelude: Option<Box<(Project, Selection)>>,
 }
 
 impl ModalOp {
@@ -320,10 +324,60 @@ impl AppState {
             source,
             changed: false,
             snap: None,
+            before_prelude: None,
         });
         self.pending_modal = None;
         self.mark_dirty();
         Ok(())
+    }
+
+    /// Inicia `kind` depois de um prelúdio já aplicado ao documento fora do
+    /// histórico (ex.: imprint de uma região numa face). `before` é o estado
+    /// anterior ao prelúdio: confirmar grava uma única entrada de Undo a partir
+    /// dele; cancelar (ou confirmar sem mudança) volta exatamente a ele. Em
+    /// erro, o documento também volta a `before`.
+    pub fn begin_modal_after_prelude(
+        &mut self,
+        kind: ModalKind,
+        before: Project,
+        before_selection: Selection,
+    ) -> Result<(), ModalError> {
+        match self.begin_modal(kind) {
+            Ok(()) => {
+                if let Some(modal) = self.modal.as_mut() {
+                    modal.before_prelude = Some(Box::new((before, before_selection)));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                if !matches!(error, ModalError::AlreadyActive) {
+                    self.restore_before_prelude(before, before_selection);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn restore_before_prelude(&mut self, before: Project, selection: Selection) {
+        let revision_clock = self.project.project.revision_clock();
+        self.project.project = before;
+        self.project
+            .project
+            .rebase_revisions_after_restore(revision_clock);
+        self.session.selection = selection;
+        self.events.emit(crate::AppEvent::SelectionChanged(
+            self.session.selection.clone(),
+        ));
+        self.emit_project_changed(ProjectChanges::ALL);
+    }
+
+    /// Estado posterior ao prelúdio (para reaplicar a "Última operação").
+    pub(crate) fn modal_prelude_state(&self) -> Option<(Project, Selection)> {
+        let modal = self.modal.as_ref()?;
+        modal
+            .before_prelude
+            .as_ref()
+            .map(|_| (modal.original.clone(), modal.selection.clone()))
     }
 
     pub fn set_modal_constraint(&mut self, constraint: ModalConstraint) -> Result<(), ModalError> {
@@ -746,7 +800,19 @@ impl AppState {
             return false;
         };
         let mut restored_changes = None;
-        if modal.changed {
+        if let Some(before) = modal.before_prelude {
+            let (before, selection) = *before;
+            if modal.changed {
+                self.project.undo.checkpoint_sized(
+                    modal.kind.label(),
+                    &before,
+                    before.estimated_bytes(),
+                );
+                self.mark_document_dirty();
+            } else {
+                self.restore_before_prelude(before, selection);
+            }
+        } else if modal.changed {
             self.project.undo.checkpoint_sized(
                 modal.kind.label(),
                 &modal.original,
@@ -785,6 +851,12 @@ impl AppState {
         let Some(modal) = self.modal.take() else {
             return false;
         };
+        if let Some(before) = modal.before_prelude {
+            let (before, selection) = *before;
+            self.restore_before_prelude(before, selection);
+            self.locked_axes = [false; 3];
+            return true;
+        }
         let revision_clock = self.project.project.revision_clock();
         self.project.project = modal.original;
         self.project

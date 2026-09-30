@@ -404,6 +404,7 @@ pub mod text_id {
     pub const TOOL_GRAMMAR_WORKPLANE_SET: TextId = TextId::new("tool_grammar.workplane_set");
     pub const TOOL_GRAMMAR_WORKPLANE_AUTO: TextId = TextId::new("tool_grammar.workplane_auto");
     pub const TOOL_GRAMMAR_NO_FACE_SELECTED: TextId = TextId::new("tool_grammar.no_face_selected");
+    pub const DRAW_SHAPE_NAME: TextId = TextId::new("draw.shape_name");
     pub const SNAP_KIND_POINT: TextId = TextId::new("snap_kind.point");
     pub const SNAP_KIND_MIDPOINT: TextId = TextId::new("snap_kind.midpoint");
     pub const SNAP_KIND_ON_EDGE: TextId = TextId::new("snap_kind.on_edge");
@@ -763,6 +764,7 @@ pub mod text_id {
         TOOL_GRAMMAR_WORKPLANE_SET,
         TOOL_GRAMMAR_WORKPLANE_AUTO,
         TOOL_GRAMMAR_NO_FACE_SELECTED,
+        DRAW_SHAPE_NAME,
         SNAP_KIND_POINT,
         SNAP_KIND_MIDPOINT,
         SNAP_KIND_ON_EDGE,

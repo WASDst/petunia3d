@@ -659,6 +659,10 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// Pré-seleção do Draw: onde o próximo clique cairia (ponto encaixado ou
     /// face que viraria o plano), mostrada com o marcador de snap.
     pub profile_hover_snap: Option<petunia_core::ScreenSnapHit>,
+    /// Região de perfil sob o cursor (Push/Pull e Draw), destacada no hover.
+    pub region_hover: Option<petunia_core::RegionHit>,
+    /// Regiões por plano, recalculadas só quando o documento muda.
+    region_planes_cache: Option<([u64; 11], petunia_core::RegionPlanes)>,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_volume_original: Option<Project>,
@@ -907,6 +911,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_drag_target: None,
             profile_selected_point: None,
             profile_hover_snap: None,
+            region_hover: None,
+            region_planes_cache: None,
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
             profile_volume_original: None,
@@ -2407,7 +2413,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 normalized_y * self.viewport_size[1],
             ];
             self.update_profile_preselection(normalized_x, normalized_y);
+            // Com um perfil aberto em desenho, o clique adiciona pontos: sem
+            // destaque de região para não sugerir outra ação.
+            let drawing = self
+                .active_profile_resources()
+                .is_some_and(|(_, spline)| !spline.closed);
+            self.region_hover = if drawing {
+                None
+            } else {
+                self.region_hit_at([
+                    normalized_x * self.viewport_size[0],
+                    normalized_y * self.viewport_size[1],
+                ])
+            };
             return true;
+        }
+        if self.state.session.tools.active_tool == "push_pull" && self.tool_modal.is_none() {
+            let previous = self.region_hover.take();
+            self.region_hover = self.region_hit_at([
+                normalized_x * self.viewport_size[0],
+                normalized_y * self.viewport_size[1],
+            ]);
+            if self.region_hover.is_some() {
+                self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                return previous != self.region_hover;
+            }
+            if previous.is_some() {
+                self.state.session.tools.hover =
+                    self.pick_viewport_target(normalized_x, normalized_y);
+                return true;
+            }
+        } else {
+            self.region_hover = None;
         }
         if self.state.session.tools.active_tool == "loop_cut" && self.loop_cut.is_none() {
             let previous_edge = match self.state.session.tools.hover {
@@ -4443,7 +4480,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Limpa a preselection (ponteiro saiu da viewport).
     pub fn clear_hover(&mut self) -> bool {
-        let had_preview = self.profile_hover_snap.take().is_some();
+        let had_preview =
+            self.profile_hover_snap.take().is_some() | self.region_hover.take().is_some();
         if !self.state.session.tools.hover.is_some() {
             return had_preview;
         }
@@ -9134,6 +9172,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 begun
             }
             GrammarTool::Parametric(kind) => {
+                if self.tool_modal.is_none()
+                    && kind == ToolModalKind::PushPull
+                    && let Some(hit) = self.region_hit_at(anchor)
+                {
+                    return self.begin_region_gesture(anchor, &hit);
+                }
                 if self.tool_modal.is_none() {
                     self.select_under_anchor_for(kind, anchor);
                     if !self.begin_tool_modal(kind) {
@@ -9161,6 +9205,109 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
         }
+    }
+
+    /// Região de perfil sob o ponto (px lógicos da viewport), se não estiver
+    /// escondida atrás da malha ativa. Os planos ficam em cache por revisão.
+    fn region_hit_at(&mut self, pixel: [f32; 2]) -> Option<petunia_core::RegionHit> {
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 || !pixel[0].is_finite() || !pixel[1].is_finite() {
+            return None;
+        }
+        let revision = self.state.project.project.revision_clock();
+        if self
+            .region_planes_cache
+            .as_ref()
+            .is_none_or(|(cached, _)| *cached != revision)
+        {
+            self.region_planes_cache = Some((revision, self.state.profile_region_planes()));
+        }
+        let planes = &self.region_planes_cache.as_ref()?.1;
+        if planes.is_empty() {
+            return None;
+        }
+        let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
+        let camera = &self.state.session.camera;
+        let (origin, direction) = camera.ray(ndc.x, ndc.y);
+        let hit = petunia_core::region_at_ray(
+            planes,
+            origin,
+            direction,
+            camera.proj == petunia_core::Projection::Perspective,
+        )?;
+        // Uma face da malha ativa claramente à frente esconde a região.
+        let occluder = self.state.project.active_mesh().and_then(|mesh| {
+            petunia_core::picking::pick_mesh(
+                mesh,
+                camera,
+                glam::Vec2::new(width, height),
+                ndc,
+                petunia_core::SelectMode::Face,
+                false,
+            )
+        });
+        let hidden = occluder.is_some_and(|occluder| {
+            let depth = (occluder.position - origin).dot(direction);
+            depth < hit.depth - 1.0e-3 * hit.depth.abs().max(1.0)
+        });
+        (!hidden).then_some(hit)
+    }
+
+    /// Push/Pull sobre uma região: prelúdio (imprint ou forma nova) + Extrude
+    /// no mesmo gesto, 1 Undo, ajustável na "Última operação".
+    fn begin_region_gesture(&mut self, anchor: [f32; 2], hit: &petunia_core::RegionHit) -> bool {
+        self.modal_text.clear();
+        if self.state.primitive_session_valid() {
+            self.state.finalize_primitive_session();
+        }
+        if let Err(error) = self.state.begin_region_push_pull(hit) {
+            self.state.set_status(error.to_string());
+            return false;
+        }
+        self.region_hover = None;
+        self.region_planes_cache = None;
+        self.tool_modal = Some(ToolModalKind::Extrude);
+        self.keyboard_tool_modal_active = false;
+        self.tool_modal_value = 0.0;
+        self.sync_viewport_context();
+        let Some(frame) = self.drag_frame() else {
+            self.cancel_tool_modal();
+            return false;
+        };
+        self.tool_gesture = Some(ToolGesture::Parametric {
+            kind: ToolModalKind::Extrude,
+            frame,
+            anchor,
+            start_value: 0.0,
+        });
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Contorno (e furos) da região em hover, em px da viewport.
+    fn region_hover_commands(&self) -> String {
+        use std::fmt::Write as _;
+        let Some(hit) = &self.region_hover else {
+            return String::new();
+        };
+        let [width, height] = self.viewport_size;
+        let matrix = self.state.session.camera.view_proj();
+        let mut commands = String::new();
+        for ring in std::iter::once(&hit.region.outer).chain(hit.region.holes.iter()) {
+            let mut first = true;
+            for point in ring {
+                let clip = matrix * hit.plane.to_world(*point).extend(1.0);
+                if !clip.is_finite() || clip.w <= 0.05 {
+                    return String::new();
+                }
+                let x = (clip.x / clip.w * 0.5 + 0.5) * width;
+                let y = (0.5 - clip.y / clip.w * 0.5) * height;
+                let action = if std::mem::take(&mut first) { 'M' } else { 'L' };
+                let _ = write!(commands, "{action} {x:.2} {y:.2} ");
+            }
+            commands.push_str("Z ");
+        }
+        commands
     }
 
     /// Arrastar sobre um elemento não selecionado o seleciona antes de operar
@@ -11739,6 +11886,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.profile_workplane =
             petunia_module_model::profile_workplane_label(&self.state).to_string();
         vm.profile_workplane_locked = self.state.profile.workplane_locked;
+        vm.region_hover_commands = self.region_hover_commands();
         vm.profile_volume_mode = match self.profile_volume_mode {
             Some(petunia_module_model::ProfileVolumeMode::Extrude) => "extrude".to_string(),
             Some(petunia_module_model::ProfileVolumeMode::Revolve) => "revolve".to_string(),

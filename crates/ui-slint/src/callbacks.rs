@@ -772,6 +772,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_point_count(vm.profile_point_count);
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
+    window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
     window.set_profile_depth(vm.profile_depth);
     window.set_profile_wall_thickness(vm.profile_wall_thickness);
     window.set_profile_smoothness(vm.profile_smoothness);
