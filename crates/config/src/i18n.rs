@@ -295,6 +295,8 @@ pub mod text_id {
     pub const TOOLS_LOOP_CUT: TextId = TextId::new("tools.loop_cut");
     pub const TOOLS_SLICE: TextId = TextId::new("tools.slice");
     pub const TOOLS_PUSH_PULL: TextId = TextId::new("tools.push_pull");
+    pub const TOOLS_POLY_PEN: TextId = TextId::new("tools.poly_pen");
+    pub const TOOLS_POLY_PEN_HINT: TextId = TextId::new("tools.poly_pen_hint");
     pub const TOOLS_DRAW_PROFILE: TextId = TextId::new("tools.draw_profile");
     pub const TOOLS_PIVOT: TextId = TextId::new("tools.pivot");
     pub const UI_PIVOT_HINT: TextId = TextId::new("ui.pivot_hint");
@@ -670,6 +672,8 @@ pub mod text_id {
         TOOLS_LOOP_CUT,
         TOOLS_SLICE,
         TOOLS_PUSH_PULL,
+        TOOLS_POLY_PEN,
+        TOOLS_POLY_PEN_HINT,
         TOOLS_DRAW_PROFILE,
         TOOLS_PIVOT,
         UI_PIVOT_HINT,

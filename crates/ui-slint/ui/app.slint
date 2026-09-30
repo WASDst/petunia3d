@@ -3526,6 +3526,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> profile-closed: false;
     in-out property <string> profile-preview-commands: "";
     in-out property <string> region-hover-commands: "";
+    in-out property <string> poly-pen-preview-commands: "";
+    in-out property <string> label-poly-pen: "";
+    in-out property <string> label-poly-pen-hint: "";
     in-out property <float> profile-depth: 1.0;
     in-out property <float> profile-wall-thickness: 0.0;
     in-out property <float> profile-smoothness: 0.02;
@@ -4547,6 +4550,15 @@ export component PetuniaSlintShell inherits Window {
                         stroke: DesignTokens.selection-active;
                         stroke-width: 2px;
                     }
+                    // Poly Pen: pontos coletados até o cursor.
+                    if root.poly-pen-preview-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.poly-pen-preview-commands;
+                        fill: transparent;
+                        stroke: DesignTokens.selection-active;
+                        stroke-width: 2px;
+                    }
+
                     // Região fechada sob o cursor (Draw/Push-Pull): tinta translúcida.
                     if root.region-hover-commands != "": Path {
                         fit: ImageFit.preserve;
@@ -7012,6 +7024,13 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
 
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
+                                icon-svg: PetuniaIcons.tool-profile;
+                                semantic-label: root.label-poly-pen;
+                                description: root.label-poly-pen-hint;
+                                active: active-tool == "poly_pen";
+                                clicked => { root.active-tool-changed("poly_pen"); }
+                            }
                             if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
                                 icon-svg: PetuniaIcons.tool-knife;
                                 semantic-label: "Knife";

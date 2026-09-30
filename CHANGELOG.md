@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Poly Pen — Onda 5, parte 1 (30/09/2026)
+- **Poly Pen no trilho POLY** (modelo: Polygon Pen do Cinema 4D): passar o mouse destaca ponto, aresta ou face; arrastar move o elemento sem selecionar antes.
+- **Ctrl-arrastar uma aresta de borda** cria uma face nova a partir dela (um gesto, um Undo; `Esc` restaura).
+- **Desenhar polígonos**: cada clique adiciona um ponto (ou reaproveita um existente); Enter ou clicar no primeiro ponto fecha; Backspace remove o último; `Esc` limpa. A face nova segue a orientação dos vizinhos ou fica de frente para a câmera; resultados não manifold são recusados.
+- **Ctrl-clique** num ponto o derrete.
+- **Escopo honesto**: ícone próprio, modificador pelo keymap, subdividir aresta por clique e pintar faces ficam pendentes. Matriz em `docs/development/poly-pen-gap-matrix.md`.
+
 ### DRAW e POLY no seletor — Onda 4, parte 2 (30/09/2026)
 - **Seletor `DRAW · POLY · PAINT · UV`**: MODEL vira dois modos do mesmo workspace de modelagem — mesmo documento, seleção, câmera e Inspector; muda o trilho de ferramentas.
 - **Trilho por modo**: DRAW mostra Sketch, Retângulo, Círculo, Push/Pull e Duplicar; POLY mostra as ferramentas de componente (Extrude, Inset, Bevel, Knife, Loop Cut e demais). Trocar de modo nunca converte nem seleciona nada; uma ferramenta que não existe no novo trilho volta para Select.

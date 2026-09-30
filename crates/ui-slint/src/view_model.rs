@@ -535,6 +535,10 @@ pub struct ShellViewModel {
     pub profile_workplane_locked: bool,
     /// Região de perfil em hover (caminho SVG em px da viewport).
     pub region_hover_commands: String,
+    /// Pontos coletados pelo Poly Pen até o cursor (caminho SVG).
+    pub poly_pen_preview_commands: String,
+    pub label_poly_pen: String,
+    pub label_poly_pen_hint: String,
     /// "DRAW" ou "POLY" (pílula ativa quando o workspace é de modelagem).
     pub modeling_mode: String,
     pub label_workspace_draw_title: String,
@@ -1447,6 +1451,9 @@ impl ShellViewModel {
             label_profile_look_at_plane: String::new(),
             profile_workplane_locked: false,
             region_hover_commands: String::new(),
+            poly_pen_preview_commands: String::new(),
+            label_poly_pen: String::new(),
+            label_poly_pen_hint: String::new(),
             modeling_mode: "POLY".to_string(),
             label_workspace_draw_title: String::new(),
             label_workspace_draw_description: String::new(),

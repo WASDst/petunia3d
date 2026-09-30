@@ -427,6 +427,8 @@ frame = "Frame"
 frame_all = "Frame All"
 
 [tools]
+poly_pen = "Poly Pen"
+poly_pen_hint = "Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it"
 pivot = "Pivot"
 select = "Select"
 select_box = "Box Select"

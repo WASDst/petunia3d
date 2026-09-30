@@ -232,6 +232,7 @@ pub mod loop_cut;
 pub mod obj;
 pub mod ops;
 pub mod path_frames;
+pub mod poly_pen;
 pub mod primitives;
 pub mod profile_geo;
 pub mod sweep;

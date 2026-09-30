@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **821**.
+Total de chaves de localização cadastradas: **823**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -578,6 +578,8 @@ Total de chaves de localização cadastradas: **821**.
 | `tools.paint` | Paint | Pintar |
 | `tools.picker` | Picker | Conta-gotas |
 | `tools.pivot` | Pivot | Pivô |
+| `tools.poly_pen` | Poly Pen | Poly Pen |
+| `tools.poly_pen_hint` | Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it | Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo |
 | `tools.primitives` | Add | Adicionar |
 | `tools.push_pull` | Push/Pull | Push/Pull |
 | `tools.pushpull` | Push/Pull | Push/Pull |

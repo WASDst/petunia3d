@@ -251,6 +251,9 @@ pub enum GrammarTool {
     Transform(TransformKind),
     /// Extrude, Inset, Round Edge e Push/Pull: o valor segue o cursor.
     Parametric(ToolModalKind),
+    /// Poly Pen: arrastar move o elemento sob o cursor; Ctrl-arrastar aresta
+    /// extruda; cliques desenham um polígono; Ctrl-clique derrete o ponto.
+    PolyPen,
 }
 
 /// Gesto da gramática única em andamento.
@@ -589,6 +592,11 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     parametric_tool: Option<ToolModalKind>,
     tool_gesture: Option<ToolGesture>,
     tool_press_extend: bool,
+    /// Modificador de "ação alternativa" no último press (Ctrl no preset
+    /// padrão): no Poly Pen, extruda a aresta ou derrete o ponto.
+    tool_press_alternate: bool,
+    /// Pontos coletados pelo Poly Pen (estado `Collecting`).
+    pub poly_pen_points: Vec<petunia_core::PenPoint>,
     /// Sessão paramétrica aberta por atalho: o movimento do mouse já manipula.
     pub keyboard_tool_modal_active: bool,
     pub tool_modal_value: f32,
@@ -903,6 +911,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             parametric_tool: None,
             tool_gesture: None,
             tool_press_extend: false,
+            tool_press_alternate: false,
+            poly_pen_points: Vec::new(),
             keyboard_tool_modal_active: false,
             tool_modal_value: 0.0,
             rename_draft: None,
@@ -1233,6 +1243,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection = val;
             }
             UiIntent::SetActiveTool(tool) => {
+                if tool != "poly_pen" {
+                    self.poly_pen_points.clear();
+                }
                 if self.state.session.tools.active_tool == "draw_profile" && tool != "draw_profile"
                 {
                     self.profile_pointer_up();
@@ -2484,6 +2497,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 ])
             };
             return true;
+        }
+        if self.state.session.tools.active_tool == "poly_pen" {
+            let pixel = [
+                normalized_x * self.viewport_size[0],
+                normalized_y * self.viewport_size[1],
+            ];
+            let next = self.poly_pen_target(pixel);
+            let changed = next != self.state.session.tools.hover;
+            self.state.session.tools.hover = next;
+            // A linha até o cursor acompanha o mouse durante a coleta.
+            return changed || !self.poly_pen_points.is_empty();
         }
         if self.state.session.tools.active_tool == "push_pull" && self.tool_modal.is_none() {
             let previous = self.region_hover.take();
@@ -4791,16 +4815,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         match self.state.begin_modal(modal_kind) {
             Ok(()) => {
-                self.reset_transform_fields();
-                self.drag = Some(ViewportDrag {
-                    kind,
-                    start: [x, y],
-                    viewport: self.viewport_size,
-                    last_pointer: [x, y],
-                    virtual_pointer: [x, y],
-                    rotation_angle: 0.0,
-                    last_angle: 0.0,
-                });
+                self.start_viewport_drag(kind, x, y);
                 true
             }
             Err(error) => {
@@ -4808,6 +4823,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 false
             }
         }
+    }
+
+    /// Arrasto de viewport sobre uma operação já aberta no core.
+    fn start_viewport_drag(&mut self, kind: TransformKind, x: f32, y: f32) {
+        self.modal_text.clear();
+        self.instant_transform = false;
+        self.reset_transform_fields();
+        self.drag = Some(ViewportDrag {
+            kind,
+            start: [x, y],
+            viewport: self.viewport_size,
+            last_pointer: [x, y],
+            virtual_pointer: [x, y],
+            rotation_angle: 0.0,
+            last_angle: 0.0,
+        });
     }
 
     /// Uma única passada de snap em espaço de tela (P3D-040, ADR 006 Onda 3).
@@ -9095,6 +9126,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "inset" => parametric(ToolModalKind::Inset),
             "bevel" => parametric(ToolModalKind::Bevel),
             "push_pull" => parametric(ToolModalKind::PushPull),
+            "poly_pen" => Some(GrammarTool::PolyPen),
             _ => None,
         }
     }
@@ -9154,6 +9186,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     petunia_core::PressTarget::Surface
                 };
                 self.tool_press_extend = shift;
+                self.tool_press_alternate = ctrl;
                 self.tool_session.press([x, y], target)
             }
             1 => self.tool_session.move_to([x, y]),
@@ -9179,6 +9212,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         use petunia_core::ToolEffect as Effect;
         match effect {
             Effect::Nothing | Effect::TypedValue(_) | Effect::TypedCleared => false,
+            Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::PolyPen) => {
+                self.poly_pen_click(at)
+            }
             Effect::Click { at } => {
                 let [width, height] = self.viewport_size;
                 if width > 1.0 && height > 1.0 {
@@ -9228,6 +9264,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 begun
             }
+            GrammarTool::PolyPen => self.begin_poly_pen_drag(anchor),
             GrammarTool::Parametric(kind) => {
                 if self.tool_modal.is_none()
                     && kind == ToolModalKind::PushPull
@@ -9262,6 +9299,195 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
         }
+    }
+
+    /// Elemento sob o cursor para o Poly Pen: ponto > aresta > face, com as
+    /// mesmas tolerâncias em pixels do picking de seleção.
+    fn poly_pen_target(&self, pixel: [f32; 2]) -> petunia_core::HoverTarget {
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return petunia_core::HoverTarget::None;
+        }
+        let (x, y) = (pixel[0] / width, pixel[1] / height);
+        [
+            SelectionDomain::Vertex,
+            SelectionDomain::Edge,
+            SelectionDomain::Face,
+        ]
+        .into_iter()
+        .map(|domain| self.pick_target_for_domain(domain, x, y))
+        .find(|target| target.is_some())
+        .unwrap_or_default()
+    }
+
+    /// Ponto de mundo para um ponto novo do Poly Pen: snap (se ligado), face
+    /// sob o cursor ou plano de frente para a câmera pelo último ponto.
+    fn poly_pen_world_point(&self, pixel: [f32; 2]) -> Option<glam::Vec3> {
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return None;
+        }
+        let mesh = self.state.project.active_mesh()?;
+        let last = self.poly_pen_points.last().map(|point| match *point {
+            petunia_core::PenPoint::Existing(index) => mesh
+                .verts
+                .get(index as usize)
+                .map_or(glam::Vec3::ZERO, |v| v.vec()),
+            petunia_core::PenPoint::New(position) => glam::Vec3::from(position),
+        });
+        if self.state.session.snap_enabled {
+            let mask = petunia_core::SnapMask::for_target(self.state.session.snap_settings.target);
+            if let Some(hit) = self.screen_snap(
+                glam::Vec2::from_array(pixel),
+                mask,
+                last.map(petunia_core::SnapAnchor::world),
+                None,
+            ) {
+                return Some(hit.point);
+            }
+        }
+        let camera = &self.state.session.camera;
+        let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
+        if let Some(hit) = petunia_core::picking::pick_mesh(
+            mesh,
+            camera,
+            glam::Vec2::new(width, height),
+            ndc,
+            petunia_core::SelectMode::Face,
+            false,
+        ) {
+            return Some(hit.position);
+        }
+        let anchor = last.unwrap_or_else(|| mesh.center());
+        let normal = camera.forward();
+        let (origin, direction) = camera.ray(ndc.x, ndc.y);
+        let denominator = direction.dot(normal);
+        if denominator.abs() < 1.0e-6 {
+            return None;
+        }
+        let distance = (anchor - origin).dot(normal) / denominator;
+        let point = origin + direction * distance;
+        point.is_finite().then_some(point)
+    }
+
+    /// Clique do Poly Pen: Ctrl-clique derrete o ponto; senão coleta um ponto
+    /// do polígono (clicar no primeiro ponto fecha).
+    fn poly_pen_click(&mut self, at: [f32; 2]) -> bool {
+        let target = self.poly_pen_target(at);
+        if self.tool_press_alternate {
+            if let petunia_core::HoverTarget::Vertex(point) = target {
+                if let Err(error) = self.state.poly_pen_melt_point(point) {
+                    self.state.set_status(error.to_string());
+                }
+                return true;
+            }
+            return false;
+        }
+        let point = match target {
+            petunia_core::HoverTarget::Vertex(index) => petunia_core::PenPoint::Existing(index),
+            _ => match self.poly_pen_world_point(at) {
+                Some(position) => petunia_core::PenPoint::New(position.to_array()),
+                None => return false,
+            },
+        };
+        if self.poly_pen_points.len() >= 3 && self.poly_pen_points.first() == Some(&point) {
+            return self.poly_pen_close();
+        }
+        if self.poly_pen_points.contains(&point) {
+            return false;
+        }
+        self.poly_pen_points.push(point);
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Fecha o polígono coletado (Enter ou clique no primeiro ponto).
+    fn poly_pen_close(&mut self) -> bool {
+        let points = std::mem::take(&mut self.poly_pen_points);
+        match self.state.poly_pen_add_polygon(&points) {
+            Ok(_) => {
+                self.sync_viewport_context();
+                true
+            }
+            Err(error) => {
+                // Mantém os pontos para o usuário corrigir.
+                self.poly_pen_points = points;
+                self.state.set_status(error.to_string());
+                false
+            }
+        }
+    }
+
+    /// Arrasto do Poly Pen: move o elemento sob o cursor (sem selecionar
+    /// antes) ou, com o modificador alternativo sobre uma aresta de borda,
+    /// extruda a aresta. Durante a coleta de pontos, arrastar não edita.
+    fn begin_poly_pen_drag(&mut self, anchor: [f32; 2]) -> bool {
+        if !self.poly_pen_points.is_empty() {
+            return false;
+        }
+        let target = self.poly_pen_target(anchor);
+        if self.tool_press_alternate
+            && let petunia_core::HoverTarget::Edge(a, b) = target
+        {
+            if let Err(error) = self.state.begin_poly_pen_edge_extrude(a, b) {
+                self.state.set_status(error.to_string());
+                return false;
+            }
+            self.start_viewport_drag(TransformKind::Position, anchor[0], anchor[1]);
+            self.tool_gesture = Some(ToolGesture::Transform { gizmo: false });
+            self.sync_viewport_context();
+            return true;
+        }
+        let domain = match target {
+            petunia_core::HoverTarget::Vertex(_) => SelectionDomain::Vertex,
+            petunia_core::HoverTarget::Edge(..) => SelectionDomain::Edge,
+            petunia_core::HoverTarget::Face(_) => SelectionDomain::Face,
+            _ => return false,
+        };
+        // O elemento arrastado passa a ser a seleção (visível), como no C4D.
+        self.state.set_selection_domain(domain);
+        let [width, height] = self.viewport_size;
+        self.select_viewport_ext(anchor[0] / width, anchor[1] / height, false, false);
+        self.sync_viewport_context();
+        let begun = self.begin_viewport_transform(TransformKind::Position, anchor[0], anchor[1]);
+        if begun {
+            self.tool_gesture = Some(ToolGesture::Transform { gizmo: false });
+        }
+        begun
+    }
+
+    /// Contorno dos pontos coletados até o cursor, em px da viewport.
+    fn poly_pen_preview_commands(&self) -> String {
+        use std::fmt::Write as _;
+        let Some(mesh) = self.state.project.active_mesh() else {
+            return String::new();
+        };
+        if self.poly_pen_points.is_empty() {
+            return String::new();
+        }
+        let [width, height] = self.viewport_size;
+        let matrix = self.state.session.camera.view_proj();
+        let mut commands = String::new();
+        for (index, point) in self.poly_pen_points.iter().enumerate() {
+            let world = match *point {
+                petunia_core::PenPoint::Existing(i) => match mesh.verts.get(i as usize) {
+                    Some(vertex) => vertex.vec(),
+                    None => return String::new(),
+                },
+                petunia_core::PenPoint::New(position) => glam::Vec3::from(position),
+            };
+            let clip = matrix * world.extend(1.0);
+            if !clip.is_finite() || clip.w <= 0.05 {
+                return String::new();
+            }
+            let x = (clip.x / clip.w * 0.5 + 0.5) * width;
+            let y = (0.5 - clip.y / clip.w * 0.5) * height;
+            let action = if index == 0 { 'M' } else { 'L' };
+            let _ = write!(commands, "{action} {x:.2} {y:.2} ");
+        }
+        let [x, y] = self.pointer_position;
+        let _ = write!(commands, "L {x:.2} {y:.2}");
+        commands
     }
 
     /// Região de perfil sob o ponto (px lógicos da viewport), se não estiver
@@ -10051,6 +10277,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.apply_tool_effect(effect, false, false);
             return true;
         }
+        // Escada do Esc: pontos coletados antes de sair da ferramenta.
+        if !self.poly_pen_points.is_empty() {
+            self.poly_pen_points.clear();
+            self.state.mark_dirty();
+            return true;
+        }
         if self.cancel_paint_stroke() {
             return true;
         }
@@ -10438,6 +10670,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if ((ctrl && !shift) || (shift && !ctrl)) && !alt && text.eq_ignore_ascii_case("d") {
             return self.duplicate_selection();
+        }
+        if text == "Backspace" && !ctrl && !alt && !shift && !self.poly_pen_points.is_empty() {
+            // Collecting: Backspace remove o último ponto (constituição 11).
+            self.poly_pen_points.pop();
+            self.state.mark_dirty();
+            return true;
         }
         if (text == "Delete" || text == "Backspace") && !ctrl && !alt && !shift {
             if self.state.session.tools.modal.is_some() && !self.modal_text.is_empty() {
@@ -11004,6 +11242,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn confirm_active_operation(&mut self) -> bool {
+        if !self.poly_pen_points.is_empty() {
+            return self.poly_pen_close();
+        }
         if self.tool_modal.is_some() {
             return self.commit_tool_modal();
         }
@@ -11644,6 +11885,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_model_slice = translated(petunia_config::text_id::TOOLS_SLICE);
         vm.hint_model_slice = translated(petunia_config::text_id::UI_SLICE_HINT);
         vm.label_model_push_pull = translated(petunia_config::text_id::TOOLS_PUSH_PULL);
+        vm.label_poly_pen = translated(petunia_config::text_id::TOOLS_POLY_PEN);
+        vm.label_poly_pen_hint = translated(petunia_config::text_id::TOOLS_POLY_PEN_HINT);
+        vm.poly_pen_preview_commands = self.poly_pen_preview_commands();
         vm.hint_model_push_pull = translated(petunia_config::text_id::UI_PUSH_PULL_HINT);
         vm.label_model_profile = translated(petunia_config::text_id::TOOLS_DRAW_PROFILE);
         vm.hint_model_profile = translated(petunia_config::text_id::UI_PROFILE_HINT);
@@ -12126,6 +12370,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "inset" => self.state.t("tools.inset"),
                 "bevel" => self.state.t("tools.bevel"),
                 "push_pull" => self.state.t_id(petunia_config::text_id::TOOLS_PUSH_PULL),
+                "poly_pen" => self.state.t_id(petunia_config::text_id::TOOLS_POLY_PEN),
                 "cursor" | "cursor_3d" => "3D Cursor".to_string(),
                 "measure" => self.state.t("tools.measure"),
                 other => {

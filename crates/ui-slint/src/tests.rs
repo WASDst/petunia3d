@@ -2491,6 +2491,161 @@ fn switching_mode_drops_a_tool_the_new_rail_does_not_offer() {
     assert!(!crate::ModelingMode::Draw.offers_tool("loop_cut"));
 }
 
+fn pixel_of(bridge: &SlintUiBridge<PlaceholderViewport>, point: glam::Vec3) -> [f32; 2] {
+    petunia_core::transform_projection::project_pixel(
+        &bridge.state.session.camera,
+        glam::Vec2::from_array(bridge.viewport_size),
+        point,
+    )
+    .expect("ponto visível")
+    .to_array()
+}
+
+fn pen_click(bridge: &mut SlintUiBridge<PlaceholderViewport>, at: [f32; 2], ctrl: bool) {
+    bridge.tool_pointer(0, at[0], at[1], false, ctrl);
+    bridge.tool_pointer(2, at[0], at[1], false, ctrl);
+}
+
+fn pen_drag(
+    bridge: &mut SlintUiBridge<PlaceholderViewport>,
+    from: [f32; 2],
+    to: [f32; 2],
+    ctrl: bool,
+) {
+    bridge.tool_pointer(0, from[0], from[1], false, ctrl);
+    bridge.tool_pointer(1, to[0], to[1], false, ctrl);
+    bridge.tool_pointer(2, to[0], to[1], false, ctrl);
+}
+
+/// Cena padrão de frente com o Poly Pen ativo.
+fn poly_pen_bridge() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    bridge.apply(UiIntent::SetActiveTool("poly_pen".into()));
+    assert!(bridge.tool_grammar_active());
+    bridge
+}
+
+/// Desenha um triângulo solto à direita do cubo; devolve seus 3 cantos.
+fn draw_triangle(bridge: &mut SlintUiBridge<PlaceholderViewport>) -> [glam::Vec3; 3] {
+    let corners = [
+        glam::Vec3::new(2.0, -0.5, 0.0),
+        glam::Vec3::new(3.0, -0.5, 0.0),
+        glam::Vec3::new(2.5, 0.5, 0.0),
+    ];
+    for corner in corners {
+        let at = pixel_of(bridge, corner);
+        pen_click(bridge, at, false);
+    }
+    assert_eq!(bridge.poly_pen_points.len(), 3);
+    assert!(!bridge.view_model().poly_pen_preview_commands.is_empty());
+    assert!(bridge.route_shortcut("Enter", false, false, false));
+    assert!(bridge.poly_pen_points.is_empty());
+    corners
+}
+
+#[test]
+fn poly_pen_draws_a_polygon_as_one_undo() {
+    let mut bridge = poly_pen_bridge();
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth = bridge.state.project.undo.depth().0;
+    draw_triangle(&mut bridge);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert_eq!(mesh.faces.len(), faces + 1);
+    let face = mesh.faces.len() - 1;
+    assert!(mesh.face_normal(face).z > 0.9, "voltado para a câmera");
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+    assert_eq!(
+        bridge.state.session.tools.active_tool, "poly_pen",
+        "ferramenta persistente"
+    );
+}
+
+#[test]
+fn poly_pen_collecting_follows_the_escape_and_backspace_ladder() {
+    let mut bridge = poly_pen_bridge();
+    for x in [2.0, 3.0] {
+        let at = pixel_of(&bridge, glam::Vec3::new(x, 0.0, 0.0));
+        pen_click(&mut bridge, at, false);
+    }
+    assert!(bridge.route_shortcut("Backspace", false, false, false));
+    assert_eq!(bridge.poly_pen_points.len(), 1);
+    assert!(bridge.route_shortcut("Escape", false, false, false));
+    assert!(bridge.poly_pen_points.is_empty());
+    assert_eq!(
+        bridge.state.session.tools.active_tool, "poly_pen",
+        "1º Esc só limpa"
+    );
+    // Clicar no primeiro ponto fecha o polígono.
+    let corners = [
+        glam::Vec3::new(2.0, -0.5, 0.0),
+        glam::Vec3::new(3.0, -0.5, 0.0),
+        glam::Vec3::new(2.5, 0.5, 0.0),
+    ];
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    for corner in corners {
+        let at = pixel_of(&bridge, corner);
+        pen_click(&mut bridge, at, false);
+    }
+    let first = pixel_of(&bridge, corners[0]);
+    pen_click(&mut bridge, first, false);
+    assert!(bridge.poly_pen_points.is_empty());
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces + 1
+    );
+}
+
+#[test]
+fn poly_pen_drag_moves_the_point_under_the_cursor() {
+    let mut bridge = poly_pen_bridge();
+    let corner = glam::Vec3::new(1.0, 1.0, 1.0);
+    let depth = bridge.state.project.undo.depth().0;
+    let from = pixel_of(&bridge, corner);
+    pen_drag(&mut bridge, from, [from[0] + 40.0, from[1]], false);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert!(
+        !mesh
+            .verts
+            .iter()
+            .any(|v| (v.vec() - corner).length() < 1e-4),
+        "o canto saiu do lugar"
+    );
+    assert!(
+        mesh.verts
+            .iter()
+            .any(|v| v.pos[0] > 1.1 && (v.pos[1] - 1.0).abs() < 1e-3)
+    );
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+}
+
+#[test]
+fn poly_pen_ctrl_drag_extrudes_a_border_edge() {
+    let mut bridge = poly_pen_bridge();
+    let corners = draw_triangle(&mut bridge);
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth = bridge.state.project.undo.depth().0;
+    let middle = (corners[0] + corners[1]) * 0.5;
+    let from = pixel_of(&bridge, middle);
+    pen_drag(&mut bridge, from, [from[0], from[1] + 50.0], true);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert_eq!(mesh.faces.len(), faces + 1, "quad novo a partir da aresta");
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+    assert!(mesh.verts.iter().any(|v| v.pos[1] < -0.6));
+}
+
+#[test]
+fn poly_pen_ctrl_click_melts_a_point() {
+    let mut bridge = poly_pen_bridge();
+    let corners = draw_triangle(&mut bridge);
+    // Ctrl-clique num canto do triângulo derrete o ponto (1 Undo).
+    let verts = bridge.state.project.active_mesh().unwrap().verts.len();
+    let at = pixel_of(&bridge, corners[2]);
+    pen_click(&mut bridge, at, true);
+    let after = bridge.state.project.active_mesh().unwrap().verts.len();
+    assert!(after < verts, "ponto derretido");
+}
+
 #[test]
 fn locked_workplane_ignores_the_face_under_the_cursor() {
     let mut bridge = front_view_bridge_with_cube();

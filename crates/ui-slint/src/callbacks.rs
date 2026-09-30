@@ -773,6 +773,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
     window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
+    window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
+    window.set_label_poly_pen(vm.label_poly_pen.as_str().into());
+    window.set_label_poly_pen_hint(vm.label_poly_pen_hint.as_str().into());
     window.set_modeling_mode(vm.modeling_mode.as_str().into());
     window.set_label_workspace_draw_title(vm.label_workspace_draw_title.as_str().into());
     window
