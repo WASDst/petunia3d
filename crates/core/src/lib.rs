@@ -1,6 +1,7 @@
 //! Petunia3D core neutro: tipos compartilhados, eventos e contrato de módulo.
 //! Features conhecem estas abstrações — nunca umas às outras (§22).
 
+pub mod animate_session;
 pub mod brush;
 pub mod camera;
 pub mod command;
@@ -31,6 +32,10 @@ pub mod transform_projection;
 pub mod viewport;
 pub mod viewport_query;
 
+pub use animate_session::{
+    AnimatePreview, AnimateSession, MotionCatalogEntry, MotionUnavailable, PosePreview,
+    PreviewBone, motion_catalog,
+};
 pub use cutting_session::CutSession;
 pub use diagnostics::{DiagnosticCategory, DiagnosticEvent, log_event};
 pub use docs::DocsTopic;

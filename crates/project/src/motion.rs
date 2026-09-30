@@ -164,8 +164,10 @@ impl MotionGenerator {
         use crate::rig_roles::{RigRequirement as R, RigRole};
         match self {
             MotionGenerator::BipedCycle => {
-                roles.require(&R::Roles(vec![RigRole::Hips]))?;
-                roles.require(&R::Legs { min: 2 })
+                // Pernas primeiro: "precisa de pernas" é o motivo mais útil para
+                // quem tenta andar com uma serpente ou um peixe.
+                roles.require(&R::Legs { min: 2 })?;
+                roles.require(&R::Roles(vec![RigRole::Hips]))
             }
             MotionGenerator::Gait => roles.require(&R::Legs { min: 2 }),
             MotionGenerator::Serpentine => {

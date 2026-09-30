@@ -37,6 +37,46 @@ pub enum RigPresetKind {
     Quadruped,
     /// Aranha/escorpião/inseto com este número de pernas (4–16).
     MultiLeg(u8),
+    /// Cadeia longa de coluna e cauda, sem pernas (12 segmentos).
+    Serpent,
+    Fish,
+    Bird,
+}
+
+impl RigPresetKind {
+    /// Presets oferecidos ao usuário, na ordem do seletor de criaturas.
+    pub const CREATURES: [RigPresetKind; 6] = [
+        RigPresetKind::Humanoid,
+        RigPresetKind::Quadruped,
+        RigPresetKind::MultiLeg(8),
+        RigPresetKind::Serpent,
+        RigPresetKind::Fish,
+        RigPresetKind::Bird,
+    ];
+
+    /// Identificador estável (chave de `TextId`).
+    pub fn id(self) -> &'static str {
+        match self {
+            RigPresetKind::Humanoid => "humanoid",
+            RigPresetKind::Quadruped => "quadruped",
+            RigPresetKind::MultiLeg(_) => "multi_leg",
+            RigPresetKind::Serpent => "serpent",
+            RigPresetKind::Fish => "fish",
+            RigPresetKind::Bird => "bird",
+        }
+    }
+
+    /// Constrói o esqueleto do preset.
+    pub fn build(self, scale: f32) -> petunia_project::Skeleton {
+        match self {
+            RigPresetKind::Humanoid => RigPreset::humanoid(scale),
+            RigPresetKind::Quadruped => RigPreset::quadruped(scale),
+            RigPresetKind::MultiLeg(n) => RigPreset::multi_leg(usize::from(n), scale),
+            RigPresetKind::Serpent => RigPreset::serpent(12, scale),
+            RigPresetKind::Fish => RigPreset::fish(scale),
+            RigPresetKind::Bird => RigPreset::bird(scale),
+        }
+    }
 }
 
 /// Adiciona um esqueleto de preset ao projeto; os papéis são inferidos.
@@ -60,12 +100,10 @@ impl Command for AddRigPresetCmd {
         Ok(())
     }
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let skeleton = match self.kind {
-            RigPresetKind::Humanoid => RigPreset::humanoid(self.scale),
-            RigPresetKind::Quadruped => RigPreset::quadruped(self.scale),
-            RigPresetKind::MultiLeg(n) => RigPreset::multi_leg(usize::from(n), self.scale),
-        };
-        state.project.project.add_skeleton(skeleton);
+        state
+            .project
+            .project
+            .add_skeleton(self.kind.build(self.scale));
         state.set_status("Rig added");
         Ok(())
     }
