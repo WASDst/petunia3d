@@ -419,6 +419,7 @@ comfortable = "Confortável"
 spacious = "Espaçosa"
 
 [view]
+toggle_split = "Dividir viewport"
 frame = "Enquadrar"
 frame_all = "Enquadrar tudo"
 
@@ -1383,6 +1384,16 @@ prefab_empty_title = "Nenhum prefab ainda"
 prefab_empty_hint = "Selecione objetos e use Salvar como prefab para reutilizá-los em qualquer cena."
 paint_canvas_open = "Abrir o canvas em janela flutuante"
 paint_canvas_close = "Fechar janela do canvas"
+split_persp = "Persp"
+split_front = "Frente"
+split_back = "Trás"
+split_left = "Esq"
+split_right = "Dir"
+split_top = "Topo"
+split_close = "Fechar vista dividida"
+split_toggle = "Dividir viewport"
+split_toggle_hint = "Mostra uma segunda vista 3D para ver outro lado do modelo"
+split_too_narrow = "A viewport está estreita demais para dividir."
 
 
 # Biblioteca de prefabs (mensagens de status; {name} é substituído)

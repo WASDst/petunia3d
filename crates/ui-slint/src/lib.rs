@@ -15,6 +15,7 @@ pub mod files;
 mod input;
 pub mod numeric;
 pub mod overlay;
+pub mod split_view;
 pub mod theme;
 pub mod thumbnail;
 pub mod tr;
@@ -521,6 +522,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub asset_sort_by_name: bool,
     /// Biblioteca: mostra só prefabs favoritos.
     pub asset_only_favorites: bool,
+    /// Vista 3D secundária opcional (viewport dividida).
+    pub split: split_view::SplitView,
     /// Miniaturas renderizadas por (prefab, revisão); `None` = sem geometria.
     prefab_thumbs: std::cell::RefCell<PrefabThumbCache>,
     pub parts_query: String,
@@ -718,6 +721,7 @@ impl MenuKind {
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("view.toggle_projection", T::VIEW_TOGGLE_PROJECTION, "O"),
                 ("view.toggle_wireframe", T::VIEW_TOGGLE_WIREFRAME, "Z"),
+                ("view.toggle_split", T::VIEW_TOGGLE_SPLIT, ""),
             ],
             Self::Window => &[
                 ("window.command_palette", T::MENU_COMMAND_PALETTE, "Ctrl+P"),
@@ -807,6 +811,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             asset_query: String::new(),
             asset_sort_by_name: false,
             asset_only_favorites: false,
+            split: split_view::SplitView::default(),
             prefab_thumbs: Default::default(),
             parts_query: String::new(),
             parts_selected_only: false,
@@ -1110,7 +1115,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_radius = size;
                 // O pincel do canvas 2D usa o mesmo tamanho (px) do slider.
                 self.state.session.tools.canvas_brush =
-                    petunia_core::brush_size_px_from_slider(size).round().max(1.0) as u32;
+                    petunia_core::brush_size_px_from_slider(size)
+                        .round()
+                        .max(1.0) as u32;
             }
             UiIntent::SetBrushOpacity(opacity) => {
                 self.state.session.tools.paint_strength = opacity.clamp(0.0, 1.0);
@@ -1578,8 +1585,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
     }
 
-    pub fn render_viewport(&mut self) -> Option<slint::Image> {
-        let render_state = ViewportRenderState {
+    /// Opções de render compartilhadas pela vista principal e pela secundária.
+    fn viewport_render_state(&self) -> ViewportRenderState {
+        ViewportRenderState {
             shading: self.state.session.shading,
             xray: self.state.session.show_xray,
             show_triangulation: self.state.session.show_triangulation,
@@ -1594,7 +1602,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             show_grid: self.state.session.show_grid,
             hover: self.state.session.tools.hover,
             boolean_operand: self.state.session.tools.boolean_operand,
-        };
+        }
+    }
+
+    pub fn render_viewport(&mut self) -> Option<slint::Image> {
+        let render_state = self.viewport_render_state();
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
         self.viewport.render_frame(
@@ -5502,6 +5514,46 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Liga/desliga a viewport dividida. Recusa (com aviso) quando a vista
+    /// principal ficaria abaixo de `MIN_SPLIT_VIEW_WIDTH` por metade.
+    pub fn toggle_split_view(&mut self) -> bool {
+        if self.split.enabled {
+            self.split.close();
+            return true;
+        }
+        if self.viewport_size[0] < 2.0 * split_view::MIN_SPLIT_VIEW_WIDTH {
+            self.state.set_status(self.state.t("sl.split_too_narrow"));
+            return false;
+        }
+        self.split.open(&self.state.session.camera);
+        true
+    }
+
+    pub fn set_split_preset(&mut self, id: &str) -> bool {
+        use petunia_core::ViewPreset;
+        let preset = match id {
+            "persp" => ViewPreset::Persp,
+            "front" => ViewPreset::Front,
+            "back" => ViewPreset::Back,
+            "left" => ViewPreset::Left,
+            "right" => ViewPreset::Right,
+            "top" => ViewPreset::Top,
+            _ => return false,
+        };
+        self.split.set_preset(preset);
+        true
+    }
+
+    /// Quadro da vista secundária, apenas quando algo mudou.
+    pub fn render_split_view(&mut self) -> Option<slint::Image> {
+        if !self.split.enabled {
+            return None;
+        }
+        let state = self.viewport_render_state();
+        self.split
+            .render(&self.state.project, &self.state.project.refs, state)
+    }
+
     pub fn set_asset_only_favorites(&mut self, only: bool) -> bool {
         if self.asset_only_favorites == only {
             return false;
@@ -6005,6 +6057,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.apply(UiIntent::DuplicateActiveAsset);
                 true
             }
+            "view.toggle_split" => self.toggle_split_view(),
             "window.command_palette" => {
                 self.apply(UiIntent::OpenCommandSearch);
                 true
@@ -9120,8 +9173,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         color,
                     );
                 } else {
-                    let radius = (petunia_core::brush_size_px_from_slider(self.state.session.tools.paint_radius)
-                        * 0.5)
+                    let radius = (petunia_core::brush_size_px_from_slider(
+                        self.state.session.tools.paint_radius,
+                    ) * 0.5)
                         .max(1.0) as u32;
                     let strength = self.state.session.tools.paint_strength;
                     let isolate = self.state.session.tools.paint_isolate_selection;
@@ -10482,6 +10536,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.asset_sort_by_name = self.asset_sort_by_name;
         vm.asset_thumbnail_size = self.state.ui.asset_thumbnail_size;
         vm.asset_only_favorites = self.asset_only_favorites;
+        vm.split_enabled = self.split.enabled;
+        vm.split_preset = self.split.preset_id().to_string();
         vm.prefab_items = self.prefab_item_models();
         vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
         vm.selection_overlay = compute_selection_overlay(
@@ -10938,6 +10994,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     checked: match *id {
                         "view.toggle_wireframe" => vm.is_wireframe,
                         "view.toggle_projection" => vm.is_orthographic,
+                        "view.toggle_split" => self.split.enabled,
                         _ => false,
                     },
                 })
@@ -11672,8 +11729,28 @@ pub fn run() -> Result<(), slint::PlatformError> {
         },
     );
 
+    // Vista dividida: re-renderiza (só se algo mudou) enquanto estiver aberta,
+    // para acompanhar edições feitas na vista principal.
+    let split_bridge = Arc::clone(&bridge);
+    let split_window = window.as_weak();
+    let split_timer = slint::Timer::default();
+    split_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(80),
+        move || {
+            if let Ok(mut bridge) = split_bridge.lock()
+                && bridge.split.enabled
+                && let Some(frame) = bridge.render_split_view()
+                && let Some(window) = split_window.upgrade()
+            {
+                window.set_split_view_image(frame);
+            }
+        },
+    );
+
     println!("Petunia3D window ready");
     let result = window.run();
+    drop(split_timer);
 
     drop(airbrush_timer);
     drop(autosave_timer);

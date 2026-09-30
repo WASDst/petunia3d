@@ -273,6 +273,9 @@ pub struct ShellViewModel {
     pub parts_row_height: f32,
     pub prefab_items: Vec<PrefabItemModel>,
     pub asset_only_favorites: bool,
+    pub split_enabled: bool,
+    /// Preset da vista secundária (`front`, `top`, ..., `custom`).
+    pub split_preset: String,
     pub asset_query: String,
     pub asset_sort_by_name: bool,
     pub asset_thumbnail_size: f32,
@@ -1153,6 +1156,8 @@ impl ShellViewModel {
             parts_row_height: 28.0,
             prefab_items: Vec::new(),
             asset_only_favorites: false,
+            split_enabled: false,
+            split_preset: String::new(),
             asset_query: String::new(),
             asset_sort_by_name: false,
             asset_thumbnail_size: state.ui.asset_thumbnail_size,

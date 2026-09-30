@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1294**.
+Total de chaves de localização cadastradas: **1307**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -796,6 +796,8 @@ Total de chaves de localização cadastradas: **1294**.
 | `sl.pack_and_arrange_uv_islands_efficiently_with` | Pack and arrange UV islands efficiently without overlap | Empacota e organiza ilhas UV com eficiência, sem sobreposição |
 | `sl.pack_islands` | Pack Islands | Pack Islands |
 | `sl.paint` | PAINT | PINTAR |
+| `sl.paint_canvas_close` | Close canvas window | Fechar janela do canvas |
+| `sl.paint_canvas_open` | Open the canvas in a floating window | Abrir o canvas em janela flutuante |
 | `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
 | `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
 | `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |
@@ -939,8 +941,18 @@ Total de chaves de localização cadastradas: **1294**.
 | `sl.sphere` | Sphere | Esfera |
 | `sl.spin` | Spin | Spin |
 | `sl.spin_lathe` | Spin / Lathe | Girar / Torno |
+| `sl.split_back` | Back | Trás |
+| `sl.split_close` | Close split view | Fechar vista dividida |
 | `sl.split_disabled` | Split (Disabled) | Split (Desativado) |
+| `sl.split_front` | Front | Frente |
+| `sl.split_left` | Left | Esq |
+| `sl.split_persp` | Persp | Persp |
+| `sl.split_right` | Right | Dir |
 | `sl.split_t` | Split (T) | Dividir (T) |
+| `sl.split_toggle` | Split viewport | Dividir viewport |
+| `sl.split_toggle_hint` | Show a second 3D view to inspect another side of the model | Mostra uma segunda vista 3D para ver outro lado do modelo |
+| `sl.split_too_narrow` | The viewport is too narrow to split. | A viewport está estreita demais para dividir. |
+| `sl.split_top` | Top | Topo |
 | `sl.standard_matte_shaded_surfaces_with_basic_di` | Standard matte shaded surfaces with basic directional lighting | Superfícies foscas padrão com iluminação direcional básica |
 | `sl.step_1_0_m_subdivisions_0_1_m` | Step 1.0 m (Subdivisions 0.1 m) | Passo 1.0 m (Subdivisões 0.1 m) |
 | `sl.step_90` | Step 90°: | Passo 90°: |
@@ -1298,6 +1310,7 @@ Total de chaves de localização cadastradas: **1294**.
 | `uv.title` | UV editor | Editor UV |
 | `view.frame` | Frame | Enquadrar |
 | `view.frame_all` | Frame All | Enquadrar tudo |
+| `view.toggle_split` | Split viewport | Dividir viewport |
 | `viewport.axis_lock` | Lock axis | Travar eixo |
 | `viewport.axis_unlock` | Unlock axis | Destravar eixo |
 | `viewport.drop_to_instantiate` | Drop to Instantiate | Soltar para Instanciar |

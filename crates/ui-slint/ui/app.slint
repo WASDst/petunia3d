@@ -701,7 +701,7 @@ component ContextMenuItem inherits Rectangle {
         padding-left: 6px;
         padding-right: 8px;
         spacing: 6px;
-        alignment: center;
+        alignment: stretch;
 
         Rectangle {
             width: 14px;
@@ -3268,6 +3268,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> active-keymap-id: "petunia-default";
     in-out property <bool> saved: true;
     in-out property <image> viewport-image;
+    in-out property <bool> split-enabled: false;
+    in-out property <string> split-preset: "";
+    in-out property <image> split-view-image;
     in-out property <bool> has-gpu-viewport: false;
 
     in-out property <[CommandItem]> command-results: [];
@@ -3914,6 +3917,12 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-pan(float, float);
     callback viewport-zoom(float);
     callback viewport-resized(float, float);
+    callback split-toggle-requested;
+    callback split-preset-requested(string);
+    callback split-orbit(float, float);
+    callback split-pan(float, float);
+    callback split-zoom(float);
+    callback split-resized(float, float);
     callback viewport-select(float, float, bool, bool);
     callback viewport-box-select(float, float, float, float, bool, bool);
     callback viewport-lasso-select(string, bool, bool);
@@ -4735,8 +4744,14 @@ export component PetuniaSlintShell inherits Window {
                     }
                 }
 
-                viewport-region := Rectangle {
+                // Contêiner da viewport: principal + (opcional) vista dividida, lado a lado.
+                Rectangle {
                     horizontal-stretch: 1;
+                viewport-region := Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: root.split-enabled ? (parent.width - 4px) / 2 : parent.width;
+                    height: parent.height;
                     clip: true;
                     background: DesignTokens.canvas;
                     border-width: 1px;
@@ -5756,6 +5771,13 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.reset_camera_zoom_orientation_and_position_t");
                                 active: false;
                                 clicked => { root.reset-camera-requested(); }
+                            }
+                            ViewportBarButton {
+                                icon: IconSet.Columns2;
+                                label: Tr.t("sl.split_toggle");
+                                description: Tr.t("sl.split_toggle_hint");
+                                active: root.split-enabled;
+                                clicked => { root.split-toggle-requested(); }
                             }
                         }
                     }
@@ -9482,6 +9504,111 @@ export component PetuniaSlintShell inherits Window {
                     }
                     }
 }
+
+                    // Viewport dividida (opcional): segunda vista 3D só de navegação.
+                    if root.split-enabled: Rectangle {
+                        x: (parent.width - 4px) / 2;
+                        y: 0px;
+                        width: 4px;
+                        height: parent.height;
+                        background: DesignTokens.border-strong;
+                    }
+
+                    if root.split-enabled: split-region := Rectangle {
+                        x: (parent.width + 4px) / 2;
+                        y: 0px;
+                        width: (parent.width - 4px) / 2;
+                        height: parent.height;
+                        clip: true;
+                        background: DesignTokens.canvas;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+
+                        changed width => { root.split-resized(self.width / 1px, self.height / 1px); }
+                        changed height => { root.split-resized(self.width / 1px, self.height / 1px); }
+                        init => { root.split-resized(self.width / 1px, self.height / 1px); }
+
+                        Image {
+                            width: 100%;
+                            height: 100%;
+                            image-fit: contain;
+                            source: root.split-view-image;
+                        }
+
+                        split-touch := TouchArea {
+                            property <bool> orbiting: false;
+                            property <bool> panning: false;
+                            property <length> last-x;
+                            property <length> last-y;
+                            mouse-cursor: (self.orbiting || self.panning) ? grabbing : default;
+                            pointer-event(event) => {
+                                if event.kind == PointerEventKind.down {
+                                    self.last-x = self.mouse-x;
+                                    self.last-y = self.mouse-y;
+                                    if event.button == PointerEventButton.left { self.orbiting = true; }
+                                    else if event.button == PointerEventButton.middle || event.button == PointerEventButton.right { self.panning = true; }
+                                } else if event.kind == PointerEventKind.up {
+                                    self.orbiting = false;
+                                    self.panning = false;
+                                }
+                            }
+                            moved => {
+                                if self.orbiting {
+                                    root.split-orbit((self.mouse-x - self.last-x) / 1px, (self.mouse-y - self.last-y) / 1px);
+                                } else if self.panning {
+                                    root.split-pan((self.mouse-x - self.last-x) / 1px, (self.mouse-y - self.last-y) / 1px);
+                                }
+                                self.last-x = self.mouse-x;
+                                self.last-y = self.mouse-y;
+                            }
+                            scroll-event(event) => {
+                                root.split-zoom(event.delta-y / 1px);
+                                return accept;
+                            }
+                        }
+
+                        // Presets da vista secundária + fechar
+                        Rectangle {
+                            x: 8px;
+                            y: 8px;
+                            height: 28px;
+                            width: split-presets.preferred-width + 8px;
+                            border-radius: DesignTokens.radius-panel;
+                            background: DesignTokens.surface-raised.with-alpha(0.94);
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            split-presets := HorizontalLayout {
+                                padding: 3px;
+                                spacing: 2px;
+                                for entry in [
+                                    { id: "persp", label: Tr.t("sl.split_persp") },
+                                    { id: "front", label: Tr.t("sl.split_front") },
+                                    { id: "back", label: Tr.t("sl.split_back") },
+                                    { id: "left", label: Tr.t("sl.split_left") },
+                                    { id: "right", label: Tr.t("sl.split_right") },
+                                    { id: "top", label: Tr.t("sl.split_top") },
+                                ]: Rectangle {
+                                    width: max(34px, pill-text.preferred-width + 14px);
+                                    border-radius: DesignTokens.radius-control;
+                                    background: root.split-preset == entry.id ? DesignTokens.accent : (pill-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0));
+                                    animate background { duration: Motion.fast; easing: ease-out; }
+                                    accessible-role: button;
+                                    accessible-label: entry.label;
+                                    accessible-checked: root.split-preset == entry.id;
+                                    pill-text := Text { text: entry.label; color: root.split-preset == entry.id ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 10px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                    pill-touch := TouchArea { clicked => { root.split-preset-requested(entry.id); } }
+                                }
+                                TopAction {
+                                    icon: IconSet.X;
+                                    semantic-label: Tr.t("sl.split_close");
+                                    width: 24px;
+                                    height: 22px;
+                                    clicked => { root.split-toggle-requested(); }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 if inspector-visible && !compact-shell: Rectangle {
                     width: 56px;

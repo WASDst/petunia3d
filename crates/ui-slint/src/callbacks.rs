@@ -448,6 +448,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     let prefab_items: Vec<PrefabItem> = vm.prefab_items.iter().map(to_prefab_item).collect();
     window.set_prefab_items(std::rc::Rc::new(slint::VecModel::from(prefab_items)).into());
     window.set_asset_only_favorites(vm.asset_only_favorites);
+    window.set_split_enabled(vm.split_enabled);
+    window.set_split_preset(vm.split_preset.as_str().into());
     window.set_asset_query(vm.asset_query.as_str().into());
     window.set_asset_sort_by_name(vm.asset_sort_by_name);
     window.set_asset_thumbnail_size(vm.asset_thumbnail_size);
@@ -3860,6 +3862,89 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let split_toggle_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_toggle_requested(move || {
+        if let Ok(mut bridge) = split_toggle_bridge.lock() {
+            bridge.toggle_split_view();
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let split_preset_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_preset_requested(move |id| {
+        if let Ok(mut bridge) = split_preset_bridge.lock() {
+            bridge.set_split_preset(id.as_str());
+            let vm = bridge.view_model();
+            let frame = bridge.render_split_view();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_split_view_image(frame);
+                }
+            }
+        }
+    });
+
+    let split_orbit_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_orbit(move |dx, dy| {
+        if let Ok(mut bridge) = split_orbit_bridge.lock() {
+            bridge.split.orbit(dx, dy);
+            let vm = bridge.view_model();
+            let frame = bridge.render_split_view();
+            if let Some(window) = window_weak.upgrade() {
+                window.set_split_preset(vm.split_preset.as_str().into());
+                if let Some(frame) = frame {
+                    window.set_split_view_image(frame);
+                }
+            }
+        }
+    });
+
+    let split_pan_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_pan(move |dx, dy| {
+        if let Ok(mut bridge) = split_pan_bridge.lock() {
+            bridge.split.pan(dx, dy);
+            let frame = bridge.render_split_view();
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), frame) {
+                window.set_split_view_image(frame);
+            }
+        }
+    });
+
+    let split_zoom_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_zoom(move |delta| {
+        if let Ok(mut bridge) = split_zoom_bridge.lock() {
+            bridge.split.zoom(delta);
+            let frame = bridge.render_split_view();
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), frame) {
+                window.set_split_view_image(frame);
+            }
+        }
+    });
+
+    let split_resize_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_resized(move |width, height| {
+        if let Ok(mut bridge) = split_resize_bridge.lock() {
+            bridge.split.resize(
+                width.round().max(1.0) as u32,
+                height.round().max(1.0) as u32,
+            );
+            let frame = bridge.render_split_view();
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), frame) {
+                window.set_split_view_image(frame);
             }
         }
     });

@@ -409,6 +409,7 @@ pub mod text_id {
     pub const VIEW_TOGGLE_PROJECTION: TextId = TextId::new("camera.projection");
     pub const VIEW_RESET_CAMERA: TextId = TextId::new("camera.reset");
     pub const VIEW_TOGGLE_WIREFRAME: TextId = TextId::new("shading.wire");
+    pub const VIEW_TOGGLE_SPLIT: TextId = TextId::new("view.toggle_split");
 
     pub const UV_TITLE: TextId = TextId::new("uv.title");
     pub const UV_SELECTED: TextId = TextId::new("uv.selected");
@@ -715,6 +716,7 @@ pub mod text_id {
         VIEW_TOGGLE_PROJECTION,
         VIEW_RESET_CAMERA,
         VIEW_TOGGLE_WIREFRAME,
+        VIEW_TOGGLE_SPLIT,
         UV_TITLE,
         UV_SELECTED,
         UV_FACES,

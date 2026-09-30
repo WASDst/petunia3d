@@ -8453,3 +8453,37 @@ fn test_2d_generated_object_has_quads_and_deleting_face_preserves_segment() {
         );
     }
 }
+
+#[test]
+fn split_view_opens_only_when_both_halves_fit_and_shares_the_document() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    assert!(
+        !bridge.toggle_split_view(),
+        "800 px não comporta duas vistas"
+    );
+    assert!(!bridge.view_model().split_enabled);
+    assert!(
+        bridge.view_model().status_message.contains("split")
+            || !bridge.view_model().status_message.is_empty()
+    );
+
+    bridge.resize_viewport(1600, 900);
+    bridge.state.mark_document_clean();
+    let assets = bridge.state.project.assets.len();
+    assert!(bridge.toggle_split_view());
+    let vm = bridge.view_model();
+    assert!(vm.split_enabled);
+    assert_eq!(vm.split_preset, "front");
+    assert!(bridge.set_split_preset("top"));
+    assert_eq!(bridge.view_model().split_preset, "top");
+    assert!(!bridge.set_split_preset("nao-existe"));
+    assert_eq!(bridge.state.project.assets.len(), assets);
+    assert!(
+        !bridge.state.is_document_dirty(),
+        "a vista dividida não suja o documento"
+    );
+
+    assert!(bridge.menu_item_invoked("view.toggle_split"));
+    assert!(!bridge.view_model().split_enabled, "o menu alterna e fecha");
+}

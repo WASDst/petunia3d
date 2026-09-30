@@ -417,6 +417,7 @@ comfortable = "Comfortable"
 spacious = "Spacious"
 
 [view]
+toggle_split = "Split viewport"
 frame = "Frame"
 frame_all = "Frame All"
 
@@ -1381,6 +1382,16 @@ prefab_empty_title = "No prefabs yet"
 prefab_empty_hint = "Select objects and choose Save as prefab to reuse them in any scene."
 paint_canvas_open = "Open the canvas in a floating window"
 paint_canvas_close = "Close canvas window"
+split_persp = "Persp"
+split_front = "Front"
+split_back = "Back"
+split_left = "Left"
+split_right = "Right"
+split_top = "Top"
+split_close = "Close split view"
+split_toggle = "Split viewport"
+split_toggle_hint = "Show a second 3D view to inspect another side of the model"
+split_too_narrow = "The viewport is too narrow to split."
 
 
 # Biblioteca de prefabs (mensagens de status; {name} é substituído)
