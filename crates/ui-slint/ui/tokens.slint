@@ -9,16 +9,20 @@ export global DesignTokens {
     in-out property <color> surface: #1d1f23;
     in-out property <color> surface-raised: #25282e;
     in-out property <color> surface-hover: #30343b;
+    in-out property <color> surface-pressed: #3a3f48;
     in-out property <color> border: #3a3f48;
     in-out property <color> border-strong: #545b67;
     in-out property <color> text-primary: #edf0f4;
     in-out property <color> text-secondary: #aeb5c0;
     in-out property <color> text-muted: #737b88;
     in-out property <color> accent: #b58cff;
+    /// Texto/ícone sobre `accent` (estado selecionado/ativo).
+    in-out property <color> on-accent: #101114;
     in-out property <color> focus-ring: #d1b8ff;
     in-out property <color> success: #73d59b;
     in-out property <color> warning: #e5bd67;
     in-out property <color> danger: #ef6b73;
+    in-out property <color> info: #6cb6ff;
     in-out property <color> scrim: #00000099;
     in-out property <color> disabled: #565d68;
     in-out property <color> axis-x: #ff6e6e;
@@ -50,4 +54,23 @@ export global DesignTokens {
     in-out property <length> space-xs: 4px;
     in-out property <length> space-sm: 8px;
     in-out property <length> space-md: 12px;
+}
+
+/// Tradução por chave do catálogo (`assets/locales/*.toml`, tabela `[sl]`).
+/// `revision` muda quando o idioma muda, reavaliando todo `Tr.t(...)`.
+export global Tr {
+    in property <int> revision: 0;
+    pure callback lookup(string) -> string;
+    pure public function t(key: string) -> string {
+        return self.revision >= 0 ? self.lookup(key) : "";
+    }
+}
+
+/// Tempos de movimento (cap. 36: hover ~90-120 ms, collapse ~140 ms, estrutural <= 180 ms).
+/// `reduced` é sincronizado com a preferência de movimento reduzido.
+export global Motion {
+    in-out property <bool> reduced: false;
+    out property <duration> fast: self.reduced ? 0ms : 100ms;
+    out property <duration> medium: self.reduced ? 0ms : 140ms;
+    out property <duration> slow: self.reduced ? 0ms : 180ms;
 }

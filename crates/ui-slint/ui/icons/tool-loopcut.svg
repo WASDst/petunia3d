@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Perspective quad volume / cube -->
-  <path d="M4 7l8-3 8 3v10l-8 4-8-4z" stroke="#A5AFBF" stroke-width="1.4"/>
-  <path d="M12 4v17M4 7l8 3.5 8-3.5" stroke="#A5AFBF" stroke-width="1.2"/>
-  <!-- Continuous yellow cutting loop ring -->
-  <path d="M4 12l8 3.5 8-3.5" stroke="#E5B567" stroke-width="2.4"/>
-  <circle cx="12" cy="15.5" r="2.2" fill="#E5B567" stroke="#1E1E28" stroke-width="0.8"/>
-</svg>

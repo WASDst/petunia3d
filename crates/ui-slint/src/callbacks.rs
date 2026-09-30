@@ -314,12 +314,34 @@ pub(crate) fn apply_ui_scale(window: &PetuniaSlintShell, preference: f32) {
     }
 }
 
+fn to_prefab_item(item: &crate::view_model::PrefabItemModel) -> PrefabItem {
+    let side = crate::thumbnail::THUMBNAIL_SIZE;
+    let image = item.thumbnail.as_ref().map(|rgba| {
+        slint::Image::from_rgba8(
+            slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(rgba, side, side),
+        )
+    });
+    PrefabItem {
+        id: item.id.as_str().into(),
+        name: item.name.as_str().into(),
+        parts: item.parts as i32,
+        tris: item.tris as i32,
+        verts: item.verts as i32,
+        favorite: item.favorite,
+        instances: item.instances as i32,
+        tags: item.tags.as_str().into(),
+        has_thumbnail: image.is_some(),
+        thumbnail: image.unwrap_or_default(),
+    }
+}
+
 pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewModel) {
     window.set_active_workspace(vm.workspace_label().into());
     window.set_saved(vm.saved);
     window.set_can_undo(vm.can_undo);
     window.set_can_redo(vm.can_redo);
     window.set_shortcuts((&vm.shortcuts).into());
+    window.set_status_severity(vm.status_severity);
     window.set_status_message(vm.status_message.as_str().into());
     window.set_active_tool(vm.active_tool.as_str().into());
     let domain_str = match vm.selection_domain {
@@ -425,8 +447,12 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_parts_selected_only(vm.parts_selected_only);
     window.set_parts_sort_by_name(vm.parts_sort_by_name);
     window.set_parts_row_height(vm.parts_row_height);
-    let asset_items: Vec<SceneItem> = vm.asset_items.iter().map(to_scene_item).collect();
-    window.set_asset_items(std::rc::Rc::new(slint::VecModel::from(asset_items)).into());
+    let prefab_items: Vec<PrefabItem> = vm.prefab_items.iter().map(to_prefab_item).collect();
+    window.set_prefab_items(std::rc::Rc::new(slint::VecModel::from(prefab_items)).into());
+    window.set_asset_only_favorites(vm.asset_only_favorites);
+    window.set_split_enabled(vm.split_enabled);
+    window.set_paint_pip(vm.paint_pip);
+    window.set_split_preset(vm.split_preset.as_str().into());
     window.set_asset_query(vm.asset_query.as_str().into());
     window.set_asset_sort_by_name(vm.asset_sort_by_name);
     window.set_asset_thumbnail_size(vm.asset_thumbnail_size);
@@ -468,6 +494,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
                 id: item.id.as_str().into(),
                 label: item.label.as_str().into(),
                 shortcut: item.shortcut.as_str().into(),
+                separator: item.separator,
+                disabled: item.disabled,
+                checked: item.checked,
             })
             .collect()
     };
@@ -800,6 +829,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_invert_vertical_drag(vm.invert_vertical_drag);
     window.set_colorblind_axes(vm.colorblind_axes);
     window.set_reduced_motion(vm.reduced_motion);
+    window
+        .global::<crate::Motion>()
+        .set_reduced(vm.reduced_motion);
     window.set_double_tap_interval_ms(vm.double_tap_interval_ms);
     window.set_tool_grammar_active(vm.tool_grammar_active);
     window.set_tool_gesture_latched(vm.tool_gesture_latched);
@@ -836,6 +868,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window
         .set_label_multiselection_measure_tag(vm.label_multiselection_measure_tag.as_str().into());
     window.set_active_language(vm.active_language.as_str().into());
+    crate::tr::install(window, &vm.active_language);
     window.set_ui_scale(vm.ui_scale);
     apply_ui_scale(window, vm.ui_scale);
     window.set_icon_theme(vm.icon_theme.as_str().into());
@@ -1188,6 +1221,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 let vm = bridge.view_model();
                 if let Some(window) = window_weak.upgrade() {
                     window.set_saved(vm.saved);
+                    window.set_status_severity(vm.status_severity);
                     window.set_status_message(vm.status_message.as_str().into());
                 }
             }
@@ -1205,6 +1239,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 let vm = bridge.view_model();
                 if let Some(window) = window_weak.upgrade() {
                     window.set_saved(vm.saved);
+                    window.set_status_severity(vm.status_severity);
                     window.set_status_message(vm.status_message.as_str().into());
                 }
             }
@@ -1665,6 +1700,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         {
             bridge.state.set_status(error.to_string());
             if let Some(window) = window_weak.upgrade() {
+                window.set_status_severity(3);
                 window.set_status_message(error.to_string().into());
             }
         }
@@ -4053,11 +4089,110 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let pip_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_pip_toggle_requested(move || {
+        if let Ok(mut bridge) = pip_bridge.lock() {
+            bridge.toggle_paint_pip();
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let split_toggle_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_toggle_requested(move || {
+        if let Ok(mut bridge) = split_toggle_bridge.lock() {
+            bridge.toggle_split_view();
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let split_preset_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_preset_requested(move |id| {
+        if let Ok(mut bridge) = split_preset_bridge.lock() {
+            bridge.set_split_preset(id.as_str());
+            let vm = bridge.view_model();
+            let frame = bridge.render_split_view();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_split_view_image(frame);
+                }
+            }
+        }
+    });
+
+    let split_orbit_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_orbit(move |dx, dy| {
+        if let Ok(mut bridge) = split_orbit_bridge.lock() {
+            bridge.split.orbit(dx, dy);
+            let vm = bridge.view_model();
+            let frame = bridge.render_split_view();
+            if let Some(window) = window_weak.upgrade() {
+                window.set_split_preset(vm.split_preset.as_str().into());
+                if let Some(frame) = frame {
+                    window.set_split_view_image(frame);
+                }
+            }
+        }
+    });
+
+    let split_pan_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_pan(move |dx, dy| {
+        if let Ok(mut bridge) = split_pan_bridge.lock() {
+            bridge.split.pan(dx, dy);
+            let frame = bridge.render_split_view();
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), frame) {
+                window.set_split_view_image(frame);
+            }
+        }
+    });
+
+    let split_zoom_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_zoom(move |delta| {
+        if let Ok(mut bridge) = split_zoom_bridge.lock() {
+            bridge.split.zoom(delta);
+            let frame = bridge.render_split_view();
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), frame) {
+                window.set_split_view_image(frame);
+            }
+        }
+    });
+
+    let split_resize_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_split_resized(move |width, height| {
+        if let Ok(mut bridge) = split_resize_bridge.lock() {
+            bridge.split.resize(
+                width.round().max(1.0) as u32,
+                height.round().max(1.0) as u32,
+            );
+            let frame = bridge.render_split_view();
+            if let (Some(window), Some(frame)) = (window_weak.upgrade(), frame) {
+                window.set_split_view_image(frame);
+            }
+        }
+    });
+
     let place_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_place_asset_requested(move |id| {
+    window.on_prefab_place_requested(move |id| {
         if let Ok(mut bridge) = place_bridge.lock() {
-            bridge.place_asset(id.as_str());
+            bridge.place_prefab(id.as_str());
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -4065,6 +4200,54 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 if let Some(frame) = new_frame {
                     window.set_viewport_image(frame);
                 }
+            }
+        }
+    });
+
+    let prefab_delete_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_prefab_delete_requested(move |id| {
+        if let Ok(mut bridge) = prefab_delete_bridge.lock() {
+            bridge.delete_prefab(id.as_str());
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let prefab_update_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_prefab_update_requested(move |id| {
+        if let Ok(mut bridge) = prefab_update_bridge.lock() {
+            bridge.update_prefab(id.as_str());
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let prefab_favorite_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_prefab_favorite_requested(move |id, favorite| {
+        if let Ok(mut bridge) = prefab_favorite_bridge.lock() {
+            bridge.set_prefab_favorite(id.as_str(), favorite);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let only_favorites_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_asset_only_favorites_changed(move |only| {
+        if let Ok(mut bridge) = only_favorites_bridge.lock() {
+            bridge.set_asset_only_favorites(only);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
             }
         }
     });
@@ -4150,6 +4333,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_theme_changed(move |theme_id| {
         if let Ok(mut bridge) = theme_bridge.lock() {
             bridge.apply(UiIntent::SetTheme(theme_id.as_str().to_string()));
+            persist_user_preferences(&mut bridge);
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

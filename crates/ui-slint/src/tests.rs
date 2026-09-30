@@ -590,26 +590,40 @@ fn closing_one_drawer_does_not_close_or_leave_a_ghost_for_another() {
 }
 
 #[test]
-fn asset_drawer_search_sort_and_zoom_do_not_mutate_the_document() {
+fn asset_library_holds_prefabs_not_scene_objects() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::AddPrimitive(petunia_core::PrimitiveKind::Sphere));
     bridge.state.mark_document_clean();
-    let total = bridge.view_model().scene_items.len();
-    assert!(total >= 2);
+    let scene = bridge.state.project.assets.len();
+    assert!(scene >= 2);
+    // Sem prefabs salvos a biblioteca fica vazia, mesmo com objetos na cena.
+    assert!(bridge.view_model().prefab_items.is_empty());
+
+    bridge.apply(UiIntent::SaveActiveAsAsset);
+    assert_eq!(bridge.state.project.assets.len(), scene, "a cena não muda");
+    let items = bridge.view_model().prefab_items;
+    assert_eq!(items.len(), 1);
+    assert!(items[0].thumbnail.is_some(), "miniatura renderizada");
+
     assert!(bridge.set_asset_query("sphere"));
-    let filtered = bridge.view_model();
-    assert_eq!(filtered.asset_items.len(), 1);
-    assert!(
-        filtered.asset_items[0]
-            .name
-            .to_lowercase()
-            .contains("sphere")
-    );
-    assert_eq!(filtered.scene_items.len(), total);
+    assert_eq!(bridge.view_model().prefab_items.len(), 1);
+    assert!(bridge.set_asset_query("cube"));
+    assert!(bridge.view_model().prefab_items.is_empty());
+    assert!(bridge.set_asset_query(""));
+
+    let id = items[0].id.clone();
+    assert!(bridge.set_prefab_favorite(&id, true));
+    assert!(bridge.set_asset_only_favorites(true));
+    assert_eq!(bridge.view_model().prefab_items.len(), 1);
+    assert!(bridge.place_prefab(&id));
+    assert_eq!(bridge.state.project.assets.len(), scene + 1);
+    assert_eq!(bridge.view_model().prefab_items[0].instances, 1);
+    assert!(bridge.delete_prefab(&id));
+    assert!(bridge.view_model().prefab_items.is_empty());
+
     assert!(bridge.set_asset_sort_by_name(true));
     assert!(bridge.set_asset_thumbnail_size(120.0));
     assert_eq!(bridge.view_model().asset_thumbnail_size, 120.0);
-    assert!(!bridge.state.is_document_dirty());
     assert!(!bridge.set_asset_thumbnail_size(f32::NAN));
 }
 
@@ -1573,7 +1587,7 @@ fn every_menu_item_publishes_a_real_translated_label_and_command_id() {
     ];
     for (menu, items) in menus {
         assert!(!items.is_empty(), "menu {menu} sem itens");
-        for item in items {
+        for item in items.iter().filter(|item| !item.separator) {
             assert!(!item.label.is_empty(), "{} tem rótulo vazio", item.id);
             assert!(
                 !item.label.contains('.'),
@@ -1583,6 +1597,31 @@ fn every_menu_item_publishes_a_real_translated_label_and_command_id() {
             );
         }
     }
+}
+
+#[test]
+fn menus_group_items_with_separators_and_reflect_undo_state() {
+    let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    for items in [
+        &vm.menu_file_items,
+        &vm.menu_edit_items,
+        &vm.menu_view_items,
+    ] {
+        assert!(items.iter().any(|item| item.separator), "menu sem divisor");
+        assert!(!items.first().is_some_and(|item| item.separator));
+        assert!(!items.last().is_some_and(|item| item.separator));
+        assert!(
+            !items.windows(2).any(|w| w[0].separator && w[1].separator),
+            "divisores consecutivos"
+        );
+    }
+    let undo = vm
+        .menu_edit_items
+        .iter()
+        .find(|i| i.id == "edit.undo")
+        .unwrap();
+    assert!(undo.disabled, "sem histórico, Undo deve estar desativado");
 }
 
 #[test]
@@ -4999,20 +5038,19 @@ fn camera_projection_and_reset() {
 }
 
 #[test]
-fn save_active_as_asset_intent_creates_project_asset() {
+fn save_active_as_asset_intent_creates_a_prefab_not_a_scene_object() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let initial_count = bridge.state.project.assets.len();
     assert_eq!(initial_count, 1);
 
     bridge.apply(UiIntent::SaveActiveAsAsset);
-    assert_eq!(bridge.state.project.assets.len(), initial_count + 1);
-    let saved_asset = &bridge.state.project.assets[1];
-    assert!(saved_asset.name.contains("(Asset)"));
+    assert_eq!(bridge.state.project.assets.len(), initial_count);
+    assert_eq!(bridge.state.project.prefabs.len(), 1);
     assert!(
         bridge
             .view_model()
             .status_message
-            .contains("biblioteca de assets")
+            .contains(&bridge.state.project.prefabs[0].name)
     );
 }
 
@@ -5043,7 +5081,12 @@ fn new_commands_execute_via_command_id() {
     assert_eq!(bridge.state.session.selection.assets.len(), 2);
 
     bridge.execute_command(CommandId::SaveActiveAsAsset);
-    assert_eq!(bridge.state.project.assets.len(), 3);
+    assert_eq!(
+        bridge.state.project.assets.len(),
+        2,
+        "prefab não entra na cena"
+    );
+    assert_eq!(bridge.state.project.prefabs.len(), 1);
 }
 
 #[test]
@@ -9007,6 +9050,40 @@ fn test_2d_generated_object_has_quads_and_deleting_face_preserves_segment() {
     }
 }
 
+#[test]
+fn split_view_opens_only_when_both_halves_fit_and_shares_the_document() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    assert!(
+        !bridge.toggle_split_view(),
+        "800 px não comporta duas vistas"
+    );
+    assert!(!bridge.view_model().split_enabled);
+    assert!(
+        bridge.view_model().status_message.contains("split")
+            || !bridge.view_model().status_message.is_empty()
+    );
+
+    bridge.resize_viewport(1600, 900);
+    bridge.state.mark_document_clean();
+    let assets = bridge.state.project.assets.len();
+    assert!(bridge.toggle_split_view());
+    let vm = bridge.view_model();
+    assert!(vm.split_enabled);
+    assert_eq!(vm.split_preset, "front");
+    assert!(bridge.set_split_preset("top"));
+    assert_eq!(bridge.view_model().split_preset, "top");
+    assert!(!bridge.set_split_preset("nao-existe"));
+    assert_eq!(bridge.state.project.assets.len(), assets);
+    assert!(
+        !bridge.state.is_document_dirty(),
+        "a vista dividida não suja o documento"
+    );
+
+    assert!(bridge.menu_item_invoked("view.toggle_split"));
+    assert!(!bridge.view_model().split_enabled, "o menu alterna e fecha");
+}
+
 // ---------------------------------------------------------------------------
 // Onda 1 (ADR 007): viewport nítido e bugs comprovados.
 // ---------------------------------------------------------------------------
@@ -9485,6 +9562,23 @@ fn drag_threshold_preference_separates_click_from_drag() {
         bridge.preferences.drag_threshold_px, 16.0,
         "limitado a 16 px"
     );
+}
+
+#[test]
+fn paint_pip_frames_the_camera_on_the_painted_face() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(bridge.toggle_paint_pip());
+    assert!(bridge.view_model().paint_pip);
+    let before = bridge.state.session.camera.target;
+    // Nenhuma face cobre UV fora do quadrado unitário: sem enquadramento.
+    assert!(!bridge.frame_camera_on_uv(5.0, 5.0));
+    assert_eq!(bridge.state.session.camera.target, before);
+    // Uma face real do cubo padrão é encontrada em algum ponto do quadrado.
+    let hit = (0..20)
+        .flat_map(|i| (0..20).map(move |j| (i as f32 / 20.0 + 0.02, j as f32 / 20.0 + 0.02)))
+        .any(|(u, v)| bridge.frame_camera_on_uv(u, v));
+    assert!(hit, "algum UV do cubo deve enquadrar uma face");
+    assert!(!bridge.toggle_paint_pip());
 }
 
 #[test]

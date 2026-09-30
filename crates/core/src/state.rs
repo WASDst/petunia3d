@@ -663,7 +663,7 @@ impl ToolState {
             paint_radius: 0.8,
             paint_strength: 1.0,
             paint_stroke: None,
-            canvas_brush: 4,
+            canvas_brush: 13,
             paint_brush_kind: 0,
             // 0.0 = falloff quadrático legado do Soft (semântica de duas zonas
             // do motor: hardness é a fração de núcleo sólido). A UI migra para
@@ -1029,7 +1029,7 @@ pub const PROPERTIES_MIN_WIDTH: f32 = 280.0;
 /// Teto do dock de contexto: a viewport precisa manter área útil.
 pub const PROPERTIES_MAX_WIDTH: f32 = 460.0;
 /// Altura inicial da Asset Library do shell Slint (logical px).
-pub const SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT: f32 = 200.0;
+pub const SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT: f32 = 264.0;
 /// Piso da Asset Library: cabe uma fileira de cartões com o cabeçalho.
 pub const SHELL_ASSET_LIBRARY_MIN_HEIGHT: f32 = 132.0;
 /// Teto da Asset Library: nunca cobre mais que isso da viewport.
@@ -3122,6 +3122,146 @@ impl AppState {
             return true;
         }
         false
+    }
+
+    /// Ids dos objetos a capturar: a seleção de objetos ou, sem seleção, o ativo.
+    fn selected_or_active_asset_ids(&self) -> Vec<uuid::Uuid> {
+        let live = |id: &uuid::Uuid| self.project.assets.iter().any(|a| a.id == *id);
+        let selected: Vec<uuid::Uuid> = self
+            .session
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .filter(live)
+            .collect();
+        if !selected.is_empty() {
+            return selected;
+        }
+        self.project
+            .active()
+            .map(|a| vec![a.id])
+            .unwrap_or_default()
+    }
+
+    fn prefab_status(&mut self, key: &str, name: &str) {
+        let message = self.t(key).replace("{name}", name);
+        self.set_status(message);
+    }
+
+    /// Salva a seleção (ou o objeto ativo) como **prefab** da biblioteca.
+    /// A cena não muda: o prefab vive à parte de `project.assets`.
+    pub fn save_selection_as_prefab(&mut self, name: Option<&str>) -> Option<uuid::Uuid> {
+        let ids = self.selected_or_active_asset_ids();
+        if ids.is_empty() {
+            return None;
+        }
+        self.checkpoint("save prefab");
+        let id = self.project.create_prefab(&ids, name)?;
+        let saved = self
+            .project
+            .prefabs
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.name.clone())
+            .unwrap_or_default();
+        self.prefab_status("prefab.saved", &saved);
+        self.mark_dirty();
+        Some(id)
+    }
+
+    /// Instancia o prefab na cena (posição dada ou 3D Cursor) e seleciona as cópias.
+    pub fn instantiate_prefab(
+        &mut self,
+        prefab_id: uuid::Uuid,
+        position: Option<[f32; 3]>,
+    ) -> bool {
+        let Some(name) = self
+            .project
+            .prefabs
+            .iter()
+            .find(|p| p.id == prefab_id)
+            .map(|p| p.name.clone())
+        else {
+            return false;
+        };
+        self.set_selection_domain(SelectionDomain::Object);
+        self.checkpoint("instantiate prefab");
+        let target = position.unwrap_or(self.session.cursor_3d);
+        let created = self.project.instantiate_prefab(prefab_id, target);
+        if created.is_empty() {
+            return false;
+        }
+        self.session.selection.assets = created;
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.prefab_status("prefab.instantiated", &name);
+        self.mark_dirty();
+        true
+    }
+
+    /// Remove o prefab da biblioteca (instâncias na cena permanecem).
+    pub fn delete_prefab(&mut self, prefab_id: uuid::Uuid) -> bool {
+        let Some(name) = self
+            .project
+            .prefabs
+            .iter()
+            .find(|p| p.id == prefab_id)
+            .map(|p| p.name.clone())
+        else {
+            return false;
+        };
+        self.checkpoint("delete prefab");
+        self.project.remove_prefab(prefab_id);
+        self.prefab_status("prefab.deleted", &name);
+        self.mark_dirty();
+        true
+    }
+
+    pub fn rename_prefab(&mut self, prefab_id: uuid::Uuid, name: &str) -> bool {
+        let exists = self.project.prefabs.iter().any(|p| p.id == prefab_id);
+        if !exists || name.trim().is_empty() {
+            return false;
+        }
+        self.checkpoint("rename prefab");
+        if !self.project.rename_prefab(prefab_id, name) {
+            return false;
+        }
+        self.prefab_status("prefab.renamed", name.trim());
+        self.mark_dirty();
+        true
+    }
+
+    pub fn set_prefab_favorite(&mut self, prefab_id: uuid::Uuid, favorite: bool) -> bool {
+        let changed = self.project.set_prefab_favorite(prefab_id, favorite);
+        if changed {
+            self.mark_dirty();
+        }
+        changed
+    }
+
+    /// Re-captura o prefab a partir da seleção atual; instâncias antigas ficam desatualizadas.
+    pub fn update_prefab_from_selection(&mut self, prefab_id: uuid::Uuid) -> bool {
+        let ids = self.selected_or_active_asset_ids();
+        let Some(name) = self
+            .project
+            .prefabs
+            .iter()
+            .find(|p| p.id == prefab_id)
+            .map(|p| p.name.clone())
+        else {
+            return false;
+        };
+        if ids.is_empty() {
+            return false;
+        }
+        self.checkpoint("update prefab");
+        if !self.project.update_prefab_from(prefab_id, &ids) {
+            return false;
+        }
+        self.prefab_status("prefab.updated", &name);
+        self.mark_dirty();
+        true
     }
 
     /// Limite canônico do nome de ativo exibido no Outliner e nos painéis.

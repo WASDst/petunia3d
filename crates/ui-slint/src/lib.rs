@@ -15,7 +15,10 @@ pub mod files;
 mod input;
 pub mod numeric;
 pub mod overlay;
+pub mod split_view;
 pub mod theme;
+pub mod thumbnail;
+pub mod tr;
 pub mod viewport_gpu;
 pub mod viewport_soft;
 
@@ -564,6 +567,10 @@ pub type DecalDragInitial = (f32, f32, [f32; 2], [f32; 2], f32);
 
 /// Bridge entre callbacks Slint e a aplicação. O bridge só aplica intenção
 /// semântica ao `AppState`; algoritmos geométricos permanecem no core/commands.
+/// Miniaturas RGBA por (prefab, revisão); `None` = prefab sem geometria.
+type PrefabThumbCache =
+    std::collections::HashMap<(uuid::Uuid, u32), Option<std::sync::Arc<Vec<u8>>>>;
+
 pub struct SlintUiBridge<V: PetuniaViewport> {
     pub state: AppState,
     pub viewport: V,
@@ -572,6 +579,14 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub asset_library_visible: bool,
     pub asset_query: String,
     pub asset_sort_by_name: bool,
+    /// Biblioteca: mostra só prefabs favoritos.
+    pub asset_only_favorites: bool,
+    /// Vista 3D secundária opcional (viewport dividida).
+    pub split: split_view::SplitView,
+    /// PiP do Paint: canvas 2D grande + inset 3D com auto-enquadramento.
+    pub paint_pip: bool,
+    /// Miniaturas renderizadas por (prefab, revisão); `None` = sem geometria.
+    prefab_thumbs: std::cell::RefCell<PrefabThumbCache>,
     pub parts_query: String,
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
@@ -767,6 +782,9 @@ pub struct ContextMenuState {
     pub viewport: bool,
 }
 
+/// Id reservado que representa um divisor entre grupos de itens de menu.
+pub const MENU_SEPARATOR: &str = "-";
+
 /// Menus da barra superior do shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuKind {
@@ -808,24 +826,30 @@ impl MenuKind {
             Self::File => &[
                 ("file.new", T::FILE_NEW, "Ctrl+N"),
                 ("file.open", T::FILE_OPEN_PROJECT, "Ctrl+O"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("file.save", T::FILE_SAVE, "Ctrl+S"),
                 ("file.save_as", T::FILE_SAVE_AS, "Ctrl+Shift+S"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("file.import_obj", T::FILE_IMPORT_OBJ, ""),
             ],
             Self::Edit => &[
                 ("edit.undo", T::EDIT_UNDO, "Ctrl+Z"),
                 ("edit.redo", T::EDIT_REDO, "Ctrl+Shift+Z"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("edit.duplicate", T::UI_DUPLICATE, "Shift+D"),
             ],
             Self::View => &[
                 ("view.frame_selection", T::VIEW_FRAME, "F"),
                 ("view.frame_all", T::VIEW_FRAME_ALL, "Home"),
+                ("view.reset_camera", T::VIEW_RESET_CAMERA, "Shift+Home"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("view.toggle_projection", T::VIEW_TOGGLE_PROJECTION, "O"),
                 ("view.toggle_wireframe", T::VIEW_TOGGLE_WIREFRAME, "Z"),
-                ("view.reset_camera", T::VIEW_RESET_CAMERA, "Shift+Home"),
+                ("view.toggle_split", T::VIEW_TOGGLE_SPLIT, ""),
             ],
             Self::Window => &[
                 ("window.command_palette", T::MENU_COMMAND_PALETTE, "Ctrl+P"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("window.settings", T::MENU_PREFERENCES, ""),
             ],
         }
@@ -910,6 +934,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             asset_library_visible: false,
             asset_query: String::new(),
             asset_sort_by_name: false,
+            asset_only_favorites: false,
+            split: split_view::SplitView::default(),
+            paint_pip: false,
+            prefab_thumbs: Default::default(),
             parts_query: String::new(),
             parts_selected_only: false,
             parts_sort_by_name: false,
@@ -1220,7 +1248,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             UiIntent::SetBrushSize(size) => {
-                self.state.session.tools.paint_radius = size.clamp(0.01, 100.0);
+                let size = size.clamp(0.01, 100.0);
+                self.state.session.tools.paint_radius = size;
+                // O pincel do canvas 2D usa o mesmo tamanho (px) do slider.
+                self.state.session.tools.canvas_brush =
+                    petunia_core::brush_size_px_from_slider(size)
+                        .round()
+                        .max(1.0) as u32;
             }
             UiIntent::SetBrushOpacity(opacity) => {
                 self.state.session.tools.paint_strength = opacity.clamp(0.0, 1.0);
@@ -1459,10 +1493,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 );
             }
             UiIntent::SaveActiveAsAsset => {
-                if self.state.save_active_as_asset() {
-                    self.state
-                        .set_status("Ativo salvo na biblioteca de assets.");
-                }
+                // "Save as asset" cria um prefab da biblioteca; a cena não muda.
+                self.state.save_selection_as_prefab(None);
             }
             UiIntent::AssignMaterialSlot(slot) => {
                 self.assign_material_slot(slot);
@@ -1687,8 +1719,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
     }
 
-    pub fn render_viewport(&mut self) -> Option<slint::Image> {
-        let render_state = ViewportRenderState {
+    /// Opções de render compartilhadas pela vista principal e pela secundária.
+    fn viewport_render_state(&self) -> ViewportRenderState {
+        ViewportRenderState {
             shading: self.state.session.shading,
             xray: self.state.session.show_xray,
             show_triangulation: self.state.session.show_triangulation,
@@ -1706,7 +1739,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
             edge_mode: self.edge_mode(),
             workplane: self.workplane_overlay(),
-        };
+        }
+    }
+
+    pub fn render_viewport(&mut self) -> Option<slint::Image> {
+        let render_state = self.viewport_render_state();
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
         self.viewport.render_frame(
@@ -5524,6 +5561,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !norm_x.is_finite() || !norm_y.is_finite() {
             return false;
         }
+        if self.paint_pip && phase == 0 {
+            self.frame_camera_on_uv(norm_x, norm_y);
+        }
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
         let (width, height) = match self
             .state
@@ -5878,6 +5918,173 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Liga/desliga a viewport dividida. Recusa (com aviso) quando a vista
+    /// principal ficaria abaixo de `MIN_SPLIT_VIEW_WIDTH` por metade.
+    pub fn toggle_split_view(&mut self) -> bool {
+        if self.split.enabled {
+            self.split.close();
+            return true;
+        }
+        if self.viewport_size[0] < 2.0 * split_view::MIN_SPLIT_VIEW_WIDTH {
+            self.state.set_status(self.state.t("sl.split_too_narrow"));
+            return false;
+        }
+        self.split.open(&self.state.session.camera);
+        true
+    }
+
+    pub fn set_split_preset(&mut self, id: &str) -> bool {
+        use petunia_core::ViewPreset;
+        let preset = match id {
+            "persp" => ViewPreset::Persp,
+            "front" => ViewPreset::Front,
+            "back" => ViewPreset::Back,
+            "left" => ViewPreset::Left,
+            "right" => ViewPreset::Right,
+            "top" => ViewPreset::Top,
+            _ => return false,
+        };
+        self.split.set_preset(preset);
+        true
+    }
+
+    /// Quadro da vista secundária, apenas quando algo mudou.
+    pub fn render_split_view(&mut self) -> Option<slint::Image> {
+        if !self.split.enabled {
+            return None;
+        }
+        let state = self.viewport_render_state();
+        self.split
+            .render(&self.state.project, &self.state.project.refs, state)
+    }
+
+    pub fn toggle_paint_pip(&mut self) -> bool {
+        self.paint_pip = !self.paint_pip;
+        self.paint_pip
+    }
+
+    /// Enquadra a câmera 3D na face cujo UV contém `(u, v)` (PiP do Paint).
+    /// Tenta `v` e `1 - v`, pois o canvas tem origem no topo.
+    pub fn frame_camera_on_uv(&mut self, u: f32, v: f32) -> bool {
+        fn inside(poly: &[[f32; 2]], p: [f32; 2]) -> bool {
+            (1..poly.len().saturating_sub(1)).any(|i| {
+                let (a, b, c) = (poly[0], poly[i], poly[i + 1]);
+                let d = |p1: [f32; 2], p2: [f32; 2], p3: [f32; 2]| {
+                    (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+                };
+                let (d1, d2, d3) = (d(p, a, b), d(p, b, c), d(p, c, a));
+                let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+                let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+                !(neg && pos)
+            })
+        }
+        let Some(mesh) = self.state.project.active_mesh() else {
+            return false;
+        };
+        let hit = [[u, v], [u, 1.0 - v]].into_iter().find_map(|p| {
+            mesh.faces
+                .iter()
+                .find(|f| f.uv.len() >= 3 && inside(&f.uv, p))
+        });
+        let Some(face) = hit else {
+            return false;
+        };
+        let points: Vec<glam::Vec3> = face
+            .verts
+            .iter()
+            .filter_map(|&i| mesh.verts.get(i as usize))
+            .map(|v| glam::Vec3::from_array(v.pos))
+            .collect();
+        if points.is_empty() {
+            return false;
+        }
+        let center = points.iter().copied().sum::<glam::Vec3>() / points.len() as f32;
+        let radius = points
+            .iter()
+            .map(|p| p.distance(center))
+            .fold(0.0f32, f32::max);
+        self.state
+            .session
+            .camera
+            .frame(center, radius.max(0.25) * 2.5);
+        true
+    }
+
+    pub fn set_asset_only_favorites(&mut self, only: bool) -> bool {
+        if self.asset_only_favorites == only {
+            return false;
+        }
+        self.asset_only_favorites = only;
+        true
+    }
+
+    /// Prefabs da biblioteca filtrados/ordenados pela busca atual, com miniatura em cache.
+    fn prefab_item_models(&self) -> Vec<view_model::PrefabItemModel> {
+        use petunia_project::model_library::{ModelLibraryQuery, ModelLibrarySort};
+        let query = ModelLibraryQuery {
+            search: self.asset_query.clone(),
+            only_favorites: self.asset_only_favorites,
+            sort: if self.asset_sort_by_name {
+                ModelLibrarySort::NameAsc
+            } else {
+                ModelLibrarySort::IndexAsc
+            },
+            ..Default::default()
+        };
+        let project = &self.state.project;
+        let mut thumbs = self.prefab_thumbs.borrow_mut();
+        let live: std::collections::HashSet<(uuid::Uuid, u32)> =
+            project.prefabs.iter().map(|p| (p.id, p.revision)).collect();
+        thumbs.retain(|key, _| live.contains(key));
+        project
+            .prefab_summaries(&query)
+            .into_iter()
+            .map(|summary| {
+                let prefab = &project.prefabs[summary.original_index];
+                let thumbnail = thumbs
+                    .entry((prefab.id, prefab.revision))
+                    .or_insert_with(|| {
+                        thumbnail::render_prefab_thumbnail(prefab).map(std::sync::Arc::new)
+                    })
+                    .clone();
+                view_model::PrefabItemModel {
+                    id: summary.id.to_string(),
+                    name: summary.name,
+                    parts: summary.parts,
+                    tris: summary.triangles,
+                    verts: summary.vertices,
+                    favorite: summary.favorite,
+                    instances: summary.instances,
+                    tags: summary.tags.join(", "),
+                    thumbnail,
+                }
+            })
+            .collect()
+    }
+
+    /// Instancia o prefab no 3D Cursor e seleciona as cópias.
+    pub fn place_prefab(&mut self, id: &str) -> bool {
+        let Ok(prefab) = uuid::Uuid::parse_str(id) else {
+            return false;
+        };
+        self.sync_viewport_context();
+        self.state.instantiate_prefab(prefab, None)
+    }
+
+    pub fn delete_prefab(&mut self, id: &str) -> bool {
+        uuid::Uuid::parse_str(id).is_ok_and(|prefab| self.state.delete_prefab(prefab))
+    }
+
+    pub fn set_prefab_favorite(&mut self, id: &str, favorite: bool) -> bool {
+        uuid::Uuid::parse_str(id)
+            .is_ok_and(|prefab| self.state.set_prefab_favorite(prefab, favorite))
+    }
+
+    pub fn update_prefab(&mut self, id: &str) -> bool {
+        uuid::Uuid::parse_str(id)
+            .is_ok_and(|prefab| self.state.update_prefab_from_selection(prefab))
+    }
+
     pub fn set_asset_sort_by_name(&mut self, sort_by_name: bool) -> bool {
         if self.asset_sort_by_name == sort_by_name {
             return false;
@@ -6049,7 +6256,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             dismiss_on_escape: true,
             dismiss_on_click_away: true,
         });
-        self.state.set_status("Reference Sets · P3D-013");
+        self.state.set_status(self.state.t("sl.reference_images"));
         true
     }
 
@@ -6306,6 +6513,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.apply(UiIntent::DuplicateActiveAsset);
                 true
             }
+            "view.toggle_split" => self.toggle_split_view(),
             "window.command_palette" => {
                 self.apply(UiIntent::OpenCommandSearch);
                 true
@@ -6904,6 +7112,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// passam preferências construídas à mão em vez de tocar o disco.
     pub fn restore_section_layouts(&mut self, preferences: &petunia_config::UserPreferences) {
         self.preferences = preferences.clone();
+        if !preferences.theme_id.is_empty() {
+            self.state.ui.active_theme_id = preferences.theme_id.clone();
+        }
         self.tool_session
             .set_drag_threshold_px(preferences.drag_threshold_px);
         self.state.session.snap_settings.radius_pixels =
@@ -6945,6 +7156,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.preferences.selection_thickness = self.state.ui.selection_thickness;
         self.preferences.model_quick_actions = self.state.ui.model_quick_actions.clone();
         self.preferences.active_keymap_id = self.state.ui.active_keymap_id.clone();
+        self.preferences.theme_id = self.state.ui.active_theme_id.clone();
     }
 
     /// Persist runtime section layouts; failures surface as status, never panic.
@@ -9984,7 +10196,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "pixel" => petunia_core::BrushType::Pixel,
             _ => settings.kind,
         };
-        settings.size_px = (self.state.session.tools.paint_radius * 16.0).max(2.0);
+        settings.size_px =
+            petunia_core::brush_size_px_from_slider(self.state.session.tools.paint_radius);
         settings.sanitized()
     }
 
@@ -10148,7 +10361,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         color,
                     );
                 } else {
-                    let radius = (self.state.session.tools.paint_radius * 8.0).max(1.0) as u32;
+                    let radius = (petunia_core::brush_size_px_from_slider(
+                        self.state.session.tools.paint_radius,
+                    ) * 0.5)
+                        .max(1.0) as u32;
                     let strength = self.state.session.tools.paint_strength;
                     let isolate = self.state.session.tools.paint_isolate_selection;
                     petunia_module_paint::PaintModule::paint_mesh_3d(
@@ -11604,21 +11820,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.asset_query = self.asset_query.clone();
         vm.asset_sort_by_name = self.asset_sort_by_name;
         vm.asset_thumbnail_size = self.state.ui.asset_thumbnail_size;
-        let query = self.asset_query.trim().to_lowercase();
-        vm.asset_items = vm
-            .scene_items
-            .iter()
-            .filter(|item| query.is_empty() || item.name.to_lowercase().contains(&query))
-            .cloned()
-            .collect();
-        if self.asset_sort_by_name {
-            vm.asset_items.sort_by(|a, b| {
-                a.name
-                    .to_lowercase()
-                    .cmp(&b.name.to_lowercase())
-                    .then_with(|| a.id.cmp(&b.id))
-            });
-        }
+        vm.asset_only_favorites = self.asset_only_favorites;
+        vm.split_enabled = self.split.enabled;
+        vm.paint_pip = self.paint_pip;
+        vm.split_preset = self.split.preset_id().to_string();
+        vm.prefab_items = self.prefab_item_models();
         vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
         vm.selection_overlay = compute_selection_overlay(
             &self.state,
@@ -12073,8 +12279,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .iter()
                 .map(|(id, label, shortcut)| MenuEntryModel {
                     id: (*id).to_string(),
-                    label: translated(*label),
+                    label: if *id == MENU_SEPARATOR {
+                        String::new()
+                    } else {
+                        translated(*label)
+                    },
                     shortcut: (*shortcut).to_string(),
+                    separator: *id == MENU_SEPARATOR,
+                    disabled: match *id {
+                        "edit.undo" => !vm.can_undo,
+                        "edit.redo" => !vm.can_redo,
+                        _ => false,
+                    },
+                    checked: match *id {
+                        "view.toggle_wireframe" => vm.is_wireframe,
+                        "view.toggle_projection" => vm.is_orthographic,
+                        "view.toggle_split" => self.split.enabled,
+                        _ => false,
+                    },
                 })
                 .collect();
             match kind {
@@ -12727,6 +12949,9 @@ pub fn run() -> Result<(), slint::PlatformError> {
     // restore below. / Clone (no máximo 6 ids curtos): `preferences` segue
     // íntegro para o restore das seções abaixo.
     state.ui.model_quick_actions = preferences.model_quick_actions.clone();
+    if !preferences.theme_id.is_empty() {
+        state.ui.active_theme_id = preferences.theme_id.clone();
+    }
     if !preferences.active_keymap_id.is_empty() {
         state.ui.active_keymap_id = preferences.active_keymap_id.clone();
         state.ui.keybinds = petunia_config::Keybinds::load_profile(&preferences.active_keymap_id);
@@ -12873,8 +13098,28 @@ pub fn run() -> Result<(), slint::PlatformError> {
         },
     );
 
+    // Vista dividida: re-renderiza (só se algo mudou) enquanto estiver aberta,
+    // para acompanhar edições feitas na vista principal.
+    let split_bridge = Arc::clone(&bridge);
+    let split_window = window.as_weak();
+    let split_timer = slint::Timer::default();
+    split_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(80),
+        move || {
+            if let Ok(mut bridge) = split_bridge.lock()
+                && bridge.split.enabled
+                && let Some(frame) = bridge.render_split_view()
+                && let Some(window) = split_window.upgrade()
+            {
+                window.set_split_view_image(frame);
+            }
+        },
+    );
+
     println!("Petunia3D window ready");
     let result = window.run();
+    drop(split_timer);
 
     drop(airbrush_timer);
     drop(autosave_timer);

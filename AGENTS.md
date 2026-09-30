@@ -129,9 +129,12 @@ Motivo: o caderno canônico em `docs/bible/` é a única fonte da verdade; o sit
 - Cadeia funcional: `Tool → Command → Algorithm → Data`. Tool não chama Tool.
 - Mutations são transacionais; documento com single-writer; jobs operam em snapshots.
 - `unsafe` isolado e auditável.
-- UI Baseline V1 congelada, com revisões de 2026-09-23 e 2026-09-29 (cap. 36,
-  ADR 007): workspaces `DRAW / POLY / PAINT / UV`, trilho de ferramentas-esquerda /
-  Inspector-direita com Parts como primeira seção / Asset Library-abaixo, dark oficial,
+- UI Baseline V1 congelada, com revisões de 2026-09-23, 2026-09-29 (DRAW / POLY,
+  ADR 007) e 2026-09-30 (painéis flutuantes não modais, até 2 viewports opcionais,
+  tema claro, Paint+UV unificados; cap. 36): workspaces `DRAW / POLY / PAINT` (a
+  edição de UV vive em "Preparar superfície" dentro do PAINT), trilho de
+  ferramentas-esquerda / Inspector-direita com Parts como primeira seção /
+  Asset Library-abaixo, dark oficial,
   Petunia Components como linguagem visual. Não reintroduzir docking irrestrito,
   clone de Blender, acesso cru a egui/wgpu para plugins nem reabrir `UI-OPEN`.
 - Vocabulário de usuário (cap. 13): **Point**, **Round Edge**, **Fuse**, **Cut**,

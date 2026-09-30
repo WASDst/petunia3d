@@ -37,11 +37,11 @@ def solid(*bits: str) -> str:
 
 
 def ink(*bits: str) -> str:
-    return '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
+    return '<g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
 
 
 def detail(*bits: str) -> str:
-    return '<g fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
+    return '<g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
 
 
 def add(key: str, group: str, label: str, outline: str, filled: str, status: str = 'current') -> None:
@@ -58,7 +58,7 @@ def badge(base: str, mark_o: str, mark_f: str, key: str, group: str, label: str,
     """A base silhouette occupies 17 px; an independently legible mark occupies the corner."""
     _, _, o, f, _ = ICONS[base]
     add(key, group, label,
-        f'<g transform="translate(1 1) scale(.78)">{o}</g>' + c(18, 18, 5, fill='#252735', stroke='currentColor', stroke_width='1.4') + ink(mark_o),
+        f'<g transform="translate(1 1) scale(.78)">{o}</g>' + c(18, 18, 5, fill='#252735', stroke='currentColor', stroke_width='1.75') + ink(mark_o),
         f'<g transform="translate(1 1) scale(.78)">{f}</g>' + c(18, 18, 5, fill='#252735') + solid(mark_f), status)
 
 
@@ -178,10 +178,14 @@ add('symmetrize', M, 'Symmetrize', ink(p('M12 2v20', stroke_dasharray='2 2'), p(
 add('separate', M, 'Separate Selection', ink(p('M3 7l6-3 5 3-6 3zM3 7v10l5 3 6-3V7M16 10l5-3v10l-5 3z'), p('M11 12h7m-3-3 3 3-3 3')), solid(p('M2 7 9 3l5 3v12l-6 3-6-4zM17 9l5-3v12l-5 3z')))
 add('revolve', M, 'Revolve', ink(p('M8 5v14M8 5q11-1 10 7t-10 7M4 4v16', stroke_dasharray='3 2'), p('M18 8l3 4-3 3')), solid(p('M7 4h3v16H7zM10 4c8-1 12 3 12 8s-4 9-12 8v-3c6 0 9-2 9-5s-3-5-9-5z')))
 add('spin', M, 'Spin', ink(p('M3 18 9 20l3-5-6-2zM12 15c8 2 11-6 5-10M15 4l2 1 1 3')), solid(p('M2 18 6 12l7 3-4 6zM12 15c7 0 10-6 5-10l-2 1c3 3 1 7-3 7zM15 3l5 2-1 5-2-3z')))
-add('boolean_fuse', M, 'Fuse', ink(r(3, 5, 12, 13, 2), c(16, 12, 6), p('M10 5v13')), solid(p('M5 4h8a3 3 0 0 1 3 2 7 7 0 0 1 1 13H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z')))
-add('boolean_cut', M, 'Cut', ink(r(3, 5, 12, 13, 2), c(16, 12, 6), p('M12 8v8', stroke_dasharray='2 2')), solid(p('M5 4h9v3H5v10h8v3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zM16 7a5 5 0 0 1 0 10v-3a2 2 0 0 0 0-4z')))
-add('boolean_intersect', M, 'Intersect', ink(r(3, 5, 12, 13, 2), c(16, 12, 6), p('M11 8v8')), solid(p('M11 6a6 6 0 0 1 7 6 6 6 0 0 1-7 6z')))
-add('boolean_join', M, 'Join', ink(r(2, 5, 10, 13, 2), c(17, 12, 5), p('M12 12h5m-2-2 2 2-2 2')), solid(r(2, 5, 10, 13, 2), c(17, 12, 5)))
+UNION = 'M12 6.8A6 6 0 1 0 12 17.2A6 6 0 1 0 12 6.8z'
+BITE = 'M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8z'
+LENS = 'M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8z'
+add('boolean_fuse', M, 'Fuse', ink(p(UNION)), solid(p(UNION)))
+add('boolean_cut', M, 'Cut', ink(p(BITE), p('M12 6.8A6 6 0 1 1 12 17.2', stroke_dasharray='2 2.4')), solid(p(BITE)) + ink(p('M12 6.8A6 6 0 1 1 12 17.2', stroke_dasharray='2 2.4')))
+OUTER = ink(p('M12 6.8A6 6 0 1 0 12 17.2', stroke_dasharray='2 2.4'), p('M12 6.8A6 6 0 1 1 12 17.2', stroke_dasharray='2 2.4'))
+add('boolean_intersect', M, 'Intersect', ink(p(LENS)) + OUTER, solid(p(LENS)) + OUTER)
+add('boolean_join', M, 'Join', ink(c(6.5, 12, 4.5), c(17.5, 12, 4.5), p('M11 12h2')), solid(c(6.5, 12, 4.5), c(17.5, 12, 4.5)) + ink(p('M10 12h4')))
 
 U = 'UV & materials'
 add('uv_editor', U, 'UV Editor', ink(r(2, 2, 20, 20, 1), p('M2 12h20M12 2v20M4 4l6 3 1 3-7 1zM14 14l7 1-3 6-5-2z')), solid(r(2, 2, 20, 20, 1)) + ink(p('M2 12h20M12 2v20M4 4l6 3 1 3-7 1zM14 14l7 1-3 6-5-2z', stroke='#252735')))
@@ -378,6 +382,39 @@ COMMAND_OVERRIDES = {
 }
 
 
+def redraw(key: str, label: str, outline: str, filled: str) -> None:
+    """Substitui a arte de um ID que antes só reaproveitava outro ícone (ambiguidade)."""
+    group, _, _, _, status = ICONS[key]
+    ICONS[key] = group, label, outline, filled, status
+
+
+HEX = 'M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z'
+FACET = 'M3.5 9h17M3.5 15h17'
+redraw('shade_flat', 'Shade Flat', ink(p(HEX), p(FACET)), solid(p(HEX)) + ink(p(FACET, stroke='#252735')))
+SMOOTH = 'M7.5 9.5a6 6 0 0 1 4-3.5M8 16c2.5 2 6.5 1.5 8.5-2'
+redraw('shade_smooth', 'Shade Smooth', ink(c(12, 12, 9), p(SMOOTH)), solid(c(12, 12, 9)) + ink(p(SMOOTH, stroke='#252735')))
+CORNERS = 'M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3'
+redraw('isolate', 'Isolate', ink(r(7, 7, 10, 10, 2), p(CORNERS)), solid(r(6, 6, 12, 12, 2)) + ink(p(CORNERS)))
+FACE = 'M4 17l8-4 8 4-8 4z'
+ARROW = 'M12 13V3m-3.5 3.5L12 3l3.5 3.5'
+redraw('normals_overlay', 'Normals Overlay', ink(p(FACE), p(ARROW)), solid(p(FACE)) + ink(p(ARROW)))
+FLIP = 'M8 20V9m-3 3 3-3 3 3M16 4v11m-3-3 3 3 3-3'
+redraw('flip_normals', 'Flip Normals', ink(p(FLIP)), ink(p(FLIP, stroke_width='2.5')))
+BACK = 'M12 12l9-5M12 12 3 7M12 12v10'
+redraw('backface_culling', 'Backface Culling', ink(p(CUBE), p(BACK, stroke_dasharray='2 2.4')), solid(p('M12 12l9-5v10l-9 5z')) + ink(p(CUBE)))
+redraw('bounding_box', 'Bounding Box', ink(r(4, 4, 16, 16, 1, stroke_dasharray='3 2.4')) + solid(c(4, 4, 1.8), c(20, 4, 1.8), c(4, 20, 1.8), c(20, 20, 1.8)), solid(r(7, 7, 10, 10, 1)) + ink(r(3, 3, 18, 18, 1, stroke_dasharray='3 2.4')) + solid(c(3, 3, 1.8), c(21, 3, 1.8), c(3, 21, 1.8), c(21, 21, 1.8)))
+MAX = 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'
+redraw('maximize', 'Maximize', ink(p(MAX)), solid(r(7, 7, 10, 10, 1)) + ink(p(MAX)))
+redraw('minimize', 'Minimize', ink(p('M6 18h12')), ink(p('M6 18h12'), ) + solid(r(6, 15, 12, 4, 1)))
+AXES = 'M12 3v18M3 12h18'
+redraw('origin', 'Origin', ink(p(AXES)) + solid(c(12, 12, 3)), solid(c(12, 12, 5)) + ink(p(AXES)))
+redraw('selection_center', 'Selection Center', ink(r(3, 3, 18, 18, 2, stroke_dasharray='3 2.4')) + solid(c(12, 12, 2.6)), solid(r(3, 3, 18, 18, 2)) + solid(c(12, 12, 3.4, fill='#252735')))
+redraw('paint', 'Paint Roller', ink(r(4, 3, 14, 6, 1.5), p('M18 6h2v5h-9v3'), r(9, 14, 4, 7, 1)), solid(r(4, 3, 14, 6, 1.5), r(9, 14, 4, 7, 1)) + ink(p('M18 6h2v5h-9v3')))
+REF = 'M9 14l3-3 3 3 2-2 2 2'
+redraw('reference_manager', 'Reference Manager', ink(r(6, 3, 15, 13, 2), p('M3 8v11a2 2 0 0 0 2 2h11'), c(11, 8, 1.4), p(REF)), solid(r(6, 3, 15, 13, 2)) + ink(p('M3 8v11a2 2 0 0 0 2 2h11')) + ink(p(REF, stroke='#252735')))
+redraw('object_mesh', 'Object Mesh', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7')) + solid(c(12, 2, 1.6), c(21, 7, 1.6), c(21, 17, 1.6), c(12, 22, 1.6), c(3, 17, 1.6), c(3, 7, 1.6), c(12, 12, 1.6)), solid(p(CUBE)) + solid(c(12, 12, 1.8, fill='#252735')))
+
+
 def command_map() -> dict[str, str]:
     repo = ROOT.parent.parent
     commands = set(re.findall(r'\| `(\w+\.\w+)` \|', (repo / 'docs/generated/COMMANDS.md').read_text()))
@@ -392,12 +429,87 @@ def command_map() -> dict[str, str]:
     return result
 
 
+KNOCKOUT = '#252735'
+SHAPES = {'path', 'circle', 'rect', 'ellipse', 'line', 'polygon', 'polyline'}
+
+
+def _tag(el: ET.Element) -> str:
+    return el.tag.split('}')[-1]
+
+
+def _open(el: ET.Element, **override: str | None) -> str:
+    attrs = dict(el.attrib)
+    for key, value in override.items():
+        key = key.replace('_', '-')
+        if value is None:
+            attrs.pop(key, None)
+        else:
+            attrs[key] = value
+    return '<' + _tag(el) + ''.join(f' {k}="{html.escape(v, quote=True)}"' for k, v in attrs.items())
+
+
+def _wrap(chain: list[ET.Element], leaf: str) -> str:
+    for group in reversed(chain):
+        leaf = _open(group) + '>' + leaf + '</g>'
+    return leaf
+
+
+def themeable(geometry: str) -> str:
+    """Turn background-coloured "knockout" strokes/fills into real SVG masks.
+
+    Icons are authored with `#252735` marks that fake a cut-out on a dark panel. That
+    only works on one background. Here every knockout becomes transparent in a mask
+    applied to everything drawn before it, so the art is monochrome `currentColor`
+    with real holes and can be tinted by any theme (Slint `colorize`).
+    """
+    root = ET.fromstring(f'<svg xmlns="http://www.w3.org/2000/svg">{geometry}</svg>')
+    content: list[str] = []
+    pending: list[str] = []
+    counter = 0
+
+    def flush() -> None:
+        nonlocal content, pending, counter
+        if not pending:
+            return
+        counter += 1
+        mask = (f'<mask id="k{counter}" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">'
+                '<rect width="24" height="24" fill="#fff"/>' + ''.join(pending) + '</mask>')
+        content = [mask, f'<g mask="url(#k{counter})">' + ''.join(content) + '</g>']
+        pending = []
+
+    def walk(el: ET.Element, chain: list[ET.Element]) -> None:
+        for child in el:
+            if _tag(child) == 'g':
+                walk(child, chain + [child])
+                continue
+            if _tag(child) not in SHAPES:
+                content.append(ET.tostring(child, encoding='unicode'))
+                continue
+            fill, stroke = child.get('fill'), child.get('stroke')
+            if fill == KNOCKOUT or stroke == KNOCKOUT:
+                if fill == KNOCKOUT:
+                    pending.append(_wrap(chain, _open(child, fill='#000', stroke='none') + '/>'))
+                    if stroke not in (None, 'none', KNOCKOUT):
+                        flush()
+                        content.append(_wrap(chain, _open(child, fill='none') + '/>'))
+                else:
+                    keep_fill = None if fill is None else fill
+                    pending.append(_wrap(chain, _open(child, stroke='#000', fill=keep_fill or 'none') + '/>'))
+            else:
+                flush()
+                content.append(_wrap(chain, _open(child) + '/>'))
+
+    walk(root, [])
+    flush()
+    return ''.join(content)
+
+
 def svg(label: str, geometry: str) -> str:
     safe_label = html.escape(label)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-            f'width="24" height="24" color="#E8EBF2" role="img" '
+            f'width="24" height="24" role="img" '
             f'aria-label="{safe_label}"><title>{safe_label}</title>'
-            f'{geometry}</svg>\n')
+            f'{themeable(geometry)}</svg>\n')
 
 
 def slug(group: str) -> str:
@@ -422,7 +534,7 @@ header{display:flex;align-items:end;justify-content:space-between;gap:24px;flex-
 .controls{display:flex;gap:10px;flex-wrap:wrap}input,select,button{background:#242836;border:1px solid #485065;border-radius:8px;color:#e8ebf2;padding:9px 12px;font:inherit}
 input{width:245px}button{cursor:pointer}button[aria-pressed=true]{border-color:#b58cff;background:#44345f}
 main{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:12px}.card{background:#1c202b;border:1px solid #343b4e;border-radius:10px;padding:12px;min-height:127px}
-.tile{height:49px;display:flex;align-items:center}.tile img{width:32px;height:32px}.name{font-weight:600;margin-bottom:4px}code{font:11px ui-monospace,monospace;color:#aeb7cc;overflow-wrap:anywhere}small{display:block;color:#b58cff;margin-top:4px}
+.tile{height:49px;display:flex;align-items:center}.tile img{width:32px;height:32px;filter:invert(1) brightness(.92)}.name{font-weight:600;margin-bottom:4px}code{font:11px ui-monospace,monospace;color:#aeb7cc;overflow-wrap:anywhere}small{display:block;color:#b58cff;margin-top:4px}
 .card[hidden]{display:none}footer{color:#aeb7cc;margin-top:25px}
 </style><header><div><h1>Petunia3D · Icon System</h1><p>Original 24 × 24 SVGs · transparent canvas · MODEL / PAINT / UV and editor actions · <span id="count"></span> visible</p></div>
 <div class="controls"><input id="search" type="search" placeholder="Search icon or ID" aria-label="Search icons"><select id="group" aria-label="Category"><option value="">All categories</option>''' + options + '''</select>

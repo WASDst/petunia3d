@@ -115,6 +115,10 @@ impl SectionLayout {
     }
 }
 
+fn default_theme_id() -> String {
+    "petunia-dark".to_string()
+}
+
 /// Limiar padrão de arrasto; igual a `petunia_core::DEFAULT_DRAG_THRESHOLD_PX`.
 const fn default_drag_threshold_px() -> f32 {
     4.0
@@ -173,6 +177,10 @@ pub struct UserPreferences {
     pub multiselection_measure_tag: bool,
     /// Perfil ativo de atalhos de teclado ("petunia-default", "blender", "maya", "3ds-max", etc.).
     pub active_keymap_id: String,
+    /// Tema de cores ativo (`petunia-dark`, `petunia-light`, `petunia-high-contrast`
+    /// ou um tema externo). Id desconhecido cai no dark ao aplicar.
+    #[serde(default = "default_theme_id")]
+    pub theme_id: String,
     /// Tema dos ícones da interface ("outline" ou "filled").
     /// Icon theme of the user interface ("outline" or "filled").
     #[serde(default = "default_icon_theme")]
@@ -202,6 +210,7 @@ impl Default for UserPreferences {
             reduced_motion: false,
             multiselection_measure_tag: true,
             active_keymap_id: "petunia-default".to_string(),
+            theme_id: default_theme_id(),
             icon_theme: "outline".to_string(),
             section_layouts: BTreeMap::new(),
         }
@@ -245,6 +254,9 @@ impl UserPreferences {
         }
         if preferences.active_keymap_id.is_empty() {
             preferences.active_keymap_id = "petunia-default".to_string();
+        }
+        if preferences.theme_id.trim().is_empty() {
+            preferences.theme_id = default_theme_id();
         }
         if !matches!(preferences.icon_theme.as_str(), "outline" | "filled") {
             preferences.icon_theme = "outline".to_string();
@@ -333,6 +345,7 @@ mod tests {
             reduced_motion: false,
             multiselection_measure_tag: true,
             active_keymap_id: "blender".to_string(),
+            theme_id: "petunia-light".to_string(),
             icon_theme: "outline".to_string(),
             double_tap_interval_ms: 300,
             drag_threshold_px: 6.0,

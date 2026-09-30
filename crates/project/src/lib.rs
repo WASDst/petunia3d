@@ -82,6 +82,7 @@ pub mod paint_layers;
 pub mod palette;
 pub mod path_generator;
 pub mod pipeline;
+pub mod prefab;
 pub mod profile;
 pub mod rig;
 pub mod rig_roles;
@@ -912,6 +913,13 @@ pub struct Project {
     /// Receitas de movimento procedural (P3D-170). Append-only.
     #[serde(default)]
     pub motions: Vec<MotionRecipe>,
+    /// Biblioteca de prefabs (snapshots reutilizáveis, separados da cena).
+    /// Append-only: fica após todos os campos existentes (layout postcard).
+    #[serde(default)]
+    pub prefabs: Vec<prefab::Prefab>,
+    /// Vínculo instância → prefab de origem.
+    #[serde(default)]
+    pub prefab_links: Vec<prefab::PrefabLink>,
 }
 
 impl Project {
@@ -963,6 +971,8 @@ impl Default for Project {
             rig_roles: Vec::new(),
             ik_chains: Vec::new(),
             motions: Vec::new(),
+            prefabs: Vec::new(),
+            prefab_links: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1423,6 +1433,8 @@ impl Project {
             rig_roles: Vec::new(),
             ik_chains: Vec::new(),
             motions: Vec::new(),
+            prefabs: Vec::new(),
+            prefab_links: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),

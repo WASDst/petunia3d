@@ -2,7 +2,7 @@
 //!
 //! Atualiza as propriedades dinâmicas do singleton `DesignTokens` em tempo de execução.
 
-use petunia_config::{ThemeRegistry, ThemeToken};
+use petunia_config::{ShellToken, ThemeRegistry, ThemeToken};
 use slint::ComponentHandle;
 
 use crate::{DesignTokens, PetuniaSlintShell};
@@ -19,21 +19,37 @@ pub fn apply_theme(window: &PetuniaSlintShell, theme_id: &str) {
         slint::Color::from_argb_u8(c.0[3], c.0[0], c.0[1], c.0[2])
     };
 
+    let shell = |token: ShellToken| -> slint::Color {
+        let c = theme.shell.get(token);
+        slint::Color::from_argb_u8(c.0[3], c.0[0], c.0[1], c.0[2])
+    };
+
     tokens.set_canvas(to_slint(ThemeToken::BgCanvas));
-    tokens.set_surface(to_slint(ThemeToken::BgSurface));
-    tokens.set_surface_raised(to_slint(ThemeToken::BgSurfaceActive));
+    tokens.set_surface(to_slint(ThemeToken::BgPanel));
+    tokens.set_surface_raised(to_slint(ThemeToken::BgSurface));
     tokens.set_surface_hover(to_slint(ThemeToken::BgSurfaceHover));
+    tokens.set_surface_pressed(to_slint(ThemeToken::BgSurfaceActive));
     tokens.set_border(to_slint(ThemeToken::BorderSubtle));
     tokens.set_border_strong(to_slint(ThemeToken::BorderStrong));
     tokens.set_text_primary(to_slint(ThemeToken::TextPrimary));
     tokens.set_text_secondary(to_slint(ThemeToken::TextSecondary));
     tokens.set_text_muted(to_slint(ThemeToken::TextMuted));
     tokens.set_accent(to_slint(ThemeToken::AccentBlue));
+    tokens.set_on_accent(to_slint(ThemeToken::TextActive));
     tokens.set_focus_ring(to_slint(ThemeToken::BorderFocus));
     tokens.set_success(to_slint(ThemeToken::StatusSuccess));
     tokens.set_warning(to_slint(ThemeToken::StatusWarning));
     tokens.set_danger(to_slint(ThemeToken::StatusError));
+    tokens.set_info(to_slint(ThemeToken::StatusInfo));
     tokens.set_selection(to_slint(ThemeToken::AccentOrange));
+    tokens.set_selection_active(shell(ShellToken::SelectionActive));
+    tokens.set_disabled(shell(ShellToken::Disabled));
+    tokens.set_hover(shell(ShellToken::HoverHighlight));
+    tokens.set_scrim(shell(ShellToken::Scrim));
+    tokens.set_shadow(shell(ShellToken::Shadow));
+    tokens.set_shadow_subtle(shell(ShellToken::ShadowSubtle));
+    tokens.set_hud_surface(shell(ShellToken::HudSurface));
+    tokens.set_hud_border(shell(ShellToken::HudBorder));
 }
 
 #[cfg(test)]
@@ -45,6 +61,7 @@ mod tests {
         let registry = ThemeRegistry::global();
         assert!(registry.get_theme("petunia-dark").is_some());
         assert!(registry.get_theme("petunia-high-contrast").is_some());
+        assert!(registry.get_theme("petunia-light").is_some());
     }
 
     #[test]
@@ -54,6 +71,7 @@ mod tests {
             return;
         };
         apply_theme(&window, "petunia-dark");
+        apply_theme(&window, "petunia-light");
         apply_theme(&window, "petunia-high-contrast");
     }
 }
