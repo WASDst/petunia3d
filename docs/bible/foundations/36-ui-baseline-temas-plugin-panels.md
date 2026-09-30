@@ -99,7 +99,7 @@ Regras:
 - double-click em divisor restaura medida default;
 - estado de layout é persistido por workspace;
 - plugin panels entram apenas em **extension slots** controlados;
-- nenhuma janela flutuante arbitrária na V1.
+- nenhuma janela flutuante arbitrária na V1 (painéis flutuantes autorizados e não modais seguem a revisão de 2026-09-30).
 
 ## Revisão de baseline MODEL — 2026-09-23
 
@@ -113,6 +113,56 @@ um drawer controlado à direita; ele não é uma segunda lista independente.
 Os slots de extensão permanecem controlados e nenhum plugin pode deslocar as
 seções centrais nem reintroduzir docking livre. PAINT e UV mantêm contratos
 próprios até revisão explícita.
+
+## Revisão de baseline — 2026-09-30
+
+Aprovada explicitamente pelo responsável do produto na iniciativa de redesenho da
+GUI (motion, painéis flutuantes, Asset Library, Paint/UV, ícones, i18n). Esta
+revisão **substitui** apenas os pontos listados; nada mais do capítulo é reaberto.
+
+1. **Painéis flutuantes não modais.** Superfícies auxiliares autorizadas
+   (Reference Manager, Settings, Asset Library expandida, Paint Canvas) passam a
+   ser `FloatingPanel`: sem scrim, cabeçalho arrastável, posição e tamanho
+   limitados à janela e persistidos por painel, empilhamento LIFO no
+   `OverlayStack` e `Esc` só fecha o painel em foco. Modal bloqueante fica
+   restrito a confirmações destrutivas. Isso **não** reintroduz docking livre nem
+   janelas arbitrárias de plugin.
+2. **Viewport dividida opcional.** Cada workspace pode exibir **até 2 viewports
+   3D** (divisão vertical ou horizontal). Regras: nunca é o padrão nem é
+   necessária para nenhum fluxo; ativada por comando (`CommandId`) e botão no
+   Viewport Control; cada viewport tem câmera própria e presets (Front/Side/Top/
+   Persp); seleção, undo e documento são compartilhados (single-writer
+   preservado); o divisor respeita o piso de `480 × 360` por viewport ou a divisão
+   é recusada com feedback; fechar a divisão devolve a câmera principal. Quad-view
+   e mais de 2 viewports continuam fora de escopo.
+3. **Asset Library dupla.** Gaveta inferior compacta (busca, miniaturas, arrastar
+   para a cena) **e** workspace/janela de gestão (catálogos, tags, favoritos,
+   detalhe). Um asset da biblioteca é um **Prefab** (`Prefab`: id, nome,
+   origem, tags, coleção, favorito, miniatura) distinto do objeto da cena;
+   instâncias mantêm o vínculo de origem.
+4. **PAINT + UV unificados.** O workspace UV separado permanece fora da UI
+   (pill UV removida). O fluxo é um único workspace **PAINT** com: viewport 3D,
+   Paint Canvas 2D (pan/zoom, composite, wireframe UV opcional), divisão 3D/2D e
+   modo câmera-sobre-câmera (2D em escala maior, 3D reduzido, com auto-enquadramento
+   da região pintada). Edição de UV (projeções, unwrap, ilhas) vive em "Preparar
+   superfície" dentro do PAINT. O controle de texturas evolui para um **grafo de
+   nós de textura** (Texture Graph) como modelo de dados de material/camadas,
+   apresentado por padrão como pilha de camadas acessível; o editor de nós é
+   avançado e opcional. O desenho do Texture Graph exige spec própria antes de
+   implementação.
+5. **Tema claro oficial.** `petunia-light` é tema oficial: neutros quentes
+   suaves (fundos `#E4E2DC`–`#EFEDE8`, nunca branco puro), texto com contraste
+   WCAG AA (≥ 4,5:1) e o mesmo accent floral ajustado em luminância. Dark
+   continua o padrão.
+6. **i18n obrigatório.** Todo texto visível em `.slint` vem do catálogo
+   (`TextId`, chaves em `assets/locales/*.toml`), sem literais. Idiomas iniciais:
+   inglês (`en`) e português do Brasil (`pt-BR`), com teste de paridade.
+7. **Sistema de ícones.** Um único pack (`petunia-outline`/`petunia-filled`),
+   grade 24, traço 1,75, `currentColor` tingido por `ThemeToken`; validado por
+   `xtask`. O set legado e a fonte egui são aposentados.
+8. **Motion.** Hover/pressed/foco animados em ~90–120 ms em todo controle
+   interativo, seções e cards com transição de altura ~140 ms, `reduced-motion`
+   respeitado por um único token global.
 
 # Design System Final V1
 
@@ -177,7 +227,7 @@ Warning/error/success usam famílias semânticas próprias.
 
 ## Tema oficial
 
-Dark é o tema completo oficial da V1. High Contrast é variação oficial de acessibilidade. Light pode surgir depois sem alterar a arquitetura porque todos os estilos usam tokens semânticos.
+Dark é o tema completo oficial da V1. High Contrast é variação oficial de acessibilidade. Light (`petunia-light`) é oficial desde a revisão de 2026-09-30, sem alterar a arquitetura, porque todos os estilos usam tokens semânticos.
 
 # Theme Extension API
 
@@ -554,6 +604,9 @@ Workspace não implementado não aparece como pill desabilitada.
 
 ### Adendo 2026-09-16 — iniciativa Paint (decisão registrada)
 
+> Atualizado em 2026-09-30: a pill UV permanece fora da UI e o fluxo Paint+UV
+> é unificado no workspace PAINT (ver "Revisão de baseline — 2026-09-30").
+
 Durante a iniciativa Paint, a **pill UV sai temporariamente da UI V1**. O
 workspace de edição UV é congelado porque o `uv_ui` alterna `f.selected`, a
 mesma flag das máscaras de pintura (P3D-132), e o próprio P3D-063 exigia
@@ -592,8 +645,8 @@ egui layout
 Repaint é event-driven em idle e contínuo somente quando interação/motion/job
 visual exigir.
 
-V1 possui um viewport 3D principal por workspace. Multi-viewport/quad-view
-fica para evolução posterior.
+V1 possui um viewport 3D principal por workspace, com **divisão opcional em até 2
+viewports** (revisão de 2026-09-30). Quad-view fica para evolução posterior.
 
 # Testes e conformance
 

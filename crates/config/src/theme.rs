@@ -133,6 +133,7 @@ pub struct Theme {
     #[serde(skip)]
     pub manifest: Option<ThemeManifest>,
     pub colors: ThemeColors,
+    pub shell: ShellColors,
     pub font: ThemeFont,
 }
 
@@ -184,32 +185,112 @@ impl Default for ThemeFont {
 }
 
 impl Default for ThemeColors {
+    /// Paleta do `petunia-dark` (baseline cap. 36). Os nomes `accent_blue` e
+    /// `accent_orange` são históricos: hoje carregam o accent floral (violeta)
+    /// e a cor de seleção (laranja), respectivamente.
     fn default() -> Self {
         Self {
-            bg_canvas: "#17181c".into(),
-            bg_header: "#202126".into(),
-            bg_panel: "#24252a".into(),
-            bg_panel_header: "#292a30".into(),
-            bg_surface: "#30323a".into(),
-            bg_surface_hover: "#3b3d47".into(),
-            bg_surface_active: "#474a56".into(),
-            text_primary: "#f0f2f5".into(),
-            text_secondary: "#a3a7b5".into(),
-            text_muted: "#6e7280".into(),
-            text_active: "#ffffff".into(),
-            accent_blue: "#3b82f6".into(),
-            accent_orange: "#f97316".into(),
-            accent_hover: "#60a5fa".into(),
-            accent_border: "#2563eb".into(),
-            border_subtle: "#32343c".into(),
-            border_strong: "#434652".into(),
-            border_focus: "#3b82f6".into(),
-            status_info: "#38bdf8".into(),
-            status_warning: "#fbbf24".into(),
-            status_error: "#f87171".into(),
-            status_success: "#4ade80".into(),
+            bg_canvas: "#101114".into(),
+            bg_header: "#17181c".into(),
+            bg_panel: "#1d1f23".into(),
+            bg_panel_header: "#22252a".into(),
+            bg_surface: "#25282e".into(),
+            bg_surface_hover: "#30343b".into(),
+            bg_surface_active: "#3a3f48".into(),
+            text_primary: "#edf0f4".into(),
+            text_secondary: "#aeb5c0".into(),
+            text_muted: "#8a919e".into(),
+            text_active: "#101114".into(),
+            accent_blue: "#b58cff".into(),
+            accent_orange: "#e96a00".into(),
+            accent_hover: "#c9a8ff".into(),
+            accent_border: "#9b6df0".into(),
+            border_subtle: "#2e3238".into(),
+            border_strong: "#454b56".into(),
+            border_focus: "#d1b8ff".into(),
+            status_info: "#6cb6ff".into(),
+            status_warning: "#e5bd67".into(),
+            status_error: "#ef6b73".into(),
+            status_success: "#73d59b".into(),
             resolved: OnceLock::new(),
         }
+    }
+}
+
+/// Tokens de shell que não fazem parte dos 22 `ThemeToken` legados e são
+/// consumidos apenas pela UI Slint (`DesignTokens`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ShellToken {
+    SelectionActive,
+    Disabled,
+    HoverHighlight,
+    Scrim,
+    Shadow,
+    ShadowSubtle,
+    HudSurface,
+    HudBorder,
+}
+
+/// Cores de shell por tema. Valores em hex `#rrggbb` ou `#rrggbbaa`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShellColors {
+    pub selection_active: String,
+    pub disabled: String,
+    pub hover_highlight: String,
+    pub scrim: String,
+    pub shadow: String,
+    pub shadow_subtle: String,
+    pub hud_surface: String,
+    pub hud_border: String,
+}
+
+impl Default for ShellColors {
+    fn default() -> Self {
+        Self {
+            selection_active: "#ffaf29".into(),
+            disabled: "#565d68".into(),
+            hover_highlight: "#7ddcff".into(),
+            scrim: "#00000099".into(),
+            shadow: "#00000088".into(),
+            shadow_subtle: "#00000055".into(),
+            hud_surface: "#14141ee6".into(),
+            hud_border: "#3a3f48".into(),
+        }
+    }
+}
+
+impl ShellColors {
+    fn hex_for(&self, token: ShellToken) -> (&str, &str) {
+        let d = |t: ShellToken| match t {
+            ShellToken::SelectionActive => "#ffaf29",
+            ShellToken::Disabled => "#565d68",
+            ShellToken::HoverHighlight => "#7ddcff",
+            ShellToken::Scrim => "#00000099",
+            ShellToken::Shadow => "#00000088",
+            ShellToken::ShadowSubtle => "#00000055",
+            ShellToken::HudSurface => "#14141ee6",
+            ShellToken::HudBorder => "#3a3f48",
+        };
+        let v = match token {
+            ShellToken::SelectionActive => &self.selection_active,
+            ShellToken::Disabled => &self.disabled,
+            ShellToken::HoverHighlight => &self.hover_highlight,
+            ShellToken::Scrim => &self.scrim,
+            ShellToken::Shadow => &self.shadow,
+            ShellToken::ShadowSubtle => &self.shadow_subtle,
+            ShellToken::HudSurface => &self.hud_surface,
+            ShellToken::HudBorder => &self.hud_border,
+        };
+        (v.as_str(), d(token))
+    }
+
+    /// Resolve o token; valor inválido cai no default escuro.
+    pub fn get(&self, token: ShellToken) -> ColorRgba {
+        let (v, fallback) = self.hex_for(token);
+        Theme::hex(v)
+            .or_else(|| Theme::hex(fallback))
+            .unwrap_or(ColorRgba::WHITE)
     }
 }
 
@@ -442,7 +523,8 @@ impl ThemeRegistry {
 
     /// IDs oficiais de V1 (capítulo 36). Nenhum outro tema é embutido: temas
     /// adicionais são declarações externas carregadas do diretório do usuário.
-    pub const OFFICIAL_V1_THEME_IDS: [&'static str; 2] = ["petunia-dark", "petunia-high-contrast"];
+    pub const OFFICIAL_V1_THEME_IDS: [&'static str; 3] =
+        ["petunia-dark", "petunia-light", "petunia-high-contrast"];
 
     fn register_builtin_themes(&mut self) {
         // Petunia Dark — tema completo oficial da V1 (default).
@@ -459,6 +541,59 @@ impl ThemeRegistry {
         };
         self.manifests.push(dark_manifest.clone());
         self.themes.insert("petunia-dark".into(), dark_theme);
+
+        // Petunia Light — tema claro oficial (revisão cap. 36, 2026-09-30):
+        // neutros quentes, sem branco puro, para conforto visual prolongado.
+        let light_manifest = ThemeManifest {
+            id: "petunia-light".into(),
+            name: "Petunia Light".into(),
+            version: "1.0.0".into(),
+            author: Some("Petunia3D Team".into()),
+            description: Some("Tema claro suave, neutros quentes sem branco puro".into()),
+        };
+        let light_colors = ThemeColors {
+            bg_canvas: "#dcdad3".into(),
+            bg_header: "#e9e7e1".into(),
+            bg_panel: "#efede8".into(),
+            bg_panel_header: "#e6e4de".into(),
+            bg_surface: "#f6f5f1".into(),
+            bg_surface_hover: "#e3e1da".into(),
+            bg_surface_active: "#d6d3ca".into(),
+            text_primary: "#24262b".into(),
+            text_secondary: "#4c515b".into(),
+            text_muted: "#626772".into(),
+            text_active: "#ffffff".into(),
+            accent_blue: "#7c4dd6".into(),
+            accent_orange: "#d45a00".into(),
+            accent_hover: "#6a3cc4".into(),
+            accent_border: "#5b2fb0".into(),
+            border_subtle: "#d2cfc6".into(),
+            border_strong: "#b3afa4".into(),
+            border_focus: "#5b2fb0".into(),
+            status_info: "#1f6fb2".into(),
+            status_warning: "#8a5f00".into(),
+            status_error: "#c93b45".into(),
+            status_success: "#2f8a55".into(),
+            ..Default::default()
+        };
+        let light_shell = ShellColors {
+            selection_active: "#c98a00".into(),
+            disabled: "#a9a69c".into(),
+            hover_highlight: "#0a8fb5".into(),
+            scrim: "#2b271f66".into(),
+            shadow: "#3a2f1f33".into(),
+            shadow_subtle: "#3a2f1f1f".into(),
+            hud_surface: "#f5f3eeee".into(),
+            hud_border: "#cfccc2".into(),
+        };
+        let light_theme = Theme {
+            manifest: Some(light_manifest.clone()),
+            colors: light_colors,
+            shell: light_shell,
+            font: ThemeFont::default(),
+        };
+        self.manifests.push(light_manifest.clone());
+        self.themes.insert("petunia-light".into(), light_theme);
 
         // Petunia High Contrast — variação oficial de acessibilidade da V1.
         let hc_manifest = ThemeManifest {
@@ -479,7 +614,7 @@ impl ThemeRegistry {
             text_primary: "#ffffff".into(),
             text_secondary: "#e6e6e6".into(),
             text_muted: "#b8b8b8".into(),
-            text_active: "#ffffff".into(),
+            text_active: "#000000".into(),
             accent_blue: "#00b0ff".into(),
             accent_orange: "#ffb000".into(),
             accent_hover: "#4dd0ff".into(),
@@ -497,6 +632,13 @@ impl ThemeRegistry {
         let hc_theme = Theme {
             manifest: Some(hc_manifest.clone()),
             colors: hc_colors,
+            shell: ShellColors {
+                selection_active: "#ffd400".into(),
+                disabled: "#8a8a8a".into(),
+                hud_surface: "#000000f2".into(),
+                hud_border: "#a0a0a0".into(),
+                ..Default::default()
+            },
             font: ThemeFont::default(),
         };
         self.manifests.push(hc_manifest.clone());
@@ -618,6 +760,60 @@ mod tests {
                 manifest.id,
                 ratio_panel
             );
+        }
+    }
+
+    #[test]
+    fn test_light_theme_is_soft_not_pure_white() {
+        let theme = ThemeRegistry::global()
+            .get_theme("petunia-light")
+            .cloned()
+            .expect("petunia-light must be registered");
+        for token in [
+            ThemeToken::BgCanvas,
+            ThemeToken::BgHeader,
+            ThemeToken::BgPanel,
+            ThemeToken::BgSurface,
+        ] {
+            let c = theme.colors.get_token_color(token);
+            assert_ne!(c, ColorRgba::WHITE, "{token:?} must not be pure white");
+            assert!(
+                relative_luminance(c) < 0.92,
+                "{token:?} must stay soft (luminance < 0.92)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_text_on_accent_meets_aa_in_every_theme() {
+        let registry = ThemeRegistry::global();
+        for manifest in registry.available() {
+            let theme = registry.get_theme(&manifest.id).unwrap();
+            let on = theme.colors.get_token_color(ThemeToken::TextActive);
+            let accent = theme.colors.get_token_color(ThemeToken::AccentBlue);
+            let ratio = contrast_ratio(on, accent);
+            assert!(
+                ratio >= 4.5,
+                "{} on-accent contrast {ratio:.2} < 4.5",
+                manifest.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_secondary_and_muted_text_meet_aa_on_panel() {
+        let registry = ThemeRegistry::global();
+        for manifest in registry.available() {
+            let theme = registry.get_theme(&manifest.id).unwrap();
+            let panel = theme.colors.get_token_color(ThemeToken::BgPanel);
+            for token in [ThemeToken::TextSecondary, ThemeToken::TextMuted] {
+                let ratio = contrast_ratio(theme.colors.get_token_color(token), panel);
+                assert!(
+                    ratio >= 4.5,
+                    "{} {token:?} on panel {ratio:.2} < 4.5",
+                    manifest.id
+                );
+            }
         }
     }
 }

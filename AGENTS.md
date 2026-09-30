@@ -124,7 +124,7 @@ Motivo: o caderno canônico em `docs/bible/` é a única fonte da verdade; o sit
 - Cadeia funcional: `Tool → Command → Algorithm → Data`. Tool não chama Tool.
 - Mutations são transacionais; documento com single-writer; jobs operam em snapshots.
 - `unsafe` isolado e auditável.
-- UI Baseline V1 congelada, com revisão MODEL de 2026-09-23 (cap. 36): workspaces
+- UI Baseline V1 congelada, com revisões de 2026-09-23 (MODEL) e 2026-09-30 (painéis flutuantes não modais, até 2 viewports opcionais, tema claro, Paint+UV unificados; cap. 36): workspaces
   `MODEL / PAINT / UV`, barra de criação-esquerda / Inspector-direita com Parts
   como primeira seção / Asset Library-abaixo, dark oficial,
   Petunia Components como linguagem visual. Não reintroduzir docking irrestrito,
