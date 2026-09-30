@@ -1,16 +1,16 @@
-# ADR 006 — Workspaces DRAW e POLY e gramática única de ferramenta
+# ADR 007 — Workspaces DRAW e POLY e gramática única de ferramenta
 
 Status: aceito em 2026-09-29 por autorização explícita do responsável do produto.
 Autoridade: [Livro Vivo, capítulo 36](../../bible/foundations/36-ui-baseline-temas-plugin-panels.md)
 (revisão de workspaces de 2026-09-29) e [constituição 11](../../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md).
-Pesquisa de apoio: [capítulo 45](../../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md).
+Pesquisa de apoio: [capítulo 46](../../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md).
 Este ADR registra o motivo; não cria uma segunda baseline.
 
 ## Contexto
 
 O responsável do produto avaliou que seguir a filosofia do Blender deixou a
 modelagem poligonal inconsistente e a modelagem por desenho ainda pior. A
-auditoria de 2026-09-29 (capítulo 45, seção 2) confirmou:
+auditoria de 2026-09-29 (capítulo 46, seção 2) confirmou:
 
 - a documentação prática tratava `Blender.svg` como referência visual canônica e
   o manual do Blender como referência de interação;
@@ -61,7 +61,7 @@ manipulação direta, snapping, esboço e acessibilidade motora.
    pela preferência de acessibilidade "arrastar sem segurar". Não é o padrão.
 4. **Referências:** `Blender.svg` e o manual do Blender deixam de ser
    referências canônicas. A referência visual é o próprio sistema Petunia
-   (capítulos 23, 24 e 36); as referências de interação estão no capítulo 45.
+   (capítulos 23, 24 e 36); as referências de interação estão no capítulo 46.
 
 ## Consequências
 

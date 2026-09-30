@@ -26,7 +26,7 @@ flowchart LR
 
 **Star não faz parte do Core V1.** Pode ser adicionada posteriormente como conveniência V1.x ou por plugin, sem aumentar a superfície inicial de criação.
 
-A Pen Tool inicial gera linhas poligonais. Bézier verdadeira fica para uma evolução posterior, evitando que o projeto dependa de um sistema completo de curvas paramétricas. Quando a curva livre entrar no workspace DRAW, a direção preferida é interpolar os pontos clicados sem alças (κ-curves, [capítulo 45](45-pesquisa-interacao-modelagem-referencias.md)), sempre discretizada com contagem de segmentos explícita.
+A Pen Tool inicial gera linhas poligonais. Bézier verdadeira fica para uma evolução posterior, evitando que o projeto dependa de um sistema completo de curvas paramétricas. Quando a curva livre entrar no workspace DRAW, a direção preferida é interpolar os pontos clicados sem alças (κ-curves, [capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)), sempre discretizada com contagem de segmentos explícita.
 
 O desenho do Petunia é **planar 3D modeling**, não desenho 2D ambíguo: cada Profile está associado a um Work Plane conhecido no espaço 3D. O sistema conhece origem, eixos do plano, normal, posição e contexto de operação. Isso elimina a necessidade de inferir livremente onde um stroke existe no espaço.
 

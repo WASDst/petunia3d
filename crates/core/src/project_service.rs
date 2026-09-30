@@ -273,6 +273,7 @@ impl ProjectService {
         let mut imported_names = Vec::new();
         if !payload.meshes.is_empty() {
             state.checkpoint("import via pipeline");
+            let first_new_asset = state.project.assets.len();
             for (name, mesh) in payload.meshes {
                 state.project.add(&name, mesh);
                 imported_names.push(name);
@@ -280,10 +281,19 @@ impl ProjectService {
             for mat in payload.materials {
                 state.project.add_material(mat);
             }
+            let mut warnings = payload.warnings;
+            if let Some(rig) = payload.rig {
+                warnings.extend(state.project.add_imported_rig(rig, first_new_asset));
+            }
             state.sync_selection();
             state.emit_mesh_changed();
+            let note = if warnings.is_empty() {
+                String::new()
+            } else {
+                format!(" ({} warning(s): {})", warnings.len(), warnings[0])
+            };
             state.set_status(format!(
-                "imported {} assets from {}",
+                "imported {} assets from {}{note}",
                 imported_names.len(),
                 path.display()
             ));

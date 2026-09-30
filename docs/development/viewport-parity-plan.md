@@ -3,7 +3,7 @@
 Data da reconciliação: 23/09/2026. Base: `f94b888` em `main` de `wasd-lat/petunia3d`.
 Fontes: Livro Vivo (`docs/bible/`), dois anexos de especificação da interface,
 três capturas de defeitos, código e comportamento do executável. Referência de
-interação: Livro Vivo, [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md) e [capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md) (ADR 006, 2026-09-29). O [manual do Blender](https://docs.blender.org/manual/en/latest/modeling/meshes/selecting/introduction.html) deixou de ser referência de interação e fica apenas como comparação histórica.
+interação: Livro Vivo, [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md) e [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md) (ADR 007, 2026-09-29). O [manual do Blender](https://docs.blender.org/manual/en/latest/modeling/meshes/selecting/introduction.html) deixou de ser referência de interação e fica apenas como comparação histórica.
 
 **Regra de estado:** `Concluído` exige comportamento integrado, teste com
 assertivas de resultado, regressão visual real, cancelamento/Undo aplicáveis e

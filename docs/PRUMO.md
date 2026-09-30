@@ -12,7 +12,7 @@ Roteador central de intenção e mapa canônico de navegação do projeto **Petu
 ## 0. Fonte Canônica (Livro Vivo)
 
 - [Petunia3D — Livro Vivo](bible/index.md) — raiz canônica: visão, escopo, arquitetura, UI Baseline, stack e governança.
-- [Especificações P3D — Readiness e Gauntlet Waves](bible/especificacoes-p3d-readiness-gauntlet-waves.md) — catálogo P3D-001 a P3D-168, epics, readiness e waves.
+- [Especificações P3D — Readiness e Gauntlet Waves](bible/especificacoes-p3d-readiness-gauntlet-waves.md) — catálogo P3D-001 a P3D-174, epics, readiness e waves.
 - [Status de implementação das especificações](bible/status/p3d-implementation-status.md) — artefato operacional (não é autoridade documental).
 - [Auditoria de conformidade documental](audits/bible-conformance/README.md) — o que em `docs/` divergia do caderno e as sessões de correção.
 
@@ -57,7 +57,7 @@ Roteador central de intenção e mapa canônico de navegação do projeto **Petu
 - [Registros de Decisões Arquiteturais (ADRs)](architecture/adr/README.md):
   - [ADR 001: Linha de Base Arquitetural](architecture/adr/001-architecture-baseline.md)
   - [ADR 32: Migração da Baseline Odin para Rust](bible/foundations/32-adr-odin-para-rust.md)
-- [Petunia3D — Livro Vivo](bible/index.md) — 251 páginas canônicas (00–16, 01–45, P3D-001–168, seções A–O, adendos):
+- [Petunia3D — Livro Vivo](bible/index.md) — 258 páginas canônicas (00–16, 01–46, P3D-001–174, seções A–O, adendos):
   - [Workflow Shape-First](bible/foundations/02-workflow-modelagem-shape-first.md)
   - [Geometria e Topologia](bible/foundations/03-geometry-core-faces-topologia.md)
   - [Combine, Fuse, Weld e Personagens](bible/foundations/04-combine-fuse-weld-personagens.md)

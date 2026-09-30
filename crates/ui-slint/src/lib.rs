@@ -247,7 +247,7 @@ impl ToolModalKind {
     }
 }
 
-/// Ferramenta que segue a gramática única (constituição 11, ADR 006).
+/// Ferramenta que segue a gramática única (constituição 11, ADR 007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GrammarTool {
     /// Move, Rotate e Scale: arrasto livre ("haul") ou pelas alças do gizmo.
@@ -675,7 +675,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// Região de perfil sob o cursor (Push/Pull e Draw), destacada no hover.
     pub region_hover: Option<petunia_core::RegionHit>,
     /// DRAW ou POLY: mesmos documento, seleção, câmera e Inspector; muda o
-    /// trilho de ferramentas (ADR 006).
+    /// trilho de ferramentas (ADR 007).
     pub modeling_mode: ModelingMode,
     /// Regiões por plano, recalculadas só quando o documento muda.
     region_planes_cache: Option<([u64; 11], petunia_core::RegionPlanes)>,
@@ -694,7 +694,7 @@ pub enum GeometryClipboard {
     Asset(Box<petunia_project::Asset>),
 }
 
-/// Modo do workspace de modelagem (ADR 006): DRAW trabalha no nível de forma,
+/// Modo do workspace de modelagem (ADR 007): DRAW trabalha no nível de forma,
 /// POLY no nível de componente.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModelingMode {
@@ -4845,7 +4845,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         });
     }
 
-    /// Uma única passada de snap em espaço de tela (P3D-040, ADR 006 Onda 3).
+    /// Uma única passada de snap em espaço de tela (P3D-040, ADR 007 Onda 3).
     ///
     /// `cursor` em px lógicos da viewport. Durante uma operação, a malha de
     /// origem congelada é o alvo e os vértices que se movem são ignorados;
@@ -8827,7 +8827,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Botão direito na viewport: abre o menu de contexto e nunca cancela
-    /// (constituição 11, ADR 006). Durante um gesto ou operação aberta ele é
+    /// (constituição 11, ADR 007). Durante um gesto ou operação aberta ele é
     /// ignorado; cancelar é `Esc`. Retorna verdadeiro quando abriu o menu.
     pub fn viewport_context_triage(&mut self, x: f32, y: f32) -> bool {
         let _ = self.cancel_rename();
@@ -10606,7 +10606,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         } else if let Some(kind) = kind.filter(|kind| *kind != ToolModalKind::ScaleSelection) {
             // Gramática única: a tecla seleciona a ferramenta persistente; a
-            // operação acontece pelo arrasto (ADR 006). O duplo toque continua
+            // operação acontece pelo arrasto (ADR 007). O duplo toque continua
             // abrindo o modo que segue o ponteiro.
             self.last_tool_press = Some((id.to_string(), now));
             self.keyboard_tool_modal_active = false;
@@ -11928,6 +11928,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_profile_depth = translated(petunia_config::text_id::UI_PROFILE_DEPTH);
         vm.label_profile_points = translated(petunia_config::text_id::UI_PROFILE_POINTS);
         vm.label_profile_close = translated(petunia_config::text_id::UI_PROFILE_CLOSE);
+        vm.label_view_gizmo = translated(petunia_config::text_id::UI_VIEW_GIZMO);
+        vm.label_view_gizmo_hint = translated(petunia_config::text_id::UI_VIEW_GIZMO_HINT);
         vm.label_profile_plane = translated(petunia_config::text_id::UI_PROFILE_PLANE);
         vm.label_profile_plane_auto = translated(petunia_config::text_id::UI_PROFILE_PLANE_AUTO);
         vm.label_profile_plane_ground =

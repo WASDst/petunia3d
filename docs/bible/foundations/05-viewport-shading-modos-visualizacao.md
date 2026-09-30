@@ -36,7 +36,7 @@ Manter extremamente simples:
 - Studio light padrão previsível.
 - Rotação rápida da luz.
 
-Implementação (2026-09-30, [ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md) Onda 6):
+Implementação (2026-09-30, [ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md) Onda 6):
 a studio light acompanha a câmera por padrão (por cima do ombro de quem olha,
 como no Plasticity e no Cinema 4D), de modo que a forma continua legível de
 qualquer lado; a preferência "Luz de estúdio acompanha a câmera" volta para a
@@ -51,12 +51,12 @@ O usuário deve trocar a forma de enxergar o modelo sem mudar de workspace ou co
 
 ## Aparência por workspace
 
-Desde a revisão de 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)), os dois workspaces de criação usam os mesmos modos-base com defaults de overlay diferentes:
+Desde a revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)), os dois workspaces de criação usam os mesmos modos-base com defaults de overlay diferentes:
 
 - **DRAW:** leitura de forma — iluminação de estúdio ou matcap, arestas de feição nítidas, plano de trabalho em destaque, regiões tingidas no hover e cotas visíveis.
 - **POLY:** leitura de topologia — flat shading, todas as arestas finas com arestas de feição reforçadas, pontos visíveis no domínio Point, pré-seleção clara e componentes de trás ocultos fora do X-Ray.
 
-Em ambos: imagem renderizada em pixels físicos com antisserrilhado, linhas de largura constante em pixels e pré-seleção do elemento sob o cursor antes do clique ([capítulo 45](45-pesquisa-interacao-modelagem-referencias.md)).
+Em ambos: imagem renderizada em pixels físicos com antisserrilhado, linhas de largura constante em pixels e pré-seleção do elemento sob o cursor antes do clique ([capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)).
 
 # Apresentação na UI
 

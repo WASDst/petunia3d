@@ -9,7 +9,7 @@ Estado: **parcial; precisa adaptação contextual** · Prioridade: P1.
 
 ## Objetivo
 
-Draw, Poly, Paint, UV e Animation como composições contextuais de painéis/tools, sem duplicar estado do projeto. DRAW e POLY substituem Model desde 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)); até estarem funcionais, a UI mantém Model.
+Draw, Poly, Paint, UV e Animation como composições contextuais de painéis/tools, sem duplicar estado do projeto. DRAW e POLY substituem Model desde 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)); até estarem funcionais, a UI mantém Model.
 
 ## Regras
 

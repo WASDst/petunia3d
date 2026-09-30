@@ -1,6 +1,6 @@
 # Workspace DRAW — regiões e Push/Pull — Implementation-vs-Spec Gap Matrix (Onda 4, parte 1)
 
-Escopo: primeira entrega da Onda 4 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
+Escopo: primeira entrega da Onda 4 do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)
 — o núcleo geométrico e de interação do DRAW. O pill DRAW, o trilho de
 ferramentas de forma e a separação de MODEL em DRAW/POLY ficam para a parte 2
 (regra "workspace não implementado não aparece").
@@ -8,7 +8,7 @@ Autoridade: [capítulo 02](../bible/foundations/02-workflow-modelagem-shape-firs
 ("Profile → Volume", "Draw on Face"), [capítulo 36](../bible/foundations/36-ui-baseline-temas-plugin-panels.md)
 (workspace DRAW), [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md)
 (gesto atômico, "Última operação", Esc restaura) e
-[capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md)
+[capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md)
 (regiões do Plasticity, Push/Pull do SketchUp).
 
 ## Auditoria antes da mudança (30/09)
@@ -37,7 +37,7 @@ Autoridade: [capítulo 02](../bible/foundations/02-workflow-modelagem-shape-firs
 
 | # | Requisito | Evidência e delta | Estado após |
 | --- | --- | --- | --- |
-| 8 | `DRAW / POLY / PAINT / UV` no lugar de MODEL | `ModelingMode { Draw, Poly }` no bridge; o workspace interno continua `Model` (DRAW e POLY compartilham documento, seleção, câmera, snapping e Inspector, como no ADR 006). `WorkspaceSegment` com quatro segmentos; títulos e descrições por `TextId` (`workspace.*`). Teste `draw_and_poly_share_the_modeling_workspace`. | PARTIALLY_COMPLIANT — sem captura nativa. |
+| 8 | `DRAW / POLY / PAINT / UV` no lugar de MODEL | `ModelingMode { Draw, Poly }` no bridge; o workspace interno continua `Model` (DRAW e POLY compartilham documento, seleção, câmera, snapping e Inspector, como no ADR 007). `WorkspaceSegment` com quatro segmentos; títulos e descrições por `TextId` (`workspace.*`). Teste `draw_and_poly_share_the_modeling_workspace`. | PARTIALLY_COMPLIANT — sem captura nativa. |
 | 9 | Trilho de ferramentas de forma no DRAW | Barra contextual filtrada por modo: DRAW = Sketch, Retângulo, Círculo, Push/Pull (sempre visível), Duplicar; POLY = Extrude, Inset, Bevel, Knife, Loop Cut, Subdivide, Merge, Slice, Connect, Make Face, Spin, Dissolve (+ Push/Pull, Duplicar). Trocar de modo devolve para Select uma ferramenta que o trilho novo não oferece; nada é convertido. Teste `switching_mode_drops_a_tool_the_new_rail_does_not_offer`. | PARTIALLY_COMPLIANT — Revolve e plano de trabalho ainda ficam no card do perfil. |
 | 10 | Conversão explícita DRAW → POLY | Hoje as formas do DRAW já são malhas (o Push/Pull gera polígonos); "Converter em polígonos" só fará sentido quando as formas forem paramétricas. | MISSING (depende de formas paramétricas) |
 

@@ -151,7 +151,7 @@ impl ReferenceImage {
     }
 }
 
-/// Origem do plano de trabalho do desenho (ADR 006, Onda 3).
+/// Origem do plano de trabalho do desenho (ADR 007, Onda 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WorkplaneKind {
     /// Chão do mundo (XZ, normal +Y).
@@ -847,6 +847,8 @@ pub struct EditorSession {
     pub primitive_session: Option<crate::primitive_session::PrimitiveCreationSession>,
     /// Último descritor confirmado (reabertura explícita).
     pub last_primitive: Option<crate::primitive_session::PrimitiveDescriptor>,
+    /// Criatura, Motion e playhead do workspace Animate (não persistido).
+    pub animate: crate::animate_session::AnimateSession,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -908,6 +910,7 @@ impl EditorSession {
             tools: ToolState::new(),
             primitive_session: None,
             last_primitive: None,
+            animate: crate::animate_session::AnimateSession::default(),
         }
     }
 
@@ -2088,6 +2091,10 @@ impl AppState {
         self.ui.right_width = restored.right_width;
         self.ui.shell_asset_library_height = restored.shell_asset_library_height;
         self.session.workspace = next;
+        #[cfg(feature = "animation-workspace")]
+        if next == Workspace::Animate {
+            self.animate_resolve();
+        }
         self.mark_dirty();
     }
 

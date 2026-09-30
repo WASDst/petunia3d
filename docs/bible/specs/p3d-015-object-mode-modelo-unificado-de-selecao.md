@@ -9,7 +9,7 @@ Decisão consolidada: **não expor Object Mode e Edit Mode como dois mundos sepa
 
 ## Objetivo
 
-Unificar a interação em quatro domínios: **Object / Face / Edge / Point** (`Point` é o termo público para vértice). Object permite editar o objeto completo; os demais operam componentes da mesh. Desde a revisão de 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)), esses domínios pertencem ao workspace **POLY**; o workspace **DRAW** usa `Shape / Curve / Point / Region`.
+Unificar a interação em quatro domínios: **Object / Face / Edge / Point** (`Point` é o termo público para vértice). Object permite editar o objeto completo; os demais operam componentes da mesh. Desde a revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)), esses domínios pertencem ao workspace **POLY**; o workspace **DRAW** usa `Shape / Curve / Point / Region`.
 
 ## UX
 

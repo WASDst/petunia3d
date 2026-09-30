@@ -1,4 +1,4 @@
-//! Motor de inferência de snap em espaço de tela (P3D-040, ADR 006 Onda 3).
+//! Motor de inferência de snap em espaço de tela (P3D-040, ADR 007 Onda 3).
 //!
 //! Uma única passada por gesto: a tolerância é medida em pixels lógicos da
 //! viewport (lei de Fitts), nunca em unidades de mundo, então o alvo tem o

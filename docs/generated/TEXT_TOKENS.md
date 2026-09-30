@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **825**.
+Total de chaves de localização cadastradas: **827**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -802,6 +802,8 @@ Total de chaves de localização cadastradas: **825**.
 | `ui.vertical_drag_inverted` | Vertical tool drag inverted | Arrasto vertical invertido |
 | `ui.vertical_drag_normal` | Vertical tool drag normal | Arrasto vertical normal |
 | `ui.vertical_tool_drag` | Vertical tool drag | Arrasto vertical das ferramentas |
+| `ui.view_gizmo` | View navigation | Navegação da vista |
+| `ui.view_gizmo_hint` | Drag to orbit; click an axis to align the view | Arraste para orbitar; clique num eixo para alinhar a vista |
 | `ui.view_lit` | Scene lighting | Iluminação da cena |
 | `ui.view_lit_hint` | Preview scene lighting and materials together. | Pré-visualiza a iluminação da cena junto com os materiais. |
 | `ui.view_material` | Material preview | Prévia de material |

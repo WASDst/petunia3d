@@ -52,6 +52,13 @@ A documentação de produto deve preferir:
 - **Keep Parts** para preservar partes independentes em uma composição.
 - **Join** para um único objeto com ilhas/submeshes separados.
 - **Project From Reference** quando houver uma referência cadastrada; **Project From View** para projeção livre/custom.
+- **Motion** para um movimento procedural pronto (andar, correr, respirar…); tecnicamente *Motion Recipe / Procedural Motion Generator*. Ajustes em **Speed, Energy, Weight, Stride, Lean** e **Style**.
+- **Wiggle** para movimento secundário (cauda, cabelo, capa); tecnicamente *spring bones*.
+- **Ghosts** para as silhuetas de poses vizinhas e **Motion Trail** para o caminho de um osso (evitar "Path", já usado por Spline/generators); tecnicamente *pose ghosting / onion skin* e *trajectory / motion path*.
+- **Apply Now** para converter um Motion vivo em keys editáveis e **Keep Live** para mantê-lo vivo (P3D-160); tecnicamente *bake to keys*.
+- **Tweak** para um ajuste aditivo sobre um Motion; tecnicamente *additive layer*.
+- **Reference Frames** para uma sequência de imagens de referência; tecnicamente *ReferenceSequence*.
+- **Role** para o papel de um osso no rig; tecnicamente *RigRole*.
 
 ## Termos técnicos internos
 

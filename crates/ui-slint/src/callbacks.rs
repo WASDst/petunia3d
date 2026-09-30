@@ -583,6 +583,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_profile_depth(vm.label_profile_depth.as_str().into());
     window.set_label_profile_points(vm.label_profile_points.as_str().into());
     window.set_label_profile_close(vm.label_profile_close.as_str().into());
+    window.set_label_view_gizmo(vm.label_view_gizmo.as_str().into());
+    window.set_label_view_gizmo_hint(vm.label_view_gizmo_hint.as_str().into());
     window.set_label_profile_plane(vm.label_profile_plane.as_str().into());
     window.set_label_profile_plane_auto(vm.label_profile_plane_auto.as_str().into());
     window.set_label_profile_plane_ground(vm.label_profile_plane_ground.as_str().into());

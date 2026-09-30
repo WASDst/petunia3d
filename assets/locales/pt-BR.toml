@@ -4,6 +4,8 @@
 title = "Petunia3D"
 
 [ui]
+view_gizmo = "Navegação da vista"
+view_gizmo_hint = "Arraste para orbitar; clique num eixo para alinhar a vista"
 profile_look_at_plane = "Olhar para o plano"
 profile_plane_view = "Vista"
 profile_plane_face = "Face"

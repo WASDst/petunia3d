@@ -1,4 +1,4 @@
-//! Imprint de região numa face e folha de região solta (ADR 006, Onda 4).
+//! Imprint de região numa face e folha de região solta (ADR 007, Onda 4).
 //!
 //! Draw on Face: uma região desenhada **dentro** de uma face plana vira uma
 //! face própria; o anel ao redor é dividido em duas faces por duas "pontes"

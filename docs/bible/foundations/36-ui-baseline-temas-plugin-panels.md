@@ -33,7 +33,7 @@ integração**. Reabertura da arquitetura exige bloqueador estrutural real + ADR
   `Object`;
   `Asset Library` permanece inferior;
 - painéis semi-flutuantes, retráteis e redimensionáveis dentro de limites explícitos;
-- `DRAW / POLY / PAINT / UV` como workspaces V1 (revisão de 2026-09-29, ADR 006; antes `MODEL / PAINT / UV`);
+- `DRAW / POLY / PAINT / UV` como workspaces V1 (revisão de 2026-09-29, ADR 007; antes `MODEL / PAINT / UV`);
 - toolbar contextual dentro do viewport;
 - seleção explícita por workspace: POLY `Object / Face / Edge / Point`; DRAW `Shape / Curve / Point / Region`;
 - uma única gramática de ferramenta para todas as ferramentas (constituição 11);
@@ -119,8 +119,8 @@ próprios até revisão explícita.
 ## Revisão de workspaces DRAW e POLY — 2026-09-29
 
 Aprovada explicitamente pelo responsável do produto
-([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md);
-pesquisa no [capítulo 45](45-pesquisa-interacao-modelagem-referencias.md)).
+([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md);
+pesquisa no [capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)).
 O workspace MODEL é substituído por dois workspaces que compartilham documento,
 seleção de objeto, câmera, snapping, gramática de ferramenta e Inspector:
 
@@ -605,6 +605,18 @@ dentro do Paint como "Preparar superfície" (P3D-065, fluxo paint-first). O
 redesign completo do workspace UV (P3D-063/064/065) fica marcado para o ciclo
 **pós-Paint**. O shell `MODEL / PAINT` permanece; nenhum outro princípio deste
 capítulo é reaberto pela decisão.
+
+## Workspaces pós-V1
+
+### Adendo 2026-09-30 — Animate (primeiro workspace pós-V1)
+
+A UI Baseline V1 permanece `MODEL / PAINT / UV` (com a revisão MODEL de 2026-09-23 e o adendo Paint de 2026-09-16); **este adendo não a reabre**. **Animate** é o primeiro workspace pós-V1 ([ADR 006](../../architecture/adr/006-workspace-animate-pos-v1.md), [cap. 45](45-pos-v1-animate-acessivel-animacao-procedural.md), [P3D-066](../specs/p3d-066-animation-workspace.md)):
+
+- a pill **Animate só aparece quando o workspace estiver implementado e aceito** (regra acima: workspace não implementado não aparece como pill desabilitada);
+- mantém os invariantes do shell: viewport dominante, um único viewport 3D, sem docking irrestrito, sem janelas de sistema;
+- layout proposto (SPEC DRAFT): barra esquerda com Motions/Rig/Reference Frames; Inspector direito em seções independentes (`Rig → Motion → Style → Layers`, com dock/float/pin do ADR 005); Timeline inferior no lugar da Asset Library enquanto o workspace estiver ativo; **Reference Monitor** como cartão flutuante in-canvas;
+- a experiência inicial é a **camada 1** (escolher Motion e ajustar sliders); timeline, Ghosts e camadas são divulgação progressiva;
+- toda alegação de acessibilidade do workspace exige o **teste do iniciante** do cap. 45 medido com artistas.
 
 # Viewport adapter final
 

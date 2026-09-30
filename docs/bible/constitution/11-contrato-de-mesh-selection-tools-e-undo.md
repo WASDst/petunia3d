@@ -9,7 +9,7 @@ Contrato compartilhado para P3D-015–041, P3D-083, P3D-100–101 e P3D-131. Evi
 
 # Selection Domain
 
-A UX pública usa `Object / Face / Edge / Point` no workspace POLY e `Shape / Curve / Point / Region` no workspace DRAW ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)). `Point` é o termo público para vértice. `Tab` não alterna domínio. O estado interno pode ter subestados, mas não deve criar uma segunda verdade pública.
+A UX pública usa `Object / Face / Edge / Point` no workspace POLY e `Shape / Curve / Point / Region` no workspace DRAW ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)). `Point` é o termo público para vértice. `Tab` não alterna domínio. O estado interno pode ter subestados, mas não deve criar uma segunda verdade pública.
 
 # Selection semantics
 
@@ -21,7 +21,7 @@ Auditar o mesh model atual e registrar invariantes: referências válidas, windi
 
 # Tool lifecycle canônico — gramática única (`ToolSession`)
 
-Revisão de 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md); pesquisa no [capítulo 45](../foundations/45-pesquisa-interacao-modelagem-referencias.md)). Todas as ferramentas usam a mesma máquina de estados, implementada uma vez no core:
+Revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md); pesquisa no [capítulo 46](../foundations/46-pesquisa-interacao-modelagem-referencias.md)). Todas as ferramentas usam a mesma máquina de estados, implementada uma vez no core:
 
 ```
 Idle (hover → pré-seleção + dica)
@@ -45,7 +45,7 @@ Regras:
 - Sem efeitos ocultos: uma ferramenta sem seleção aplicável mostra uma dica e não seleciona tudo por conta própria.
 - Activate/deactivate/cancel não deixam estado fantasma. Troca de tool encerra/cancela explicitamente a operação anterior.
 
-> **Decisão aprovada, implementação em ondas.** Em 2026-09-29 o código ainda tem cinco mecanismos de sessão distintos ([capítulo 45](../foundations/45-pesquisa-interacao-modelagem-referencias.md), seção 2.2). A migração segue a ordem do ADR 006; ferramentas não migradas continuam marcadas como PARTIALLY_COMPLIANT nas matrizes de lacunas.
+> **Decisão aprovada, implementação em ondas.** Em 2026-09-29 o código ainda tem cinco mecanismos de sessão distintos ([capítulo 46](../foundations/46-pesquisa-interacao-modelagem-referencias.md), seção 2.2). A migração segue a ordem do ADR 007; ferramentas não migradas continuam marcadas como PARTIALLY_COMPLIANT nas matrizes de lacunas.
 
 # Preview vs Commit
 

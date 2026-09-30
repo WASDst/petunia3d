@@ -1,7 +1,7 @@
 # Protocolo de teste com usuários — DRAW, POLY e acessibilidade (Onda 6)
 
-Escopo: validar com pessoas reais as decisões do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
-que os testes automáticos não conseguem decidir. Base de método: capítulo 45
+Escopo: validar com pessoas reais as decisões do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)
+que os testes automáticos não conseguem decidir. Base de método: capítulo 46
 §8.5 (acessibilidade motora e cognitiva) e as matrizes das Ondas 1–5.
 Este documento é um roteiro de sessão; não cria requisito novo.
 
@@ -23,7 +23,7 @@ Este documento é um roteiro de sessão; não cria requisito novo.
   1. nunca modelaram em 3D;
   2. usam outro modelador (Blender, SketchUp, Plasticity, C4D ou Modo);
   3. têm limitação motora nas mãos (tremor, pouca força, amplitude reduzida) ou
-     usam mouse adaptado/trackball — grupo exigido pelo capítulo 45 §8.5
+     usam mouse adaptado/trackball — grupo exigido pelo capítulo 46 §8.5
      (Findlater et al., 2010; Wobbrock et al., 2011).
 - Termo de consentimento, anonimização dos dados e direito de parar a qualquer
   momento. Gravar tela e voz só com autorização explícita.

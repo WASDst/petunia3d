@@ -31,11 +31,11 @@ O modo iniciante pode apresentar **Width / Height / Depth** em vez de exigir X/Y
 
 ## Seleção contextual
 
-Evitar obrigar o iniciante a compreender imediatamente uma separação rígida entre Object Mode e Edit Mode. Desde a revisão de 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)), o nível de trabalho é escolhido pelo workspace: **DRAW** expõe **Shape · Curve · Point · Region**; **POLY** expõe **Object · Face · Edge · Point**, além de inferência contextual por clique/duplo clique.
+Evitar obrigar o iniciante a compreender imediatamente uma separação rígida entre Object Mode e Edit Mode. Desde a revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)), o nível de trabalho é escolhido pelo workspace: **DRAW** expõe **Shape · Curve · Point · Region**; **POLY** expõe **Object · Face · Edge · Point**, além de inferência contextual por clique/duplo clique.
 
 ## Smart Snap
 
-Por padrão, snapping contextual detecta Vertex, Edge, Midpoint, Center, Grid, centerline da referência e interseções de profiles, com inferência de direção (eixos, paralelo, perpendicular) no estilo snap-dragging/SketchUp. Cada snap é mostrado com forma, cor **e rótulo**, nunca só por cor ([capítulo 45](45-pesquisa-interacao-modelagem-referencias.md)). Configuração avançada permanece disponível.
+Por padrão, snapping contextual detecta Vertex, Edge, Midpoint, Center, Grid, centerline da referência e interseções de profiles, com inferência de direção (eixos, paralelo, perpendicular) no estilo snap-dragging/SketchUp. Cada snap é mostrado com forma, cor **e rótulo**, nunca só por cor ([capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)). Configuração avançada permanece disponível.
 
 ## Filosofia de nomenclatura
 

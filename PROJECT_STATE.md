@@ -3,9 +3,9 @@
 - Project: **Petunia3D**
 - Prumo: **0.5.1**
 - Current phase: **Wave 11 — Extensibility, Plugins & Automation (Ativa)**
-- Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (155 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 36 capítulos de fundação unificados)
-- Referência de UI e interação (ADR 006, 2026-09-29): o próprio sistema Petunia ([cap. 23](docs/bible/foundations/23-macroarquitetura-interface.md), [24](docs/bible/foundations/24-design-system-tokens-estados.md), [36](docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md)) e a pesquisa de interação do [cap. 45](docs/bible/foundations/45-pesquisa-interacao-modelagem-referencias.md). `docs/image-references/Blender.svg` deixou de ser referência canônica e permanece apenas como material histórico.
-- Decisão de produto 2026-09-29 ([ADR 006](docs/architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)): workspaces **DRAW + POLY** no lugar de MODEL e gramática única de ferramenta (persistente, arrastar, valor digitado, clicar-mover-clicar, RMB = menu). Implementação em ondas no branch `design/draw-poly-interaction`: Onda 1 (viewport em pixels físicos + MSAA 4× e bugs comprovados) e Onda 2 (`ToolSession` no core; ferramentas persistentes; "Última operação"; RMB = menu; navegação nunca suspensa) com testes, clippy e gates verdes em 2026-09-30; Onda 3 (snapping em pixels de tela com uma passada por gesto, tipos nomeados com rótulo e guias de eixo; pré-seleção no Draw; plano de trabalho automático/travado sem mover a câmera) e Onda 4 parte 1 (regiões por arranjo planar com hover, Push/Pull de região com imprint na face ou sólido novo, 1 Undo) Onda 4 parte 2 (seletor DRAW · POLY · PAINT · UV com trilho por modo) Onda 5 parte 1 (Poly Pen: mover sem selecionar, extrudar aresta, desenhar polígono, derreter ponto) e Onda 6 parte 1 (luz de estúdio presa à câmera, raio do snap ajustável, testes de aparência por pixels, roteiro de teste com usuários) em 2026-09-30; seleção Shape/Curve/Point/Region e aparência por modo, captura nativa e teste com usuários pendentes ([matriz Onda 1](docs/development/viewport-crispness-gap-matrix.md), [matriz Onda 2](docs/development/tool-session-gap-matrix.md), [matriz Onda 3](docs/development/snap-inference-gap-matrix.md), [matriz Onda 4](docs/development/draw-regions-gap-matrix.md), [matriz Onda 5](docs/development/poly-pen-gap-matrix.md), [matriz Onda 6](docs/development/wave6-visual-accessibility-gap-matrix.md)).
+- Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (174 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 46 capítulos de fundação)
+- Referência de UI e interação (ADR 007, 2026-09-29): o próprio sistema Petunia ([cap. 23](docs/bible/foundations/23-macroarquitetura-interface.md), [24](docs/bible/foundations/24-design-system-tokens-estados.md), [36](docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md)) e a pesquisa de interação do [cap. 46](docs/bible/foundations/46-pesquisa-interacao-modelagem-referencias.md). `docs/image-references/Blender.svg` deixou de ser referência canônica e permanece apenas como material histórico.
+- Decisão de produto 2026-09-29 ([ADR 007](docs/architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)): workspaces **DRAW + POLY** no lugar de MODEL e gramática única de ferramenta (persistente, arrastar, valor digitado, clicar-mover-clicar, RMB = menu). Implementação em ondas no branch `design/draw-poly-interaction`: Onda 1 (viewport em pixels físicos + MSAA 4× e bugs comprovados) e Onda 2 (`ToolSession` no core; ferramentas persistentes; "Última operação"; RMB = menu; navegação nunca suspensa) com testes, clippy e gates verdes em 2026-09-30; Onda 3 (snapping em pixels de tela com uma passada por gesto, tipos nomeados com rótulo e guias de eixo; pré-seleção no Draw; plano de trabalho automático/travado sem mover a câmera) e Onda 4 parte 1 (regiões por arranjo planar com hover, Push/Pull de região com imprint na face ou sólido novo, 1 Undo) Onda 4 parte 2 (seletor DRAW · POLY · PAINT · UV com trilho por modo) Onda 5 parte 1 (Poly Pen: mover sem selecionar, extrudar aresta, desenhar polígono, derreter ponto) e Onda 6 parte 1 (luz de estúdio presa à câmera, raio do snap ajustável, testes de aparência por pixels, roteiro de teste com usuários) em 2026-09-30; seleção Shape/Curve/Point/Region e aparência por modo, captura nativa e teste com usuários pendentes ([matriz Onda 1](docs/development/viewport-crispness-gap-matrix.md), [matriz Onda 2](docs/development/tool-session-gap-matrix.md), [matriz Onda 3](docs/development/snap-inference-gap-matrix.md), [matriz Onda 4](docs/development/draw-regions-gap-matrix.md), [matriz Onda 5](docs/development/poly-pen-gap-matrix.md), [matriz Onda 6](docs/development/wave6-visual-accessibility-gap-matrix.md)).
 - Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Nesta rodada, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
 - **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, 169 testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
 - Context methodology: **Lean Progressive Context (LPC)**
@@ -31,7 +31,7 @@ validação de 23/09 está registrada no plano de paridade.
 ## Current status
 
 The premium audit supersedes the previous claim that all required operations were
-complete. *(Histórico: até 2026-09-29, o alvo visual era o layout 1920×1080 de `Blender.svg`; o ADR 006 retirou essa referência canônica.)* The visual target for final production was formalised as the 1920×1080
+complete. *(Histórico: até 2026-09-29, o alvo visual era o layout 1920×1080 de `Blender.svg`; o ADR 007 retirou essa referência canônica.)* The visual target for final production was formalised as the 1920×1080
 layout of [`Blender.svg`](docs/image-references/Blender.svg),
 with 268 component SVGs cataloged and verified in [`docs/image-references/extracted/index.html`](docs/image-references/extracted/index.html).
 
@@ -273,6 +273,17 @@ unitários verdes. Gaps conhecidos em relação ao caderno (capítulos 23/36):
   refinamento de responsividade e densidade.
 
 Esses gaps estão registrados na [auditoria Slint](docs/ui/slint-modern-audit.md).
+
+### Animate procedural-first — decisão de 2026-09-30
+
+Documentação apenas; **nenhum código foi alterado**. Registradas no caderno
+(cap. 45, ADR 006, P3D-169–174 em `SPEC DRAFT`): procedural primeiro, criaturas
+de primeira classe, referência de animação por **batch de imagens** (sem vídeo,
+sem ML) e Animate como primeiro workspace **pós-V1** (a UI Baseline V1
+`MODEL / PAINT / UV` não é reaberta). Gap Matrix real: domínio de rig/clipes
+`COMPLIANT`, mas **sem alcance no Slint** e **sem skin/animação no glTF**
+(AN-07, AN-13). A ordem de entrega (F0–F5) e os pré-requisitos (D-02, AX-03)
+estão no cap. 45. Prioridades vigentes (Sprint A–E de 2026-09-29) não mudam.
 
 ## Recovery order
 

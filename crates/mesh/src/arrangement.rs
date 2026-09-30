@@ -1,4 +1,4 @@
-//! Arranjo planar de perfis (ADR 006, Onda 4): regiões fechadas formadas por
+//! Arranjo planar de perfis (ADR 007, Onda 4): regiões fechadas formadas por
 //! polilinhas que se cruzam no mesmo plano, como no Plasticity.
 //!
 //! Algoritmo clássico de arranjo em DCEL simplificada:

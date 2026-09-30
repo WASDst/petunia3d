@@ -42,3 +42,7 @@ Bake pesado trabalha em snapshot/job e somente commita se revision ainda for vá
 # Testes / DoD
 
 Equivalence tests live vs baked, cancellation, revision conflict, Undo when feasible, atomic output e diagnostics para perda de editabilidade.
+
+# Extensão pós-V1 (2026-09-30) — Animação
+
+O vocabulário aplica-se a animação: **Motion Recipe** e pilhas de camadas ficam **vivos** (*Keep Live*) até o usuário escolher **Apply Now**, que amostra em fps escolhido, **reduz keys** por tolerância, gera `BoneTrack`s editáveis, reporta o que mudou e é atômico no Undo ([P3D-170](p3d-170-procedural-motion-generators.md), [P3D-173](p3d-173-secondary-motion-simple-ragdoll.md), [P3D-174](p3d-174-layered-animation.md)). Simulações (Wiggle, ragdoll) são sempre cozidas na exportação.

@@ -1,11 +1,11 @@
 # Snapping, pré-seleção e plano de trabalho — Implementation-vs-Spec Gap Matrix (Onda 3)
 
-Escopo: Onda 3 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md).
+Escopo: Onda 3 do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md).
 Parte 1: snapping. Parte 2: pré-seleção no Draw e plano de trabalho automático.
 Autoridade: [P3D-040](../bible/specs/p3d-040-sistema-de-snap.md) (direção
 aprovada em 2026-09-29), [P3D-131](../bible/specs/p3d-131-modal-tool-feedback-system.md),
 [constituição 03](../bible/constitution/03-invariantes-de-ui-ux-design-system-e-acessib.md)
-(nunca só cor) e [capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md),
+(nunca só cor) e [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md),
 seções 2.2, 2.3 e 3.3.
 
 ## Antes × depois
@@ -42,7 +42,7 @@ seções 2.2, 2.3 e 3.3.
   da normal) e snap entre objetos diferentes (hoje só a malha ativa).
 - Centro de face, interseção de arestas, paralelo/perpendicular a aresta, 15°.
 - Custo: a passada percorre todos os vértices e arestas da malha ativa a cada
-  movimento; o orçamento do capítulo 45 (≤ 16,7 ms até 50 mil triângulos) exige
+  movimento; o orçamento do capítulo 46 (≤ 16,7 ms até 50 mil triângulos) exige
   um índice espacial (BVH/grade de tela) antes da Onda 6.
 - Snap continua desligado por padrão (`SnapSettings::enabled = false`); o
   capítulo 01 pede snapping contextual por padrão, decisão a registrar junto com
@@ -65,7 +65,7 @@ Autoridade adicional: [capítulo 01](../bible/foundations/01-visao-ux-referencia
 [capítulo 02](../bible/foundations/02-workflow-modelagem-shape-first.md)
 (Draw on Face: a face sob o cursor vira o plano; "Olhar para o plano"),
 [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md)
-("Idle → pré-seleção + dica") e capítulo 45 (tabela de decisões: plano
+("Idle → pré-seleção + dica") e capítulo 46 (tabela de decisões: plano
 "automático pela vista, face sob o cursor, … travado; câmera não é forçada").
 
 ## Auditoria antes da mudança

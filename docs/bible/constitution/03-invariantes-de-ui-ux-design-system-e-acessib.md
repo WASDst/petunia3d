@@ -11,7 +11,7 @@ Separar claramente Workspace, Selection Domain, Tool, Command, Object Property, 
 # Regiões
 
 - Header do viewport: seleção/contexto, menus, orientação/pivot, aids e shading.
-- Toolbar vertical: tools persistentes do workspace (DRAW ou POLY, ADR 006).
+- Toolbar vertical: tools persistentes do workspace (DRAW ou POLY, ADR 007).
 - Shelf contextual: commands/tools do contexto atual, sem duplicar Selection Domain.
 - Direita: Inspector (`Parts → Transform → Material → Object`); Tool Properties e "Última operação" separadas do Inspector.
 - Assets: browser rápido; Project Model Library: gerenciador amplo separado.
@@ -26,7 +26,7 @@ Slint é o frontend de produção; egui é legado de transição (capítulo 36).
 
 # Acessibilidade
 
-Hitboxes adequadas (alças e alvos do viewport com pelo menos 24×24 px lógicos), keyboard navigation, foco visível, tooltips, baixa ambiguidade e layouts úteis em 1366×768 até telas maiores. Todo arrasto tem alternativa sem arrastar (clicar-mover-clicar e valor digitado); limiar de arrasto e raio de picking são configuráveis (design baseado em habilidades, capítulo 45).
+Hitboxes adequadas (alças e alvos do viewport com pelo menos 24×24 px lógicos), keyboard navigation, foco visível, tooltips, baixa ambiguidade e layouts úteis em 1366×768 até telas maiores. Todo arrasto tem alternativa sem arrastar (clicar-mover-clicar e valor digitado); limiar de arrasto e raio de picking são configuráveis (design baseado em habilidades, capítulo 46).
 
 ## Input routing e foco
 

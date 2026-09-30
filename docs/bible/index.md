@@ -3,7 +3,7 @@
 <aside>
 🌸
 
-**Caderno unificado — 2026-09-15.** Este **Petunia3D — Livro Vivo** é a única raiz canônica do projeto. A antiga **Implementation Bible** foi absorvida como o hub **Especificações P3D — Readiness e Gauntlet Waves**, preservando integralmente epics, P3Ds, contratos operacionais e histórico, mas eliminando a existência de uma segunda autoridade documental. O catálogo funcional consolidado atualmente alcança **P3D-168**.
+**Caderno unificado — 2026-09-15.** Este **Petunia3D — Livro Vivo** é a única raiz canônica do projeto. A antiga **Implementation Bible** foi absorvida como o hub **Especificações P3D — Readiness e Gauntlet Waves**, preservando integralmente epics, P3Ds, contratos operacionais e histórico, mas eliminando a existência de uma segunda autoridade documental. O catálogo funcional consolidado atualmente alcança **P3D-174**.
 
 </aside>
 
@@ -16,7 +16,7 @@
 
 # Visão do produto
 
-O Petunia3D será um **modelador low-poly shape-first e direct-mesh**, inspirado principalmente pela simplicidade conceitual do MoI 3D, interação direta e feedback visual do Plasticity, acessibilidade low-poly do Blockbench, inferência do SketchUp e fluidez de edição poligonal do Cinema 4D e do Modo — sem adotar um kernel CAD/NURBS como arquitetura central. Pesquisa no [capítulo 45](foundations/45-pesquisa-interacao-modelagem-referencias.md).
+O Petunia3D será um **modelador low-poly shape-first e direct-mesh**, inspirado principalmente pela simplicidade conceitual do MoI 3D, interação direta e feedback visual do Plasticity, acessibilidade low-poly do Blockbench, inferência do SketchUp e fluidez de edição poligonal do Cinema 4D e do Modo — sem adotar um kernel CAD/NURBS como arquitetura central. Pesquisa no [capítulo 46](foundations/46-pesquisa-interacao-modelagem-referencias.md).
 
 ## Princípios centrais
 
@@ -71,7 +71,7 @@ flowchart TD
 
 ## Edição direta
 
-- Edição de **Object / Face / Edge / Point** será suportada no workspace **POLY**; o workspace **DRAW** trabalha no nível de forma (ADR 006, 2026-09-29).
+- Edição de **Object / Face / Edge / Point** será suportada no workspace **POLY**; o workspace **DRAW** trabalha no nível de forma (ADR 007, 2026-09-29).
 - O fluxo principal será contextual e não dependerá obrigatoriamente de um Edit Mode rígido.
 - Todas as ferramentas seguem uma única gramática: persistente, arrastar (alça ou em qualquer lugar), valor digitado, clicar-mover-clicar, RMB = menu, Esc cancela (constituição 11).
 - Operações avançadas continuam disponíveis para quem precisar de controle topológico.
@@ -211,4 +211,6 @@ A ordem normativa para decisões técnicas é: facilidade de uso → previsibili
 
 [44 — Pós-V1: Surface Paint Toolbox além do Brush](foundations/44-pos-v1-surface-paint-toolbox.md)
 
-[45 — Pesquisa: Interação de Modelagem, Referências de Mercado e Literatura](foundations/45-pesquisa-interacao-modelagem-referencias.md)
+[45 — Pós-V1: Animate Acessível e Animação Procedural](foundations/45-pos-v1-animate-acessivel-animacao-procedural.md)
+
+[46 — Pesquisa: Interação de Modelagem, Referências de Mercado e Literatura](foundations/46-pesquisa-interacao-modelagem-referencias.md)

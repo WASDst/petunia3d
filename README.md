@@ -82,7 +82,7 @@ petunia3d/
 
 - Roteador do projeto: [`docs/PRUMO.md`](docs/PRUMO.md).
 - **Livro Vivo (SSOT):** [`docs/bible/index.md`](docs/bible/index.md), atualmente
-  com catálogo até `P3D-168`.
+  com catálogo até `P3D-174`.
 - Interface e contratos visuais: [`docs/ui/README.md`](docs/ui/README.md).
 - Auditoria atual da interface Slint:
   [`docs/ui/slint-modern-audit.md`](docs/ui/slint-modern-audit.md).

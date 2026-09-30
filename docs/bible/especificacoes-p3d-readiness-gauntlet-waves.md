@@ -56,12 +56,13 @@ Estados recomendados: `IDEA/ROADMAP → SPEC DRAFT → SPEC READY → AUDITED �
 
 # Escopo do catálogo P3D consolidado
 
-O catálogo preservado cobre **P3D-001 a P3D-168**. A antiga descrição que terminava em P3D-155 ficou obsoleta após a expansão aprovada do roadmap pós-GA.
+O catálogo preservado cobre **P3D-001 a P3D-174**. A antiga descrição que terminava em P3D-155 ficou obsoleta após a expansão aprovada do roadmap pós-GA.
 
 - P3D-016 permanece como registro histórico; sua UX pública foi absorvida por P3D-015.
 - P3D-131–143 formalizam feedback modal, Paint avançado, rig/animação, materiais avançados, AI e bridge futura.
 - P3D-144–155 iniciam o toolkit pós-GA game-ready.
 - P3D-156–168 expandem o pós-GA com Decals, Modifier Stack, Surface Attachment, Parametric Asset Properties, Bake/Flatten, Spline Core, Morph Targets, Low-Poly Hair, Surface Recipes, Surface Paint Toolbox, Parts Hierarchy, Asset States e Procedural Path Generators.
+- P3D-169–174 (2026-09-30) especificam o **Animate procedural-first**: Rig Roles/IK, Motion Generators, Ghosts/Trails, Reference Image Sequence, Secondary Motion e Layered Animation ([cap. 45](foundations/45-pos-v1-animate-acessivel-animacao-procedural.md)).
 
 # Fontes redundantes preservadas após o merge
 

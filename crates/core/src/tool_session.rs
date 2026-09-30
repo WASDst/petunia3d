@@ -1,4 +1,4 @@
-//! Gramática única de ferramenta (constituição 11, ADR 006).
+//! Gramática única de ferramenta (constituição 11, ADR 007).
 //!
 //! Uma máquina de estados para todas as ferramentas de operação, independente
 //! de toolkit. O frontend traduz eventos físicos em entradas neutras

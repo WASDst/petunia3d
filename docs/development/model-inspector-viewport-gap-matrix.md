@@ -42,7 +42,7 @@ confirmação e cancelamento, respeitando a semântica própria do Petunia.
 
 ### Fontes Blender consultadas (histórico)
 
-Desde o ADR 006 (2026-09-29), o manual do Blender não é referência de interação; a referência é a constituição 11 e o capítulo 45 do Livro Vivo. As fontes abaixo ficam como registro desta rodada.
+Desde o ADR 007 (2026-09-29), o manual do Blender não é referência de interação; a referência é a constituição 11 e o capítulo 46 do Livro Vivo. As fontes abaixo ficam como registro desta rodada.
 
 - [Loop Cut](https://docs.blender.org/manual/en/latest/modeling/meshes/tools/loop.html)
 - [Loop Cut and Slide](https://docs.blender.org/manual/en/latest/modeling/meshes/editing/edge/loopcut_slide.html)

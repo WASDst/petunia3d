@@ -1,4 +1,4 @@
-//! Regiões de perfis e Push/Pull de região (ADR 006, Onda 4; capítulo 02).
+//! Regiões de perfis e Push/Pull de região (ADR 007, Onda 4; capítulo 02).
 //!
 //! Os perfis persistentes do documento são agrupados por plano; em cada plano,
 //! o arranjo planar ([`petunia_mesh::arrangement`]) dá as regiões fechadas —

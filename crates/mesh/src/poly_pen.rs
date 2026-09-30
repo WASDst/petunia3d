@@ -1,4 +1,4 @@
-//! Operações do Poly Pen (ADR 006, Onda 5; modelo: Polygon Pen do Cinema 4D).
+//! Operações do Poly Pen (ADR 007, Onda 5; modelo: Polygon Pen do Cinema 4D).
 //!
 //! - [`Mesh::add_pen_polygon`]: um polígono desenhado ponto a ponto, que pode
 //!   reaproveitar pontos existentes. A orientação segue os vizinhos (aresta

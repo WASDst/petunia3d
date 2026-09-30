@@ -1,4 +1,4 @@
-# 45 — Pesquisa: Interação de Modelagem, Referências de Mercado e Literatura
+# 46 — Pesquisa: Interação de Modelagem, Referências de Mercado e Literatura
 
 <aside>
 🔬
@@ -7,7 +7,7 @@
 investigação de 2026-09-29 sobre Plasticity, Cinema 4D, Modo e SketchUp, a
 literatura acadêmica aplicável e o diagnóstico da implementação Slint. As
 decisões normativas resultantes estão no
-[ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
+[ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)
 e nas páginas revisadas do caderno (capítulos 01, 02, 05, 23, 36; constituição 03
 e 11; P3D-015, 040, 073, 075, 076, 083, 092, 095, 131). Em conflito, essas páginas
 prevalecem sobre este capítulo.
@@ -447,7 +447,7 @@ subtrair pelo sentido.
 
 # 10. Arquitetura resultante (resumo)
 
-O contrato normativo está no ADR 006 e na [constituição 11](../constitution/11-contrato-de-mesh-selection-tools-e-undo.md).
+O contrato normativo está no ADR 007 e na [constituição 11](../constitution/11-contrato-de-mesh-selection-tools-e-undo.md).
 
 ```
 Idle (hover → pré-seleção + dica)

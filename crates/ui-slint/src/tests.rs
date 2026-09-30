@@ -4088,7 +4088,7 @@ fn selection_summary_and_inspector_follow_component_picks() {
 fn viewport_right_click_never_cancels_an_active_transform() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.resize_viewport(1024, 768);
-    // ADR 006: com operação aberta o botão direito é ignorado; cancelar é Esc.
+    // ADR 007: com operação aberta o botão direito é ignorado; cancelar é Esc.
     assert!(bridge.begin_viewport_transform(TransformKind::Position, 512.0, 384.0));
     assert!(!bridge.viewport_context_triage(700.0, 300.0));
     assert!(bridge.drag.is_some(), "a operação continua");
@@ -4351,7 +4351,7 @@ fn modeling_tool_shortcut_double_tap_behavior() {
     bridge.state.sync_selection();
     assert_eq!(bridge.view_model().tool_activation, "drag");
 
-    // 1 toque no atalho E (ADR 006): escolhe a ferramenta persistente sem
+    // 1 toque no atalho E (ADR 007): escolhe a ferramenta persistente sem
     // abrir operação; o arrasto na viewport é que opera.
     assert!(bridge.route_shortcut("E", false, false, false));
     assert!(bridge.tool_modal.is_none());
@@ -5529,7 +5529,7 @@ fn proportional_editing_radius_adjustment_and_falloff() {
     bridge.apply(UiIntent::SetProportionalFalloff("linear".into()));
     assert_eq!(bridge.view_model().proportional_falloff, "linear");
 
-    // ADR 006: durante a operação, Ctrl+roda ajusta o raio; a roda sozinha
+    // ADR 007: durante a operação, Ctrl+roda ajusta o raio; a roda sozinha
     // continua sendo zoom.
     bridge
         .state
@@ -5893,7 +5893,7 @@ fn wheel_zooms_even_with_a_tool_modal_open() {
     assert_eq!(bridge.tool_modal, Some(ToolModalKind::Extrude));
     let initial_value = bridge.tool_modal_value;
 
-    // ADR 006: a roda sempre faz zoom; o valor da ferramenta não muda.
+    // ADR 007: a roda sempre faz zoom; o valor da ferramenta não muda.
     let distance = bridge.state.session.camera.distance;
     bridge.apply_viewport_gesture(ViewportGesture::Zoom { delta: -1.0 });
     assert_eq!(bridge.tool_modal_value, initial_value);
@@ -7637,6 +7637,7 @@ fn test_viewport_context_menu_modeling_actions_and_dismissal() {
     // 4. Test actions in viewport context menu
     bridge.open_viewport_context_menu(200.0, 150.0);
     assert!(bridge.context_menu_action("shade_smooth"));
+    // `model.shade_smooth` passou a ser `SetShadeSmoothCmd` (G7): a mensagem é a do comando.
     assert_eq!(bridge.view_model().status_message, "Smooth shading");
 
     bridge.open_viewport_context_menu(200.0, 150.0);
@@ -8263,7 +8264,7 @@ fn test_smart_contextual_selection_mode_switching() {
     );
 
     // 3. Extrude a partir de Object troca para Face de forma visível e,
-    // pelo ADR 006, nunca seleciona todas as faces sozinho.
+    // pelo ADR 007, nunca seleciona todas as faces sozinho.
     bridge.apply(UiIntent::SetSelectionDomain(
         petunia_core::SelectionDomain::Object,
     ));
@@ -9007,7 +9008,7 @@ fn test_2d_generated_object_has_quads_and_deleting_face_preserves_segment() {
 }
 
 // ---------------------------------------------------------------------------
-// Onda 1 (ADR 006): viewport nítido e bugs comprovados.
+// Onda 1 (ADR 007): viewport nítido e bugs comprovados.
 // ---------------------------------------------------------------------------
 
 fn bridge_with_selected_face() -> SlintUiBridge<PlaceholderViewport> {
@@ -9205,7 +9206,7 @@ fn cpu_viewport_keeps_logical_pixels() {
 }
 
 // ---------------------------------------------------------------------------
-// Onda 2 (ADR 006): gramática única de ferramenta.
+// Onda 2 (ADR 007): gramática única de ferramenta.
 // ---------------------------------------------------------------------------
 
 /// Um ponto de tela (px lógicos) sobre uma face visível do asset ativo.

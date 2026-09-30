@@ -270,7 +270,7 @@ visual em janelas estreitas. Logs e capturas: `.prumo/history/premium/`.
 
 # Rodada premium 2 (2026-09-12) — widgets de navegação, 3d cursor e rmb contextual
 
-Implementação do Gizmo de Orientação 3D interativo, 3D Cursor posicional e menu contextual RMB conforme a então Golden Reference (retirada pelo ADR 006 em 2026-09-29) [`Blender.svg`](../docs/image-references/Blender.svg).
+Implementação do Gizmo de Orientação 3D interativo, 3D Cursor posicional e menu contextual RMB conforme a então Golden Reference (retirada pelo ADR 007 em 2026-09-29) [`Blender.svg`](../docs/image-references/Blender.svg).
 
 | Perspectiva | Nota R1 | Nota R2 | Ganhos Materiais e Evidências |
 |---|---:|---:|---|

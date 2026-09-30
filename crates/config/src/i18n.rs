@@ -307,6 +307,8 @@ pub mod text_id {
     pub const UI_PROFILE_DEPTH: TextId = TextId::new("ui.profile_depth");
     pub const UI_PROFILE_POINTS: TextId = TextId::new("ui.profile_points");
     pub const UI_PROFILE_CLOSE: TextId = TextId::new("ui.profile_close");
+    pub const UI_VIEW_GIZMO: TextId = TextId::new("ui.view_gizmo");
+    pub const UI_VIEW_GIZMO_HINT: TextId = TextId::new("ui.view_gizmo_hint");
     pub const UI_PROFILE_GENERATE: TextId = TextId::new("ui.profile_generate");
     pub const UI_PROFILE_REVOLVE: TextId = TextId::new("ui.profile_revolve");
     pub const UI_PROFILE_CUTS: TextId = TextId::new("ui.profile_cuts");
@@ -688,6 +690,8 @@ pub mod text_id {
         UI_PROFILE_DEPTH,
         UI_PROFILE_POINTS,
         UI_PROFILE_CLOSE,
+        UI_VIEW_GIZMO,
+        UI_VIEW_GIZMO_HINT,
         UI_PROFILE_GENERATE,
         UI_PROFILE_REVOLVE,
         UI_PROFILE_CUTS,

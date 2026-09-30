@@ -1,12 +1,12 @@
 # Viewport nítido e fluido + bugs comprovados — Implementation-vs-Spec Gap Matrix (Onda 1)
 
-Escopo: Onda 1 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md).
+Escopo: Onda 1 do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md).
 Autoridade: Livro Vivo [05](../bible/foundations/05-viewport-shading-modos-visualizacao.md),
 [36](../bible/foundations/36-ui-baseline-temas-plugin-panels.md) (HiDPI, repaint
 event-driven), [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md)
 (contrato numérico), [P3D-040](../bible/specs/p3d-040-sistema-de-snap.md) e
 [P3D-131](../bible/specs/p3d-131-modal-tool-feedback-system.md). Diagnóstico de
-origem: [capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md), seção 2.
+origem: [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md), seção 2.
 Auditoria revalidada em 2026-09-29 contra `f0d7f25`. Nenhum item vira COMPLIANT
 sem teste ou captura.
 

@@ -2970,7 +2970,7 @@ export component PetuniaSlintShell inherits Window {
     forward-focus: root-focus;
 
     in-out property <string> active-workspace: "MODEL";
-    /// "DRAW" ou "POLY" dentro do workspace de modelagem (ADR 006).
+    /// "DRAW" ou "POLY" dentro do workspace de modelagem (ADR 007).
     in-out property <string> modeling-mode: "POLY";
     in-out property <string> label-workspace-draw-title: "";
     in-out property <string> label-workspace-draw-description: "";
@@ -3420,6 +3420,8 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-profile-depth: "";
     in-out property <string> label-profile-points: "";
     in-out property <string> label-profile-close: "";
+    in-out property <string> label-view-gizmo: "";
+    in-out property <string> label-view-gizmo-hint: "";
     in-out property <string> label-profile-plane: "";
     in-out property <string> label-profile-plane-auto: "";
     in-out property <string> label-profile-plane-ground: "";
@@ -3546,7 +3548,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> colorblind-axes: false;
     in-out property <bool> reduced-motion: false;
     in-out property <int> double-tap-interval-ms: 350;
-    // Gramática única de ferramenta (constituição 11, ADR 006).
+    // Gramática única de ferramenta (constituição 11, ADR 007).
     in property <bool> tool-grammar-active: false;
     in property <bool> tool-gesture-latched: false;
     in property <bool> last-operation-active: false;
@@ -6859,6 +6861,9 @@ export component PetuniaSlintShell inherits Window {
                         height: 108px;
                         clip: true;
                         background: transparent;
+                        accessible-role: groupbox;
+                        accessible-label: root.label-view-gizmo;
+                        accessible-description: root.label-view-gizmo-hint;
                         animate x { duration: root.reduced-motion ? 0ms : 180ms; easing: ease-out; }
 
                         TouchArea {

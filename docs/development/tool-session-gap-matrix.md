@@ -1,6 +1,6 @@
 # Gramática única de ferramenta (`ToolSession`) — Implementation-vs-Spec Gap Matrix (Onda 2)
 
-Escopo: Onda 2 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md).
+Escopo: Onda 2 do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md).
 Autoridade: [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md)
 (ciclo `ToolSession`, gesto atômico, "Última operação", contrato numérico),
 [constituição 03](../bible/constitution/03-invariantes-de-ui-ux-design-system-e-acessib.md)
@@ -8,7 +8,7 @@ Autoridade: [constituição 11](../bible/constitution/11-contrato-de-mesh-select
 (entrada), [P3D-083](../bible/specs/p3d-083-tool-properties.md),
 [P3D-092](../bible/specs/p3d-092-petunia-default.md) e
 [P3D-131](../bible/specs/p3d-131-modal-tool-feedback-system.md). Diagnóstico de
-origem: [capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md), seção 2.2.
+origem: [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md), seção 2.2.
 
 ## Ciclo de cada ferramenta antes × depois
 
@@ -47,7 +47,7 @@ origem: [capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-refe
 
 ## Testes do contrato antigo atualizados de propósito
 
-Estes testes codificavam comportamentos que o ADR 006 substituiu e foram
+Estes testes codificavam comportamentos que o ADR 007 substituiu e foram
 reescritos para o contrato novo (não são regressões):
 `viewport_right_click_never_cancels_an_active_transform` (antes: RMB cancela),
 `viewport_right_click_opens_selection_menu_without_session` (retorno = menu aberto),

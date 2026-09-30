@@ -1,10 +1,10 @@
 # Visual e acessibilidade — Implementation-vs-Spec Gap Matrix (Onda 6, parte 1)
 
-Escopo: primeira entrega da Onda 6 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
+Escopo: primeira entrega da Onda 6 do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)
 (visual premium, preferências de acessibilidade e testes com usuários).
 Autoridade: [capítulo 05](../bible/foundations/05-viewport-shading-modos-visualizacao.md)
 ("Studio light padrão previsível", aparência por workspace),
-[capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md)
+[capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md)
 §2.4, §3.4 e §8.4–8.5, [constituição 03](../bible/constitution/03-invariantes-de-ui-ux-design-system-e-acessib.md).
 
 ## Auditoria antes da mudança (30/09)

@@ -1,9 +1,9 @@
 # Workspace POLY — Poly Pen — Implementation-vs-Spec Gap Matrix (Onda 5, parte 1)
 
-Escopo: primeira entrega da Onda 5 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
+Escopo: primeira entrega da Onda 5 do [ADR 007](../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)
 — a ferramenta "quase universal" de edição de componente do POLY.
 Autoridade: [P3D-075](../bible/specs/p3d-075-vertical-tool-toolbar.md) (trilho
-POLY com Poly Pen), [capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md)
+POLY com Poly Pen), [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-referencias.md)
 §1.2 ("POLY também desenha, no nível de componente") e §4 (Polygon Pen do
 Cinema 4D como modelo) e [constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md)
 (ferramenta persistente, `Collecting`, gesto = 1 Undo, escada do Esc).

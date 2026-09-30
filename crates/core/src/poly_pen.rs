@@ -1,4 +1,4 @@
-//! Poly Pen no core (ADR 006, Onda 5): comandos transacionais usados pela
+//! Poly Pen no core (ADR 007, Onda 5): comandos transacionais usados pela
 //! ferramenta, sem conhecer teclas nem toolkit.
 //!
 //! - [`AppState::poly_pen_add_polygon`]: polígono desenhado ponto a ponto

@@ -3,7 +3,7 @@
 <aside>
 🧭
 
-Este capítulo registra a **direção adotada para a macroestrutura da UI**. A referência visual é o próprio sistema Petunia (capítulos 24 e 36); a análise do Blender UI Redesign do capítulo 22 permanece como registro histórico, não como referência canônica. As referências de interação estão no [capítulo 45](45-pesquisa-interacao-modelagem-referencias.md). A organização funcional é Petunia-first e selection/task-centric.
+Este capítulo registra a **direção adotada para a macroestrutura da UI**. A referência visual é o próprio sistema Petunia (capítulos 24 e 36); a análise do Blender UI Redesign do capítulo 22 permanece como registro histórico, não como referência canônica. As referências de interação estão no [capítulo 46](46-pesquisa-interacao-modelagem-referencias.md). A organização funcional é Petunia-first e selection/task-centric.
 
 </aside>
 
@@ -34,7 +34,7 @@ Direção:
 
 # Workspaces
 
-Baseline visual/funcional (revisão de 2026-09-29, [ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)):
+Baseline visual/funcional (revisão de 2026-09-29, [ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)):
 
 ```
 [ DRAW ] [ POLY ] [ PAINT ] [ UV ]

@@ -26,3 +26,7 @@ Evitar ciclos na hierarquia, weights inválidos e bones órfãos; erros estrutur
 ## Testes / DoD
 
 Criar hierarchy, reparent válido/inválido, bind pose, weights normalizados, save/load, undo e aplicação headless de transforms.
+
+## Extensão pós-V1 (2026-09-30)
+
+O modelo passa a incluir **Rig Roles** e **IK chains** como dados do rig ([P3D-169](p3d-169-rig-roles-ik-foundation.md)). Geradores e retarget consomem **papéis**, nunca nomes de osso. Erro estruturado quando um contrato de rig não é satisfeito.
