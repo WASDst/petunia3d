@@ -5,6 +5,10 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F1.1 — presets de serpente, peixe e pássaro (30/09/2026)
+- `RigPreset::serpent(segments, scale)`, `fish(scale)` (serpente de 9 segmentos + nadadeiras) e `bird(scale)` (coluna horizontal, pernas de 3 ossos, asas `Wing_n.L/R`, cauda), como templates de dados (P3D-136).
+- Inferência de papéis passa a reconhecer `Spine_n` numerado e `Wing_n.L/R` (`RigRole::Wing`); Mixamo `Spine1/Spine2` continua igual.
+
 ### Animate F0.6 — comandos transacionais de rig, papéis, IK e clipes (30/09/2026)
 - **`petunia_core::rig_commands`**: presets de rig (humanoide, quadrúpede, multi-leg), Auto-Rig do asset ativo (fit + pesos), remoção de esqueleto em cascata (papéis, IK, vínculos de skin), atribuir/limpar/redetectar papéis, adicionar/editar/remover cadeias de IK, criar/remover clipes e gravar/apagar chaves de osso (valores locais absolutos, rotação normalizada).
 - **Contrato**: `can_execute` sem efeitos, `NoChange` sem histórico, rollback do dispatcher, `do → undo → redo` idêntico por hash e nenhuma revisão de render alterada (`changes() = NONE`). Import glTF pelo `ProjectService` liga esqueleto, pesos, papéis e clipes e é desfazível.

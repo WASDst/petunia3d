@@ -35,7 +35,7 @@ Auditoria estática do código em `main` (`e806225`); nada foi compilado para es
 | --- | --- | :---: | --- |
 | AN-01 | Skeleton & Rig Core (P3D-135) | `COMPLIANT` (domínio) | `crates/project/src/rig.rs`: hierarquia sem ciclos, bind pose, pesos normalizados (4 influências), Linear Blend Skinning |
 | AN-02 | Clipes e keyframes (P3D-067) | `COMPLIANT` (domínio) | `animation.rs`: trilhas por osso, lerp/slerp, `sample_pose`, `sample_skinning_matrices`, loop e FPS |
-| AN-03 | Rig Presets (P3D-136) | `PARTIALLY_COMPLIANT` | `RigPreset::{humanoid, quadruped, multi_leg}`; faltam **serpente, peixe e pássaro** |
+| AN-03 | Rig Presets (P3D-136) | `PARTIALLY_COMPLIANT` → `COMPLIANT` (F1.1, 2026-09-30) | `RigPreset::{humanoid, quadruped, multi_leg, serpent, fish, bird}`; todos com papéis inferidos (`Spine_n`, `Tail_n`, `Wing_n.L/R`, pernas) e testados |
 | AN-04 | Auto-Rig (P3D-137) | `RUDIMENTARY` | `auto_fit_humanoid` por bounding box e `compute_auto_skin_weights` por distância; sem landmarks, sem correção guiada, só humanoide |
 | AN-05 | Retargeting (P3D-138) | `PARTIALLY_COMPLIANT` | `RetargetProfile::mixamo_standard`; sem importação de clipes externos |
 | AN-06 | Animation Asset Library (P3D-139) | `RUDIMENTARY` | `AnimationLibrary` tem 2 clipes canônicos; o "walk" anima apenas 2 ossos com 3 keys (é uma demo) |
