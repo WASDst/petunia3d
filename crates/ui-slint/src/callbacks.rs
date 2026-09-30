@@ -773,6 +773,13 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
     window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
+    window.set_modeling_mode(vm.modeling_mode.as_str().into());
+    window.set_label_workspace_draw_title(vm.label_workspace_draw_title.as_str().into());
+    window
+        .set_label_workspace_draw_description(vm.label_workspace_draw_description.as_str().into());
+    window.set_label_workspace_poly_title(vm.label_workspace_poly_title.as_str().into());
+    window
+        .set_label_workspace_poly_description(vm.label_workspace_poly_description.as_str().into());
     window.set_profile_depth(vm.profile_depth);
     window.set_profile_wall_thickness(vm.profile_wall_thickness);
     window.set_profile_smoothness(vm.profile_smoothness);
@@ -1108,6 +1115,25 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let workspace_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_workspace_changed(move |workspace| {
+        let mode = match workspace.as_str() {
+            "DRAW" => Some(crate::ModelingMode::Draw),
+            "POLY" => Some(crate::ModelingMode::Poly),
+            _ => None,
+        };
+        if let Some(mode) = mode
+            && let Ok(mut bridge) = workspace_bridge.lock()
+        {
+            bridge.apply(UiIntent::SetModelingMode(mode));
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+            return;
+        }
         let workspace = match workspace.as_str() {
             "MODEL" => Workspace::Model,
             "PAINT" => Workspace::Paint,

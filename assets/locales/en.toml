@@ -908,3 +908,11 @@ grid = "Grid"
 
 [draw]
 shape_name = "Shape"
+
+[workspace]
+draw_title = "Draw Workspace"
+draw_description = "Shape level: draw profiles on planes and faces, push and pull regions into solids"
+poly_title = "Poly Workspace"
+poly_description = "Component level: edit points, edges and faces with extrude, inset, round edge and cuts"
+draw_ready = "DRAW: shape tools — Sketch, Push/Pull on regions"
+poly_ready = "POLY: component tools — points, edges and faces"

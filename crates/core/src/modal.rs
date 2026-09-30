@@ -100,6 +100,9 @@ pub struct ModalOp {
     /// fora do histórico: o gesto inteiro vira uma entrada de Undo e Esc
     /// restaura exatamente este estado (constituição 11).
     before_prelude: Option<Box<(Project, Selection)>>,
+    /// A malha ativa é uma folha de região solta: extrudar para o lado
+    /// negativo inverte todas as faces para o sólido continuar voltado para fora.
+    flip_when_negative: bool,
 }
 
 impl ModalOp {
@@ -325,6 +328,7 @@ impl AppState {
             changed: false,
             snap: None,
             before_prelude: None,
+            flip_when_negative: false,
         });
         self.pending_modal = None;
         self.mark_dirty();
@@ -369,6 +373,19 @@ impl AppState {
             self.session.selection.clone(),
         ));
         self.emit_project_changed(ProjectChanges::ALL);
+    }
+
+    pub(crate) fn modal_flips_when_negative(&self) -> bool {
+        self.modal
+            .as_ref()
+            .is_some_and(|modal| modal.flip_when_negative)
+    }
+
+    /// Marca a operação ativa como extrusão de uma folha de região solta.
+    pub(crate) fn set_modal_flip_when_negative(&mut self) {
+        if let Some(modal) = self.modal.as_mut() {
+            modal.flip_when_negative = true;
+        }
     }
 
     /// Estado posterior ao prelúdio (para reaplicar a "Última operação").
@@ -540,6 +557,12 @@ impl AppState {
                 mesh.extrude_selected(0.0);
                 for vertex in mesh.verts.iter_mut().filter(|v| v.selected) {
                     vertex.pos = (vertex.vec() + direction * value).to_array();
+                }
+                if modal.flip_when_negative && value < 0.0 {
+                    for face in &mut mesh.faces {
+                        face.verts.reverse();
+                        face.uv.reverse();
+                    }
                 }
             }
             ModalKind::ExtrudeIndividual if value != 0.0 => mesh.extrude_individual(value),

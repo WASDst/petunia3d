@@ -33,15 +33,27 @@ Autoridade: [capítulo 02](../bible/foundations/02-workflow-modelagem-shape-firs
 | 6 | Gesto = 1 Undo; Esc restaura exatamente; "Última operação" ajustável | Prelúdio no core: `AppState::begin_modal_after_prelude` (commit grava a partir do estado anterior ao imprint; cancelar ou confirmar sem mudança volta a ele) e `LastOperation` guarda o documento pós-prelúdio para reaplicar sem imprint duplicado. Testes `cancel_restores_the_document_exactly`, `last_operation_reapplies_the_region_push_in_the_same_undo`, `escape_during_a_region_push_restores_the_face`. | COMPLIANT |
 | 7 | A primitiva paramétrica não é regenerada por cima do imprint | `freeze_active_primitive_for_command` antes do imprint. | COMPLIANT |
 
+## Parte 2 — DRAW e POLY no seletor (2026-09-30)
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 8 | `DRAW / POLY / PAINT / UV` no lugar de MODEL | `ModelingMode { Draw, Poly }` no bridge; o workspace interno continua `Model` (DRAW e POLY compartilham documento, seleção, câmera, snapping e Inspector, como no ADR 006). `WorkspaceSegment` com quatro segmentos; títulos e descrições por `TextId` (`workspace.*`). Teste `draw_and_poly_share_the_modeling_workspace`. | PARTIALLY_COMPLIANT — sem captura nativa. |
+| 9 | Trilho de ferramentas de forma no DRAW | Barra contextual filtrada por modo: DRAW = Sketch, Retângulo, Círculo, Push/Pull (sempre visível), Duplicar; POLY = Extrude, Inset, Bevel, Knife, Loop Cut, Subdivide, Merge, Slice, Connect, Make Face, Spin, Dissolve (+ Push/Pull, Duplicar). Trocar de modo devolve para Select uma ferramenta que o trilho novo não oferece; nada é convertido. Teste `switching_mode_drops_a_tool_the_new_rail_does_not_offer`. | PARTIALLY_COMPLIANT — Revolve e plano de trabalho ainda ficam no card do perfil. |
+| 10 | Conversão explícita DRAW → POLY | Hoje as formas do DRAW já são malhas (o Push/Pull gera polígonos); "Converter em polígonos" só fará sentido quando as formas forem paramétricas. | MISSING (depende de formas paramétricas) |
+
+**Padrão:** POLY, para preservar o fluxo atual; DRAW como padrão para quem
+começa é decisão a validar com usuários (Onda 6).
+
 ## Pendências registradas
 
-- **Parte 2 da Onda 4:** pill DRAW (e POLY na Onda 5), trilho de ferramentas de
-  forma, aparência de viewport para leitura de forma (capítulo 05), plano por
-  3 pontos/face + aresta, "Converter em polígonos".
+- **Restante da Onda 4:** conjunto de seleção `Shape / Curve / Point / Region`
+  no DRAW, aparência de viewport para leitura de forma (capítulo 05), plano por
+  3 pontos/face + aresta, formas paramétricas + "Converter em polígonos".
 - Imprint geral: região que cruza as arestas da face (dividir por corte),
   região com furos sobre face, região que atravessa várias faces coplanares.
-- Região solta empurrada para o lado negativo: hoje o topo atravessa o fundo
-  (sólido invertido); o esperado é extrudar a partir do fundo.
+- ~~Região solta empurrada para o lado negativo inverte o sólido~~ → corrigido:
+  a extrusão negativa de uma folha solta inverte as faces e o sólido continua
+  voltado para fora (também ao reajustar a "Última operação").
 - Perfil consumido: depois do Push/Pull o perfil continua no documento e a
   região volta a aparecer no hover (como no Plasticity); avaliar com usuários.
 - Oclusão da região só considera a malha ativa; outros objetos não escondem.

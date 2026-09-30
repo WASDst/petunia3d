@@ -264,6 +264,9 @@ impl AppState {
         }
         self.emit_project_changed(petunia_project::ProjectChanges::ALL);
         self.begin_modal_after_prelude(ModalKind::Extrude, before, before_selection)?;
+        if host.is_none() {
+            self.set_modal_flip_when_negative();
+        }
         Ok(())
     }
 }
@@ -387,6 +390,23 @@ mod tests {
         assert_eq!(state.project.project.assets.len(), assets + 1);
         let mesh = state.project.active_mesh().unwrap();
         assert_eq!(mesh.faces.len(), 6, "caixa fechada");
+
+        // Para o lado negativo o sólido continua fechado e voltado para fora.
+        let mut state = state_with_profiles(&[(&SQUARE, free_plane())]);
+        let hit = state.profile_region_at_ray(origin, direction).unwrap();
+        state.begin_region_push_pull(&hit).unwrap();
+        state.update_modal(Vec3::ZERO, -0.5).unwrap();
+        assert!(state.commit_modal());
+        let mesh = state.project.active_mesh().unwrap();
+        assert_eq!(mesh.faces.len(), 6);
+        let center = mesh.verts.iter().map(|v| v.vec()).sum::<Vec3>() / mesh.verts.len() as f32;
+        for face in 0..mesh.faces.len() {
+            let first = mesh.verts[mesh.faces[face].verts[0] as usize].vec();
+            assert!(
+                mesh.face_normal(face).dot(first - center) > 0.0,
+                "face {face} voltada para dentro"
+            );
+        }
 
         // Confirmar sem mover não deixa asset órfão.
         let mut state = state_with_profiles(&[(&SQUARE, free_plane())]);

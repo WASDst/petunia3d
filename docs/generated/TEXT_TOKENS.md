@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **815**.
+Total de chaves de localização cadastradas: **821**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -830,6 +830,12 @@ Total de chaves de localização cadastradas: **815**.
 | `viewport.snap_tip` | Magnetic Snapping · Shift+Tab | Snapping Magnético · Shift+Tab |
 | `viewport.tri_tip` | Triangulation inspection (internal diagonals of quads/n-gons) | Inspeção de triangulação (diagonais internas de quads/n-gons) |
 | `viewport.xray_tip` | X-Ray / Mesh transparency mode · Alt+Z | Modo Raio-X / Transparência de Malha · Alt+Z |
+| `workspace.draw_description` | Shape level: draw profiles on planes and faces, push and pull regions into solids | Nível de forma: desenhe perfis em planos e faces, empurre e puxe regiões em sólidos |
+| `workspace.draw_ready` | DRAW: shape tools — Sketch, Push/Pull on regions | DRAW: ferramentas de forma — Sketch, Push/Pull em regiões |
+| `workspace.draw_title` | Draw Workspace | Workspace Desenho |
+| `workspace.poly_description` | Component level: edit points, edges and faces with extrude, inset, round edge and cuts | Nível de componente: edite pontos, arestas e faces com extrude, inset, round edge e cortes |
+| `workspace.poly_ready` | POLY: component tools — points, edges and faces | POLY: ferramentas de componente — pontos, arestas e faces |
+| `workspace.poly_title` | Poly Workspace | Workspace Polígonos |
 | `ws.model` | MODEL | MODEL |
 | `ws.paint` | PAINT | PAINT |
 | `ws.uv` | UV | UV |

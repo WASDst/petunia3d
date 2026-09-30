@@ -430,6 +430,7 @@ pub struct LastOperation {
     /// Documento logo após o prelúdio (imprint/forma nova), para reaplicar o
     /// gesto sem refazer a detecção de região.
     prelude: Option<PreludeState>,
+    flip_when_negative: bool,
 }
 
 /// Documento após o prelúdio de um gesto; comparado por identidade.
@@ -478,6 +479,7 @@ impl AppState {
     /// Confirma a operação modal ativa como um gesto e devolve a "Última
     /// operação" ajustável. `None` quando nada mudou (sem entrada de Undo).
     pub fn commit_modal_gesture(&mut self) -> Option<LastOperation> {
+        let flip_when_negative = self.modal_flips_when_negative();
         let prelude = self
             .modal_prelude_state()
             .map(|state| PreludeState(std::sync::Arc::new(state)));
@@ -500,6 +502,7 @@ impl AppState {
             history_depth: self.project.undo.depth(),
             revision_clock: self.project.project.revision_clock(),
             prelude,
+            flip_when_negative,
         })
     }
 
@@ -553,6 +556,9 @@ impl AppState {
             self.project.project = after;
             self.session.selection = selection;
             self.begin_modal_after_prelude(last.kind, before, before_selection)?;
+            if last.flip_when_negative {
+                self.set_modal_flip_when_negative();
+            }
         } else {
             self.begin_modal(last.kind)?;
         }

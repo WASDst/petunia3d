@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### DRAW e POLY no seletor — Onda 4, parte 2 (30/09/2026)
+- **Seletor `DRAW · POLY · PAINT · UV`**: MODEL vira dois modos do mesmo workspace de modelagem — mesmo documento, seleção, câmera e Inspector; muda o trilho de ferramentas.
+- **Trilho por modo**: DRAW mostra Sketch, Retângulo, Círculo, Push/Pull e Duplicar; POLY mostra as ferramentas de componente (Extrude, Inset, Bevel, Knife, Loop Cut e demais). Trocar de modo nunca converte nem seleciona nada; uma ferramenta que não existe no novo trilho volta para Select.
+- **Correção**: empurrar uma região solta para o lado negativo agora gera um sólido voltado para fora.
+- **Escopo honesto**: seleção `Shape / Curve / Point / Region` no DRAW, aparência de viewport por modo, plano por 3 pontos e formas paramétricas com "Converter em polígonos" continuam pendentes; padrão POLY a validar com usuários.
+
 ### Regiões e Push/Pull do DRAW — Onda 4, parte 1 (30/09/2026)
 - **Regiões fechadas como no Plasticity**: perfis que se cruzam no mesmo plano formam regiões (arranjo planar com furos); a região sob o cursor recebe tinta translúcida no Draw e no Push/Pull.
 - **Push/Pull na região**: arrastar uma região com Push/Pull gera volume na hora, com o mesmo gesto das outras ferramentas (valor segue o cursor, digitação vence o mouse, "Última operação" ajustável).

@@ -910,3 +910,11 @@ grid = "Grade"
 
 [draw]
 shape_name = "Forma"
+
+[workspace]
+draw_title = "Workspace Desenho"
+draw_description = "Nível de forma: desenhe perfis em planos e faces, empurre e puxe regiões em sólidos"
+poly_title = "Workspace Polígonos"
+poly_description = "Nível de componente: edite pontos, arestas e faces com extrude, inset, round edge e cortes"
+draw_ready = "DRAW: ferramentas de forma — Sketch, Push/Pull em regiões"
+poly_ready = "POLY: ferramentas de componente — pontos, arestas e faces"

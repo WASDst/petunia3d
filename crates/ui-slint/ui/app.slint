@@ -572,13 +572,18 @@ component TopAction inherits Rectangle {
 
 /// Segmented control para a seleção de workspaces com pill deslizante.
 component WorkspaceSegment inherits Rectangle {
-    in property <string> active: "MODEL";
+    /// "DRAW", "POLY", "PAINT" ou "UV".
+    in property <string> active: "POLY";
     in property <bool> reduced-motion: false;
+    in property <string> draw-title: "Draw";
+    in property <string> draw-description: "";
+    in property <string> poly-title: "Poly";
+    in property <string> poly-description: "";
     callback changed(string);
 
     accessible-role: tab-list;
     accessible-label: "Workspaces";
-    width: 246px;
+    width: 327px;
     height: 28px;
     border-radius: 6px;
     background: DesignTokens.surface-raised;
@@ -587,7 +592,7 @@ component WorkspaceSegment inherits Rectangle {
 
     // Sliding pill
     Rectangle {
-        x: root.active == "MODEL" ? 2px : (root.active == "PAINT" ? 83px : 164px);
+        x: root.active == "DRAW" ? 2px : (root.active == "POLY" ? 83px : (root.active == "PAINT" ? 164px : 245px));
         y: 2px;
         width: 80px;
         height: 22px;
@@ -604,23 +609,51 @@ component WorkspaceSegment inherits Rectangle {
             height: 22px;
             background: transparent;
             accessible-role: tab;
-            accessible-label: "Model Workspace";
-            accessible-checked: root.active == "MODEL";
+            accessible-label: root.draw-title;
+            accessible-description: root.draw-description;
+            accessible-checked: root.active == "DRAW";
             Text {
-                text: "MODEL";
-                color: root.active == "MODEL" ? DesignTokens.canvas : DesignTokens.text-secondary;
+                text: "DRAW";
+                color: root.active == "DRAW" ? DesignTokens.canvas : DesignTokens.text-secondary;
                 font-size: 11px;
                 font-weight: 700;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
             TouchArea {
-                clicked => { root.changed("MODEL"); }
+                clicked => { root.changed("DRAW"); }
                 Tooltip {
                     RichTooltip {
-                        title: "Model Workspace";
+                        title: root.draw-title;
                         shortcut: "F1";
-                        description: "3D mesh modeling, extrusion, loop cuts, and booleans";
+                        description: root.draw-description;
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 80px;
+            height: 22px;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: root.poly-title;
+            accessible-description: root.poly-description;
+            accessible-checked: root.active == "POLY";
+            Text {
+                text: "POLY";
+                color: root.active == "POLY" ? DesignTokens.canvas : DesignTokens.text-secondary;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.changed("POLY"); }
+                Tooltip {
+                    RichTooltip {
+                        title: root.poly-title;
+                        shortcut: "F1";
+                        description: root.poly-description;
                     }
                 }
             }
@@ -2937,6 +2970,12 @@ export component PetuniaSlintShell inherits Window {
     forward-focus: root-focus;
 
     in-out property <string> active-workspace: "MODEL";
+    /// "DRAW" ou "POLY" dentro do workspace de modelagem (ADR 006).
+    in-out property <string> modeling-mode: "POLY";
+    in-out property <string> label-workspace-draw-title: "";
+    in-out property <string> label-workspace-draw-description: "";
+    in-out property <string> label-workspace-poly-title: "";
+    in-out property <string> label-workspace-poly-description: "";
     in-out property <bool> inspector-visible: true;
     in-out property <bool> model-parts-open: false;
     in-out property <bool> model-transform-open: false;
@@ -4039,7 +4078,11 @@ export component PetuniaSlintShell inherits Window {
 
                     // 2. Centro: Seletor de Workspace rigorosamente centralizado
                     WorkspaceSegment {
-                        active: active-workspace;
+                        active: active-workspace == "MODEL" ? root.modeling-mode : active-workspace;
+                        draw-title: root.label-workspace-draw-title;
+                        draw-description: root.label-workspace-draw-description;
+                        poly-title: root.label-workspace-poly-title;
+                        poly-description: root.label-workspace-poly-description;
                         reduced-motion: root.reduced-motion;
                         changed(ws) => { root.workspace-changed(ws); }
                     }
@@ -6905,7 +6948,7 @@ export component PetuniaSlintShell inherits Window {
                             alignment: center;
 
                             // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
-                            if active-workspace == "MODEL": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW": ToolButton {
                                 icon-svg: PetuniaIcons.tool-profile;
                                 semantic-label: "Sketch";
                                 shortcut: root.shortcuts.model-profile;
@@ -6913,48 +6956,49 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "draw_profile";
                                 clicked => { root.active-tool-changed("draw_profile"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.viewport-region-width >= 760: ToolButton {
                                 icon: IconSet.Square;
                                 semantic-label: "Rect 2D";
                                 description: "Create 2D rectangle profile on active workplane, ready to extrude";
                                 clicked => { root.add-profile-rectangle(2.0, 1.5); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.viewport-region-width >= 760: ToolButton {
                                 icon: IconSet.Circle;
                                 semantic-label: "Circle 2D";
                                 description: "Create 2D circle profile on active workplane, ready to extrude or revolve";
                                 clicked => { root.add-profile-circle(1.0, 16); }
                             }
 
-                            if active-workspace == "MODEL": Rectangle {
+                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW": Rectangle {
                                 width: 1px;
                                 height: 20px;
                                 background: DesignTokens.border;
                             }
 
                             // --- MODEL: Ferramentas principais de edição poligonal ---
-                            if active-workspace == "MODEL": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
                                 icon-svg: PetuniaIcons.tool-extrude;
                                 semantic-label: "Extrude";
                                 shortcut: root.shortcuts.model-extrude;
                                 description: "Pull new vertices and faces outward from selected edges or faces";
                                 clicked => { root.command-executed("model.extrude"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && (root.modeling-mode == "DRAW" || root.viewport-region-width >= 760): ToolButton {
                                 icon-svg: PetuniaIcons.tool-pushpull;
+                                active: active-tool == "push_pull";
                                 semantic-label: root.label-model-push-pull;
                                 shortcut: root.shortcuts.model-push-pull;
                                 description: "Push or pull faces along surface normals directly";
                                 clicked => { root.command-executed("model.push_pull"); }
                             }
-                            if active-workspace == "MODEL": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
                                 icon-svg: PetuniaIcons.tool-inset;
                                 semantic-label: "Inset";
                                 shortcut: root.shortcuts.model-inset;
                                 description: "Inset new polygonal boundary inside selected faces";
                                 clicked => { root.command-executed("model.inset"); }
                             }
-                            if active-workspace == "MODEL": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
                                 icon-svg: PetuniaIcons.tool-bevel;
                                 semantic-label: "Bevel";
                                 shortcut: root.shortcuts.model-bevel;
@@ -6962,13 +7006,13 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("model.bevel"); }
                             }
 
-                            if active-workspace == "MODEL": Rectangle {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": Rectangle {
                                 width: 1px;
                                 height: 20px;
                                 background: DesignTokens.border;
                             }
 
-                            if active-workspace == "MODEL": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
                                 icon-svg: PetuniaIcons.tool-knife;
                                 semantic-label: "Knife";
                                 shortcut: root.shortcuts.model-knife;
@@ -6976,7 +7020,7 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "cut";
                                 clicked => { root.command-executed("model.knife"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-loopcut;
                                 semantic-label: root.label-model-loop-cut;
                                 shortcut: root.shortcuts.model-loop-cut;
@@ -6991,21 +7035,21 @@ export component PetuniaSlintShell inherits Window {
                                 description: "Create an identical clone of selected geometry or parts";
                                 clicked => { root.duplicate-requested(); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-subdivide;
                                 semantic-label: "Subdivide";
                                 shortcut: root.shortcuts.model-subdivide;
                                 description: "Subdivide faces into quad quarters creating finer geometry";
                                 clicked => { root.command-executed("model.subdivide"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-merge;
                                 semantic-label: "Merge Center";
                                 shortcut: root.shortcuts.model-merge;
                                 description: "Collapse and merge all selected vertices to their median center";
                                 clicked => { root.command-executed("model.merge"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-slice;
                                 semantic-label: root.label-model-slice;
                                 shortcut: root.shortcuts.model-slice;
@@ -7013,28 +7057,28 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "slice";
                                 clicked => { root.active-tool-changed("slice"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-connect;
                                 semantic-label: "Connect";
                                 shortcut: root.shortcuts.model-connect;
                                 description: "Bridge edge loops with configurable quad segments and twist";
                                 clicked => { root.command-executed("model.connect"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 720: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 720: ToolButton {
                                 icon: IconSet.Square;
                                 semantic-label: "Make Face";
                                 shortcut: "F";
                                 description: "Create face or edge connecting selected vertices or edges (F)";
                                 clicked => { root.command-executed("model.make_face"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-spin;
                                 semantic-label: "Spin";
                                 shortcut: root.shortcuts.model-spin;
                                 description: "Revolve selection around cursor or axis into lathe surface";
                                 clicked => { root.command-executed("model.spin"); }
                             }
-                            if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
                                 icon-svg: PetuniaIcons.tool-dissolve;
                                 semantic-label: "Dissolve";
                                 shortcut: root.shortcuts.model-dissolve;

@@ -435,6 +435,8 @@ pub enum UiIntent {
     ProfileSetWorkplaneView,
     /// Plano automático: face sob o cursor ou plano mais paralelo à vista.
     ProfileSetWorkplaneAuto,
+    /// DRAW (forma) ou POLY (componente) dentro do workspace de modelagem.
+    SetModelingMode(ModelingMode),
     /// "Olhar para o plano": alinha a câmera ao plano sob comando (cap. 01).
     ProfileLookAtPlane,
 }
@@ -661,6 +663,9 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_hover_snap: Option<petunia_core::ScreenSnapHit>,
     /// Região de perfil sob o cursor (Push/Pull e Draw), destacada no hover.
     pub region_hover: Option<petunia_core::RegionHit>,
+    /// DRAW ou POLY: mesmos documento, seleção, câmera e Inspector; muda o
+    /// trilho de ferramentas (ADR 006).
+    pub modeling_mode: ModelingMode,
     /// Regiões por plano, recalculadas só quando o documento muda.
     region_planes_cache: Option<([u64; 11], petunia_core::RegionPlanes)>,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
@@ -676,6 +681,36 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
 pub enum GeometryClipboard {
     Mesh(petunia_core::Mesh),
     Asset(Box<petunia_project::Asset>),
+}
+
+/// Modo do workspace de modelagem (ADR 006): DRAW trabalha no nível de forma,
+/// POLY no nível de componente.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ModelingMode {
+    Draw,
+    #[default]
+    Poly,
+}
+
+impl ModelingMode {
+    /// Rótulo estável usado pela UI para a pílula ativa.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Draw => "DRAW",
+            Self::Poly => "POLY",
+        }
+    }
+
+    /// A ferramenta persistente pertence ao trilho deste modo.
+    pub fn offers_tool(self, tool: &str) -> bool {
+        const SHARED: [&str; 5] = ["select", "move", "rotate", "scale", "push_pull"];
+        const DRAW: [&str; 1] = ["draw_profile"];
+        SHARED.contains(&tool)
+            || match self {
+                Self::Draw => DRAW.contains(&tool),
+                Self::Poly => !DRAW.contains(&tool),
+            }
+    }
 }
 
 /// Alvo de hit-test para manipulação interativa de nós e alças do perfil 2D.
@@ -912,6 +947,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_selected_point: None,
             profile_hover_snap: None,
             region_hover: None,
+            modeling_mode: ModelingMode::default(),
             region_planes_cache: None,
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
@@ -1574,6 +1610,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .state
                     .t_id(petunia_config::text_id::TOOL_GRAMMAR_WORKPLANE_AUTO);
                 self.state.set_status(message);
+            }
+            UiIntent::SetModelingMode(mode) => {
+                if self.state.workspace != Workspace::Model {
+                    self.state.switch_workspace(Workspace::Model);
+                    self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                }
+                if self.modeling_mode != mode {
+                    self.modeling_mode = mode;
+                    // A ferramenta ativa que não existe no trilho novo volta
+                    // para Select; nada é convertido ou selecionado sozinho.
+                    let tool = self.state.session.tools.active_tool.clone();
+                    if !mode.offers_tool(&tool) {
+                        self.apply(UiIntent::SetActiveTool("select".into()));
+                    }
+                }
+                let message = self.state.t_id(match mode {
+                    ModelingMode::Draw => petunia_config::text_id::WORKSPACE_DRAW_READY,
+                    ModelingMode::Poly => petunia_config::text_id::WORKSPACE_POLY_READY,
+                });
+                self.state.set_status(message);
+                self.state.mark_dirty();
             }
             UiIntent::ProfileLookAtPlane => {
                 petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
@@ -11887,6 +11944,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             petunia_module_model::profile_workplane_label(&self.state).to_string();
         vm.profile_workplane_locked = self.state.profile.workplane_locked;
         vm.region_hover_commands = self.region_hover_commands();
+        vm.modeling_mode = self.modeling_mode.id().to_string();
+        vm.label_workspace_draw_title = self
+            .state
+            .t_id(petunia_config::text_id::WORKSPACE_DRAW_TITLE);
+        vm.label_workspace_draw_description = self
+            .state
+            .t_id(petunia_config::text_id::WORKSPACE_DRAW_DESCRIPTION);
+        vm.label_workspace_poly_title = self
+            .state
+            .t_id(petunia_config::text_id::WORKSPACE_POLY_TITLE);
+        vm.label_workspace_poly_description = self
+            .state
+            .t_id(petunia_config::text_id::WORKSPACE_POLY_DESCRIPTION);
         vm.profile_volume_mode = match self.profile_volume_mode {
             Some(petunia_module_model::ProfileVolumeMode::Extrude) => "extrude".to_string(),
             Some(petunia_module_model::ProfileVolumeMode::Revolve) => "revolve".to_string(),

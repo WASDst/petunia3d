@@ -2446,6 +2446,52 @@ fn escape_during_a_region_push_restores_the_face() {
 }
 
 #[test]
+fn draw_and_poly_share_the_modeling_workspace() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    assert_eq!(vm.modeling_mode, "POLY", "padrão preserva o fluxo atual");
+    assert!(!vm.label_workspace_draw_title.is_empty());
+    assert!(!vm.label_workspace_poly_description.is_empty());
+
+    // DRAW a partir do PAINT volta ao workspace de modelagem.
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.workspace, Workspace::Model);
+    assert_eq!(bridge.view_model().modeling_mode, "DRAW");
+
+    // Mesmo documento e seleção: nada é convertido ao trocar de modo.
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let selection = bridge.state.session.selection.clone();
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces
+    );
+    assert_eq!(bridge.state.session.selection, selection);
+}
+
+#[test]
+fn switching_mode_drops_a_tool_the_new_rail_does_not_offer() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.activate_parametric_tool(ToolModalKind::Extrude);
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.session.tools.active_tool, "draw_profile");
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+
+    // Push/Pull e transformações existem nos dois trilhos.
+    bridge.activate_parametric_tool(ToolModalKind::PushPull);
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.session.tools.active_tool, "push_pull");
+    assert!(crate::ModelingMode::Poly.offers_tool("extrude"));
+    assert!(!crate::ModelingMode::Draw.offers_tool("loop_cut"));
+}
+
+#[test]
 fn locked_workplane_ignores_the_face_under_the_cursor() {
     let mut bridge = front_view_bridge_with_cube();
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));

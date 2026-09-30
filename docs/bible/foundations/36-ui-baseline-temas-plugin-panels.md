@@ -577,8 +577,12 @@ Mesma estrutura de DRAW, com trilho de ferramentas de componente (Move/Rotate/
 Scale, Extrude, Inset, Round Edge, Loop Cut, Cut, Poly Pen etc.) e aparência do
 viewport para leitura de topologia (capítulo 05).
 
-> Até a implementação de DRAW e POLY, o workspace exibido continua sendo MODEL,
-> com a composição acima.
+> Implementação (2026-09-30): o seletor do topo mostra `DRAW · POLY · PAINT · UV`.
+> DRAW e POLY são modos do mesmo workspace de modelagem (mesmos documento,
+> seleção, câmera, snapping e Inspector); muda o trilho de ferramentas. O
+> conjunto de seleção `Shape / Curve / Point / Region` do DRAW e a aparência de
+> viewport por modo (capítulo 05) ainda estão pendentes — ver
+> [`draw-regions-gap-matrix.md`](../../development/draw-regions-gap-matrix.md).
 
 ## PAINT
 
