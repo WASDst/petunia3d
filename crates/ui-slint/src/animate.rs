@@ -29,7 +29,7 @@ use petunia_config::text_id as T;
 use petunia_core::{
     AnimatePreview, CommandError, MotionUnavailable, PosePreview, RigPresetKind, motion_catalog,
 };
-use petunia_project::{MotionGenerator, MotionRecipe, MotionStyle, RootMode};
+use petunia_project::{MotionGenerator, MotionRecipe, MotionStyle, PoseOverride, RootMode};
 
 use crate::{
     PetuniaSlintShell, PetuniaViewport, SlintUiBridge, UiIntent, project_preview_segment,
@@ -54,6 +54,10 @@ pub struct AnimateRuntime {
     /// amostrar a pose sem exigir `&mut` do bridge inteiro.
     preview: RefCell<AnimatePreview>,
     last_tick: Option<Instant>,
+    /// Última malha deformada entregue ao renderer e sua revisão (só avança
+    /// quando a geometria muda, para o wgpu não reconstruir buffers à toa).
+    pose: Option<Arc<PoseOverride>>,
+    pose_revision: u64,
 }
 
 impl AnimateRuntime {
@@ -506,6 +510,56 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         (bones, joints)
     }
 
+    /// Há um modelo do projeto ligado (por skin) à criatura em foco? Só então
+    /// vale re-renderizar o viewport a cada quadro de animação.
+    pub fn animate_has_posed_model(&self) -> bool {
+        let project = &self.state.project.project;
+        let Some(skeleton) = self.state.session.animate.skeleton else {
+            return false;
+        };
+        project.assets.iter().any(|a| {
+            a.visible
+                && !a.has_enabled_modifiers()
+                && a.skin_data
+                    .as_ref()
+                    .is_some_and(|s| s.skeleton_id == skeleton)
+        })
+    }
+
+    /// Malhas deformadas pela pose atual, para o renderer desenhar no lugar do
+    /// repouso. Fora do workspace Animate (ou sem modelo ligado) é `None` e o
+    /// viewport mostra o documento como está. O documento nunca é alterado.
+    pub fn animate_pose_override(&mut self) -> Option<Arc<PoseOverride>> {
+        if !self.animate_workspace_active() {
+            self.animate.pose = None;
+            return None;
+        }
+        self.animate_pose_override_now()
+    }
+
+    /// Como [`Self::animate_pose_override`], sem olhar o workspace ativo.
+    pub(crate) fn animate_pose_override_now(&mut self) -> Option<Arc<PoseOverride>> {
+        let next = self.animate.pose_revision + 1;
+        let fresh = self.animate.preview.get_mut().pose_override(
+            &self.state.project.project,
+            &self.state.session.animate,
+            next,
+        );
+        let Some(fresh) = fresh else {
+            self.animate.pose = None;
+            return None;
+        };
+        if let Some(previous) = &self.animate.pose
+            && previous.same_geometry(&fresh)
+        {
+            return Some(Arc::clone(previous));
+        }
+        self.animate.pose_revision = next;
+        let shared = Arc::new(fresh);
+        self.animate.pose = Some(Arc::clone(&shared));
+        Some(shared)
+    }
+
     /// Avança o playhead em `dt` segundos. `true` se a pose mudou.
     pub fn animate_advance(&mut self, dt: f32) -> bool {
         self.state.animate_resolve();
@@ -830,7 +884,22 @@ pub fn connect_animate_callbacks<V: PetuniaViewport + 'static>(
         } else {
             crate::sync_window_properties(&window, &bridge.view_model());
         }
+        refresh_posed_viewport(&mut bridge, &window);
     });
+}
+
+/// Re-renderiza o viewport quando há um modelo deformado pela pose (a malha
+/// muda a cada quadro, ao contrário do esqueleto, que é um overlay Slint).
+pub(crate) fn refresh_posed_viewport<V: PetuniaViewport>(
+    bridge: &mut SlintUiBridge<V>,
+    window: &PetuniaSlintShell,
+) {
+    if bridge.animate_workspace_active()
+        && bridge.animate_has_posed_model()
+        && let Some(frame) = bridge.render_viewport()
+    {
+        window.set_viewport_image(frame);
+    }
 }
 
 #[cfg(test)]
@@ -1212,6 +1281,117 @@ mod bridge_tests {
             rebuilds,
             "mover o playhead não reconstrói o avaliador"
         );
+    }
+
+    /// Modelo low-poly ligado à criatura em foco (Fit to model), com Motion.
+    fn with_walking_model() -> Bridge {
+        let mut b = bridge();
+        let mut mesh = petunia_core::Mesh::cube(1.0);
+        for v in &mut mesh.verts {
+            v.pos = [
+                if v.pos[0] >= 0.0 { 0.4 } else { -0.4 },
+                if v.pos[1] >= 0.0 { 1.9 } else { 0.0 },
+                if v.pos[2] >= 0.0 { 0.2 } else { -0.2 },
+            ];
+        }
+        b.state.project.project.add("Hero", mesh);
+        act(&mut b, AnimateIntent::AddCreature(RigPresetKind::Humanoid));
+        b.state.animate_fit_to_model().unwrap();
+        act(
+            &mut b,
+            AnimateIntent::AddMotion(MotionGenerator::BipedCycle),
+        );
+        b
+    }
+
+    #[test]
+    fn pose_override_exists_only_for_a_bound_model_and_only_when_it_changes() {
+        // Sem modelo ligado não há nada a substituir.
+        let mut plain = with_walk();
+        assert!(!plain.animate_has_posed_model());
+        assert!(plain.animate_pose_override_now().is_none());
+
+        let mut b = with_walking_model();
+        assert!(b.animate_has_posed_model());
+        act(&mut b, AnimateIntent::Seek(0.1));
+        let first = b.animate_pose_override_now().expect("modelo ligado");
+        // Mesma pose ⇒ mesmo Arc e mesma revisão (o wgpu não reconstrói).
+        let again = b.animate_pose_override_now().unwrap();
+        assert!(Arc::ptr_eq(&first, &again));
+        assert_eq!(first.revision, again.revision);
+
+        act(&mut b, AnimateIntent::Seek(0.6));
+        let moved = b.animate_pose_override_now().unwrap();
+        assert!(moved.revision > first.revision, "pose nova ⇒ revisão nova");
+        assert!(!moved.same_geometry(&first));
+
+        // Esconder o modelo tira-o da pose.
+        b.state.project.project.assets.last_mut().unwrap().visible = false;
+        assert!(!b.animate_has_posed_model());
+        assert!(b.animate_pose_override_now().is_none());
+    }
+
+    #[test]
+    fn a_draft_slider_value_deforms_the_model_live() {
+        let mut b = with_walking_model();
+        act(&mut b, AnimateIntent::Seek(0.3));
+        let before = b.animate_pose_override_now().unwrap();
+        act(
+            &mut b,
+            AnimateIntent::ParamPreview {
+                key: "stride".into(),
+                value: 2.0,
+            },
+        );
+        let live = b.animate_pose_override_now().unwrap();
+        assert!(!live.same_geometry(&before), "o draft já muda a malha");
+        let depth = b.state.project.undo.depth();
+        act(&mut b, AnimateIntent::ParamCommit);
+        assert_eq!(b.state.project.undo.depth().0, depth.0 + 1);
+    }
+
+    #[test]
+    fn the_viewport_receives_the_pose_override_when_rendering() {
+        #[derive(Default)]
+        struct Recorder {
+            last: Option<Option<Arc<PoseOverride>>>,
+        }
+        impl PetuniaViewport for Recorder {
+            fn resize(&mut self, _: u32, _: u32) {}
+            fn update(&mut self, _: f32) {}
+            fn set_workspace(&mut self, _: petunia_core::Workspace) {}
+            fn set_selection_domain(&mut self, _: petunia_core::SelectionDomain) {}
+            fn set_pose_override(&mut self, pose: Option<Arc<PoseOverride>>) {
+                self.last = Some(pose);
+            }
+        }
+        let mut b = SlintUiBridge::new(AppState::default(), Recorder::default());
+        b.render_viewport();
+        assert_eq!(b.viewport.last.as_ref().map(Option::is_none), Some(true));
+
+        #[cfg(feature = "animation-workspace")]
+        {
+            let mut mesh = petunia_core::Mesh::cube(1.0);
+            for v in &mut mesh.verts {
+                v.pos[1] += 1.0;
+            }
+            b.state.project.project.add("Hero", mesh);
+            b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Animate));
+            b.apply(UiIntent::Animate(AnimateIntent::AddCreature(
+                RigPresetKind::Humanoid,
+            )));
+            b.state.animate_fit_to_model().unwrap();
+            b.render_viewport();
+            let sent = b.viewport.last.clone().flatten();
+            assert!(
+                sent.is_some_and(|p| !p.is_empty()),
+                "no Animate o renderer recebe a pose"
+            );
+            // Saindo do Animate o viewport volta ao repouso do documento.
+            b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Model));
+            b.render_viewport();
+            assert!(b.viewport.last.clone().flatten().is_none());
+        }
     }
 
     #[test]

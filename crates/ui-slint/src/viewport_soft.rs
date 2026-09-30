@@ -2,8 +2,9 @@
 
 use glam::{Mat4, Vec3, Vec4};
 use petunia_core::{Camera, HoverTarget, SelectionDomain, Workspace};
-use petunia_project::{Canvas, Project};
+use petunia_project::{Canvas, PoseOverride, Project, mesh_to_draw};
 use petunia_render::{Shading, scene};
+use std::sync::Arc;
 
 use crate::{PetuniaViewport, ViewportRenderState};
 
@@ -31,6 +32,8 @@ pub struct Software3dViewport {
     pub selection_domain: SelectionDomain,
     pub depth_buffer: Vec<f32>,
     pub color_buffer: Vec<u8>,
+    /// Malhas deformadas por skin (preview de pose); o documento fica em repouso.
+    pose: Option<Arc<PoseOverride>>,
 }
 
 impl Software3dViewport {
@@ -43,6 +46,7 @@ impl Software3dViewport {
             selection_domain: SelectionDomain::Object,
             depth_buffer: vec![1.0; (width * height) as usize],
             color_buffer: vec![0; (width * height * 4) as usize],
+            pose: None,
         }
     }
 
@@ -274,6 +278,10 @@ impl PetuniaViewport for Software3dViewport {
         true
     }
 
+    fn set_pose_override(&mut self, pose: Option<Arc<PoseOverride>>) {
+        self.pose = pose;
+    }
+
     fn render_frame(
         &mut self,
         project: &Project,
@@ -293,12 +301,13 @@ impl PetuniaViewport for Software3dViewport {
                 self.world_line(Vec3::from_array(a), Vec3::from_array(b), &vp, color, true);
             }
         }
+        let pose = self.pose.clone();
         let meshes: Vec<_> = project
             .assets
             .iter()
             .enumerate()
             .filter(|(_, a)| a.visible)
-            .map(|(index, asset)| (index, asset, asset.evaluated_mesh_ref()))
+            .map(|(index, asset)| (index, asset, mesh_to_draw(pose.as_deref(), asset)))
             .collect();
         let scene_light = if state.shading.uses_scene_light() {
             project.active_light()
@@ -585,6 +594,42 @@ mod tests {
         let img = image.expect("image");
         assert_eq!(img.size().width, 320);
         assert_eq!(img.size().height, 240);
+    }
+
+    #[test]
+    fn software_pose_override_replaces_the_mesh_only_while_drawing() {
+        let mut viewport = Software3dViewport::new(240, 180);
+        let mut project = Project::default();
+        project.add("Hero", petunia_core::Mesh::cube(2.0));
+        let asset_id = project.assets.last().unwrap().id;
+        let camera = Camera::default();
+        let state = ViewportRenderState {
+            show_grid: false,
+            ..ViewportRenderState::default()
+        };
+        viewport.render_frame(&project, &[], &camera, state);
+        let rest = viewport.color_buffer.clone();
+
+        // A mesma malha, deslocada: o documento não muda, o desenho sim.
+        let mut moved = project.assets.last().unwrap().mesh.clone();
+        for v in &mut moved.verts {
+            v.pos[0] += 1.5;
+        }
+        let mut pose = PoseOverride::new(1);
+        pose.insert(asset_id, moved);
+        viewport.set_pose_override(Some(Arc::new(pose)));
+        viewport.render_frame(&project, &[], &camera, state);
+        assert_ne!(viewport.color_buffer, rest, "a pose muda os pixels");
+        assert_eq!(
+            project.assets.last().unwrap().mesh.verts[0].pos,
+            petunia_core::Mesh::cube(2.0).verts[0].pos,
+            "o documento segue em repouso"
+        );
+
+        // Sem override, volta exatamente ao repouso.
+        viewport.set_pose_override(None);
+        viewport.render_frame(&project, &[], &camera, state);
+        assert_eq!(viewport.color_buffer, rest);
     }
 
     #[test]

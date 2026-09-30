@@ -490,6 +490,9 @@ pub trait PetuniaViewport: Send {
     }
     /// Pixels físicos por pixel lógico, para larguras de linha e pontos.
     fn set_pixel_ratio(&mut self, _ratio: f32) {}
+    /// Malhas deformadas por skin (preview do Animate) que substituem, só ao
+    /// desenhar, as malhas em repouso do documento. `None` volta ao repouso.
+    fn set_pose_override(&mut self, _pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {}
     fn render_frame(
         &mut self,
         _project: &Project,
@@ -553,6 +556,10 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn draws_component_guides(&self) -> bool {
         (**self).draws_component_guides()
+    }
+
+    fn set_pose_override(&mut self, pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {
+        (**self).set_pose_override(pose);
     }
 
     fn render_frame(
@@ -1753,6 +1760,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let render_state = self.viewport_render_state();
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
+        let pose = self.animate_pose_override();
+        self.viewport.set_pose_override(pose);
         self.viewport.render_frame(
             &self.state.project,
             &self.state.project.refs,
@@ -13149,6 +13158,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 && let Some(window) = animate_window.upgrade()
             {
                 animate::sync_animate_playhead(&window, &bridge.animate_view_model());
+                animate::refresh_posed_viewport(&mut bridge, &window);
             }
         },
     );

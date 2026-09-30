@@ -57,6 +57,19 @@ impl PoseOverride {
     pub fn len(&self) -> usize {
         self.meshes.len()
     }
+
+    /// Mesmos assets e mesmas posições de vértice (ignora `revision`). Quem
+    /// produz o override usa isto para só avançar a revisão — e o renderer só
+    /// reconstruir buffers — quando a pose realmente mudou.
+    pub fn same_geometry(&self, other: &PoseOverride) -> bool {
+        self.meshes.len() == other.meshes.len()
+            && self.meshes.iter().all(|(id, a)| {
+                other.meshes.get(id).is_some_and(|b| {
+                    a.verts.len() == b.verts.len()
+                        && a.verts.iter().zip(&b.verts).all(|(x, y)| x.pos == y.pos)
+                })
+            })
+    }
 }
 
 /// Malha a desenhar para `asset`: a deformada, quando há; senão a avaliada
