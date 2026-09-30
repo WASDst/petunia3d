@@ -751,6 +751,33 @@ pub struct LoopCutSessionState {
 }
 
 /// Tema disponível no registry, já marcado como ativo ou não.
+/// Normaliza os nomes de teclas do teclado numérico entre plataformas/backends
+/// (`KP_1`, `Numpad1`, `Keypad1`, `NumPad1`, `Numpad 1`, ...) para o dígito ou
+/// operador que representam: "0".."9", ".", "/".
+fn numpad_key(text: &str) -> Option<&'static str> {
+    let name = text
+        .strip_prefix("KP_")
+        .or_else(|| text.strip_prefix("Numpad "))
+        .or_else(|| text.strip_prefix("Numpad"))
+        .or_else(|| text.strip_prefix("NumPad"))
+        .or_else(|| text.strip_prefix("Keypad"))?;
+    Some(match name {
+        "0" => "0",
+        "1" => "1",
+        "2" => "2",
+        "3" => "3",
+        "4" => "4",
+        "5" => "5",
+        "6" => "6",
+        "7" => "7",
+        "8" => "8",
+        "9" => "9",
+        "Decimal" | "." => ".",
+        "Divide" | "/" => "/",
+        _ => return None,
+    })
+}
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn new(state: AppState, viewport: V) -> Self {
         let mut bridge = Self {
@@ -9521,124 +9548,34 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             && self.rename_draft.is_none()
         {
             // Atalhos de navegação da viewport (estilo Blender / Teclado Numérico)
-            if (ctrl || alt)
-                && (text == "KP_1"
-                    || text == "Numpad1"
-                    || text == "Keypad1"
-                    || text == "NumPad1"
-                    || text == "Numpad 1")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Back);
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_1"
-                    || text == "Numpad1"
-                    || text == "Keypad1"
-                    || text == "NumPad1"
-                    || text == "Numpad 1")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Front);
-            }
-            if (ctrl || alt)
-                && (text == "KP_3"
-                    || text == "Numpad3"
-                    || text == "Keypad3"
-                    || text == "NumPad3"
-                    || text == "Numpad 3")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Left);
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_3"
-                    || text == "Numpad3"
-                    || text == "Keypad3"
-                    || text == "NumPad3"
-                    || text == "Numpad 3")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Right);
-            }
-            if (ctrl || alt)
-                && (text == "KP_7"
-                    || text == "Numpad7"
-                    || text == "Keypad7"
-                    || text == "NumPad7"
-                    || text == "Numpad 7")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Bottom);
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_7"
-                    || text == "Numpad7"
-                    || text == "Keypad7"
-                    || text == "NumPad7"
-                    || text == "Numpad 7")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Top);
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_9"
-                    || text == "Numpad9"
-                    || text == "Keypad9"
-                    || text == "NumPad9"
-                    || text == "Numpad 9")
-            {
-                return self.toggle_view_opposite();
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_5"
-                    || text == "Numpad5"
-                    || text == "Keypad5"
-                    || text == "NumPad5"
-                    || text == "Numpad 5")
-            {
-                self.apply(UiIntent::ToggleProjection);
-                return true;
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_0"
-                    || text == "Numpad0"
-                    || text == "Keypad0"
-                    || text == "NumPad0"
-                    || text == "Numpad 0")
-            {
-                return self.set_view_preset(petunia_core::ViewPreset::Persp);
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_Decimal"
-                    || text == "NumpadDecimal"
-                    || text == "KeypadDecimal"
-                    || text == "Numpad ."
-                    || text == "KP_.")
-            {
-                let _ = self.state.dispatch_command("view.frame_selection");
-                return true;
-            }
-            if !ctrl
-                && !alt
-                && !shift
-                && (text == "KP_Divide"
-                    || text == "NumpadDivide"
-                    || text == "KeypadDivide"
-                    || text == "Numpad /"
-                    || text == "KP_/")
-            {
-                self.state.toggle_isolate();
-                self.state.mark_dirty();
-                return true;
+            if let Some(key) = numpad_key(text) {
+                let plain = !ctrl && !alt && !shift;
+                let opposite = (ctrl || alt) && key.len() == 1;
+                use petunia_core::ViewPreset as V;
+                match key {
+                    "1" if opposite => return self.set_view_preset(V::Back),
+                    "1" if plain => return self.set_view_preset(V::Front),
+                    "3" if opposite => return self.set_view_preset(V::Left),
+                    "3" if plain => return self.set_view_preset(V::Right),
+                    "7" if opposite => return self.set_view_preset(V::Bottom),
+                    "7" if plain => return self.set_view_preset(V::Top),
+                    "9" if plain => return self.toggle_view_opposite(),
+                    "0" if plain => return self.set_view_preset(V::Persp),
+                    "5" if plain => {
+                        self.apply(UiIntent::ToggleProjection);
+                        return true;
+                    }
+                    "." if plain => {
+                        let _ = self.state.dispatch_command("view.frame_selection");
+                        return true;
+                    }
+                    "/" if plain => {
+                        self.state.toggle_isolate();
+                        self.state.mark_dirty();
+                        return true;
+                    }
+                    _ => {}
+                }
             }
         }
         if (text == "Insert" || text.eq_ignore_ascii_case("d"))
@@ -11643,3 +11580,36 @@ pub fn run() -> Result<(), slint::PlatformError> {
 // Suíte de testes unitários e de integração para o bridge Slint UI e interações do shell.
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod numpad_key_tests {
+    use super::numpad_key;
+
+    #[test]
+    fn numpad_names_normalize_across_backends() {
+        for name in ["KP_1", "Numpad1", "Keypad1", "NumPad1", "Numpad 1"] {
+            assert_eq!(numpad_key(name), Some("1"), "{name}");
+        }
+        for name in [
+            "KP_Decimal",
+            "NumpadDecimal",
+            "KeypadDecimal",
+            "Numpad .",
+            "KP_.",
+        ] {
+            assert_eq!(numpad_key(name), Some("."), "{name}");
+        }
+        for name in [
+            "KP_Divide",
+            "NumpadDivide",
+            "KeypadDivide",
+            "Numpad /",
+            "KP_/",
+        ] {
+            assert_eq!(numpad_key(name), Some("/"), "{name}");
+        }
+        assert_eq!(numpad_key("1"), None);
+        assert_eq!(numpad_key("Numpad"), None);
+        assert_eq!(numpad_key("KP_Enter"), None);
+    }
+}
