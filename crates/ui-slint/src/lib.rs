@@ -6515,6 +6515,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// passam preferências construídas à mão em vez de tocar o disco.
     pub fn restore_section_layouts(&mut self, preferences: &petunia_config::UserPreferences) {
         self.preferences = preferences.clone();
+        if !preferences.theme_id.is_empty() {
+            self.state.ui.active_theme_id = preferences.theme_id.clone();
+        }
         if !preferences.active_keymap_id.is_empty() {
             self.state.ui.active_keymap_id = preferences.active_keymap_id.clone();
             self.state.ui.keybinds =
@@ -6549,6 +6552,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.preferences.selection_thickness = self.state.ui.selection_thickness;
         self.preferences.model_quick_actions = self.state.ui.model_quick_actions.clone();
         self.preferences.active_keymap_id = self.state.ui.active_keymap_id.clone();
+        self.preferences.theme_id = self.state.ui.active_theme_id.clone();
     }
 
     /// Persist runtime section layouts; failures surface as status, never panic.
@@ -11445,6 +11449,9 @@ pub fn run() -> Result<(), slint::PlatformError> {
     // restore below. / Clone (no máximo 6 ids curtos): `preferences` segue
     // íntegro para o restore das seções abaixo.
     state.ui.model_quick_actions = preferences.model_quick_actions.clone();
+    if !preferences.theme_id.is_empty() {
+        state.ui.active_theme_id = preferences.theme_id.clone();
+    }
     if !preferences.active_keymap_id.is_empty() {
         state.ui.active_keymap_id = preferences.active_keymap_id.clone();
         state.ui.keybinds = petunia_config::Keybinds::load_profile(&preferences.active_keymap_id);

@@ -392,12 +392,87 @@ def command_map() -> dict[str, str]:
     return result
 
 
+KNOCKOUT = '#252735'
+SHAPES = {'path', 'circle', 'rect', 'ellipse', 'line', 'polygon', 'polyline'}
+
+
+def _tag(el: ET.Element) -> str:
+    return el.tag.split('}')[-1]
+
+
+def _open(el: ET.Element, **override: str | None) -> str:
+    attrs = dict(el.attrib)
+    for key, value in override.items():
+        key = key.replace('_', '-')
+        if value is None:
+            attrs.pop(key, None)
+        else:
+            attrs[key] = value
+    return '<' + _tag(el) + ''.join(f' {k}="{html.escape(v, quote=True)}"' for k, v in attrs.items())
+
+
+def _wrap(chain: list[ET.Element], leaf: str) -> str:
+    for group in reversed(chain):
+        leaf = _open(group) + '>' + leaf + '</g>'
+    return leaf
+
+
+def themeable(geometry: str) -> str:
+    """Turn background-coloured "knockout" strokes/fills into real SVG masks.
+
+    Icons are authored with `#252735` marks that fake a cut-out on a dark panel. That
+    only works on one background. Here every knockout becomes transparent in a mask
+    applied to everything drawn before it, so the art is monochrome `currentColor`
+    with real holes and can be tinted by any theme (Slint `colorize`).
+    """
+    root = ET.fromstring(f'<svg xmlns="http://www.w3.org/2000/svg">{geometry}</svg>')
+    content: list[str] = []
+    pending: list[str] = []
+    counter = 0
+
+    def flush() -> None:
+        nonlocal content, pending, counter
+        if not pending:
+            return
+        counter += 1
+        mask = (f'<mask id="k{counter}" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">'
+                '<rect width="24" height="24" fill="#fff"/>' + ''.join(pending) + '</mask>')
+        content = [mask, f'<g mask="url(#k{counter})">' + ''.join(content) + '</g>']
+        pending = []
+
+    def walk(el: ET.Element, chain: list[ET.Element]) -> None:
+        for child in el:
+            if _tag(child) == 'g':
+                walk(child, chain + [child])
+                continue
+            if _tag(child) not in SHAPES:
+                content.append(ET.tostring(child, encoding='unicode'))
+                continue
+            fill, stroke = child.get('fill'), child.get('stroke')
+            if fill == KNOCKOUT or stroke == KNOCKOUT:
+                if fill == KNOCKOUT:
+                    pending.append(_wrap(chain, _open(child, fill='#000', stroke='none') + '/>'))
+                    if stroke not in (None, 'none', KNOCKOUT):
+                        flush()
+                        content.append(_wrap(chain, _open(child, fill='none') + '/>'))
+                else:
+                    keep_fill = None if fill is None else fill
+                    pending.append(_wrap(chain, _open(child, stroke='#000', fill=keep_fill or 'none') + '/>'))
+            else:
+                flush()
+                content.append(_wrap(chain, _open(child) + '/>'))
+
+    walk(root, [])
+    flush()
+    return ''.join(content)
+
+
 def svg(label: str, geometry: str) -> str:
     safe_label = html.escape(label)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-            f'width="24" height="24" color="#E8EBF2" role="img" '
+            f'width="24" height="24" role="img" '
             f'aria-label="{safe_label}"><title>{safe_label}</title>'
-            f'{geometry}</svg>\n')
+            f'{themeable(geometry)}</svg>\n')
 
 
 def slug(group: str) -> str:
@@ -422,7 +497,7 @@ header{display:flex;align-items:end;justify-content:space-between;gap:24px;flex-
 .controls{display:flex;gap:10px;flex-wrap:wrap}input,select,button{background:#242836;border:1px solid #485065;border-radius:8px;color:#e8ebf2;padding:9px 12px;font:inherit}
 input{width:245px}button{cursor:pointer}button[aria-pressed=true]{border-color:#b58cff;background:#44345f}
 main{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:12px}.card{background:#1c202b;border:1px solid #343b4e;border-radius:10px;padding:12px;min-height:127px}
-.tile{height:49px;display:flex;align-items:center}.tile img{width:32px;height:32px}.name{font-weight:600;margin-bottom:4px}code{font:11px ui-monospace,monospace;color:#aeb7cc;overflow-wrap:anywhere}small{display:block;color:#b58cff;margin-top:4px}
+.tile{height:49px;display:flex;align-items:center}.tile img{width:32px;height:32px;filter:invert(1) brightness(.92)}.name{font-weight:600;margin-bottom:4px}code{font:11px ui-monospace,monospace;color:#aeb7cc;overflow-wrap:anywhere}small{display:block;color:#b58cff;margin-top:4px}
 .card[hidden]{display:none}footer{color:#aeb7cc;margin-top:25px}
 </style><header><div><h1>Petunia3D · Icon System</h1><p>Original 24 × 24 SVGs · transparent canvas · MODEL / PAINT / UV and editor actions · <span id="count"></span> visible</p></div>
 <div class="controls"><input id="search" type="search" placeholder="Search icon or ID" aria-label="Search icons"><select id="group" aria-label="Category"><option value="">All categories</option>''' + options + '''</select>

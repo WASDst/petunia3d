@@ -3939,6 +3939,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_theme_changed(move |theme_id| {
         if let Ok(mut bridge) = theme_bridge.lock() {
             bridge.apply(UiIntent::SetTheme(theme_id.as_str().to_string()));
+            persist_user_preferences(&mut bridge);
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

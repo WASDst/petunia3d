@@ -816,4 +816,42 @@ mod tests {
             }
         }
     }
+
+    /// Contrato do README de temas: pack em disco == fallback embutido.
+    #[test]
+    fn test_disk_packs_match_builtin_official_themes() {
+        const PACKS: [(&str, &str); 3] = [
+            (
+                "petunia-dark",
+                include_str!("../../../assets/themes/petunia-dark/theme.toml"),
+            ),
+            (
+                "petunia-light",
+                include_str!("../../../assets/themes/petunia-light/theme.toml"),
+            ),
+            (
+                "petunia-high-contrast",
+                include_str!("../../../assets/themes/petunia-high-contrast/theme.toml"),
+            ),
+        ];
+        let mut builtin = ThemeRegistry {
+            themes: HashMap::new(),
+            manifests: Vec::new(),
+        };
+        builtin.register_builtin_themes();
+        for (id, text) in PACKS {
+            let disk: Theme = toml::from_str(text).expect("theme.toml válido");
+            let mem = builtin.get_theme(id).expect("tema embutido");
+            assert_eq!(
+                toml::to_string(&disk.colors).unwrap(),
+                toml::to_string(&mem.colors).unwrap(),
+                "{id}: [colors] diverge do embutido"
+            );
+            assert_eq!(
+                toml::to_string(&disk.shell).unwrap(),
+                toml::to_string(&mem.shell).unwrap(),
+                "{id}: [shell] diverge do embutido"
+            );
+        }
+    }
 }

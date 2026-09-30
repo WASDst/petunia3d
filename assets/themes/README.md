@@ -8,14 +8,15 @@ capítulo 36 do Livro Vivo (*UI Baseline Final V1, Temas e Plugin Panels*).
 | ID | Papel | Pasta |
 | --- | --- | --- |
 | `petunia-dark` | Tema completo oficial e **default** da V1 | [`petunia-dark/`](petunia-dark/) |
+| `petunia-light` | Tema claro oficial (revisão 2026-09-30): neutros quentes, sem branco puro | [`petunia-light/`](petunia-light/) |
 | `petunia-high-contrast` | Variação oficial de **acessibilidade** | [`petunia-high-contrast/`](petunia-high-contrast/) |
 
 Cada pack é declarativo e contém:
 
 - `manifest.toml` — metadados (`id`, `name`, `version`, `author`, `description`);
-- `theme.toml` — valores dos tokens semânticos (`ThemeToken`).
+- `theme.toml` — tabelas `[colors]` (22 `ThemeToken`), `[shell]` (tokens de shell Slint) e `[font]`.
 
-Os mesmos dois temas existem como fallback embutido em
+Os mesmos temas existem como fallback embutido em
 `petunia_config::theme::ThemeRegistry`, para que o editor nunca dependa de I/O
 para abrir com a aparência correta. **Os valores dos packs em disco e do
 fallback embutido devem permanecer idênticos** — essa é a checagem de contrato

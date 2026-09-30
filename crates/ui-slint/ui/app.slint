@@ -318,6 +318,7 @@ component ViewportBarButton inherits Rectangle {
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
         width: 16px;
         height: 16px;
         x: (parent.width - self.width) / 2;
@@ -378,6 +379,7 @@ component ViewportSvgButton inherits Rectangle {
     animate transform-scale { duration: Motion.fast; easing: ease-out; }
     Image {
         source: root.glyph;
+        colorize: (root.active || root.live-mode) ? DesignTokens.on-accent : DesignTokens.text-primary;
         width: 20px;
         height: 20px;
         x: (parent.width - self.width) / 2;
@@ -581,6 +583,7 @@ component TopAction inherits Rectangle {
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
         width: 18px;
         height: 18px;
         x: (parent.width - self.width) / 2;
@@ -933,6 +936,7 @@ component ToolButton inherits Rectangle {
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
         width: 18px;
         height: 18px;
         x: (parent.width - self.width) / 2;
@@ -1419,6 +1423,7 @@ component InspectorPill inherits Rectangle {
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
         width: 18px;
         height: 18px;
         x: (parent.width - self.width) / 2;
@@ -10911,7 +10916,7 @@ export component PetuniaSlintShell inherits Window {
                                                 spacing: 6px;
                                                 padding-left: 10px;
                                                 alignment: start;
-                                                Image { source: PetuniaIcons.cube; width: 16px; height: 16px; y: (parent.height - self.height) / 2; image-fit: contain; }
+                                                Image { source: PetuniaIcons.cube; colorize: DesignTokens.text-primary; width: 16px; height: 16px; y: (parent.height - self.height) / 2; image-fit: contain; }
                                                 Text { text: "Outline"; color: root.icon-theme == "outline" ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                             }
                                             TouchArea { clicked => { root.icon-theme-set("outline"); } }
@@ -10924,7 +10929,7 @@ export component PetuniaSlintShell inherits Window {
                                                 spacing: 6px;
                                                 padding-left: 10px;
                                                 alignment: start;
-                                                Image { source: PetuniaIcons.cube; width: 16px; height: 16px; y: (parent.height - self.height) / 2; image-fit: contain; }
+                                                Image { source: PetuniaIcons.cube; colorize: DesignTokens.text-primary; width: 16px; height: 16px; y: (parent.height - self.height) / 2; image-fit: contain; }
                                                 Text { text: "Filled"; color: root.icon-theme == "filled" ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                             }
                                             TouchArea { clicked => { root.icon-theme-set("filled"); } }
