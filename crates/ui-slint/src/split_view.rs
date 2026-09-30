@@ -127,11 +127,13 @@ impl SplitView {
         (c.proj as u8).hash(&mut hasher);
         self.size.hash(&mut hasher);
         format!("{:?}", state.shading).hash(&mut hasher);
+        format!("{:?}", (state.edge_mode, state.workplane)).hash(&mut hasher);
         (
             state.xray,
             state.show_wireframe_overlay,
             state.show_grid,
             state.textured,
+            state.studio_light_follows_camera,
         )
             .hash(&mut hasher);
         hasher.finish()
@@ -204,6 +206,36 @@ mod tests {
         );
         split.orbit(20.0, -40.0);
         assert_eq!(split.preset_id(), "custom");
+    }
+
+    #[test]
+    fn rerenders_when_edge_mode_or_studio_light_change() {
+        let mut split = SplitView::default();
+        split.open(&Camera::default());
+        split.resize(200, 120);
+        let project = scene();
+        let base = ViewportRenderState::default();
+        assert!(split.render(&project, &[], base).is_some());
+
+        // DRAW ↔ POLY troca a aparência das arestas; a segunda vista precisa acompanhar.
+        let features = ViewportRenderState {
+            edge_mode: petunia_render_wgpu::EdgeMode::Features,
+            ..base
+        };
+        assert_ne!(base.edge_mode, features.edge_mode);
+        assert!(
+            split.render(&project, &[], features).is_some(),
+            "mudar o modo de arestas invalida o cache da vista secundária"
+        );
+
+        let fixed_light = ViewportRenderState {
+            studio_light_follows_camera: !features.studio_light_follows_camera,
+            ..features
+        };
+        assert!(
+            split.render(&project, &[], fixed_light).is_some(),
+            "a luz de estúdio também invalida o cache"
+        );
     }
 
     #[test]
