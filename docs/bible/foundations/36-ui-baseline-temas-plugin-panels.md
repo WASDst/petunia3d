@@ -663,7 +663,7 @@ capítulo é reaberto pela decisão.
 
 ### Adendo 2026-09-30 — Animate (primeiro workspace pós-V1)
 
-A UI Baseline V1 permanece `MODEL / PAINT / UV` (com a revisão MODEL de 2026-09-23 e o adendo Paint de 2026-09-16); **este adendo não a reabre**. **Animate** é o primeiro workspace pós-V1 ([ADR 006](../../architecture/adr/006-workspace-animate-pos-v1.md), [cap. 45](45-pos-v1-animate-acessivel-animacao-procedural.md), [P3D-066](../specs/p3d-066-animation-workspace.md)):
+A UI Baseline V1 permanece com os workspaces `DRAW / POLY / PAINT` (revisões de 2026-09-23, 2026-09-29 e 2026-09-30, acima, e o adendo Paint de 2026-09-16; antes `MODEL / PAINT / UV`); **este adendo não a reabre**. **Animate** é o primeiro workspace pós-V1 ([ADR 006](../../architecture/adr/006-workspace-animate-pos-v1.md), [cap. 45](45-pos-v1-animate-acessivel-animacao-procedural.md), [P3D-066](../specs/p3d-066-animation-workspace.md)):
 
 - a pill **Animate só aparece quando o workspace estiver implementado e aceito** (regra acima: workspace não implementado não aparece como pill desabilitada);
 - mantém os invariantes do shell: viewport dominante, um único viewport 3D, sem docking irrestrito, sem janelas de sistema;

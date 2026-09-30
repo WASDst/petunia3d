@@ -334,6 +334,8 @@ fn advanced_controls_appear_on_demand_and_choices_are_immediate() {
     rig.button("Advanced")
         .mock_single_click(PointerEventButton::Left);
     assert!(rig.shell.get_animate_show_advanced());
+    // As seções do Inspector animam a altura (tokens Motion): espera terminar.
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(400));
     rig.slider("Step height");
     rig.button("Wave")
         .mock_single_click(PointerEventButton::Left);

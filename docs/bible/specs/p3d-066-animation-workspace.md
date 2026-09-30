@@ -31,7 +31,7 @@ Workspace de animação low-poly **extremamente fácil para quem não entende de
 
 ## Shell
 
-Animate é o **primeiro workspace pós-V1** (adendo no cap. 36): a pill só aparece quando o workspace estiver implementado e aceito; a UI Baseline V1 `MODEL / PAINT / UV` não é reaberta. Layout proposto no ADR 006 (sem docking irrestrito, sem janelas de sistema, um único viewport).
+Animate é o **primeiro workspace pós-V1** (adendo no cap. 36): a pill só aparece quando o workspace estiver implementado e aceito; a UI Baseline V1 (workspaces do cap. 36, hoje `DRAW / POLY / PAINT`) não é reaberta. Layout proposto no ADR 006 (sem docking irrestrito, sem janelas de sistema, um único viewport).
 
 ## Arquitetura
 
