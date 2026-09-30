@@ -34,11 +34,18 @@ Autoridade: [capítulo 05](../bible/foundations/05-viewport-shading-modos-visual
 | 6 | Linhas de largura constante em pixels, com antisserrilhado | As arestas viram faixas de dois triângulos expandidas no vertex shader (`WIDE_LINE_WGSL`), com largura em px lógicos × escala da tela; o MSAA 4× suaviza as bordas; os buffers não dependem da câmera. A pipeline `LineList` antiga das arestas foi removida (a grade continua em `LineList`). Teste por pixels `wireframe_edges_have_constant_pixel_width` (largura segue a configuração e não muda com o zoom). | COMPLIANT (2026-09-30) |
 | 7 | Aparência por modo (capítulo 05) | `Mesh::to_classified_edges` (borda, não manifold ou dobra > 30°) + `EdgeMode`: DRAW = só arestas de feição; POLY = todas, as comuns mais finas e claras e as de feição reforçadas; PAINT/UV = faces limpas com o overlay opcional. Testes `classified_edges_mark_borders_and_creases_only` e, por pixels, `draw_reads_shape_and_poly_reads_topology`. | PARTIALLY_COMPLIANT — pontos visíveis no domínio Point e plano de trabalho em destaque no DRAW ainda não; viewport por software mantém o comportamento antigo. |
 
+## Parte 3 (2026-09-30)
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 8 | Pontos visíveis no domínio Point (POLY) | Já existia: a camada de seleção desenha um disco de 3,5–5,5 px por ponto não selecionado no domínio Point (`update_selection_layer`). A parte 2 o listou como pendente por engano; nenhuma mudança de código. | COMPLIANT (auditado em 2026-09-30) |
+| 9 | Plano de trabalho em destaque no DRAW (cap. 05) | `WorkplaneOverlay` + `append_workplane`: recorte translúcido com grade de 4 + 4 células e eixos reforçados, centrado na origem do perfil, com tamanho proporcional à altura visível (lê igual em qualquer zoom) e empurrado levemente para a câmera para não disputar profundidade com a face. Aparece no DRAW com a ferramenta de desenho quando o plano está decidido (travado ou perfil em edição); no automático, antes do 1º clique, o destaque da face sob o cursor já mostra o candidato. Testes `draw_highlights_the_workplane_only_once_it_is_decided` e, por pixels, `workplane_highlight_tints_the_plane_under_the_camera`. | PARTIALLY_COMPLIANT — viewport por software sem o destaque. |
+
 ## Pendências registradas
 
 - Contorno de seleção por jump flooding; matcap; oclusão ambiente (GTAO).
-- Aparência por modo: pontos no domínio Point (POLY), plano de trabalho em
-  destaque (DRAW) e o mesmo no viewport por software.
+- Guias de aresta do domínio Edge ainda em `LineList` de 1 px.
+- Aparência por modo e plano de trabalho no viewport por software.
 - Coalescer renders por quadro (pendência da Onda 1).
 - Girar a luz de estúdio por arrasto; filtragem de tremor e "lupa motora".
 - Instalar Vulkan por software no CI para os testes de aparência.

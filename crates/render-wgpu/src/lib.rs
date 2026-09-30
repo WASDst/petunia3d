@@ -53,6 +53,80 @@ pub enum EdgeMode {
     Topology,
 }
 
+/// Plano de trabalho do DRAW em destaque (capítulo 05): origem e eixos do
+/// frame do perfil, em coordenadas de mundo.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WorkplaneOverlay {
+    pub origin: [f32; 3],
+    pub right: [f32; 3],
+    pub up: [f32; 3],
+}
+
+/// Fração da altura visível coberta pelo recorte do plano (meia largura).
+const WORKPLANE_HALF_EXTENT: f32 = 0.3;
+/// Divisões da grade do recorte em cada metade.
+const WORKPLANE_HALF_CELLS: i32 = 4;
+const WORKPLANE_FILL: [f32; 4] = [0.36, 0.62, 0.95, 0.10];
+const WORKPLANE_GRID: [f32; 4] = [0.46, 0.70, 0.98, 0.35];
+const WORKPLANE_AXIS: [f32; 4] = [0.56, 0.78, 1.0, 0.75];
+
+/// Recorte translúcido do plano de trabalho com grade, centrado na origem.
+/// O tamanho acompanha a altura visível, então lê igual em qualquer zoom; o
+/// recorte é empurrado um pouco para a câmera para não brigar com a face.
+fn append_workplane(
+    triangles: &mut Vec<SelectionVertex>,
+    plane: WorkplaneOverlay,
+    camera: &Camera,
+    viewport_height: u32,
+) {
+    let origin = Vec3::from(plane.origin);
+    let right = Vec3::from(plane.right).normalize_or_zero();
+    let up = Vec3::from(plane.up).normalize_or_zero();
+    let mut normal = right.cross(up).normalize_or_zero();
+    if right == Vec3::ZERO || up == Vec3::ZERO || normal == Vec3::ZERO {
+        return;
+    }
+    let perspective_scale = if camera.proj == petunia_core::Projection::Perspective {
+        ((origin - camera.eye()).dot(camera.forward()) / camera.distance.max(0.01)).max(0.01)
+    } else {
+        1.0
+    };
+    let visible = camera.visible_height() * perspective_scale;
+    if normal.dot(camera.eye() - origin) < 0.0 {
+        normal = -normal;
+    }
+    let center = origin + normal * visible * 0.002;
+    let half = visible * WORKPLANE_HALF_EXTENT;
+    let corner = |u: f32, v: f32| center + right * u + up * v;
+    let quad = [
+        corner(-half, -half),
+        corner(half, -half),
+        corner(half, half),
+        corner(-half, half),
+    ];
+    for index in [0usize, 1, 2, 0, 2, 3] {
+        triangles.push(SelectionVertex {
+            pos: quad[index].to_array(),
+            color: WORKPLANE_FILL,
+        });
+    }
+    let step = half / WORKPLANE_HALF_CELLS as f32;
+    for cell in -WORKPLANE_HALF_CELLS..=WORKPLANE_HALF_CELLS {
+        let offset = cell as f32 * step;
+        let (color, width) = if cell == 0 {
+            (WORKPLANE_AXIS, 1.5)
+        } else {
+            (WORKPLANE_GRID, 1.0)
+        };
+        for (start, end) in [
+            (corner(offset, -half), corner(offset, half)),
+            (corner(-half, offset), corner(half, offset)),
+        ] {
+            append_edge_band(triangles, start, end, camera, viewport_height, width, color);
+        }
+    }
+}
+
 /// Ângulo entre faces vizinhas acima do qual a aresta é "de feição".
 pub const CREASE_DEGREES: f32 = 30.0;
 /// Arestas comuns (não de feição) em relação à largura base.
@@ -309,6 +383,9 @@ pub struct Renderer {
     /// Largura das arestas em px lógicos; o uniform recebe × `pixel_ratio`.
     line_width_px: f32,
     edge_mode: EdgeMode,
+    workplane: Option<WorkplaneOverlay>,
+    /// A camada de seleção precisa ser refeita (mudou algo fora da cena).
+    selection_dirty: bool,
     selection_tri_pipeline: wgpu::RenderPipeline,
     selection_line_pipeline: wgpu::RenderPipeline,
     selection_tri_xray_pipeline: wgpu::RenderPipeline,
@@ -1283,6 +1360,8 @@ impl Renderer {
             wide_line_xray_pipeline,
             line_width_px: DEFAULT_LINE_WIDTH_PX,
             edge_mode: EdgeMode::Overlay,
+            workplane: None,
+            selection_dirty: false,
             selection_tri_pipeline,
             selection_line_pipeline,
             selection_tri_xray_pipeline,
@@ -1361,6 +1440,14 @@ impl Renderer {
     /// `false` a mantém fixa no mundo.
     pub fn set_studio_light_follows_camera(&mut self, follows: bool) {
         self.studio_light_follows_camera = follows;
+    }
+
+    /// Plano de trabalho em destaque (DRAW com a ferramenta de desenho).
+    pub fn set_workplane(&mut self, workplane: Option<WorkplaneOverlay>) {
+        if self.workplane != workplane {
+            self.workplane = workplane;
+            self.selection_dirty = true;
+        }
     }
 
     /// Aparência das arestas (DRAW/POLY/overlay); mudar reconstrói as linhas.
@@ -1566,7 +1653,11 @@ impl Renderer {
                 );
             }
             self.last_fingerprint = Some(fp);
-            if hover_changed || camera_changed || domain_changed {
+            if hover_changed
+                || camera_changed
+                || domain_changed
+                || std::mem::take(&mut self.selection_dirty)
+            {
                 self.update_selection_layer(device, scene, camera, edit_domain, hover);
             }
             self.skipped_frames += 1;
@@ -1999,6 +2090,10 @@ impl Renderer {
                 petunia_core::HoverTarget::Object(_) | petunia_core::HoverTarget::None => {}
             }
         }
+        if let Some(plane) = self.workplane {
+            append_workplane(&mut sel_tri, plane, camera, logical_height);
+        }
+        self.selection_dirty = false;
         self.selection_tri_count = sel_tri.len() as u32;
         self.selection_tri_vb = if sel_tri.is_empty() {
             None

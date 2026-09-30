@@ -174,6 +174,7 @@ impl WgpuViewport {
         self.renderer
             .set_studio_light_follows_camera(state.studio_light_follows_camera);
         self.renderer.set_edge_mode(state.edge_mode);
+        self.renderer.set_workplane(state.workplane);
         self.renderer
             .set_selection_style(state.selection_rgb, state.selection_thickness);
         self.renderer.update(
@@ -502,6 +503,47 @@ mod tests {
     }
 
     #[test]
+    fn workplane_highlight_tints_the_plane_under_the_camera() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
+            return;
+        };
+        let mut camera = Camera::default();
+        camera.set_preset(petunia_core::ViewPreset::Top);
+        camera.target = glam::Vec3::ZERO;
+        let mut render = |workplane| {
+            let state = ViewportRenderState {
+                show_grid: false,
+                workplane,
+                ..ViewportRenderState::default()
+            };
+            viewport
+                .render_frame(&Project::default(), &[], &camera, state)
+                .unwrap();
+            // Fora das linhas da grade do recorte: meio de uma célula.
+            let pixels = read_pixels(&viewport);
+            let (x, y) = (
+                viewport.width as usize / 2 + 5,
+                viewport.height as usize / 2 + 5,
+            );
+            let i = (y * viewport.width as usize + x) * 4;
+            [pixels[i], pixels[i + 1], pixels[i + 2]]
+        };
+        let plain = render(None);
+        let highlighted = render(Some(petunia_render_wgpu::WorkplaneOverlay {
+            origin: [0.0, 0.0, 0.0],
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 0.0, -1.0],
+        }));
+        assert_ne!(plain, highlighted, "o recorte precisa aparecer");
+        assert!(
+            highlighted[2] > plain[2],
+            "tinta azul do plano: {plain:?} → {highlighted:?}"
+        );
+        // Desligar remove o destaque.
+        assert_eq!(render(None), plain);
+    }
+
+    #[test]
     fn studio_light_following_the_camera_reads_the_same_from_any_side() {
         let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
             // Sem adaptador (nem lavapipe): nada a medir.
@@ -554,6 +596,7 @@ mod tests {
                         boolean_operand: None,
                         studio_light_follows_camera: true,
                         edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
+                        workplane: None,
                     },
                 );
                 assert!(img.is_ok());

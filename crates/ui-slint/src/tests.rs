@@ -9486,3 +9486,35 @@ fn drag_threshold_preference_separates_click_from_drag() {
         "limitado a 16 px"
     );
 }
+
+#[test]
+fn draw_highlights_the_workplane_only_once_it_is_decided() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(
+        bridge.workplane_overlay(),
+        None,
+        "sem ferramenta de desenho"
+    );
+
+    // Automático e sem perfil: o plano ainda não foi escolhido.
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert!(!bridge.state.profile.workplane_locked);
+    assert_eq!(
+        bridge.workplane_overlay(),
+        None,
+        "o hover da face é o candidato"
+    );
+
+    // Travado no chão: o plano aparece com o frame do perfil.
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    let plane = bridge
+        .workplane_overlay()
+        .expect("plano travado em destaque");
+    assert_eq!(plane.right, bridge.state.profile.right);
+    assert_eq!(plane.up, bridge.state.profile.up);
+
+    // POLY lê topologia: sem plano de trabalho.
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    assert_eq!(bridge.workplane_overlay(), None);
+}
