@@ -75,6 +75,8 @@ pub mod import_obj;
 pub mod io_atomic;
 pub mod material;
 pub mod model_library;
+pub mod motion;
+mod motion_gen;
 pub mod package;
 pub mod paint_layers;
 pub mod palette;
@@ -93,12 +95,19 @@ pub use animation::{
 };
 pub use autosave::{AutosaveConfig, AutosaveService, RecoveryInfo, SessionLockInfo};
 pub use export::{ExportError, export_gltf, export_obj};
-pub use ik::{IkChain, IkError, IkOutcome, IkSolver, solve_chain, solve_fabrik, solve_two_bone};
+pub use ik::{
+    IkChain, IkError, IkOutcome, IkSolver, chain_end_position, solve_chain, solve_fabrik,
+    solve_two_bone,
+};
 pub use import_gltf::{GlbMeshes, GltfImportError, GltfSummary, import_glb_bytes, parse_gltf_json};
 pub use import_obj::{ObjImportError, import_obj_bytes};
 pub use io_atomic::{AtomicIoError, TempScope, atomic_write};
 pub use material::{AlphaMode, Material, ShaderProfile, TextureChannel};
 pub use model_library::{AssetSummary, ModelLibraryQuery, ModelLibraryService, ModelLibrarySort};
+pub use motion::{
+    BakeOptions, BakeResult, BakeTolerance, MotionError, MotionEvaluator, MotionGenerator,
+    MotionParam, MotionRecipe, MotionStyle, ParamSpec, RootMode, bake_motion,
+};
 pub use package::{
     Attachment, PACKAGE_VERSION, PackageError, PackageManifest, open_package, open_package_bytes,
     save_package, save_package_bytes,
