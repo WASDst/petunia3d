@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **781**.
+Total de chaves de localização cadastradas: **1282**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -501,6 +501,507 @@ Total de chaves de localização cadastradas: **781**.
 | `shading.tip_wireframe` | Wireframe (Z 4) | Arame (Z 4) |
 | `shading.unlit` | Unlit | Sem Luz |
 | `shading.wire` | Wireframe | Arame |
+| `sl.200_ms` | 200 ms | 200 ms |
+| `sl.2d_circle` | 2D Circle | Círculo 2D |
+| `sl.2d_planar_boundary_circle_polygon_or_n_gon_d` | 2D planar boundary circle polygon or n-gon disc | Círculo plano 2D: polígono de contorno ou disco n-gon |
+| `sl.2d_rectangle` | 2D Rectangle | Retângulo 2D |
+| `sl.350_ms` | 350 ms | 350 ms |
+| `sl.3d_cursor` | 3D Cursor | Cursor 3D |
+| `sl.3d_mesh_modeling_extrusion_loop_cuts_and_boo` | 3D mesh modeling, extrusion, loop cuts, and booleans | Modelagem de malhas 3D, extrusão, loop cuts e booleanas |
+| `sl.3d_viewport` | 3D Viewport | Viewport 3D |
+| `sl.500_ms` | 500 ms | 500 ms |
+| `sl.90_ccw` | ↺ 90° CCW | ↺ 90° anti-horário |
+| `sl.90_cw` | ↻ 90° CW | ↻ 90° horário |
+| `sl.accent_selection_color` | Accent / Selection Color | Cor de Destaque / Seleção |
+| `sl.accessibility` | Accessibility | Acessibilidade |
+| `sl.accessibility_inclusion` | Accessibility & Inclusion | Acessibilidade & Inclusão |
+| `sl.active` | Active | Ativa |
+| `sl.active_effect` | Active effect | Efeito ativo |
+| `sl.active_features_high_contrast_theme_ui_scale` | Active features: high contrast (theme), UI scale, reduced motion and axes that don't rely on color. | Recursos ativos: alto contraste (tema), escala de UI, movimento reduzido e eixos sem depender de cor. |
+| `sl.add_an_effect_layer` | Add an effect layer | Adicionar camada de efeito |
+| `sl.add_cube` | Add Cube | Adicionar cubo |
+| `sl.add_cylinder` | Add Cylinder | Adicionar cilindro |
+| `sl.add_decal_layer` | Add decal layer | Adicionar camada de decalque |
+| `sl.add_group` | Add group | Adicionar grupo |
+| `sl.add_layer` | Add layer | Adicionar camada |
+| `sl.add_parametric_3d_cube_mesh_with_customizabl` | Add parametric 3D cube mesh with customizable subdivisions | Adiciona um cubo 3D paramétrico com subdivisões ajustáveis |
+| `sl.add_parametric_cylinder_with_radial_subdivis` | Add parametric cylinder with radial subdivisions | Adiciona um cilindro paramétrico com subdivisões radiais |
+| `sl.add_primitive` | Add Primitive | Adicionar primitiva |
+| `sl.add_sphere` | Add Sphere | Adicionar esfera |
+| `sl.add_uv_sphere_mesh_with_longitude_and_latitu` | Add UV sphere mesh with longitude and latitude rings | Adiciona uma esfera UV com anéis de longitude e latitude |
+| `sl.airbrush` | Airbrush | Aerógrafo |
+| `sl.alt_w_subdivide` | Alt+W: Subdivide | Alt+W: Subdividir (Subdivide) |
+| `sl.angle` | Angle | Ângulo |
+| `sl.angle_2` | Angle:  | Ângulo:  |
+| `sl.appearance` | Appearance | Aparência |
+| `sl.assistive_technology` | Assistive Technology | Tecnologia Assistiva |
+| `sl.autodesk_3ds_max` | Autodesk 3ds Max | Autodesk 3ds Max |
+| `sl.autodesk_maya` | Autodesk Maya | Autodesk Maya |
+| `sl.automatic_fallback_to_english_when_a_key_is_` | ✓ Automatic fallback to English when a key is not found | ✓ Fallback automático para inglês quando chave não encontrada |
+| `sl.automatic_workplane_ground_xz_active_face_or` | • Automatic workplane: Ground (XZ), active Face or Orthographic view | • Workplane automático: Ground (XZ), Face ativa ou Vista ortográfica |
+| `sl.automation_mcp` | Automation (MCP) | Automação (MCP) |
+| `sl.bake_reference_to_texture` | Bake Reference to Texture | Gerar textura da referência |
+| `sl.base_cap_off` | Base Cap: off | Tampa da base: desligada |
+| `sl.base_cap_on` | Base Cap: on | Tampa da base: ligada |
+| `sl.bevel` | Bevel | Bevel |
+| `sl.bevel_round_edge_bevel` | Bevel (Round Edge / Bevel) | Bisel (Round Edge / Bevel) |
+| `sl.blender_official` | Blender (Official) | Blender (Oficial) |
+| `sl.bottom_cap_off` | Bottom Cap: off | Tampa inferior: desligada |
+| `sl.bottom_cap_on` | Bottom Cap: on | Tampa inferior: ligada |
+| `sl.bottom_radius` | Bottom Radius | Raio inferior |
+| `sl.box_click_selection_of_scene_points_edges_an` | Box / click selection of scene points, edges and faces | Seleção por caixa ou clique de Points, arestas e faces da cena |
+| `sl.bridge_edge_loops_with_configurable_quad_seg` | Bridge edge loops with configurable quad segments and twist | Conecta loops de arestas com segmentos de quads e torção configuráveis |
+| `sl.brush` | Brush | Pincel |
+| `sl.brush_lock` | Brush lock | Bloquear pincel |
+| `sl.brush_settings` | Brush Settings | Configurações do pincel |
+| `sl.camera_projection` | Camera Projection | Projeção da Câmera |
+| `sl.camera_viewpoints_viewport_overlays_and_rend` | Camera viewpoints, viewport overlays and rendering display modes | Pontos de vista da câmera, overlays da viewport e modos de exibição |
+| `sl.cancel` | Cancel | Cancelar |
+| `sl.cancel_esc` | Cancel (Esc) | Cancelar (Esc) |
+| `sl.canvas` | Canvas | Tela |
+| `sl.cap_rings` | Cap Rings | Anéis da tampa |
+| `sl.capsule` | Capsule | Cápsula |
+| `sl.card_gizmo` | CARD / GIZMO | CARD / GIZMO |
+| `sl.change_pivot_point_origin_for_transformation` | Change pivot point origin for transformations (Median, Cursor, Bounds) | Muda a origem do pivô das transformações (Mediana, Cursor, Limites) |
+| `sl.choose` | Choose | Escolher |
+| `sl.circle` | Circle | Círculo |
+| `sl.circle_2d` | Circle 2D | Círculo 2D |
+| `sl.clamp_overlap_active` | ✓ Clamp Overlap (Active) | ✓ Limitar sobreposição (ativo) |
+| `sl.clamp_overlap_off` | Clamp Overlap (Off) | Limitar sobreposição (desligado) |
+| `sl.clamp_overlap_prevents_geometry_self_interse` | Clamp Overlap (prevents geometry self-intersection) | Clamp Overlap (evita auto-interseção de geometria) |
+| `sl.clear` | Clear | Limpar |
+| `sl.clear_all` | Clear All | Limpar tudo |
+| `sl.clear_all_seams` | Clear all seams | Limpa todas as costuras |
+| `sl.clear_all_uv_pins` | Clear all UV pins | Limpa todas as fixações UV |
+| `sl.clear_operand` | Clear operand | Limpar operando |
+| `sl.clear_pins` | Clear Pins | Limpar fixações |
+| `sl.clear_seams` | Clear Seams | Limpar costuras |
+| `sl.clear_selection` | Clear Selection | Limpar seleção |
+| `sl.click_and_drag_or_press_e_alt_e_to_extrude_s` | Click and drag or press E / Alt+E to extrude selected faces | Clique e arraste ou pressione E / Alt+E para extrudar as faces selecionadas |
+| `sl.click_drag` | Click + Drag | Clique + Arrastar |
+| `sl.click_edge_to_cut_scroll_to_adjust_cuts` | Click edge to cut · Scroll to adjust cuts | Clique na aresta para cortar · Role para ajustar os cortes |
+| `sl.click_to_collapse_section` | Click to collapse section | Clique para recolher a seção |
+| `sl.click_to_enter_value_drag_to_adjust_shift_fo` | Click to enter value · Drag to adjust · Shift for precision | Clique para digitar · Arraste para ajustar · Shift para precisão |
+| `sl.click_to_expand_section` | Click to expand section | Clique para expandir a seção |
+| `sl.click_to_pin_section_open` | Click to pin section open | Clique para fixar a seção aberta |
+| `sl.click_to_select_or_modify_active_color` | Click to select or modify active color | Clique para escolher ou alterar a cor ativa |
+| `sl.click_to_unpin_section` | Click to unpin section | Clique para desafixar a seção |
+| `sl.click_vertices_or_edges_to_draw_cut_path` | Click vertices or edges to draw cut path | Clique em vértices ou arestas para desenhar o caminho do corte |
+| `sl.close_asset_library` | Close asset library | Fechar biblioteca de Assets |
+| `sl.close_reference_manager` | Close reference manager | Fechar gerenciador de referências |
+| `sl.close_scene_drawer` | Close scene drawer | Fechar gaveta da cena |
+| `sl.close_settings` | Close settings | Fechar configurações |
+| `sl.collapse` | Collapse | Recolher |
+| `sl.collapse_and_merge_all_selected_vertices_to_` | Collapse and merge all selected vertices to their median center | Colapsa e mescla todos os vértices selecionados no centro mediano |
+| `sl.color_palette` | Color Palette | Paleta de cores |
+| `sl.color_picker` | Color Picker | Conta-gotas |
+| `sl.color_swatch` | Color Swatch | Amostra de cor |
+| `sl.combine` | Combine | Combinar |
+| `sl.combine_the_active_part_with_the_operand` | Combine the active part with the operand | Combina a parte ativa com o operando |
+| `sl.command_search` | Command search | Busca de comandos |
+| `sl.cone` | Cone | Cone |
+| `sl.configure_studio_matcaps_cavity_highlights_a` | Configure studio matcaps, cavity highlights and wireframe opacity | Configura matcaps de estúdio, realces de cavidade e opacidade do wireframe |
+| `sl.confirm` | Confirm | Confirmar |
+| `sl.confirm_cut` | Confirm Cut | Confirmar Cut |
+| `sl.confirm_enter` | Confirm (Enter) | Confirmar (Enter) |
+| `sl.conical_geometry_tapering_to_a_single_apex_v` | Conical geometry tapering to a single apex vertex | Geometria cônica que afina até um único vértice no topo |
+| `sl.connect` | Connect | Connect |
+| `sl.connect_loops` | Connect Loops | Connect Loops |
+| `sl.create_2d_circle_profile_on_active_workplane` | Create 2D circle profile on active workplane, ready to extrude or revolve | Cria um perfil circular 2D no plano de trabalho ativo, pronto para extrudar ou revolver |
+| `sl.create_2d_rectangle_profile_on_active_workpl` | Create 2D rectangle profile on active workplane, ready to extrude | Cria um perfil retangular 2D no plano de trabalho ativo, pronto para extrudar |
+| `sl.create_an_identical_clone_of_selected_geomet` | Create an identical clone of selected geometry or parts | Cria um clone idêntico da geometria ou das partes selecionadas |
+| `sl.create_face_or_edge_connecting_selected_vert` | Create face or edge connecting selected vertices or edges (F) | Cria uma face ou aresta ligando vértices ou arestas selecionados (F) |
+| `sl.ctrl_snap` | Ctrl: Snap | Ctrl: encaixe |
+| `sl.ctrl_z_ctrl_y_undo_redo` | Ctrl+Z / Ctrl+Y: Undo / Redo | Ctrl+Z / Ctrl+Y: Desfazer / Refazer |
+| `sl.cube` | Cube | Cubo |
+| `sl.cursor` | Cursor | Cursor |
+| `sl.cut` | Cut | Cut |
+| `sl.cut_mesh_along_an_infinite_cutting_plane_thr` | Cut mesh along an infinite cutting plane through selection | Corta a malha por um plano de corte infinito através da seleção |
+| `sl.cuts` | Cuts | Cortes |
+| `sl.cylinder` | Cylinder | Cilindro |
+| `sl.cylindrical_body_capped_by_two_hemispherical` | Cylindrical body capped by two hemispherical domes | Corpo cilíndrico com duas cúpulas hemisféricas nas pontas |
+| `sl.default_modeling_parameters` | Default Modeling Parameters | Parâmetros Padrão de Modelagem |
+| `sl.deg` | Deg | Graus |
+| `sl.delete` | Delete | Excluir |
+| `sl.depth` | Depth | Profundidade |
+| `sl.disabled` | Disabled | Desativado |
+| `sl.disabled_0` | Disabled (0) | Desativado (0) |
+| `sl.display_mesh_edges_with_transparent_wirefram` | Display mesh edges with transparent wireframe surfaces | Exibe as arestas da malha com superfícies wireframe transparentes |
+| `sl.dissolve` | Dissolve | Dissolver |
+| `sl.dissolve_selected_vertices_edges_or_faces_wi` | Dissolve selected vertices, edges or faces without removing surrounding geometry | Dissolve vértices, arestas ou faces selecionados sem remover a geometria ao redor |
+| `sl.distance` | Distance:  | Distância:  |
+| `sl.document_mutations_go_through_transactional_` | Document mutations go through transactional commands with Undo/Redo. | Mutações do documento passam por comandos transacionais com Undo/Redo. |
+| `sl.donut_shaped_revolution_ring_with_major_and_` | Donut-shaped revolution ring with major and minor radii | Anel de revolução em forma de rosca, com raios maior e menor |
+| `sl.double_tap_interval_modal_shortcut` | Double-Tap Interval (Modal Shortcut) | Intervalo do Duplo Toque (Atalho Modal) |
+| `sl.drag_a_cut_line_across_the_mesh_to_bisect` | Drag a cut line across the mesh to bisect | Arraste uma linha de corte pela malha para dividi-la |
+| `sl.drag_direction` | Drag Direction | Direção de Arraste |
+| `sl.draw_2d_profile_curves_on_ground_face_or_vie` | Draw 2D profile curves on ground, face, or viewplane to extrude or revolve | Desenhe curvas de perfil 2D no chão, em uma face ou no plano da vista para extrudar ou revolver |
+| `sl.draw_linear_color_gradients_between_endpoint` | Draw linear color gradients between endpoints across active canvas | Desenha gradientes lineares de cor entre dois pontos na tela ativa |
+| `sl.draw_straight_brush_strokes_between_clicked_` | Draw straight brush strokes between clicked endpoints | Desenha pinceladas retas entre os pontos clicados |
+| `sl.dual_balanced_off` | Dual Balanced: OFF | Dual balanceado: OFF |
+| `sl.dual_balanced_on` | Dual Balanced: ON | Dual balanceado: ON |
+| `sl.duplicate` | Duplicate | Duplicar |
+| `sl.edge` | Edge | Aresta |
+| `sl.effects` | Effects | Efeitos |
+| `sl.enabled` | Enabled | Ativado |
+| `sl.english_us` | English (US) | English (US) |
+| `sl.enter_confirm_esc_cancel` | Enter confirm · Esc cancel | Enter confirma · Esc cancela |
+| `sl.enter_confirm_esc_cancel_drag_slide` | Enter confirm · Esc cancel · Drag slide | Enter confirma · Esc cancela · Arraste para deslizar |
+| `sl.enter_confirm_esc_cancel_t_toggle_trim` | Enter: Confirm · Esc: Cancel · T: Toggle Trim | Enter: Confirmar · Esc: Cancelar · T: Alternar Aparar |
+| `sl.equalize_texel_density` | Equalize Texel Density | Igualar densidade de texels |
+| `sl.equalize_texel_density_across_uv_islands` | Equalize texel density across UV islands | Iguala a densidade de texels entre as ilhas UV |
+| `sl.erase_pixel_color_values_and_alpha_transpare` | Erase pixel color values and alpha transparency from active texture | Apaga cor e transparência alfa da textura ativa |
+| `sl.eraser` | Eraser | Borracha |
+| `sl.essential_keyboard_shortcuts` | Essential Keyboard Shortcuts | Atalhos de Teclado Essenciais |
+| `sl.expand` | Expand | Expandir |
+| `sl.export` | Export | Exportar |
+| `sl.extensions_plugins` | Extensions & Plugins | Extensões & Plugins |
+| `sl.extrude` | Extrude | Extrude |
+| `sl.extrude_preview_live` | Extrude Preview (Live) | Prévia de Extrude (ao vivo) |
+| `sl.extrude_region_e` | Extrude Region (E) | Extrude Região (E) |
+| `sl.f1_f2_f3_workspaces_model_paint_uv` | F1 / F2 / F3: Workspaces (Model/Paint/UV) | F1 / F2 / F3: Workspaces (Model/Paint/UV) |
+| `sl.face` | Face | Face |
+| `sl.face_orientation` | Face Orientation | Orientação das faces |
+| `sl.face_orientation_front_back_normals` | Face Orientation (Front/Back normals) | Orientação de Faces (Normais frontais/traseiras) |
+| `sl.face_orientation_front_blue_back_red` | Face Orientation: Front (Blue) / Back (Red) | Orientação das faces: frente (azul) / verso (vermelho) |
+| `sl.face_orientation_off` | Face Orientation: Off | Orientação das faces: desligada |
+| `sl.fill` | Fill | Preencher |
+| `sl.fill_bucket` | Fill Bucket | Balde de tinta |
+| `sl.fill_disc` | Fill: Disc | Preenchimento: disco |
+| `sl.fill_open_loop` | Fill: Open Loop | Preenchimento: laço aberto |
+| `sl.fill_or_stroke_rectangular_2d_shapes_on_text` | Fill or stroke rectangular 2D shapes on texture canvas | Preenche ou contorna formas retangulares 2D na tela de textura |
+| `sl.fill_projection` | Fill & Projection | Preenchimento e projeção |
+| `sl.fill_scope` | Fill scope | Escopo do preenchimento |
+| `sl.filled` | Filled | Filled |
+| `sl.flat_2d_quad_rectangular_plane_surface_posit` | Flat 2D quad rectangular plane surface positioned on ground plane | Superfície plana retangular 2D posicionada no plano do chão |
+| `sl.flip_normals` | Flip Normals | Inverter normais |
+| `sl.flood_fill_contiguous_color_areas_on_active_` | Flood fill contiguous color areas on active UV map | Preenche áreas contíguas de cor no mapa UV ativo |
+| `sl.focus_camera` | Focus Camera | Focar câmera |
+| `sl.frame` | Frame | Enquadrar |
+| `sl.frame_and_center_camera_view_on_currently_se` | Frame and center camera view on currently selected geometry | Enquadra e centraliza a câmera na geometria selecionada |
+| `sl.frame_selection` | Frame Selection | Enquadrar seleção |
+| `sl.free_mode` | FREE MODE | MODO LIVRE |
+| `sl.freehand_polygon_loop_lasso_selection` | Freehand polygon loop lasso selection | Seleção livre por laço de polígono |
+| `sl.freehand_raster_texture_painting_with_adjust` | Freehand raster texture painting with adjustable size and softness | Pintura raster livre de textura com tamanho e suavidade ajustáveis |
+| `sl.fuse` | Fuse | Fuse |
+| `sl.g_move_r_rotate_s_scale_shift_precision` | G move · R rotate · S scale · Shift precision | G move · R gira · S escala · Shift precisão |
+| `sl.g_move_translate` | G: Move / Translate | G: Mover / Transladar |
+| `sl.g_to_move_origin` | · G to move origin | · G para mover a origem |
+| `sl.generate_volume_directly_by_dragging_depth_o` | • Generate volume directly by dragging depth or pressing Enter | • Gerar volume direto por arraste de profundidade ou Enter |
+| `sl.generative_and_deformer_modifier_stack` | Generative and deformer modifier stack | Pilha de modificadores generativos e deformadores |
+| `sl.gradient` | Gradient | Gradiente |
+| `sl.grid` | Grid | Grade |
+| `sl.ground` | Ground | Chão |
+| `sl.ground_grid` | Ground Grid | Grade de Chão (Ground Grid) |
+| `sl.hardness` | Hardness | Dureza |
+| `sl.height` | Height | Altura |
+| `sl.hide` | Hide | Ocultar |
+| `sl.hold_alt_and_click_to_toggle_all_sections` | Hold Alt and click to toggle all sections | Segure Alt e clique para alternar todas as seções |
+| `sl.icon_style` | Icon Style | Estilo dos Ícones |
+| `sl.icosphere` | Icosphere | Icosfera |
+| `sl.import` | Import | Importar |
+| `sl.individual` | Individual | Individual |
+| `sl.individual_alt_e` | Individual (Alt+E) | Individual (Alt+E) |
+| `sl.insert` | Insert | Inserir |
+| `sl.insert_a_connected_edge_loop_ring_across_qua` | Insert a connected edge loop ring across quad mesh geometry | Insere um anel de arestas conectado em uma malha de quads |
+| `sl.inset` | Inset | Inset |
+| `sl.inset_new_polygonal_boundary_inside_selected` | Inset new polygonal boundary inside selected faces | Cria um novo contorno poligonal dentro das faces selecionadas |
+| `sl.instant_shortcut` | Instant Shortcut | Atalho Instantâneo |
+| `sl.interactively_slice_through_edges_and_faces_` | Interactively slice through edges and faces with cutting line | Corta arestas e faces de forma interativa com uma linha de corte |
+| `sl.interface_language` | Interface Language | Idioma da Interface |
+| `sl.interface_theme` | Interface Theme | Tema da Interface |
+| `sl.intersect` | Intersect | Intersectar |
+| `sl.invert` | Invert | Inverter |
+| `sl.invert_selection` | Invert Selection | Inverter seleção |
+| `sl.invert_vertical_mouse_response` | Invert vertical mouse response | Inverter resposta vertical do mouse |
+| `sl.isolate` | Isolate | Isolar |
+| `sl.join` | Join | Join |
+| `sl.join_the_operand_into_the_active_part` | Join the operand into the active part | Une o operando à parte ativa |
+| `sl.keep_parts` | Keep Parts | Keep Parts |
+| `sl.keep_parts_off` | Keep Parts: off | Keep Parts: desligado |
+| `sl.keep_parts_on` | Keep Parts: on | Keep Parts: ligado |
+| `sl.keep_the_overlapping_volume` | Keep the overlapping volume | Mantém o volume sobreposto |
+| `sl.keyboard_global_shortcuts_work_tab_focus_bet` | Keyboard: global shortcuts work; Tab focus between controls is still partial. | Teclado: atalhos globais funcionam; foco por Tab entre controles ainda é parcial. |
+| `sl.keyboard_shortcut_profile` | Keyboard Shortcut Profile | Perfil de Atalhos de Teclado |
+| `sl.keyboard_shortcuts` | Keyboard & Shortcuts | Teclado & Atalhos |
+| `sl.knife` | Knife | Knife |
+| `sl.language_region` | Language & Region | Idioma & Região |
+| `sl.layer_locked` | Layer locked | Camada bloqueada |
+| `sl.layer_visible` | Layer visible | Camada visível |
+| `sl.layers` | Layers | Camadas |
+| `sl.layout_truncated_only_the_first_2000_faces_a` | Layout truncated: only the first 2000 faces are drawn. | Layout truncado: apenas as primeiras 2000 faces são desenhadas. |
+| `sl.line` | Line | Linha |
+| `sl.lit_preview_with_a_single_directional_light_` | Lit preview with a single directional light (no shadows or ray tracing) | Prévia iluminada com uma luz direcional (sem sombras nem ray tracing) |
+| `sl.lmb_click_to_place_shift_rmb_in_any_tool` | LMB Click to place · Shift+RMB in any tool | Clique esquerdo para posicionar · Shift+botão direito em qualquer ferramenta |
+| `sl.load_image` | Load Image | Carregar imagem |
+| `sl.localization_status` | Localization Status | Status de Localização |
+| `sl.lock` | Lock | Bloquear |
+| `sl.loop_cut` | Loop Cut | Loop Cut |
+| `sl.make_face` | Make Face | Criar face |
+| `sl.make_face_edge` | Make Face / Edge | Criar face / aresta |
+| `sl.manage_scene_parts_groups_and_hierarchy` | Manage scene parts, groups and hierarchy | Gerencie partes, grupos e hierarquia da cena |
+| `sl.mark_clear_seam` | Mark / Clear Seam | Marcar / limpar costura |
+| `sl.mark_unmark_seams` | Mark/Unmark Seams | Marcar/desmarcar costuras |
+| `sl.mask_selection` | Mask Selection: | Máscara de seleção: |
+| `sl.mcp_automation` | MCP & Automation | MCP & Automação |
+| `sl.measure` | Measure | Medir |
+| `sl.measure_distances_and_angles_between_geometr` | Measure distances and angles between geometry elements in 3D | Mede distâncias e ângulos entre elementos da geometria em 3D |
+| `sl.measurement_tags_on_multi_edge_selection` | Measurement Tags on Multi-Edge Selection | Tags de Medida em Multiseleção de Arestas |
+| `sl.merge` | Merge | Mesclar |
+| `sl.merge_center` | Merge Center | Mesclar no centro |
+| `sl.merge_layer_down` | Merge layer down | Mesclar com a camada abaixo |
+| `sl.micro_inspector` | Micro-Inspector | Micro-Inspector |
+| `sl.migration_of_literal_strings_to_textid_in_pr` | Migration of literal strings to TextId in progress. | Migração de textos literais para TextId em andamento. |
+| `sl.mode` | Mode | Modo |
+| `sl.model` | MODEL | MODELAR |
+| `sl.model_workspace` | Model Workspace | Espaço de modelagem |
+| `sl.move` | Move | Mover |
+| `sl.move_down` | Move Down | Mover para baixo |
+| `sl.move_layer_down` | Move layer down | Mover camada para baixo |
+| `sl.move_layer_up` | Move layer up | Mover camada para cima |
+| `sl.move_up` | Move Up | Mover para cima |
+| `sl.move_uv_down` | Move UV down | Mover UV para baixo |
+| `sl.move_uv_left` | Move UV left | Mover UV para a esquerda |
+| `sl.move_uv_right` | Move UV right | Mover UV para a direita |
+| `sl.move_uv_up` | Move UV up | Mover UV para cima |
+| `sl.new_open_save_import_export_projects_and_sce` | New, open, save, import/export projects and scene files | Novo, abrir, salvar, importar/exportar projetos e arquivos de cena |
+| `sl.no_extension_is_loaded_by_this_interface_in_` | No extension is loaded by this interface in this version. | Nenhuma extensão é carregada por esta interface nesta versão. |
+| `sl.no_reference_image_loaded_click_the_box_to_l` | No reference image loaded. Click the box to load blueprints or photo references. | Nenhuma imagem de referência carregada. Clique na caixa para carregar blueprints ou fotos de referência. |
+| `sl.non_color_axis_differentiation_color_blindne` | Non-Color Axis Differentiation (Color Blindness) | Diferenciação Não-Cromática de Eixos (Daltonismo) |
+| `sl.numeric_property_field` | Numeric property field | Campo numérico |
+| `sl.obj_import_and_gltf_export_are_native_featur` | OBJ import and glTF export are native features, available from the File menu. | Importar OBJ e exportar glTF são recursos nativos, acessíveis pelo menu Arquivo. |
+| `sl.object` | Object | Objeto |
+| `sl.object_metadata_visibility_and_display_optio` | Object metadata, visibility and display options | Metadados, visibilidade e opções de exibição do objeto |
+| `sl.off` | OFF | DESLIGADO |
+| `sl.offset` | Offset | Deslocamento |
+| `sl.on` | ON | LIGADO |
+| `sl.opacity` | Opacity | Opacidade |
+| `sl.open_an_existing_project_from_disk_p3d` | Open an existing project from disk (.p3d) | Abre um projeto existente do disco (.p3d) |
+| `sl.open_application_preferences_keymaps_and_the` | Open application preferences, keymaps and theme settings | Abre preferências, atalhos e tema do aplicativo |
+| `sl.open_or_collapse_the_bottom_project_asset_li` | Open or collapse the bottom project asset library | Abre ou recolhe a biblioteca de Assets do projeto na parte inferior |
+| `sl.open_or_collapse_the_scene_parts_hierarchy_o` | Open or collapse the scene parts hierarchy outliner | Abre ou recolhe o Outliner da hierarquia de partes da cena |
+| `sl.open_overflow_menu_with_additional_modeling_` | Open overflow menu with additional modeling operations | Abre o menu extra com mais operações de modelagem |
+| `sl.open_project` | Open project | Abrir projeto |
+| `sl.open_reference_image_manager_to_load_bluepri` | Open Reference Image Manager to load blueprints and background references | Abre o gerenciador de imagens de referência para blueprints e fundos |
+| `sl.operand` | Operand | Operando |
+| `sl.ortho` | Ortho | Orto |
+| `sl.orthographic` | Orthographic | Ortográfica |
+| `sl.outline` | Outline | Outline |
+| `sl.overlaid_wireframe_overlay` | Overlaid Wireframe Overlay | Wireframe Overlay sobreposto |
+| `sl.pack_and_arrange_uv_islands_efficiently_with` | Pack and arrange UV islands efficiently without overlap | Empacota e organiza ilhas UV com eficiência, sem sobreposição |
+| `sl.pack_islands` | Pack Islands | Pack Islands |
+| `sl.paint` | PAINT | PINTAR |
+| `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
+| `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
+| `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |
+| `sl.partial_coverage_menus_and_tooltips_are_tran` | Partial coverage: menus and tooltips are translated; several status messages still mix Portuguese and English. | Cobertura parcial: menus e tooltips traduzidos; várias mensagens de status ainda misturam português e inglês. |
+| `sl.parts` | Parts | Peças |
+| `sl.persp` | Persp | Persp |
+| `sl.perspective` | Perspective | Perspectiva |
+| `sl.petunia3d` | Petunia3D | Petunia3D |
+| `sl.petunia_default` | Petunia Default | Petunia Padrão |
+| `sl.pin_or_unpin_uv_vertices_of_the_selected_fac` | Pin or unpin UV vertices of the selected faces | Fixa ou solta os vértices UV das faces selecionadas |
+| `sl.pin_parts` | Pin Parts | Fixar peças |
+| `sl.pin_section` | Pin section | Fixar seção |
+| `sl.pin_section_open` | Pin section open | Fixar seção aberta |
+| `sl.pin_unpin_p` | Pin/Unpin (P) | Fixar/soltar (P) |
+| `sl.pinned_open` | Pinned open | Fixada aberta |
+| `sl.pipe_radius` | Pipe Radius | Raio do tubo |
+| `sl.pipe_segments` | Pipe Segments | Segmentos do tubo |
+| `sl.pivot` | Pivot | Pivô |
+| `sl.place_3d_cursor_as_origin_for_new_objects_an` | Place 3D cursor as origin for new objects and transformations | Posiciona o cursor 3D como origem de novos objetos e transformações |
+| `sl.plane` | Plane: | Plano: |
+| `sl.plane_2` | Plane | Plano |
+| `sl.plugins` | Plugins | Plugins |
+| `sl.point` | Point | Point |
+| `sl.point_mode_off` | Point Mode (Off) | Modo Point (desligado) |
+| `sl.point_vertex_mode` | ✓ Point (Vertex) Mode | ✓ Modo Point (vértice) |
+| `sl.polyhedral_geodesic_sphere_composed_of_equil` | Polyhedral geodesic sphere composed of equilateral triangles | Esfera geodésica poliédrica feita de triângulos equiláteros |
+| `sl.portugues_brasil` | Português (Brasil) | Português (Brasil) |
+| `sl.pos` | Pos:  | Pos:  |
+| `sl.position` | Position | Posição |
+| `sl.position_rotation_and_scale_coordinates` | Position, rotation and scale coordinates | Coordenadas de posição, rotação e escala |
+| `sl.precision_0_1` | PRECISION 0.1× | PRECISÃO 0.1× |
+| `sl.preview_base_color_texture_and_emission_with` | Preview base color, texture and emission with a simple directional light | Visualiza cor base, textura e emissão com uma luz direcional simples |
+| `sl.primitive_properties` | Primitive Properties | Propriedades da primitiva |
+| `sl.profile_2d_sketch_draw_profile` | Profile & 2D Sketch (Draw Profile) | Perfil & Esboço 2D (Draw Profile) |
+| `sl.project_ref` | Project Ref | Project Ref |
+| `sl.project_uv_coordinates_from_active_camera_pe` | Project UV coordinates from active camera perspective | Projeta coordenadas UV a partir da perspectiva da câmera ativa |
+| `sl.projection` | Projection | Projeção |
+| `sl.prop` | Prop | Prop |
+| `sl.pull_new_vertices_and_faces_outward_from_sel` | Pull new vertices and faces outward from selected edges or faces | Puxa novos vértices e faces para fora a partir de arestas ou faces selecionadas |
+| `sl.push_or_pull_faces_along_surface_normals_dir` | Push or pull faces along surface normals directly | Empurra ou puxa faces diretamente ao longo das normais da superfície |
+| `sl.quick_actions_and_modeling_tools` | Quick actions and modeling tools | Ações rápidas e ferramentas de modelagem |
+| `sl.quick_menu_to_create_standard_3d_parametric_` | Quick menu to create standard 3D parametric shapes | Menu rápido para criar formas 3D paramétricas padrão |
+| `sl.quick_search_and_execute_any_command_tool_or` | Quick search and execute any command, tool or setting | Busque e execute qualquer comando, ferramenta ou ajuste |
+| `sl.r_rotate` | R: Rotate | R: Rotacionar |
+| `sl.radius` | Radius | Raio |
+| `sl.reapply_the_most_recently_undone_operation` | Reapply the most recently undone operation | Reaplica a última operação desfeita |
+| `sl.rect_2d` | Rect 2D | Ret. 2D |
+| `sl.rectangle` | Rectangle | Retângulo |
+| `sl.redo` | Redo | Refazer |
+| `sl.reduced_motion_vestibular_sensitivity` | Reduced Motion (Vestibular Sensitivity) | Redução de Movimento (Sensibilidade Vestibular) |
+| `sl.ref_images` | Ref Images | Imagens ref. |
+| `sl.reference_images` | Reference Images | Imagens de referência |
+| `sl.reference_images_manager_for_background_blue` | Reference Images manager for background blueprints and modeling guides | Gerenciador de imagens de referência para blueprints de fundo e guias de modelagem |
+| `sl.reference_images_p3d_013` | Reference Images · P3D-013 | Imagens de referência · P3D-013 |
+| `sl.region` | Region | Região |
+| `sl.relax` | Relax | Relaxar |
+| `sl.relax_uv` | Relax UV | Relaxar UV |
+| `sl.remove_layer` | Remove layer | Remover camada |
+| `sl.remove_selected_points_edges_faces_or_entire` | Remove selected points, edges, faces or entire objects | Remove Points, arestas, faces ou objetos inteiros selecionados |
+| `sl.rename` | Rename | Renomear |
+| `sl.reset_0_0_0` | Reset (0,0,0) | Resetar (0,0,0) |
+| `sl.reset_camera_zoom_orientation_and_position_t` | Reset camera zoom, orientation and position to default origin | Restaura zoom, orientação e posição da câmera para a origem padrão |
+| `sl.reset_e96a00` | Reset (#E96A00) | Reset (#E96A00) |
+| `sl.reset_view` | Reset view | Resetar vista |
+| `sl.resize_active_selection_proportionally_or_al` | Resize active selection proportionally or along specific axes | Redimensiona a seleção ativa de forma proporcional ou por eixo |
+| `sl.resize_panel_height` | Resize panel height | Redimensionar altura do painel |
+| `sl.revert_the_most_recent_modeling_or_editing_o` | Revert the most recent modeling or editing operation | Reverte a operação de modelagem ou edição mais recente |
+| `sl.revolve_selection_around_cursor_or_axis_into` | Revolve selection around cursor or axis into lathe surface | Revolve a seleção em torno do cursor ou de um eixo, criando uma superfície de torno |
+| `sl.right_angled_triangular_prism_3d_ramp_mesh` | Right-angled triangular prism 3D ramp mesh | Prisma triangular retângulo 3D, em forma de rampa |
+| `sl.ring_radius` | Ring Radius | Raio do anel |
+| `sl.ring_segments` | Ring Segments | Segmentos do anel |
+| `sl.rings` | Rings | Anéis |
+| `sl.rot` | Rot:  | Rot:  |
+| `sl.rotate` | Rotate | Girar |
+| `sl.rotate_2` | Rotate − | Girar − |
+| `sl.rotate_3` | Rotate + | Girar + |
+| `sl.rotate_active_selection_around_the_active_pi` | Rotate active selection around the active pivot point | Gira a seleção ativa em torno do pivô ativo |
+| `sl.rotate_uv_90_degrees_clockwise` | Rotate UV 90 degrees clockwise | Girar UV 90 graus no sentido horário |
+| `sl.rotate_uv_90_degrees_counter_clockwise` | Rotate UV 90 degrees counter-clockwise | Girar UV 90 graus no sentido anti-horário |
+| `sl.rotate_uv_clockwise` | Rotate UV clockwise | Girar UV no sentido horário |
+| `sl.rotate_uv_counter_clockwise` | Rotate UV counter-clockwise | Girar UV no sentido anti-horário |
+| `sl.rotation` | Rotation | Rotação |
+| `sl.round_edge_bevel_options` | Round Edge (Bevel) Options | Opções de Round Edge (Bevel) |
+| `sl.round_edges_or_vertices_with_smooth_chamfer_` | Round edges or vertices with smooth chamfer bevel fillets | Arredonda arestas ou vértices com chanfros suaves |
+| `sl.s_scale` | S: Scale | S: Escalonar |
+| `sl.sample_color_from_viewport_pixels_under_mous` | Sample color from viewport pixels under mouse cursor | Amostra a cor do pixel da viewport sob o cursor |
+| `sl.save_project` | Save project | Salvar projeto |
+| `sl.save_the_current_project_and_scene_to_disk` | Save the current project and scene to disk | Salva o projeto e a cena atuais no disco |
+| `sl.saved` | Saved | Salvo |
+| `sl.scale` | Scale | Escala |
+| `sl.scale_2` | Scale − | Escala − |
+| `sl.scale_3` | Scale + | Escala + |
+| `sl.scale_uv_down` | Scale UV down | Reduzir escala UV |
+| `sl.scale_uv_up` | Scale UV up | Aumentar escala UV |
+| `sl.screen_reader_labels_and_roles_exist_only_on` | Screen reader: labels and roles exist only on some controls; WCAG compliance has not been audited yet. | Leitor de tela: rótulos e papéis existem só em parte dos controles; conformidade WCAG ainda não foi auditada. |
+| `sl.search_commands` | Search commands | Buscar comandos |
+| `sl.segments` | Segments | Segmentos |
+| `sl.select` | Select | Selecionar |
+| `sl.select_all` | Select All | Selecionar tudo |
+| `sl.select_and_manipulate_entire_objects_as_disc` | Select and manipulate entire objects as discrete units | Seleciona e manipula objetos inteiros como unidades |
+| `sl.select_and_transform_individual_vertices_poi` | Select and transform individual vertices (points) | Seleciona e transforma vértices (Points) individuais |
+| `sl.select_and_transform_polygonal_boundary_edge` | Select and transform polygonal boundary edges | Seleciona e transforma arestas de contorno do polígono |
+| `sl.select_and_transform_polygonal_planar_faces` | Select and transform polygonal planar faces | Seleciona e transforma faces planas do polígono |
+| `sl.select_second_part_to_combine` | Select second part to Combine: | Selecione a segunda parte para combinar: |
+| `sl.select_uv_vertices_edges_and_polygon_islands` | Select UV vertices, edges and polygon islands | Seleciona vértices, arestas e ilhas de polígonos UV |
+| `sl.semi_transparent_surfaces_allowing_selection` | Semi-transparent surfaces allowing selection of occluded geometry | Superfícies semitransparentes que permitem selecionar geometria oculta |
+| `sl.set_as_boolean_operand` | Set as Boolean Operand | Definir como operando booleano |
+| `sl.set_origin` | Set Origin | Definir origem |
+| `sl.settings` | Settings | Configurações |
+| `sl.shade_flat` | Shade Flat | Sombreamento chapado |
+| `sl.shade_smooth` | Shade Smooth | Sombreamento suave |
+| `sl.shading` | Shading | Sombreamento |
+| `sl.shading_options` | Shading options | Opções de sombreamento |
+| `sl.shift_a_add_primitive` | Shift+A: Add Primitive | Shift+A: Adicionar Primitiva |
+| `sl.shift_precision_0_1` | Shift: Precision 0.1× | Shift: precisão 0,1× |
+| `sl.show` | Show | Mostrar |
+| `sl.show_texture` | ✓ Show Texture | ✓ Mostrar textura |
+| `sl.show_texture_2` | Show Texture | Mostrar textura |
+| `sl.sides` | Sides | Lados |
+| `sl.size` | Size | Tamanho |
+| `sl.sketch` | Sketch | Esboço |
+| `sl.sketch_profile` | Sketch / Profile | Esboço / Perfil |
+| `sl.slice` | Slice | Slice |
+| `sl.slicer_slice_loop_cut` | Slicer (Slice / Loop Cut) | Fatiador (Slice / Loop Cut) |
+| `sl.slide` | Slide | Deslizar |
+| `sl.smooth_gradual_airbrush_spray_effect_onto_ac` | Smooth gradual airbrush spray effect onto active texture | Aplica um spray suave e gradual de aerógrafo na textura ativa |
+| `sl.smooth_unpinned_uv_island_corners_to_minimiz` | Smooth unpinned UV island corners to minimize distortion | Suaviza cantos de ilhas UV não fixados para reduzir distorção |
+| `sl.smoothly_deform_neighboring_vertices_with_pr` | Smoothly deform neighboring vertices with proportional falloff curve | Deforma suavemente os vértices vizinhos com curva de queda proporcional |
+| `sl.snap` | SNAP | SNAP |
+| `sl.snap_2` | Snap | Snap |
+| `sl.snap_transformations_to_grid_intervals_verti` | Snap transformations to grid intervals, vertices, edges or faces | Ajusta transformações a intervalos da grade, vértices, arestas ou faces |
+| `sl.space_close_esc_cancel` | Space: close · Esc: cancel | Space: fechar · Esc: cancelar |
+| `sl.space_floating_micro_inspector` | Space: Floating Micro-Inspector | Espaço: Micro-Inspector flutuante |
+| `sl.sphere` | Sphere | Esfera |
+| `sl.spin` | Spin | Spin |
+| `sl.spin_lathe` | Spin / Lathe | Girar / Torno |
+| `sl.split_disabled` | Split (Disabled) | Split (Desativado) |
+| `sl.split_t` | Split (T) | Dividir (T) |
+| `sl.standard_matte_shaded_surfaces_with_basic_di` | Standard matte shaded surfaces with basic directional lighting | Superfícies foscas padrão com iluminação direcional básica |
+| `sl.step_1_0_m_subdivisions_0_1_m` | Step 1.0 m (Subdivisions 0.1 m) | Passo 1.0 m (Subdivisões 0.1 m) |
+| `sl.step_90` | Step 90°: | Passo 90°: |
+| `sl.stitch` | Stitch | Costurar |
+| `sl.stitch_seams` | Stitch Seams | Costurar bordas |
+| `sl.subdivide` | Subdivide | Subdividir |
+| `sl.subdivide_faces_into_quad_quarters_creating_` | Subdivide faces into quad quarters creating finer geometry | Subdivide faces em quatro quads, criando geometria mais fina |
+| `sl.subdivisions` | Subdivisions | Subdivisões |
+| `sl.subtract_the_operand_from_the_active_part` | Subtract the operand from the active part | Subtrai o operando da parte ativa |
+| `sl.surface_shaders_colors_and_textures` | Surface shaders, colors and textures | Shaders, cores e texturas da superfície |
+| `sl.symmetry` | Symmetry: | Simetria: |
+| `sl.tab_selection_mode_v_e_f_obj` | Tab: Selection Mode (V/E/F/Obj) | Tab: Modo de Seleção (V/E/F/Obj) |
+| `sl.target` | Target: | Alvo: |
+| `sl.target_canonical_vocabulary_point_round_edge` | Target canonical vocabulary: Point, Round Edge, Fuse, Cut, Connect. | Vocabulário canônico alvo: Point, Round Edge, Fuse, Cut, Connect. |
+| `sl.texture` | Texture | Textura |
+| `sl.texture_layers` | Texture Layers | Camadas de textura |
+| `sl.texture_painting_layer_management_and_brush_` | Texture painting, layer management, and brush tools | Pintura de texturas, camadas e pincéis |
+| `sl.the_mcp_server_is_a_separate_component_this_` | The MCP server is a separate component; this screen does not start it or monitor its state. | O servidor MCP é um componente separado; esta tela não o inicia nem monitora seu estado. |
+| `sl.this_effect_has_no_parameters` | This effect has no parameters. | Este efeito não tem parâmetros. |
+| `sl.toggle_between_perspective_3d_projection_and` | Toggle between perspective 3D projection and orthographic view | Alterna entre projeção 3D em perspectiva e vista ortográfica |
+| `sl.toggle_panels_layouts_fullscreen_mode_and_ac` | Toggle panels, layouts, fullscreen mode and accessibility options | Alternar painéis, layouts, tela cheia e opções de acessibilidade |
+| `sl.toggle_seams_on_the_selected_face` | Toggle seams on the selected face | Alterna as costuras na face selecionada |
+| `sl.toggle_the_scene_parts_outliner_and_hierarch` | Toggle the scene parts outliner and hierarchy list | Alterna o Outliner de partes e a lista de hierarquia da cena |
+| `sl.tool_confirmation_mode` | Tool Confirmation Mode | Modo de Confirmação de Ferramenta |
+| `sl.tool_options` | Tool Options | Opções da ferramenta |
+| `sl.tools` | Tools | Ferramentas |
+| `sl.top_cap_off` | Top Cap: off | Tampa superior: desligada |
+| `sl.top_cap_on` | Top Cap: on | Tampa superior: ligada |
+| `sl.top_radius` | Top Radius | Raio superior |
+| `sl.torus` | Torus | Toro |
+| `sl.transform_quick_readout` | Transform Quick Readout | Leitura rápida de transformação |
+| `sl.translate_active_selection_along_axes_or_vie` | Translate active selection along axes or viewport plane | Move a seleção ativa pelos eixos ou pelo plano da viewport |
+| `sl.trim_enabled` | Trim (Enabled) | Trim (Ativado) |
+| `sl.trim_mode_removes_the_cut_side_instead_of_sp` | Trim mode (removes the cut side instead of splitting) | Modo Trim (remove lado cortado ao invés de split) |
+| `sl.trim_t` | Trim (T) | Aparar (T) |
+| `sl.ui_scale_zoom` | UI Scale (Zoom) | Escala da UI (Zoom) |
+| `sl.un_isolate` | Un-isolate | Desisolar |
+| `sl.undo` | Undo | Desfazer |
+| `sl.undo_redo_history_and_global_application_pre` | Undo, redo, history and global application preferences | Desfazer, refazer, histórico e preferências globais do app |
+| `sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou` | Unfold 3D mesh surface into flat 2D UV layout | Desdobra a superfície da malha 3D em um layout UV 2D plano |
+| `sl.universal_3_in_1_gizmo_for_translate_rotate_` | Universal 3-in-1 gizmo for translate, rotate and scale | Gizmo universal 3 em 1 para mover, girar e escalar |
+| `sl.unlock` | Unlock | Desbloquear |
+| `sl.unpin_parts` | Unpin Parts | Desafixar peças |
+| `sl.unpin_section` | Unpin section | Desafixar seção |
+| `sl.unsaved` | Unsaved | Não salvo |
+| `sl.unwrap` | Unwrap | Unwrap |
+| `sl.uv` | UV | UV |
+| `sl.uv_checkerboard` | UV Checkerboard | Xadrez UV |
+| `sl.uv_checkerboard_off` | UV Checkerboard: Off | Xadrez UV: desligado |
+| `sl.uv_checkerboard_on` | UV Checkerboard: On | Xadrez UV: ligado |
+| `sl.uv_editor` | UV Editor | Editor UV |
+| `sl.uv_operations` | UV Operations | Operações UV |
+| `sl.uv_projection_unwrapping_seams_and_island_pa` | UV projection, unwrapping, seams, and island packing | Projeção UV, unwrap, seams e empacotamento de ilhas |
+| `sl.uv_select` | UV Select | Seleção UV |
+| `sl.uv_sphere_parameterized_by_longitude_segment` | UV sphere parameterized by longitude segments and latitude rings | Esfera UV com segmentos de longitude e anéis de latitude |
+| `sl.uv_statistics` | UV Statistics | Estatísticas UV |
+| `sl.uv_wireframe_overlay` | ✓ UV Wireframe Overlay | ✓ Sobreposição de wireframe UV |
+| `sl.uv_wireframe_overlay_2` | UV Wireframe Overlay | Sobreposição de wireframe UV |
+| `sl.uv_workspace` | UV Workspace | Espaço UV |
+| `sl.vertex` | Vertex | Vértice |
+| `sl.vertices` | Vertices | Vértices |
+| `sl.view` | View | Vista |
+| `sl.viewport_n_nslint_shell_bootstrap_ngpu_viewp` | VIEWPORT\n\nSlint shell bootstrap\nGPU viewport remains behind PetuniaViewport | VIEWPORT\n\nSlint shell bootstrap\nGPU viewport remains behind PetuniaViewport |
+| `sl.viewport_rendering_shading` | Viewport Rendering & Shading | Renderização e Shading do Viewport |
+| `sl.w_toggle_selection_select_box_select` | W: Toggle Selection (Select / Box Select) | W: Alternar Seleção (Select / Box Select) |
+| `sl.wedge` | Wedge | Cunha |
+| `sl.weld_coincident_3d_edges_that_have_split_uv_` | Weld coincident 3D edges that have split UV seams | Solda arestas 3D coincidentes que têm seams UV divididas |
+| `sl.width` | Width | Largura |
+| `sl.workspaces` | Workspaces | Espaços de trabalho |
+| `sl.x_ray` | X-Ray | X-Ray |
+| `sl.x_ray_enabled` | X-Ray enabled | X-Ray ativado |
+| `sl.x_ray_off` | X-Ray off | X-Ray desligado |
+| `sl.x_ray_on` | X-Ray on | X-Ray ligado |
 | `tool_properties.bevel_hint` | Supports one manifold convex edge with simple corners; one segment. | Suporta um edge convexo manifold com cantos simples; um segmento. |
 | `tool_properties.bevel_width` | Round Edge width | Largura do Round Edge |
 | `tool_properties.blocked` | Confirm or cancel the viewport operation before editing these fields. | Confirme ou cancele a operação na viewport antes de editar estes campos. |

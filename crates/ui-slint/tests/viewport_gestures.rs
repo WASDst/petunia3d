@@ -26,6 +26,7 @@ fn scroll_pointer(shell: &PetuniaSlintShell, x: f32, y: f32, delta_y: f32) {
 fn viewport_shortcut_drag_parametric_hover_and_navigation_gesture() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
@@ -357,6 +358,7 @@ fn viewport_shortcut_drag_parametric_hover_and_navigation_gesture() {
 fn loop_cut_armed_tool_routes_hover_scroll_and_click_without_navigating() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
@@ -384,6 +386,7 @@ fn loop_cut_armed_tool_routes_hover_scroll_and_click_without_navigating() {
 fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
@@ -443,6 +446,7 @@ fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
 fn inspector_rail_collapsed_by_default_and_expands_on_hover() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
@@ -484,6 +488,7 @@ fn inspector_rail_collapsed_by_default_and_expands_on_hover() {
 fn inspector_pinned_section_keeps_flyout_open_without_hover() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
@@ -509,6 +514,7 @@ fn inspector_pinned_section_keeps_flyout_open_without_hover() {
 fn inspector_pill_and_pin_callbacks_dispatch() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
@@ -544,6 +550,7 @@ fn inspector_pill_and_pin_callbacks_dispatch() {
 fn test_tooltip_hover() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
