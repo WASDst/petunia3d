@@ -120,6 +120,15 @@ const fn default_drag_threshold_px() -> f32 {
     4.0
 }
 
+/// Igual a `petunia_core::DEFAULT_SNAP_RADIUS_PIXELS`.
+const fn default_snap_radius_px() -> f32 {
+    12.0
+}
+
+const fn default_true() -> bool {
+    true
+}
+
 fn default_icon_theme() -> String {
     "outline".to_string()
 }
@@ -148,6 +157,14 @@ pub struct UserPreferences {
     /// menos que a câmera esteja quase na horizontal; `false` usa o plano do
     /// mundo mais de frente para a vista.
     pub workplane_prefer_ground: bool,
+    /// Luz de estúdio acompanha a câmera (Plasticity/C4D); `false` a mantém
+    /// fixa no mundo.
+    #[serde(default = "default_true")]
+    pub studio_light_follows_camera: bool,
+    /// Raio do snap em px lógicos (4–48). Maior ajuda quem tem tremor ou pouca
+    /// precisão (Findlater et al., 2010: cursores de área).
+    #[serde(default = "default_snap_radius_px")]
+    pub snap_radius_px: f32,
     /// Diferenciação não-cromática de eixos para acessibilidade e daltonismo.
     pub colorblind_axes: bool,
     /// Redução de movimento para usuários com sensibilidade vestibular / labirintite.
@@ -179,6 +196,8 @@ impl Default for UserPreferences {
             drag_threshold_px: default_drag_threshold_px(),
             click_move_click: false,
             workplane_prefer_ground: false,
+            studio_light_follows_camera: true,
+            snap_radius_px: default_snap_radius_px(),
             colorblind_axes: false,
             reduced_motion: false,
             multiselection_measure_tag: true,
@@ -207,6 +226,11 @@ impl UserPreferences {
             || !(1.0..=6.0).contains(&preferences.selection_thickness)
         {
             preferences.selection_thickness = Self::default().selection_thickness;
+        }
+        if !preferences.snap_radius_px.is_finite()
+            || !(4.0..=48.0).contains(&preferences.snap_radius_px)
+        {
+            preferences.snap_radius_px = default_snap_radius_px();
         }
         if !preferences.ui_scale.is_finite() || !(1.0..=2.0).contains(&preferences.ui_scale) {
             preferences.ui_scale = 1.0;
@@ -314,6 +338,8 @@ mod tests {
             drag_threshold_px: 6.0,
             click_move_click: true,
             workplane_prefer_ground: true,
+            studio_light_follows_camera: false,
+            snap_radius_px: 20.0,
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),
                 SectionLayout {

@@ -1,0 +1,39 @@
+# Visual e acessibilidade — Implementation-vs-Spec Gap Matrix (Onda 6, parte 1)
+
+Escopo: primeira entrega da Onda 6 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
+(visual premium, preferências de acessibilidade e testes com usuários).
+Autoridade: [capítulo 05](../bible/foundations/05-viewport-shading-modos-visualizacao.md)
+("Studio light padrão previsível", aparência por workspace),
+[capítulo 45](../bible/foundations/45-pesquisa-interacao-modelagem-referencias.md)
+§2.4, §3.4 e §8.4–8.5, [constituição 03](../bible/constitution/03-invariantes-de-ui-ux-design-system-e-acessib.md).
+
+## Auditoria antes da mudança (30/09)
+
+| Aspecto | Encontrado | Classificação |
+| --- | --- | --- |
+| Tinta translúcida de hover e seleção | Hover 18% (ciano), seleção 32% (cor de seleção) na camada de seleção do renderer | COMPLIANT (preservado) |
+| Luz de estúdio | Direção fixa no mundo (`LIGHT_DIR`): orbitando para trás, a forma fica só com luz ambiente; o X-Ray usava outra constante no shader | FUNCTIONAL_BUT_DIFFERENT |
+| Raio do snap ajustável | `SnapSettings::radius_pixels` existia, sem controle na UI | PARTIALLY_COMPLIANT |
+| Testes de aparência | Sem GPU no CI de nuvem: testes wgpu eram pulados | MISSING |
+| Roteiro de teste com usuários | Inexistente | MISSING |
+
+## Requisitos
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 1 | Luz de estúdio previsível e legível ao orbitar | `petunia_render::scene::studio_light_for_camera` (luz por cima do ombro de quem olha) usada pelo wgpu (sólido, textura e X-Ray pelo mesmo uniforme) e pelo viewport por software. Testes com leitura de pixels: `studio_light_following_the_camera_reads_the_same_from_any_side` (GPU) e `software_studio_light_follows_the_camera`. | COMPLIANT (2026-09-30) |
+| 2 | "Rotação rápida da luz" / escolha do usuário | Preferência "Luz de estúdio acompanha a câmera" (padrão ligada; desligada = fixa no mundo), salva em disco. Teste `studio_light_preference_reaches_the_render_state`. | PARTIALLY_COMPLIANT — girar a luz por arrasto ainda não existe. |
+| 3 | Raio do snap ajustável (cursores de área, Findlater et al. 2010) | Slider "Raio do snap" (4–48 px) em Configurações; salvo e restaurado; valor fora da faixa volta ao padrão. Teste `snap_radius_is_an_accessibility_setting_with_real_effect` (20 px encaixa com 30, não com 12). | COMPLIANT |
+| 4 | Aparência verificável sem GPU física | Testes wgpu executam com Vulkan por software (Mesa lavapipe, `mesa-vulkan-drivers`); sem adaptador eles continuam pulando sem falhar. | PARTIALLY_COMPLIANT — o CI precisa instalar o pacote para rodar de fato. |
+| 5 | Teste com usuários | [`user-test-protocol.md`](user-test-protocol.md): 7 decisões em aberto (Q1–Q7), 3 grupos (incluindo limitação motora), 7 tarefas, SEQ/SUS e critérios de decisão. | PARTIALLY_COMPLIANT — roteiro pronto; sessões não realizadas. |
+
+## Pendências registradas
+
+- Linhas de largura constante com antisserrilhado para o wireframe (hoje
+  `LineList` de 1 px + MSAA 4×); contorno de seleção por jump flooding; matcap;
+  oclusão ambiente (GTAO).
+- Aparência por modo (capítulo 05): DRAW com arestas de feição, POLY com todas as
+  arestas e pontos.
+- Coalescer renders por quadro (pendência da Onda 1).
+- Girar a luz de estúdio por arrasto; filtragem de tremor e "lupa motora".
+- Instalar Vulkan por software no CI para os testes de aparência.

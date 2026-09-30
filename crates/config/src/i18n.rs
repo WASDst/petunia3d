@@ -381,6 +381,10 @@ pub mod text_id {
         TextId::new("preferences.multiselection_measure_tag");
     pub const PREFERENCES_DRAG_THRESHOLD: TextId = TextId::new("preferences.drag_threshold");
     pub const PREFERENCES_CLICK_MOVE_CLICK: TextId = TextId::new("preferences.click_move_click");
+    pub const PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA: TextId =
+        TextId::new("preferences.studio_light_follows_camera");
+    pub const PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA_HINT: TextId =
+        TextId::new("preferences.studio_light_follows_camera_hint");
     pub const PREFERENCES_WORKPLANE_PREFER_GROUND: TextId =
         TextId::new("preferences.workplane_prefer_ground");
     pub const PREFERENCES_WORKPLANE_PREFER_GROUND_HINT: TextId =
@@ -753,6 +757,8 @@ pub mod text_id {
         PREFERENCES_DRAG_THRESHOLD,
         PREFERENCES_CLICK_MOVE_CLICK,
         PREFERENCES_CLICK_MOVE_CLICK_HINT,
+        PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA,
+        PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA_HINT,
         PREFERENCES_WORKPLANE_PREFER_GROUND,
         PREFERENCES_WORKPLANE_PREFER_GROUND_HINT,
         TOOL_GRAMMAR_LAST_OPERATION,

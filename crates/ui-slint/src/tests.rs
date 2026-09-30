@@ -2647,6 +2647,57 @@ fn poly_pen_ctrl_click_melts_a_point() {
 }
 
 #[test]
+fn snap_radius_is_an_accessibility_setting_with_real_effect() {
+    let mut bridge = front_view_bridge_with_cube();
+    let vm = bridge.view_model();
+    assert_eq!(vm.snap_radius_px, 12.0);
+    assert!(!vm.label_snap_radius.is_empty());
+
+    let corner = pixel_of(&bridge, glam::Vec3::new(1.0, 1.0, 1.0));
+    let cursor = glam::Vec2::new(corner[0] + 20.0, corner[1]);
+    let points_only = petunia_core::SnapMask::for_target(petunia_core::SnapTarget::Vertex);
+    assert!(
+        bridge
+            .screen_snap(cursor, points_only, None, None)
+            .is_none(),
+        "20 px está fora do raio padrão"
+    );
+
+    assert!(bridge.set_snap_radius_px(30.0));
+    assert!(bridge.preferences.snap_radius_px == 30.0);
+    let hit = bridge.screen_snap(cursor, points_only, None, None).unwrap();
+    assert_eq!(hit.kind, petunia_core::SnapKind::Point);
+
+    // Faixa segura e restauração do disco.
+    assert!(bridge.set_snap_radius_px(500.0));
+    assert_eq!(bridge.state.session.snap_settings.radius_pixels, 48.0);
+    let mut restored = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let preferences = petunia_config::UserPreferences {
+        snap_radius_px: 24.0,
+        ..Default::default()
+    };
+    restored.restore_section_layouts(&preferences);
+    assert_eq!(restored.state.session.snap_settings.radius_pixels, 24.0);
+}
+
+#[test]
+fn studio_light_preference_reaches_the_render_state() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    assert!(
+        vm.studio_light_follows_camera,
+        "padrão: luz acompanha a câmera"
+    );
+    assert!(!vm.label_studio_light_follows_camera_hint.is_empty());
+    assert!(bridge.set_studio_light_follows_camera(false));
+    assert!(
+        !bridge.set_studio_light_follows_camera(false),
+        "sem mudança"
+    );
+    assert!(!bridge.view_model().studio_light_follows_camera);
+}
+
+#[test]
 fn locked_workplane_ignores_the_face_under_the_cursor() {
     let mut bridge = front_view_bridge_with_cube();
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));

@@ -35,6 +35,13 @@ Manter extremamente simples:
 
 - Studio light padrão previsível.
 - Rotação rápida da luz.
+
+Implementação (2026-09-30, [ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md) Onda 6):
+a studio light acompanha a câmera por padrão (por cima do ombro de quem olha,
+como no Plasticity e no Cinema 4D), de modo que a forma continua legível de
+qualquer lado; a preferência "Luz de estúdio acompanha a câmera" volta para a
+luz fixa no mundo. Girar a luz por arrasto continua pendente — ver
+[`wave6-visual-accessibility-gap-matrix.md`](../../development/wave6-visual-accessibility-gap-matrix.md).
 - **Unlit suportado na V1** como opção secundária para conferir textura pura, sem substituir os quatro modos-base.
 - Sem sistema completo de renderização na área principal de modelagem.
 

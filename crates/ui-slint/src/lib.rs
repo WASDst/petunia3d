@@ -69,6 +69,8 @@ pub struct ViewportRenderState {
     /// Componente sob o cursor (preselection).
     pub hover: petunia_core::HoverTarget,
     pub boolean_operand: Option<uuid::Uuid>,
+    /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
+    pub studio_light_follows_camera: bool,
 }
 
 impl Default for ViewportRenderState {
@@ -88,6 +90,7 @@ impl Default for ViewportRenderState {
             show_grid: true,
             hover: petunia_core::HoverTarget::None,
             boolean_operand: None,
+            studio_light_follows_camera: true,
         }
     }
 }
@@ -1686,6 +1689,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             show_grid: self.state.session.show_grid,
             hover: self.state.session.tools.hover,
             boolean_operand: self.state.session.tools.boolean_operand,
+            studio_light_follows_camera: self.preferences.studio_light_follows_camera,
         };
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
@@ -6886,6 +6890,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.preferences = preferences.clone();
         self.tool_session
             .set_drag_threshold_px(preferences.drag_threshold_px);
+        self.state.session.snap_settings.radius_pixels =
+            petunia_core::clamp_snap_radius(preferences.snap_radius_px);
         self.tool_session
             .set_click_move_click(preferences.click_move_click);
         self.state.profile.workplane_prefer_ground = preferences.workplane_prefer_ground;
@@ -10630,6 +10636,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Raio do snap em px lógicos (acessibilidade motora).
+    pub fn set_snap_radius_px(&mut self, pixels: f32) -> bool {
+        if !pixels.is_finite() {
+            return false;
+        }
+        let pixels = petunia_core::clamp_snap_radius(pixels);
+        if (self.preferences.snap_radius_px - pixels).abs() < f32::EPSILON {
+            return false;
+        }
+        self.preferences.snap_radius_px = pixels;
+        self.state.session.snap_settings.radius_pixels = pixels;
+        self.state.mark_dirty();
+        true
+    }
+
     /// Clicar numa alça a faz seguir o ponteiro até o próximo clique.
     pub fn set_click_move_click(&mut self, enabled: bool) -> bool {
         if self.preferences.click_move_click == enabled {
@@ -10637,6 +10658,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.preferences.click_move_click = enabled;
         self.tool_session.set_click_move_click(enabled);
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Luz de estúdio presa à câmera (padrão) ou fixa no mundo.
+    pub fn set_studio_light_follows_camera(&mut self, follows: bool) -> bool {
+        if self.preferences.studio_light_follows_camera == follows {
+            return false;
+        }
+        self.preferences.studio_light_follows_camera = follows;
+        self.state.render.mark_dirty();
         self.state.mark_dirty();
         true
     }
@@ -12284,8 +12316,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.tool_grammar_active = self.tool_grammar_active();
         vm.tool_gesture_latched = self.tool_session.is_latched();
         vm.drag_threshold_px = self.preferences.drag_threshold_px;
+        vm.snap_radius_px = self.preferences.snap_radius_px;
+        vm.label_snap_radius = translated(petunia_config::text_id::PREFERENCES_SNAP_RADIUS);
         vm.click_move_click = self.preferences.click_move_click;
         vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
+        vm.studio_light_follows_camera = self.preferences.studio_light_follows_camera;
+        vm.label_studio_light_follows_camera =
+            translated(petunia_config::text_id::PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA);
+        vm.label_studio_light_follows_camera_hint =
+            translated(petunia_config::text_id::PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA_HINT);
         vm.label_workplane_prefer_ground =
             translated(petunia_config::text_id::PREFERENCES_WORKPLANE_PREFER_GROUND);
         vm.label_workplane_prefer_ground_hint =
@@ -12676,6 +12715,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         show_grid: state.session.show_grid,
         hover: state.session.tools.hover,
         boolean_operand: state.session.tools.boolean_operand,
+        studio_light_follows_camera: true,
     };
     if let Some(frame) = viewport.render_frame(
         &state.project,

@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Visual e acessibilidade — Onda 6, parte 1 (30/09/2026)
+- **Luz de estúdio que acompanha a câmera**: a forma continua clara e legível ao orbitar para qualquer lado (como no Plasticity e no Cinema 4D); a preferência "Luz de estúdio acompanha a câmera" volta à luz fixa no mundo. X-Ray e viewport por software usam a mesma luz.
+- **Raio do snap nas Configurações** (4–48 px): quem tem tremor ou pouca precisão pode aumentar a área de encaixe.
+- **Aparência testada por pixels**: os testes do renderer rodam com Vulkan por software (lavapipe) e medem o brilho do modelo visto de frente e de trás.
+- **Roteiro de teste com usuários**: `docs/development/user-test-protocol.md` reúne as 7 decisões em aberto das Ondas 3–6, tarefas, métricas (SEQ, SUS) e critérios de decisão, com um grupo de pessoas com limitação motora.
+- **Escopo honesto**: linhas de largura constante com AA, contorno por jump flooding, matcap, aparência por modo e girar a luz por arrasto ficam pendentes. Matriz em `docs/development/wave6-visual-accessibility-gap-matrix.md`.
+
 ### Poly Pen — Onda 5, parte 1 (30/09/2026)
 - **Poly Pen no trilho POLY** (modelo: Polygon Pen do Cinema 4D): passar o mouse destaca ponto, aresta ou face; arrastar move o elemento sem selecionar antes.
 - **Ctrl-arrastar uma aresta de borda** cria uma face nova a partir dela (um gesto, um Undo; `Esc` restaura).

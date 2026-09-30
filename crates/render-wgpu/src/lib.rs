@@ -261,6 +261,7 @@ pub struct Renderer {
     grid_step: f32,
     /// Último alvo de preselection desenhado.
     last_hover: petunia_core::HoverTarget,
+    studio_light_follows_camera: bool,
     last_selection_view_proj: Option<[f32; 16]>,
     mesh_rebuilds: u64,
     skipped_frames: u64,
@@ -353,11 +354,10 @@ fn fs_xray(in: Out) -> @location(0) vec4<f32> {
     if (length(in.normal) < 0.1) {
         return vec4<f32>(in.color, cam.xray.x);
     }
-    let light = normalize(vec3<f32>(LIGHT_X, LIGHT_Y, LIGHT_Z));
+    let light = normalize(cam.light_dir.xyz);
     let n = normalize(in.normal);
     let diff = max(dot(n, light), 0.0);
-    let amb = LIGHT_AMB;
-    let c = in.color * (amb + LIGHT_DIF * diff);
+    let c = in.color * (cam.light_params.x + cam.light_params.y * diff);
     return vec4<f32>(c, cam.xray.x);
 }
 "#;
@@ -425,11 +425,10 @@ fn fs_tex_xray(in: Out) -> @location(0) vec4<f32> {
     if (length(in.normal) < 0.1) {
         return vec4<f32>(base, cam.xray.x);
     }
-    let light = normalize(vec3<f32>(LIGHT_X, LIGHT_Y, LIGHT_Z));
+    let light = normalize(cam.light_dir.xyz);
     let n = normalize(in.normal);
     let diff = max(dot(n, light), 0.0);
-    let amb = LIGHT_AMB;
-    let c = base * (amb + LIGHT_DIF * diff);
+    let c = base * (cam.light_params.x + cam.light_params.y * diff);
     return vec4<f32>(c, cam.xray.x);
 }
 "#;
@@ -1164,6 +1163,7 @@ impl Renderer {
             last_domain: None,
             grid_step: 1.0,
             last_hover: petunia_core::HoverTarget::None,
+            studio_light_follows_camera: true,
             last_selection_view_proj: None,
             mesh_rebuilds: 0,
             skipped_frames: 0,
@@ -1212,6 +1212,13 @@ impl Renderer {
     }
 
     /// Opacidade da geometria em X-Ray, aplicada no uniform do shader.
+    /// Luz de estúdio (Solid/Material): `true` acompanha a câmera, como no
+    /// Plasticity e no Cinema 4D — a forma continua legível de qualquer lado;
+    /// `false` a mantém fixa no mundo.
+    pub fn set_studio_light_follows_camera(&mut self, follows: bool) {
+        self.studio_light_follows_camera = follows;
+    }
+
     pub fn set_xray_opacity(&mut self, opacity: f32) {
         self.xray_opacity = opacity.clamp(0.1, 0.9);
     }
@@ -1340,16 +1347,18 @@ impl Renderer {
                     petunia_render::scene::LIGHT_DIFFUSE * intensity,
                 )
             }
-            _ => (
-                [
-                    petunia_render::scene::LIGHT_DIR[0],
-                    petunia_render::scene::LIGHT_DIR[1],
-                    petunia_render::scene::LIGHT_DIR[2],
-                    0.0,
-                ],
-                petunia_render::scene::LIGHT_AMBIENT,
-                petunia_render::scene::LIGHT_DIFFUSE,
-            ),
+            _ => {
+                let [x, y, z] = if self.studio_light_follows_camera {
+                    petunia_render::scene::studio_light_for_camera(camera)
+                } else {
+                    petunia_render::scene::LIGHT_DIR
+                };
+                (
+                    [x, y, z, 0.0],
+                    petunia_render::scene::LIGHT_AMBIENT,
+                    petunia_render::scene::LIGHT_DIFFUSE,
+                )
+            }
         };
         queue.write_buffer(
             &self.cam_buffer,

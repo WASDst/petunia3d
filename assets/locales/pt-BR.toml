@@ -874,6 +874,8 @@ conflict_title = "Conflito de atalhos detectado"
 conflict_shared = "compartilha o atalho com"
 
 [preferences]
+studio_light_follows_camera = "Luz de estúdio acompanha a câmera"
+studio_light_follows_camera_hint = "Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo."
 workplane_prefer_ground = "Plano automático favorece o chão"
 workplane_prefer_ground_hint = "Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D)."
 snap_radius = "Raio do snap (px)"

@@ -172,6 +172,8 @@ impl WgpuViewport {
         // estar no renderer antes dessa escrita, inclusive no primeiro frame.
         self.renderer.set_xray_opacity(state.xray_opacity);
         self.renderer
+            .set_studio_light_follows_camera(state.studio_light_follows_camera);
+        self.renderer
             .set_selection_style(state.selection_rgb, state.selection_thickness);
         self.renderer.update(
             &self.device,
@@ -302,6 +304,103 @@ mod tests {
     use petunia_project::Canvas;
     use petunia_render::Shading;
 
+    /// Lê o pixel RGBA do centro da textura exibida (teste de aparência).
+    fn center_pixel(viewport: &WgpuViewport) -> [u8; 4] {
+        let texture = viewport.target_texture.as_ref().expect("alvo");
+        let bytes_per_row = (viewport.width * 4).div_ceil(256) * 256;
+        let buffer = viewport.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback"),
+            size: u64::from(bytes_per_row * viewport.height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = viewport
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(viewport.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: viewport.width,
+                height: viewport.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        viewport.queue.submit(std::iter::once(encoder.finish()));
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        viewport
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("mapeado");
+        let offset = ((viewport.height / 2) * bytes_per_row + (viewport.width / 2) * 4) as usize;
+        [
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]
+    }
+
+    fn luminance(pixel: [u8; 4]) -> f32 {
+        0.2126 * f32::from(pixel[0]) + 0.7152 * f32::from(pixel[1]) + 0.0722 * f32::from(pixel[2])
+    }
+
+    /// Brilho do centro do cubo visto de frente e de trás.
+    fn front_and_back_luminance(viewport: &mut WgpuViewport, follows: bool) -> (f32, f32) {
+        let mut project = Project::new();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let state = ViewportRenderState {
+            show_grid: false,
+            show_wireframe_overlay: false,
+            studio_light_follows_camera: follows,
+            ..ViewportRenderState::default()
+        };
+        let mut sides = [0.0; 2];
+        for (side, preset) in [
+            petunia_core::ViewPreset::Front,
+            petunia_core::ViewPreset::Back,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut camera = Camera::default();
+            camera.set_preset(preset);
+            camera.target = glam::Vec3::ZERO;
+            viewport
+                .render_frame(&project, &[], &camera, state)
+                .unwrap();
+            sides[side] = luminance(center_pixel(viewport));
+        }
+        (sides[0], sides[1])
+    }
+
+    #[test]
+    fn studio_light_following_the_camera_reads_the_same_from_any_side() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
+            // Sem adaptador (nem lavapipe): nada a medir.
+            return;
+        };
+        let (front, back) = front_and_back_luminance(&mut viewport, true);
+        assert!(
+            (front - back).abs() < 6.0,
+            "frente {front:.1} × trás {back:.1}"
+        );
+        assert!(front > 120.0, "a face de frente fica clara: {front:.1}");
+
+        // Luz fixa no mundo: o lado de trás fica só com a luz ambiente.
+        let (front, back) = front_and_back_luminance(&mut viewport, false);
+        assert!(front - back > 30.0, "frente {front:.1} × trás {back:.1}");
+    }
+
     #[test]
     fn wgpu_viewport_initializes_or_skips_when_no_gpu() {
         match WgpuViewport::try_create_default(640, 480) {
@@ -335,6 +434,7 @@ mod tests {
                         show_grid: true,
                         hover: petunia_core::HoverTarget::None,
                         boolean_operand: None,
+                        studio_light_follows_camera: true,
                     },
                 );
                 assert!(img.is_ok());

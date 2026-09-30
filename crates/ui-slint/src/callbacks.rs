@@ -809,8 +809,17 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_last_operation(vm.label_last_operation.as_str().into());
     window.set_label_last_operation_hint(vm.label_last_operation_hint.as_str().into());
     window.set_drag_threshold_px(vm.drag_threshold_px);
+    window.set_snap_radius_px(vm.snap_radius_px);
+    window.set_label_snap_radius(vm.label_snap_radius.as_str().into());
     window.set_click_move_click(vm.click_move_click);
     window.set_workplane_prefer_ground(vm.workplane_prefer_ground);
+    window.set_studio_light_follows_camera(vm.studio_light_follows_camera);
+    window.set_label_studio_light_follows_camera(
+        vm.label_studio_light_follows_camera.as_str().into(),
+    );
+    window.set_label_studio_light_follows_camera_hint(
+        vm.label_studio_light_follows_camera_hint.as_str().into(),
+    );
     window.set_label_workplane_prefer_ground(vm.label_workplane_prefer_ground.as_str().into());
     window.set_label_workplane_prefer_ground_hint(
         vm.label_workplane_prefer_ground_hint.as_str().into(),
@@ -2629,6 +2638,19 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let snap_radius_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_snap_radius_set(move |pixels| {
+        if let Ok(mut bridge) = snap_radius_bridge.lock()
+            && bridge.set_snap_radius_px(pixels)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
     let click_move_click_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_click_move_click_set(move |enabled| {
@@ -2638,6 +2660,24 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             persist_user_preferences(&mut bridge);
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let studio_light_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_studio_light_follows_camera_set(move |follows| {
+        if let Ok(mut bridge) = studio_light_bridge.lock()
+            && bridge.set_studio_light_follows_camera(follows)
+        {
+            persist_user_preferences(&mut bridge);
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });

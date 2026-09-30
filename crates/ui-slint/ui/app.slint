@@ -3557,11 +3557,16 @@ export component PetuniaSlintShell inherits Window {
     in property <string> label-last-operation;
     in property <string> label-last-operation-hint;
     in-out property <float> drag-threshold-px: 4.0;
+    in-out property <float> snap-radius-px: 12.0;
+    in property <string> label-snap-radius;
     in-out property <bool> click-move-click: false;
     in property <string> label-drag-threshold;
     in property <string> label-click-move-click;
     in property <string> label-click-move-click-hint;
     in-out property <bool> workplane-prefer-ground: false;
+    in-out property <bool> studio-light-follows-camera: true;
+    in property <string> label-studio-light-follows-camera;
+    in property <string> label-studio-light-follows-camera-hint;
     in property <string> label-workplane-prefer-ground;
     in property <string> label-workplane-prefer-ground-hint;
     in-out property <bool> multiselection-measure-tag: true;
@@ -3684,8 +3689,10 @@ export component PetuniaSlintShell inherits Window {
     /// Ctrl+roda: contagens e raios da ferramenta (a roda sozinha sempre faz zoom).
     callback viewport-ctrl-scroll(float);
     callback drag-threshold-set(float);
+    callback snap-radius-set(float);
     callback click-move-click-set(bool);
     callback workplane-prefer-ground-set(bool);
+    callback studio-light-follows-camera-set(bool);
     callback double-tap-interval-released(int);
     callback multiselection-measure-tag-set(bool);
     callback asset-query-changed(string);
@@ -11284,6 +11291,21 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
 
+                                    Text { text: root.label-snap-radius; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px; alignment: center;
+                                        Slider {
+                                            horizontal-stretch: 1; minimum: 4; maximum: 48;
+                                            value: root.snap-radius-px;
+                                            accessible-label: root.label-snap-radius;
+                                            changed(value) => { root.snap-radius-set(Math.round(value)); }
+                                        }
+                                        Text {
+                                            text: "\{Math.round(root.snap-radius-px)} px";
+                                            color: DesignTokens.text-secondary; font-size: 10px; width: 85px; horizontal-alignment: right; vertical-alignment: center;
+                                        }
+                                    }
+
                                     Rectangle {
                                         height: 30px; border-radius: 4px;
                                         background: root.click-move-click ? DesignTokens.accent : DesignTokens.surface;
@@ -11319,6 +11341,24 @@ export component PetuniaSlintShell inherits Window {
                                         TouchArea { clicked => { root.workplane-prefer-ground-set(!root.workplane-prefer-ground); } }
                                     }
                                     Text { text: root.label-workplane-prefer-ground-hint; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
+
+                                    Rectangle {
+                                        height: 30px; border-radius: 4px;
+                                        background: root.studio-light-follows-camera ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.studio-light-follows-camera ? DesignTokens.focus-ring : DesignTokens.border;
+                                        accessible-role: checkbox;
+                                        accessible-checkable: true;
+                                        accessible-checked: root.studio-light-follows-camera;
+                                        accessible-label: root.label-studio-light-follows-camera;
+                                        accessible-description: root.label-studio-light-follows-camera-hint;
+                                        accessible-action-default => { root.studio-light-follows-camera-set(!root.studio-light-follows-camera); }
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: root.label-studio-light-follows-camera; color: root.studio-light-follows-camera ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.studio-light-follows-camera-set(!root.studio-light-follows-camera); } }
+                                    }
+                                    Text { text: root.label-studio-light-follows-camera-hint; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 
