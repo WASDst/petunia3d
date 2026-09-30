@@ -6,6 +6,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
 ### Paint e viewport dividida (30/09/2026)
+- **Paint+UV unificado (primeiro passo)**: a pill UV saiu da barra de workspaces (MODEL | PAINT); "Preparar superfície" (Unwrap e Pack Islands) entra no Inspector do PAINT. O código do workspace UV ainda existe por trás de atalhos e será removido quando o wireframe UV do canvas cobrir a edição de ilhas.
 - **Pincel coerente**: `BRUSH_PX_PER_UNIT` é a única relação entre o slider "Size" e o pincel; o carimbo 3D, o clique na malha e o pincel do canvas 2D usam o mesmo diâmetro (o 2D estava preso em 4 px). Anel de preview na viewport PAINT com o mesmo diâmetro e cursor do sistema escondido nas ferramentas de pincel.
 - **Canvas 2D flutuante**: `PaintCanvasSurface` (raster, wireframe UV, grade, pan com botão do meio/direito, zoom por roda) no Inspector e em janela arrastável sincronizada com a viewport 3D.
 - **Viewport dividida (opcional)**: menu View ou botão da barra da viewport abre uma segunda vista 3D lado a lado com câmera própria (Persp/Frente/Trás/Esq/Dir/Topo), renderizada pelo caminho de software. É vista de navegação: edição continua na principal; documento, undo e seleção são compartilhados. Recusada abaixo de 2×480 px. Divisão vertical, PiP 2D/3D com auto-enquadramento e canvas 2D como divisão da viewport seguem pendentes.

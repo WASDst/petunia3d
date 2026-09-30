@@ -850,7 +850,7 @@ component WorkspaceSegment inherits Rectangle {
 
     accessible-role: tab-list;
     accessible-label: Tr.t("sl.workspaces");
-    width: 246px;
+    width: 165px;
     height: 28px;
     border-radius: 6px;
     background: DesignTokens.surface-raised;
@@ -919,32 +919,6 @@ component WorkspaceSegment inherits Rectangle {
                         title: Tr.t("sl.paint_workspace");
                         shortcut: "F2";
                         description: Tr.t("sl.texture_painting_layer_management_and_brush_");
-                    }
-                }
-            }
-        }
-        Rectangle {
-            width: 80px;
-            height: 22px;
-            background: transparent;
-            accessible-role: tab;
-            accessible-label: Tr.t("sl.uv_workspace");
-            accessible-checked: root.active == "UV";
-            Text {
-                text: Tr.t("sl.uv");
-                color: root.active == "UV" ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                font-size: 11px;
-                font-weight: 700;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
-            TouchArea {
-                clicked => { root.changed("UV"); }
-                Tooltip {
-                    RichTooltip {
-                        title: Tr.t("sl.uv_workspace");
-                        shortcut: "F3";
-                        description: Tr.t("sl.uv_projection_unwrapping_seams_and_island_pa");
                     }
                 }
             }
@@ -8095,6 +8069,42 @@ export component PetuniaSlintShell inherits Window {
 
                         if active-workspace == "PAINT": VerticalLayout {
                             spacing: 10px;
+
+                            // Preparar superfície (UV): desembrulhar e empacotar ilhas dentro do fluxo de pintura.
+                            InspectorSection {
+                                title: Tr.t("sl.prepare_surface");
+                                open: true;
+                                toggled => { self.open = !self.open; }
+
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    padding-top: 4px;
+                                    Rectangle {
+                                        height: 28px;
+                                        horizontal-stretch: 1;
+                                        border-radius: DesignTokens.radius-control;
+                                        background: unwrap-touch.pressed ? DesignTokens.accent.darker(0.15) : (unwrap-touch.has-hover ? DesignTokens.accent.brighter(0.1) : DesignTokens.accent);
+                                        animate background { duration: Motion.fast; easing: ease-out; }
+                                        accessible-role: button;
+                                        accessible-label: root.label-unwrap-mesh;
+                                        Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                        unwrap-touch := TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
+                                    }
+                                    Rectangle {
+                                        height: 28px;
+                                        horizontal-stretch: 1;
+                                        border-radius: DesignTokens.radius-control;
+                                        background: pack-touch.pressed ? DesignTokens.surface-pressed : (pack-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                        animate background { duration: Motion.fast; easing: ease-out; }
+                                        border-width: 1px;
+                                        border-color: DesignTokens.border;
+                                        accessible-role: button;
+                                        accessible-label: root.label-pack-islands;
+                                        Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                        pack-touch := TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
+                                    }
+                                }
+                            }
 
                             InspectorSection {
                                 title: Tr.t("sl.effects");

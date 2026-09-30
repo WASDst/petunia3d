@@ -1392,6 +1392,7 @@ split_close = "Close split view"
 split_toggle = "Split viewport"
 split_toggle_hint = "Show a second 3D view to inspect another side of the model"
 split_too_narrow = "The viewport is too narrow to split."
+prepare_surface = "Prepare surface"
 
 
 # Biblioteca de prefabs (mensagens de status; {name} é substituído)

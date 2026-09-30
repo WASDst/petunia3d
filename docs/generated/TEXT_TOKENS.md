@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1307**.
+Total de chaves de localização cadastradas: **1308**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -837,6 +837,7 @@ Total de chaves de localização cadastradas: **1307**.
 | `sl.prefab_parts` | parts | peças |
 | `sl.prefab_place` | Place in scene | Colocar na cena |
 | `sl.prefab_update` | Update from selection | Atualizar com a seleção |
+| `sl.prepare_surface` | Prepare surface | Preparar superfície |
 | `sl.preview_base_color_texture_and_emission_with` | Preview base color, texture and emission with a simple directional light | Visualiza cor base, textura e emissão com uma luz direcional simples |
 | `sl.primitive_properties` | Primitive Properties | Propriedades da primitiva |
 | `sl.profile_2d_sketch_draw_profile` | Profile & 2D Sketch (Draw Profile) | Perfil & Esboço 2D (Draw Profile) |
