@@ -614,6 +614,7 @@ mod tests {
                         axis_constraint: None,
                         plane_constraint: None,
                         is_snapped: true,
+                        snap_kind: None,
                         status_hint: "LMB Confirm",
                     };
 

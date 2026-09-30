@@ -5,7 +5,7 @@ use glam::{EulerRot, Quat, Vec3};
 use petunia_mesh::Mesh;
 use petunia_project::{Project, ProjectChanges};
 
-use crate::{AppState, EditMode, Selection};
+use crate::{AppState, EditMode, Selection, SnapKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
@@ -94,6 +94,58 @@ pub struct ModalOp {
     selection: Selection,
     source: Mesh,
     changed: bool,
+    /// Alvo em que o último update encaixou de fato (não apenas "snap ligado").
+    snap: Option<SnapKind>,
+    /// Estado de antes de um prelúdio (imprint de região, forma nova) feito
+    /// fora do histórico: o gesto inteiro vira uma entrada de Undo e Esc
+    /// restaura exatamente este estado (constituição 11).
+    before_prelude: Option<Box<(Project, Selection)>>,
+    /// A malha ativa é uma folha de região solta: extrudar para o lado
+    /// negativo inverte todas as faces para o sólido continuar voltado para fora.
+    flip_when_negative: bool,
+}
+
+impl ModalOp {
+    /// A prévia difere do estado original (confirmar criará uma entrada de Undo).
+    pub(crate) fn changed(&self) -> bool {
+        self.changed
+    }
+
+    /// Verdadeiro somente quando o último update foi atraído por um alvo de snap.
+    pub fn snapped(&self) -> bool {
+        self.snap.is_some()
+    }
+
+    /// Tipo do alvo que encaixou no último update, para o rótulo do HUD.
+    pub fn snap_kind(&self) -> Option<SnapKind> {
+        self.snap
+    }
+
+    /// Vértices da malha de origem que se movem com a operação: não servem de
+    /// alvo de snap (senão o ponto encaixaria em si mesmo).
+    /// Malha de origem congelada no início da operação (sem a prévia).
+    pub fn source_mesh(&self) -> &Mesh {
+        &self.source
+    }
+
+    pub fn moving_vertices(&self) -> Vec<bool> {
+        self.source.verts.iter().map(|v| v.selected).collect()
+    }
+
+    /// Ponto de mundo que representa o valor atual, quando ele é uma posição.
+    ///
+    /// Move usa o deslocamento absoluto; Extrude/Push-Pull, a distância ao longo
+    /// da normal. Rotate, Scale, Inset e Bevel não têm um ponto de mundo
+    /// correspondente (graus, fator ou fração), então retornam `None`.
+    pub fn current_point(&self) -> Option<Vec3> {
+        match self.kind {
+            ModalKind::Move => Some(self.pivot + self.components),
+            ModalKind::Extrude | ModalKind::ExtrudeIndividual | ModalKind::PushPull => {
+                Some(self.pivot + self.normal * self.value)
+            }
+            ModalKind::Rotate | ModalKind::Scale | ModalKind::Inset | ModalKind::Bevel => None,
+        }
+    }
 }
 
 fn valid_mesh(mesh: &Mesh) -> bool {
@@ -274,10 +326,75 @@ impl AppState {
             selection: self.session.selection.clone(),
             source,
             changed: false,
+            snap: None,
+            before_prelude: None,
+            flip_when_negative: false,
         });
         self.pending_modal = None;
         self.mark_dirty();
         Ok(())
+    }
+
+    /// Inicia `kind` depois de um prelúdio já aplicado ao documento fora do
+    /// histórico (ex.: imprint de uma região numa face). `before` é o estado
+    /// anterior ao prelúdio: confirmar grava uma única entrada de Undo a partir
+    /// dele; cancelar (ou confirmar sem mudança) volta exatamente a ele. Em
+    /// erro, o documento também volta a `before`.
+    pub fn begin_modal_after_prelude(
+        &mut self,
+        kind: ModalKind,
+        before: Project,
+        before_selection: Selection,
+    ) -> Result<(), ModalError> {
+        match self.begin_modal(kind) {
+            Ok(()) => {
+                if let Some(modal) = self.modal.as_mut() {
+                    modal.before_prelude = Some(Box::new((before, before_selection)));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                if !matches!(error, ModalError::AlreadyActive) {
+                    self.restore_before_prelude(before, before_selection);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn restore_before_prelude(&mut self, before: Project, selection: Selection) {
+        let revision_clock = self.project.project.revision_clock();
+        self.project.project = before;
+        self.project
+            .project
+            .rebase_revisions_after_restore(revision_clock);
+        self.session.selection = selection;
+        self.events.emit(crate::AppEvent::SelectionChanged(
+            self.session.selection.clone(),
+        ));
+        self.emit_project_changed(ProjectChanges::ALL);
+    }
+
+    pub(crate) fn modal_flips_when_negative(&self) -> bool {
+        self.modal
+            .as_ref()
+            .is_some_and(|modal| modal.flip_when_negative)
+    }
+
+    /// Marca a operação ativa como extrusão de uma folha de região solta.
+    pub(crate) fn set_modal_flip_when_negative(&mut self) {
+        if let Some(modal) = self.modal.as_mut() {
+            modal.flip_when_negative = true;
+        }
+    }
+
+    /// Estado posterior ao prelúdio (para reaplicar a "Última operação").
+    pub(crate) fn modal_prelude_state(&self) -> Option<(Project, Selection)> {
+        let modal = self.modal.as_ref()?;
+        modal
+            .before_prelude
+            .as_ref()
+            .map(|_| (modal.original.clone(), modal.selection.clone()))
     }
 
     pub fn set_modal_constraint(&mut self, constraint: ModalConstraint) -> Result<(), ModalError> {
@@ -301,7 +418,20 @@ impl AppState {
 
     /// `translation` is an absolute world-space delta from the start, `value`
     /// is the absolute scalar (including exact numeric input), never a frame delta.
+    /// The core never snaps: snapping is one screen-space pass by the caller
+    /// ([`crate::inference`]), reported through [`Self::update_modal_snapped`].
     pub fn update_modal(&mut self, translation: Vec3, value: f32) -> Result<(), ModalError> {
+        self.update_modal_snapped(translation, value, None)
+    }
+
+    /// Same as [`Self::update_modal`], recording which snap target the caller
+    /// already applied to `translation` (P3D-040: one snap pass per gesture).
+    pub fn update_modal_snapped(
+        &mut self,
+        translation: Vec3,
+        value: f32,
+        snap: Option<SnapKind>,
+    ) -> Result<(), ModalError> {
         if !translation.is_finite() || !value.is_finite() || value.abs() > 1.0e6 {
             return Err(ModalError::InvalidInput);
         }
@@ -314,19 +444,6 @@ impl AppState {
         }
         if modal.kind == ModalKind::Bevel && value < 0.0 {
             return Err(ModalError::InvalidInput);
-        }
-        let mut translation = translation;
-        if self.snap_enabled {
-            let query = crate::snap::SnapQuery {
-                point: modal.pivot + translation,
-                start_point: Some(modal.pivot),
-                settings: &self.session.snap_settings,
-                mesh: Some(&modal.source),
-            };
-            let res = crate::snap::snap_point(query);
-            if res.snapped {
-                translation = res.point - modal.pivot;
-            }
         }
         let mut mesh = modal.source.clone();
         let mut components = Vec3::ZERO;
@@ -441,6 +558,12 @@ impl AppState {
                 for vertex in mesh.verts.iter_mut().filter(|v| v.selected) {
                     vertex.pos = (vertex.vec() + direction * value).to_array();
                 }
+                if modal.flip_when_negative && value < 0.0 {
+                    for face in &mut mesh.faces {
+                        face.verts.reverse();
+                        face.uv.reverse();
+                    }
+                }
             }
             ModalKind::ExtrudeIndividual if value != 0.0 => mesh.extrude_individual(value),
             ModalKind::Inset if value != 0.0 => mesh.inset_selected(value),
@@ -461,7 +584,11 @@ impl AppState {
             ModalKind::PushPull => mesh.translate_selected((direction * value).to_array()),
             _ => {}
         }
-        self.publish_modal_mesh(mesh, value, components)
+        self.publish_modal_mesh(mesh, value, components)?;
+        if let Some(modal) = self.modal.as_mut() {
+            modal.snap = snap;
+        }
+        Ok(())
     }
 
     /// Absolute XYZ property fields; rotation uses Euler XYZ angles in degrees.
@@ -696,7 +823,19 @@ impl AppState {
             return false;
         };
         let mut restored_changes = None;
-        if modal.changed {
+        if let Some(before) = modal.before_prelude {
+            let (before, selection) = *before;
+            if modal.changed {
+                self.project.undo.checkpoint_sized(
+                    modal.kind.label(),
+                    &before,
+                    before.estimated_bytes(),
+                );
+                self.mark_document_dirty();
+            } else {
+                self.restore_before_prelude(before, selection);
+            }
+        } else if modal.changed {
             self.project.undo.checkpoint_sized(
                 modal.kind.label(),
                 &modal.original,
@@ -735,6 +874,12 @@ impl AppState {
         let Some(modal) = self.modal.take() else {
             return false;
         };
+        if let Some(before) = modal.before_prelude {
+            let (before, selection) = *before;
+            self.restore_before_prelude(before, selection);
+            self.locked_axes = [false; 3];
+            return true;
+        }
         let revision_clock = self.project.project.revision_clock();
         self.project.project = modal.original;
         self.project
@@ -1252,6 +1397,60 @@ mod tests {
         );
         state.cancel_modal();
         assert_eq!(state.locked_axes, [false; 3]);
+    }
+
+    #[test]
+    fn feedback_reports_snap_only_when_the_caller_snapped() {
+        let mut state = selected_face();
+        state.snap_enabled = true;
+        state.session.snap_settings.enabled = true;
+        state.begin_modal(ModalKind::Move).unwrap();
+        let pivot = state.modal.as_ref().unwrap().pivot;
+        let vertex = state.modal.as_ref().unwrap().source.verts[0].vec();
+
+        // Snap ligado não encaixa nada no core: uma única passada, feita por
+        // quem conhece a tela (P3D-040). O ponto sobre um vértice fica livre.
+        state
+            .update_modal(vertex - pivot, (vertex - pivot).length())
+            .unwrap();
+        let feedback = state.current_tool_feedback().unwrap();
+        assert!(!feedback.is_snapped, "snap ligado não significa encaixe");
+        assert_eq!(feedback.snap_kind, None);
+
+        state
+            .update_modal_snapped(
+                vertex - pivot,
+                (vertex - pivot).length(),
+                Some(SnapKind::Point),
+            )
+            .unwrap();
+        let feedback = state.current_tool_feedback().unwrap();
+        assert!(feedback.is_snapped);
+        assert_eq!(feedback.snap_kind, Some(SnapKind::Point));
+        assert!((feedback.current - vertex).length() < 1.0e-4);
+
+        // O próximo update sem encaixe limpa o rótulo.
+        state.update_modal(Vec3::new(0.0, 0.0, 3.0), 3.0).unwrap();
+        assert!(!state.current_tool_feedback().unwrap().is_snapped);
+    }
+
+    #[test]
+    fn rotation_and_scale_have_no_world_point_or_guide_line() {
+        let mut state = selected_face();
+        state.begin_modal(ModalKind::Rotate).unwrap();
+        state.update_modal(Vec3::ZERO, 45.0).unwrap();
+        assert!(state.modal.as_ref().unwrap().current_point().is_none());
+        let feedback = state.current_tool_feedback().unwrap();
+        assert!(
+            feedback.guide_line.is_none(),
+            "graus não viram posição de mundo"
+        );
+        state.cancel_modal();
+
+        state.begin_modal(ModalKind::Move).unwrap();
+        state.update_modal(Vec3::new(1.0, 0.0, 0.0), 1.0).unwrap();
+        let modal = state.modal.as_ref().unwrap();
+        assert_eq!(modal.current_point(), Some(modal.pivot + Vec3::X));
     }
 
     #[test]

@@ -24,6 +24,8 @@ pub struct ToolFeedback {
     pub plane_constraint: Option<usize>,
     /// Indicador se o ponto atual foi atraído por snap magnético.
     pub is_snapped: bool,
+    /// Tipo do alvo que encaixou (forma + rótulo no HUD), quando houver.
+    pub snap_kind: Option<crate::inference::SnapKind>,
     /// Instruções de tecla para a barra de status.
     pub status_hint: &'static str,
 }
@@ -44,6 +46,7 @@ impl ToolFeedback {
             axis_constraint: None,
             plane_constraint: None,
             is_snapped: false,
+            snap_kind: None,
             status_hint: "LMB Confirm · RMB / Esc Cancel · X/Y/Z Axis",
         }
     }

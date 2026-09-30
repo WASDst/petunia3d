@@ -2,7 +2,7 @@
 //! de documentação do projeto (P3D-120).
 //!
 //! Verifica:
-//! 1. completude e continuidade do caderno (00–16, 01–44, P3D-001–168, seções A–O, adendos);
+//! 1. completude e continuidade do caderno (00–16, 01–46, P3D-001–174, seções A–O, adendos);
 //! 2. integridade dos links internos do caderno;
 //! 3. ausência de caminhos mortos (`petunia3d-livro-vivo/`, `petunia-full-book/`);
 //! 4. vocabulário de usuário (Point/Round Edge) nos manuais;
@@ -13,8 +13,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 const CONSTITUTION_CHAPTERS: std::ops::RangeInclusive<u32> = 0..=16;
-const FOUNDATIONS_CHAPTERS: std::ops::RangeInclusive<u32> = 1..=44;
-const P3D_RANGE: std::ops::RangeInclusive<u32> = 1..=168;
+const FOUNDATIONS_CHAPTERS: std::ops::RangeInclusive<u32> = 1..=46;
+const P3D_RANGE: std::ops::RangeInclusive<u32> = 1..=174;
 const SECTION_LETTERS: &str = "ABCDEFGHIJKLMNO";
 
 const DEAD_PATHS: [&str; 2] = ["petunia3d-livro-vivo/", "petunia-full-book/"];
@@ -99,7 +99,7 @@ fn check_structure(bible: &Path) -> Result<()> {
         }
     }
 
-    // Fundamentos 01–44
+    // Fundamentos 01–46
     let foundations_dir = bible.join("foundations");
     let found: BTreeSet<u32> = std::fs::read_dir(&foundations_dir)
         .with_context(|| format!("falha ao ler {}", foundations_dir.display()))?
@@ -112,7 +112,7 @@ fn check_structure(bible: &Path) -> Result<()> {
         }
     }
 
-    // Especificações P3D-001 a P3D-168
+    // Especificações P3D-001 a P3D-174
     let specs_dir = bible.join("specs");
     let found: BTreeSet<u32> = std::fs::read_dir(&specs_dir)
         .with_context(|| format!("falha ao ler {}", specs_dir.display()))?
@@ -169,7 +169,7 @@ fn check_structure(bible: &Path) -> Result<()> {
 
     let total = walk_md(bible).len();
     println!(
-        "✅ Caderno completo: {total} páginas markdown (00–16, 01–44, P3D-001–168, A–O, adendos)."
+        "✅ Caderno completo: {total} páginas markdown (00–16, 01–46, P3D-001–174, A–O, adendos)."
     );
     Ok(())
 }

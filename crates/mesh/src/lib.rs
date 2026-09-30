@@ -4,7 +4,7 @@
 //! arestas selecionáveis. Operações retornam `Result` em input externo e
 //! mantêm o invariante `face.uv.len() == face.verts.len()`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
@@ -220,16 +220,19 @@ impl Mesh {
     }
 }
 
+pub mod arrangement;
 mod bevel;
 pub mod boolean;
 mod connect;
 pub mod curve;
 pub mod half_edge;
+pub mod imprint;
 pub mod knife;
 pub mod loop_cut;
 pub mod obj;
 pub mod ops;
 pub mod path_frames;
+pub mod poly_pen;
 pub mod primitives;
 pub mod profile_geo;
 pub mod sweep;
@@ -430,6 +433,48 @@ impl Mesh {
         out
     }
 
+    /// Arestas classificadas para a aparência por modo (capítulo 05): `(a, b,
+    /// selecionada, de feição)`. De feição = borda (uma face), não manifold
+    /// ou dobra entre faces vizinhas acima de `crease_degrees`.
+    pub fn to_classified_edges(
+        &self,
+        crease_degrees: f32,
+    ) -> Vec<([f32; 3], [f32; 3], bool, bool)> {
+        let mut faces_of: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+        let mut order = Vec::new();
+        for (index, face) in self.faces.iter().enumerate() {
+            let m = face.verts.len();
+            for k in 0..m {
+                let key = edge_key(face.verts[k], face.verts[(k + 1) % m]);
+                let entry = faces_of.entry(key).or_default();
+                if entry.is_empty() {
+                    order.push(key);
+                }
+                entry.push(index);
+            }
+        }
+        let cos_limit = crease_degrees.to_radians().cos();
+        let normals: Vec<Vec3> = (0..self.faces.len())
+            .map(|f| self.face_normal(f).normalize_or_zero())
+            .collect();
+        order
+            .into_iter()
+            .map(|key| {
+                let faces = &faces_of[&key];
+                let feature = match faces.as_slice() {
+                    [a, b] => normals[*a].dot(normals[*b]) < cos_limit,
+                    _ => true,
+                };
+                (
+                    self.verts[key.0 as usize].pos,
+                    self.verts[key.1 as usize].pos,
+                    self.selected_edges.contains(&key),
+                    feature,
+                )
+            })
+            .collect()
+    }
+
     /// Retorna pares de pontos `(p0, p1)` representando as diagonais internas de triangulação
     /// para todos os polígonos com 4 ou mais lados da malha (para exibição em Show Triangulation).
     pub fn triangulation_wireframe(&self) -> Vec<([f32; 3], [f32; 3])> {
@@ -458,6 +503,41 @@ impl Mesh {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn classified_edges_mark_borders_and_creases_only() {
+        use super::{Face, Mesh, Vertex};
+        // Dois quads coplanares (aresta do meio plana) e um terceiro dobrado
+        // a 90° sobre a borda direita.
+        let mut mesh = Mesh::default();
+        for p in [
+            [-2.0f32, -1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [2.0, -1.0, 0.0],
+            [2.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [-2.0, 1.0, 0.0],
+            [2.0, -1.0, -2.0],
+            [2.0, 1.0, -2.0],
+        ] {
+            mesh.verts.push(Vertex::new(p[0], p[1], p[2]));
+        }
+        mesh.faces.push(Face::new(vec![0, 1, 4, 5]));
+        mesh.faces.push(Face::new(vec![1, 2, 3, 4]));
+        mesh.faces.push(Face::new(vec![2, 6, 7, 3]));
+        let edges = mesh.to_classified_edges(30.0);
+        let feature = |a: [f32; 3], b: [f32; 3]| {
+            edges
+                .iter()
+                .find(|e| (e.0 == a && e.1 == b) || (e.0 == b && e.1 == a))
+                .map(|e| e.3)
+                .unwrap()
+        };
+        assert!(!feature([0.0, -1.0, 0.0], [0.0, 1.0, 0.0]), "plana");
+        assert!(feature([2.0, -1.0, 0.0], [2.0, 1.0, 0.0]), "dobra de 90°");
+        assert!(feature([-2.0, -1.0, 0.0], [-2.0, 1.0, 0.0]), "borda");
+        assert_eq!(edges.len(), mesh.edges_unique().len());
+    }
+
     use crate::{Face, Mesh, triangulate::ear_clip, triangulate::ray_tri_hit};
     use glam::Vec3;
 

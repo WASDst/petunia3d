@@ -162,6 +162,8 @@ pub struct ImportPayload {
     pub meshes: Vec<(String, Mesh)>,
     pub materials: Vec<Material>,
     pub warnings: Vec<String>,
+    /// Esqueletos, pesos de skin e clipes do arquivo (glTF/GLB).
+    pub rig: Option<crate::gltf_rig::ImportedRig>,
 }
 
 /// Erros estruturados ocorridos no pipeline de importação e exportação.
@@ -344,6 +346,7 @@ impl FormatImporter for ObjImporter {
             meshes: vec![(name_hint.to_string(), mesh)],
             materials: Vec::new(),
             warnings: Vec::new(),
+            rig: None,
         })
     }
 }
@@ -424,10 +427,14 @@ impl FormatImporter for GlbImporter {
         let meshes =
             import_gltf::import_glb_bytes(data, name_hint, options.triangulate, options.scale)
                 .map_err(|e| PipelineError::Import(e.to_string()))?;
+        let rig = import_gltf::import_rig(data, name_hint, options.scale)
+            .map_err(|e| PipelineError::Import(e.to_string()))?;
+        let warnings = rig.as_ref().map_or_else(Vec::new, |r| r.warnings.clone());
         Ok(ImportPayload {
             meshes,
             materials: Vec::new(),
-            warnings: Vec::new(),
+            warnings,
+            rig,
         })
     }
 }
@@ -467,6 +474,7 @@ impl FormatImporter for GltfImporter {
                 "glTF 2.0 validado ({name_hint}): {} cenas, {} nós, {} malhas",
                 summary.scenes, summary.nodes, summary.meshes
             )],
+            rig: None,
         })
     }
 }
@@ -549,6 +557,7 @@ impl FormatImporter for PkgImporter {
             meshes,
             materials: proj.materials,
             warnings: Vec::new(),
+            rig: None,
         })
     }
 }

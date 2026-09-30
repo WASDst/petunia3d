@@ -3,7 +3,7 @@
 <aside>
 🧭
 
-Este capítulo registra a **direção adotada para a macroestrutura da UI**. A referência visual principal é o Blender UI Redesign analisado no capítulo 22, mas a organização funcional deve ser Petunia-first e selection/task-centric.
+Este capítulo registra a **direção adotada para a macroestrutura da UI**. A referência visual é o próprio sistema Petunia (capítulos 24 e 36); a análise do Blender UI Redesign do capítulo 22 permanece como registro histórico, não como referência canônica. As referências de interação estão no [capítulo 46](46-pesquisa-interacao-modelagem-referencias.md). A organização funcional é Petunia-first e selection/task-centric.
 
 </aside>
 
@@ -34,30 +34,45 @@ Direção:
 
 # Workspaces
 
-Baseline visual/funcional inicial:
+Baseline visual/funcional (revisão de 2026-09-29, [ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)):
 
 ```
-[ MODEL ] [ PAINT ] [ UV ]
+[ DRAW ] [ POLY ] [ PAINT ] [ UV ]
 ```
+
+- **DRAW (Desenhar)** — nível de forma: perfis, regiões, volumes paramétricos,
+  desenho sobre faces e Push/Pull. É o caminho padrão para começar um asset.
+- **POLY (Polígonos)** — nível de componente: `Point / Edge / Face` e topologia.
+
+DRAW e POLY substituem o antigo workspace `MODEL` e juntos formam o ambiente de
+criação. Eles compartilham documento, seleção de objeto, câmera, snapping,
+gramática de ferramenta (constituição 11) e o Inspector; mudam apenas o trilho
+esquerdo de ferramentas, o conjunto de seleção e a aparência do viewport
+(capítulo 05). Passar uma forma de DRAW para edição em POLY é explícito e
+reversível por Undo ("Converter em polígonos").
+
+> **Decisão aprovada, implementação pendente.** Até DRAW e POLY estarem
+> funcionais, a UI continua exibindo `MODEL` (capítulo 36: workspace não
+> implementado não aparece como pill).
 
 `Animate` pode surgir futuramente quando esse módulo existir.
 
-Não criar workspace `Layout`. O workspace **Model já é o layout de criação principal**. Não replicar Shading/Compositing/Scripting do Blender porque não correspondem ao escopo do produto.
+Não criar workspace `Layout`. Não replicar Shading/Compositing/Scripting do Blender porque não correspondem ao escopo do produto.
 
 Os workspaces devem usar o princípio de pills compactas observado no Figma: troca rápida, baixa altura, estado ativo inequívoco.
 
-# Estrutura conceitual da tela Model
+# Estrutura conceitual das telas DRAW e POLY
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ Application chrome / menus / project                        │
 ├──────────────────────────────────────────────────────────────┤
-│                [ MODEL ] [ PAINT ] [ UV ]                   │
+│             [ DRAW ] [ POLY ] [ PAINT ] [ UV ]              │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │ ╭──────────╮                      ╭─────────────────────────╮ │
-│ │ CREATE   │                      │ INSPECTOR               │ │
-│ │ TOOLS    │       VIEWPORT       │ Parts                   │ │
+│ │ TOOLS DO │                      │ INSPECTOR               │ │
+│ │WORKSPACE │       VIEWPORT       │ Parts                   │ │
 │ ╰──────────╯                      │ Transform               │ │
 │                                   │ Material                │ │
 │                                   │ Object                  │ │
@@ -70,12 +85,13 @@ Os workspaces devem usar o princípio de pills compactas observado no Figma: tro
 └──────────────────────────────────────────────────────────────┘
 ```
 
-Esta composição MODEL segue a revisão de baseline de 2026-09-23 do capítulo 36.
+Esta composição segue a revisão de baseline de 2026-09-23 do capítulo 36 (Parts
+no Inspector) e vale igualmente para DRAW e POLY desde a revisão de 2026-09-29.
 Em largura compacta, o Inspector pode ser substituído por drawer à direita.
 
 # PARTS em vez de Outliner
 
-**Parts** é preferível a `Outliner` para o produto principal. No MODEL, ele é a
+**Parts** é preferível a `Outliner` para o produto principal. Em DRAW e POLY, ele é a
 primeira seção recolhível do Inspector direito, não um painel sobre a barra de
 criação esquerda (capítulo 36, revisão de 2026-09-23).
 
@@ -180,17 +196,20 @@ Weld
 Delete
 ```
 
-O conjunto exato será validado pelo fluxo de uso; o princípio normativo é **contextualidade antes de volume de botões**.
+O conjunto exato será validado pelo fluxo de uso; o princípio normativo é **contextualidade antes de volume de botões**. Os exemplos acima misturam os dois níveis; desde a revisão de 2026-09-29, ações de forma (Draw, Push, Primitive) pertencem a DRAW e ações de componente (Inset, Round, Split, Weld, Dissolve) a POLY.
 
-# Seleção Object / Face / Edge / Point
+# Seleção por workspace
 
-Evitar o ritual `Object Mode → Edit Mode → Vertex/Edge/Face`. Petunia deve expor seleção em linguagem direta, potencialmente como segmented control:
+Evitar o ritual `Object Mode → Edit Mode → Vertex/Edge/Face`. Petunia expõe seleção em linguagem direta, como segmented control, e o conjunto depende do workspace:
 
 ```
-[ Object | Face | Edge | Point ]
+POLY: [ Object | Face | Edge | Point ]
+DRAW: [ Shape | Curve | Point | Region ]
 ```
 
-A apresentação final pode ser refinada, mas não exigir conhecimento prévio do conceito de Edit Mode.
+Em DRAW, `Point` é o ponto de uma curva ou perfil; em POLY, o vértice da malha. O nome é o mesmo porque o gesto e o significado para o usuário são os mesmos.
+
+`Tab` não alterna domínio (ele navega controles, capítulo 36). A apresentação final pode ser refinada, mas não exigir conhecimento prévio do conceito de Edit Mode.
 
 # Viewport control bar
 

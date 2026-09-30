@@ -305,10 +305,14 @@ impl PetuniaViewport for Software3dViewport {
         } else {
             None
         };
-        let light_dir = scene_light
-            .map_or(Vec3::from_array(scene::LIGHT_DIR).normalize(), |light| {
-                Vec3::from_array(light.normalized_direction())
-            });
+        let light_dir = scene_light.map_or(
+            if state.studio_light_follows_camera {
+                Vec3::from_array(scene::studio_light_for_camera(camera))
+            } else {
+                Vec3::from_array(scene::LIGHT_DIR).normalize()
+            },
+            |light| Vec3::from_array(light.normalized_direction()),
+        );
         let ambient = if scene_light.is_some() {
             scene::LIGHT_AMBIENT * 0.35
         } else {
@@ -645,6 +649,42 @@ mod tests {
         style.selection_thickness = 5.0;
         viewport.render_frame(&project, &[], &camera, style);
         assert_ne!(viewport.color_buffer, blue);
+    }
+
+    #[test]
+    fn software_studio_light_follows_the_camera() {
+        let mut project = Project::default();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let luminance_from = |preset, follows| {
+            let mut viewport = Software3dViewport::new(160, 120);
+            let mut camera = Camera::default();
+            camera.set_preset(preset);
+            camera.target = Vec3::ZERO;
+            let state = ViewportRenderState {
+                show_grid: false,
+                show_wireframe_overlay: false,
+                studio_light_follows_camera: follows,
+                ..ViewportRenderState::default()
+            };
+            viewport.render_frame(&project, &[], &camera, state);
+            let offset = ((60 * 160 + 80) * 4) as usize;
+            let pixel = &viewport.color_buffer[offset..offset + 3];
+            0.2126 * f32::from(pixel[0])
+                + 0.7152 * f32::from(pixel[1])
+                + 0.0722 * f32::from(pixel[2])
+        };
+        let front = luminance_from(petunia_core::ViewPreset::Front, true);
+        let back = luminance_from(petunia_core::ViewPreset::Back, true);
+        assert!(
+            (front - back).abs() < 6.0,
+            "frente {front:.1} × trás {back:.1}"
+        );
+        let fixed_front = luminance_from(petunia_core::ViewPreset::Front, false);
+        let fixed_back = luminance_from(petunia_core::ViewPreset::Back, false);
+        assert!(
+            fixed_front - fixed_back > 30.0,
+            "{fixed_front:.1} × {fixed_back:.1}"
+        );
     }
 
     #[test]

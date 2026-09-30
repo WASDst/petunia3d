@@ -115,14 +115,26 @@ fn viewport_shortcut_drag_parametric_hover_and_navigation_gesture() {
     shell.on_viewport_orbit(move |_, _| {
         orbit_callback.set(orbit_callback.get() + 1);
     });
-    move_pointer(&shell, 936.0, 150.0);
+    // O tripé é posicionado dentro do viewport: localizá-lo pelo nome
+    // acessível em vez de coordenadas fixas da janela.
+    shell.set_label_view_gizmo("View navigation".into());
+    let tripod =
+        i_slint_backend_testing::ElementHandle::find_by_accessible_label(&shell, "View navigation")
+            .next()
+            .expect("tripé de navegação com nome acessível");
+    let (position, size) = (tripod.absolute_position(), tripod.size());
+    let (x, y) = (
+        position.x + size.width * 0.75,
+        position.y + size.height * 0.75,
+    );
+    move_pointer(&shell, x, y);
     shell.window().dispatch_event(WindowEvent::PointerPressed {
-        position: LogicalPosition::new(936.0, 150.0),
+        position: LogicalPosition::new(x, y),
         button: PointerEventButton::Left,
     });
-    move_pointer(&shell, 952.0, 166.0);
+    move_pointer(&shell, x + 12.0, y + 12.0);
     shell.window().dispatch_event(WindowEvent::PointerReleased {
-        position: LogicalPosition::new(952.0, 166.0),
+        position: LogicalPosition::new(x + 12.0, y + 12.0),
         button: PointerEventButton::Left,
     });
     assert!(orbits.get() > 0, "arrastar o tripé deve orbitar a câmera");
@@ -373,13 +385,11 @@ fn loop_cut_armed_tool_routes_hover_scroll_and_click_without_navigating() {
     let count_callback = Rc::clone(&counts);
     shell.on_loop_cut_count_committed(move |_| count_callback.set(count_callback.get() + 1));
 
+    // Constituição 11 (ADR 007, Onda 2): a roda sempre faz zoom, inclusive
+    // com o Loop Cut armado; a contagem de cortes usa Ctrl+roda ou +/−.
     scroll_pointer(&shell, 600.0, 400.0, 1.0);
-    assert_eq!(counts.get(), 1, "scroll ajusta Cuts durante Loop Cut");
-    assert_eq!(
-        zooms.get(),
-        0,
-        "scroll não deve navegar durante a ferramenta"
-    );
+    assert_eq!(zooms.get(), 1, "a roda sempre faz zoom");
+    assert_eq!(counts.get(), 0, "a roda sozinha não muda os cortes");
 }
 
 #[test]
@@ -554,10 +564,12 @@ fn test_tooltip_hover() {
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
+    shell.set_label_workspace_draw_title("Draw Workspace".into());
 
-    let tab = ElementHandle::find_by_accessible_label(&shell, "Model Workspace")
+    // Desde a Onda 4 (ADR 007) o seletor mostra DRAW · POLY · PAINT · UV.
+    let tab = ElementHandle::find_by_accessible_label(&shell, "Draw Workspace")
         .next()
-        .expect("Model tab");
+        .expect("aba DRAW");
     let pos = tab.absolute_position();
     let size = tab.size();
     let center_x = pos.x + size.width / 2.0;

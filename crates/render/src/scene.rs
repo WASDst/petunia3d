@@ -6,6 +6,19 @@ pub const LIGHT_DIR: [f32; 3] = [0.5, 0.9, 0.6];
 pub const LIGHT_AMBIENT: f32 = 0.45;
 pub const LIGHT_DIFFUSE: f32 = 0.65;
 
+/// Luz de estúdio presa à câmera (Plasticity, Cinema 4D): por cima do ombro
+/// esquerdo de quem olha, para as faces de frente ficarem claras e as
+/// laterais darem leitura de volume em qualquer órbita.
+pub fn studio_light_for_camera(camera: &petunia_core::Camera) -> [f32; 3] {
+    let direction = -camera.forward() * 0.75 + camera.up() * 0.55 - camera.right() * 0.35;
+    let direction = direction.normalize_or_zero();
+    if direction.length_squared() < 0.5 {
+        LIGHT_DIR
+    } else {
+        direction.to_array()
+    }
+}
+
 /// Cor de seleção (laranja Blender-like).
 pub const SELECT_COLOR: [f32; 3] = [1.0, 0.55, 0.15];
 /// Cor de aresta selecionada (overlay).

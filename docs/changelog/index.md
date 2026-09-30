@@ -22,6 +22,124 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - **Asset Library com Prefabs**: novo modelo `Prefab`/`PrefabLink` no projeto (persistido, retrocompatível), separado da cena; "Salvar seleção como prefab" não cria objetos na cena, instanciar é desfazível, instâncias desatualizadas são detectáveis. A gaveta mostra miniaturas renderizadas, busca, favoritos, ordenação, colocar/atualizar/excluir. O workspace de gestão completo (catálogos, tags, renomear inline) permanece pendente.
 - **Correções**: teste desatualizado de Smooth shading; `viewport_shortcut_drag_parametric_hover_and_navigation_gesture` já falhava antes desta rodada e segue vermelho.
 
+### Arestas nítidas e aparência por modo — Onda 6, parte 2 (30/09/2026)
+- **Arestas de largura constante**: as linhas do modelo têm a mesma espessura em pixels em qualquer zoom, distância ou escala de tela, com bordas suavizadas (antes eram linhas de 1 px físico).
+- **DRAW lê forma, POLY lê topologia** (capítulo 05): no DRAW aparecem só as arestas de feição (bordas e dobras acima de 30°); no POLY aparecem todas, as comuns mais finas e as de feição reforçadas; PAINT e UV mantêm as faces limpas.
+- **Verificado por pixels** no renderer real (Vulkan por software): largura medida e visibilidade de cada tipo de aresta por modo.
+- **Escopo honesto**: pontos visíveis no domínio Point, destaque do plano de trabalho, contorno de seleção por jump flooding e matcap ficam pendentes.
+
+### Visual e acessibilidade — Onda 6, parte 1 (30/09/2026)
+- **Luz de estúdio que acompanha a câmera**: a forma continua clara e legível ao orbitar para qualquer lado (como no Plasticity e no Cinema 4D); a preferência "Luz de estúdio acompanha a câmera" volta à luz fixa no mundo. X-Ray e viewport por software usam a mesma luz.
+- **Raio do snap nas Configurações** (4–48 px): quem tem tremor ou pouca precisão pode aumentar a área de encaixe.
+- **Aparência testada por pixels**: os testes do renderer rodam com Vulkan por software (lavapipe) e medem o brilho do modelo visto de frente e de trás.
+- **Roteiro de teste com usuários**: `docs/development/user-test-protocol.md` reúne as 7 decisões em aberto das Ondas 3–6, tarefas, métricas (SEQ, SUS) e critérios de decisão, com um grupo de pessoas com limitação motora.
+- **Escopo honesto**: linhas de largura constante com AA, contorno por jump flooding, matcap, aparência por modo e girar a luz por arrasto ficam pendentes. Matriz em `docs/development/wave6-visual-accessibility-gap-matrix.md`.
+
+### Poly Pen — Onda 5, parte 1 (30/09/2026)
+- **Poly Pen no trilho POLY** (modelo: Polygon Pen do Cinema 4D): passar o mouse destaca ponto, aresta ou face; arrastar move o elemento sem selecionar antes.
+- **Ctrl-arrastar uma aresta de borda** cria uma face nova a partir dela (um gesto, um Undo; `Esc` restaura).
+- **Desenhar polígonos**: cada clique adiciona um ponto (ou reaproveita um existente); Enter ou clicar no primeiro ponto fecha; Backspace remove o último; `Esc` limpa. A face nova segue a orientação dos vizinhos ou fica de frente para a câmera; resultados não manifold são recusados.
+- **Ctrl-clique** num ponto o derrete.
+- **Escopo honesto**: ícone próprio, modificador pelo keymap, subdividir aresta por clique e pintar faces ficam pendentes. Matriz em `docs/development/poly-pen-gap-matrix.md`.
+
+### DRAW e POLY no seletor — Onda 4, parte 2 (30/09/2026)
+- **Seletor `DRAW · POLY · PAINT · UV`**: MODEL vira dois modos do mesmo workspace de modelagem — mesmo documento, seleção, câmera e Inspector; muda o trilho de ferramentas.
+- **Trilho por modo**: DRAW mostra Sketch, Retângulo, Círculo, Push/Pull e Duplicar; POLY mostra as ferramentas de componente (Extrude, Inset, Bevel, Knife, Loop Cut e demais). Trocar de modo nunca converte nem seleciona nada; uma ferramenta que não existe no novo trilho volta para Select.
+- **Correção**: empurrar uma região solta para o lado negativo agora gera um sólido voltado para fora.
+- **Escopo honesto**: seleção `Shape / Curve / Point / Region` no DRAW, aparência de viewport por modo, plano por 3 pontos e formas paramétricas com "Converter em polígonos" continuam pendentes; padrão POLY a validar com usuários.
+
+### Regiões e Push/Pull do DRAW — Onda 4, parte 1 (30/09/2026)
+- **Regiões fechadas como no Plasticity**: perfis que se cruzam no mesmo plano formam regiões (arranjo planar com furos); a região sob o cursor recebe tinta translúcida no Draw e no Push/Pull.
+- **Push/Pull na região**: arrastar uma região com Push/Pull gera volume na hora, com o mesmo gesto das outras ferramentas (valor segue o cursor, digitação vence o mouse, "Última operação" ajustável).
+- **Draw on Face**: uma região desenhada dentro de uma face é gravada nela (imprint); puxar para fora soma volume, empurrar para dentro cria um rebaixo. No vazio, a região vira um sólido fechado num objeto novo ("Forma").
+- **Um gesto, um Undo**: imprint e extrusão entram como uma única entrada de histórico; `Esc` restaura o documento exatamente; reajustar a "Última operação" não duplica o imprint.
+- **Escopo honesto**: pill DRAW e trilho de forma (parte 2), imprint de região que cruza arestas ou tem furos sobre face, e extrusão negativa de região solta ficam pendentes. Matriz em `docs/development/draw-regions-gap-matrix.md`.
+
+### Pré-seleção e plano de trabalho — Onda 3, parte 2 (30/09/2026)
+- **A câmera nunca se move sozinha**: ativar o Draw ou escolher o plano Face não troca mais a vista nem a projeção; o novo botão "Olhar para o plano" faz isso sob comando.
+- **Plano automático**: no 1º clique de um perfil novo, a face sob o cursor vira o plano (Draw on Face); sem face, o plano do mundo mais paralelo à vista, pelo 3D Cursor.
+- **Plano travado**: Chão, Face e Vista travam o plano até voltar para Auto; o card mostra a pílula Auto e textos traduzidos (en/pt-BR).
+- **Preferência de plano automático**: Configurações → "Plano automático favorece o chão". Ligada (estilo SketchUp), o desenho sem face sob o cursor vai para o chão, a menos que a câmera esteja quase na horizontal (< 20°); desligada (padrão, estilo Modo/Cinema 4D), usa o plano do mundo mais de frente para a vista.
+- **Pré-seleção no Draw**: o hover mostra a face que viraria o plano (marcador "Na face") e, depois, o ponto encaixado que o clique criaria.
+- **Escopo honesto**: plano por 3 pontos/face + aresta, regiões no hover e imprint na face hospedeira ficam para a Onda 4; a regra do eixo dominante em perspectiva será validada com usuários. Matriz em `docs/development/snap-inference-gap-matrix.md`.
+
+### Snapping com inferência — Onda 3, parte 1 (30/09/2026)
+- **Tolerância em pixels**: o snap passa a medir a distância na tela (padrão 12 px, faixa 4–48), com o mesmo alcance em qualquer zoom; antes era 0,35 unidade de mundo.
+- **Uma passada por gesto**: o Move encaixava duas vezes (bridge contra a malha em prévia e core); agora o bridge faz uma única consulta contra a malha de origem, ignora a geometria que se move e o core apenas registra o que encaixou. Reajustar a "Última operação" não reencaixa mais o valor digitado.
+- **Tipos nomeados com prioridade**: Ponto, Ponto médio, Na aresta, Guia de eixo X/Y/Z, Na face (ponto sob o cursor, não o centroide) e Grade; pontos atrás da malha só com raio-X/wireframe.
+- **Inferência de direção**: guias paralelas aos eixos a partir da âncora (snap-dragging); com grade, o comprimento ao longo da guia anda no passo da grade.
+- **Desenho de perfil**: usa a mesma passada (pontos da malha projetados no plano, guias do plano a partir do último ponto, grade do plano); a grade fixa de 0,25 foi removida.
+- **Nunca só cor**: marcador com forma por tipo e rótulo traduzido (en/pt-BR); o HUD mostra o tipo encaixado.
+- **Escopo honesto**: centro de face, interseção, paralelo/perpendicular a aresta, passos de 15°, snap entre objetos, campo de raio em Configurações, índice espacial e pré-seleção universal ficam pendentes. Matriz em `docs/development/snap-inference-gap-matrix.md`.
+
+### Gramática única de ferramenta — Onda 2 (30/09/2026)
+- **`ToolSession` no core**: uma máquina de estados (`Idle/Pressed/Dragging/Latched`) decide clique × arrasto com limiar configurável; clicar-mover-clicar em alças (WCAG 2.2, 2.5.7); valor digitado vence o mouse; testes de domínio sem toolkit.
+- **Ferramentas persistentes**: Extrude, Inset, Round Edge e Push/Pull deixam de abrir operação ao apertar a tecla; arrastar sobre uma face (ou aresta) a seleciona e opera seguindo o cursor pela normal projetada, estável sob zoom. Move/Rotate/Scale e o gizmo passam pela mesma máquina.
+- **"Última operação"**: cada gesto é 1 Undo e continua ajustável no card da ferramenta, reaplicado dentro da mesma entrada de histórico.
+- **Contrato de entrada**: RMB nunca cancela (abre menu fora de gesto); navegação nunca é suspensa; a roda sempre faz zoom e Ctrl+roda ajusta contagens; Esc em escada (gesto → overlays → ferramenta volta para Select); Esc mantém a primitiva recém-criada; nada é selecionado sozinho.
+- **Preferências de acessibilidade**: distância para começar a arrastar (2–16 px) e "arrastar sem segurar o botão".
+- **Escopo honesto**: Loop Cut, Slice, Knife e Profile ainda usam ciclos próprios (Ondas 4/5); `Space` = ferramenta anterior e alças dedicadas de Extrude/Inset ficam pendentes. Matriz em `docs/development/tool-session-gap-matrix.md`.
+
+### Viewport nítido e bugs comprovados — Onda 1 (30/09/2026)
+- **Nitidez**: a imagem 3D passa a ser renderizada em pixels físicos (HiDPI e UI scale), com MSAA 4× resolvido na textura exibida; larguras de linha continuam em px lógicos.
+- **Fluidez**: mouse parado sobre o mesmo alvo não reconstrói o view model nem redesenha o frame.
+- **Correções**: buffer numérico não vaza mais entre operações (E → 2 → Enter → E → 5 extrudava 25); card e Cancelar da faca funcionam (`cut`); hover do gizmo clareia; anel de View Roll clicável onde é desenhado; `is_snapped` significa "encaixou"; cota linear só para distâncias (não para graus/fatores); HUD mostra o valor digitado.
+- **Escopo honesto**: coalescer renders por quadro, linhas de largura constante com AA e contorno por jump flooding ficam para ondas seguintes. Matriz em `docs/development/viewport-crispness-gap-matrix.md`.
+
+### Decisão DRAW + POLY e gramática única de ferramenta — Onda 0 (29/09/2026)
+- **Pesquisa registrada**: novo capítulo 46 do Livro Vivo com a análise de Plasticity (incluindo o código aberto inicial), Cinema 4D, Modo e SketchUp, a literatura acadêmica aplicável (snap-dragging, beautification, κ-curves, bubble cursor, cursores de área para deficiência motora, WCAG 2.2) e o diagnóstico da implementação Slint.
+- **ADR 007 aceito**: workspaces **DRAW** (nível de forma) e **POLY** (nível de componente) substituem MODEL; todas as ferramentas passam a seguir uma gramática única — persistente, arrastar pela alça ou em qualquer lugar, valor digitado, clicar-mover-clicar, "Última operação" ajustável, RMB = menu, Esc cancela, navegação nunca suspensa.
+- **Referência canônica**: `Blender.svg` e o manual do Blender deixam de ser referências; caminhos absolutos quebrados (`Projetos/simple3d-modeling`) foram convertidos em caminhos relativos.
+- **Escopo honesto**: somente documentação. O código ainda exibe MODEL e mantém cinco mecanismos de sessão; as páginas revisadas marcam "decisão aprovada, implementação pendente".
+### Animate F1 — geradores de movimento procedural (P3D-170) (30/09/2026)
+- **`MotionRecipe`** (`Project::motions`, append-only) avaliado por `MotionEvaluator` como `pose(t)` puro e determinístico (mesma receita ⇒ mesma pose); parâmetros com faixa (`speed`, `energy`, `weight`, `stride`, `lean`, `smoothness`, `variation` + específicos), **Styles** (Cartoon, Heavy, Stiff, Floaty), **Stepped** (quantização temporal), In Place/Root Motion e contrato de rig via Rig Roles com erro legível.
+- **Geradores**: `BipedCycle` (walk↔run, pés plantados por IK, braços contralaterais, lean/torção), `Gait` de N pernas (alternado, sequência lateral, onda; alternating tetrapod para aranhas; ondulação de coluna e cauda), `Serpentine` (serpente, peixe, cauda) e `IdleBreath`. Frente/lateral vêm do próprio rig.
+- **Apply Now** (`bake_motion`): amostra ciclos inteiros e reduz chaves por canal (Ramer–Douglas–Peucker) com relatório do que mudou; canais no repouso não geram chaves. O glTF exporta Motions **sempre baked**; os que não podem ser exportados aparecem como aviso no relatório.
+- **Comandos** transacionais: `AddMotionCmd`, `SetMotionParamCmd`, `SetMotionStyleCmd`, `UpdateMotionCmd`, `DuplicateMotionCmd`, `RemoveMotionCmd`, `ApplyMotionNowCmd` (Keep Live ou converter em clipe); não tocam revisões de render.
+- **Testes** (22 no projeto + 6 no core): fechamento de loop, determinismo, seed/variation, só rotações (exceto raiz), comprimentos de osso, pés plantados (walk e run), aranha 8 pernas, quadrúpede, onda com defasagem, sentido de joelho/braços/lean, extremos sem NaN, bake, persistência e export.
+- **Não incluído**: Wing Flap, Reaction, Action, Look/Aim e UI. Valores padrão sem avaliação visual.
+
+### Animate F1.1 — presets de serpente, peixe e pássaro (30/09/2026)
+- `RigPreset::serpent(segments, scale)`, `fish(scale)` (serpente de 9 segmentos + nadadeiras) e `bird(scale)` (coluna horizontal, pernas de 3 ossos, asas `Wing_n.L/R`, cauda), como templates de dados (P3D-136).
+- Inferência de papéis passa a reconhecer `Spine_n` numerado e `Wing_n.L/R` (`RigRole::Wing`); Mixamo `Spine1/Spine2` continua igual.
+
+### Animate F0.6 — comandos transacionais de rig, papéis, IK e clipes (30/09/2026)
+- **`petunia_core::rig_commands`**: presets de rig (humanoide, quadrúpede, multi-leg), Auto-Rig do asset ativo (fit + pesos), remoção de esqueleto em cascata (papéis, IK, vínculos de skin), atribuir/limpar/redetectar papéis, adicionar/editar/remover cadeias de IK, criar/remover clipes e gravar/apagar chaves de osso (valores locais absolutos, rotação normalizada).
+- **Contrato**: `can_execute` sem efeitos, `NoChange` sem histórico, rollback do dispatcher, `do → undo → redo` idêntico por hash e nenhuma revisão de render alterada (`changes() = NONE`). Import glTF pelo `ProjectService` liga esqueleto, pesos, papéis e clipes e é desfazível.
+- **Fora do escopo**: registro em `canonical()` (palette/keymap/MCP) depende da decisão D-21; edição de ossos segue no egui legado.
+- **Testes**: 8 de comandos e 1 de importação pelo serviço. O teste do Slint `test_viewport_context_menu_modeling_actions_and_dismissal` estava desatualizado desde o G7 (mensagem de `model.shade_smooth`) e foi alinhado; suíte Slint 345/345 verde.
+
+### Animate F0.5 — IK mínimo (P3D-169) (30/09/2026)
+- **Solvers puros** (`petunia_project::ik`): `solve_two_bone` (analítico com pole vector e soft IK exponencial), `solve_fabrik` (raiz fixa, comprimentos preservados) e look-at; alvos inalcançáveis/próximos demais são limitados sem NaN.
+- **Aplicação na pose**: `solve_chain` altera somente as rotações locais dos ossos da cadeia (swing até a nova direção, preservando a torção) com mistura por `weight`; `Skeleton::world_pose_matrices` exposto.
+- **Dados**: `IkChain` (`Project::ik_chains`, append-only) com validação (ossos existentes e contíguos) e `IkChain::two_bone_leg` a partir dos Rig Roles; poda em `validate()`.
+- **Testes**: alcance, comprimentos, pole, continuidade do soft IK, FABRIK/look-at no esqueleto, pesos, determinismo e persistência. Limites angulares e comandos ficam para a sequência da F0.
+
+### Animate F0.4 — Rig Roles (P3D-169, dados) (30/09/2026)
+- **Domínio** (`petunia_project::rig_roles`): `RigRole` (Root, Hips, Spine(n), Chest, Neck, Head, Jaw, Leg/Arm por membro e parte, Wing, Tail(n), Tentacle, Wiggle(n)) e `RigRoleMap` com atribuição validada (osso existente, papel único por osso — o erro nomeia o dono), pernas completas, cadeias de coluna/cauda e `RigRequirement` com mensagens legíveis.
+- **Inferência por nomes**: presets Petunia (humanoide, quadrúpede, multi-leg com 2–16 pernas), Mixamo e nomes genéricos; nomes desconhecidos ficam sem papel.
+- **Projeto**: `Project::rig_roles` (append-only, `serde(default)`; arquivos antigos abrem sem o campo), `add_skeleton` infere os papéis, `validate()` poda ossos/esqueletos ausentes; `assign_rig_role`/`clear_rig_role`/`infer_rig_roles`.
+- **glTF**: papéis em `skin.extras.petunia.roles` (por nome de osso); import restaura ou infere para rigs externos.
+
+### Animate F0.2/F0.3 — glTF com skin, joints e animação (30/09/2026)
+- **Export** (`petunia_project::gltf_rig`, integrado a `export_gltf`): nós de joint com TRS de repouso, `skin` com `inverseBindMatrices`, `JOINTS_0`/`WEIGHTS_0` por vértice, `animations` por osso (translation/rotation/scale; LINEAR ou STEP) e `extras.petunia` para round-trip. Sem rig o GLB é idêntico ao anterior. Avisos em `export_report` quando a malha avaliada não casa com os pesos (skin omitida, nunca silenciosa).
+- **Import** (`import_rig`, `Project::add_imported_rig`, `ImportPayload.rig`): esqueleto a partir da IBM (com rotação de repouso), pesos `JOINTS_0` u8/u16, clipes (fps/loop/duração via extras), `scale` aplicado; CUBICSPLINE convertido e ancestrais/escala/canais ignorados geram **avisos**. O `ProjectService` liga esqueleto, pesos e clipes ao projeto.
+- **Rig Core**: `compute_bind_pose_matrices` respeita a rotação de repouso (rigs externos).
+- **Testes**: 9 novos de round-trip (nomes, hierarquia, heads, bind, pesos por vértice, poses amostradas, rotação de repouso, escala, pipeline) + GLB externo montado à mão + export (skin, pesos, animações, tempos inválidos, skin omitida).
+- **Registrado**: AN-17 (pesos guardam IDs, consumidores tratam como índice); o import de malha ainda ignora UV/normais.
+
+### Animate F0.1 — correção do bind pose do Rig Core (30/09/2026)
+- **AN-16 corrigido**: `Skeleton::compute_bind_pose_matrices` tratava `head` (absoluto) como offset relativo ao pai, acumulando a hierarquia; ossos fora da origem não voltavam à identidade em repouso. Agora o bind é `translate(head)` e `local_transform.translation` guarda o offset de repouso (`head − head_do_pai`), a mesma convenção dos joints do glTF.
+- **Amostragem**: `AnimationClip::sample_pose` usa `BoneTrack::sample_transform_over`, e canais sem keyframes herdam o repouso (uma trilha só de rotação não solta mais o osso do pai). O clipe `Humanoid_Idle` passou a respirar em torno do repouso e o botão "Inserir Pose Key" do egui legado grava o repouso do osso.
+- **Testes**: repouso ⇒ skinning identidade em hierarquia deslocada, offsets após reparent/remoção e amostragem só-rotação.
+
+### Animate procedural-first — documentação (30/09/2026)
+- **Decisão de produto registrada**: Animate acessível a quem não entende de animação, com **animação procedural primeiro**, **criaturas de primeira classe** (humanoide, quadrúpede, multi-leg, serpente, peixe, pássaro) e referência de animação por **batch de imagens** (sem vídeo, sem ML). Sem alteração de código.
+- **Caderno**: novo capítulo 45 (visão, UX em quatro camadas, Gap Matrix `AN-01…AN-15`, análise do Dust3D, pesquisa externa e fases F0–F5); novas specs **P3D-169** (Rig Roles & IK), **P3D-170** (Procedural Motion Generators), **P3D-171** (Ghosts & Trajectories), **P3D-172** (Reference Image Sequence), **P3D-173** (Secondary Motion & Ragdoll) e **P3D-174** (Layered Animation), todas em `SPEC DRAFT`.
+- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e [ADR 006](docs/architecture/adr/006-workspace-animate-pos-v1.md). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
+- **Achados registrados**: o domínio de rig/clipes existe em `petunia_project`, mas não alcança o Slint (AN-07) e o glTF não exporta skin/animação (AN-13).
+- **Gates**: `xtask bible-check` passa a validar P3D-001–174 e fundamentos 01–45.
+
 ### Iconografia vetorial Petunia oficial e temas configuráveis (28/09/2026)
 - **Integração nativa no shell Slint**: Os 249 ícones vetoriais SVG oficiais criados para o Petunia3D foram compilados em catálogo declarativo dinâmico (`PetuniaIcons` em `petunia_icons.slint`), fornecendo suporte unificado a duas variantes estéticas: `outline` (traço) e `filled` (preenchido).
 - **Troca dinâmica e reatividade imediata**: Alternância de estilo em tempo de execução via seletor em Configurações -> Aparência, com preview dos dois estilos e callback reativo conectado ao singleton global Slint sem reinicialização.
