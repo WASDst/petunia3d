@@ -109,6 +109,9 @@ fn viewport_shortcut_drag_parametric_hover_and_navigation_gesture() {
     shell.set_keyboard_tool_modal_active(false);
     shell.set_view_gizmo_origin_x(896.0);
     shell.set_view_gizmo_origin_y(108.0);
+    // O tripé desliza (`animate x`, 180 ms) ao mudar a origem; sem avançar o
+    // relógio mockado a área de hit ainda está na posição anterior.
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(300));
     let orbits = Rc::new(Cell::new(0));
     let orbit_callback = Rc::clone(&orbits);
     shell.on_viewport_orbit(move |_, _| {
