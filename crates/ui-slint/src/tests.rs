@@ -7704,22 +7704,24 @@ fn test_menu_and_workspace_keyboard_shortcuts() {
     assert!(bridge.route_shortcut("Escape", false, false, false));
     assert_eq!(bridge.view_model().menu_open, "");
 
-    // Ctrl+PageDown cycles workspace MODEL -> PAINT -> UV -> MODEL
-    assert_eq!(bridge.state.workspace, Workspace::Model);
-    assert!(bridge.route_shortcut("PageDown", true, false, false));
-    assert_eq!(bridge.state.workspace, Workspace::Paint);
-    assert!(bridge.route_shortcut("PageDown", true, false, false));
-    assert_eq!(bridge.state.workspace, Workspace::Uv);
-    assert!(bridge.route_shortcut("PageDown", true, false, false));
-    assert_eq!(bridge.state.workspace, Workspace::Model);
+    // Ctrl+PageDown cycles workspace MODEL -> PAINT -> UV -> MODEL (com a
+    // feature `animation-workspace`, ANIMATE entra depois de UV — a mesma
+    // ordem das pills).
+    #[allow(unused_mut)]
+    let mut cycle: Vec<Workspace> = [Workspace::Model, Workspace::Paint, Workspace::Uv].into();
+    #[cfg(feature = "animation-workspace")]
+    cycle.push(Workspace::Animate);
+    assert_eq!(bridge.state.workspace, cycle[0]);
+    for expected in cycle.iter().skip(1).chain(std::iter::once(&cycle[0])) {
+        assert!(bridge.route_shortcut("PageDown", true, false, false));
+        assert_eq!(bridge.state.workspace, *expected);
+    }
 
-    // Ctrl+PageUp cycles backwards MODEL -> UV -> PAINT -> MODEL
-    assert!(bridge.route_shortcut("PageUp", true, false, false));
-    assert_eq!(bridge.state.workspace, Workspace::Uv);
-    assert!(bridge.route_shortcut("PageUp", true, false, false));
-    assert_eq!(bridge.state.workspace, Workspace::Paint);
-    assert!(bridge.route_shortcut("PageUp", true, false, false));
-    assert_eq!(bridge.state.workspace, Workspace::Model);
+    // Ctrl+PageUp cycles backwards pela mesma lista, ao contrário.
+    for expected in cycle.iter().skip(1).rev().chain(std::iter::once(&cycle[0])) {
+        assert!(bridge.route_shortcut("PageUp", true, false, false));
+        assert_eq!(bridge.state.workspace, *expected);
+    }
 }
 
 #[test]

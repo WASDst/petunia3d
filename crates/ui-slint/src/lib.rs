@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+pub mod animate;
 pub mod commands;
 pub mod files;
 mod input;
@@ -309,6 +310,8 @@ pub struct ViewportDrag {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UiIntent {
     SetWorkspace(Workspace),
+    /// Ação do workspace Animate (cap. 45 F2).
+    Animate(animate::AnimateIntent),
     SaveProject,
     Undo,
     Redo,
@@ -487,6 +490,9 @@ pub trait PetuniaViewport: Send {
     }
     /// Pixels físicos por pixel lógico, para larguras de linha e pontos.
     fn set_pixel_ratio(&mut self, _ratio: f32) {}
+    /// Malhas deformadas por skin (preview do Animate) que substituem, só ao
+    /// desenhar, as malhas em repouso do documento. `None` volta ao repouso.
+    fn set_pose_override(&mut self, _pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {}
     /// Objetos com contorno de seleção (domínio Object) e o ativo.
     fn set_outlined_objects(&mut self, _selected: &[uuid::Uuid], _active: Option<uuid::Uuid>) {}
     fn render_frame(
@@ -552,6 +558,10 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn draws_component_guides(&self) -> bool {
         (**self).draws_component_guides()
+    }
+
+    fn set_pose_override(&mut self, pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {
+        (**self).set_pose_override(pose);
     }
 
     fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
@@ -712,6 +722,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
     pub clipboard: Option<GeometryClipboard>,
+    /// Runtime do workspace Animate (cache do avaliador, relógio de reprodução).
+    pub animate: animate::AnimateRuntime,
 }
 
 /// Dados da área de transferência de geometria.
@@ -1016,6 +1028,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
             clipboard: None,
+            animate: animate::AnimateRuntime::default(),
             position: [
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(0.0, None, None).with_steps(0.1, 0.01),
@@ -1054,6 +1067,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 // cá: o hover pertence ao domínio e ao modo onde nasceu.
                 self.state.session.tools.hover = petunia_core::HoverTarget::None;
             }
+            UiIntent::Animate(intent) => self.apply_animate(intent),
             UiIntent::SaveProject => {
                 if let Some(path) = self.state.project.project_path.clone() {
                     self.apply(UiIntent::SaveProjectTo(PathBuf::from(path)));
@@ -1752,6 +1766,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let render_state = self.viewport_render_state();
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
+        let pose = self.animate_pose_override();
+        self.viewport.set_pose_override(pose);
         let (outlined, active) = self.outlined_objects();
         self.viewport.set_outlined_objects(&outlined, active);
         self.viewport.render_frame(
@@ -11077,9 +11093,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             match text {
                 "PageUp" => {
                     let next = match self.state.workspace {
+                        #[cfg(not(feature = "animation-workspace"))]
                         Workspace::Model => Workspace::Uv,
+                        #[cfg(feature = "animation-workspace")]
+                        Workspace::Model => Workspace::Animate,
                         Workspace::Paint => Workspace::Model,
                         Workspace::Uv => Workspace::Paint,
+                        #[cfg(feature = "animation-workspace")]
+                        Workspace::Animate => Workspace::Uv,
                     };
                     self.apply(UiIntent::SetWorkspace(next));
                     return true;
@@ -11088,7 +11109,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let next = match self.state.workspace {
                         Workspace::Model => Workspace::Paint,
                         Workspace::Paint => Workspace::Uv,
+                        #[cfg(not(feature = "animation-workspace"))]
                         Workspace::Uv => Workspace::Model,
+                        #[cfg(feature = "animation-workspace")]
+                        Workspace::Uv => Workspace::Animate,
+                        #[cfg(feature = "animation-workspace")]
+                        Workspace::Animate => Workspace::Model,
                     };
                     self.apply(UiIntent::SetWorkspace(next));
                     return true;
@@ -11812,6 +11838,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.scale[1].value(),
             self.scale[2].value(),
         ];
+        vm.animate = self.animate_view_model();
         vm.is_orthographic = self.state.session.camera.proj == petunia_core::Projection::Ortho;
         vm.is_wireframe = self.state.session.show_wireframe_overlay;
         vm.asset_library_visible = self.asset_library_visible;
@@ -13137,10 +13164,30 @@ pub fn run() -> Result<(), slint::PlatformError> {
         },
     );
 
+    // Reprodução do Animate (~30 Hz): só avança com o workspace ativo e um
+    // Motion tocando; atualiza playhead e pose sem reconstruir o painel.
+    let animate_bridge = Arc::clone(&bridge);
+    let animate_window = window.as_weak();
+    let animate_timer = slint::Timer::default();
+    animate_timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(33),
+        move || {
+            if let Ok(mut bridge) = animate_bridge.lock()
+                && bridge.animate_tick()
+                && let Some(window) = animate_window.upgrade()
+            {
+                animate::sync_animate_playhead(&window, &bridge.animate_view_model());
+                animate::refresh_posed_viewport(&mut bridge, &window);
+            }
+        },
+    );
+
     println!("Petunia3D window ready");
     let result = window.run();
     drop(split_timer);
 
+    drop(animate_timer);
     drop(airbrush_timer);
     drop(autosave_timer);
     let path = bridge

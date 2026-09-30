@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1358**.
+Total de chaves de localização cadastradas: **1449**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -65,18 +65,108 @@ Total de chaves de localização cadastradas: **1358**.
 | `actions.symmetrize_dir_pos` | + to − | + para − |
 | `actions.triangulate` | Triangulate | Triangular |
 | `actions.weld_eps` | Weld | Solda |
+| `animate.add_creature` | Add creature | Adicionar criatura |
+| `animate.advanced` | Advanced | Avançado |
+| `animate.apply_now` | Apply Now | Aplicar agora |
+| `animate.apply_now_tip` | Turn this Motion into an editable clip and remove the live Motion | Transforma o Movimento em um clipe editável e remove o Movimento vivo |
 | `animate.auto_rig` | Auto-Rig | Auto-Rig |
+| `animate.choice.pattern_alternate` | Alternate | Alternado |
+| `animate.choice.pattern_auto` | Automatic | Automático |
+| `animate.choice.pattern_lateral` | Side by side | Lado a lado |
+| `animate.choice.pattern_wave` | Wave | Onda |
+| `animate.creature.bird` | Bird | Pássaro |
+| `animate.creature.fish` | Fish | Peixe |
+| `animate.creature.humanoid` | Humanoid | Humanoide |
+| `animate.creature.multi_leg` | Many legs | Muitas pernas |
+| `animate.creature.quadruped` | Four legs | Quadrúpede |
+| `animate.creature.serpent` | Serpent | Serpente |
+| `animate.duplicate` | Duplicate Motion | Duplicar Movimento |
+| `animate.empty_creature` | Start by adding a creature. It comes with bones ready to animate. | Comece adicionando uma criatura. Ela já vem com ossos prontos para animar. |
+| `animate.empty_motion` | Pick a Motion on the left to bring your creature to life. | Escolha um Movimento à esquerda para dar vida à criatura. |
 | `animate.first_frame` | First frame | Primeiro frame |
+| `animate.fit_locked` | Unlock the model first | Destrave o modelo antes |
+| `animate.fit_model` | Fit to model | Ajustar ao modelo |
+| `animate.fit_model_tip` | Fits this creature's bones to your selected model so the model moves with them | Ajusta os ossos da criatura ao modelo selecionado para o modelo se mover com eles |
+| `animate.fit_needs_model` | Select a model with points first | Selecione antes um modelo com pontos |
 | `animate.frame` | Frame | Frame |
 | `animate.humanoid` | Humanoid | Humanoide |
+| `animate.keep_live` | Bake a copy | Gerar cópia |
+| `animate.keep_live_tip` | Add an editable clip but keep the live Motion too | Adiciona um clipe editável e mantém também o Movimento vivo |
 | `animate.last_frame` | Last frame | Último frame |
+| `animate.linked_model` | Linked model | Modelo ligado |
+| `animate.motion.biped_cycle` | Walk / Run | Andar / Correr |
+| `animate.motion.gait` | Walk (legs) | Andar (pernas) |
+| `animate.motion.idle_breath` | Breathe | Respirar |
+| `animate.motion.serpentine` | Slither / Swim | Deslizar / Nadar |
+| `animate.motion_tip.biped_cycle` | Walk or run on two legs | Andar ou correr sobre duas pernas |
+| `animate.motion_tip.gait` | Walk, trot or crawl on four or more legs | Andar, trotar ou rastejar com quatro ou mais pernas |
+| `animate.motion_tip.idle_breath` | Breathe and sway in place | Respirar e balançar no lugar |
+| `animate.motion_tip.serpentine` | Slither, swim or sway a tail | Deslizar, nadar ou balançar uma cauda |
+| `animate.needs_body` | Needs a body bone | Precisa de um osso de corpo |
+| `animate.needs_chain` | Needs a longer spine or tail | Precisa de coluna ou cauda mais longa |
+| `animate.needs_legs` | Needs at least two legs | Precisa de pelo menos duas pernas |
+| `animate.param.arm_swing` | Arm swing | Balanço dos braços |
+| `animate.param.duty` | Foot contact | Contato do pé |
+| `animate.param.energy` | Energy | Energia |
+| `animate.param.head_hold` | Head steady | Cabeça firme |
+| `animate.param.lean` | Lean | Inclinação |
+| `animate.param.pattern` | Step pattern | Padrão de passo |
+| `animate.param.run_blend` | Walk ↔ Run | Andar ↔ Correr |
+| `animate.param.smoothness` | Smoothness | Suavidade |
+| `animate.param.speed` | Speed | Velocidade |
+| `animate.param.spine_wave` | Spine wave | Onda da coluna |
+| `animate.param.step_height` | Step height | Altura do passo |
+| `animate.param.stride` | Stride | Passada |
+| `animate.param.sway` | Sway | Balanço |
+| `animate.param.tail_boost` | Tail boost | Reforço da cauda |
+| `animate.param.tail_sway` | Tail sway | Balanço da cauda |
+| `animate.param.variation` | Variation | Variação |
+| `animate.param.wavelength` | Wave length | Comprimento da onda |
+| `animate.param.weight` | Weight | Peso |
+| `animate.param_tip.arm_swing` | How much the arms swing | Quanto os braços balançam |
+| `animate.param_tip.duty` | How long each foot stays on the ground | Por quanto tempo cada pé fica no chão |
+| `animate.param_tip.energy` | How big and lively the movement is | Quão grande e animado é o movimento |
+| `animate.param_tip.head_hold` | Keeps the head steadier than the body | Mantém a cabeça mais firme que o corpo |
+| `animate.param_tip.lean` | Lean the body backward or forward | Inclina o corpo para trás ou para a frente |
+| `animate.param_tip.pattern` | Which legs move together | Quais pernas se movem juntas |
+| `animate.param_tip.run_blend` | 0 walks, 1 runs | 0 anda, 1 corre |
+| `animate.param_tip.smoothness` | Snappy at 0, flowing at 1 | Seco em 0, fluido em 1 |
+| `animate.param_tip.speed` | How fast the Motion plays | Quão rápido o Movimento toca |
+| `animate.param_tip.spine_wave` | How much the spine bends while walking | Quanto a coluna dobra ao andar |
+| `animate.param_tip.step_height` | How high the feet lift | Quão alto os pés levantam |
+| `animate.param_tip.stride` | Length of each step | Comprimento de cada passo |
+| `animate.param_tip.sway` | Side-to-side body sway | Balanço lateral do corpo |
+| `animate.param_tip.tail_boost` | Extra motion toward the tail tip | Movimento extra na ponta da cauda |
+| `animate.param_tip.tail_sway` | How much the tail swings | Quanto a cauda balança |
+| `animate.param_tip.variation` | Adds small natural differences | Adiciona pequenas diferenças naturais |
+| `animate.param_tip.wavelength` | How many bends fit along the body | Quantas curvas cabem ao longo do corpo |
+| `animate.param_tip.weight` | Heavier bodies bounce and settle more | Corpos mais pesados quicam e assentam mais |
 | `animate.pause` | Pause | Pausar |
 | `animate.play` | Play | Reproduzir |
+| `animate.playhead` | Playhead | Cabeça de reprodução |
+| `animate.remove` | Remove Motion | Remover Movimento |
+| `animate.rig_error` | This creature cannot do this Motion. Check its bones. | Esta criatura não consegue fazer este Movimento. Confira os ossos dela. |
+| `animate.root_motion` | Move forward | Avançar |
+| `animate.root_motion_tip` | The whole body travels instead of walking in place | O corpo todo se desloca em vez de andar no lugar |
+| `animate.show_bones` | Show bones | Mostrar ossos |
+| `animate.stepped` | Stepped (retro) | Em degraus (retrô) |
+| `animate.stepped_tip` | Holds each pose for a moment, like classic 12 fps animation | Segura cada pose por um instante, como na animação clássica de 12 fps |
+| `animate.style.cartoon` | Cartoon | Cartoon |
+| `animate.style.custom` | Custom | Personalizado |
+| `animate.style.floaty` | Floaty | Flutuante |
+| `animate.style.heavy` | Heavy | Pesado |
+| `animate.style.stiff` | Stiff | Rígido |
 | `animate.tip_first` | Jump to First Frame · Shift+Left | Ir ao Primeiro Frame · Shift+Left |
 | `animate.tip_last` | Jump to Last Frame · Shift+Right | Ir ao Último Frame · Shift+Right |
 | `animate.tip_next` | Step 1 Frame Forward · Right | Avançar 1 Frame · Right |
 | `animate.tip_play` | Play / Pause Animation · Space | Reproduzir / Pausar Animação · Space |
 | `animate.tip_prev` | Step 1 Frame Backward · Left | Voltar 1 Frame · Left |
+| `animate.title_creature` | Creature | Criatura |
+| `animate.title_motion` | Motion | Movimento |
+| `animate.title_picker` | Motions | Movimentos |
+| `animate.title_style` | Style | Estilo |
+| `animate.unavailable_no_rig` | Add a creature first | Adicione uma criatura primeiro |
+| `animate.workspace_tip` | Bring creatures to life with ready-made Motions | Dê vida a criaturas com Movimentos prontos |
 | `app.title` | Petunia3D | Petunia3D |
 | `camera.back` | Back | Traseira |
 | `camera.bottom` | Bottom | Inferior |
@@ -1373,6 +1463,7 @@ Total de chaves de localização cadastradas: **1358**.
 | `workspace.poly_description` | Component level: edit points, edges and faces with extrude, inset, round edge and cuts | Nível de componente: edite pontos, arestas e faces com extrude, inset, round edge e cortes |
 | `workspace.poly_ready` | POLY: component tools — points, edges and faces | POLY: ferramentas de componente — pontos, arestas e faces |
 | `workspace.poly_title` | Poly Workspace | Workspace Polígonos |
+| `ws.animate` | ANIMATE | ANIMATE |
 | `ws.model` | MODEL | MODEL |
 | `ws.paint` | PAINT | PAINT |
 | `ws.uv` | UV | UV |

@@ -777,6 +777,8 @@ pub struct ShellViewModel {
     pub command_search_visible: bool,
     pub scene_drawer_visible: bool,
     pub active_keymap_id: String,
+    /// Painel do workspace Animate (cap. 45 F2).
+    pub animate: crate::animate::AnimateViewModel,
 }
 
 impl ShellViewModel {
@@ -1711,6 +1713,7 @@ impl ShellViewModel {
             command_search_visible: false,
             scene_drawer_visible: false,
             active_keymap_id: state.ui.active_keymap_id.clone(),
+            animate: crate::animate::AnimateViewModel::default(),
         }
     }
 

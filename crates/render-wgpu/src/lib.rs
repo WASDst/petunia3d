@@ -9,8 +9,9 @@ use wgpu::util::DeviceExt;
 use petunia_core::Camera;
 use petunia_core::RefAxis;
 use petunia_core::{FingerprintFlags, SceneFingerprint, TextureUpdate, fingerprint_scene};
-use petunia_project::Project;
+use petunia_project::{PoseOverride, Project, mesh_to_draw};
 use petunia_render::Shading;
+use std::sync::Arc;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -508,6 +509,10 @@ pub struct Renderer {
     pub show_overlays: bool,
     pub show_grid: bool,
     last_fingerprint: Option<SceneFingerprint>,
+    /// Malhas deformadas por skin (preview de pose) e a última revisão desenhada.
+    /// O documento continua em repouso; isto só substitui a malha ao desenhar.
+    pose: Option<Arc<PoseOverride>>,
+    last_pose_revision: Option<u64>,
     last_domain: Option<petunia_core::SelectionDomain>,
     /// Passo do grid atualmente na GPU, para reconstruir só ao cruzar degrau.
     grid_step: f32,
@@ -835,6 +840,15 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 "#;
 
 /// Passo do grid correspondente a uma escala visível.
+/// A revisão do override de pose mudou desde o último quadro desenhado?
+/// (Aparecer, sumir ou avançar de revisão contam; repetir a mesma, não.)
+fn pose_revision_changed(last: &mut Option<u64>, pose: Option<&PoseOverride>) -> bool {
+    let now = pose.map(|p| p.revision);
+    let changed = *last != now;
+    *last = now;
+    changed
+}
+
 fn adaptive_grid_step(visible_height: f32) -> f32 {
     if visible_height > 60.0 {
         10.0
@@ -1607,6 +1621,8 @@ impl Renderer {
             show_overlays: true,
             show_grid: true,
             last_fingerprint: None,
+            pose: None,
+            last_pose_revision: None,
             last_domain: None,
             grid_step: 1.0,
             last_hover: petunia_core::HoverTarget::None,
@@ -1763,6 +1779,12 @@ impl Renderer {
         if width.is_finite() {
             self.line_width_px = width.clamp(1.0, 8.0);
         }
+    }
+
+    /// Define (ou remove) as malhas deformadas por skin. A geometria só é
+    /// reconstruída quando a revisão do override muda (ou ele aparece/some).
+    pub fn set_pose_override(&mut self, pose: Option<Arc<PoseOverride>>) {
+        self.pose = pose;
     }
 
     pub fn set_xray_opacity(&mut self, opacity: f32) {
@@ -1966,7 +1988,9 @@ impl Renderer {
                 show_uv_checker,
             },
         );
-        let mesh_changed = self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh);
+        let pose = self.pose.clone();
+        let pose_changed = pose_revision_changed(&mut self.last_pose_revision, pose.as_deref());
+        let mesh_changed = pose_changed || self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh);
         let texture_changed = self.last_fingerprint.map(|f| f.textures) != Some(fp.textures);
         let refs_changed = self.last_fingerprint.map(|f| f.refs_layout) != Some(fp.refs_layout);
         let texture_updates = std::mem::take(&mut self.pending_texture_updates);
@@ -2014,7 +2038,7 @@ impl Renderer {
                 continue;
             }
             let range_start = mv.len() as u32;
-            let mesh = obj.evaluated_mesh_ref();
+            let mesh = mesh_to_draw(pose.as_deref(), obj);
             if !is_wire {
                 let (mat_profile, mat_color, has_emission, emission_color) =
                     if let Some(mat) = obj.material(scene) {
@@ -2265,8 +2289,9 @@ impl Renderer {
         let logical_height = self.logical_height();
         let mut sel_tri: Vec<SelectionVertex> = Vec::new();
         let mut sel_line: Vec<SelectionVertex> = Vec::new();
+        let pose = self.pose.clone();
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh_ref();
+            let mesh = mesh_to_draw(pose.as_deref(), asset);
             let domain = edit_domain;
             // Seleção: laranja quente com alpha, como Blender/C4D. Legível
             // sobre qualquer shading porque o shader não aplica luz.
@@ -2373,7 +2398,7 @@ impl Renderer {
         let hover_line = [0.49f32, 0.86, 1.0, 0.85];
         let hover_tri = [0.49f32, 0.86, 1.0, 0.18];
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh_ref();
+            let mesh = mesh_to_draw(pose.as_deref(), asset);
             match hover {
                 petunia_core::HoverTarget::Vertex(index) => {
                     if let Some(vertex) = mesh.verts.get(index as usize) {
@@ -2884,5 +2909,35 @@ impl Renderer {
 
     pub fn depth_view(&self) -> Option<&wgpu::TextureView> {
         self.depth_view.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod pose_override_tests {
+    use super::*;
+
+    #[test]
+    fn rebuilds_only_when_the_pose_revision_changes() {
+        let mut last = None;
+        assert!(
+            !pose_revision_changed(&mut last, None),
+            "sem pose desde o início"
+        );
+        let p1 = PoseOverride::new(1);
+        assert!(
+            pose_revision_changed(&mut last, Some(&p1)),
+            "a pose aparece"
+        );
+        assert!(
+            !pose_revision_changed(&mut last, Some(&p1)),
+            "mesma revisão"
+        );
+        let p2 = PoseOverride::new(2);
+        assert!(pose_revision_changed(&mut last, Some(&p2)), "nova revisão");
+        assert!(
+            pose_revision_changed(&mut last, None),
+            "a pose some: volta ao repouso"
+        );
+        assert!(!pose_revision_changed(&mut last, None));
     }
 }

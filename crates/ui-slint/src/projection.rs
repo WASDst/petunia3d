@@ -4,6 +4,23 @@
 use crate::*;
 use petunia_core::{AppState, Camera, PivotPoint, SelectionDomain, Workspace};
 
+/// Projeta um ponto do mundo para pixels da viewport; `None` atrás da câmera
+/// ou fora do frustum de profundidade.
+pub(crate) fn project_world_point(
+    camera: &Camera,
+    viewport: [f32; 2],
+    point: glam::Vec3,
+) -> Option<[f32; 2]> {
+    let clip = camera.view_proj() * point.extend(1.0);
+    if !clip.is_finite() || clip.w <= 0.05 || clip.z < 0.0 || clip.z > clip.w {
+        return None;
+    }
+    Some([
+        (clip.x / clip.w * 0.5 + 0.5) * viewport[0],
+        (0.5 - clip.y / clip.w * 0.5) * viewport[1],
+    ])
+}
+
 pub(crate) fn project_preview_segment(
     camera: &Camera,
     viewport: [f32; 2],
@@ -11,18 +28,10 @@ pub(crate) fn project_preview_segment(
     b: glam::Vec3,
     commands: &mut String,
 ) {
-    let matrix = camera.view_proj();
-    let project = |point: glam::Vec3| -> Option<[f32; 2]> {
-        let clip = matrix * point.extend(1.0);
-        if !clip.is_finite() || clip.w <= 0.05 || clip.z < 0.0 || clip.z > clip.w {
-            return None;
-        }
-        Some([
-            (clip.x / clip.w * 0.5 + 0.5) * viewport[0],
-            (0.5 - clip.y / clip.w * 0.5) * viewport[1],
-        ])
-    };
-    if let (Some(a), Some(b)) = (project(a), project(b)) {
+    if let (Some(a), Some(b)) = (
+        project_world_point(camera, viewport, a),
+        project_world_point(camera, viewport, b),
+    ) {
         use std::fmt::Write as _;
         let _ = write!(
             commands,

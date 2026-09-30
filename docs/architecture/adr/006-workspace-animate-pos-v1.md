@@ -11,11 +11,11 @@ O caderno previa Animate (P3D-066/067) como workspace de baixa prioridade (P3), 
 1. O domínio de rig e clipes existe em `petunia_project`, mas **não alcança o produto**: a UI de Animate vive só no egui legado, atrás da feature `animation-workspace`, e o Slint não a tem.
 2. **Animação procedural não constava do roadmap** — "procedural" referia-se só a geometria.
 3. O objetivo de produto é que o Animate seja **extremamente fácil para quem não entende de animação**. Uma timeline de keyframes como primeira experiência contradiz esse objetivo.
-4. O capítulo 36 lista `MODEL / PAINT / UV` como workspaces **V1** e diz que "workspace não implementado não aparece como pill desabilitada".
+4. O capítulo 36 lista os workspaces **V1** (na data desta decisão, `MODEL / PAINT / UV`; hoje `DRAW / POLY / PAINT`, após as revisões de baseline de 2026-09-29 e 2026-09-30) e diz que "workspace não implementado não aparece como pill desabilitada".
 
 ## Decisão
 
-1. **Animate é o primeiro workspace pós-V1.** A UI Baseline V1 **não é reaberta**: continua `MODEL / PAINT / UV`. A pill **Animate só aparece quando o workspace estiver implementado e aceito** (F2 do capítulo 45); antes disso o workspace não existe no shell de produção, e a feature `animation-workspace` do egui legado segue como transição, sem receber novas features (AGENTS §0.1).
+1. **Animate é o primeiro workspace pós-V1.** A UI Baseline V1 **não é reaberta** por este ADR (seus workspaces seguem os do capítulo 36, hoje `DRAW / POLY / PAINT`). A pill **Animate só aparece quando o workspace estiver implementado e aceito** (F2 do capítulo 45); antes disso o workspace não existe no shell de produção, e a feature `animation-workspace` do egui legado segue como transição, sem receber novas features (AGENTS §0.1).
 2. **Procedural primeiro** (D1). A primeira experiência é escolher um **Motion** e ajustar poucos sliders; keyframes, Ghosts e camadas entram por divulgação progressiva. A cadeia é `Tool → Command → Algorithm → Data`: o módulo de animação não conhece UI.
 3. **Criaturas de primeira classe** (D2): os geradores usam **papéis de osso** (Rig Roles) e **número de pernas**, nunca nomes de osso nem lógica por espécie.
 4. **Sem vídeo e sem ML por enquanto** (D3): a referência de animação é batch de imagens (P3D-172).
@@ -28,6 +28,8 @@ O caderno previa Animate (P3D-066/067) como workspace de baixa prioridade (P3), 
    | Centro | viewport dominante com Ghosts/Trails; **Reference Monitor** como cartão flutuante *in-canvas* (padrão do [ADR 005](005-modulos-inspector-dock-float-pin.md)) |
    | Direita | Inspector em seções independentes (dock/float/pin, ADR 005): `Rig → Motion → Style → Layers` |
    | Inferior | Timeline (clip/Motion, keys, filmstrip de referência), no lugar da Asset Library enquanto o workspace estiver ativo; a Animation Asset Library (P3D-139) abre como gaveta |
+
+   **Nota de implementação (F2, 2026-09-30):** o layout acima foi implementado com três desvios — Inspector aberto por padrão no Animate, *Styles* dentro da seção *Motion* (`Creature → Motions → Motion`) e **transporte in-canvas** no lugar da timeline (que é F3). A pill ANIMATE só existe com a feature `animation-workspace`. Falta o aceite visual; ver "Estado da fase F2" no capítulo 45.
 
 7. **Ordem de entrega** (fases F0–F5 do capítulo 45): fundação headless e glTF com skin/animação → Motions headless → shell Animate camadas 1–2 → Posar (timeline, Ghosts) → Reference Frames e camadas → Wiggle e biblioteca.
 

@@ -2,7 +2,18 @@ import { Icon, IconDisplay, IconSet } from "@lucide";
 import { ListView, ScrollView } from "std-widgets.slint";
 import { DesignTokens, Motion, Tr } from "tokens.slint";
 import { PetuniaIcons } from "petunia_icons.slint";
+import {
+    AnimateCreatureBody,
+    AnimateMotionBody,
+    AnimateParamEntry,
+    AnimateRowEntry,
+    AnimateTexts,
+    AnimateTransport,
+    AnimateTweakBody,
+    AnimTile,
+} from "animate.slint";
 export { DesignTokens, Motion, PetuniaIcons, Tr }
+export { AnimateParamEntry, AnimateRowEntry, AnimateTexts }
 
 export struct CommandItem {
     id: string,
@@ -851,11 +862,16 @@ component WorkspaceSegment inherits Rectangle {
     in property <string> draw-description: "";
     in property <string> poly-title: "Poly";
     in property <string> poly-description: "";
+    // Pós-V1 (ADR 006): a pill ANIMATE só existe quando o workspace está
+    // implementado (feature `animation-workspace`); nunca aparece desabilitada.
+    in property <bool> animate-available: false;
+    in property <string> animate-label: "ANIMATE";
+    in property <string> animate-tip: "";
     callback changed(string);
 
     accessible-role: tab-list;
     accessible-label: Tr.t("sl.workspaces");
-    width: 246px;
+    width: root.animate-available ? 327px : 246px;
     height: 28px;
     border-radius: 6px;
     background: DesignTokens.surface-raised;
@@ -952,6 +968,33 @@ component WorkspaceSegment inherits Rectangle {
                         title: Tr.t("sl.paint_workspace");
                         shortcut: "F2";
                         description: Tr.t("sl.texture_painting_layer_management_and_brush_");
+                    }
+                }
+            }
+        }
+        if root.animate-available: Rectangle {
+            width: 80px;
+            height: 22px;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: root.animate-label;
+            accessible-description: root.animate-tip;
+            accessible-checked: root.active == "ANIMATE";
+            Text {
+                text: root.animate-label;
+                color: root.active == "ANIMATE" ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.changed("ANIMATE"); }
+                Tooltip {
+                    RichTooltip {
+                        title: root.animate-label;
+                        shortcut: "Ctrl+PgDn";
+                        description: root.animate-tip;
                     }
                 }
             }
@@ -3249,6 +3292,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> flyout-hovered: false;
     in-out property <bool> rail-hovered: false;
     in-out property <bool> inspector-flyout-open: (
+        // Animate: o painel É a superfície principal do workspace (Creature →
+        // Motions → Motion → Style); fica aberto em vez de depender de hover.
+        root.active-workspace == "ANIMATE" ||
         root.hovered-inspector-section != "" ||
         root.flyout-hovered ||
         root.rail-hovered ||
@@ -3919,6 +3965,34 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> bevel-affect-vertices: false;
     in-out property <ShortcutsEntry> shortcuts;
 
+    // Workspace Animate (cap. 45 F2): tudo vem pronto do view-model Rust e o
+    // markup só devolve a ação semântica (ação, argumento, valor).
+    in-out property <bool> animate-available: false;
+    in-out property <bool> animate-has-creature: false;
+    in-out property <bool> animate-has-motion: false;
+    in-out property <bool> animate-rig-error: false;
+    in-out property <bool> animate-playing: false;
+    in-out property <bool> animate-show-advanced: false;
+    in-out property <bool> animate-show-bones: true;
+    in-out property <bool> animate-stepped: false;
+    in-out property <bool> animate-root-motion: false;
+    in-out property <bool> animate-root-motion-supported: false;
+    in-out property <bool> animate-can-fit: false;
+    in-out property <string> animate-fit-tip: "";
+    in-out property <string> animate-linked-models: "";
+    in-out property <float> animate-progress: 0;
+    in-out property <string> animate-time-label: "";
+    in-out property <string> animate-bone-commands: "";
+    in-out property <string> animate-joint-commands: "";
+    in-out property <AnimateTexts> animate-texts;
+    in-out property <[AnimateRowEntry]> animate-creatures;
+    in-out property <[AnimateRowEntry]> animate-creature-presets;
+    in-out property <[AnimateRowEntry]> animate-catalog;
+    in-out property <[AnimateRowEntry]> animate-motions;
+    in-out property <[AnimateRowEntry]> animate-styles;
+    in-out property <[AnimateParamEntry]> animate-params;
+    callback animate-action(string, string, float);
+
     callback workspace-changed(string);
     callback save-requested;
     callback search-requested;
@@ -4444,6 +4518,9 @@ export component PetuniaSlintShell inherits Window {
                         poly-title: root.label-workspace-poly-title;
                         poly-description: root.label-workspace-poly-description;
                         reduced-motion: root.reduced-motion;
+                        animate-available: root.animate-available;
+                        animate-label: root.animate-texts.workspace-label;
+                        animate-tip: root.animate-texts.workspace-tip;
                         changed(ws) => { root.workspace-changed(ws); }
                     }
 
@@ -4788,6 +4865,16 @@ export component PetuniaSlintShell inherits Window {
                             }
                         }
 
+                        // Animate: um botão por Motion do catálogo (o rótulo e o
+                        // motivo de indisponibilidade vêm do Rust, por TextId).
+                        if active-workspace == "ANIMATE": VerticalLayout {
+                            spacing: 6px;
+                            for item in root.animate-catalog: AnimTile {
+                                entry: item;
+                                clicked => { root.animate-action("add-motion", item.id, 0); }
+                            }
+                        }
+
                         Rectangle { vertical-stretch: 1; }
 
                         // Navigation pills (Decision D4: Parts & Asset Library)
@@ -4897,6 +4984,23 @@ export component PetuniaSlintShell inherits Window {
                         fill: root.selection-color;
                         stroke: transparent;
                         commands: root.selection-point-commands;
+                    }
+
+                    // Animate: esqueleto posado (ossos + articulações) em pixels
+                    // da viewport, projetado pelo bridge — independe da GPU.
+                    if root.active-workspace == "ANIMATE" && root.animate-show-bones: Path {
+                        fit: ImageFit.preserve;
+                        commands: root.animate-bone-commands;
+                        fill: transparent;
+                        stroke: DesignTokens.accent;
+                        stroke-width: 2.5px;
+                    }
+                    if root.active-workspace == "ANIMATE" && root.animate-show-bones: Path {
+                        fit: ImageFit.preserve;
+                        commands: root.animate-joint-commands;
+                        fill: transparent;
+                        stroke: DesignTokens.text-primary;
+                        stroke-width: 1.5px;
                     }
 
                     Path {
@@ -6122,6 +6226,22 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     // Barra de domínio de seleção independente no canto superior direito (Decision D3)
+                    // Barra de transporte: interativa, então fica DEPOIS do
+                    // `viewport-touch` (irmãos posteriores recebem o clique antes).
+                    if root.active-workspace == "ANIMATE" && root.animate-has-creature: AnimateTransport {
+                        // Centrada na parte livre da viewport (fora do painel aberto)
+                        // e ACIMA da barra contextual (40px + 14px de margem + respiro).
+                        x: (parent.width - root.inspector-clearance - self.width) / 2;
+                        y: parent.height - self.height - 64px;
+                        width: min(640px, parent.width - root.inspector-clearance - 32px);
+                        texts: root.animate-texts;
+                        playing: root.animate-playing;
+                        has-motion: root.animate-has-motion;
+                        progress: root.animate-progress;
+                        time-label: root.animate-time-label;
+                        action(a, b, v) => { root.animate-action(a, b, v); }
+                    }
+
                     if active-workspace == "MODEL": domain-bar := Rectangle {
                         x: (parent.width >= 720px) ? (parent.width - self.width - 118px - root.inspector-clearance) : (parent.width - self.width - 14px - root.inspector-clearance);
                         y: (parent.width >= 720px) ? 14px : 118px;
@@ -9315,6 +9435,68 @@ export component PetuniaSlintShell inherits Window {
                                     }
                                 }
                             }
+                        }
+
+                        // Animate: Creature → Motions → Motion (Styles + sliders).
+                        // Só a moldura vem daqui; o conteúdo é de animate.slint.
+                        if active-workspace == "ANIMATE": VerticalLayout {
+                            spacing: 10px;
+
+                            // Recolhe sozinha quando já existe uma criatura (divulgação
+                            // progressiva: o espaço vai para os sliders); o usuário
+                            // reabre com um clique.
+                            InspectorSection {
+                                title: root.animate-texts.title-creature;
+                                open: !root.animate-has-creature;
+                                toggled => { self.open = !self.open; }
+
+                                AnimateCreatureBody {
+                                    texts: root.animate-texts;
+                                    creatures: root.animate-creatures;
+                                    presets: root.animate-creature-presets;
+                                    has-creature: root.animate-has-creature;
+                                    action(a, b, v) => { root.animate-action(a, b, v); }
+                                }
+                            }
+
+                            InspectorSection {
+                                title: root.animate-texts.title-picker;
+                                open: true;
+                                toggled => { self.open = !self.open; }
+
+                                AnimateMotionBody {
+                                    texts: root.animate-texts;
+                                    catalog: root.animate-catalog;
+                                    motions: root.animate-motions;
+                                    has-motion: root.animate-has-motion;
+                                    has-creature: root.animate-has-creature;
+                                    can-fit: root.animate-can-fit;
+                                    fit-tip: root.animate-fit-tip;
+                                    linked-models: root.animate-linked-models;
+                                    action(a, b, v) => { root.animate-action(a, b, v); }
+                                }
+                            }
+
+                            if root.animate-has-motion: InspectorSection {
+                                title: root.animate-texts.title-motion;
+                                open: true;
+                                toggled => { self.open = !self.open; }
+
+                                AnimateTweakBody {
+                                    texts: root.animate-texts;
+                                    styles: root.animate-styles;
+                                    params: root.animate-params;
+                                    has-motion: root.animate-has-motion;
+                                    rig-error: root.animate-rig-error;
+                                    show-advanced: root.animate-show-advanced;
+                                    show-bones: root.animate-show-bones;
+                                    stepped: root.animate-stepped;
+                                    root-motion: root.animate-root-motion;
+                                    root-motion-supported: root.animate-root-motion-supported;
+                                    action(a, b, v) => { root.animate-action(a, b, v); }
+                                }
+                            }
+
                         }
 
                         if active-workspace == "UV": VerticalLayout {

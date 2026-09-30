@@ -23,14 +23,15 @@
 
 use crate::command::CommandError;
 use crate::rig_commands::{
-    AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd, DuplicateMotionCmd, RemoveMotionCmd,
-    RigPresetKind, SetMotionParamCmd, SetMotionStyleCmd, UpdateMotionCmd,
+    AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd,
+    RemoveMotionCmd, RigPresetKind, SetMotionParamCmd, SetMotionStyleCmd, UpdateMotionCmd,
 };
 use crate::state::AppState;
 use glam::Vec3;
 use petunia_project::{
-    BakeOptions, MotionError, MotionEvaluator, MotionGenerator, MotionRecipe, MotionStyle, Project,
-    RigRoleMap, RoleContractError, RootMode, Skeleton, Transform3D,
+    BakeOptions, MotionError, MotionEvaluator, MotionGenerator, MotionRecipe, MotionStyle,
+    PoseOverride, Project, RigRoleMap, RoleContractError, RootMode, Skeleton, Transform3D,
+    posed_meshes,
 };
 use uuid::Uuid;
 
@@ -327,6 +328,41 @@ impl AnimatePreview {
         Some(PosePreview::rest(skeleton))
     }
 
+    /// Pose **local** (uma transformação por osso) da criatura em foco: a do
+    /// Motion no tempo da sessão ou, sem Motion (ou com rig incompatível), o
+    /// repouso. Devolve também o id do esqueleto.
+    pub fn local_pose(
+        &mut self,
+        project: &Project,
+        session: &AnimateSession,
+    ) -> Option<(Uuid, Vec<Transform3D>)> {
+        if session.motion.is_some()
+            && let Some(skeleton) = self.refresh(project, session)
+            && let Some(Ok(evaluator)) = self.evaluator.as_ref()
+        {
+            return Some((skeleton.id, evaluator.pose_at(session.time)));
+        }
+        let skeleton = project.get_skeleton(session.skeleton?)?;
+        Some((
+            skeleton.id,
+            skeleton.bones.iter().map(|b| b.local_transform).collect(),
+        ))
+    }
+
+    /// Malhas deformadas pela pose atual, para o renderer desenhar no lugar das
+    /// malhas em repouso. `None` quando nenhum modelo está ligado à criatura em
+    /// foco (nada a substituir). O documento não é tocado.
+    pub fn pose_override(
+        &mut self,
+        project: &Project,
+        session: &AnimateSession,
+        revision: u64,
+    ) -> Option<PoseOverride> {
+        let (skeleton_id, local) = self.local_pose(project, session)?;
+        let over = posed_meshes(project, skeleton_id, &local, revision);
+        (!over.is_empty()).then_some(over)
+    }
+
     /// Avança o playhead em `dt` segundos, dando a volta no ciclo. `true` se o
     /// tempo mudou (o shell só redesenha nesse caso).
     pub fn advance(&mut self, project: &Project, session: &mut AnimateSession, dt: f32) -> bool {
@@ -554,6 +590,13 @@ impl AppState {
             Err(CommandError::NoChange(_)) => Ok(false),
             Err(e) => Err(e),
         }
+    }
+
+    /// **Fit to model**: ajusta a criatura em foco ao modelo ativo e os liga por
+    /// skin, para o viewport mostrar a malha se movendo. Um passo de Undo.
+    pub fn animate_fit_to_model(&mut self) -> Result<(), CommandError> {
+        let skeleton_id = self.session.animate.skeleton.ok_or_else(no_rig)?;
+        self.dispatch(&FitRigToActiveAssetCmd { skeleton_id })
     }
 
     /// Liga/desliga o Stepped (`Some(fps)` liga; `None` desliga).

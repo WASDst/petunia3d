@@ -294,6 +294,10 @@ impl PetuniaViewport for WgpuViewport {
         true
     }
 
+    fn set_pose_override(&mut self, pose: Option<Arc<petunia_project::PoseOverride>>) {
+        self.renderer.set_pose_override(pose);
+    }
+
     fn render_frame(
         &mut self,
         project: &Project,
@@ -706,6 +710,56 @@ mod tests {
             )
             .unwrap();
         assert_eq!(viewport.renderer.mesh_rebuilds(), rebuilt);
+    }
+
+    #[test]
+    fn pose_override_rebuilds_geometry_only_when_its_revision_changes() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(320, 240) else {
+            // Sem adaptador físico: a lógica de revisão tem teste puro no renderer.
+            return;
+        };
+        let project = Project::new();
+        let asset_id = project.assets[0].id;
+        let camera = Camera::default();
+        let state = ViewportRenderState::default();
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        let base = viewport.renderer.mesh_rebuilds();
+
+        let mut moved = project.assets[0].mesh.clone();
+        for v in &mut moved.verts {
+            v.pos[0] += 1.0;
+        }
+        let mut pose = petunia_project::PoseOverride::new(1);
+        pose.insert(asset_id, moved);
+        let pose = Arc::new(pose);
+
+        viewport.set_pose_override(Some(Arc::clone(&pose)));
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        assert_eq!(
+            viewport.renderer.mesh_rebuilds(),
+            base + 1,
+            "a pose aparece"
+        );
+
+        viewport.set_pose_override(Some(pose));
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        assert_eq!(viewport.renderer.mesh_rebuilds(), base + 1, "mesma revisão");
+
+        viewport.set_pose_override(None);
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        assert_eq!(
+            viewport.renderer.mesh_rebuilds(),
+            base + 2,
+            "volta ao repouso"
+        );
     }
 
     #[test]

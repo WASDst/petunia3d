@@ -95,9 +95,9 @@ pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename
 pub use rig_commands::{
     AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd,
     AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearRigRoleCmd, DeleteBoneKeyCmd, DuplicateMotionCmd,
-    InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd, RemoveMotionCmd, RemoveSkeletonCmd,
-    RigPresetKind, SetBoneKeyCmd, SetMotionParamCmd, SetMotionStyleCmd, UpdateIkChainCmd,
-    UpdateMotionCmd,
+    FitBlocked, FitRigToActiveAssetCmd, InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd,
+    RemoveMotionCmd, RemoveSkeletonCmd, RigPresetKind, SetBoneKeyCmd, SetMotionParamCmd,
+    SetMotionStyleCmd, UpdateIkChainCmd, UpdateMotionCmd, fit_availability,
 };
 
 pub use brush::{

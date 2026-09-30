@@ -4,7 +4,7 @@
 O binário `petunia3d` executa este shell por padrão; a UI egui (`crates/ui/`) é
 legado de transição acessível via `--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`.
 
-- **Shell declarativo (`ui/app.slint`)**: Top bar com navegação exclusiva dos workspaces (`MODEL`, `PAINT`, `UV`), alternador de domínio de seleção (Object, Point, Edge, Face), Tool Tray contextual, painel Parts, gaveta inferior para Asset Library, e painéis de Context Inspector adaptados ao workspace ativo.
+- **Shell declarativo (`ui/app.slint`)**: Top bar com navegação exclusiva dos workspaces (`MODEL`, `PAINT`, `UV` e, com a feature `animation-workspace`, `ANIMATE`), alternador de domínio de seleção (Object, Point, Edge, Face), Tool Tray contextual, painel Parts, gaveta inferior para Asset Library, e painéis de Context Inspector adaptados ao workspace ativo.
 - **Viewport central interativo**: composição direta da textura WGPU no Slint via WGPU 30, sem readback síncrono GPU→CPU por frame, com software viewport fallback resiliente (`viewport_soft.rs`).
 - **Bridge de intents reativo (`lib.rs`)**: Comunicação desacoplada entre a UI Slint e os domínios de `petunia_core`, `petunia_commands` e `petunia_project`. O tipo `UiIntent` é a única fronteira que traduz ações do shell para operações de domínio.
 - **Command Palette & dispatcher canônico**: busca, disabled reasons, foco, seleção por teclado e execução através do `CommandDispatcher` do core.
@@ -19,7 +19,8 @@ botão visual como operação concluída.
 ## Validação
 
 ```bash
-cargo test -p petunia_ui_slint --lib          # 55 testes unitários
+cargo test -p petunia_ui_slint --lib          # testes unitários e do bridge (inclui o Animate)
+cargo test -p petunia_ui_slint --features animation-workspace --lib --test animate_shell   # workspace Animate no shell real
 cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
 cargo fmt -p petunia_ui_slint -- --check
 ```
