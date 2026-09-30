@@ -7053,10 +7053,8 @@ fn test_viewport_context_menu_modeling_actions_and_dismissal() {
     // 4. Test actions in viewport context menu
     bridge.open_viewport_context_menu(200.0, 150.0);
     assert!(bridge.context_menu_action("shade_smooth"));
-    assert_eq!(
-        bridge.view_model().status_message,
-        "Normais recalculadas (suave)"
-    );
+    // `model.shade_smooth` passou a ser `SetShadeSmoothCmd` (G7): a mensagem é a do comando.
+    assert_eq!(bridge.view_model().status_message, "Smooth shading");
 
     bridge.open_viewport_context_menu(200.0, 150.0);
     assert!(bridge.context_menu_action("subdivide"));

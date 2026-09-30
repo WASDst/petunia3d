@@ -22,6 +22,7 @@ pub mod proportional;
 pub mod queries;
 pub mod recent_projects;
 pub mod render_revision;
+pub mod rig_commands;
 pub mod schema_contracts;
 pub mod selection;
 pub mod snap;
@@ -82,6 +83,11 @@ pub use command::{
     UpdateSweepGeneratorCmd, UvPackIslandsCmd, UvProjectFromViewCmd, WeldCmd,
 };
 pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename};
+pub use rig_commands::{
+    AddAnimationCmd, AddIkChainCmd, AddRigPresetCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd,
+    ClearRigRoleCmd, DeleteBoneKeyCmd, InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd,
+    RemoveSkeletonCmd, RigPresetKind, SetBoneKeyCmd, UpdateIkChainCmd,
+};
 
 pub use brush::{
     BrushLock, BrushPreviewKind, BrushPreviewStyle, BrushProjectionMode, BrushSettings, BrushType,

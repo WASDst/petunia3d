@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F0.6 — comandos transacionais de rig, papéis, IK e clipes (30/09/2026)
+- **`petunia_core::rig_commands`**: presets de rig (humanoide, quadrúpede, multi-leg), Auto-Rig do asset ativo (fit + pesos), remoção de esqueleto em cascata (papéis, IK, vínculos de skin), atribuir/limpar/redetectar papéis, adicionar/editar/remover cadeias de IK, criar/remover clipes e gravar/apagar chaves de osso (valores locais absolutos, rotação normalizada).
+- **Contrato**: `can_execute` sem efeitos, `NoChange` sem histórico, rollback do dispatcher, `do → undo → redo` idêntico por hash e nenhuma revisão de render alterada (`changes() = NONE`). Import glTF pelo `ProjectService` liga esqueleto, pesos, papéis e clipes e é desfazível.
+- **Fora do escopo**: registro em `canonical()` (palette/keymap/MCP) depende da decisão D-21; edição de ossos segue no egui legado.
+- **Testes**: 8 de comandos e 1 de importação pelo serviço. O teste do Slint `test_viewport_context_menu_modeling_actions_and_dismissal` estava desatualizado desde o G7 (mensagem de `model.shade_smooth`) e foi alinhado; suíte Slint 345/345 verde.
+
 ### Animate F0.5 — IK mínimo (P3D-169) (30/09/2026)
 - **Solvers puros** (`petunia_project::ik`): `solve_two_bone` (analítico com pole vector e soft IK exponencial), `solve_fabrik` (raiz fixa, comprimentos preservados) e look-at; alvos inalcançáveis/próximos demais são limitados sem NaN.
 - **Aplicação na pose**: `solve_chain` altera somente as rotações locais dos ossos da cadeia (swing até a nova direção, preservando a torção) com mistura por `weight`; `Skeleton::world_pose_matrices` exposto.
