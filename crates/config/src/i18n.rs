@@ -480,6 +480,32 @@ pub mod text_id {
     pub const ANIMATE_TIP_PLAY: TextId = TextId::new("animate.tip_play");
     pub const ANIMATE_TIP_NEXT: TextId = TextId::new("animate.tip_next");
     pub const ANIMATE_TIP_LAST: TextId = TextId::new("animate.tip_last");
+    pub const ANIMATE_TITLE_PICKER: TextId = TextId::new("animate.title_picker");
+    pub const ANIMATE_TITLE_CREATURE: TextId = TextId::new("animate.title_creature");
+    pub const ANIMATE_TITLE_MOTION: TextId = TextId::new("animate.title_motion");
+    pub const ANIMATE_TITLE_STYLE: TextId = TextId::new("animate.title_style");
+    pub const ANIMATE_ADD_CREATURE: TextId = TextId::new("animate.add_creature");
+    pub const ANIMATE_EMPTY_CREATURE: TextId = TextId::new("animate.empty_creature");
+    pub const ANIMATE_EMPTY_MOTION: TextId = TextId::new("animate.empty_motion");
+    pub const ANIMATE_NO_RIG: TextId = TextId::new("animate.unavailable_no_rig");
+    pub const ANIMATE_NEEDS_LEGS: TextId = TextId::new("animate.needs_legs");
+    pub const ANIMATE_NEEDS_CHAIN: TextId = TextId::new("animate.needs_chain");
+    pub const ANIMATE_NEEDS_BODY: TextId = TextId::new("animate.needs_body");
+    pub const ANIMATE_RIG_ERROR: TextId = TextId::new("animate.rig_error");
+    pub const ANIMATE_ADVANCED: TextId = TextId::new("animate.advanced");
+    pub const ANIMATE_SHOW_BONES: TextId = TextId::new("animate.show_bones");
+    pub const ANIMATE_STEPPED: TextId = TextId::new("animate.stepped");
+    pub const ANIMATE_STEPPED_TIP: TextId = TextId::new("animate.stepped_tip");
+    pub const ANIMATE_ROOT_MOTION: TextId = TextId::new("animate.root_motion");
+    pub const ANIMATE_ROOT_MOTION_TIP: TextId = TextId::new("animate.root_motion_tip");
+    pub const ANIMATE_APPLY_NOW: TextId = TextId::new("animate.apply_now");
+    pub const ANIMATE_APPLY_NOW_TIP: TextId = TextId::new("animate.apply_now_tip");
+    pub const ANIMATE_KEEP_LIVE: TextId = TextId::new("animate.keep_live");
+    pub const ANIMATE_KEEP_LIVE_TIP: TextId = TextId::new("animate.keep_live_tip");
+    pub const ANIMATE_DUPLICATE: TextId = TextId::new("animate.duplicate");
+    pub const ANIMATE_REMOVE: TextId = TextId::new("animate.remove");
+    pub const ANIMATE_PLAYHEAD: TextId = TextId::new("animate.playhead");
+    pub const ANIMATE_WORKSPACE_TIP: TextId = TextId::new("animate.workspace_tip");
 
     pub const PAINT_RADIUS: TextId = TextId::new("paint.radius");
     pub const PAINT_COLOR: TextId = TextId::new("paint.color");
@@ -831,6 +857,32 @@ pub mod text_id {
         ANIMATE_TIP_PLAY,
         ANIMATE_TIP_NEXT,
         ANIMATE_TIP_LAST,
+        ANIMATE_TITLE_PICKER,
+        ANIMATE_TITLE_CREATURE,
+        ANIMATE_TITLE_MOTION,
+        ANIMATE_TITLE_STYLE,
+        ANIMATE_ADD_CREATURE,
+        ANIMATE_EMPTY_CREATURE,
+        ANIMATE_EMPTY_MOTION,
+        ANIMATE_NO_RIG,
+        ANIMATE_NEEDS_LEGS,
+        ANIMATE_NEEDS_CHAIN,
+        ANIMATE_NEEDS_BODY,
+        ANIMATE_RIG_ERROR,
+        ANIMATE_ADVANCED,
+        ANIMATE_SHOW_BONES,
+        ANIMATE_STEPPED,
+        ANIMATE_STEPPED_TIP,
+        ANIMATE_ROOT_MOTION,
+        ANIMATE_ROOT_MOTION_TIP,
+        ANIMATE_APPLY_NOW,
+        ANIMATE_APPLY_NOW_TIP,
+        ANIMATE_KEEP_LIVE,
+        ANIMATE_KEEP_LIVE_TIP,
+        ANIMATE_DUPLICATE,
+        ANIMATE_REMOVE,
+        ANIMATE_PLAYHEAD,
+        ANIMATE_WORKSPACE_TIP,
         PAINT_RADIUS,
         PAINT_COLOR,
         SETTINGS_INTERFACE,

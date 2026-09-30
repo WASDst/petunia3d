@@ -671,6 +671,8 @@ A UI Baseline V1 permanece `MODEL / PAINT / UV` (com a revisão MODEL de 2026-09
 - a experiência inicial é a **camada 1** (escolher Motion e ajustar sliders); timeline, Ghosts e camadas são divulgação progressiva;
 - toda alegação de acessibilidade do workspace exige o **teste do iniciante** do cap. 45 medido com artistas.
 
+**Implementação F2 (2026-09-30, sem aceite visual):** o workspace existe no Slint atrás da feature `animation-workspace`; a pill ANIMATE só é desenhada com ela (nunca desabilitada). Desvios do layout proposto, todos dentro dos invariantes acima: (1) o Inspector fica **aberto por padrão** no Animate, por ser a superfície principal; (2) as seções são `Creature → Motions → Motion` e os **Styles** ficam dentro de *Motion*, para os sliders universais caberem sem rolagem em 1280×800; (3) o **transporte in-canvas** (play/pause, scrub, Apply Now) substitui a timeline, que só chega no F3; (4) a bandeja esquerda traz um botão por Motion. Ver a seção "Estado da fase F2" do [cap. 45](45-pos-v1-animate-acessivel-animacao-procedural.md).
+
 # Viewport adapter final
 
 O viewport adapter é **toolkit-neutro**. `PetuniaRenderer` (`crates/render/`)

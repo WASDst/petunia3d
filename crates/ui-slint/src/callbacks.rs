@@ -337,6 +337,7 @@ fn to_prefab_item(item: &crate::view_model::PrefabItemModel) -> PrefabItem {
 
 pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewModel) {
     window.set_active_workspace(vm.workspace_label().into());
+    crate::animate::sync_animate_properties(window, &vm.animate);
     window.set_saved(vm.saved);
     window.set_can_undo(vm.can_undo);
     window.set_can_redo(vm.can_redo);
@@ -1144,6 +1145,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window: &PetuniaSlintShell,
     bridge: Arc<Mutex<SlintUiBridge<V>>>,
 ) {
+    crate::animate::connect_animate_callbacks(window, Arc::clone(&bridge));
     let shortcut_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_shortcut_requested(move |text, ctrl, shift, alt| {
@@ -1185,6 +1187,8 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             "MODEL" => Workspace::Model,
             "PAINT" => Workspace::Paint,
             "UV" => Workspace::Uv,
+            #[cfg(feature = "animation-workspace")]
+            "ANIMATE" => Workspace::Animate,
             _ => return,
         };
         if let Ok(mut bridge) = workspace_bridge.lock() {

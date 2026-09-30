@@ -2,6 +2,7 @@
 
 Módulos Rust do backend e integração do frontend Slint:
 - `lib.rs`: Bridge de intenções, view models reativos, loop de aplicação e inicialização do shell.
+- `animate.rs`: Bridge do workspace Animate (cap. 45 F2): `AnimateIntent` (o markup emite `(ação, argumento, valor)`), `AnimateViewModel`, tick de reprodução, projeção do esqueleto posado e sincronização **no lugar** das listas/sliders. Compila sempre; só a pill ANIMATE depende da feature `animation-workspace`.
 - `commands.rs`: Integração do catálogo de comandos semânticos com a Command Palette.
 - `files.rs`: Serviço de diálogo nativo de arquivos assíncrono (abrir/salvar projeto).
 - `numeric.rs`: Lógica de scrubbing, fine-stepping e clamping para inputs numéricos de precisão.

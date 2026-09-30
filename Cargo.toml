@@ -121,9 +121,10 @@ path = "src/main.rs"
 
 [features]
 default = []
-# Workspace de animação de P3D-066 (P3). Fora da V1 congelada (capítulo 36:
-# MODEL/PAINT/UV). Habilite explicitamente para compilar o módulo de animação.
-animation-workspace = ["petunia_app/animation-workspace"]
+# Workspace Animate (P3D-066/170, ADR 006). Fora da V1 congelada (capítulo 36:
+# MODEL/PAINT/UV). Habilite explicitamente: liga a pill ANIMATE no shell Slint de
+# produção e, para transição, o painel do egui legado (`--legacy-egui`).
+animation-workspace = ["petunia_ui_slint/animation-workspace", "petunia_app/animation-workspace"]
 
 [dependencies]
 petunia_ui_slint = { workspace = true }

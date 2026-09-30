@@ -29,6 +29,8 @@ O caderno previa Animate (P3D-066/067) como workspace de baixa prioridade (P3), 
    | Direita | Inspector em seções independentes (dock/float/pin, ADR 005): `Rig → Motion → Style → Layers` |
    | Inferior | Timeline (clip/Motion, keys, filmstrip de referência), no lugar da Asset Library enquanto o workspace estiver ativo; a Animation Asset Library (P3D-139) abre como gaveta |
 
+   **Nota de implementação (F2, 2026-09-30):** o layout acima foi implementado com três desvios — Inspector aberto por padrão no Animate, *Styles* dentro da seção *Motion* (`Creature → Motions → Motion`) e **transporte in-canvas** no lugar da timeline (que é F3). A pill ANIMATE só existe com a feature `animation-workspace`. Falta o aceite visual; ver "Estado da fase F2" no capítulo 45.
+
 7. **Ordem de entrega** (fases F0–F5 do capítulo 45): fundação headless e glTF com skin/animação → Motions headless → shell Animate camadas 1–2 → Posar (timeline, Ghosts) → Reference Frames e camadas → Wiggle e biblioteca.
 
 ## Consequências
