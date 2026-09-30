@@ -84,9 +84,11 @@ pub use command::{
 };
 pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename};
 pub use rig_commands::{
-    AddAnimationCmd, AddIkChainCmd, AddRigPresetCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd,
-    ClearRigRoleCmd, DeleteBoneKeyCmd, InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd,
-    RemoveSkeletonCmd, RigPresetKind, SetBoneKeyCmd, UpdateIkChainCmd,
+    AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd,
+    AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearRigRoleCmd, DeleteBoneKeyCmd, DuplicateMotionCmd,
+    InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd, RemoveMotionCmd, RemoveSkeletonCmd,
+    RigPresetKind, SetBoneKeyCmd, SetMotionParamCmd, SetMotionStyleCmd, UpdateIkChainCmd,
+    UpdateMotionCmd,
 };
 
 pub use brush::{

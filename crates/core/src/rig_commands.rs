@@ -16,8 +16,9 @@
 use crate::command::{Command, CommandError};
 use crate::state::AppState;
 use petunia_project::{
-    AnimationAsset, AnimationClip, IkChain, IkSolver, Interpolation, Keyframe, RigPreset, RigRole,
-    Transform3D, auto_fit_humanoid, compute_auto_skin_weights,
+    AnimationAsset, AnimationClip, BakeOptions, IkChain, IkSolver, Interpolation, Keyframe,
+    MotionGenerator, MotionRecipe, MotionStyle, RigPreset, RigRole, RootMode, Transform3D,
+    auto_fit_humanoid, compute_auto_skin_weights,
 };
 use uuid::Uuid;
 
@@ -665,6 +666,314 @@ impl Command for DeleteBoneKeyCmd {
             anim.clip.tracks.retain(|t| t.bone_id != id);
         }
         state.set_status("Key deleted");
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Movimento procedural (P3D-170)
+// ---------------------------------------------------------------------------
+
+fn motion_exists(state: &AppState, id: Uuid) -> Result<(), &'static str> {
+    state
+        .project
+        .project
+        .get_motion(id)
+        .map(|_| ())
+        .ok_or("Motion not found")
+}
+
+fn motion_mut(state: &mut AppState, id: Uuid) -> Result<&mut MotionRecipe, CommandError> {
+    state
+        .project
+        .project
+        .motions
+        .iter_mut()
+        .find(|m| m.id == id)
+        .ok_or_else(|| exec_err("Motion not found"))
+}
+
+/// Cria um Motion para o esqueleto. O contrato de rig (papéis) é verificado na
+/// execução: o erro diz o que falta no rig e nada é criado.
+#[derive(Debug, Clone)]
+pub struct AddMotionCmd {
+    pub skeleton_id: Uuid,
+    pub generator: MotionGenerator,
+    /// `None` usa o nome do gerador.
+    pub name: Option<String>,
+    pub style: MotionStyle,
+}
+
+impl Command for AddMotionCmd {
+    fn label(&self) -> &'static str {
+        "add motion"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        state
+            .project
+            .project
+            .get_skeleton(self.skeleton_id)
+            .map(|_| ())
+            .ok_or("Rig not found")
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let roles = state
+            .project
+            .project
+            .rig_roles_of(self.skeleton_id)
+            .cloned()
+            .unwrap_or_else(|| petunia_project::RigRoleMap::new(self.skeleton_id));
+        self.generator.check_rig(&roles).map_err(exec_err)?;
+        let name = self
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .unwrap_or(self.generator.id());
+        let mut recipe = MotionRecipe::new(self.skeleton_id, self.generator, name);
+        recipe.apply_style(self.style);
+        state.project.project.motions.push(recipe);
+        state.set_status("Motion added");
+        Ok(())
+    }
+}
+
+/// Ajusta um parâmetro do Motion (limitado à faixa do parâmetro).
+#[derive(Debug, Clone)]
+pub struct SetMotionParamCmd {
+    pub motion_id: Uuid,
+    pub key: String,
+    pub value: f32,
+}
+
+impl Command for SetMotionParamCmd {
+    fn label(&self) -> &'static str {
+        "set motion parameter"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        motion_exists(state, self.motion_id)?;
+        if !self.value.is_finite() {
+            return Err("Parameter value is not finite");
+        }
+        Ok(())
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let recipe = motion_mut(state, self.motion_id)?;
+        if recipe.set_param(&self.key, self.value).map_err(exec_err)? {
+            Ok(())
+        } else {
+            Err(CommandError::NoChange(
+                "parameter already has that value".into(),
+            ))
+        }
+    }
+}
+
+/// Aplica um Style (preenche parâmetros).
+#[derive(Debug, Clone)]
+pub struct SetMotionStyleCmd {
+    pub motion_id: Uuid,
+    pub style: MotionStyle,
+}
+
+impl Command for SetMotionStyleCmd {
+    fn label(&self) -> &'static str {
+        "set motion style"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        motion_exists(state, self.motion_id)
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        if motion_mut(state, self.motion_id)?.apply_style(self.style) {
+            Ok(())
+        } else {
+            Err(CommandError::NoChange(
+                "motion already has that style".into(),
+            ))
+        }
+    }
+}
+
+/// Edita nome, seed, modo de raiz e Stepped. Campos `None` não mudam;
+/// `step_fps: Some(None)` desliga o Stepped.
+#[derive(Debug, Clone, Default)]
+pub struct UpdateMotionCmd {
+    pub motion_id: Uuid,
+    pub name: Option<String>,
+    pub seed: Option<u32>,
+    pub root_mode: Option<RootMode>,
+    pub step_fps: Option<Option<f32>>,
+}
+
+impl Command for UpdateMotionCmd {
+    fn label(&self) -> &'static str {
+        "edit motion"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        motion_exists(state, self.motion_id)?;
+        if self.name.as_deref().is_some_and(|n| n.trim().is_empty()) {
+            return Err("Motion name is empty");
+        }
+        if let Some(Some(fps)) = self.step_fps
+            && (!fps.is_finite() || !(1.0..=60.0).contains(&fps))
+        {
+            return Err("Stepped fps must be between 1 and 60");
+        }
+        if self.root_mode == Some(RootMode::RootMotion) {
+            let gen_ok = state
+                .project
+                .project
+                .get_motion(self.motion_id)
+                .is_some_and(|m| m.generator.supports_root_motion());
+            if !gen_ok {
+                return Err("This motion does not support root motion");
+            }
+        }
+        Ok(())
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let recipe = motion_mut(state, self.motion_id)?;
+        let before = recipe.clone();
+        if let Some(n) = &self.name {
+            recipe.name = n.trim().to_string();
+        }
+        if let Some(seed) = self.seed {
+            recipe.seed = seed;
+        }
+        if let Some(mode) = self.root_mode {
+            recipe.root_mode = mode;
+        }
+        if let Some(step) = self.step_fps {
+            recipe.step_fps = step;
+        }
+        if *recipe == before {
+            return Err(CommandError::NoChange(
+                "motion already has those values".into(),
+            ));
+        }
+        recipe.revision += 1;
+        Ok(())
+    }
+}
+
+/// Remove o Motion.
+#[derive(Debug, Clone)]
+pub struct RemoveMotionCmd {
+    pub motion_id: Uuid,
+}
+
+impl Command for RemoveMotionCmd {
+    fn label(&self) -> &'static str {
+        "remove motion"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        motion_exists(state, self.motion_id)
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state
+            .project
+            .project
+            .motions
+            .retain(|m| m.id != self.motion_id);
+        state.set_status("Motion removed");
+        Ok(())
+    }
+}
+
+/// Duplica o Motion (novo id, nome com " copy").
+#[derive(Debug, Clone)]
+pub struct DuplicateMotionCmd {
+    pub motion_id: Uuid,
+}
+
+impl Command for DuplicateMotionCmd {
+    fn label(&self) -> &'static str {
+        "duplicate motion"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        motion_exists(state, self.motion_id)
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let mut copy = state
+            .project
+            .project
+            .get_motion(self.motion_id)
+            .cloned()
+            .ok_or_else(|| exec_err("Motion not found"))?;
+        copy.id = Uuid::new_v4();
+        copy.name = format!("{} copy", copy.name);
+        copy.revision = 0;
+        state.project.project.motions.push(copy);
+        state.set_status("Motion duplicated");
+        Ok(())
+    }
+}
+
+/// **Apply Now** (P3D-160): converte o Motion em um clipe editável na biblioteca.
+/// Com `keep_motion = false` o Motion vivo é removido; o resultado é um passo de
+/// histórico e a mensagem relata quantas chaves foram geradas.
+#[derive(Debug, Clone)]
+pub struct ApplyMotionNowCmd {
+    pub motion_id: Uuid,
+    pub options: BakeOptions,
+    pub keep_motion: bool,
+}
+
+impl Command for ApplyMotionNowCmd {
+    fn label(&self) -> &'static str {
+        "apply motion now"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        motion_exists(state, self.motion_id)
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let result = state
+            .project
+            .project
+            .bake_motion(self.motion_id, &self.options)
+            .map_err(exec_err)?;
+        let recipe = state
+            .project
+            .project
+            .get_motion(self.motion_id)
+            .cloned()
+            .ok_or_else(|| exec_err("Motion not found"))?;
+        let mut asset = AnimationAsset::new(recipe.name.clone(), result.clip);
+        asset.preset = Some(recipe.generator.id().to_string());
+        asset.tags = vec!["motion".into(), recipe.generator.id().into()];
+        state.project.project.add_animation(asset);
+        if !self.keep_motion {
+            state
+                .project
+                .project
+                .motions
+                .retain(|m| m.id != self.motion_id);
+        }
+        state.set_status(format!(
+            "Apply Now: {} keys (from {} samples) on {} bones",
+            result.keys_after, result.keys_before, result.animated_bones
+        ));
         Ok(())
     }
 }

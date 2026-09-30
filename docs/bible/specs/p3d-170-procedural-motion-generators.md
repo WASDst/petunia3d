@@ -3,7 +3,7 @@
 <aside>
 🚶
 
-Estado: **SPEC DRAFT (2026-09-30)** · Prioridade: P2 · Era 3. **Primeira experiência do Animate** ([cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md), decisão D1). Criaturas são cidadãs de primeira classe (D2).
+Estado: **SPEC DRAFT (2026-09-30); Biped Cycle, Gait, Serpentine Wave, Idle Breath, Styles, Stepped, Apply Now e comandos implementados no domínio (F1), sem UI; Wing Flap, Reaction, Action e Look/Aim pendentes** · Prioridade: P2 · Era 3. **Primeira experiência do Animate** ([cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md), decisão D1). Criaturas são cidadãs de primeira classe (D2).
 
 </aside>
 

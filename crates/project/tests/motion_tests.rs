@@ -3,7 +3,8 @@
 use glam::{Quat, Vec3};
 use petunia_project::{
     BakeOptions, IkChain, MotionError, MotionEvaluator, MotionGenerator, MotionRecipe, MotionStyle,
-    RigPreset, RigRoleMap, RootMode, Skeleton, Transform3D, bake_motion, chain_end_position,
+    Project, RigPreset, RigRoleMap, RootMode, Skeleton, Transform3D, bake_motion,
+    chain_end_position,
 };
 
 type Rig = (Skeleton, RigRoleMap);
@@ -781,4 +782,98 @@ fn energy_scales_the_motion_and_style_changes_it_measurably() {
     });
     let (lo0, hi0) = travel(&|_| {});
     assert!(hi - lo < hi0 - lo0, "Stiff balança menos os braços");
+}
+
+fn project_with_rig(sk: Skeleton) -> Project {
+    let mut p = Project::new();
+    p.assets[0].skeleton_id = Some(sk.id);
+    p.assets[0].skin_data = Some(petunia_project::compute_auto_skin_weights(
+        &p.assets[0].mesh,
+        &sk,
+    ));
+    p.add_skeleton(sk);
+    p
+}
+
+#[test]
+fn project_stores_validates_and_prunes_motions() {
+    let mut p = project_with_rig(RigPreset::humanoid(1.0));
+    let sid = p.skeletons[0].id;
+    let mut m = MotionRecipe::new(sid, MotionGenerator::BipedCycle, "Walk");
+    m.apply_style(MotionStyle::Heavy);
+    let id = m.id;
+    p.motions.push(m.clone());
+    p.motions.push(m.clone()); // id duplicado
+    p.motions.push(MotionRecipe::new(
+        uuid::Uuid::new_v4(),
+        MotionGenerator::Gait,
+        "Órfão",
+    ));
+    let back: Project = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
+    assert_eq!(back.motions.len(), 3);
+    p.validate();
+    assert_eq!(p.motions.len(), 1, "duplicado e órfão removidos");
+    assert_eq!(p.get_motion(id), Some(&m));
+
+    // JSON antigo sem `motions` continua abrindo.
+    let mut old = serde_json::to_value(&p).unwrap();
+    old.as_object_mut().unwrap().remove("motions");
+    assert!(
+        serde_json::from_value::<Project>(old)
+            .unwrap()
+            .motions
+            .is_empty()
+    );
+
+    // Avaliador e bake pelos papéis do projeto.
+    assert!(p.motion_evaluator(id).is_ok());
+    let baked = p.bake_motion(id, &BakeOptions::default()).unwrap();
+    assert!(baked.keys_after > 0);
+    p.remove_skeleton(sid);
+    assert!(p.motions.is_empty());
+    assert!(p.bake_motion(id, &BakeOptions::default()).is_err());
+}
+
+#[test]
+fn gltf_export_bakes_motions_and_reports_the_ones_that_cannot_be() {
+    use petunia_project::export::{export_gltf, export_report};
+    use petunia_project::import_gltf::import_rig;
+    let mut p = project_with_rig(RigPreset::humanoid(1.0));
+    let sid = p.skeletons[0].id;
+    let walk = MotionRecipe::new(sid, MotionGenerator::BipedCycle, "Walk");
+    let bad = MotionRecipe::new(sid, MotionGenerator::Serpentine, "Slither");
+    let wid = walk.id;
+    p.motions.push(walk);
+    p.motions.push(bad);
+
+    // Movimento inexportável: o GLB sai sem ele e o relatório avisa.
+    let report = export_report(&p, &[0], true);
+    assert!(
+        report
+            .iter()
+            .any(|l| l.contains("aviso") && l.contains("Slither")),
+        "{report:?}"
+    );
+    let glb = export_gltf(&p, &[0]).unwrap();
+    let rig = import_rig(&glb, "t", 1.0).unwrap().unwrap();
+    assert_eq!(rig.animations.len(), 1);
+    let clip = &rig.animations[0].clip;
+    assert_eq!(rig.animations[0].name, "Walk");
+
+    // O clipe importado reproduz o gerador nos instantes de amostragem.
+    let ev = p.motion_evaluator(wid).unwrap();
+    let sk = &rig.skeletons[0];
+    let src = &p.skeletons[0];
+    let n = (clip.duration * clip.fps).round() as usize;
+    for i in (0..n).step_by(3) {
+        let t = clip.duration * i as f32 / n as f32;
+        let want = ev.pose_at(t);
+        let got = clip.sample_pose(sk, t.min(clip.duration - 1e-4));
+        for (bone, w) in src.bones.iter().zip(&want) {
+            let g = &got[sk.bone_index(sk.find_bone(&bone.name).unwrap()).unwrap()];
+            let ang = Quat::from_array(w.rotation).angle_between(Quat::from_array(g.rotation));
+            assert!(ang < 0.02, "{} frame {i}: {ang}", bone.name);
+            assert!((Vec3::from(w.translation) - Vec3::from(g.translation)).length() < 5e-3);
+        }
+    }
 }

@@ -41,7 +41,7 @@ Auditoria estática do código em `main` (`e806225`); nada foi compilado para es
 | AN-06 | Animation Asset Library (P3D-139) | `RUDIMENTARY` | `AnimationLibrary` tem 2 clipes canônicos; o "walk" anima apenas 2 ossos com 3 keys (é uma demo) |
 | AN-07 | Animation Workspace (P3D-066) | `MISSING` no produto | UI existe só no egui legado atrás da feature `animation-workspace` (`crates/ui/src/modules_ui/animation_ui.rs`); `Workspace::Animate` é feature-gated no core; o Slint não tem referência a Bone/Skeleton |
 | AN-08 | IK e constraints | `MISSING` → `PARTIALLY_COMPLIANT` (F0.5, 2026-09-30) | `petunia_project::ik`: `solve_two_bone` (analítico, pole, soft IK), `solve_fabrik`, look-at e `solve_chain` sobre a pose (só rotações locais dos ossos da cadeia; preserva comprimentos e torção); `IkChain` como dado em `Project::ik_chains` (append-only, validado e podado). Determinístico e testado (alcance, clamps, pole, continuidade do soft IK, pesos). Pendente: comandos (F0.6), limites angulares no FABRIK, foot planting por fase de contato (F1) |
-| AN-09 | Animação procedural | `MISSING` | **não constava do roadmap**; "procedural" no caderno referia-se só a geometria (P3D-161/168) |
+| AN-09 | Animação procedural | `MISSING` → `PARTIALLY_COMPLIANT` (F1, 2026-09-30) | `petunia_project::{motion, motion_gen}`: `MotionRecipe` (dado serializável em `Project::motions`), `pose(t)` puro e determinístico, geradores **BipedCycle** (walk/run, pés plantados por IK, braços contralaterais), **Gait** de N pernas (alternado, sequência lateral, onda; tetrapod para aranhas; ondulação de coluna e cauda), **Serpentine** (serpente, peixe, cauda) e **IdleBreath**; controles universais, Styles, Stepped, In Place/Root Motion; **Apply Now** com redução de chaves; export glTF sempre baked. Pendentes: Wing Flap, Reaction (Hit/Die), Action (Attack/Eat/Wave/Jump), Look/Aim, Wiggle (P3D-173) e UI |
 | AN-10 | Secondary motion (spring/wiggle) | `MISSING` | — |
 | AN-11 | Ghosts e trajetórias | `MISSING` | — |
 | AN-12 | Referência em sequência de imagens | `MISSING` | `ReferenceImage` (P3D-013) é estática e sem tempo |
@@ -172,6 +172,15 @@ A ordem respeita a regra de reconciliação (AGENTS §2): preservar o `COMPLIANT
 | **F5** Wiggle e biblioteca | Secondary motion e ragdoll simples (P3D-173); Animation Asset Library com UX (P3D-139) | F4 | Wiggle determinístico e scrubável |
 
 Cada fase encerra com os gates do AGENTS §4 e um registro de evidência; nenhuma fase é dada como concluída por presença de botão ou callback.
+
+# Estado da fase F1 (2026-09-30)
+
+A fase F1 está implementada **no domínio e nos comandos**, sem UI:
+
+- Geradores entregues: `BipedCycle`, `Gait` (N pernas), `Serpentine`, `IdleBreath`. Ainda não existem `Wing Flap`, `Reaction` (Hit/Die), `Action` (Attack/Eat/Wave/Jump) e `Look/Aim` — o catálogo "alvo" do capítulo continua sendo alvo.
+- Comandos: `AddMotionCmd`, `SetMotionParamCmd`, `SetMotionStyleCmd`, `UpdateMotionCmd`, `DuplicateMotionCmd`, `RemoveMotionCmd` e `ApplyMotionNowCmd` (`Keep Live` ou converter), todos transacionais. O "teste do iniciante" existe como teste de comandos (Auto-Rig → Motion → glTF), **sem** a medição com artistas que o capítulo exige.
+- Convenção de eixos: frente e lateral são derivadas do rig (Hips→Head, direção dos pés, eixo da raiz), sem convenção nova; o cap. 10 segue "a congelar".
+- Limitações conhecidas: a avaliação clona cadeias de IK por frame (sem orçamento de desempenho medido); pesos/parâmetros padrão são a recomendação inicial e **não passaram por avaliação visual**; nenhum gerador trata terreno (P3D-128).
 
 # Não objetivos
 

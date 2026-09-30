@@ -5,6 +5,14 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F1 — geradores de movimento procedural (P3D-170) (30/09/2026)
+- **`MotionRecipe`** (`Project::motions`, append-only) avaliado por `MotionEvaluator` como `pose(t)` puro e determinístico (mesma receita ⇒ mesma pose); parâmetros com faixa (`speed`, `energy`, `weight`, `stride`, `lean`, `smoothness`, `variation` + específicos), **Styles** (Cartoon, Heavy, Stiff, Floaty), **Stepped** (quantização temporal), In Place/Root Motion e contrato de rig via Rig Roles com erro legível.
+- **Geradores**: `BipedCycle` (walk↔run, pés plantados por IK, braços contralaterais, lean/torção), `Gait` de N pernas (alternado, sequência lateral, onda; alternating tetrapod para aranhas; ondulação de coluna e cauda), `Serpentine` (serpente, peixe, cauda) e `IdleBreath`. Frente/lateral vêm do próprio rig.
+- **Apply Now** (`bake_motion`): amostra ciclos inteiros e reduz chaves por canal (Ramer–Douglas–Peucker) com relatório do que mudou; canais no repouso não geram chaves. O glTF exporta Motions **sempre baked**; os que não podem ser exportados aparecem como aviso no relatório.
+- **Comandos** transacionais: `AddMotionCmd`, `SetMotionParamCmd`, `SetMotionStyleCmd`, `UpdateMotionCmd`, `DuplicateMotionCmd`, `RemoveMotionCmd`, `ApplyMotionNowCmd` (Keep Live ou converter em clipe); não tocam revisões de render.
+- **Testes** (22 no projeto + 6 no core): fechamento de loop, determinismo, seed/variation, só rotações (exceto raiz), comprimentos de osso, pés plantados (walk e run), aranha 8 pernas, quadrúpede, onda com defasagem, sentido de joelho/braços/lean, extremos sem NaN, bake, persistência e export.
+- **Não incluído**: Wing Flap, Reaction, Action, Look/Aim e UI. Valores padrão sem avaliação visual.
+
 ### Animate F1.1 — presets de serpente, peixe e pássaro (30/09/2026)
 - `RigPreset::serpent(segments, scale)`, `fish(scale)` (serpente de 9 segmentos + nadadeiras) e `bird(scale)` (coluna horizontal, pernas de 3 ossos, asas `Wing_n.L/R`, cauda), como templates de dados (P3D-136).
 - Inferência de papéis passa a reconhecer `Spine_n` numerado e `Wing_n.L/R` (`RigRole::Wing`); Mixamo `Spine1/Spine2` continua igual.

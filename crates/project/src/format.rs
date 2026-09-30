@@ -122,6 +122,7 @@ impl LegacyProjectWithSplines {
             smooth_shaded_assets: Vec::new(),
             rig_roles: Vec::new(),
             ik_chains: Vec::new(),
+            motions: Vec::new(),
         }
     }
 }
@@ -192,6 +193,7 @@ impl LegacyProjectBeforeSplines {
             smooth_shaded_assets: Vec::new(),
             rig_roles: Vec::new(),
             ik_chains: Vec::new(),
+            motions: Vec::new(),
         }
     }
 }
