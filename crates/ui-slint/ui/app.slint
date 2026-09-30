@@ -1278,12 +1278,22 @@ component InspectorSection inherits Rectangle {
             }
 
             Rectangle {
-                width: 22px;
-                height: 22px;
+                width: 28px;
+                height: 28px;
                 border-radius: 4px;
                 background: root.pin-open ? DesignTokens.accent : (pin-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                border-width: pin-focus.has-focus ? 2px : 0px;
+                border-color: DesignTokens.focus-ring;
                 accessible-role: button;
                 accessible-label: root.pin-open ? "Unpin section" : "Pin section";
+                accessible-checked: root.pin-open;
+                accessible-action-default => { root.pin-toggled(root.section-id); }
+                pin-focus := FocusScope {
+                    key-pressed(event) => {
+                        if event.text == Key.Return || event.text == " " { root.pin-toggled(root.section-id); return accept; }
+                        reject
+                    }
+                }
                 IconDisplay {
                     icon: IconSet.Pin;
                     size: 11px;
@@ -1324,18 +1334,33 @@ component InspectorPill inherits Rectangle {
     in property <bool> active: false;
     in property <string> section-id: "";
     out property <bool> has-hover: pill-touch.has-hover;
+    /// Incrementar move o foco de teclado para esta pílula (usado por F6).
+    in property <int> focus-token: 0;
     callback clicked;
     callback hovered(string);
+    changed focus-token => { pill-focus.focus(); }
 
     accessible-role: button;
     accessible-label: root.semantic-label;
     accessible-checked: root.active;
+    accessible-action-default => { root.clicked(); }
     width: 36px;
     height: 36px;
     border-radius: 9px;
     background: root.active ? DesignTokens.accent : (pill-touch.has-hover ? DesignTokens.surface-hover : transparent);
-    border-width: pill-touch.has-hover || root.active ? 1px : 0px;
+    border-width: pill-touch.has-hover || root.active || pill-focus.has-focus ? (pill-focus.has-focus ? 2px : 1px) : 0px;
     border-color: DesignTokens.focus-ring;
+
+    // Teclado: Tab foca a pílula (e abre o peek), Enter/Espaço fixa ou solta a seção.
+    pill-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        changed has-focus => {
+            if self.has-focus { root.hovered(root.section-id); }
+        }
+    }
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
@@ -3027,6 +3052,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> uv-stats: "";
     in-out property <string> current-theme: "petunia-dark";
     in-out property <int> settings-tab: 0;
+    // F6 alterna o foco de teclado entre a viewport e a régua do Inspector.
+    in-out property <int> f6-rail-token: 0;
+    in-out property <bool> f6-in-rail: false;
     in-out property <float> ui-scale: 1.0;
     in-out property <string> icon-theme: "outline";
     in-out property <string> active-language: "pt-BR";
@@ -3802,6 +3830,22 @@ export component PetuniaSlintShell inherits Window {
         key-pressed(event) => {
             root.precision-mode = event.modifiers.shift;
             root.snap-mode = event.modifiers.control;
+            if root.settings-visible && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
+                root.settings-tab = event.text == Key.DownArrow ? min(root.settings-tab + 1, 7) : max(root.settings-tab - 1, 0);
+                return accept;
+            }
+            if event.text == Key.F6 {
+                if root.f6-in-rail && !root-focus.has-focus && root.inspector-visible && !root.compact-shell {
+                    root.f6-in-rail = false;
+                    root-focus.focus();
+                } else if root.inspector-visible && !root.compact-shell {
+                    root.f6-in-rail = true;
+                    root.f6-rail-token += 1;
+                } else {
+                    root-focus.focus();
+                }
+                return accept;
+            }
             if event.text == Key.Escape {
                 if root.context-menu-open {
                     root.context-menu-open = false;
@@ -9087,6 +9131,7 @@ export component PetuniaSlintShell inherits Window {
                         alignment: start;
 
                         InspectorPill {
+                            focus-token: root.f6-rail-token;
                             section-id: "parts";
                             icon: IconSet.Layers3;
                             icon-svg: PetuniaIcons.parts;
@@ -10489,6 +10534,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 0 ? DesignTokens.accent : (tab0-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Aparência";
+                                    accessible-checked: root.settings-tab == 0;
+                                    accessible-action-default => { root.settings-tab = 0; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10502,6 +10551,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 1 ? DesignTokens.accent : (tab1-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Idioma & Região";
+                                    accessible-checked: root.settings-tab == 1;
+                                    accessible-action-default => { root.settings-tab = 1; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10515,6 +10568,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 2 ? DesignTokens.accent : (tab2-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Teclado & Atalhos";
+                                    accessible-checked: root.settings-tab == 2;
+                                    accessible-action-default => { root.settings-tab = 2; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10528,6 +10585,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 3 ? DesignTokens.accent : (tab3-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Acessibilidade";
+                                    accessible-checked: root.settings-tab == 3;
+                                    accessible-action-default => { root.settings-tab = 3; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10541,6 +10602,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 4 ? DesignTokens.accent : (tab4-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Ferramentas";
+                                    accessible-checked: root.settings-tab == 4;
+                                    accessible-action-default => { root.settings-tab = 4; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10554,6 +10619,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 5 ? DesignTokens.accent : (tab5-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Viewport 3D";
+                                    accessible-checked: root.settings-tab == 5;
+                                    accessible-action-default => { root.settings-tab = 5; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10567,6 +10636,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 6 ? DesignTokens.accent : (tab6-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Plugins";
+                                    accessible-checked: root.settings-tab == 6;
+                                    accessible-action-default => { root.settings-tab = 6; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10580,6 +10653,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 7 ? DesignTokens.accent : (tab7-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "MCP & Automação";
+                                    accessible-checked: root.settings-tab == 7;
+                                    accessible-action-default => { root.settings-tab = 7; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
