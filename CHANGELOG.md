@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F0.1 — correção do bind pose do Rig Core (30/09/2026)
+- **AN-16 corrigido**: `Skeleton::compute_bind_pose_matrices` tratava `head` (absoluto) como offset relativo ao pai, acumulando a hierarquia; ossos fora da origem não voltavam à identidade em repouso. Agora o bind é `translate(head)` e `local_transform.translation` guarda o offset de repouso (`head − head_do_pai`), a mesma convenção dos joints do glTF.
+- **Amostragem**: `AnimationClip::sample_pose` usa `BoneTrack::sample_transform_over`, e canais sem keyframes herdam o repouso (uma trilha só de rotação não solta mais o osso do pai). O clipe `Humanoid_Idle` passou a respirar em torno do repouso e o botão "Inserir Pose Key" do egui legado grava o repouso do osso.
+- **Testes**: repouso ⇒ skinning identidade em hierarquia deslocada, offsets após reparent/remoção e amostragem só-rotação.
+
 ### Animate procedural-first — documentação (30/09/2026)
 - **Decisão de produto registrada**: Animate acessível a quem não entende de animação, com **animação procedural primeiro**, **criaturas de primeira classe** (humanoide, quadrúpede, multi-leg, serpente, peixe, pássaro) e referência de animação por **batch de imagens** (sem vídeo, sem ML). Sem alteração de código.
 - **Caderno**: novo capítulo 45 (visão, UX em quatro camadas, Gap Matrix `AN-01…AN-15`, análise do Dust3D, pesquisa externa e fases F0–F5); novas specs **P3D-169** (Rig Roles & IK), **P3D-170** (Procedural Motion Generators), **P3D-171** (Ghosts & Trajectories), **P3D-172** (Reference Image Sequence), **P3D-173** (Secondary Motion & Ragdoll) e **P3D-174** (Layered Animation), todas em `SPEC DRAFT`.

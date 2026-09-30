@@ -373,45 +373,32 @@ impl Skeleton {
         Ok(())
     }
 
-    /// Calcula as matrizes mundiais da pose de repouso (Bind Pose) e armazena
-    /// a Matriz Inversa de Bind (`inverse_bind_matrix`) para cada osso.
+    /// Recalcula a pose de repouso a partir de `head` (posição **absoluta** no
+    /// espaço do esqueleto, rotação de repouso identidade):
+    ///
+    /// - `inverse_bind_matrix` = inversa de `translate(head)`;
+    /// - `local_transform.translation` = `head - head_do_pai` (offset local de
+    ///   repouso, a mesma convenção dos nós de joint do glTF). Rotação e escala
+    ///   locais são preservadas.
+    ///
+    /// Assim, uma pose igual ao `local_transform` de cada osso produz matrizes de
+    /// skinning identidade (AN-16). Chamado a cada mudança estrutural.
     pub fn compute_bind_pose_matrices(&mut self) {
-        let mut world_bind_matrices = HashMap::new();
-
-        // Processa em ordem topológica (pais antes de filhos)
-        let mut resolved = HashSet::new();
-        let total = self.bones.len();
-
-        for _ in 0..total {
-            for b in &self.bones {
-                if resolved.contains(&b.id) {
-                    continue;
-                }
-
-                let parent_mat = match b.parent {
-                    None => Mat4::IDENTITY,
-                    Some(pid) => match world_bind_matrices.get(&pid) {
-                        Some(&m) => m,
-                        None => continue, // Pai ainda não resolvido nesta iteração
-                    },
-                };
-
-                let head = Vec3::from(b.head);
-                let local_mat = Mat4::from_translation(head);
-                let world_mat = parent_mat * local_mat;
-
-                world_bind_matrices.insert(b.id, world_mat);
-                resolved.insert(b.id);
-            }
-        }
+        let heads: HashMap<u32, Vec3> = self
+            .bones
+            .iter()
+            .map(|b| (b.id, Vec3::from(b.head)))
+            .collect();
 
         for b in &mut self.bones {
-            let world_mat = world_bind_matrices
-                .get(&b.id)
-                .copied()
-                .unwrap_or(Mat4::IDENTITY);
-            let inv = world_mat.inverse();
-            b.inverse_bind_matrix = inv.to_cols_array();
+            let head = Vec3::from(b.head);
+            let parent_head = b
+                .parent
+                .and_then(|pid| heads.get(&pid).copied())
+                .unwrap_or(Vec3::ZERO);
+            let offset = head - parent_head;
+            b.local_transform.translation = [offset.x, offset.y, offset.z];
+            b.inverse_bind_matrix = Mat4::from_translation(-head).to_cols_array();
         }
     }
 
@@ -754,6 +741,85 @@ mod tests {
         assert!((deformed_pt[1] - pt[1]).abs() < 1e-4);
         assert!((deformed_pt[2] - pt[2]).abs() < 1e-4);
         assert!((deformed_norm[1] - 1.0).abs() < 1e-4);
+    }
+
+    /// AN-16: em repouso (pose = `local_transform` de cada osso) as matrizes de
+    /// skinning precisam ser identidade, mesmo com hierarquia deslocada da origem.
+    #[test]
+    fn test_rest_pose_yields_identity_skinning_for_offset_hierarchy() {
+        let mut skel = Skeleton::new("Chain");
+        let hips = skel
+            .add_bone("Hips", None, [0.0, 1.0, 0.0], [0.0, 1.2, 0.0])
+            .unwrap();
+        let spine = skel
+            .add_bone("Spine", Some(hips), [0.0, 1.2, 0.0], [0.0, 1.4, 0.0])
+            .unwrap();
+        let _head = skel
+            .add_bone("Head", Some(spine), [0.0, 1.4, 0.0], [0.0, 1.6, 0.0])
+            .unwrap();
+
+        let rest: Vec<Transform3D> = skel.bones.iter().map(|b| b.local_transform).collect();
+        let mats = skel.compute_skinning_matrices(&rest).unwrap();
+        for (bone, m) in skel.bones.iter().zip(&mats) {
+            assert!(
+                m.abs_diff_eq(Mat4::IDENTITY, 1e-5),
+                "osso {} não é identidade em repouso: {m:?}",
+                bone.name
+            );
+        }
+    }
+
+    #[test]
+    fn test_rest_local_translation_is_offset_from_parent_and_bind_is_absolute() {
+        let mut skel = Skeleton::new("Chain");
+        let a = skel
+            .add_bone("A", None, [1.0, 2.0, 3.0], [1.0, 3.0, 3.0])
+            .unwrap();
+        let b = skel
+            .add_bone("B", Some(a), [1.0, 3.0, 3.0], [1.0, 4.0, 3.0])
+            .unwrap();
+        assert_eq!(
+            skel.get_bone(a).unwrap().local_transform.translation,
+            [1.0, 2.0, 3.0]
+        );
+        assert_eq!(
+            skel.get_bone(b).unwrap().local_transform.translation,
+            [0.0, 1.0, 0.0]
+        );
+        // Bind mundial = translate(head) absoluto.
+        let inv_b = Mat4::from_cols_array(&skel.get_bone(b).unwrap().inverse_bind_matrix);
+        let world_b = inv_b.inverse();
+        assert!(world_b.abs_diff_eq(Mat4::from_translation(Vec3::new(1.0, 3.0, 3.0)), 1e-5));
+    }
+
+    #[test]
+    fn test_reparent_and_remove_keep_bind_and_recompute_rest_offsets() {
+        let mut skel = Skeleton::new("Chain");
+        let a = skel
+            .add_bone("A", None, [0.0, 1.0, 0.0], [0.0, 2.0, 0.0])
+            .unwrap();
+        let b = skel
+            .add_bone("B", Some(a), [0.0, 2.0, 0.0], [0.0, 3.0, 0.0])
+            .unwrap();
+        let c = skel
+            .add_bone("C", Some(b), [0.0, 3.0, 0.0], [0.0, 4.0, 0.0])
+            .unwrap();
+        skel.remove_bone(b).unwrap();
+        // C passa a filho de A; head absoluto permanece, offset local é recalculado.
+        assert_eq!(skel.get_bone(c).unwrap().parent, Some(a));
+        assert_eq!(
+            skel.get_bone(c).unwrap().local_transform.translation,
+            [0.0, 2.0, 0.0]
+        );
+        skel.reparent_bone(c, None).unwrap();
+        assert_eq!(
+            skel.get_bone(c).unwrap().local_transform.translation,
+            [0.0, 3.0, 0.0]
+        );
+        let rest: Vec<Transform3D> = skel.bones.iter().map(|b| b.local_transform).collect();
+        for m in skel.compute_skinning_matrices(&rest).unwrap() {
+            assert!(m.abs_diff_eq(Mat4::IDENTITY, 1e-5));
+        }
     }
 
     #[test]

@@ -48,6 +48,7 @@ Auditoria estática do código em `main` (`e806225`); nada foi compilado para es
 | AN-13 | glTF com skin e animação | `MISSING` | `export.rs`, `pipeline.rs` e `import_gltf.rs` não referenciam skins/animations; o `.petunia` serializa `skeletons` e `animations` |
 | AN-14 | Undo/transações de rig e clipes | não auditado | depende do dono único de transação (D-02 da matriz de 2026-09-29) |
 | AN-15 | Morph Targets (P3D-162) | `MISSING` | — |
+| AN-16 | Bind pose e repouso do Rig Core | `BROKEN` → `COMPLIANT` (F0, 2026-09-30) | Achado ao preparar o glTF: `head` é absoluto, mas o bind compunha `pai × translate(head)` (acumulava a hierarquia) e `local_transform` nascia identidade; um osso fora da origem não voltava à identidade em repouso e trilhas só de rotação soltavam o osso do pai. Corrigido: bind = `translate(head)`, offset local de repouso = `head − head_do_pai`, canais sem keyframes herdam o repouso (`sample_transform_over`); testes de repouso/reparent/remoção |
 
 Leitura: **o domínio de rig e clipes é sólido; o produto não o alcança**. O maior risco para "game-ready" é AN-13: sem skin/animação no glTF, nenhuma animação sai do Petunia.
 
