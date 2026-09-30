@@ -1381,6 +1381,8 @@ prefab_only_favorites = "Só favoritos"
 prefab_parts = "peças"
 prefab_empty_title = "Nenhum prefab ainda"
 prefab_empty_hint = "Selecione objetos e use Salvar como prefab para reutilizá-los em qualquer cena."
+paint_canvas_open = "Abrir o canvas em janela flutuante"
+paint_canvas_close = "Fechar janela do canvas"
 
 
 # Biblioteca de prefabs (mensagens de status; {name} é substituído)

@@ -560,6 +560,96 @@ component PetuniaSlider inherits Rectangle {
     }
 }
 
+/// Superfície do canvas de pintura 2D: raster, wireframe UV, grade de pixels, pan (botão do meio)
+/// e zoom (roda). Mesma superfície no Inspector (pequena) e na janela flutuante (grande).
+component PaintCanvasSurface inherits Rectangle {
+    in property <image> canvas-image;
+    in property <int> zoom: 1;
+    in property <bool> show-uv: false;
+    in property <string> uv-commands: "";
+    in property <bool> show-grid: false;
+    in property <string> grid-commands: "";
+    in-out property <length> pan-x: 0px;
+    in-out property <length> pan-y: 0px;
+    callback stroke(float, float, int);
+    callback zoom-step(int);
+
+    background: DesignTokens.canvas;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    clip: true;
+
+    raster := Image {
+        width: root.width * root.zoom;
+        height: root.height * root.zoom;
+        x: (root.width - self.width) / 2 + root.pan-x;
+        y: (root.height - self.height) / 2 + root.pan-y;
+        image-fit: fill;
+        image-rendering: pixelated;
+        source: root.canvas-image;
+    }
+
+    if root.show-uv: Path {
+        width: raster.width;
+        height: raster.height;
+        x: raster.x;
+        y: raster.y;
+        fill: transparent;
+        stroke: #00ffff99;
+        stroke-width: 1px;
+        commands: root.uv-commands;
+    }
+
+    if root.show-grid && root.grid-commands != "": Path {
+        width: 100%;
+        height: 100%;
+        fill: transparent;
+        stroke: DesignTokens.border.transparentize(0.35);
+        stroke-width: 1px;
+        commands: root.grid-commands;
+    }
+
+    surface-touch := TouchArea {
+        property <bool> panning: false;
+        property <length> last-x;
+        property <length> last-y;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.middle || event.button == PointerEventButton.right {
+                    self.panning = true;
+                    self.last-x = self.mouse-x;
+                    self.last-y = self.mouse-y;
+                } else if event.button == PointerEventButton.left {
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0);
+                }
+            } else if event.kind == PointerEventKind.up {
+                if self.panning {
+                    self.panning = false;
+                } else if event.button == PointerEventButton.left {
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2);
+                }
+            }
+        }
+        moved => {
+            if self.panning {
+                root.pan-x += self.mouse-x - self.last-x;
+                root.pan-y += self.mouse-y - self.last-y;
+                self.last-x = self.mouse-x;
+                self.last-y = self.mouse-y;
+            } else if self.pressed {
+                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1);
+            }
+        }
+        scroll-event(event) => {
+            if event.delta-y != 0px {
+                root.zoom-step(event.delta-y > 0px ? 1 : -1);
+                return accept;
+            }
+            reject
+        }
+    }
+}
+
 /// Alça de arraste de painéis flutuantes não modais (cap. 36, revisão 2026-09-30).
 /// O pai guarda a posição; duplo clique recentraliza (posição negativa = centro).
 component PanelDragHandle inherits TouchArea {
@@ -3168,6 +3258,9 @@ export component PetuniaSlintShell inherits Window {
     // Posição dos painéis flutuantes; negativo = centralizado.
     in-out property <length> ref-panel-x: -1px;
     in-out property <length> ref-panel-y: -1px;
+    in-out property <bool> paint-canvas-panel-visible: false;
+    in-out property <length> canvas-panel-x: -1px;
+    in-out property <length> canvas-panel-y: -1px;
     in-out property <length> settings-panel-x: -1px;
     in-out property <length> settings-panel-y: -1px;
     in-out property <[ReferenceSlotData]> reference-slots: [];
@@ -4116,6 +4209,10 @@ export component PetuniaSlintShell inherits Window {
                 if root.context-menu-open {
                     root.context-menu-open = false;
                     root.click-away-requested();
+                    return accept;
+                }
+                if root.paint-canvas-panel-visible {
+                    root.paint-canvas-panel-visible = false;
                     return accept;
                 }
                 if root.settings-visible {
@@ -8069,11 +8166,30 @@ export component PetuniaSlintShell inherits Window {
 
                                     HorizontalLayout {
                                         alignment: space-between;
-                                        Text {
-                                            text: root.paint-canvas-size;
-                                            color: DesignTokens.text-muted;
-                                            font-size: 10px;
-                                            vertical-alignment: center;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text {
+                                                text: root.paint-canvas-size;
+                                                color: DesignTokens.text-muted;
+                                                font-size: 10px;
+                                                vertical-alignment: center;
+                                            }
+                                            Rectangle {
+                                                width: 20px;
+                                                height: 20px;
+                                                border-radius: 3px;
+                                                background: root.paint-canvas-panel-visible ? DesignTokens.accent : (expand-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                                animate background { duration: Motion.fast; easing: ease-out; }
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: button;
+                                                accessible-label: Tr.t("sl.paint_canvas_open");
+                                                IconDisplay { icon: IconSet.Maximize2; size: 11px; stroke: root.paint-canvas-panel-visible ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                                expand-touch := TouchArea {
+                                                    clicked => { root.paint-canvas-panel-visible = !root.paint-canvas-panel-visible; }
+                                                    Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_canvas_open"); color: DesignTokens.text-primary; font-size: 10px; } } }
+                                                }
+                                            }
                                         }
                                         HorizontalLayout {
                                             spacing: 4px;
@@ -8153,59 +8269,20 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
 
-                                    // Xadrez de transparência atrás do raster + pintura 2D interativa
-                                    Rectangle {
+                                    PaintCanvasSurface {
                                         width: 256px;
                                         height: 256px;
                                         horizontal-stretch: 0;
-                                        background: DesignTokens.canvas;
-                                        border-width: 1px;
-                                        border-color: DesignTokens.border;
-                                        clip: true;
-
-                                        paint-canvas-raster := Image {
-                                            width: parent.width * root.paint-canvas-zoom;
-                                            height: parent.height * root.paint-canvas-zoom;
-                                            x: (parent.width - self.width) / 2;
-                                            y: (parent.height - self.height) / 2;
-                                            image-fit: fill;
-                                            image-rendering: pixelated;
-                                            source: root.paint-canvas-image;
-                                        }
-
-                                        if root.paint-show-uv: Path {
-                                            width: paint-canvas-raster.width;
-                                            height: paint-canvas-raster.height;
-                                            x: paint-canvas-raster.x;
-                                            y: paint-canvas-raster.y;
-                                            fill: transparent;
-                                            stroke: #00ffff99;
-                                            stroke-width: 1px;
-                                            commands: root.uv-layout-commands;
-                                        }
-
-                                        if root.paint-pixel-grid && root.paint-canvas-grid-commands != "": Path {
-                                            width: 100%;
-                                            height: 100%;
-                                            fill: transparent;
-                                            stroke: DesignTokens.border.transparentize(0.35);
-                                            stroke-width: 1px;
-                                            commands: root.paint-canvas-grid-commands;
-                                        }
-
-                                        TouchArea {
-                                            pointer-event(event) => {
-                                                if (event.kind == PointerEventKind.down) {
-                                                    root.paint-2d-stroke((self.mouse-x - paint-canvas-raster.x) / paint-canvas-raster.width, (self.mouse-y - paint-canvas-raster.y) / paint-canvas-raster.height, 0);
-                                                } else if (event.kind == PointerEventKind.up) {
-                                                    root.paint-2d-stroke((self.mouse-x - paint-canvas-raster.x) / paint-canvas-raster.width, (self.mouse-y - paint-canvas-raster.y) / paint-canvas-raster.height, 2);
-                                                }
-                                            }
-                                            moved => {
-                                                if (self.pressed) {
-                                                    root.paint-2d-stroke((self.mouse-x - paint-canvas-raster.x) / paint-canvas-raster.width, (self.mouse-y - paint-canvas-raster.y) / paint-canvas-raster.height, 1);
-                                                }
-                                            }
+                                        canvas-image: root.paint-canvas-image;
+                                        zoom: root.paint-canvas-zoom;
+                                        show-uv: root.paint-show-uv;
+                                        uv-commands: root.uv-layout-commands;
+                                        show-grid: root.paint-pixel-grid;
+                                        grid-commands: root.paint-canvas-grid-commands;
+                                        stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                                        zoom-step(direction) => {
+                                            if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
+                                            if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
                                         }
                                     }
 
@@ -10736,6 +10813,88 @@ export component PetuniaSlintShell inherits Window {
                     font-weight: 600;
                     vertical-alignment: center;
                     overflow: elide;
+                }
+            }
+        }
+
+        // Painel flutuante: Paint Canvas 2D em escala maior, sincronizado com a viewport 3D.
+        if paint-canvas-panel-visible: Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            canvas-panel := Rectangle {
+                width: min(520px, parent.width - 40px);
+                height: min(576px, parent.height - 80px);
+                x: root.canvas-panel-x < 0px ? min(60px, max(parent.width - self.width, 0px)) : clamp(root.canvas-panel-x, 0px, max(parent.width - self.width, 0px));
+                y: root.canvas-panel-y < 0px ? min(56px, max(parent.height - self.height, 0px)) : clamp(root.canvas-panel-y, 0px, max(parent.height - self.height, 0px));
+                border-radius: DesignTokens.radius-panel;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                drop-shadow-blur: 16px;
+                drop-shadow-color: DesignTokens.shadow;
+                drop-shadow-offset-y: 6px;
+                TouchArea { }
+
+                VerticalLayout {
+                    Rectangle {
+                        height: 40px;
+                        background: DesignTokens.surface;
+                        border-top-left-radius: DesignTokens.radius-panel;
+                        border-top-right-radius: DesignTokens.radius-panel;
+                        PanelDragHandle {
+                            panel-x: canvas-panel.x;
+                            panel-y: canvas-panel.y;
+                            max-x: root.width - canvas-panel.width;
+                            max-y: root.height - canvas-panel.height;
+                            moved-to(x, y) => { root.canvas-panel-x = x; root.canvas-panel-y = y; }
+                        }
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 8px;
+                            spacing: 6px;
+                            VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Image; size: 14px; stroke: DesignTokens.accent; } }
+                            Text { text: Tr.t("sl.canvas") + "  " + root.paint-canvas-size; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    height: 24px;
+                                    width: max(72px, uv-label.preferred-width + 20px);
+                                    border-radius: DesignTokens.radius-control;
+                                    background: root.paint-show-uv ? DesignTokens.accent : (uv-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                    animate background { duration: Motion.fast; easing: ease-out; }
+                                    border-width: 1px;
+                                    border-color: DesignTokens.border;
+                                    accessible-role: button;
+                                    accessible-checked: root.paint-show-uv;
+                                    accessible-label: Tr.t("sl.uv_wireframe_overlay_2");
+                                    uv-label := Text { text: "UV"; color: root.paint-show-uv ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                    uv-touch := TouchArea { clicked => { root.toggle-paint-show-uv(); } }
+                                }
+                            }
+                            TopAction {
+                                icon: IconSet.X;
+                                semantic-label: Tr.t("sl.paint_canvas_close");
+                                clicked => { root.paint-canvas-panel-visible = false; }
+                            }
+                        }
+                    }
+                    Rectangle { height: 1px; background: DesignTokens.border; }
+                    PaintCanvasSurface {
+                        vertical-stretch: 1;
+                        canvas-image: root.paint-canvas-image;
+                        zoom: root.paint-canvas-zoom;
+                        show-uv: root.paint-show-uv;
+                        uv-commands: root.uv-layout-commands;
+                        show-grid: root.paint-pixel-grid;
+                        grid-commands: root.paint-canvas-grid-commands;
+                        stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                        zoom-step(direction) => {
+                            if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
+                            if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
+                        }
+                    }
                 }
             }
         }
