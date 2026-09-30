@@ -111,3 +111,18 @@
 | `129` | Transversal | `COMPLIANT (Invariantes de Filosofia do Projeto)` | Verificado contra a suíte de testes automatizados e o código-fonte canônico. | [spec](../specs/p3d-129-sem-login-obrigatorio.md) |
 | `130` | Transversal | `COMPLIANT (Invariantes de Filosofia do Projeto)` | Verificado contra a suíte de testes automatizados e o código-fonte canônico. | [spec](../specs/p3d-130-customizacao-sem-quebrar-core.md) |
 | `131` | Wave 5 | `COMPLIANT (Modal Tool Feedback & Snapping)` | Verificado contra a suíte de testes automatizados e o código-fonte canônico. | [spec](../specs/p3d-131-modal-tool-feedback-system.md) |
+
+## Specs em `SPEC DRAFT` — Animate procedural-first (2026-09-30)
+
+Sem implementação; estados abaixo são de **especificação**, não de código. Visão, Gap Matrix `AN-01…AN-15` e fasing em [cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md); decisão de shell em [ADR 006](../../architecture/adr/006-workspace-animate-pos-v1.md).
+
+| P3D | Fase | Estado | Nota | Página canônica |
+| :--- | :--- | :--- | :--- | :--- |
+| `066` | F2 | `SPEC DRAFT` (emenda 2026-09-30) | Animate pós-V1; domínio existe, **sem UI no Slint** | [spec](../specs/p3d-066-animation-workspace.md) |
+| `067` | F3 | `SPEC DRAFT` (emenda 2026-09-30) | exceções nomeadas: IK, Wiggle/Ragdoll, Layers | [spec](../specs/p3d-067-animacao-simples.md) |
+| `169` | F0 | `SPEC DRAFT` | Rig Roles & IK Foundation | [spec](../specs/p3d-169-rig-roles-ik-foundation.md) |
+| `170` | F1 | `SPEC DRAFT` | Procedural Motion Generators | [spec](../specs/p3d-170-procedural-motion-generators.md) |
+| `171` | F3 | `SPEC DRAFT` | Ghosts & Trajectories | [spec](../specs/p3d-171-animation-ghosts-trajectories.md) |
+| `172` | F4 | `SPEC DRAFT` | Reference Image Sequence (batch de imagens) | [spec](../specs/p3d-172-reference-image-sequence.md) |
+| `173` | F5 | `SPEC DRAFT` | Secondary Motion & Simple Ragdoll | [spec](../specs/p3d-173-secondary-motion-simple-ragdoll.md) |
+| `174` | F4 | `SPEC DRAFT` | Layered Animation | [spec](../specs/p3d-174-layered-animation.md) |

@@ -26,3 +26,7 @@ P3D-003, P3D-138.
 ## Testes / DoD
 
 Import, tag/search, missing file/relink, preview, apply compatível/incompatível e metadata persistida.
+
+## Extensão pós-V1 (2026-09-30)
+
+A biblioteca também guarda **Motion Recipes** ([P3D-170](p3d-170-procedural-motion-generators.md)) — vivos, com parâmetros e Style — além de clipes com keys. Grade com prévia ao vivo é a porta de entrada da camada 1 do Animate (cap. 45).

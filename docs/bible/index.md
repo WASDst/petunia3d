@@ -3,7 +3,7 @@
 <aside>
 🌸
 
-**Caderno unificado — 2026-09-15.** Este **Petunia3D — Livro Vivo** é a única raiz canônica do projeto. A antiga **Implementation Bible** foi absorvida como o hub **Especificações P3D — Readiness e Gauntlet Waves**, preservando integralmente epics, P3Ds, contratos operacionais e histórico, mas eliminando a existência de uma segunda autoridade documental. O catálogo funcional consolidado atualmente alcança **P3D-168**.
+**Caderno unificado — 2026-09-15.** Este **Petunia3D — Livro Vivo** é a única raiz canônica do projeto. A antiga **Implementation Bible** foi absorvida como o hub **Especificações P3D — Readiness e Gauntlet Waves**, preservando integralmente epics, P3Ds, contratos operacionais e histórico, mas eliminando a existência de uma segunda autoridade documental. O catálogo funcional consolidado atualmente alcança **P3D-174**.
 
 </aside>
 
@@ -209,3 +209,5 @@ A ordem normativa para decisões técnicas é: facilidade de uso → previsibili
 [43 — Auditoria Pós-V1: Novos Gaps, Anti-Bloat e Asset Authoring Boundary](foundations/43-auditoria-pos-v1-novos-gaps-anti-bloat.md)
 
 [44 — Pós-V1: Surface Paint Toolbox além do Brush](foundations/44-pos-v1-surface-paint-toolbox.md)
+
+[45 — Pós-V1: Animate Acessível e Animação Procedural](foundations/45-pos-v1-animate-acessivel-animacao-procedural.md)

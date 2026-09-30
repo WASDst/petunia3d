@@ -34,3 +34,7 @@ P3D-014, P3D-006, P3D-125.
 ## Testes / DoD
 
 Load/remove/replace, formatos inválidos, arquivo ausente, persistência, transforms independentes e comportamento após mover o projeto.
+
+## Extensão pós-V1 (2026-09-30)
+
+Uma referência pode ser uma **sequência de imagens** ligada ao tempo (Reference Frames): importação em lote, ordenação natural, mapeamento imagem→frame, filmstrip e marcação de key poses. Ver [P3D-172](p3d-172-reference-image-sequence.md). O contrato desta página (slots, propriedades e persistência) permanece válido para cada imagem da sequência.
