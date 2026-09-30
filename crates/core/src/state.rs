@@ -114,11 +114,27 @@ pub struct ReferenceImage {
     pub locked: bool,
     pub rotation: f32,
     pub xray: bool,
+    /// Identidade monotônica do conteúdo de `rgba` (nunca 0). Trocar os pixels
+    /// exige `bump_revision()`; o renderer usa isto em vez de varrer os bytes.
+    pub revision: u64,
 }
 
 impl ReferenceImage {
+    /// Próxima revisão global de conteúdo (única por processo, começa em 1).
+    pub fn next_revision() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Marca que `rgba` foi substituído.
+    pub fn bump_revision(&mut self) {
+        self.revision = Self::next_revision();
+    }
+
     pub fn from_rgba(name: String, width: u32, height: u32, rgba: Vec<u8>) -> Self {
         Self {
+            revision: Self::next_revision(),
             name,
             width,
             height,
@@ -312,7 +328,10 @@ impl Default for ProjectState {
 
 impl ProjectState {
     pub fn new() -> Self {
-        let p = Project::new();
+        let mut p = Project::new();
+        // Nunca deixar todas as revisões em 0: o fingerprint da cena recorre a
+        // um hash O(V+F) por frame enquanto o projeto estiver "sem revisão".
+        p.bump_changes(ProjectChanges::ALL);
         let pal = p.palette.clone();
         Self {
             project: p,
@@ -328,7 +347,8 @@ impl ProjectState {
     }
 
     pub fn reset(&mut self) {
-        let p = Project::new();
+        let mut p = Project::new();
+        p.bump_changes(ProjectChanges::ALL);
         self.palette = p.palette.clone();
         self.project = p;
         self.undo.clear();
@@ -358,7 +378,7 @@ impl ProjectState {
     pub fn checkpoint(&mut self, label: &str) {
         let snap = self.project.clone();
         let bytes = snap.estimated_bytes();
-        self.undo.checkpoint_sized(label, &snap, bytes);
+        self.undo.push_sized(label, snap, bytes);
         self.is_dirty = true;
     }
 

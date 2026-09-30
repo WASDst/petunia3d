@@ -138,7 +138,66 @@ pub struct Canvas {
     pub w: u32,
     pub h: u32,
     /// RGBA8 row-major, origem em cima.
+    #[serde(with = "pixel_bytes")]
     pub pixels: Vec<u8>,
+}
+
+/// Serialização compacta de pixels: base64 em formatos legíveis (JSON, ~1,33×)
+/// e bytes crus em binários (postcard). A leitura aceita também o array de
+/// números dos arquivos antigos, então projetos existentes continuam abrindo.
+mod pixel_bytes {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use serde::de::{self, SeqAccess, Visitor};
+    use serde::{Deserializer, Serializer};
+    use std::fmt;
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&STANDARD.encode(bytes))
+        } else {
+            serializer.serialize_bytes(bytes)
+        }
+    }
+
+    struct BytesVisitor;
+
+    impl<'de> Visitor<'de> for BytesVisitor {
+        type Value = Vec<u8>;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("base64 string, byte array or sequence of u8")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Vec<u8>, E> {
+            STANDARD.decode(v).map_err(E::custom)
+        }
+
+        fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
+            Ok(v.to_vec())
+        }
+
+        fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> Result<Vec<u8>, E> {
+            Ok(v)
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
+            let mut out = Vec::with_capacity(seq.size_hint().unwrap_or(0).min(1 << 24));
+            while let Some(byte) = seq.next_element::<u8>()? {
+                out.push(byte);
+            }
+            Ok(out)
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_any(BytesVisitor)
+        } else {
+            // Postcard não é auto-descritivo: `serialize_bytes` grava
+            // varint + bytes, idêntico ao layout de `Vec<u8>` antigo.
+            deserializer.deserialize_seq(BytesVisitor)
+        }
+    }
 }
 
 impl Canvas {
@@ -431,10 +490,29 @@ impl Asset {
         hash
     }
 
+    /// Há algum modifier habilitado que altere a malha avaliada?
+    pub fn has_enabled_modifiers(&self) -> bool {
+        self.modifiers.iter().any(|modifier| modifier.enabled)
+    }
+
+    /// Malha avaliada emprestada quando não há modifiers (caso comum: zero
+    /// cópia e zero hash) e calculada quando há. Preferir esta API em caminhos
+    /// por frame (render, seleção, picking).
+    pub fn evaluated_mesh_ref(&self) -> std::borrow::Cow<'_, Mesh> {
+        if self.has_enabled_modifiers() {
+            std::borrow::Cow::Owned(self.evaluated_mesh())
+        } else {
+            std::borrow::Cow::Borrowed(&self.mesh)
+        }
+    }
+
     /// Avalia a pilha de modifiers sem alterar a malha-base.
     /// Render, preview e export usam este resultado; edição continua operando
     /// sobre `mesh`, preservando a natureza não destrutiva da pilha.
     pub fn evaluated_mesh(&self) -> Mesh {
+        if !self.has_enabled_modifiers() {
+            return self.mesh.clone();
+        }
         let key = (self.source_mesh_hash(), self.modifier_hash());
         if let Some((k0, k1, cached)) = &self.eval_cache
             && (*k0, *k1) == key
@@ -802,9 +880,43 @@ pub struct Project {
     pub profiles: Vec<ProfileResource>,
     #[serde(default)]
     pub path_generators: Vec<PathGenerator>,
+    /// Assets com sombreamento suave (normais interpoladas). Ausente = flat,
+    /// o padrão do cap. 05. Fica no projeto — não no `Asset` — para não deslocar
+    /// o layout postcard legado, que embute `Vec<Asset>`.
+    #[serde(default)]
+    pub smooth_shaded_assets: Vec<Uuid>,
 }
 
 impl Project {
+    /// O asset usa sombreamento suave (Shade Smooth)?
+    pub fn is_smooth_shaded(&self, asset_id: Uuid) -> bool {
+        self.smooth_shaded_assets.contains(&asset_id)
+    }
+
+    /// Define Flat/Smooth de um asset. Retorna `true` quando algo mudou.
+    /// Avança apenas a revisão de normais.
+    pub fn set_smooth_shaded(&mut self, asset_id: Uuid, smooth: bool) -> bool {
+        if !self.assets.iter().any(|asset| asset.id == asset_id) {
+            return false;
+        }
+        let changed = if smooth {
+            if self.is_smooth_shaded(asset_id) {
+                false
+            } else {
+                self.smooth_shaded_assets.push(asset_id);
+                true
+            }
+        } else {
+            let before = self.smooth_shaded_assets.len();
+            self.smooth_shaded_assets.retain(|id| *id != asset_id);
+            self.smooth_shaded_assets.len() != before
+        };
+        if changed {
+            self.bump_normals();
+        }
+        changed
+    }
+
     /// Primeira luz habilitada da cena, se houver.
     pub fn active_light(&self) -> Option<&Light> {
         self.lights.iter().find(|light| light.enabled)
@@ -820,6 +932,7 @@ impl Default for Project {
             splines: Vec::new(),
             profiles: Vec::new(),
             path_generators: Vec::new(),
+            smooth_shaded_assets: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1276,6 +1389,7 @@ impl Project {
             splines: Vec::new(),
             profiles: Vec::new(),
             path_generators: Vec::new(),
+            smooth_shaded_assets: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1712,6 +1826,13 @@ impl Project {
     /// Normaliza projeto vindo de arquivo (M2/M3): malhas válidas,
     /// no mínimo 1 asset, `active` dentro dos limites e materiais íntegros (P3D-050).
     pub fn validate(&mut self) {
+        // Remove ids de sombreamento suave que não apontam mais para um asset.
+        let asset_ids: std::collections::HashSet<Uuid> =
+            self.assets.iter().map(|asset| asset.id).collect();
+        self.smooth_shaded_assets
+            .retain(|id| asset_ids.contains(id));
+        self.smooth_shaded_assets.sort_unstable();
+        self.smooth_shaded_assets.dedup();
         let mut spline_ids = std::collections::HashSet::with_capacity(self.splines.len());
         for spline in &mut self.splines {
             if !spline_ids.insert(spline.id) {

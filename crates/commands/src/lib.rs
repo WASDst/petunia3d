@@ -4,6 +4,8 @@
 //! document are acceptable for V1. History is bounded by a **byte budget**
 //! (default 256 MiB), discarding oldest entries first — not a fixed op count.
 
+use std::collections::VecDeque;
+
 /// Default history memory budget (ch. 16): 256 MiB per document.
 pub const DEFAULT_HISTORY_BUDGET_BYTES: usize = 256 * 1024 * 1024;
 
@@ -27,8 +29,8 @@ struct HistoryEntry<T> {
 /// Pilha genérica de undo/redo sobre estado clonável com rastreamento determinístico de estado salvo/dirty.
 #[derive(Debug)]
 pub struct UndoStack<T: Clone> {
-    undo: Vec<HistoryEntry<T>>,
-    redo: Vec<HistoryEntry<T>>,
+    undo: VecDeque<HistoryEntry<T>>,
+    redo: VecDeque<HistoryEntry<T>>,
     cap: usize,
     byte_budget: usize,
     undo_bytes: usize,
@@ -47,8 +49,8 @@ impl<T: Clone> Default for UndoStack<T> {
 impl<T: Clone> UndoStack<T> {
     pub fn new() -> Self {
         Self {
-            undo: Vec::new(),
-            redo: Vec::new(),
+            undo: VecDeque::new(),
+            redo: VecDeque::new(),
             cap: 4096,
             byte_budget: DEFAULT_HISTORY_BUDGET_BYTES,
             undo_bytes: 0,
@@ -71,16 +73,27 @@ impl<T: Clone> UndoStack<T> {
     }
 
     /// Salva o estado ATUAL antes de uma mutação (chamar antes de mudar).
+    ///
+    /// Estimativa superficial (`size_of_val`): existe só para testes com tipos
+    /// pequenos. Produção usa [`Self::push_sized`]/[`Self::checkpoint_sized`] com
+    /// tamanho profundo do documento.
+    #[cfg(test)]
     pub fn checkpoint(&mut self, label: impl Into<String>, current: &T) {
         self.checkpoint_sized(label, current, estimate_bytes(current));
     }
 
-    /// Checkpoint with an explicit payload size (preferred for `Project`).
+    /// Checkpoint with an explicit payload size (clones `current`).
+    /// Prefer [`Self::push_sized`] when the caller already owns a snapshot.
     pub fn checkpoint_sized(&mut self, label: impl Into<String>, current: &T, bytes: usize) {
+        self.push_sized(label, current.clone(), bytes);
+    }
+
+    /// Registra um snapshot que o chamador já possui, sem clonar de novo.
+    pub fn push_sized(&mut self, label: impl Into<String>, snapshot: T, bytes: usize) {
         let bytes = bytes.max(1);
-        self.undo.push(HistoryEntry {
+        self.undo.push_back(HistoryEntry {
             label: label.into(),
-            value: current.clone(),
+            value: snapshot,
             bytes,
             version: self.current_version,
         });
@@ -91,17 +104,25 @@ impl<T: Clone> UndoStack<T> {
         self.redo.clear();
         self.evict_to_budget();
         while self.undo.len() > self.cap {
-            if let Some(old) = self.undo.first() {
+            if let Some(old) = self.undo.pop_front() {
                 self.undo_bytes = self.undo_bytes.saturating_sub(old.bytes);
             }
-            self.undo.remove(0);
         }
     }
 
+    /// Descarta as entradas mais antigas até caber no orçamento. Sempre mantém
+    /// ao menos uma entrada de undo, mesmo que sozinha exceda o orçamento (o
+    /// último passo reversível não pode ser perdido). Redo obedece o mesmo teto.
     fn evict_to_budget(&mut self) {
         while self.undo_bytes > self.byte_budget && self.undo.len() > 1 {
-            let old = self.undo.remove(0);
-            self.undo_bytes = self.undo_bytes.saturating_sub(old.bytes);
+            if let Some(old) = self.undo.pop_front() {
+                self.undo_bytes = self.undo_bytes.saturating_sub(old.bytes);
+            }
+        }
+        while self.redo_bytes > self.byte_budget && self.redo.len() > 1 {
+            if let Some(old) = self.redo.pop_front() {
+                self.redo_bytes = self.redo_bytes.saturating_sub(old.bytes);
+            }
         }
     }
 
@@ -131,10 +152,10 @@ impl<T: Clone> UndoStack<T> {
         !self.redo.is_empty()
     }
     pub fn undo_label(&self) -> Option<&str> {
-        self.undo.last().map(|e| e.label.as_str())
+        self.undo.back().map(|e| e.label.as_str())
     }
     pub fn redo_label(&self) -> Option<&str> {
-        self.redo.last().map(|e| e.label.as_str())
+        self.redo.back().map(|e| e.label.as_str())
     }
     pub fn depth(&self) -> (usize, usize) {
         (self.undo.len(), self.redo.len())
@@ -161,16 +182,17 @@ impl<T: Clone> UndoStack<T> {
     }
 
     /// Desfaz: guarda estado atual no redo, retorna estado anterior.
+    #[cfg(test)]
     pub fn undo(&mut self, current: T) -> Option<T> {
         let bytes = estimate_bytes(&current);
         self.undo_sized(current, bytes)
     }
 
     pub fn undo_sized(&mut self, current: T, bytes: usize) -> Option<T> {
-        let prev = self.undo.pop()?;
+        let prev = self.undo.pop_back()?;
         self.undo_bytes = self.undo_bytes.saturating_sub(prev.bytes);
         let current_bytes = bytes.max(1);
-        self.redo.push(HistoryEntry {
+        self.redo.push_back(HistoryEntry {
             label: prev.label,
             value: current,
             bytes: current_bytes,
@@ -178,20 +200,22 @@ impl<T: Clone> UndoStack<T> {
         });
         self.current_version = prev.version;
         self.redo_bytes = self.redo_bytes.saturating_add(current_bytes);
+        self.evict_to_budget();
         Some(prev.value)
     }
 
     /// Refaz sem reutilizar uma identidade de estado de outra ramificação.
+    #[cfg(test)]
     pub fn redo(&mut self, current: T) -> Option<T> {
         let bytes = estimate_bytes(&current);
         self.redo_sized(current, bytes)
     }
 
     pub fn redo_sized(&mut self, current: T, bytes: usize) -> Option<T> {
-        let next = self.redo.pop()?;
+        let next = self.redo.pop_back()?;
         self.redo_bytes = self.redo_bytes.saturating_sub(next.bytes);
         let current_bytes = bytes.max(1);
-        self.undo.push(HistoryEntry {
+        self.undo.push_back(HistoryEntry {
             label: next.label,
             value: current,
             bytes: current_bytes,
@@ -214,6 +238,7 @@ impl<T: Clone> UndoStack<T> {
     }
 }
 
+#[cfg(test)]
 fn estimate_bytes<T>(value: &T) -> usize {
     std::mem::size_of_val(value).max(1)
 }
@@ -333,5 +358,28 @@ mod tests {
         assert!(metrics.history_bytes <= 64);
         assert!(metrics.history_entries <= 4);
         assert!(metrics.largest_entry <= 20);
+    }
+
+    #[test]
+    fn push_sized_takes_ownership_without_extra_clone() {
+        let mut st: UndoStack<Vec<u8>> = UndoStack::with_budget(1024);
+        st.push_sized("a", vec![1, 2, 3], 3);
+        assert_eq!(st.depth(), (1, 0));
+        assert_eq!(st.metrics().history_bytes, 3);
+        assert_eq!(st.undo_sized(vec![9], 1), Some(vec![1, 2, 3]));
+    }
+
+    #[test]
+    fn redo_stack_obeys_the_byte_budget() {
+        let mut st: UndoStack<Vec<u8>> = UndoStack::with_budget(64);
+        for i in 0..8u8 {
+            st.push_sized("step", vec![i; 32], 32);
+        }
+        // Desfazer tudo empilha estados de 32 B no redo; o teto de 64 B vale também aqui.
+        for _ in 0..8 {
+            let _ = st.undo_sized(vec![0; 32], 32);
+        }
+        assert!(st.metrics().history_bytes <= 64 + 32, "{:?}", st.metrics());
+        assert!(st.can_redo());
     }
 }

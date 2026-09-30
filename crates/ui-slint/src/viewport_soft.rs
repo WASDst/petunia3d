@@ -298,7 +298,7 @@ impl PetuniaViewport for Software3dViewport {
             .iter()
             .enumerate()
             .filter(|(_, a)| a.visible)
-            .map(|(index, asset)| (index, asset, asset.evaluated_mesh()))
+            .map(|(index, asset)| (index, asset, asset.evaluated_mesh_ref()))
             .collect();
         let scene_light = if state.shading.uses_scene_light() {
             project.active_light()

@@ -33,7 +33,7 @@ pub fn apply_theme(window: &PetuniaSlintShell, theme_id: &str) {
     tokens.set_success(to_slint(ThemeToken::StatusSuccess));
     tokens.set_warning(to_slint(ThemeToken::StatusWarning));
     tokens.set_danger(to_slint(ThemeToken::StatusError));
-    tokens.set_selection(to_slint(ThemeToken::AccentBlue));
+    tokens.set_selection(to_slint(ThemeToken::AccentOrange));
 }
 
 #[cfg(test)]

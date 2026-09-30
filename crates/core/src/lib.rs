@@ -74,12 +74,12 @@ pub use command::{
     ResetCameraCmd, ReverseSplineCmd, RevolveCmd, RotateSplinePointAttachmentCmd,
     SaveActiveAsAssetCmd, SaveProjectAsCmd, SaveProjectCmd, ScaleSelectionCmd, SelectAllCmd,
     SelectLinkedCmd, SeparateSelectionCmd, SetAssetCollectionCmd, SetDecalTransformCmd,
-    SetSelectionDomainCmd, SetSplineClosedCmd, SetSplineHandlesCmd, SlideSplinePointAttachmentCmd,
-    SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
-    ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd,
-    ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, UndoCmd,
-    UnwrapAutoCmd, UpdateProfileCmd, UpdateSplineCmd, UpdateSweepGeneratorCmd, UvPackIslandsCmd,
-    UvProjectFromViewCmd, WeldCmd,
+    SetSelectionDomainCmd, SetShadeSmoothCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
+    SlideSplinePointAttachmentCmd, SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd,
+    ToggleCollectionVisibilityCmd, ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd,
+    ToggleProjectionCmd, ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd,
+    ToggleXRayCmd, UndoCmd, UnwrapAutoCmd, UpdateProfileCmd, UpdateSplineCmd,
+    UpdateSweepGeneratorCmd, UvPackIslandsCmd, UvProjectFromViewCmd, WeldCmd,
 };
 pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename};
 

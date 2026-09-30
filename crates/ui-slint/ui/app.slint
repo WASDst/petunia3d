@@ -1278,12 +1278,22 @@ component InspectorSection inherits Rectangle {
             }
 
             Rectangle {
-                width: 22px;
-                height: 22px;
+                width: 28px;
+                height: 28px;
                 border-radius: 4px;
                 background: root.pin-open ? DesignTokens.accent : (pin-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                border-width: pin-focus.has-focus ? 2px : 0px;
+                border-color: DesignTokens.focus-ring;
                 accessible-role: button;
                 accessible-label: root.pin-open ? "Unpin section" : "Pin section";
+                accessible-checked: root.pin-open;
+                accessible-action-default => { root.pin-toggled(root.section-id); }
+                pin-focus := FocusScope {
+                    key-pressed(event) => {
+                        if event.text == Key.Return || event.text == " " { root.pin-toggled(root.section-id); return accept; }
+                        reject
+                    }
+                }
                 IconDisplay {
                     icon: IconSet.Pin;
                     size: 11px;
@@ -1324,18 +1334,33 @@ component InspectorPill inherits Rectangle {
     in property <bool> active: false;
     in property <string> section-id: "";
     out property <bool> has-hover: pill-touch.has-hover;
+    /// Incrementar move o foco de teclado para esta pílula (usado por F6).
+    in property <int> focus-token: 0;
     callback clicked;
     callback hovered(string);
+    changed focus-token => { pill-focus.focus(); }
 
     accessible-role: button;
     accessible-label: root.semantic-label;
     accessible-checked: root.active;
+    accessible-action-default => { root.clicked(); }
     width: 36px;
     height: 36px;
     border-radius: 9px;
     background: root.active ? DesignTokens.accent : (pill-touch.has-hover ? DesignTokens.surface-hover : transparent);
-    border-width: pill-touch.has-hover || root.active ? 1px : 0px;
+    border-width: pill-touch.has-hover || root.active || pill-focus.has-focus ? (pill-focus.has-focus ? 2px : 1px) : 0px;
     border-color: DesignTokens.focus-ring;
+
+    // Teclado: Tab foca a pílula (e abre o peek), Enter/Espaço fixa ou solta a seção.
+    pill-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        changed has-focus => {
+            if self.has-focus { root.hovered(root.section-id); }
+        }
+    }
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
@@ -2939,6 +2964,9 @@ export component PetuniaSlintShell inherits Window {
         root.model-modifiers-open ||
         root.quick-actions-section-open
     );
+    out property <length> inspector-clearance: (root.inspector-flyout-open && inspector-visible && !compact-shell)
+        ? (min(320px, viewport-region.width - 60px) + 12px)
+        : 0px;
     in-out property <bool> compact-shell: false;
     in-out property <bool> command-search-visible: false;
     in-out property <bool> scene-drawer-visible: false;
@@ -3024,6 +3052,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> uv-stats: "";
     in-out property <string> current-theme: "petunia-dark";
     in-out property <int> settings-tab: 0;
+    // F6 alterna o foco de teclado entre a viewport e a régua do Inspector.
+    in-out property <int> f6-rail-token: 0;
+    in-out property <bool> f6-in-rail: false;
     in-out property <float> ui-scale: 1.0;
     in-out property <string> icon-theme: "outline";
     in-out property <string> active-language: "pt-BR";
@@ -3799,6 +3830,22 @@ export component PetuniaSlintShell inherits Window {
         key-pressed(event) => {
             root.precision-mode = event.modifiers.shift;
             root.snap-mode = event.modifiers.control;
+            if root.settings-visible && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
+                root.settings-tab = event.text == Key.DownArrow ? min(root.settings-tab + 1, 7) : max(root.settings-tab - 1, 0);
+                return accept;
+            }
+            if event.text == Key.F6 {
+                if root.f6-in-rail && !root-focus.has-focus && root.inspector-visible && !root.compact-shell {
+                    root.f6-in-rail = false;
+                    root-focus.focus();
+                } else if root.inspector-visible && !root.compact-shell {
+                    root.f6-in-rail = true;
+                    root.f6-rail-token += 1;
+                } else {
+                    root-focus.focus();
+                }
+                return accept;
+            }
             if event.text == Key.Escape {
                 if root.context-menu-open {
                     root.context-menu-open = false;
@@ -5346,8 +5393,8 @@ export component PetuniaSlintShell inherits Window {
 
                                 ViewportSvgButton { glyph: PetuniaIcons.view-wire; label: root.label-view-wireframe; shortcut: root.shortcuts.view-wireframe; description: "Display mesh edges with transparent wireframe surfaces"; active: root.shading-mode == "wireframe"; clicked => { root.shading-mode-set("wireframe"); } }
                                 ViewportSvgButton { glyph: PetuniaIcons.view-solid; label: root.label-view-solid; shortcut: root.shortcuts.view-solid; description: "Standard matte shaded surfaces with basic directional lighting"; active: root.shading-mode == "solid"; clicked => { root.shading-mode-set("solid"); } }
-                                ViewportSvgButton { glyph: PetuniaIcons.view-material; label: root.label-view-material; shortcut: root.shortcuts.view-material; description: "Preview PBR surface materials, roughness and base colors"; active: root.shading-mode == "material"; clicked => { root.shading-mode-set("material"); } }
-                                ViewportSvgButton { glyph: PetuniaIcons.view-lit; label: root.label-view-lit; shortcut: root.shortcuts.view-lit; description: "Full raytraced or realistic real-time lighting with shadows"; active: root.shading-mode == "rendered"; clicked => { root.shading-mode-set("rendered"); } }
+                                ViewportSvgButton { glyph: PetuniaIcons.view-material; label: root.label-view-material; shortcut: root.shortcuts.view-material; description: "Preview base color, texture and emission with a simple directional light"; active: root.shading-mode == "material"; clicked => { root.shading-mode-set("material"); } }
+                                ViewportSvgButton { glyph: PetuniaIcons.view-lit; label: root.label-view-lit; shortcut: root.shortcuts.view-lit; description: "Lit preview with a single directional light (no shadows or ray tracing)"; active: root.shading-mode == "rendered"; clicked => { root.shading-mode-set("rendered"); } }
 
                                 Rectangle { width: 1px; height: 18px; background: DesignTokens.border; }
 
@@ -5523,7 +5570,7 @@ export component PetuniaSlintShell inherits Window {
 
                     // Barra de domínio de seleção independente no canto superior direito (Decision D3)
                     if active-workspace == "MODEL": domain-bar := Rectangle {
-                        x: (parent.width >= 720px) ? (parent.width - self.width - 118px) : (parent.width - self.width - 14px);
+                        x: (parent.width >= 720px) ? (parent.width - self.width - 118px - root.inspector-clearance) : (parent.width - self.width - 14px - root.inspector-clearance);
                         y: (parent.width >= 720px) ? 14px : 118px;
                         width: domain-row.preferred-width + 12px;
                         height: 38px;
@@ -5534,6 +5581,7 @@ export component PetuniaSlintShell inherits Window {
                         drop-shadow-blur: 10px;
                         drop-shadow-color: #00000055;
                         drop-shadow-offset-y: 2px;
+                        animate x { duration: root.reduced-motion ? 0ms : 180ms; easing: ease-out; }
 
                         domain-row := HorizontalLayout {
                             x: 6px;
@@ -6612,12 +6660,13 @@ export component PetuniaSlintShell inherits Window {
                     // Tripé de navegação no alto à direita. Arrastar orbita a
                     // câmera; clicar em um eixo mantém o alinhamento da vista.
                     Rectangle {
-                        x: view-gizmo-origin-x - 54px;
+                        x: view-gizmo-origin-x - 54px - root.inspector-clearance;
                         y: view-gizmo-origin-y - 54px;
                         width: 108px;
                         height: 108px;
                         clip: true;
                         background: transparent;
+                        animate x { duration: root.reduced-motion ? 0ms : 180ms; easing: ease-out; }
 
                         TouchArea {
                             mouse-cursor: self.pressed ? grabbing : grab;
@@ -7337,8 +7386,7 @@ export component PetuniaSlintShell inherits Window {
                             spacing: 10px;
                             vertical-stretch: 0;
 
-                            InspectorSection {
-                                visible: root.model-parts-open || root.hovered-inspector-section == "parts";
+                            if (root.model-parts-open || root.hovered-inspector-section == "parts"): InspectorSection {
                                 title: root.label-parts;
                                 section-id: "parts";
                                 open: root.model-parts-open || root.hovered-inspector-section == "parts";
@@ -7378,8 +7426,7 @@ export component PetuniaSlintShell inherits Window {
                                 }
                             }
 
-                            if selection-domain == "OBJECT": InspectorSection {
-                                visible: root.model-transform-open || root.hovered-inspector-section == "transform";
+                            if (selection-domain == "OBJECT" && (root.model-transform-open || root.hovered-inspector-section == "transform")): InspectorSection {
                                 title: root.label-tab-transform;
                                 section-id: "transform";
                                 open: root.model-transform-open || root.hovered-inspector-section == "transform";
@@ -7406,8 +7453,7 @@ export component PetuniaSlintShell inherits Window {
                                         scrub-cancelled => { root.transform-scrub-cancelled(); }
                                     }
                             }
-                            InspectorSection {
-                                visible: root.model-material-open || root.hovered-inspector-section == "material";
+                            if (root.model-material-open || root.hovered-inspector-section == "material"): InspectorSection {
                                 title: root.label-tab-material;
                                 section-id: "material";
                                 open: root.model-material-open || root.hovered-inspector-section == "material";
@@ -7470,8 +7516,7 @@ export component PetuniaSlintShell inherits Window {
                                     material-albedo-clear => { root.material-albedo-clear(); }
                                 }
                             }
-                            InspectorSection {
-                                visible: root.model-object-open || root.hovered-inspector-section == "object";
+                            if (root.model-object-open || root.hovered-inspector-section == "object"): InspectorSection {
                                 title: root.label-tab-object;
                                 section-id: "object";
                                 open: root.model-object-open || root.hovered-inspector-section == "object";
@@ -7519,8 +7564,7 @@ export component PetuniaSlintShell inherits Window {
                                     freeze-primitive-requested => { root.freeze-primitive-requested(); }
                                 }
                             }
-                             InspectorSection {
-                                visible: root.model-modifiers-open || root.hovered-inspector-section == "modifiers";
+                             if (root.model-modifiers-open || root.hovered-inspector-section == "modifiers"): InspectorSection {
                                 title: root.label-tab-modifiers;
                                 section-id: "modifiers";
                                 open: root.model-modifiers-open || root.hovered-inspector-section == "modifiers";
@@ -7546,8 +7590,7 @@ export component PetuniaSlintShell inherits Window {
                                      modifier-direction-changed(id, direction) => { root.modifier-direction-changed(id, direction); }
                                  }
                              }
-                             InspectorSection {
-                                visible: root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions";
+                             if (root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions"): InspectorSection {
                                 title: root.label-quick-actions;
                                 section-id: "quick_actions";
                                 open: root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions";
@@ -9088,6 +9131,7 @@ export component PetuniaSlintShell inherits Window {
                         alignment: start;
 
                         InspectorPill {
+                            focus-token: root.f6-rail-token;
                             section-id: "parts";
                             icon: IconSet.Layers3;
                             icon-svg: PetuniaIcons.parts;
@@ -10490,6 +10534,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 0 ? DesignTokens.accent : (tab0-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Aparência";
+                                    accessible-checked: root.settings-tab == 0;
+                                    accessible-action-default => { root.settings-tab = 0; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10503,6 +10551,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 1 ? DesignTokens.accent : (tab1-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Idioma & Região";
+                                    accessible-checked: root.settings-tab == 1;
+                                    accessible-action-default => { root.settings-tab = 1; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10516,6 +10568,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 2 ? DesignTokens.accent : (tab2-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Teclado & Atalhos";
+                                    accessible-checked: root.settings-tab == 2;
+                                    accessible-action-default => { root.settings-tab = 2; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10529,6 +10585,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 3 ? DesignTokens.accent : (tab3-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Acessibilidade";
+                                    accessible-checked: root.settings-tab == 3;
+                                    accessible-action-default => { root.settings-tab = 3; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10542,6 +10602,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 4 ? DesignTokens.accent : (tab4-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Ferramentas";
+                                    accessible-checked: root.settings-tab == 4;
+                                    accessible-action-default => { root.settings-tab = 4; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10555,6 +10619,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 5 ? DesignTokens.accent : (tab5-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Viewport 3D";
+                                    accessible-checked: root.settings-tab == 5;
+                                    accessible-action-default => { root.settings-tab = 5; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10568,6 +10636,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 6 ? DesignTokens.accent : (tab6-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "Plugins";
+                                    accessible-checked: root.settings-tab == 6;
+                                    accessible-action-default => { root.settings-tab = 6; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10581,6 +10653,10 @@ export component PetuniaSlintShell inherits Window {
                                     height: 32px;
                                     border-radius: 4px;
                                     background: root.settings-tab == 7 ? DesignTokens.accent : (tab7-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                    accessible-role: tab;
+                                    accessible-label: "MCP & Automação";
+                                    accessible-checked: root.settings-tab == 7;
+                                    accessible-action-default => { root.settings-tab = 7; }
                                     HorizontalLayout {
                                         padding-left: 10px;
                                         spacing: 8px;
@@ -10835,16 +10911,16 @@ export component PetuniaSlintShell inherits Window {
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 
-                                    Text { text: "Status de Localização (Wave 7 / P3D-157)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Status de Localização"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface;
                                         border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 6px;
-                                            Text { text: "✓ 100% dos TextIds cobertos em pt-BR e en"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
-                                            Text { text: "✓ Zero strings em hardcode na interface"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
+                                            Text { text: "Cobertura parcial: menus e tooltips traduzidos; várias mensagens de status ainda misturam português e inglês."; color: DesignTokens.warning; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Migração de textos literais para TextId em andamento."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                             Text { text: "✓ Fallback automático para inglês quando chave não encontrada"; color: DesignTokens.text-secondary; font-size: 10px; }
-                                            Text { text: "✓ Vocabulário canônico: Point, Round Edge, Fuse, Cut, Connect"; color: DesignTokens.text-muted; font-size: 10px; }
+                                            Text { text: "Vocabulário canônico alvo: Point, Round Edge, Fuse, Cut, Connect."; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }
@@ -11017,7 +11093,7 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 3: VerticalLayout {
                                     spacing: 12px;
 
-                                    Text { text: "Acessibilidade & Inclusão (WCAG 2.2 AA)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Acessibilidade & Inclusão"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
 
                                     Rectangle {
                                         height: 32px; border-radius: 4px;
@@ -11054,14 +11130,14 @@ export component PetuniaSlintShell inherits Window {
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 
-                                    Text { text: "Tecnologia Assistiva (Screen Readers & AccessKit)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Tecnologia Assistiva"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 6px;
-                                            Text { text: "✓ Árvore de acessibilidade AccessKit ativada por padrão"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
-                                            Text { text: "✓ Controles mapeados com accessible-role e accessible-label"; color: DesignTokens.success; font-size: 11px; font-weight: 600; }
-                                            Text { text: "✓ Navegação por foco via Tab / Shift+Tab e ativação por Enter / Barra de espaço"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "Leitor de tela: rótulos e papéis existem só em parte dos controles; conformidade WCAG ainda não foi auditada."; color: DesignTokens.warning; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Teclado: atalhos globais funcionam; foco por Tab entre controles ainda é parcial."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
+                                            Text { text: "Recursos ativos: alto contraste (tema), escala de UI, movimento reduzido e eixos sem depender de cor."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }
@@ -11174,28 +11250,13 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 6: VerticalLayout {
                                     spacing: 12px;
 
-                                    Text { text: "Gerenciador de Extensões & Plugins (P3D-160)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
-                                    Text { text: "Diretório de plugins: ~/.config/petunia3d/plugins/"; color: DesignTokens.text-muted; font-size: 10px; font-family: "monospace"; }
-
+                                    Text { text: "Extensões & Plugins"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 8px;
-                                            HorizontalLayout {
-                                                Text { text: "core.exporter.gltf — Exportador GLTF / GLB nativo"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
-                                            }
-                                            HorizontalLayout {
-                                                Text { text: "core.importer.obj — Importador Wavefront OBJ"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
-                                            }
-                                            HorizontalLayout {
-                                                Text { text: "core.tools.uvpack — Empacotador de Ilhas UV"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                                Rectangle { horizontal-stretch: 1; }
-                                                Text { text: "Ativo"; color: DesignTokens.success; font-size: 10px; font-weight: 700; }
-                                            }
+                                            Text { text: "Nenhuma extensão é carregada por esta interface nesta versão."; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Importar OBJ e exportar glTF são recursos nativos, acessíveis pelo menu Arquivo."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }
@@ -11204,16 +11265,14 @@ export component PetuniaSlintShell inherits Window {
                                 if root.settings-tab == 7: VerticalLayout {
                                     spacing: 12px;
 
-                                    Text { text: "Model Context Protocol (MCP) & IA Colaborativa"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    Text { text: "Automação (MCP)"; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
 
                                     Rectangle {
                                         border-radius: 6px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
                                         VerticalLayout {
                                             padding: 12px; spacing: 8px;
-                                            Text { text: "Protocolo: Model Context Protocol v1.0 / Google Antigravity SDK"; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
-                                            Text { text: "• Status: Servidor MCP integrado e ativo para ferramentas do Petunia3D"; color: DesignTokens.success; font-size: 10px; font-weight: 600; }
-                                            Text { text: "• Segurança: Princípio do menor privilégio, zero vazamento de segredos"; color: DesignTokens.text-secondary; font-size: 10px; }
-                                            Text { text: "• Journal: Todas as mutações do documento são transacionais e auditáveis"; color: DesignTokens.text-secondary; font-size: 10px; }
+                                            Text { text: "O servidor MCP é um componente separado; esta tela não o inicia nem monitora seu estado."; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; wrap: word-wrap; }
+                                            Text { text: "Mutações do documento passam por comandos transacionais com Undo/Redo."; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                                         }
                                     }
                                 }

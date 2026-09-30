@@ -59,7 +59,7 @@ impl ViewportSceneQuery {
             .enumerate()
             .filter(|(_, asset)| asset.visible)
             .filter_map(|(asset_index, asset)| {
-                let mesh = asset.evaluated_mesh();
+                let mesh = asset.evaluated_mesh_ref();
                 let triangles: Vec<_> = mesh
                     .faces
                     .iter()
@@ -270,7 +270,7 @@ impl crate::AppState {
                 .iter()
                 .filter(|asset| asset.visible && !asset.locked)
                 .filter(|asset| {
-                    let mesh = asset.evaluated_mesh();
+                    let mesh = asset.evaluated_mesh_ref();
                     mesh.verts.iter().any(|v| inside(v.vec()))
                         || mesh.edges_unique().into_iter().any(|(a, b)| {
                             edge_inside(mesh.verts[a as usize].vec(), mesh.verts[b as usize].vec())

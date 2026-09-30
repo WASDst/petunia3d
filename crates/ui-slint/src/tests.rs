@@ -6876,8 +6876,15 @@ fn test_model_connect_spin_dissolve_commands() {
     // 1. Dissolve
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     if let Some(mesh) = bridge.state.project.active_mesh_mut() {
-        mesh.faces[0].selected = true;
-        mesh.faces[1].selected = true;
+        // Duas faces que compartilham uma aresta (as faces 0 e 1 do cubo são opostas).
+        let (a, b) = mesh
+            .edges_unique()
+            .into_iter()
+            .find(|&(a, b)| mesh.edge_faces(a, b).len() == 2)
+            .expect("cube has shared edges");
+        for face in mesh.edge_faces(a, b) {
+            mesh.faces[face].selected = true;
+        }
     }
     assert!(bridge.execute_core_command("model.dissolve").is_ok());
 
@@ -8267,10 +8274,10 @@ fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
 
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
 
-    // Verify default states: all sections open, docked, not pinned
+    // Verify default states: rail-first (collapsed to pill), docked, not pinned
     let parts_idx = crate::section_layout::section_index(InspectorSectionId::Parts);
     let transform_idx = crate::section_layout::section_index(InspectorSectionId::Transform);
-    assert!(bridge.section_layouts[parts_idx].open);
+    assert!(!bridge.section_layouts[parts_idx].open);
     assert!(bridge.section_layouts[parts_idx].docked);
     assert!(!bridge.section_layouts[parts_idx].pin_open);
 
@@ -8286,7 +8293,7 @@ fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
     bridge.set_section_pin_open(InspectorSectionId::Parts, true);
     assert!(bridge.section_layouts[parts_idx].pin_open);
 
-    // 3. Close the floating section to pill
+    // 3. Keep the floating section collapsed to its pill
     bridge.set_section_open(InspectorSectionId::Parts, false);
     assert!(!bridge.section_layouts[parts_idx].open);
 

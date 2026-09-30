@@ -571,15 +571,6 @@ fn adaptive_grid_lines(visible_height: f32) -> Vec<LineVertex> {
         .collect()
 }
 
-fn fnv1a_hash(bytes: &[u8]) -> u64 {
-    let mut h = 0xcbf29ce484222325u64;
-    for &b in bytes {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    h
-}
-
 impl Renderer {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let cam_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1372,13 +1363,13 @@ impl Renderer {
         // luz da cena. `smooth` é ortogonal: normais suavizadas por vértice.
         let is_wire = !shading.fills_faces();
         let unlit = false;
-        let smooth = false;
         for obj in &scene.assets {
+            let smooth = scene.is_smooth_shaded(obj.id);
             if !obj.visible {
                 continue;
             }
             let range_start = mv.len() as u32;
-            let mesh = obj.evaluated_mesh();
+            let mesh = obj.evaluated_mesh_ref();
             if !is_wire {
                 let (mat_profile, mat_color, has_emission, emission_color) =
                     if let Some(mat) = obj.material(scene) {
@@ -1613,7 +1604,7 @@ impl Renderer {
         let mut sel_tri: Vec<SelectionVertex> = Vec::new();
         let mut sel_line: Vec<SelectionVertex> = Vec::new();
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh();
+            let mesh = asset.evaluated_mesh_ref();
             let domain = edit_domain;
             // Seleção: laranja quente com alpha, como Blender/C4D. Legível
             // sobre qualquer shading porque o shader não aplica luz.
@@ -1720,7 +1711,7 @@ impl Renderer {
         let hover_line = [0.49f32, 0.86, 1.0, 0.85];
         let hover_tri = [0.49f32, 0.86, 1.0, 0.18];
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh();
+            let mesh = asset.evaluated_mesh_ref();
             match hover {
                 petunia_core::HoverTarget::Vertex(index) => {
                     if let Some(vertex) = mesh.verts.get(index as usize) {
@@ -2050,13 +2041,14 @@ impl Renderer {
         self.texture_upload_scratch = scratch;
     }
 
-    /// Upload dos pixels + opacidade por ref (chamado todo frame; wgpu ignora se igual via hash cache).
+    /// Upload dos pixels + opacidade por ref (chamado todo frame; pixels só sobem quando a revisão muda).
     pub fn upload_ref_pixels(&self, queue: &wgpu::Queue, refs: &[petunia_core::ReferenceImage]) {
         for (i, r) in refs.iter().enumerate() {
             let Some(slot) = self.ref_gpu.get(i) else {
                 continue;
             };
-            let h = fnv1a_hash(&r.rgba);
+            // Revisão monotônica em vez de FNV sobre todos os pixels a cada frame.
+            let h = r.revision;
             if !r.rgba.is_empty()
                 && (r.width, r.height) == (slot.width, slot.height)
                 && r.rgba.len() == slot.len

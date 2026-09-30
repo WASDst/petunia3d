@@ -458,6 +458,7 @@ fn persistent_profile_sweep_and_bake_are_transactional() {
     let path_id = path.id;
     let generator_id = generator.id;
 
+    let clock_before = state.project.project.revision_clock();
     state
         .dispatch(&CreateProfileCmd {
             spline: profile_spline,
@@ -466,8 +467,14 @@ fn persistent_profile_sweep_and_bake_are_transactional() {
         .unwrap();
     assert_eq!(state.project.profiles.len(), 1);
     assert_eq!(state.render.last_dirty_reason, Some(DirtyReason::CurveEdit));
-    assert_eq!(state.project.project.revision_clock()[9], 1);
-    assert_eq!(state.project.project.revision_clock()[10], 1);
+    assert_eq!(
+        state.project.project.revision_clock()[9],
+        clock_before[9] + 1
+    );
+    assert_eq!(
+        state.project.project.revision_clock()[10],
+        clock_before[10] + 1
+    );
 
     state.dispatch(&CreateSplineCmd { spline: path }).unwrap();
     state
@@ -1885,6 +1892,7 @@ fn test_project_from_reference_and_bake_commands() {
         locked: false,
         rotation: 0.0,
         xray: false,
+        revision: petunia_core::ReferenceImage::next_revision(),
     });
 
     // 3. Project from reference with active reference image
@@ -1971,4 +1979,130 @@ fn test_decal_commands_transform_and_bake() {
         stack.layers.iter().find(|l| l.id == decal_id).unwrap().kind,
         petunia_project::paint_layers::LayerKind::Decal(_)
     ));
+}
+
+#[test]
+fn profile_owned_spline_rejects_edits_that_break_planarity() {
+    let mut state = AppState::default();
+    let mut spline = SplineResource::new("Profile curve", SplineInterpolation::CubicBezier);
+    let first = SplinePoint::new([0.0, 0.0, 0.0]);
+    let first_id = first.id;
+    spline.add_point(first).unwrap();
+    let spline_id = spline.id;
+    let profile = ProfileResource::new("Planar", spline_id, ProfileWorkplane::default());
+    state
+        .dispatch(&CreateProfileCmd { spline, profile })
+        .unwrap();
+    let depth = state.project.undo.depth();
+
+    // Sair do plano do Profile por qualquer comando de spline deve ser recusado.
+    assert!(
+        state
+            .dispatch(&MoveSplinePointCmd {
+                spline_id,
+                point_id: first_id,
+                position: [0.0, 0.0, 0.5],
+            })
+            .is_err()
+    );
+    assert!(
+        state
+            .dispatch(&AddSplinePointCmd {
+                spline_id,
+                index: None,
+                point: SplinePoint::new([1.0, 0.0, 0.25]),
+            })
+            .is_err()
+    );
+    assert!(
+        state
+            .dispatch(&SetSplineHandlesCmd {
+                spline_id,
+                point_id: first_id,
+                handle_in: [0.0, 0.0, 0.0],
+                handle_out: [0.5, 0.0, 0.5],
+                mode: SplineHandleMode::Broken,
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.undo.depth(), depth);
+
+    // Edições planares continuam funcionando.
+    state
+        .dispatch(&MoveSplinePointCmd {
+            spline_id,
+            point_id: first_id,
+            position: [0.5, 0.5, 0.0],
+        })
+        .unwrap();
+    assert_eq!(state.project.undo.depth().0, depth.0 + 1);
+}
+
+#[test]
+fn no_op_command_creates_no_history_entry_and_keeps_session() {
+    use petunia_core::command::PrimitiveKind;
+    let mut state = AppState::default();
+    assert!(state.begin_primitive(PrimitiveKind::Cube, None));
+    let had_session = state.session.primitive_session.is_some();
+    assert!(had_session);
+    state.finalize_primitive_session();
+    // Com uma única face selecionada nenhuma aresta compartilhada entra no
+    // filtro de costura, então o comando não tem o que alterar.
+    state.session.uv_selected.insert(0);
+    let depth = state.project.undo.depth();
+    let clock = state.project.project.revision_clock();
+    let result = state.dispatch(&UvStitchCmd);
+    assert!(
+        matches!(result, Err(CommandError::NoChange(_))),
+        "{result:?}"
+    );
+    assert_eq!(state.project.undo.depth(), depth);
+    assert_eq!(state.project.project.revision_clock(), clock);
+}
+
+#[test]
+fn failed_dispatch_restores_primitive_creation_session() {
+    use petunia_core::command::PrimitiveKind;
+    let mut state = AppState::default();
+    assert!(state.begin_primitive(PrimitiveKind::Cube, None));
+    assert!(state.session.primitive_session.is_some());
+    let last = state.session.last_primitive;
+    // Dispatch destrutivo que falha depois de congelar a primitiva: a sessão
+    // de criação precisa voltar junto com o projeto.
+    let result = state.dispatch(&DissolveCmd);
+    if result.is_err() {
+        assert!(state.session.primitive_session.is_some());
+        assert_eq!(state.session.last_primitive, last);
+    }
+}
+
+#[test]
+fn shade_smooth_is_per_object_transactional_and_persistent() {
+    use petunia_core::command::SetShadeSmoothCmd;
+    let mut state = AppState::default();
+    let id = state.project.active().unwrap().id;
+    assert!(!state.project.project.is_smooth_shaded(id));
+    let normals_before = state.project.project.normal_revision;
+
+    state.dispatch(&SetShadeSmoothCmd { smooth: true }).unwrap();
+    assert!(state.project.project.is_smooth_shaded(id));
+    assert!(state.project.project.normal_revision > normals_before);
+    // Repetir é no-op: sem entrada de histórico.
+    let depth = state.project.undo.depth();
+    assert!(state.dispatch(&SetShadeSmoothCmd { smooth: true }).is_err());
+    assert_eq!(state.project.undo.depth(), depth);
+
+    // Persistência por objeto.
+    let bytes = petunia_project::format::encode_zip(&state.project.project).unwrap();
+    let back = petunia_project::format::load_bytes(&bytes).unwrap();
+    assert!(back.is_smooth_shaded(id));
+
+    assert!(state.undo());
+    assert!(!state.project.project.is_smooth_shaded(id));
+    assert!(state.redo());
+    assert!(state.project.project.is_smooth_shaded(id));
+    state
+        .dispatch(&SetShadeSmoothCmd { smooth: false })
+        .unwrap();
+    assert!(!state.project.project.is_smooth_shaded(id));
 }
