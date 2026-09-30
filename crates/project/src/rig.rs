@@ -10,7 +10,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 /// Erros estruturados do subsistema de Skeleton & Rigging.
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Clone, Error, PartialEq)]
 pub enum RigError {
     #[error("Osso com ID {0} não encontrado")]
     BoneNotFound(u32),
@@ -444,9 +444,9 @@ impl Skeleton {
         }
     }
 
-    /// Calcula as matrizes de skinning finais para uma pose fornecida.
-    /// `pose_transforms` deve possuir uma transformação para cada osso (na mesma ordem de `self.bones`).
-    pub fn compute_skinning_matrices(
+    /// Matrizes **mundiais** de cada osso (na ordem de `self.bones`) para uma pose
+    /// de transformações locais. `pose_transforms` tem uma entrada por osso.
+    pub fn world_pose_matrices(
         &self,
         pose_transforms: &[Transform3D],
     ) -> Result<Vec<Mat4>, RigError> {
@@ -483,18 +483,31 @@ impl Skeleton {
             }
         }
 
-        let mut skinning_matrices = Vec::with_capacity(self.bones.len());
-        for b in &self.bones {
-            let world_pose = world_pose_matrices
-                .get(&b.id)
-                .copied()
-                .unwrap_or(Mat4::IDENTITY);
-            let inv_bind = Mat4::from_cols_array(&b.inverse_bind_matrix);
-            let skinning_mat = world_pose * inv_bind;
-            skinning_matrices.push(skinning_mat);
-        }
+        Ok(self
+            .bones
+            .iter()
+            .map(|b| {
+                world_pose_matrices
+                    .get(&b.id)
+                    .copied()
+                    .unwrap_or(Mat4::IDENTITY)
+            })
+            .collect())
+    }
 
-        Ok(skinning_matrices)
+    /// Calcula as matrizes de skinning finais para uma pose fornecida.
+    /// `pose_transforms` deve possuir uma transformação para cada osso (na mesma ordem de `self.bones`).
+    pub fn compute_skinning_matrices(
+        &self,
+        pose_transforms: &[Transform3D],
+    ) -> Result<Vec<Mat4>, RigError> {
+        let world = self.world_pose_matrices(pose_transforms)?;
+        Ok(self
+            .bones
+            .iter()
+            .zip(world)
+            .map(|(b, world_pose)| world_pose * Mat4::from_cols_array(&b.inverse_bind_matrix))
+            .collect())
     }
 }
 

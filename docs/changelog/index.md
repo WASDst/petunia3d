@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F0.5 — IK mínimo (P3D-169) (30/09/2026)
+- **Solvers puros** (`petunia_project::ik`): `solve_two_bone` (analítico com pole vector e soft IK exponencial), `solve_fabrik` (raiz fixa, comprimentos preservados) e look-at; alvos inalcançáveis/próximos demais são limitados sem NaN.
+- **Aplicação na pose**: `solve_chain` altera somente as rotações locais dos ossos da cadeia (swing até a nova direção, preservando a torção) com mistura por `weight`; `Skeleton::world_pose_matrices` exposto.
+- **Dados**: `IkChain` (`Project::ik_chains`, append-only) com validação (ossos existentes e contíguos) e `IkChain::two_bone_leg` a partir dos Rig Roles; poda em `validate()`.
+- **Testes**: alcance, comprimentos, pole, continuidade do soft IK, FABRIK/look-at no esqueleto, pesos, determinismo e persistência. Limites angulares e comandos ficam para a sequência da F0.
+
 ### Animate F0.4 — Rig Roles (P3D-169, dados) (30/09/2026)
 - **Domínio** (`petunia_project::rig_roles`): `RigRole` (Root, Hips, Spine(n), Chest, Neck, Head, Jaw, Leg/Arm por membro e parte, Wing, Tail(n), Tentacle, Wiggle(n)) e `RigRoleMap` com atribuição validada (osso existente, papel único por osso — o erro nomeia o dono), pernas completas, cadeias de coluna/cauda e `RigRequirement` com mensagens legíveis.
 - **Inferência por nomes**: presets Petunia (humanoide, quadrúpede, multi-leg com 2–16 pernas), Mixamo e nomes genéricos; nomes desconhecidos ficam sem papel.

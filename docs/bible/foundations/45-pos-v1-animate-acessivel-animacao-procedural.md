@@ -40,7 +40,7 @@ Auditoria estática do código em `main` (`e806225`); nada foi compilado para es
 | AN-05 | Retargeting (P3D-138) | `PARTIALLY_COMPLIANT` | `RetargetProfile::mixamo_standard`; sem importação de clipes externos |
 | AN-06 | Animation Asset Library (P3D-139) | `RUDIMENTARY` | `AnimationLibrary` tem 2 clipes canônicos; o "walk" anima apenas 2 ossos com 3 keys (é uma demo) |
 | AN-07 | Animation Workspace (P3D-066) | `MISSING` no produto | UI existe só no egui legado atrás da feature `animation-workspace` (`crates/ui/src/modules_ui/animation_ui.rs`); `Workspace::Animate` é feature-gated no core; o Slint não tem referência a Bone/Skeleton |
-| AN-08 | IK e constraints | `MISSING` | nenhum solver no repositório |
+| AN-08 | IK e constraints | `MISSING` → `PARTIALLY_COMPLIANT` (F0.5, 2026-09-30) | `petunia_project::ik`: `solve_two_bone` (analítico, pole, soft IK), `solve_fabrik`, look-at e `solve_chain` sobre a pose (só rotações locais dos ossos da cadeia; preserva comprimentos e torção); `IkChain` como dado em `Project::ik_chains` (append-only, validado e podado). Determinístico e testado (alcance, clamps, pole, continuidade do soft IK, pesos). Pendente: comandos (F0.6), limites angulares no FABRIK, foot planting por fase de contato (F1) |
 | AN-09 | Animação procedural | `MISSING` | **não constava do roadmap**; "procedural" no caderno referia-se só a geometria (P3D-161/168) |
 | AN-10 | Secondary motion (spring/wiggle) | `MISSING` | — |
 | AN-11 | Ghosts e trajetórias | `MISSING` | — |

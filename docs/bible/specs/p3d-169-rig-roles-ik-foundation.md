@@ -3,7 +3,7 @@
 <aside>
 🦴
 
-Estado: **SPEC DRAFT (2026-09-30)** · Prioridade: P2 · Era 3. Fundação headless do Animate procedural ([cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md)). Sem UI própria: consumida por P3D-170, P3D-173 e pelo retarget (P3D-138).
+Estado: **SPEC DRAFT (2026-09-30); dados de Rig Roles e solvers de IK implementados no domínio (F0.4/F0.5), sem comandos nem UI** · Prioridade: P2 · Era 3. Fundação headless do Animate procedural ([cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md)). Sem UI própria: consumida por P3D-170, P3D-173 e pelo retarget (P3D-138).
 
 </aside>
 

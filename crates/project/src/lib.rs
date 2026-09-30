@@ -69,6 +69,7 @@ pub mod autosave;
 pub mod export;
 pub mod format;
 pub mod gltf_rig;
+pub mod ik;
 pub mod import_gltf;
 pub mod import_obj;
 pub mod io_atomic;
@@ -92,6 +93,7 @@ pub use animation::{
 };
 pub use autosave::{AutosaveConfig, AutosaveService, RecoveryInfo, SessionLockInfo};
 pub use export::{ExportError, export_gltf, export_obj};
+pub use ik::{IkChain, IkError, IkOutcome, IkSolver, solve_chain, solve_fabrik, solve_two_bone};
 pub use import_gltf::{GlbMeshes, GltfImportError, GltfSummary, import_glb_bytes, parse_gltf_json};
 pub use import_obj::{ObjImportError, import_obj_bytes};
 pub use io_atomic::{AtomicIoError, TempScope, atomic_write};
@@ -895,6 +897,9 @@ pub struct Project {
     /// para não deslocar o layout postcard legado, que embute `Vec<Skeleton>`.
     #[serde(default)]
     pub rig_roles: Vec<RigRoleMap>,
+    /// Cadeias de IK (P3D-169). Append-only, como `rig_roles`.
+    #[serde(default)]
+    pub ik_chains: Vec<IkChain>,
 }
 
 impl Project {
@@ -944,6 +949,7 @@ impl Default for Project {
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
             rig_roles: Vec::new(),
+            ik_chains: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1402,6 +1408,7 @@ impl Project {
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
             rig_roles: Vec::new(),
+            ik_chains: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1521,6 +1528,7 @@ impl Project {
     pub fn remove_skeleton(&mut self, id: Uuid) {
         self.skeletons.retain(|s| s.id != id);
         self.rig_roles.retain(|m| m.skeleton_id != id);
+        self.ik_chains.retain(|c| c.skeleton_id != id);
         for a in &mut self.assets {
             if a.skeleton_id == Some(id) {
                 a.skeleton_id = None;
@@ -1963,6 +1971,14 @@ impl Project {
             .retain(|id| asset_ids.contains(id));
         self.smooth_shaded_assets.sort_unstable();
         self.smooth_shaded_assets.dedup();
+        // Cadeias de IK: só as válidas (esqueleto existente, ossos contíguos).
+        let skeletons = &self.skeletons;
+        self.ik_chains.retain(|c| {
+            skeletons
+                .iter()
+                .find(|s| s.id == c.skeleton_id)
+                .is_some_and(|s| c.validate(s).is_ok())
+        });
         // Papéis de rig: um mapa por esqueleto existente, sem ossos fantasmas.
         let mut seen_skeletons = std::collections::HashSet::new();
         let skeletons = &self.skeletons;
