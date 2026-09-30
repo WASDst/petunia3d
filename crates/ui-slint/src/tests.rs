@@ -590,26 +590,40 @@ fn closing_one_drawer_does_not_close_or_leave_a_ghost_for_another() {
 }
 
 #[test]
-fn asset_drawer_search_sort_and_zoom_do_not_mutate_the_document() {
+fn asset_library_holds_prefabs_not_scene_objects() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::AddPrimitive(petunia_core::PrimitiveKind::Sphere));
     bridge.state.mark_document_clean();
-    let total = bridge.view_model().scene_items.len();
-    assert!(total >= 2);
+    let scene = bridge.state.project.assets.len();
+    assert!(scene >= 2);
+    // Sem prefabs salvos a biblioteca fica vazia, mesmo com objetos na cena.
+    assert!(bridge.view_model().prefab_items.is_empty());
+
+    bridge.apply(UiIntent::SaveActiveAsAsset);
+    assert_eq!(bridge.state.project.assets.len(), scene, "a cena não muda");
+    let items = bridge.view_model().prefab_items;
+    assert_eq!(items.len(), 1);
+    assert!(items[0].thumbnail.is_some(), "miniatura renderizada");
+
     assert!(bridge.set_asset_query("sphere"));
-    let filtered = bridge.view_model();
-    assert_eq!(filtered.asset_items.len(), 1);
-    assert!(
-        filtered.asset_items[0]
-            .name
-            .to_lowercase()
-            .contains("sphere")
-    );
-    assert_eq!(filtered.scene_items.len(), total);
+    assert_eq!(bridge.view_model().prefab_items.len(), 1);
+    assert!(bridge.set_asset_query("cube"));
+    assert!(bridge.view_model().prefab_items.is_empty());
+    assert!(bridge.set_asset_query(""));
+
+    let id = items[0].id.clone();
+    assert!(bridge.set_prefab_favorite(&id, true));
+    assert!(bridge.set_asset_only_favorites(true));
+    assert_eq!(bridge.view_model().prefab_items.len(), 1);
+    assert!(bridge.place_prefab(&id));
+    assert_eq!(bridge.state.project.assets.len(), scene + 1);
+    assert_eq!(bridge.view_model().prefab_items[0].instances, 1);
+    assert!(bridge.delete_prefab(&id));
+    assert!(bridge.view_model().prefab_items.is_empty());
+
     assert!(bridge.set_asset_sort_by_name(true));
     assert!(bridge.set_asset_thumbnail_size(120.0));
     assert_eq!(bridge.view_model().asset_thumbnail_size, 120.0);
-    assert!(!bridge.state.is_document_dirty());
     assert!(!bridge.set_asset_thumbnail_size(f32::NAN));
 }
 
@@ -4474,20 +4488,19 @@ fn camera_projection_and_reset() {
 }
 
 #[test]
-fn save_active_as_asset_intent_creates_project_asset() {
+fn save_active_as_asset_intent_creates_a_prefab_not_a_scene_object() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let initial_count = bridge.state.project.assets.len();
     assert_eq!(initial_count, 1);
 
     bridge.apply(UiIntent::SaveActiveAsAsset);
-    assert_eq!(bridge.state.project.assets.len(), initial_count + 1);
-    let saved_asset = &bridge.state.project.assets[1];
-    assert!(saved_asset.name.contains("(Asset)"));
+    assert_eq!(bridge.state.project.assets.len(), initial_count);
+    assert_eq!(bridge.state.project.prefabs.len(), 1);
     assert!(
         bridge
             .view_model()
             .status_message
-            .contains("biblioteca de assets")
+            .contains(&bridge.state.project.prefabs[0].name)
     );
 }
 
@@ -4518,7 +4531,12 @@ fn new_commands_execute_via_command_id() {
     assert_eq!(bridge.state.session.selection.assets.len(), 2);
 
     bridge.execute_command(CommandId::SaveActiveAsAsset);
-    assert_eq!(bridge.state.project.assets.len(), 3);
+    assert_eq!(
+        bridge.state.project.assets.len(),
+        2,
+        "prefab não entra na cena"
+    );
+    assert_eq!(bridge.state.project.prefabs.len(), 1);
 }
 
 #[test]

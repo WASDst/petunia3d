@@ -5,6 +5,16 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Redesenho da GUI: temas, i18n, movimento, painéis flutuantes e Prefabs (30/09/2026)
+- **Revisão de baseline (cap. 36, 2026-09-30)**: painéis flutuantes não modais, até 2 viewports opcionais, Asset Library dupla, Paint+UV unificados com Texture Graph futuro, tema claro oficial, i18n obrigatório e sistema de ícones único. A divisão de viewport, o Paint+UV unificado e o Texture Graph estão **decididos, não implementados**.
+- **Temas**: novo `petunia-light` (neutros quentes, sem branco puro, WCAG AA), dark alinhado ao accent violeta do baseline, High Contrast com texto legível sobre accent. `ShellColors`/`ShellToken` cobrem os tokens de shell; o tema escolhido persiste em `preferences.toml` (`theme_id`). Testes de contraste e de contrato pack-em-disco == embutido. O fundo do viewport 3D ainda não segue o tema.
+- **i18n**: 633 literais do `app.slint` migrados para `Tr.t("sl.*")` (en e pt-BR, mesma paridade) com teste-guarda de chaves. Restam textos montados em Rust (status) e atalhos físicos escritos à mão.
+- **Movimento e feedback**: tokens `Motion` (100/140/180 ms, respeita movimento reduzido), hover/pressed/foco animados, seções do Inspector com altura animada, slider Petunia próprio, toast de status por severidade, menus com separadores/itens desativados/check e navegação por teclado.
+- **Painéis flutuantes**: Reference Manager e Settings deixam de ser modais (sem scrim), arrastáveis pelo cabeçalho, duplo clique recentraliza; Reference Manager compacto à esquerda.
+- **Ícones**: o gerador transforma os recortes falsos (`#252735`) em máscaras SVG reais; os packs ficam monocromáticos em `currentColor` e o Slint os tinge por token (legíveis no tema claro).
+- **Asset Library com Prefabs**: novo modelo `Prefab`/`PrefabLink` no projeto (persistido, retrocompatível), separado da cena; "Salvar seleção como prefab" não cria objetos na cena, instanciar é desfazível, instâncias desatualizadas são detectáveis. A gaveta mostra miniaturas renderizadas, busca, favoritos, ordenação, colocar/atualizar/excluir. O workspace de gestão completo (catálogos, tags, renomear inline) permanece pendente.
+- **Correções**: teste desatualizado de Smooth shading; `viewport_shortcut_drag_parametric_hover_and_navigation_gesture` já falhava antes desta rodada e segue vermelho.
+
 ### Iconografia vetorial Petunia oficial e temas configuráveis (28/09/2026)
 - **Integração nativa no shell Slint**: Os 249 ícones vetoriais SVG oficiais criados para o Petunia3D foram compilados em catálogo declarativo dinâmico (`PetuniaIcons` em `petunia_icons.slint`), fornecendo suporte unificado a duas variantes estéticas: `outline` (traço) e `filled` (preenchido).
 - **Troca dinâmica e reatividade imediata**: Alternância de estilo em tempo de execução via seletor em Configurações -> Aparência, com preview dos dois estilos e callback reativo conectado ao singleton global Slint sem reinicialização.

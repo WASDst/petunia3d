@@ -78,6 +78,7 @@ pub mod paint_layers;
 pub mod palette;
 pub mod path_generator;
 pub mod pipeline;
+pub mod prefab;
 pub mod profile;
 pub mod rig;
 pub mod spline;
@@ -885,6 +886,13 @@ pub struct Project {
     /// o layout postcard legado, que embute `Vec<Asset>`.
     #[serde(default)]
     pub smooth_shaded_assets: Vec<Uuid>,
+    /// Biblioteca de prefabs (snapshots reutilizáveis, separados da cena).
+    /// Append-only: fica após todos os campos existentes (layout postcard).
+    #[serde(default)]
+    pub prefabs: Vec<prefab::Prefab>,
+    /// Vínculo instância → prefab de origem.
+    #[serde(default)]
+    pub prefab_links: Vec<prefab::PrefabLink>,
 }
 
 impl Project {
@@ -933,6 +941,8 @@ impl Default for Project {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            prefabs: Vec::new(),
+            prefab_links: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1390,6 +1400,8 @@ impl Project {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            prefabs: Vec::new(),
+            prefab_links: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),

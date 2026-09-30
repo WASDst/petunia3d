@@ -18,6 +18,21 @@ pub struct SceneItemModel {
     pub tris: usize,
 }
 
+/// Prefab da biblioteca já resumido para a grade do Asset Library.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrefabItemModel {
+    pub id: String,
+    pub name: String,
+    pub parts: usize,
+    pub tris: usize,
+    pub verts: usize,
+    pub favorite: bool,
+    pub instances: usize,
+    pub tags: String,
+    /// RGBA8 `THUMBNAIL_SIZE²`; `None` = sem geometria para renderizar.
+    pub thumbnail: Option<std::sync::Arc<Vec<u8>>>,
+}
+
 /// Ação rápida do Inspector MODEL derivada do Command Registry.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuickActionModel {
@@ -256,7 +271,8 @@ pub struct ShellViewModel {
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
     pub parts_row_height: f32,
-    pub asset_items: Vec<SceneItemModel>,
+    pub prefab_items: Vec<PrefabItemModel>,
+    pub asset_only_favorites: bool,
     pub asset_query: String,
     pub asset_sort_by_name: bool,
     pub asset_thumbnail_size: f32,
@@ -1135,7 +1151,8 @@ impl ShellViewModel {
             parts_selected_only: false,
             parts_sort_by_name: false,
             parts_row_height: 28.0,
-            asset_items: Vec::new(),
+            prefab_items: Vec::new(),
+            asset_only_favorites: false,
             asset_query: String::new(),
             asset_sort_by_name: false,
             asset_thumbnail_size: state.ui.asset_thumbnail_size,

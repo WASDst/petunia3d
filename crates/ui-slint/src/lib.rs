@@ -16,6 +16,7 @@ mod input;
 pub mod numeric;
 pub mod overlay;
 pub mod theme;
+pub mod thumbnail;
 pub mod tr;
 pub mod viewport_gpu;
 pub mod viewport_soft;
@@ -506,6 +507,10 @@ pub type DecalDragInitial = (f32, f32, [f32; 2], [f32; 2], f32);
 
 /// Bridge entre callbacks Slint e a aplicação. O bridge só aplica intenção
 /// semântica ao `AppState`; algoritmos geométricos permanecem no core/commands.
+/// Miniaturas RGBA por (prefab, revisão); `None` = prefab sem geometria.
+type PrefabThumbCache =
+    std::collections::HashMap<(uuid::Uuid, u32), Option<std::sync::Arc<Vec<u8>>>>;
+
 pub struct SlintUiBridge<V: PetuniaViewport> {
     pub state: AppState,
     pub viewport: V,
@@ -514,6 +519,10 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub asset_library_visible: bool,
     pub asset_query: String,
     pub asset_sort_by_name: bool,
+    /// Biblioteca: mostra só prefabs favoritos.
+    pub asset_only_favorites: bool,
+    /// Miniaturas renderizadas por (prefab, revisão); `None` = sem geometria.
+    prefab_thumbs: std::cell::RefCell<PrefabThumbCache>,
     pub parts_query: String,
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
@@ -797,6 +806,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             asset_library_visible: false,
             asset_query: String::new(),
             asset_sort_by_name: false,
+            asset_only_favorites: false,
+            prefab_thumbs: Default::default(),
             parts_query: String::new(),
             parts_selected_only: false,
             parts_sort_by_name: false,
@@ -1329,10 +1340,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 );
             }
             UiIntent::SaveActiveAsAsset => {
-                if self.state.save_active_as_asset() {
-                    self.state
-                        .set_status("Ativo salvo na biblioteca de assets.");
-                }
+                // "Save as asset" cria um prefab da biblioteca; a cena não muda.
+                self.state.save_selection_as_prefab(None);
             }
             UiIntent::AssignMaterialSlot(slot) => {
                 self.assign_material_slot(slot);
@@ -5487,6 +5496,81 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.parts_row_height = size;
         true
+    }
+
+    pub fn set_asset_only_favorites(&mut self, only: bool) -> bool {
+        if self.asset_only_favorites == only {
+            return false;
+        }
+        self.asset_only_favorites = only;
+        true
+    }
+
+    /// Prefabs da biblioteca filtrados/ordenados pela busca atual, com miniatura em cache.
+    fn prefab_item_models(&self) -> Vec<view_model::PrefabItemModel> {
+        use petunia_project::model_library::{ModelLibraryQuery, ModelLibrarySort};
+        let query = ModelLibraryQuery {
+            search: self.asset_query.clone(),
+            only_favorites: self.asset_only_favorites,
+            sort: if self.asset_sort_by_name {
+                ModelLibrarySort::NameAsc
+            } else {
+                ModelLibrarySort::IndexAsc
+            },
+            ..Default::default()
+        };
+        let project = &self.state.project;
+        let mut thumbs = self.prefab_thumbs.borrow_mut();
+        let live: std::collections::HashSet<(uuid::Uuid, u32)> =
+            project.prefabs.iter().map(|p| (p.id, p.revision)).collect();
+        thumbs.retain(|key, _| live.contains(key));
+        project
+            .prefab_summaries(&query)
+            .into_iter()
+            .map(|summary| {
+                let prefab = &project.prefabs[summary.original_index];
+                let thumbnail = thumbs
+                    .entry((prefab.id, prefab.revision))
+                    .or_insert_with(|| {
+                        thumbnail::render_prefab_thumbnail(prefab).map(std::sync::Arc::new)
+                    })
+                    .clone();
+                view_model::PrefabItemModel {
+                    id: summary.id.to_string(),
+                    name: summary.name,
+                    parts: summary.parts,
+                    tris: summary.triangles,
+                    verts: summary.vertices,
+                    favorite: summary.favorite,
+                    instances: summary.instances,
+                    tags: summary.tags.join(", "),
+                    thumbnail,
+                }
+            })
+            .collect()
+    }
+
+    /// Instancia o prefab no 3D Cursor e seleciona as cópias.
+    pub fn place_prefab(&mut self, id: &str) -> bool {
+        let Ok(prefab) = uuid::Uuid::parse_str(id) else {
+            return false;
+        };
+        self.sync_viewport_context();
+        self.state.instantiate_prefab(prefab, None)
+    }
+
+    pub fn delete_prefab(&mut self, id: &str) -> bool {
+        uuid::Uuid::parse_str(id).is_ok_and(|prefab| self.state.delete_prefab(prefab))
+    }
+
+    pub fn set_prefab_favorite(&mut self, id: &str, favorite: bool) -> bool {
+        uuid::Uuid::parse_str(id)
+            .is_ok_and(|prefab| self.state.set_prefab_favorite(prefab, favorite))
+    }
+
+    pub fn update_prefab(&mut self, id: &str) -> bool {
+        uuid::Uuid::parse_str(id)
+            .is_ok_and(|prefab| self.state.update_prefab_from_selection(prefab))
     }
 
     pub fn set_asset_sort_by_name(&mut self, sort_by_name: bool) -> bool {
@@ -10390,21 +10474,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.asset_query = self.asset_query.clone();
         vm.asset_sort_by_name = self.asset_sort_by_name;
         vm.asset_thumbnail_size = self.state.ui.asset_thumbnail_size;
-        let query = self.asset_query.trim().to_lowercase();
-        vm.asset_items = vm
-            .scene_items
-            .iter()
-            .filter(|item| query.is_empty() || item.name.to_lowercase().contains(&query))
-            .cloned()
-            .collect();
-        if self.asset_sort_by_name {
-            vm.asset_items.sort_by(|a, b| {
-                a.name
-                    .to_lowercase()
-                    .cmp(&b.name.to_lowercase())
-                    .then_with(|| a.id.cmp(&b.id))
-            });
-        }
+        vm.asset_only_favorites = self.asset_only_favorites;
+        vm.prefab_items = self.prefab_item_models();
         vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
         vm.selection_overlay = compute_selection_overlay(
             &self.state,

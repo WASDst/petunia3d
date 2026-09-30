@@ -120,6 +120,8 @@ impl LegacyProjectWithSplines {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            prefabs: Vec::new(),
+            prefab_links: Vec::new(),
         }
     }
 }
@@ -188,6 +190,8 @@ impl LegacyProjectBeforeSplines {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            prefabs: Vec::new(),
+            prefab_links: Vec::new(),
         }
     }
 }
@@ -744,6 +748,32 @@ mod tests {
         assert!(loaded.profiles.is_empty());
         assert!(loaded.path_generators.is_empty());
         assert_eq!(loaded.procedural_revision, 0);
+    }
+
+    #[test]
+    fn prefab_library_roundtrips_and_old_documents_default_to_empty() {
+        let mut p = Project::new();
+        let cube_id = p.assets[0].id;
+        let prefab_id = p.create_prefab(&[cube_id], Some("Crate")).unwrap();
+        assert!(p.set_prefab_favorite(prefab_id, true));
+        let instance = p.instantiate_prefab(prefab_id, [3.0, 0.0, 0.0])[0];
+
+        let path = std::env::temp_dir().join("petunia_test_prefab_roundtrip.petunia");
+        save(&p, &path).unwrap();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.prefabs.len(), 1);
+        assert_eq!(loaded.prefabs[0].name, "Crate");
+        assert!(loaded.prefabs[0].favorite);
+        assert_eq!(loaded.prefab_instance_count(prefab_id), 1);
+        assert!(loaded.assets.iter().any(|a| a.id == instance));
+        let _ = std::fs::remove_file(&path);
+
+        let mut document = serde_json::to_value(&p).unwrap();
+        let object = document.as_object_mut().unwrap();
+        object.remove("prefabs");
+        object.remove("prefab_links");
+        let old: Project = serde_json::from_value(document).unwrap();
+        assert!(old.prefabs.is_empty() && old.prefab_links.is_empty());
     }
 
     #[test]

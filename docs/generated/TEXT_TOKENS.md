@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1281**.
+Total de chaves de localização cadastradas: **1294**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -343,6 +343,11 @@ Total de chaves de localização cadastradas: **1281**.
 | `pivot.origin_to_cursor` | Origin to 3D Cursor | Origem para o Cursor 3D |
 | `pivot.origin_to_geometry` | Origin to Geometry | Origem para a Geometria |
 | `pivot.origin_to_selection` | Origin to Selection | Origem para a Seleção |
+| `prefab.deleted` | Prefab '{name}' removed from the library | Prefab '{name}' removido da biblioteca |
+| `prefab.instantiated` | Prefab '{name}' placed in the scene | Prefab '{name}' colocado na cena |
+| `prefab.renamed` | Prefab renamed to '{name}' | Prefab renomeado para '{name}' |
+| `prefab.saved` | Prefab '{name}' saved to the library | Prefab '{name}' salvo na biblioteca |
+| `prefab.updated` | Prefab '{name}' updated from the selection | Prefab '{name}' atualizado com a seleção |
 | `preferences.colorblind_axes` | Colorblind axes differentiation (X, Y, Z labels) | Diferenciação não-cromática de eixos (Rótulos X, Y, Z) |
 | `preferences.double_tap_interval` | Double-tap shortcut interval (ms) | Intervalo de duplo toque de atalho (ms) |
 | `preferences.multiselection_measure_tag` | Display average measure tag on multiple edge selection | Exibir tag de média na multiseleção de arestas |
@@ -822,6 +827,14 @@ Total de chaves de localização cadastradas: **1281**.
 | `sl.position` | Position | Posição |
 | `sl.position_rotation_and_scale_coordinates` | Position, rotation and scale coordinates | Coordenadas de posição, rotação e escala |
 | `sl.precision_0_1` | PRECISION 0.1× | PRECISÃO 0.1× |
+| `sl.prefab_delete` | Delete prefab | Excluir prefab |
+| `sl.prefab_empty_hint` | Select objects and choose Save as prefab to reuse them in any scene. | Selecione objetos e use Salvar como prefab para reutilizá-los em qualquer cena. |
+| `sl.prefab_empty_title` | No prefabs yet | Nenhum prefab ainda |
+| `sl.prefab_favorite` | Favorite | Favoritar |
+| `sl.prefab_only_favorites` | Only favorites | Só favoritos |
+| `sl.prefab_parts` | parts | peças |
+| `sl.prefab_place` | Place in scene | Colocar na cena |
+| `sl.prefab_update` | Update from selection | Atualizar com a seleção |
 | `sl.preview_base_color_texture_and_emission_with` | Preview base color, texture and emission with a simple directional light | Visualiza cor base, textura e emissão com uma luz direcional simples |
 | `sl.primitive_properties` | Primitive Properties | Propriedades da primitiva |
 | `sl.profile_2d_sketch_draw_profile` | Profile & 2D Sketch (Draw Profile) | Perfil & Esboço 2D (Draw Profile) |
@@ -1224,7 +1237,7 @@ Total de chaves de localização cadastradas: **1281**.
 | `ui.refs` | Reference images | Imagens de referência |
 | `ui.rename` | Rename | Renomear |
 | `ui.resize_panel_width` | Resize panel width | Redimensionar largura do painel |
-| `ui.save_active_as_asset` | Save Active as Asset | Salvar ativo como asset |
+| `ui.save_active_as_asset` | Save selection as prefab | Salvar seleção como prefab |
 | `ui.search` | Search | Buscar |
 | `ui.search_assets` | Search assets | Buscar assets |
 | `ui.search_parts` | Search parts | Buscar peças |
