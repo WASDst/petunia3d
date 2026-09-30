@@ -3272,6 +3272,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <length> ref-panel-x: -1px;
     in-out property <length> ref-panel-y: -1px;
     in-out property <bool> paint-canvas-panel-visible: false;
+    in-out property <bool> paint-pip: false;
     in-out property <length> canvas-panel-x: -1px;
     in-out property <length> canvas-panel-y: -1px;
     in-out property <length> settings-panel-x: -1px;
@@ -3970,6 +3971,7 @@ export component PetuniaSlintShell inherits Window {
     /// px lógicos (largura, altura) e px físicos (largura, altura) da viewport.
     callback viewport-resized(float, float, float, float);
     callback split-toggle-requested;
+    callback paint-pip-toggle-requested;
     callback split-preset-requested(string);
     callback split-orbit(float, float);
     callback split-pan(float, float);
@@ -8416,6 +8418,23 @@ export component PetuniaSlintShell inherits Window {
                                                 width: 20px;
                                                 height: 20px;
                                                 border-radius: 3px;
+                                                background: root.paint-pip ? DesignTokens.accent : (pipbtn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                                animate background { duration: Motion.fast; easing: ease-out; }
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: button;
+                                                accessible-checked: root.paint-pip;
+                                                accessible-label: Tr.t("sl.paint_pip");
+                                                IconDisplay { icon: IconSet.PictureInPicture2; size: 11px; stroke: root.paint-pip ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                                pipbtn-touch := TouchArea {
+                                                    clicked => { root.paint-pip-toggle-requested(); }
+                                                    Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_pip"); color: DesignTokens.text-primary; font-size: 10px; } } }
+                                                }
+                                            }
+                                            Rectangle {
+                                                width: 20px;
+                                                height: 20px;
+                                                border-radius: 3px;
                                                 background: root.paint-canvas-panel-visible ? DesignTokens.accent : (expand-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
                                                 animate background { duration: Motion.fast; easing: ease-out; }
                                                 border-width: 1px;
@@ -9718,6 +9737,56 @@ export component PetuniaSlintShell inherits Window {
 
                         }
                     }
+                    }
+
+                    // Picture-in-picture do Paint: o canvas 2D ocupa a viewport e o 3D vira um inset
+                    // (clique no inset para voltar). A câmera 3D enquadra a área pintada.
+                    if root.paint-pip && root.active-workspace == "PAINT": Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: parent.height;
+                        background: DesignTokens.canvas;
+
+                        PaintCanvasSurface {
+                            width: parent.width;
+                            height: parent.height;
+                            canvas-image: root.paint-canvas-image;
+                            zoom: root.paint-canvas-zoom;
+                            show-uv: root.paint-show-uv;
+                            uv-commands: root.uv-layout-commands;
+                            show-grid: root.paint-pixel-grid;
+                            grid-commands: root.paint-canvas-grid-commands;
+                            stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                            zoom-step(direction) => {
+                                if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
+                                if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
+                            }
+                        }
+
+                        // Inset 3D ao vivo (mesma imagem da viewport), com cantos arredondados.
+                        Rectangle {
+                            width: min(300px, parent.width * 0.32);
+                            height: self.width * (parent.height / max(parent.width, 1px));
+                            x: parent.width - self.width - 14px;
+                            y: parent.height - self.height - 14px;
+                            border-radius: DesignTokens.radius-panel;
+                            background: DesignTokens.canvas;
+                            border-width: 2px;
+                            border-color: pip-touch.has-hover ? DesignTokens.accent : DesignTokens.border-strong;
+                            animate border-color { duration: Motion.fast; easing: ease-out; }
+                            drop-shadow-blur: 14px;
+                            drop-shadow-color: DesignTokens.shadow;
+                            drop-shadow-offset-y: 4px;
+                            clip: true;
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.paint_pip_back");
+                            Image { width: 100%; height: 100%; image-fit: contain; source: root.viewport-image; }
+                            pip-touch := TouchArea {
+                                clicked => { root.paint-pip-toggle-requested(); }
+                                Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_pip_back"); color: DesignTokens.text-primary; font-size: 10px; } } }
+                            }
+                        }
                     }
 }
 

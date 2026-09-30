@@ -9563,3 +9563,20 @@ fn drag_threshold_preference_separates_click_from_drag() {
         "limitado a 16 px"
     );
 }
+
+#[test]
+fn paint_pip_frames_the_camera_on_the_painted_face() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(bridge.toggle_paint_pip());
+    assert!(bridge.view_model().paint_pip);
+    let before = bridge.state.session.camera.target;
+    // Nenhuma face cobre UV fora do quadrado unitário: sem enquadramento.
+    assert!(!bridge.frame_camera_on_uv(5.0, 5.0));
+    assert_eq!(bridge.state.session.camera.target, before);
+    // Uma face real do cubo padrão é encontrada em algum ponto do quadrado.
+    let hit = (0..20)
+        .flat_map(|i| (0..20).map(move |j| (i as f32 / 20.0 + 0.02, j as f32 / 20.0 + 0.02)))
+        .any(|(u, v)| bridge.frame_camera_on_uv(u, v));
+    assert!(hit, "algum UV do cubo deve enquadrar uma face");
+    assert!(!bridge.toggle_paint_pip());
+}

@@ -580,6 +580,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub asset_only_favorites: bool,
     /// Vista 3D secundária opcional (viewport dividida).
     pub split: split_view::SplitView,
+    /// PiP do Paint: canvas 2D grande + inset 3D com auto-enquadramento.
+    pub paint_pip: bool,
     /// Miniaturas renderizadas por (prefab, revisão); `None` = sem geometria.
     prefab_thumbs: std::cell::RefCell<PrefabThumbCache>,
     pub parts_query: String,
@@ -931,6 +933,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             asset_sort_by_name: false,
             asset_only_favorites: false,
             split: split_view::SplitView::default(),
+            paint_pip: false,
             prefab_thumbs: Default::default(),
             parts_query: String::new(),
             parts_selected_only: false,
@@ -5554,6 +5557,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !norm_x.is_finite() || !norm_y.is_finite() {
             return false;
         }
+        if self.paint_pip && phase == 0 {
+            self.frame_camera_on_uv(norm_x, norm_y);
+        }
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
         let (width, height) = match self
             .state
@@ -5946,6 +5952,58 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let state = self.viewport_render_state();
         self.split
             .render(&self.state.project, &self.state.project.refs, state)
+    }
+
+    pub fn toggle_paint_pip(&mut self) -> bool {
+        self.paint_pip = !self.paint_pip;
+        self.paint_pip
+    }
+
+    /// Enquadra a câmera 3D na face cujo UV contém `(u, v)` (PiP do Paint).
+    /// Tenta `v` e `1 - v`, pois o canvas tem origem no topo.
+    pub fn frame_camera_on_uv(&mut self, u: f32, v: f32) -> bool {
+        fn inside(poly: &[[f32; 2]], p: [f32; 2]) -> bool {
+            (1..poly.len().saturating_sub(1)).any(|i| {
+                let (a, b, c) = (poly[0], poly[i], poly[i + 1]);
+                let d = |p1: [f32; 2], p2: [f32; 2], p3: [f32; 2]| {
+                    (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+                };
+                let (d1, d2, d3) = (d(p, a, b), d(p, b, c), d(p, c, a));
+                let neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
+                let pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
+                !(neg && pos)
+            })
+        }
+        let Some(mesh) = self.state.project.active_mesh() else {
+            return false;
+        };
+        let hit = [[u, v], [u, 1.0 - v]].into_iter().find_map(|p| {
+            mesh.faces
+                .iter()
+                .find(|f| f.uv.len() >= 3 && inside(&f.uv, p))
+        });
+        let Some(face) = hit else {
+            return false;
+        };
+        let points: Vec<glam::Vec3> = face
+            .verts
+            .iter()
+            .filter_map(|&i| mesh.verts.get(i as usize))
+            .map(|v| glam::Vec3::from_array(v.pos))
+            .collect();
+        if points.is_empty() {
+            return false;
+        }
+        let center = points.iter().copied().sum::<glam::Vec3>() / points.len() as f32;
+        let radius = points
+            .iter()
+            .map(|p| p.distance(center))
+            .fold(0.0f32, f32::max);
+        self.state
+            .session
+            .camera
+            .frame(center, radius.max(0.25) * 2.5);
+        true
     }
 
     pub fn set_asset_only_favorites(&mut self, only: bool) -> bool {
@@ -11743,6 +11801,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.asset_thumbnail_size = self.state.ui.asset_thumbnail_size;
         vm.asset_only_favorites = self.asset_only_favorites;
         vm.split_enabled = self.split.enabled;
+        vm.paint_pip = self.paint_pip;
         vm.split_preset = self.split.preset_id().to_string();
         vm.prefab_items = self.prefab_item_models();
         vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);

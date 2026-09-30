@@ -274,6 +274,7 @@ pub struct ShellViewModel {
     pub prefab_items: Vec<PrefabItemModel>,
     pub asset_only_favorites: bool,
     pub split_enabled: bool,
+    pub paint_pip: bool,
     /// Preset da vista secundária (`front`, `top`, ..., `custom`).
     pub split_preset: String,
     pub asset_query: String,
@@ -1206,6 +1207,7 @@ impl ShellViewModel {
             prefab_items: Vec::new(),
             asset_only_favorites: false,
             split_enabled: false,
+            paint_pip: false,
             split_preset: String::new(),
             asset_query: String::new(),
             asset_sort_by_name: false,
