@@ -171,6 +171,8 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
     window.set_snap_marker_visible(snap_marker.visible);
     window.set_snap_marker_x(snap_marker.x);
     window.set_snap_marker_y(snap_marker.y);
+    window.set_snap_marker_label(snap_marker.label.as_str().into());
+    window.set_snap_marker_round(snap_marker.round);
 
     let measure = compute_quick_measure(&bridge.state, width, height);
     window.set_measure_visible(measure.visible);
@@ -842,6 +844,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_snap_marker_visible(vm.snap_marker_visible);
     window.set_snap_marker_x(vm.snap_marker_x);
     window.set_snap_marker_y(vm.snap_marker_y);
+    window.set_snap_marker_label(vm.snap_marker_label.as_str().into());
+    window.set_snap_marker_round(vm.snap_marker_round);
 
     window.set_measure_visible(vm.measure_visible);
     window.set_measure_commands(vm.measure_commands.as_str().into());

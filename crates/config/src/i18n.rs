@@ -390,6 +390,15 @@ pub mod text_id {
     pub const TOOL_GRAMMAR_EXPIRED: TextId = TextId::new("tool_grammar.expired");
     pub const TOOL_GRAMMAR_ADJUSTED: TextId = TextId::new("tool_grammar.adjusted");
     pub const TOOL_GRAMMAR_PRIMITIVE_KEPT: TextId = TextId::new("tool_grammar.primitive_kept");
+    pub const SNAP_KIND_POINT: TextId = TextId::new("snap_kind.point");
+    pub const SNAP_KIND_MIDPOINT: TextId = TextId::new("snap_kind.midpoint");
+    pub const SNAP_KIND_ON_EDGE: TextId = TextId::new("snap_kind.on_edge");
+    pub const SNAP_KIND_AXIS_X: TextId = TextId::new("snap_kind.axis_x");
+    pub const SNAP_KIND_AXIS_Y: TextId = TextId::new("snap_kind.axis_y");
+    pub const SNAP_KIND_AXIS_Z: TextId = TextId::new("snap_kind.axis_z");
+    pub const SNAP_KIND_ON_FACE: TextId = TextId::new("snap_kind.on_face");
+    pub const SNAP_KIND_GRID: TextId = TextId::new("snap_kind.grid");
+    pub const PREFERENCES_SNAP_RADIUS: TextId = TextId::new("preferences.snap_radius");
 
     // Diálogo de recuperação de autosave (P3D-002).
     pub const UI_RECOVERY_TITLE: TextId = TextId::new("ui.recovery_title");
@@ -728,6 +737,15 @@ pub mod text_id {
         TOOL_GRAMMAR_EXPIRED,
         TOOL_GRAMMAR_ADJUSTED,
         TOOL_GRAMMAR_PRIMITIVE_KEPT,
+        SNAP_KIND_POINT,
+        SNAP_KIND_MIDPOINT,
+        SNAP_KIND_ON_EDGE,
+        SNAP_KIND_AXIS_X,
+        SNAP_KIND_AXIS_Y,
+        SNAP_KIND_AXIS_Z,
+        SNAP_KIND_ON_FACE,
+        SNAP_KIND_GRID,
+        PREFERENCES_SNAP_RADIUS,
         FILE_NEW,
         FILE_OPEN_PROJECT,
         FILE_SAVE,

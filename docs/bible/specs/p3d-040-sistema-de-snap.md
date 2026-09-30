@@ -29,6 +29,14 @@ Mapear targets, prioridade, tolerance, visual feedback e integração com Move/R
 - `is_snapped` significa que o ponto encaixou, não que o snap está ligado.
 - Uma única passada de snap por gesto (sem snap duplo bridge + core).
 
+## Implementação (2026-09-30, Onda 3 parte 1)
+
+Motor em espaço de tela em `crates/core/src/inference.rs` (`snap_screen`,
+`SnapKind`, `SnapMask`, `SnapAnchor`, `SnapGrid`), usado pelo Move e pelo desenho
+de perfil numa única passada; o core não encaixa em `update_modal`. Estado por
+requisito, pendências e evidências em
+[`docs/development/snap-inference-gap-matrix.md`](../../development/snap-inference-gap-matrix.md).
+
 ## Dependências
 
 P3D-009, P3D-021–029.

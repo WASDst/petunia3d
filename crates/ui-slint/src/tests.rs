@@ -2173,6 +2173,46 @@ fn profile_tool_draws_closes_and_generates_transactionally() {
     assert_eq!(bridge.state.project.undo.depth(), (6, 0));
 }
 
+fn draw_two_profile_points(snap: bool, grid_spacing: f32) -> [[f64; 3]; 2] {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.snap_enabled = snap;
+    bridge.state.session.snap_settings.grid_spacing = grid_spacing;
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    // O segundo ponto fica ~4 px abaixo da horizontal do primeiro.
+    for point in [[0.35, 0.35], [0.65, 0.355]] {
+        bridge.select_viewport_ext(point[0], point[1], false, false);
+        bridge.profile_pointer_up();
+    }
+    let spline = active_profile_spline(&bridge);
+    [spline.points[0].position, spline.points[1].position]
+}
+
+#[test]
+fn profile_snap_infers_workplane_axis_from_last_point() {
+    // Sem snap, o tremor de 4 px entra no desenho.
+    let [a, b] = draw_two_profile_points(false, 1.0);
+    assert!((a[1] - b[1]).abs() > 1.0e-3);
+
+    // Com snap (grade fina, fora de alcance), a guia paralela ao eixo do
+    // plano a partir do último ponto vence: a linha sai exatamente reta.
+    let [a, b] = draw_two_profile_points(true, 1.0e-3);
+    assert!((a[1] - b[1]).abs() < 1.0e-5, "{a:?} {b:?}");
+    assert!((a[0] - b[0]).abs() > 0.1);
+}
+
+#[test]
+fn profile_snap_falls_back_to_workplane_grid() {
+    // 1º ponto na grade; o 2º segue a guia horizontal andando no passo da grade.
+    let [a, b] = draw_two_profile_points(true, 0.5);
+    assert!((a[1] - b[1]).abs() < 1.0e-5);
+    for value in [a[0], a[1], b[0]] {
+        assert!(
+            ((value / 0.5).round() * 0.5 - value).abs() < 1.0e-4,
+            "{value} fora da grade"
+        );
+    }
+}
+
 #[test]
 fn paint_layer_panel_adds_removes_reorders_and_composites() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
@@ -5712,13 +5752,30 @@ fn test_magnetic_snap_marker_projection() {
     // Snap ligado não basta: nada encaixou ainda (Onda 1, P3D-040).
     assert!(!compute_snap_marker(&bridge.state, 800.0, 600.0).visible);
 
-    // Depois de um deslocamento atraído pela grade, o marcador é projetado.
+    // Sem encaixe informado, o core não encaixa sozinho (uma passada só).
     bridge
         .state
         .update_modal(glam::Vec3::new(0.3, 0.0, 0.0), 0.3)
         .unwrap();
+    assert!(!compute_snap_marker(&bridge.state, 800.0, 600.0).visible);
+
+    // Depois de um deslocamento que encaixou num ponto, o marcador é projetado
+    // com forma e rótulo do tipo de alvo.
+    bridge
+        .state
+        .update_modal_snapped(
+            glam::Vec3::new(0.3, 0.0, 0.0),
+            0.3,
+            Some(petunia_core::SnapKind::Point),
+        )
+        .unwrap();
     let marker_active = compute_snap_marker(&bridge.state, 800.0, 600.0);
     assert!(marker_active.visible);
+    assert!(!marker_active.round);
+    assert_eq!(
+        marker_active.label,
+        bridge.state.t_id(petunia_config::text_id::SNAP_KIND_POINT)
+    );
     assert!(marker_active.x >= 0.0 && marker_active.x <= 800.0);
     assert!(marker_active.y >= 0.0 && marker_active.y <= 600.0);
 

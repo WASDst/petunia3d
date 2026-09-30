@@ -5,6 +5,15 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Snapping com inferência — Onda 3, parte 1 (30/09/2026)
+- **Tolerância em pixels**: o snap passa a medir a distância na tela (padrão 12 px, faixa 4–48), com o mesmo alcance em qualquer zoom; antes era 0,35 unidade de mundo.
+- **Uma passada por gesto**: o Move encaixava duas vezes (bridge contra a malha em prévia e core); agora o bridge faz uma única consulta contra a malha de origem, ignora a geometria que se move e o core apenas registra o que encaixou. Reajustar a "Última operação" não reencaixa mais o valor digitado.
+- **Tipos nomeados com prioridade**: Ponto, Ponto médio, Na aresta, Guia de eixo X/Y/Z, Na face (ponto sob o cursor, não o centroide) e Grade; pontos atrás da malha só com raio-X/wireframe.
+- **Inferência de direção**: guias paralelas aos eixos a partir da âncora (snap-dragging); com grade, o comprimento ao longo da guia anda no passo da grade.
+- **Desenho de perfil**: usa a mesma passada (pontos da malha projetados no plano, guias do plano a partir do último ponto, grade do plano); a grade fixa de 0,25 foi removida.
+- **Nunca só cor**: marcador com forma por tipo e rótulo traduzido (en/pt-BR); o HUD mostra o tipo encaixado.
+- **Escopo honesto**: centro de face, interseção, paralelo/perpendicular a aresta, passos de 15°, snap entre objetos, campo de raio em Configurações, índice espacial e pré-seleção universal ficam pendentes. Matriz em `docs/development/snap-inference-gap-matrix.md`.
+
 ### Gramática única de ferramenta — Onda 2 (30/09/2026)
 - **`ToolSession` no core**: uma máquina de estados (`Idle/Pressed/Dragging/Latched`) decide clique × arrasto com limiar configurável; clicar-mover-clicar em alças (WCAG 2.2, 2.5.7); valor digitado vence o mouse; testes de domínio sem toolkit.
 - **Ferramentas persistentes**: Extrude, Inset, Round Edge e Push/Pull deixam de abrir operação ao apertar a tecla; arrastar sobre uma face (ou aresta) a seleciona e opera seguindo o cursor pela normal projetada, estável sob zoom. Move/Rotate/Scale e o gizmo passam pela mesma máquina.

@@ -66,7 +66,16 @@ pub struct SnapSettings {
     pub target: SnapTarget,
     pub element: SnapElement,
     pub grid_spacing: f32,
+    /// Legado (unidades de mundo) das funções `snap_point*`; as ferramentas
+    /// interativas usam [`Self::radius_pixels`].
     pub snap_distance: f32,
+    /// Raio do snap interativo em px lógicos (P3D-040).
+    #[serde(default = "default_radius_pixels")]
+    pub radius_pixels: f32,
+}
+
+fn default_radius_pixels() -> f32 {
+    crate::inference::DEFAULT_SNAP_RADIUS_PIXELS
 }
 
 impl Default for SnapSettings {
@@ -77,6 +86,7 @@ impl Default for SnapSettings {
             element: SnapElement::Closest,
             grid_spacing: 1.0,
             snap_distance: 0.35,
+            radius_pixels: default_radius_pixels(),
         }
     }
 }

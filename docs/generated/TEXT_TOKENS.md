@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **793**.
+Total de chaves de localização cadastradas: **802**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -350,6 +350,7 @@ Total de chaves de localização cadastradas: **793**.
 | `preferences.drag_threshold` | Distance before a drag starts (px) | Distância para começar a arrastar (px) |
 | `preferences.multiselection_measure_tag` | Display average measure tag on multiple edge selection | Exibir tag de média na multiseleção de arestas |
 | `preferences.reduced_motion` | Reduced motion (disable viewport animations) | Redução de movimento (desativa animações do viewport) |
+| `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
 | `prims.body_length` | Body Length | Comprimento do Corpo |
 | `prims.bottom_radius` | Bottom Radius | Raio da Base |
 | `prims.cancel` | Cancel | Cancelar |
@@ -504,6 +505,14 @@ Total de chaves de localização cadastradas: **793**.
 | `shading.tip_wireframe` | Wireframe (Z 4) | Arame (Z 4) |
 | `shading.unlit` | Unlit | Sem Luz |
 | `shading.wire` | Wireframe | Arame |
+| `snap_kind.axis_x` | Along X axis | Paralelo ao eixo X |
+| `snap_kind.axis_y` | Along Y axis | Paralelo ao eixo Y |
+| `snap_kind.axis_z` | Along Z axis | Paralelo ao eixo Z |
+| `snap_kind.grid` | Grid | Grade |
+| `snap_kind.midpoint` | Midpoint | Ponto médio |
+| `snap_kind.on_edge` | On edge | Na aresta |
+| `snap_kind.on_face` | On face | Na face |
+| `snap_kind.point` | Point | Ponto |
 | `tool_grammar.adjust_hint` | Type a value and press Enter to adjust (same Undo) | Digite um valor e Enter para ajustar (mesmo Undo) |
 | `tool_grammar.adjusted` | Last operation adjusted | Última operação ajustada |
 | `tool_grammar.expired` | The last operation can no longer be adjusted | A última operação não pode mais ser ajustada |

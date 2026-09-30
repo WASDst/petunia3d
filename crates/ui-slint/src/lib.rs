@@ -2084,8 +2084,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if let Some(fb) = self.state.current_tool_feedback() {
                 // ToolFeedback telemetry for magnetic snapping (P3D-131)
                 // Telemetria de ToolFeedback para atração magnética (P3D-131)
-                if fb.is_snapped {
-                    lines.push("Snap   Active".to_string());
+                if let Some(kind) = fb.snap_kind {
+                    lines.push(format!("Snap   {}", self.state.t_id(kind.text_id())));
                 }
             }
             vm.operation_hud_active = true;
@@ -3178,15 +3178,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return None;
         }
-        let offset = ray_origin + ray_direction * distance - origin;
         let right = glam::Vec3::from_array(workplane.right.map(|value| value as f32));
         let up = glam::Vec3::from_array(workplane.up.map(|value| value as f32));
-        let mut point = [f64::from(offset.dot(right)), f64::from(offset.dot(up))];
-        if self.state.profile.snap {
-            point[0] = (point[0] * 4.0).round() / 4.0;
-            point[1] = (point[1] * 4.0).round() / 4.0;
+        let mut hit = ray_origin + ray_direction * distance;
+        if self.state.session.snap_enabled || self.state.profile.snap {
+            // Mesma passada de snap das transformações (P3D-040): pontos e
+            // arestas da malha, guias paralelas aos eixos do plano a partir do
+            // último ponto e, por último, a grade do plano de trabalho.
+            let to_world = |p: [f64; 3]| origin + right * p[0] as f32 + up * p[1] as f32;
+            let anchor = self
+                .active_profile_resources()
+                .and_then(|(_, spline)| spline.points.last())
+                .map(|last| petunia_core::SnapAnchor {
+                    point: to_world(last.position),
+                    axes: [Some(right), Some(up), None],
+                });
+            let settings = &self.state.session.snap_settings;
+            let cursor = glam::Vec2::new(ndc_x + 1.0, 1.0 - ndc_y)
+                * glam::Vec2::from_array(self.viewport_size)
+                * 0.5;
+            let grid = petunia_core::SnapGrid {
+                origin,
+                right,
+                up,
+                spacing: settings.grid_spacing,
+            };
+            let mut mask = petunia_core::SnapMask::for_target(settings.target);
+            mask.grid = true;
+            if let Some(snapped) = self.screen_snap(cursor, mask, anchor, Some(grid)) {
+                hit = snapped.point;
+            }
         }
-        Some(point)
+        // Pontos fora do plano (arestas de outra face) são projetados nele.
+        let offset = hit - origin;
+        Some([f64::from(offset.dot(right)), f64::from(offset.dot(up))])
     }
 
     fn update_profile_handle(
@@ -4539,6 +4564,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
+    /// Uma única passada de snap em espaço de tela (P3D-040, ADR 006 Onda 3).
+    ///
+    /// `cursor` em px lógicos da viewport. Durante uma operação, a malha de
+    /// origem congelada é o alvo e os vértices que se movem são ignorados;
+    /// fora dela, a malha ativa inteira.
+    fn screen_snap(
+        &self,
+        cursor: glam::Vec2,
+        mask: petunia_core::SnapMask,
+        anchor: Option<petunia_core::SnapAnchor>,
+        grid: Option<petunia_core::SnapGrid>,
+    ) -> Option<petunia_core::ScreenSnapHit> {
+        let modal = self.state.session.tools.modal.as_ref();
+        let moving = modal
+            .map(|modal| modal.moving_vertices())
+            .unwrap_or_default();
+        let mesh = modal
+            .map(|modal| modal.source_mesh())
+            .or_else(|| self.state.project.active_mesh());
+        let session = &self.state.session;
+        petunia_core::snap_screen(&petunia_core::ScreenSnapQuery {
+            camera: &session.camera,
+            viewport_pixels: glam::Vec2::from_array(self.viewport_size),
+            cursor_pixels: cursor,
+            mesh,
+            moving: &moving,
+            anchor,
+            grid,
+            radius_pixels: session.snap_settings.radius_pixels,
+            mask,
+            xray: session.show_xray || session.shading == petunia_core::Shading::Wireframe,
+        })
+    }
+
     /// Atualiza a transformação a partir do deslocamento absoluto do ponteiro.
     pub fn update_viewport_transform(&mut self, x: f32, y: f32) -> bool {
         self.update_viewport_transform_modified(x, y, false, false)
@@ -4629,20 +4688,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         0.0,
                     ),
                 };
+                let mut snapped_kind = None;
                 if snap || self.state.session.snap_enabled {
-                    let mut settings = self.state.session.snap_settings.clone();
-                    settings.enabled = true;
-                    let mesh = self.state.project.active_mesh();
-                    let current_pivot = pivot + translation;
-                    let query = petunia_core::SnapQuery {
-                        point: current_pivot,
-                        start_point: Some(pivot),
-                        settings: &settings,
-                        mesh,
-                    };
-                    let snap_res = petunia_core::snap_point(query);
-                    if snap_res.snapped {
-                        translation = snap_res.point - pivot;
+                    let target = self.state.session.snap_settings.target;
+                    let mut mask = petunia_core::SnapMask::for_target(target);
+                    // Move não tem plano de grade inequívoco em 3D: a grade vira
+                    // passo relativo ao pivô abaixo, como antes.
+                    mask.grid = false;
+                    let hit = self.screen_snap(
+                        current,
+                        mask,
+                        Some(petunia_core::SnapAnchor::world(pivot)),
+                        None,
+                    );
+                    if let Some(hit) = hit {
+                        translation = hit.point - pivot;
                         match constraint {
                             ModalConstraint::Axis(index) => {
                                 let a = axis(index);
@@ -4655,13 +4715,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             }
                             ModalConstraint::Free => {}
                         }
-                    } else if settings.target == petunia_core::SnapTarget::Grid {
-                        let step = settings.grid_spacing.max(0.001);
+                        snapped_kind = Some(hit.kind);
+                    } else if matches!(
+                        target,
+                        petunia_core::SnapTarget::Grid | petunia_core::SnapTarget::Increment
+                    ) {
+                        let step = self.state.session.snap_settings.grid_spacing.max(0.001);
                         translation = (translation / step).round() * step;
                         scalar = (scalar / step).round() * step;
                     }
                 }
-                self.state.update_modal(translation, scalar)
+                self.state
+                    .update_modal_snapped(translation, scalar, snapped_kind)
             }
             TransformKind::Rotation => {
                 let normal = match constraint {
@@ -11011,6 +11076,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.snap_marker_visible = snap_marker.visible;
         vm.snap_marker_x = snap_marker.x;
         vm.snap_marker_y = snap_marker.y;
+        vm.snap_marker_label = snap_marker.label;
+        vm.snap_marker_round = snap_marker.round;
 
         let protractor = compute_protractor(
             &self.state,

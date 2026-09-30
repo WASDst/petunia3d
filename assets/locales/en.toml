@@ -864,6 +864,7 @@ conflict_title = "Shortcut conflicts detected"
 conflict_shared = "shares the shortcut with"
 
 [preferences]
+snap_radius = "Snap radius (px)"
 colorblind_axes = "Colorblind axes differentiation (X, Y, Z labels)"
 reduced_motion = "Reduced motion (disable viewport animations)"
 double_tap_interval = "Double-tap shortcut interval (ms)"
@@ -882,3 +883,13 @@ needs_edge = "{tool}: click or drag an edge"
 expired = "The last operation can no longer be adjusted"
 adjusted = "Last operation adjusted"
 primitive_kept = "Primitive kept · Ctrl+Z undoes"
+
+[snap_kind]
+point = "Point"
+midpoint = "Midpoint"
+on_edge = "On edge"
+axis_x = "Along X axis"
+axis_y = "Along Y axis"
+axis_z = "Along Z axis"
+on_face = "On face"
+grid = "Grid"

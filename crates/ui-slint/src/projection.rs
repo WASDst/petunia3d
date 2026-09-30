@@ -1276,6 +1276,11 @@ pub struct SnapMarkerModel {
     pub visible: bool,
     pub x: f32,
     pub y: f32,
+    /// Rótulo do alvo (TextId traduzido): o tipo nunca é comunicado só por cor.
+    pub label: String,
+    /// Forma do marcador: quadrado para pontos, círculo para arestas, guias,
+    /// faces e grade.
+    pub round: bool,
 }
 
 pub(crate) fn compute_snap_marker(state: &AppState, width: f32, height: f32) -> SnapMarkerModel {
@@ -1303,6 +1308,14 @@ pub(crate) fn compute_snap_marker(state: &AppState, width: f32, height: f32) -> 
             visible: true,
             x,
             y,
+            label: fb
+                .snap_kind
+                .map(|kind| state.t_id(kind.text_id()))
+                .unwrap_or_default(),
+            round: !matches!(
+                fb.snap_kind,
+                Some(petunia_core::SnapKind::Point | petunia_core::SnapKind::Midpoint)
+            ),
         }
     } else {
         SnapMarkerModel::default()

@@ -2830,6 +2830,7 @@ impl AppState {
 
         // Encaixou de fato, não apenas "snap ligado" (P3D-040).
         fb.is_snapped = modal.snapped();
+        fb.snap_kind = modal.snap_kind();
         Some(fb)
     }
 

@@ -866,6 +866,7 @@ conflict_title = "Conflito de atalhos detectado"
 conflict_shared = "compartilha o atalho com"
 
 [preferences]
+snap_radius = "Raio do snap (px)"
 colorblind_axes = "Diferenciação não-cromática de eixos (Rótulos X, Y, Z)"
 reduced_motion = "Redução de movimento (desativa animações do viewport)"
 double_tap_interval = "Intervalo de duplo toque de atalho (ms)"
@@ -884,3 +885,13 @@ needs_edge = "{tool}: clique ou arraste uma aresta"
 expired = "A última operação não pode mais ser ajustada"
 adjusted = "Última operação ajustada"
 primitive_kept = "Primitiva mantida · Ctrl+Z desfaz"
+
+[snap_kind]
+point = "Ponto"
+midpoint = "Ponto médio"
+on_edge = "Na aresta"
+axis_x = "Paralelo ao eixo X"
+axis_y = "Paralelo ao eixo Y"
+axis_z = "Paralelo ao eixo Z"
+on_face = "Na face"
+grid = "Grade"

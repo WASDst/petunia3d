@@ -5,7 +5,7 @@ use glam::{EulerRot, Quat, Vec3};
 use petunia_mesh::Mesh;
 use petunia_project::{Project, ProjectChanges};
 
-use crate::{AppState, EditMode, Selection};
+use crate::{AppState, EditMode, Selection, SnapKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
@@ -94,8 +94,8 @@ pub struct ModalOp {
     selection: Selection,
     source: Mesh,
     changed: bool,
-    /// O último update encaixou de fato num alvo de snap (não apenas "snap ligado").
-    snapped: bool,
+    /// Alvo em que o último update encaixou de fato (não apenas "snap ligado").
+    snap: Option<SnapKind>,
 }
 
 impl ModalOp {
@@ -106,7 +106,23 @@ impl ModalOp {
 
     /// Verdadeiro somente quando o último update foi atraído por um alvo de snap.
     pub fn snapped(&self) -> bool {
-        self.snapped
+        self.snap.is_some()
+    }
+
+    /// Tipo do alvo que encaixou no último update, para o rótulo do HUD.
+    pub fn snap_kind(&self) -> Option<SnapKind> {
+        self.snap
+    }
+
+    /// Vértices da malha de origem que se movem com a operação: não servem de
+    /// alvo de snap (senão o ponto encaixaria em si mesmo).
+    /// Malha de origem congelada no início da operação (sem a prévia).
+    pub fn source_mesh(&self) -> &Mesh {
+        &self.source
+    }
+
+    pub fn moving_vertices(&self) -> Vec<bool> {
+        self.source.verts.iter().map(|v| v.selected).collect()
     }
 
     /// Ponto de mundo que representa o valor atual, quando ele é uma posição.
@@ -303,7 +319,7 @@ impl AppState {
             selection: self.session.selection.clone(),
             source,
             changed: false,
-            snapped: false,
+            snap: None,
         });
         self.pending_modal = None;
         self.mark_dirty();
@@ -331,7 +347,20 @@ impl AppState {
 
     /// `translation` is an absolute world-space delta from the start, `value`
     /// is the absolute scalar (including exact numeric input), never a frame delta.
+    /// The core never snaps: snapping is one screen-space pass by the caller
+    /// ([`crate::inference`]), reported through [`Self::update_modal_snapped`].
     pub fn update_modal(&mut self, translation: Vec3, value: f32) -> Result<(), ModalError> {
+        self.update_modal_snapped(translation, value, None)
+    }
+
+    /// Same as [`Self::update_modal`], recording which snap target the caller
+    /// already applied to `translation` (P3D-040: one snap pass per gesture).
+    pub fn update_modal_snapped(
+        &mut self,
+        translation: Vec3,
+        value: f32,
+        snap: Option<SnapKind>,
+    ) -> Result<(), ModalError> {
         if !translation.is_finite() || !value.is_finite() || value.abs() > 1.0e6 {
             return Err(ModalError::InvalidInput);
         }
@@ -344,21 +373,6 @@ impl AppState {
         }
         if modal.kind == ModalKind::Bevel && value < 0.0 {
             return Err(ModalError::InvalidInput);
-        }
-        let mut translation = translation;
-        let mut snapped = false;
-        if self.snap_enabled {
-            let query = crate::snap::SnapQuery {
-                point: modal.pivot + translation,
-                start_point: Some(modal.pivot),
-                settings: &self.session.snap_settings,
-                mesh: Some(&modal.source),
-            };
-            let res = crate::snap::snap_point(query);
-            if res.snapped {
-                translation = res.point - modal.pivot;
-                snapped = true;
-            }
         }
         let mut mesh = modal.source.clone();
         let mut components = Vec3::ZERO;
@@ -495,7 +509,7 @@ impl AppState {
         }
         self.publish_modal_mesh(mesh, value, components)?;
         if let Some(modal) = self.modal.as_mut() {
-            modal.snapped = snapped;
+            modal.snap = snap;
         }
         Ok(())
     }
@@ -1291,28 +1305,38 @@ mod tests {
     }
 
     #[test]
-    fn feedback_reports_snap_only_when_a_target_attracted_the_point() {
+    fn feedback_reports_snap_only_when_the_caller_snapped() {
         let mut state = selected_face();
         state.snap_enabled = true;
         state.session.snap_settings.enabled = true;
-        state.session.snap_settings.target = crate::snap::SnapTarget::Vertex;
-        state.session.snap_settings.snap_distance = 0.1;
         state.begin_modal(ModalKind::Move).unwrap();
-
-        // Snap ligado, mas longe de qualquer vértice: nada encaixou.
-        state.update_modal(Vec3::new(0.0, 0.0, 37.0), 37.0).unwrap();
-        let feedback = state.current_tool_feedback().unwrap();
-        assert!(!feedback.is_snapped, "snap ligado não significa encaixe");
-
-        // Pivô + deslocamento exatamente sobre um vértice: encaixou.
         let pivot = state.modal.as_ref().unwrap().pivot;
         let vertex = state.modal.as_ref().unwrap().source.verts[0].vec();
+
+        // Snap ligado não encaixa nada no core: uma única passada, feita por
+        // quem conhece a tela (P3D-040). O ponto sobre um vértice fica livre.
         state
             .update_modal(vertex - pivot, (vertex - pivot).length())
             .unwrap();
         let feedback = state.current_tool_feedback().unwrap();
+        assert!(!feedback.is_snapped, "snap ligado não significa encaixe");
+        assert_eq!(feedback.snap_kind, None);
+
+        state
+            .update_modal_snapped(
+                vertex - pivot,
+                (vertex - pivot).length(),
+                Some(SnapKind::Point),
+            )
+            .unwrap();
+        let feedback = state.current_tool_feedback().unwrap();
         assert!(feedback.is_snapped);
+        assert_eq!(feedback.snap_kind, Some(SnapKind::Point));
         assert!((feedback.current - vertex).length() < 1.0e-4);
+
+        // O próximo update sem encaixe limpa o rótulo.
+        state.update_modal(Vec3::new(0.0, 0.0, 3.0), 3.0).unwrap();
+        assert!(!state.current_tool_feedback().unwrap().is_snapped);
     }
 
     #[test]

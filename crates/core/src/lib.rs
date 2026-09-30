@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod docs;
 pub mod events;
 pub mod handles;
+pub mod inference;
 pub mod jobs;
 pub mod loop_cut;
 pub mod mesh_preview;
@@ -90,6 +91,10 @@ pub use brush::{
 };
 pub use camera::{Camera, Projection, ViewPreset};
 pub use events::{AppEvent, EventBus};
+pub use inference::{
+    DEFAULT_SNAP_RADIUS_PIXELS, ScreenSnapHit, ScreenSnapQuery, SnapAnchor, SnapGrid, SnapKind,
+    SnapMask, clamp_snap_radius, snap_screen,
+};
 pub use modal_feedback::ToolFeedback;
 pub use module::{Module, ModuleRegistry};
 pub use primitive_session::{

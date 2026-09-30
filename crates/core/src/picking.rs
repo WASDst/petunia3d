@@ -23,9 +23,9 @@ pub struct PickHit {
     pub position: Vec3,
 }
 
-struct Triangle {
-    face: usize,
-    points: [Vec3; 3],
+pub(crate) struct Triangle {
+    pub(crate) face: usize,
+    pub(crate) points: [Vec3; 3],
 }
 
 /// Picks the nearest visible component within a fixed pixel tolerance.
@@ -161,7 +161,7 @@ pub fn pick_mesh_filtered(
     best.map(|(_, _, hit)| hit)
 }
 
-fn project(matrix: Mat4, position: Vec3) -> Option<Vec3> {
+pub(crate) fn project(matrix: Mat4, position: Vec3) -> Option<Vec3> {
     let clip = matrix * position.extend(1.0);
     if !clip.is_finite() || clip.w <= 0.0 {
         return None;
@@ -170,7 +170,7 @@ fn project(matrix: Mat4, position: Vec3) -> Option<Vec3> {
     (-1e-5..=1.00001).contains(&ndc.z).then_some(ndc)
 }
 
-fn ray(inverse: Mat4, ndc: Vec2) -> Option<(Vec3, Vec3)> {
+pub(crate) fn ray(inverse: Mat4, ndc: Vec2) -> Option<(Vec3, Vec3)> {
     let near = inverse.project_point3(ndc.extend(0.0));
     let far = inverse.project_point3(ndc.extend(1.0));
     let direction = (far - near).normalize_or_zero();
@@ -178,7 +178,7 @@ fn ray(inverse: Mat4, ndc: Vec2) -> Option<(Vec3, Vec3)> {
         .then_some((near, direction))
 }
 
-fn clip_depth(matrix: Mat4, mut a: Vec3, mut b: Vec3) -> Option<(Vec3, Vec3)> {
+pub(crate) fn clip_depth(matrix: Mat4, mut a: Vec3, mut b: Vec3) -> Option<(Vec3, Vec3)> {
     if !a.is_finite() || !b.is_finite() {
         return None;
     }
@@ -202,7 +202,7 @@ fn clip_depth(matrix: Mat4, mut a: Vec3, mut b: Vec3) -> Option<(Vec3, Vec3)> {
     Some((a, b))
 }
 
-fn triangles(mesh: &Mesh) -> Vec<Triangle> {
+pub(crate) fn triangles(mesh: &Mesh) -> Vec<Triangle> {
     let mut result = Vec::new();
     for (face_index, face) in mesh.faces.iter().enumerate() {
         result.extend(
@@ -217,7 +217,11 @@ fn triangles(mesh: &Mesh) -> Vec<Triangle> {
     result
 }
 
-fn nearest_face(triangles: &[Triangle], origin: Vec3, direction: Vec3) -> Option<(usize, f32)> {
+pub(crate) fn nearest_face(
+    triangles: &[Triangle],
+    origin: Vec3,
+    direction: Vec3,
+) -> Option<(usize, f32)> {
     triangles
         .iter()
         .filter_map(|triangle| {
@@ -229,7 +233,7 @@ fn nearest_face(triangles: &[Triangle], origin: Vec3, direction: Vec3) -> Option
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-fn occluded(triangles: &[Triangle], inverse: Mat4, ndc: Vec2, position: Vec3) -> bool {
+pub(crate) fn occluded(triangles: &[Triangle], inverse: Mat4, ndc: Vec2, position: Vec3) -> bool {
     let Some((origin, direction)) = ray(inverse, ndc) else {
         return true;
     };
