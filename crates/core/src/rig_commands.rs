@@ -18,7 +18,8 @@ use crate::state::AppState;
 use petunia_project::{
     AnimationAsset, AnimationClip, BakeOptions, IkChain, IkSolver, Interpolation, Keyframe,
     MotionGenerator, MotionRecipe, MotionStyle, RigPreset, RigRole, RootMode, Transform3D,
-    auto_fit_humanoid, compute_auto_skin_weights,
+    auto_fit_humanoid, compute_auto_skin_weights, compute_blended_skin_weights,
+    default_blend_radius, fit_skeleton_to_bounds, mesh_bounds,
 };
 use uuid::Uuid;
 
@@ -105,6 +106,95 @@ impl Command for AddRigPresetCmd {
             .project
             .add_skeleton(self.kind.build(self.scale));
         state.set_status("Rig added");
+        Ok(())
+    }
+}
+
+/// Por que o modelo ativo não pode ser ligado a uma criatura.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FitBlocked {
+    NoCreature,
+    NoModel,
+    Locked,
+}
+
+/// Verifica, sem efeitos, se dá para ajustar `skeleton_id` ao asset ativo.
+pub fn fit_availability(
+    project: &petunia_project::Project,
+    skeleton_id: Option<Uuid>,
+) -> Result<(), FitBlocked> {
+    if skeleton_id.is_none_or(|id| project.get_skeleton(id).is_none()) {
+        return Err(FitBlocked::NoCreature);
+    }
+    match project.active() {
+        Some(a) if !a.mesh.verts.is_empty() => {
+            if a.locked {
+                Err(FitBlocked::Locked)
+            } else {
+                Ok(())
+            }
+        }
+        _ => Err(FitBlocked::NoModel),
+    }
+}
+
+/// **Fit to model**: leva o rig da criatura ao volume do modelo ativo e o liga à
+/// malha por skin (pesos que seguem o osso mais próximo e só misturam perto das
+/// articulações). O rig mantém o id, então Motions, papéis e cadeias de IK
+/// seguem valendo. Um passo de Undo; refazer com o mesmo resultado não cria
+/// histórico. O documento continua guardando a malha em repouso.
+#[derive(Debug, Clone)]
+pub struct FitRigToActiveAssetCmd {
+    pub skeleton_id: Uuid,
+}
+
+impl Command for FitRigToActiveAssetCmd {
+    fn label(&self) -> &'static str {
+        "fit rig to model"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        match fit_availability(&state.project.project, Some(self.skeleton_id)) {
+            Ok(()) => Ok(()),
+            Err(FitBlocked::NoCreature) => Err("Rig not found"),
+            Err(FitBlocked::NoModel) => Err("The active model has no points"),
+            Err(FitBlocked::Locked) => Err("The active model is locked"),
+        }
+    }
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let project = &mut state.project.project;
+        let mesh = project
+            .active()
+            .map(|a| a.mesh.clone())
+            .ok_or(CommandError::NoActiveAsset)?;
+        let (lo, hi) =
+            mesh_bounds(&mesh).ok_or_else(|| exec_err("The model has no finite points"))?;
+        let original = project
+            .get_skeleton(self.skeleton_id)
+            .cloned()
+            .ok_or_else(|| exec_err("Rig not found"))?;
+        let mut skeleton = original.clone();
+        if !fit_skeleton_to_bounds(&mut skeleton, lo, hi) {
+            return Err(exec_err("The rig has no bones to fit"));
+        }
+        let skin = compute_blended_skin_weights(&mesh, &skeleton, default_blend_radius(&skeleton));
+        let unchanged = skeleton == original
+            && project.active().is_some_and(|a| {
+                a.skeleton_id == Some(self.skeleton_id) && a.skin_data.as_ref() == Some(&skin)
+            });
+        if unchanged {
+            return Err(CommandError::NoChange("rig already fits the model".into()));
+        }
+        if let Some(target) = project.get_skeleton_mut(self.skeleton_id) {
+            *target = skeleton;
+        }
+        if let Some(asset) = project.active_mut() {
+            asset.skeleton_id = Some(self.skeleton_id);
+            asset.skin_data = Some(skin);
+        }
+        state.set_status("Rig fitted to model");
         Ok(())
     }
 }

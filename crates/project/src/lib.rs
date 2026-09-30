@@ -82,6 +82,7 @@ pub mod paint_layers;
 pub mod palette;
 pub mod path_generator;
 pub mod pipeline;
+pub mod posing;
 pub mod prefab;
 pub mod profile;
 pub mod rig;
@@ -127,6 +128,10 @@ pub use pipeline::{
     BatchExportReport, DeliveryPipeline, ExportOptions, ExportReport, FileFormat,
     FormatCapabilities, FormatExporter, FormatImporter, ImportOptions, ImportPayload,
     PipelineError,
+};
+pub use posing::{
+    DEFAULT_BLEND_FRACTION, PoseOverride, compute_blended_skin_weights, default_blend_radius,
+    fit_skeleton_to_bounds, mesh_bounds, mesh_to_draw, posed_meshes, skeleton_bounds, skin_mesh,
 };
 pub use profile::{ProfileError, ProfileResource, ProfileWorkplane};
 pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight};
