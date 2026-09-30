@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Plano de trabalho em destaque — Onda 6, parte 3 (30/09/2026)
+- **O plano de trabalho aparece no DRAW** (capítulo 05): um recorte translúcido com grade, centrado na origem do desenho e do mesmo tamanho na tela em qualquer zoom. Aparece quando o plano está decidido (travado, ou com um perfil em edição); antes do primeiro clique no modo automático, o destaque da face sob o cursor continua mostrando o candidato.
+- **Verificado por pixels** no renderer real, e as regras de quando aparecer por teste do bridge.
+- **Correção de registro**: os pontos do domínio Point já eram desenhados como discos; a parte 2 os listou como pendentes por engano.
+
 ### Arestas nítidas e aparência por modo — Onda 6, parte 2 (30/09/2026)
 - **Arestas de largura constante**: as linhas do modelo têm a mesma espessura em pixels em qualquer zoom, distância ou escala de tela, com bordas suavizadas (antes eram linhas de 1 px físico).
 - **DRAW lê forma, POLY lê topologia** (capítulo 05): no DRAW aparecem só as arestas de feição (bordas e dobras acima de 30°); no POLY aparecem todas, as comuns mais finas e as de feição reforçadas; PAINT e UV mantêm as faces limpas.
