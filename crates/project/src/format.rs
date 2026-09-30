@@ -120,6 +120,7 @@ impl LegacyProjectWithSplines {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            rig_roles: Vec::new(),
         }
     }
 }
@@ -188,6 +189,7 @@ impl LegacyProjectBeforeSplines {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            rig_roles: Vec::new(),
         }
     }
 }

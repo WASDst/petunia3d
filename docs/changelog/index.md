@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F0.4 — Rig Roles (P3D-169, dados) (30/09/2026)
+- **Domínio** (`petunia_project::rig_roles`): `RigRole` (Root, Hips, Spine(n), Chest, Neck, Head, Jaw, Leg/Arm por membro e parte, Wing, Tail(n), Tentacle, Wiggle(n)) e `RigRoleMap` com atribuição validada (osso existente, papel único por osso — o erro nomeia o dono), pernas completas, cadeias de coluna/cauda e `RigRequirement` com mensagens legíveis.
+- **Inferência por nomes**: presets Petunia (humanoide, quadrúpede, multi-leg com 2–16 pernas), Mixamo e nomes genéricos; nomes desconhecidos ficam sem papel.
+- **Projeto**: `Project::rig_roles` (append-only, `serde(default)`; arquivos antigos abrem sem o campo), `add_skeleton` infere os papéis, `validate()` poda ossos/esqueletos ausentes; `assign_rig_role`/`clear_rig_role`/`infer_rig_roles`.
+- **glTF**: papéis em `skin.extras.petunia.roles` (por nome de osso); import restaura ou infere para rigs externos.
+
 ### Animate F0.2/F0.3 — glTF com skin, joints e animação (30/09/2026)
 - **Export** (`petunia_project::gltf_rig`, integrado a `export_gltf`): nós de joint com TRS de repouso, `skin` com `inverseBindMatrices`, `JOINTS_0`/`WEIGHTS_0` por vértice, `animations` por osso (translation/rotation/scale; LINEAR ou STEP) e `extras.petunia` para round-trip. Sem rig o GLB é idêntico ao anterior. Avisos em `export_report` quando a malha avaliada não casa com os pesos (skin omitida, nunca silenciosa).
 - **Import** (`import_rig`, `Project::add_imported_rig`, `ImportPayload.rig`): esqueleto a partir da IBM (com rotação de repouso), pesos `JOINTS_0` u8/u16, clipes (fps/loop/duração via extras), `scale` aplicado; CUBICSPLINE convertido e ancestrais/escala/canais ignorados geram **avisos**. O `ProjectService` liga esqueleto, pesos e clipes ao projeto.

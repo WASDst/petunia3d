@@ -81,6 +81,7 @@ pub mod path_generator;
 pub mod pipeline;
 pub mod profile;
 pub mod rig;
+pub mod rig_roles;
 pub mod spline;
 pub mod surface_attachment;
 pub mod surface_recipe;
@@ -117,6 +118,10 @@ pub use pipeline::{
 };
 pub use profile::{ProfileError, ProfileResource, ProfileWorkplane};
 pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight};
+pub use rig_roles::{
+    ArmPart, LegChain, LimbPart, RigRequirement, RigRole, RigRoleMap, RoleAssignment,
+    RoleContractError, RoleError,
+};
 pub use spline::{
     ArcLengthTable, SplineError, SplineEvaluationCache, SplineFrame, SplineHandleMode,
     SplineInterpolation, SplinePoint, SplineResource, SplineSample, SplineSnapSettings,
@@ -886,6 +891,10 @@ pub struct Project {
     /// o layout postcard legado, que embute `Vec<Asset>`.
     #[serde(default)]
     pub smooth_shaded_assets: Vec<Uuid>,
+    /// Papéis dos ossos por esqueleto (P3D-169). Append-only: fora de `Skeleton`
+    /// para não deslocar o layout postcard legado, que embute `Vec<Skeleton>`.
+    #[serde(default)]
+    pub rig_roles: Vec<RigRoleMap>,
 }
 
 impl Project {
@@ -934,6 +943,7 @@ impl Default for Project {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            rig_roles: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1391,6 +1401,7 @@ impl Project {
             profiles: Vec::new(),
             path_generators: Vec::new(),
             smooth_shaded_assets: Vec::new(),
+            rig_roles: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1427,12 +1438,89 @@ impl Project {
         self.skeletons.iter_mut().find(|s| s.id == id)
     }
 
+    /// Adiciona o esqueleto e infere seus papéis pelos nomes (presets canônicos,
+    /// Mixamo e nomes genéricos); o usuário pode corrigi-los depois.
     pub fn add_skeleton(&mut self, skeleton: Skeleton) {
+        let roles = RigRoleMap::infer(&skeleton);
+        self.push_skeleton_with_roles(skeleton, roles);
+    }
+
+    fn push_skeleton_with_roles(&mut self, skeleton: Skeleton, roles: RigRoleMap) {
+        self.rig_roles.retain(|m| m.skeleton_id != skeleton.id);
+        if !roles.is_empty() {
+            self.rig_roles.push(roles);
+        }
         self.skeletons.push(skeleton);
+    }
+
+    /// Mapa de papéis do esqueleto, se houver algum papel atribuído.
+    pub fn rig_roles_of(&self, skeleton_id: Uuid) -> Option<&RigRoleMap> {
+        self.rig_roles.iter().find(|m| m.skeleton_id == skeleton_id)
+    }
+
+    /// Atribui um papel. `Ok(true)` se algo mudou.
+    pub fn assign_rig_role(
+        &mut self,
+        skeleton_id: Uuid,
+        bone_id: u32,
+        role: RigRole,
+    ) -> Result<bool, RoleError> {
+        let Some(skeleton) = self.skeletons.iter().find(|s| s.id == skeleton_id) else {
+            return Err(RoleError::WrongSkeleton);
+        };
+        let pos = match self
+            .rig_roles
+            .iter()
+            .position(|m| m.skeleton_id == skeleton_id)
+        {
+            Some(p) => p,
+            None => {
+                self.rig_roles.push(RigRoleMap::new(skeleton_id));
+                self.rig_roles.len() - 1
+            }
+        };
+        let map = &mut self.rig_roles[pos];
+        let before = map.revision;
+        map.assign(skeleton, bone_id, role)?;
+        Ok(map.revision != before)
+    }
+
+    /// Remove o papel de um osso. `true` se algo mudou.
+    pub fn clear_rig_role(&mut self, skeleton_id: Uuid, bone_id: u32) -> bool {
+        self.rig_roles
+            .iter_mut()
+            .find(|m| m.skeleton_id == skeleton_id)
+            .is_some_and(|m| m.clear(bone_id))
+    }
+
+    /// Redetecta os papéis pelos nomes, substituindo o mapa. `true` se mudou.
+    pub fn infer_rig_roles(&mut self, skeleton_id: Uuid) -> bool {
+        let Some(skeleton) = self.skeletons.iter().find(|s| s.id == skeleton_id) else {
+            return false;
+        };
+        let mut fresh = RigRoleMap::infer(skeleton);
+        let old = self
+            .rig_roles
+            .iter()
+            .position(|m| m.skeleton_id == skeleton_id);
+        let changed = match old {
+            Some(i) => {
+                let same = self.rig_roles[i].entries() == fresh.entries();
+                fresh.revision = self.rig_roles[i].revision + u64::from(!same);
+                self.rig_roles.remove(i);
+                !same
+            }
+            None => !fresh.is_empty(),
+        };
+        if !fresh.is_empty() {
+            self.rig_roles.push(fresh);
+        }
+        changed
     }
 
     pub fn remove_skeleton(&mut self, id: Uuid) {
         self.skeletons.retain(|s| s.id != id);
+        self.rig_roles.retain(|m| m.skeleton_id != id);
         for a in &mut self.assets {
             if a.skeleton_id == Some(id) {
                 a.skeleton_id = None;
@@ -1481,8 +1569,8 @@ impl Project {
                 }
             }
         }
-        for skeleton in rig.skeletons {
-            self.add_skeleton(skeleton);
+        for (skeleton, roles) in rig.skeletons.into_iter().zip(rig.roles) {
+            self.push_skeleton_with_roles(skeleton, roles);
         }
         for animation in rig.animations {
             self.add_animation(animation);
@@ -1875,6 +1963,19 @@ impl Project {
             .retain(|id| asset_ids.contains(id));
         self.smooth_shaded_assets.sort_unstable();
         self.smooth_shaded_assets.dedup();
+        // Papéis de rig: um mapa por esqueleto existente, sem ossos fantasmas.
+        let mut seen_skeletons = std::collections::HashSet::new();
+        let skeletons = &self.skeletons;
+        self.rig_roles.retain_mut(|m| {
+            let Some(skeleton) = skeletons.iter().find(|s| s.id == m.skeleton_id) else {
+                return false;
+            };
+            if !seen_skeletons.insert(m.skeleton_id) {
+                return false;
+            }
+            m.prune(skeleton);
+            !m.is_empty()
+        });
         let mut spline_ids = std::collections::HashSet::with_capacity(self.splines.len());
         for spline in &mut self.splines {
             if !spline_ids.insert(spline.id) {

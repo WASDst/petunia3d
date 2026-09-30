@@ -424,3 +424,54 @@ fn foreign_glb_imports_with_honest_warnings() {
     // O canal do nó fora do esqueleto não vira trilha.
     assert_eq!(clip.tracks.len(), 1);
 }
+
+#[test]
+fn roles_round_trip_through_gltf_and_are_inferred_for_foreign_rigs() {
+    use petunia_project::{ArmPart, RigRole};
+    let (mut p, skel) = rigged_project();
+    // Correção manual: a mão esquerda vira acessório com movimento secundário.
+    let hand = skel.find_bone("Hand.L").unwrap();
+    p.assign_rig_role(skel.id, hand, RigRole::Wiggle(0))
+        .unwrap();
+    let glb = export_gltf(&p, &[0]).unwrap();
+    let rig = import_rig(&glb, "t", 1.0).unwrap().unwrap();
+    let sk = &rig.skeletons[0];
+    let roles = &rig.roles[0];
+    assert_eq!(roles.skeleton_id, sk.id);
+    let hand2 = sk.find_bone("Hand.L").unwrap();
+    assert_eq!(
+        roles.role_of(hand2),
+        Some(RigRole::Wiggle(0)),
+        "papel manual"
+    );
+    let hand_r = sk.find_bone("Hand.R").unwrap();
+    assert_eq!(
+        roles.role_of(hand_r),
+        Some(RigRole::Arm {
+            limb: 1,
+            part: ArmPart::Hand
+        })
+    );
+    assert_eq!(roles.legs().len(), 2);
+
+    // Entra no projeto com os papéis.
+    let mut target = Project::new();
+    let first = target.assets.len();
+    let meshes = import_glb_bytes(&glb, "t", false, 1.0).unwrap();
+    for (name, mesh) in meshes {
+        target.add(&name, mesh);
+    }
+    target.add_imported_rig(rig, first);
+    let sid = target.skeletons[0].id;
+    assert_eq!(target.rig_roles_of(sid).unwrap().legs().len(), 2);
+
+    // GLB externo (sem extras de papéis): inferência por nome; "Root" é raiz.
+    let foreign = import_rig(&foreign_glb(), "ext", 1.0).unwrap().unwrap();
+    let fsk = &foreign.skeletons[0];
+    let root = fsk.find_bone("Root").unwrap();
+    assert_eq!(foreign.roles[0].role_of(root), Some(RigRole::Root));
+    assert_eq!(
+        foreign.roles[0].role_of(fsk.find_bone("Tip").unwrap()),
+        None
+    );
+}

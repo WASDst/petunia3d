@@ -264,11 +264,18 @@ pub(crate) fn build_rig_doc(
         }
         let ibm_acc = bb.push_f32(&ibm, "MAT4", 16, 0, None);
         let joints: Vec<usize> = (0..sk.bones.len()).map(|i| base + i).collect();
+        let roles: Vec<Value> = project
+            .rig_roles_of(sk.id)
+            .map(|m| m.by_bone_name(sk))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(bone, role)| json!({ "bone": bone, "role": role }))
+            .collect();
         let mut skin = json!({
             "name": sk.name,
             "joints": joints,
             "inverseBindMatrices": ibm_acc,
-            "extras": { "petunia": { "skeleton_id": sk.id } },
+            "extras": { "petunia": { "skeleton_id": sk.id, "roles": roles } },
         });
         if let Some(root) = first_root {
             skin["skeleton"] = json!(root);
@@ -425,6 +432,9 @@ pub struct ImportedMeshSkin {
 #[derive(Clone, Debug, Default)]
 pub struct ImportedRig {
     pub skeletons: Vec<Skeleton>,
+    /// Papéis (P3D-169), alinhado a `skeletons`: dos `extras` do Petunia ou
+    /// inferidos pelos nomes.
+    pub roles: Vec<crate::rig_roles::RigRoleMap>,
     pub mesh_skins: Vec<ImportedMeshSkin>,
     pub animations: Vec<AnimationAsset>,
     /// Limitações encontradas (nunca silenciosas).
@@ -648,6 +658,24 @@ pub fn import_rig(
             }
         }
         skeleton.compute_bind_pose_matrices();
+
+        let pairs: Option<Vec<(String, crate::rig_roles::RigRole)>> = extras_petunia(skin.extras())
+            .and_then(|e| e.get("roles").cloned())
+            .and_then(|r| r.as_array().cloned())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| {
+                        let name = e.get("bone")?.as_str()?.to_string();
+                        let role = serde_json::from_value(e.get("role")?.clone()).ok()?;
+                        Some((name, role))
+                    })
+                    .collect()
+            });
+        let roles = match pairs {
+            Some(p) => crate::rig_roles::RigRoleMap::from_names(&skeleton, &p),
+            None => crate::rig_roles::RigRoleMap::infer(&skeleton),
+        };
+        rig.roles.push(roles);
 
         let ids: Vec<u32> = bone_of.iter().map(|b| b.expect("resolvido")).collect();
         for (j, n) in joints.iter().enumerate() {
