@@ -6,6 +6,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
 ### Paint e viewport dividida (30/09/2026)
+- **Ícones booleanos redesenhados**: Fuse (união sólida), Cut (união com mordida e contorno tracejado do volume removido), Intersect (interseção destacada com arcos tracejados) e Join (duas partes ligadas por ponte) agora são distinguíveis a 16–20 px; antes eram quatro variações do mesmo par quadrado+círculo.
 - **PiP do Paint**: botão no Canvas do Inspector troca os papéis — o canvas 2D ocupa a viewport e o 3D vira um inset ao vivo (clique para voltar); ao iniciar um traço, a câmera 3D enquadra a face cujo UV foi tocado. Limite: com o PiP aberto os cards flutuantes do Inspector ficam cobertos.
 - **Ícones**: traço padronizado em 1,75 px nos dois packs (antes 1,4 a 1,8), novo `cargo run -p xtask -- icons-check` (grade 24, só `currentColor`, larguras permitidas, paridade outline/filled) e remoção dos 26 SVGs legados não usados do shell Slint.
 - **Paint+UV unificado (primeiro passo)**: a pill UV saiu da barra de workspaces (MODEL | PAINT); "Preparar superfície" (Unwrap e Pack Islands) entra no Inspector do PAINT. O código do workspace UV ainda existe por trás de atalhos e será removido quando o wireframe UV do canvas cobrir a edição de ilhas.

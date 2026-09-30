@@ -178,10 +178,14 @@ add('symmetrize', M, 'Symmetrize', ink(p('M12 2v20', stroke_dasharray='2 2'), p(
 add('separate', M, 'Separate Selection', ink(p('M3 7l6-3 5 3-6 3zM3 7v10l5 3 6-3V7M16 10l5-3v10l-5 3z'), p('M11 12h7m-3-3 3 3-3 3')), solid(p('M2 7 9 3l5 3v12l-6 3-6-4zM17 9l5-3v12l-5 3z')))
 add('revolve', M, 'Revolve', ink(p('M8 5v14M8 5q11-1 10 7t-10 7M4 4v16', stroke_dasharray='3 2'), p('M18 8l3 4-3 3')), solid(p('M7 4h3v16H7zM10 4c8-1 12 3 12 8s-4 9-12 8v-3c6 0 9-2 9-5s-3-5-9-5z')))
 add('spin', M, 'Spin', ink(p('M3 18 9 20l3-5-6-2zM12 15c8 2 11-6 5-10M15 4l2 1 1 3')), solid(p('M2 18 6 12l7 3-4 6zM12 15c7 0 10-6 5-10l-2 1c3 3 1 7-3 7zM15 3l5 2-1 5-2-3z')))
-add('boolean_fuse', M, 'Fuse', ink(r(3, 5, 12, 13, 2), c(16, 12, 6), p('M10 5v13')), solid(p('M5 4h8a3 3 0 0 1 3 2 7 7 0 0 1 1 13H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z')))
-add('boolean_cut', M, 'Cut', ink(r(3, 5, 12, 13, 2), c(16, 12, 6), p('M12 8v8', stroke_dasharray='2 2')), solid(p('M5 4h9v3H5v10h8v3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zM16 7a5 5 0 0 1 0 10v-3a2 2 0 0 0 0-4z')))
-add('boolean_intersect', M, 'Intersect', ink(r(3, 5, 12, 13, 2), c(16, 12, 6), p('M11 8v8')), solid(p('M11 6a6 6 0 0 1 7 6 6 6 0 0 1-7 6z')))
-add('boolean_join', M, 'Join', ink(r(2, 5, 10, 13, 2), c(17, 12, 5), p('M12 12h5m-2-2 2 2-2 2')), solid(r(2, 5, 10, 13, 2), c(17, 12, 5)))
+UNION = 'M12 6.8A6 6 0 1 0 12 17.2A6 6 0 1 0 12 6.8z'
+BITE = 'M12 6.8A6 6 0 1 0 12 17.2A6 6 0 0 1 12 6.8z'
+LENS = 'M12 6.8A6 6 0 0 1 12 17.2A6 6 0 0 1 12 6.8z'
+add('boolean_fuse', M, 'Fuse', ink(p(UNION)), solid(p(UNION)))
+add('boolean_cut', M, 'Cut', ink(p(BITE), p('M12 6.8A6 6 0 1 1 12 17.2', stroke_dasharray='2 2.4')), solid(p(BITE)) + ink(p('M12 6.8A6 6 0 1 1 12 17.2', stroke_dasharray='2 2.4')))
+OUTER = ink(p('M12 6.8A6 6 0 1 0 12 17.2', stroke_dasharray='2 2.4'), p('M12 6.8A6 6 0 1 1 12 17.2', stroke_dasharray='2 2.4'))
+add('boolean_intersect', M, 'Intersect', ink(p(LENS)) + OUTER, solid(p(LENS)) + OUTER)
+add('boolean_join', M, 'Join', ink(c(6.5, 12, 4.5), c(17.5, 12, 4.5), p('M11 12h2')), solid(c(6.5, 12, 4.5), c(17.5, 12, 4.5)) + ink(p('M10 12h4')))
 
 U = 'UV & materials'
 add('uv_editor', U, 'UV Editor', ink(r(2, 2, 20, 20, 1), p('M2 12h20M12 2v20M4 4l6 3 1 3-7 1zM14 14l7 1-3 6-5-2z')), solid(r(2, 2, 20, 20, 1)) + ink(p('M2 12h20M12 2v20M4 4l6 3 1 3-7 1zM14 14l7 1-3 6-5-2z', stroke='#252735')))
