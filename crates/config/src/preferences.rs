@@ -115,6 +115,11 @@ impl SectionLayout {
     }
 }
 
+/// Limiar padrão de arrasto; igual a `petunia_core::DEFAULT_DRAG_THRESHOLD_PX`.
+const fn default_drag_threshold_px() -> f32 {
+    4.0
+}
+
 fn default_icon_theme() -> String {
     "outline".to_string()
 }
@@ -134,6 +139,11 @@ pub struct UserPreferences {
     pub model_quick_actions: Vec<String>,
     /// Intervalo máximo em milissegundos para duplo toque de tecla de ferramenta entrar em modo modal (0 desativa o temporizador).
     pub double_tap_interval_ms: u64,
+    /// Distância, em px lógicos, que separa um clique de um arrasto (2–16).
+    pub drag_threshold_px: f32,
+    /// Clicar numa alça a faz seguir o ponteiro até o próximo clique, sem
+    /// segurar o botão (alternativa a arrastar, WCAG 2.2 — 2.5.7).
+    pub click_move_click: bool,
     /// Diferenciação não-cromática de eixos para acessibilidade e daltonismo.
     pub colorblind_axes: bool,
     /// Redução de movimento para usuários com sensibilidade vestibular / labirintite.
@@ -162,6 +172,8 @@ impl Default for UserPreferences {
             ui_scale: 1.0,
             model_quick_actions: Vec::new(),
             double_tap_interval_ms: 350,
+            drag_threshold_px: default_drag_threshold_px(),
+            click_move_click: false,
             colorblind_axes: false,
             reduced_motion: false,
             multiselection_measure_tag: true,
@@ -196,6 +208,11 @@ impl UserPreferences {
         }
         if preferences.double_tap_interval_ms > 2000 {
             preferences.double_tap_interval_ms = 2000;
+        }
+        if !preferences.drag_threshold_px.is_finite()
+            || !(2.0..=16.0).contains(&preferences.drag_threshold_px)
+        {
+            preferences.drag_threshold_px = Self::default().drag_threshold_px;
         }
         if preferences.active_keymap_id.is_empty() {
             preferences.active_keymap_id = "petunia-default".to_string();
@@ -289,6 +306,8 @@ mod tests {
             active_keymap_id: "blender".to_string(),
             icon_theme: "outline".to_string(),
             double_tap_interval_ms: 300,
+            drag_threshold_px: 6.0,
+            click_move_click: true,
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),
                 SectionLayout {

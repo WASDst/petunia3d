@@ -8,6 +8,10 @@ use petunia_render_wgpu::Renderer;
 
 use crate::{PetuniaViewport, ViewportRenderState};
 
+/// Amostras por pixel do viewport. `Rgba8Unorm` e `Depth24Plus` têm MSAA 4x
+/// garantido pelo wgpu em todos os backends.
+pub const VIEWPORT_MSAA_SAMPLES: u32 = 4;
+
 /// Viewport acelerado por WGPU que renderiza a cena 3D para uma textura
 /// off-screen e converte em [`slint::Image`].
 pub struct WgpuViewport {
@@ -20,6 +24,8 @@ pub struct WgpuViewport {
     pub selection_domain: SelectionDomain,
     target_texture: Option<wgpu::Texture>,
     target_view: Option<wgpu::TextureView>,
+    /// Alvo multisample resolvido em `target_texture` a cada frame.
+    msaa_view: Option<wgpu::TextureView>,
 }
 
 impl WgpuViewport {
@@ -81,7 +87,11 @@ impl WgpuViewport {
         width: u32,
         height: u32,
     ) -> Self {
-        let renderer = Renderer::new(&device, wgpu::TextureFormat::Rgba8Unorm);
+        let renderer = Renderer::with_sample_count(
+            &device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            VIEWPORT_MSAA_SAMPLES,
+        );
         let mut viewport = Self {
             device,
             queue,
@@ -92,6 +102,7 @@ impl WgpuViewport {
             selection_domain: SelectionDomain::Object,
             target_texture: None,
             target_view: None,
+            msaa_view: None,
         };
         viewport.recreate_target();
         viewport
@@ -117,6 +128,25 @@ impl WgpuViewport {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.target_texture = Some(texture);
         self.target_view = Some(view);
+        let samples = self.renderer.sample_count();
+        self.msaa_view = (samples > 1).then(|| {
+            self.device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("Petunia Slint Viewport MSAA"),
+                    size: wgpu::Extent3d {
+                        width: self.width.max(1),
+                        height: self.height.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .create_view(&wgpu::TextureViewDescriptor::default())
+        });
         self.renderer.resize(&self.device, self.width, self.height);
     }
 
@@ -172,9 +202,11 @@ impl WgpuViewport {
             let depth_view = self.renderer.depth_view();
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Slint Viewport Pass"),
+                // Com MSAA, desenha no alvo multisample e resolve na textura
+                // exibida pelo Slint; as amostras não precisam ser guardadas.
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
+                    view: self.msaa_view.as_ref().unwrap_or(view),
+                    resolve_target: self.msaa_view.as_ref().map(|_| view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.082,
@@ -182,7 +214,11 @@ impl WgpuViewport {
                             b: 0.098,
                             a: 1.0,
                         }),
-                        store: wgpu::StoreOp::Store,
+                        store: if self.msaa_view.is_some() {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
                     },
                     depth_slice: None,
                 })],
@@ -212,11 +248,22 @@ impl WgpuViewport {
 
 impl PetuniaViewport for WgpuViewport {
     fn resize(&mut self, width: u32, height: u32) {
+        let limit = self.device.limits().max_texture_dimension_2d.max(1);
+        let width = width.clamp(1, limit);
+        let height = height.clamp(1, limit);
         if self.width != width || self.height != height {
-            self.width = width.max(1);
-            self.height = height.max(1);
+            self.width = width;
+            self.height = height;
             self.recreate_target();
         }
+    }
+
+    fn uses_physical_pixels(&self) -> bool {
+        true
+    }
+
+    fn set_pixel_ratio(&mut self, ratio: f32) {
+        self.renderer.set_pixel_ratio(ratio);
     }
 
     fn update(&mut self, _dt_seconds: f32) {}

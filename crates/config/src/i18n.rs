@@ -377,6 +377,19 @@ pub mod text_id {
         TextId::new("preferences.double_tap_interval");
     pub const PREFERENCES_MULTISELECTION_MEASURE: TextId =
         TextId::new("preferences.multiselection_measure_tag");
+    pub const PREFERENCES_DRAG_THRESHOLD: TextId = TextId::new("preferences.drag_threshold");
+    pub const PREFERENCES_CLICK_MOVE_CLICK: TextId = TextId::new("preferences.click_move_click");
+    pub const PREFERENCES_CLICK_MOVE_CLICK_HINT: TextId =
+        TextId::new("preferences.click_move_click_hint");
+    pub const TOOL_GRAMMAR_LAST_OPERATION: TextId = TextId::new("tool_grammar.last_operation");
+    pub const TOOL_GRAMMAR_ADJUST_HINT: TextId = TextId::new("tool_grammar.adjust_hint");
+    pub const TOOL_GRAMMAR_READY: TextId = TextId::new("tool_grammar.ready");
+    pub const TOOL_GRAMMAR_GESTURE_HINT: TextId = TextId::new("tool_grammar.gesture_hint");
+    pub const TOOL_GRAMMAR_NEEDS_FACE: TextId = TextId::new("tool_grammar.needs_face");
+    pub const TOOL_GRAMMAR_NEEDS_EDGE: TextId = TextId::new("tool_grammar.needs_edge");
+    pub const TOOL_GRAMMAR_EXPIRED: TextId = TextId::new("tool_grammar.expired");
+    pub const TOOL_GRAMMAR_ADJUSTED: TextId = TextId::new("tool_grammar.adjusted");
+    pub const TOOL_GRAMMAR_PRIMITIVE_KEPT: TextId = TextId::new("tool_grammar.primitive_kept");
 
     // Diálogo de recuperação de autosave (P3D-002).
     pub const UI_RECOVERY_TITLE: TextId = TextId::new("ui.recovery_title");
@@ -703,6 +716,18 @@ pub mod text_id {
         PREFERENCES_REDUCED_MOTION,
         PREFERENCES_DOUBLE_TAP_INTERVAL,
         PREFERENCES_MULTISELECTION_MEASURE,
+        PREFERENCES_DRAG_THRESHOLD,
+        PREFERENCES_CLICK_MOVE_CLICK,
+        PREFERENCES_CLICK_MOVE_CLICK_HINT,
+        TOOL_GRAMMAR_LAST_OPERATION,
+        TOOL_GRAMMAR_ADJUST_HINT,
+        TOOL_GRAMMAR_READY,
+        TOOL_GRAMMAR_GESTURE_HINT,
+        TOOL_GRAMMAR_NEEDS_FACE,
+        TOOL_GRAMMAR_NEEDS_EDGE,
+        TOOL_GRAMMAR_EXPIRED,
+        TOOL_GRAMMAR_ADJUSTED,
+        TOOL_GRAMMAR_PRIMITIVE_KEPT,
         FILE_NEW,
         FILE_OPEN_PROJECT,
         FILE_SAVE,

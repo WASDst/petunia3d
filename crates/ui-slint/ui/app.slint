@@ -3494,6 +3494,21 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> colorblind-axes: false;
     in-out property <bool> reduced-motion: false;
     in-out property <int> double-tap-interval-ms: 350;
+    // Gramática única de ferramenta (constituição 11, ADR 006).
+    in property <bool> tool-grammar-active: false;
+    in property <bool> tool-gesture-latched: false;
+    in property <bool> last-operation-active: false;
+    in property <string> last-operation-title;
+    in property <float> last-operation-value: 0.0;
+    in property <float> last-operation-step: 0.1;
+    in property <string> last-operation-unit;
+    in property <string> label-last-operation;
+    in property <string> label-last-operation-hint;
+    in-out property <float> drag-threshold-px: 4.0;
+    in-out property <bool> click-move-click: false;
+    in property <string> label-drag-threshold;
+    in property <string> label-click-move-click;
+    in property <string> label-click-move-click-hint;
     in-out property <bool> multiselection-measure-tag: true;
     in-out property <bool> tool-modal-active: false;
     in-out property <bool> tool-options-active: false;
@@ -3580,7 +3595,8 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-orbit(float, float);
     callback viewport-pan(float, float);
     callback viewport-zoom(float);
-    callback viewport-resized(float, float);
+    /// px lógicos (largura, altura) e px físicos (largura, altura) da viewport.
+    callback viewport-resized(float, float, float, float);
     callback viewport-select(float, float, bool, bool);
     callback viewport-box-select(float, float, float, float, bool, bool);
     callback viewport-lasso-select(string, bool, bool);
@@ -3607,6 +3623,13 @@ export component PetuniaSlintShell inherits Window {
     callback colorblind-axes-set(bool);
     callback reduced-motion-set(bool);
     callback double-tap-interval-set(int);
+    /// Botão principal da gramática única: 0 pressionar, 1 mover, 2 soltar, 3 cancelar.
+    callback tool-pointer(int, float, float, bool, bool);
+    callback last-operation-committed(string) -> bool;
+    /// Ctrl+roda: contagens e raios da ferramenta (a roda sozinha sempre faz zoom).
+    callback viewport-ctrl-scroll(float);
+    callback drag-threshold-set(float);
+    callback click-move-click-set(bool);
     callback double-tap-interval-released(int);
     callback multiselection-measure-tag-set(bool);
     callback asset-query-changed(string);
@@ -3788,7 +3811,8 @@ export component PetuniaSlintShell inherits Window {
             return base.transparentize(0.72);
         }
         if root.gizmo-hover-axis == axis {
-            return base.transparentize(0.18);
+            // Pré-seleção: o eixo sob o cursor ganha presença (clareia).
+            return base.brighter(0.35);
         }
         return base;
     }
@@ -4379,11 +4403,21 @@ export component PetuniaSlintShell inherits Window {
                     border-width: 1px;
                     border-color: DesignTokens.border;
 
+                    // Em px físicos a medida muda também quando só o fator de escala
+                    // muda (UI scale, troca de monitor), o que recria o alvo nítido.
+                    property <float> physical-width: self.width / 1phx;
+                    property <float> physical-height: self.height / 1phx;
                     changed width => {
-                        root.viewport-resized(self.width / 1px, self.height / 1px);
+                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
                     }
                     changed height => {
-                        root.viewport-resized(self.width / 1px, self.height / 1px);
+                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
+                    }
+                    changed physical-width => {
+                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
+                    }
+                    changed physical-height => {
+                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
                     }
 
                     if has-gpu-viewport: Image {
@@ -4560,7 +4594,7 @@ export component PetuniaSlintShell inherits Window {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
                             : (root.active-workspace == "PAINT") ? crosshair
-                            : (root.active-tool == "slice" || root.active-tool == "knife" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
+                            : (root.active-tool == "slice" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
                             : (root.active-tool == "extrude" || root.active-tool == "push_pull") ? ns-resize
                             : root.active-tool == "bevel" ? nesw-resize
                             : root.active-tool == "inset" ? nwse-resize
@@ -4598,6 +4632,8 @@ export component PetuniaSlintShell inherits Window {
                         property <bool> is-slice-drag: false;
                         property <bool> is-gizmo-drag: false;
                         property <bool> is-keyboard-transform-drag: false;
+                        // Gesto da gramática única em andamento (botão pressionado).
+                        property <bool> is-tool-gesture: false;
                         property <bool> is-profile-depth-drag: false;
                         property <bool> is-profile-volume-drag: false;
                         property <bool> is-profile-draw-drag: false;
@@ -4628,6 +4664,7 @@ export component PetuniaSlintShell inherits Window {
                             self.is-slice-drag = false;
                             self.is-gizmo-drag = false;
                             self.is-keyboard-transform-drag = false;
+                            self.is-tool-gesture = false;
                             self.consume-click = false;
                             self.loop-selection = false;
                             self.is-painting = false;
@@ -4655,14 +4692,21 @@ export component PetuniaSlintShell inherits Window {
                         pointer-event(event) => {
                             root.precision-mode = event.modifiers.shift;
                             root.snap-mode = event.modifiers.control;
-                            if event.kind == PointerEventKind.cancel || (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
+                            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right
+                                && (is-tool-gesture || root.tool-gesture-latched || is-transform || is-gizmo-drag
+                                    || is-tool-drag || is-keyboard-transform-drag || root.transform-instant-active
+                                    || is-loop-drag || is-slice-drag) {
+                                // RMB nunca cancela um gesto (constituição 11); cancelar é Esc.
+                            } else if event.kind == PointerEventKind.cancel || (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
+                                if event.kind == PointerEventKind.cancel && (is-tool-gesture || root.tool-gesture-latched) {
+                                    root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false);
+                                }
                                 self.clear-gesture();
                                 if event.kind == PointerEventKind.down && event.modifiers.shift {
                                     consume-click = true;
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
                                 } else {
-                                    // Blender: com sessão ativa o botão direito
-                                    // cancela; sem sessão abre o menu da viewport.
+                                    // Sem gesto: abre o menu da viewport.
                                     root.viewport-context-requested(self.mouse-x / 1px, self.mouse-y / 1px);
                                 }
                             } else if event.kind == PointerEventKind.down {
@@ -4692,9 +4736,7 @@ export component PetuniaSlintShell inherits Window {
                                         is-profile-draw-drag = true;
                                         root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
                                     }
-                                } else if event.button == PointerEventButton.middle
-                                    && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && root.active-tool != "slice" {
+                                } else if event.button == PointerEventButton.middle {
                                     if event.modifiers.shift {
                                         is-pan = true;
                                         is-orbit = false;
@@ -4702,9 +4744,7 @@ export component PetuniaSlintShell inherits Window {
                                         is-orbit = true;
                                         is-pan = false;
                                     }
-                                } else if event.button == PointerEventButton.left && event.modifiers.alt && root.active-keymap-id == "maya"
-                                    && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && root.active-tool != "slice" {
+                                } else if event.button == PointerEventButton.left && event.modifiers.alt && root.active-keymap-id == "maya" {
                                     is-orbit = true;
                                     is-pan = false;
                                 } else if event.button == PointerEventButton.left && root.active-tool == "lasso_select" && !event.modifiers.alt {
@@ -4722,9 +4762,15 @@ export component PetuniaSlintShell inherits Window {
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
                                 } else if event.button == PointerEventButton.left
                                     && (!event.modifiers.alt || root.active-keymap-id != "maya") {
-                                    // O gizmo tem picking próprio: clicar num
-                                    // handle restringe a transformação ao eixo/plano.
-                                    if root.gizmo-has-hover {
+                                    // Gramática única: ferramentas persistentes (Move/Rotate/Scale,
+                                    // Extrude, Inset, Round Edge, Push/Pull) e o gizmo delas decidem
+                                    // clique × arrasto no bridge; o clique sem arrasto seleciona lá.
+                                    if root.tool-gesture-latched
+                                        || (root.tool-grammar-active && !event.modifiers.alt && !root.transform-instant-active) {
+                                        is-tool-gesture = true;
+                                        consume-click = true;
+                                        root.tool-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
+                                    } else if root.gizmo-has-hover {
                                         is-gizmo-drag = true;
                                         root.gizmo-drag-begin(self.mouse-x / 1px, self.mouse-y / 1px);
                                     } else if root.transform-instant-active {
@@ -4808,18 +4854,20 @@ export component PetuniaSlintShell inherits Window {
                                     pending-box-select = false;
                                     is-box-select = true;
                                     moved-since-down = true;
-                                } else if is-orbit && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && root.active-tool != "slice" {
+                                } else if is-orbit {
                                     moved-since-down = true;
                                     root.viewport-orbit((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
-                                } else if is-pan && !root.tool-modal-active && !root.loop-cut-active && !root.loop-cut-armed
-                                    && root.active-tool != "slice" {
+                                } else if is-pan {
                                     moved-since-down = true;
                                     root.viewport-pan((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
+                                } else if (is-tool-gesture && self.pressed) || root.tool-gesture-latched {
+                                    // Gramática única: o bridge decide clique × arrasto e aplica.
+                                    moved-since-down = true;
+                                    root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
                                 } else if event.modifiers.alt && root.active-keymap-id != "maya"
                                     && (abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px) {
                                     moved-since-down = true;
@@ -4897,6 +4945,10 @@ export component PetuniaSlintShell inherits Window {
                                     root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
                                 }
                             } else if event.kind == PointerEventKind.up {
+                                if is-tool-gesture {
+                                    root.tool-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
+                                    is-tool-gesture = false;
+                                }
                                 if is-box-select {
                                     if moved-since-down {
                                         root.viewport-box-select(last-x / self.width, last-y / self.height, self.mouse-x / self.width, self.mouse-y / self.height, extend-selection, subtract-selection);
@@ -4985,11 +5037,11 @@ export component PetuniaSlintShell inherits Window {
                         }
 
                         scroll-event(event) => {
-                            if root.active-tool == "loop_cut" {
-                                root.loop-cut-count-committed("\{root.loop-cut-cuts + (event.delta-y > 0px ? 1 : -1)}");
-                            } else if root.tool-modal-active {
-                                root.tool-modal-scrubbed((event.delta-y > 0px ? -15.0 : 15.0), event.modifiers.shift, self.mouse-x / 1px, self.mouse-y / 1px);
-                            } else if !root.profile-active && root.active-tool != "slice" {
+                            // A roda sempre faz zoom (constituição 11). Ctrl+roda ajusta
+                            // contagens (Loop Cut) e o raio da edição proporcional.
+                            if event.modifiers.control {
+                                root.viewport-ctrl-scroll(event.delta-y / 1px);
+                            } else {
                                 root.viewport-zoom(event.delta-y / 1px);
                             }
                             accept
@@ -5473,7 +5525,7 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     // Pílula de Ferramenta Ativa e Modo de Operação (Feedback visual contínuo)
-                    if !root.measure-visible && active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "knife" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
+                    if !root.measure-visible && active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
                         width: min(parent.width - 40px, active-tool-hud-row.preferred-width + 24px);
                         x: (parent.width - self.width) / 2;
                         y: 58px;
@@ -6185,12 +6237,33 @@ export component PetuniaSlintShell inherits Window {
                         Text { text: "Enter confirm · Esc cancel"; color: DesignTokens.text-muted; font-size: 9px; }
                     }
 
-                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "knife" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d"): ToolCard {
+                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d"): ToolCard {
                         x: 14px;
                         y: 58px;
                         title: root.tool-options-title != "" ? root.tool-options-title : "Tool Options";
                         collapsed: root.tool-properties-collapsed;
                         collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
+
+                        // Última operação (constituição 11): o valor do gesto confirmado
+                        // continua ajustável aqui, dentro da mesma entrada de Undo.
+                        if root.last-operation-active: VerticalLayout {
+                            spacing: 4px;
+                            Text {
+                                text: root.label-last-operation + " · " + root.last-operation-title;
+                                color: DesignTokens.text-secondary;
+                                font-size: 10px;
+                                font-weight: 600;
+                            }
+                            NumericField {
+                                label: root.last-operation-unit != "" ? root.last-operation-unit : "#";
+                                full-label: root.label-last-operation + " — " + root.last-operation-title;
+                                hint: root.label-last-operation-hint;
+                                value: root.last-operation-value;
+                                step: root.last-operation-step;
+                                label-color: DesignTokens.accent;
+                                text-committed(text) => { root.last-operation-committed(text) }
+                            }
+                        }
 
                         if root.active-tool == "extrude": VerticalLayout {
                             spacing: 6px;
@@ -6366,7 +6439,7 @@ export component PetuniaSlintShell inherits Window {
                             scrub-cancelled => { root.transform-scrub-cancelled(); }
                         }
 
-                        if root.active-tool == "knife": VerticalLayout {
+                        if root.active-tool == "cut": VerticalLayout {
                             spacing: 6px;
                             Text { text: "Click vertices or edges to draw cut path"; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
                             HorizontalLayout {
@@ -6379,14 +6452,14 @@ export component PetuniaSlintShell inherits Window {
                                     border-width: 1px;
                                     border-color: DesignTokens.border;
                                     Text { text: root.label-cancel; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
-                                    TouchArea { clicked => { root.command-executed("view.cancel_active"); } }
+                                    TouchArea { clicked => { root.command-executed("model.knife_cancel"); } }
                                 }
                                 Rectangle {
                                     horizontal-stretch: 1;
                                     border-radius: 4px;
                                     background: DesignTokens.accent;
                                     Text { text: "Cut"; color: DesignTokens.canvas; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                    TouchArea { clicked => { root.command-executed("model.knife"); } }
+                                    TouchArea { clicked => { root.command-executed("model.knife_apply"); } }
                                 }
                             }
                             Text { text: "Enter confirm · Esc cancel"; color: DesignTokens.text-muted; font-size: 9px; }
@@ -6842,7 +6915,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: "Knife";
                                 shortcut: root.shortcuts.model-knife;
                                 description: "Interactively slice through edges and faces with cutting line";
-                                active: active-tool == "knife";
+                                active: active-tool == "cut";
                                 clicked => { root.command-executed("model.knife"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
@@ -11072,6 +11145,41 @@ export component PetuniaSlintShell inherits Window {
                                             color: DesignTokens.text-secondary; font-size: 10px; width: 85px; horizontal-alignment: right; vertical-alignment: center;
                                         }
                                     }
+
+                                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                                    Text { text: root.label-drag-threshold; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px; alignment: center;
+                                        Slider {
+                                            horizontal-stretch: 1; minimum: 2; maximum: 16;
+                                            value: root.drag-threshold-px;
+                                            accessible-label: root.label-drag-threshold;
+                                            changed(value) => { root.drag-threshold-set(Math.round(value)); }
+                                        }
+                                        Text {
+                                            text: "\{Math.round(root.drag-threshold-px)} px";
+                                            color: DesignTokens.text-secondary; font-size: 10px; width: 85px; horizontal-alignment: right; vertical-alignment: center;
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        height: 30px; border-radius: 4px;
+                                        background: root.click-move-click ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.click-move-click ? DesignTokens.focus-ring : DesignTokens.border;
+                                        accessible-role: checkbox;
+                                        accessible-checkable: true;
+                                        accessible-checked: root.click-move-click;
+                                        accessible-label: root.label-click-move-click;
+                                        accessible-description: root.label-click-move-click-hint;
+                                        accessible-action-default => { root.click-move-click-set(!root.click-move-click); }
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: root.label-click-move-click; color: root.click-move-click ? DesignTokens.canvas : DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.click-move-click-set(!root.click-move-click); } }
+                                    }
+                                    Text { text: root.label-click-move-click-hint; color: DesignTokens.text-muted; font-size: 10px; wrap: word-wrap; }
 
                                     Rectangle { height: 1px; background: DesignTokens.border; }
 

@@ -26,6 +26,7 @@ pub mod schema_contracts;
 pub mod selection;
 pub mod snap;
 pub mod state;
+pub mod tool_session;
 pub mod transform_projection;
 pub mod viewport;
 pub mod viewport_query;
@@ -119,6 +120,10 @@ pub use viewport_query::{ViewportQueryBuffer, ViewportQuerySample};
 pub type AttachmentValidity = SurfaceAttachmentStatus;
 
 pub use modal::{ModalConstraint, ModalError, ModalKind, ModalOp};
+pub use tool_session::{
+    DEFAULT_DRAG_THRESHOLD_PX, DRAG_THRESHOLD_RANGE, DragFrame, LastOperation, PressTarget,
+    ToolEffect, ToolKey, ToolPhase, ToolSession, drag_value,
+};
 
 /// Malha, reexportada para os shells que manipulam geometria sem depender de `petunia_mesh`.
 pub use petunia_mesh::Mesh;

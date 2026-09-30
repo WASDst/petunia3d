@@ -5,6 +5,26 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Gramática única de ferramenta — Onda 2 (30/09/2026)
+- **`ToolSession` no core**: uma máquina de estados (`Idle/Pressed/Dragging/Latched`) decide clique × arrasto com limiar configurável; clicar-mover-clicar em alças (WCAG 2.2, 2.5.7); valor digitado vence o mouse; testes de domínio sem toolkit.
+- **Ferramentas persistentes**: Extrude, Inset, Round Edge e Push/Pull deixam de abrir operação ao apertar a tecla; arrastar sobre uma face (ou aresta) a seleciona e opera seguindo o cursor pela normal projetada, estável sob zoom. Move/Rotate/Scale e o gizmo passam pela mesma máquina.
+- **"Última operação"**: cada gesto é 1 Undo e continua ajustável no card da ferramenta, reaplicado dentro da mesma entrada de histórico.
+- **Contrato de entrada**: RMB nunca cancela (abre menu fora de gesto); navegação nunca é suspensa; a roda sempre faz zoom e Ctrl+roda ajusta contagens; Esc em escada (gesto → overlays → ferramenta volta para Select); Esc mantém a primitiva recém-criada; nada é selecionado sozinho.
+- **Preferências de acessibilidade**: distância para começar a arrastar (2–16 px) e "arrastar sem segurar o botão".
+- **Escopo honesto**: Loop Cut, Slice, Knife e Profile ainda usam ciclos próprios (Ondas 4/5); `Space` = ferramenta anterior e alças dedicadas de Extrude/Inset ficam pendentes. Matriz em `docs/development/tool-session-gap-matrix.md`.
+
+### Viewport nítido e bugs comprovados — Onda 1 (30/09/2026)
+- **Nitidez**: a imagem 3D passa a ser renderizada em pixels físicos (HiDPI e UI scale), com MSAA 4× resolvido na textura exibida; larguras de linha continuam em px lógicos.
+- **Fluidez**: mouse parado sobre o mesmo alvo não reconstrói o view model nem redesenha o frame.
+- **Correções**: buffer numérico não vaza mais entre operações (E → 2 → Enter → E → 5 extrudava 25); card e Cancelar da faca funcionam (`cut`); hover do gizmo clareia; anel de View Roll clicável onde é desenhado; `is_snapped` significa "encaixou"; cota linear só para distâncias (não para graus/fatores); HUD mostra o valor digitado.
+- **Escopo honesto**: coalescer renders por quadro, linhas de largura constante com AA e contorno por jump flooding ficam para ondas seguintes. Matriz em `docs/development/viewport-crispness-gap-matrix.md`.
+
+### Decisão DRAW + POLY e gramática única de ferramenta — Onda 0 (29/09/2026)
+- **Pesquisa registrada**: novo capítulo 45 do Livro Vivo com a análise de Plasticity (incluindo o código aberto inicial), Cinema 4D, Modo e SketchUp, a literatura acadêmica aplicável (snap-dragging, beautification, κ-curves, bubble cursor, cursores de área para deficiência motora, WCAG 2.2) e o diagnóstico da implementação Slint.
+- **ADR 006 aceito**: workspaces **DRAW** (nível de forma) e **POLY** (nível de componente) substituem MODEL; todas as ferramentas passam a seguir uma gramática única — persistente, arrastar pela alça ou em qualquer lugar, valor digitado, clicar-mover-clicar, "Última operação" ajustável, RMB = menu, Esc cancela, navegação nunca suspensa.
+- **Referência canônica**: `Blender.svg` e o manual do Blender deixam de ser referências; caminhos absolutos quebrados (`Projetos/simple3d-modeling`) foram convertidos em caminhos relativos.
+- **Escopo honesto**: somente documentação. O código ainda exibe MODEL e mantém cinco mecanismos de sessão; as páginas revisadas marcam "decisão aprovada, implementação pendente".
+
 ### Iconografia vetorial Petunia oficial e temas configuráveis (28/09/2026)
 - **Integração nativa no shell Slint**: Os 249 ícones vetoriais SVG oficiais criados para o Petunia3D foram compilados em catálogo declarativo dinâmico (`PetuniaIcons` em `petunia_icons.slint`), fornecendo suporte unificado a duas variantes estéticas: `outline` (traço) e `filled` (preenchido).
 - **Troca dinâmica e reatividade imediata**: Alternância de estilo em tempo de execução via seletor em Configurações -> Aparência, com preview dos dois estilos e callback reativo conectado ao singleton global Slint sem reinicialização.

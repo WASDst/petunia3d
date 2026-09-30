@@ -210,6 +210,11 @@ pub struct Renderer {
     depth_format: wgpu::TextureFormat,
     depth_view: Option<wgpu::TextureView>,
     depth_size: (u32, u32),
+    /// Amostras por pixel de todas as pipelines e do depth (1 = sem MSAA).
+    sample_count: u32,
+    /// Pixels físicos do alvo por pixel lógico da UI. Larguras e raios de
+    /// overlays são especificados em px lógicos e convertidos por esta razão.
+    pixel_ratio: f32,
     mesh_pipeline: wgpu::RenderPipeline,
     mesh_xray_pipeline: wgpu::RenderPipeline,
     mesh_tex_pipeline: wgpu::RenderPipeline,
@@ -573,6 +578,23 @@ fn adaptive_grid_lines(visible_height: f32) -> Vec<LineVertex> {
 
 impl Renderer {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        Self::with_sample_count(device, format, 1)
+    }
+
+    /// Cria o renderer para um alvo com `sample_count` amostras (MSAA).
+    ///
+    /// O adaptador deve fornecer um alvo de cor multisample com o mesmo número
+    /// de amostras e resolvê-lo para a textura exibida.
+    pub fn with_sample_count(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        sample_count: u32,
+    ) -> Self {
+        let sample_count = sample_count.max(1);
+        let msaa = wgpu::MultisampleState {
+            count: sample_count,
+            ..Default::default()
+        };
         let cam_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("simple3d-cam"),
             size: std::mem::size_of::<CameraUniform>() as u64,
@@ -655,7 +677,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -694,7 +716,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -734,7 +756,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -773,7 +795,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -831,7 +853,7 @@ impl Renderer {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: Default::default(),
+                multisample: msaa,
                 multiview_mask: None,
                 cache: None,
             })
@@ -926,7 +948,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -966,7 +988,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -1045,7 +1067,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -1081,7 +1103,7 @@ impl Renderer {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: Default::default(),
+                multisample: msaa,
                 multiview_mask: None,
                 cache: None,
             });
@@ -1098,6 +1120,8 @@ impl Renderer {
             depth_format: wgpu::TextureFormat::Depth24Plus,
             depth_view: None,
             depth_size: (0, 0),
+            sample_count,
+            pixel_ratio: 1.0,
             mesh_pipeline,
             mesh_xray_pipeline,
             mesh_tex_pipeline,
@@ -1202,6 +1226,32 @@ impl Renderer {
         }
     }
 
+    /// Amostras por pixel usadas pelas pipelines deste renderer.
+    pub fn sample_count(&self) -> u32 {
+        self.sample_count
+    }
+
+    /// Define quantos pixels físicos do alvo correspondem a um pixel lógico.
+    pub fn set_pixel_ratio(&mut self, ratio: f32) {
+        let ratio = if ratio.is_finite() && ratio > 0.0 {
+            ratio.clamp(0.5, 4.0)
+        } else {
+            1.0
+        };
+        if (self.pixel_ratio - ratio).abs() > f32::EPSILON {
+            self.pixel_ratio = ratio;
+            // Bandas e discos de seleção dependem da altura lógica.
+            self.last_selection_view_proj = None;
+        }
+    }
+
+    /// Altura do alvo em px lógicos: base das larguras de overlay.
+    fn logical_height(&self) -> u32 {
+        (self.depth_size.1 as f32 / self.pixel_ratio)
+            .round()
+            .max(1.0) as u32
+    }
+
     pub fn set_overlays(&mut self, show_overlays: bool, show_grid: bool) {
         self.show_overlays = show_overlays;
         self.show_grid = show_grid;
@@ -1222,7 +1272,7 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: self.sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: self.depth_format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1601,6 +1651,8 @@ impl Renderer {
         // Camada de seleção: geometria própria, com depth test no render. Só o
         // ativo contribui, e só o domínio atual — um vértice selecionado não
         // pode virar face pintada, que era a contaminação antiga.
+        // Larguras e raios em px lógicos, mesmo com o alvo em px físicos.
+        let logical_height = self.logical_height();
         let mut sel_tri: Vec<SelectionVertex> = Vec::new();
         let mut sel_line: Vec<SelectionVertex> = Vec::new();
         if let Some(asset) = scene.assets.get(scene.active) {
@@ -1642,7 +1694,7 @@ impl Renderer {
                         &mut sel_tri,
                         vertex.vec(),
                         camera,
-                        self.depth_size.1,
+                        logical_height,
                         (self.selection_thickness * 1.5).clamp(3.5, 5.5),
                         guide_color,
                     );
@@ -1684,7 +1736,7 @@ impl Renderer {
                         va.vec(),
                         vb.vec(),
                         camera,
-                        self.depth_size.1,
+                        logical_height,
                         self.selection_thickness.max(2.5),
                         edge_color,
                     );
@@ -1697,7 +1749,7 @@ impl Renderer {
                         &mut sel_tri,
                         vertex.vec(),
                         camera,
-                        self.depth_size.1,
+                        logical_height,
                         (self.selection_thickness * 2.0).clamp(5.0, 7.0),
                         point_color,
                     );
@@ -1719,7 +1771,7 @@ impl Renderer {
                             &mut sel_tri,
                             vertex.vec(),
                             camera,
-                            self.depth_size.1,
+                            logical_height,
                             (self.selection_thickness * 2.5).clamp(6.5, 8.5),
                             hover_line,
                         );
@@ -1734,7 +1786,7 @@ impl Renderer {
                             va.vec(),
                             vb.vec(),
                             camera,
-                            self.depth_size.1,
+                            logical_height,
                             self.selection_thickness * 1.35,
                             hover_line,
                         );

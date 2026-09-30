@@ -94,6 +94,35 @@ pub struct ModalOp {
     selection: Selection,
     source: Mesh,
     changed: bool,
+    /// O último update encaixou de fato num alvo de snap (não apenas "snap ligado").
+    snapped: bool,
+}
+
+impl ModalOp {
+    /// A prévia difere do estado original (confirmar criará uma entrada de Undo).
+    pub(crate) fn changed(&self) -> bool {
+        self.changed
+    }
+
+    /// Verdadeiro somente quando o último update foi atraído por um alvo de snap.
+    pub fn snapped(&self) -> bool {
+        self.snapped
+    }
+
+    /// Ponto de mundo que representa o valor atual, quando ele é uma posição.
+    ///
+    /// Move usa o deslocamento absoluto; Extrude/Push-Pull, a distância ao longo
+    /// da normal. Rotate, Scale, Inset e Bevel não têm um ponto de mundo
+    /// correspondente (graus, fator ou fração), então retornam `None`.
+    pub fn current_point(&self) -> Option<Vec3> {
+        match self.kind {
+            ModalKind::Move => Some(self.pivot + self.components),
+            ModalKind::Extrude | ModalKind::ExtrudeIndividual | ModalKind::PushPull => {
+                Some(self.pivot + self.normal * self.value)
+            }
+            ModalKind::Rotate | ModalKind::Scale | ModalKind::Inset | ModalKind::Bevel => None,
+        }
+    }
 }
 
 fn valid_mesh(mesh: &Mesh) -> bool {
@@ -274,6 +303,7 @@ impl AppState {
             selection: self.session.selection.clone(),
             source,
             changed: false,
+            snapped: false,
         });
         self.pending_modal = None;
         self.mark_dirty();
@@ -316,6 +346,7 @@ impl AppState {
             return Err(ModalError::InvalidInput);
         }
         let mut translation = translation;
+        let mut snapped = false;
         if self.snap_enabled {
             let query = crate::snap::SnapQuery {
                 point: modal.pivot + translation,
@@ -326,6 +357,7 @@ impl AppState {
             let res = crate::snap::snap_point(query);
             if res.snapped {
                 translation = res.point - modal.pivot;
+                snapped = true;
             }
         }
         let mut mesh = modal.source.clone();
@@ -461,7 +493,11 @@ impl AppState {
             ModalKind::PushPull => mesh.translate_selected((direction * value).to_array()),
             _ => {}
         }
-        self.publish_modal_mesh(mesh, value, components)
+        self.publish_modal_mesh(mesh, value, components)?;
+        if let Some(modal) = self.modal.as_mut() {
+            modal.snapped = snapped;
+        }
+        Ok(())
     }
 
     /// Absolute XYZ property fields; rotation uses Euler XYZ angles in degrees.
@@ -1252,6 +1288,50 @@ mod tests {
         );
         state.cancel_modal();
         assert_eq!(state.locked_axes, [false; 3]);
+    }
+
+    #[test]
+    fn feedback_reports_snap_only_when_a_target_attracted_the_point() {
+        let mut state = selected_face();
+        state.snap_enabled = true;
+        state.session.snap_settings.enabled = true;
+        state.session.snap_settings.target = crate::snap::SnapTarget::Vertex;
+        state.session.snap_settings.snap_distance = 0.1;
+        state.begin_modal(ModalKind::Move).unwrap();
+
+        // Snap ligado, mas longe de qualquer vértice: nada encaixou.
+        state.update_modal(Vec3::new(0.0, 0.0, 37.0), 37.0).unwrap();
+        let feedback = state.current_tool_feedback().unwrap();
+        assert!(!feedback.is_snapped, "snap ligado não significa encaixe");
+
+        // Pivô + deslocamento exatamente sobre um vértice: encaixou.
+        let pivot = state.modal.as_ref().unwrap().pivot;
+        let vertex = state.modal.as_ref().unwrap().source.verts[0].vec();
+        state
+            .update_modal(vertex - pivot, (vertex - pivot).length())
+            .unwrap();
+        let feedback = state.current_tool_feedback().unwrap();
+        assert!(feedback.is_snapped);
+        assert!((feedback.current - vertex).length() < 1.0e-4);
+    }
+
+    #[test]
+    fn rotation_and_scale_have_no_world_point_or_guide_line() {
+        let mut state = selected_face();
+        state.begin_modal(ModalKind::Rotate).unwrap();
+        state.update_modal(Vec3::ZERO, 45.0).unwrap();
+        assert!(state.modal.as_ref().unwrap().current_point().is_none());
+        let feedback = state.current_tool_feedback().unwrap();
+        assert!(
+            feedback.guide_line.is_none(),
+            "graus não viram posição de mundo"
+        );
+        state.cancel_modal();
+
+        state.begin_modal(ModalKind::Move).unwrap();
+        state.update_modal(Vec3::new(1.0, 0.0, 0.0), 1.0).unwrap();
+        let modal = state.modal.as_ref().unwrap();
+        assert_eq!(modal.current_point(), Some(modal.pivot + Vec3::X));
     }
 
     #[test]

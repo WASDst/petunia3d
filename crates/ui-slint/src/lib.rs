@@ -244,6 +244,40 @@ impl ToolModalKind {
     }
 }
 
+/// Ferramenta que segue a gramática única (constituição 11, ADR 006).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GrammarTool {
+    /// Move, Rotate e Scale: arrasto livre ("haul") ou pelas alças do gizmo.
+    Transform(TransformKind),
+    /// Extrude, Inset, Round Edge e Push/Pull: o valor segue o cursor.
+    Parametric(ToolModalKind),
+}
+
+/// Gesto da gramática única em andamento.
+#[derive(Debug, Clone, Copy)]
+enum ToolGesture {
+    Transform {
+        gizmo: bool,
+    },
+    Parametric {
+        kind: ToolModalKind,
+        frame: petunia_core::DragFrame,
+        anchor: [f32; 2],
+        start_value: f32,
+    },
+}
+
+/// Id persistente da ferramenta paramétrica no trilho.
+const fn parametric_tool_id(kind: ToolModalKind) -> &'static str {
+    match kind {
+        ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual => "extrude",
+        ToolModalKind::Inset => "inset",
+        ToolModalKind::Bevel => "bevel",
+        ToolModalKind::PushPull => "push_pull",
+        ToolModalKind::ScaleSelection => "scale",
+    }
+}
+
 /// Sessão de arrasto transacional iniciada na viewport.
 #[derive(Debug, Clone, Copy)]
 pub struct ViewportDrag {
@@ -425,6 +459,13 @@ pub trait PetuniaViewport: Send {
     fn draws_component_guides(&self) -> bool {
         false
     }
+    /// O backend renderiza em pixels físicos (nítido em HiDPI e UI scale > 100%).
+    /// Backends de CPU permanecem em pixels lógicos para não multiplicar o custo.
+    fn uses_physical_pixels(&self) -> bool {
+        false
+    }
+    /// Pixels físicos por pixel lógico, para larguras de linha e pontos.
+    fn set_pixel_ratio(&mut self, _ratio: f32) {}
     fn render_frame(
         &mut self,
         _project: &Project,
@@ -532,6 +573,16 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub add_menu_open: bool,
     /// Ferramenta paramétrica modal ativa (Extrude, Inset, Bevel, Push/Pull).
     pub tool_modal: Option<ToolModalKind>,
+    /// Pixels físicos por pixel lógico da viewport (última medição da janela).
+    pub pixel_ratio: f32,
+    /// Máquina de estados da gramática única (constituição 11).
+    pub tool_session: petunia_core::ToolSession,
+    /// Gesto confirmado, ajustável no card "Última operação".
+    pub last_operation: Option<petunia_core::LastOperation>,
+    /// Variante da ferramenta paramétrica persistente (ex.: Extrude Individual).
+    parametric_tool: Option<ToolModalKind>,
+    tool_gesture: Option<ToolGesture>,
+    tool_press_extend: bool,
     /// Sessão paramétrica aberta por atalho: o movimento do mouse já manipula.
     pub keyboard_tool_modal_active: bool,
     pub tool_modal_value: f32,
@@ -800,6 +851,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             paint_sampler: petunia_core::StrokeSampler::default(),
             add_menu_open: false,
             tool_modal: None,
+            pixel_ratio: 1.0,
+            tool_session: petunia_core::ToolSession::default(),
+            last_operation: None,
+            parametric_tool: None,
+            tool_gesture: None,
+            tool_press_extend: false,
             keyboard_tool_modal_active: false,
             tool_modal_value: 0.0,
             rename_draft: None,
@@ -1504,22 +1561,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.sync_viewport_context();
     }
 
+    /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre
+    /// faz zoom (constituição 11). Contagens e raios usam `viewport_ctrl_scroll`.
     pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
-        if self.mouse_navigation_suspended() {
-            if let ViewportGesture::Zoom { delta } = gesture {
-                if self.tool_modal.is_some() {
-                    let step = if delta > 0.0 { -40.0 } else { 40.0 };
-                    self.scrub_tool_modal(step, false);
-                    self.state.mark_dirty();
-                } else if self.state.session.tools.active_tool == "loop_cut"
-                    || self.loop_cut.is_some()
-                {
-                    self.scroll_loop_cut_count(delta);
-                    self.state.mark_dirty();
-                }
-            }
-            return;
-        }
         match gesture {
             ViewportGesture::Orbit { dx, dy } => {
                 self.state.session.camera.orbit(dx, dy);
@@ -1528,29 +1572,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.camera.pan(dx, dy);
             }
             ViewportGesture::Zoom { delta } => {
-                if self.state.session.tools.modal.is_some()
-                    && self.state.session.proportional_editing
-                {
-                    let step = if delta > 0.0 { 0.25 } else { -0.25 };
-                    self.adjust_proportional_radius(step);
-                    if let Some(drag) = self.drag {
-                        self.update_viewport_transform_modified(
-                            drag.last_pointer[0],
-                            drag.last_pointer[1],
-                            false,
-                            false,
-                        );
-                    }
-                } else if self.state.session.tools.active_tool == "loop_cut"
-                    || self.loop_cut.is_some()
-                {
-                    self.scroll_loop_cut_count(delta);
-                } else if self.tool_modal.is_some() {
-                    let step = if delta > 0.0 { -40.0 } else { 40.0 };
-                    self.scrub_tool_modal(step, false);
-                } else {
-                    self.state.session.camera.zoom(delta);
-                }
+                self.state.session.camera.zoom(delta);
             }
         }
         self.state.mark_dirty();
@@ -1888,9 +1910,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn resize_viewport(&mut self, width: u32, height: u32) {
+        self.resize_viewport_scaled(width, height, self.pixel_ratio);
+    }
+
+    /// Redimensiona a viewport. `width`/`height` são px lógicos (câmera, picking
+    /// e overlays); `pixel_ratio` é px físicos por px lógico (fator de escala da
+    /// janela, incluindo a preferência de UI scale).
+    pub fn resize_viewport_scaled(&mut self, width: u32, height: u32, pixel_ratio: f32) {
         let width = width.max(1);
         let height = height.max(1);
-        self.viewport.resize(width, height);
+        let ratio = if pixel_ratio.is_finite() && pixel_ratio > 0.0 {
+            pixel_ratio.clamp(0.5, 4.0)
+        } else {
+            1.0
+        };
+        self.pixel_ratio = ratio;
+        if self.viewport.uses_physical_pixels() {
+            self.viewport.set_pixel_ratio(ratio);
+            self.viewport.resize(
+                (width as f32 * ratio).round().max(1.0) as u32,
+                (height as f32 * ratio).round().max(1.0) as u32,
+            );
+        } else {
+            self.viewport.resize(width, height);
+        }
         self.viewport_size = [width as f32, height as f32];
         self.state.session.camera.aspect = width as f32 / height as f32;
         self.state.mark_dirty();
@@ -1936,6 +1979,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.operation_hud_title = kind.title().to_string();
             vm.operation_hud_lines =
                 vec![format!("{}   {:.3}", kind.label(), self.tool_modal_value)];
+            if !self.modal_text.is_empty() {
+                vm.operation_hud_lines
+                    .push(format!("Input   {}", self.modal_text));
+            }
             vm.operation_hud_subject = self
                 .state
                 .project
@@ -2111,9 +2158,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// É o comportamento de Blender/C4D: o usuário orbita em torno do que
     /// está trabalhando, não de um ponto fixo da cena.
     pub fn orbit_viewport(&mut self, dx: f32, dy: f32) -> bool {
-        if self.mouse_navigation_suspended() {
-            return false;
-        }
         if !dx.is_finite() || !dy.is_finite() {
             return false;
         }
@@ -2128,17 +2172,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.camera.orbit(dx, dy);
         self.state.mark_dirty();
         true
-    }
-
-    pub(crate) fn mouse_navigation_suspended(&self) -> bool {
-        self.loop_cut.is_some()
-            || self.state.session.tools.active_tool == "loop_cut"
-            || self.tool_modal.is_some()
-            || self.slice_anchor.is_some()
-            || matches!(
-                self.state.session.tools.active_tool.as_str(),
-                "slice" | "draw_profile"
-            )
     }
 
     pub fn set_pivot_point(&mut self, id: &str) -> bool {
@@ -4294,7 +4327,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
 
         // View Roll para a ferramenta Rotate (anel perimetral externo a ~113px)
-        if active == "rotate" && (dist_from_origin - 96.0 * 1.18).abs() <= 8.0 {
+        if active == "rotate"
+            && (dist_from_origin - projection::GIZMO_VIEW_ROLL_RADIUS).abs()
+                <= projection::GIZMO_RING_HIT_HALF_WIDTH
+        {
             return Some(GizmoTarget {
                 handle: GizmoHandle::Center,
                 kind: TransformKind::Rotation,
@@ -6506,6 +6542,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// passam preferências construídas à mão em vez de tocar o disco.
     pub fn restore_section_layouts(&mut self, preferences: &petunia_config::UserPreferences) {
         self.preferences = preferences.clone();
+        self.tool_session
+            .set_drag_threshold_px(preferences.drag_threshold_px);
+        self.tool_session
+            .set_click_move_click(preferences.click_move_click);
         if !preferences.active_keymap_id.is_empty() {
             self.state.ui.active_keymap_id = preferences.active_keymap_id.clone();
             self.state.ui.keybinds =
@@ -8437,15 +8477,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    /// Triagem do botão direito na viewport (Blender): com sessão ativa o
-    /// clique cancela (modal, arrasto, knife...); sem sessão abre o menu.
-    /// Retorna verdadeiro quando cancelou algo.
+    /// Botão direito na viewport: abre o menu de contexto e nunca cancela
+    /// (constituição 11, ADR 006). Durante um gesto ou operação aberta ele é
+    /// ignorado; cancelar é `Esc`. Retorna verdadeiro quando abriu o menu.
     pub fn viewport_context_triage(&mut self, x: f32, y: f32) -> bool {
-        if self.cancel_rename() | self.cancel_active_operation() {
-            return true;
+        let _ = self.cancel_rename();
+        if self.tool_session.is_gesture_active()
+            || self.drag.is_some()
+            || self.tool_modal.is_some()
+            || self.state.session.tools.modal.is_some()
+        {
+            return false;
         }
-        self.open_viewport_context_menu(x, y);
-        false
+        self.open_viewport_context_menu(x, y)
     }
 
     pub fn close_context_menu(&mut self) -> bool {
@@ -8718,36 +8762,420 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Ferramenta ativa que segue a gramática única, se houver.
+    pub fn grammar_tool(&self) -> Option<GrammarTool> {
+        if self.state.workspace != Workspace::Model {
+            return None;
+        }
+        let parametric = |fallback: ToolModalKind| {
+            let kind = self
+                .tool_modal
+                .or(self.parametric_tool)
+                .filter(|kind| parametric_tool_id(*kind) == parametric_tool_id(fallback))
+                .unwrap_or(fallback);
+            Some(GrammarTool::Parametric(kind))
+        };
+        match self.state.session.tools.active_tool.as_str() {
+            "move" | "transform" => Some(GrammarTool::Transform(TransformKind::Position)),
+            "rotate" => Some(GrammarTool::Transform(TransformKind::Rotation)),
+            "scale" => Some(GrammarTool::Transform(TransformKind::Scale)),
+            "extrude" => parametric(ToolModalKind::Extrude),
+            "inset" => parametric(ToolModalKind::Inset),
+            "bevel" => parametric(ToolModalKind::Bevel),
+            "push_pull" => parametric(ToolModalKind::PushPull),
+            _ => None,
+        }
+    }
+
+    /// O botão principal na viewport é roteado pela gramática única.
+    ///
+    /// Operações abertas por teclado (modal estilo Blender) e o Loop Cut
+    /// continuam nos caminhos próprios até a migração das Ondas 4 e 5.
+    pub fn tool_grammar_active(&self) -> bool {
+        self.grammar_tool().is_some()
+            && !self.keyboard_tool_modal_active
+            && !self.instant_transform
+            && self.loop_cut.is_none()
+    }
+
+    /// Ativa uma ferramenta paramétrica persistente sem abrir operação.
+    ///
+    /// Em Object, troca de forma visível para o domínio exigido; nunca
+    /// seleciona tudo por conta própria (constituição 11).
+    pub fn activate_parametric_tool(&mut self, kind: ToolModalKind) {
+        if self.tool_modal.is_some() {
+            self.cancel_tool_modal();
+        }
+        self.tool_session.reset();
+        self.tool_gesture = None;
+        self.parametric_tool = Some(kind);
+        self.state.session.tools.active_tool = parametric_tool_id(kind).to_string();
+        let domain = if kind == ToolModalKind::Bevel {
+            SelectionDomain::Edge
+        } else {
+            SelectionDomain::Face
+        };
+        if self.state.selection_domain() == SelectionDomain::Object {
+            self.state.set_selection_domain(domain);
+            self.sync_viewport_context();
+        }
+        let message = self
+            .state
+            .t_id(petunia_config::text_id::TOOL_GRAMMAR_READY)
+            .replace("{tool}", kind.title());
+        self.state.set_status(message);
+        self.state.mark_dirty();
+    }
+
+    /// Eventos do botão principal na viewport: 0 = pressionar, 1 = mover,
+    /// 2 = soltar. Coordenadas em px lógicos da viewport.
+    pub fn tool_pointer(&mut self, phase: i32, x: f32, y: f32, shift: bool, ctrl: bool) -> bool {
+        if !x.is_finite() || !y.is_finite() {
+            return false;
+        }
+        self.pointer_position = [x, y];
+        let effect = match phase {
+            0 => {
+                let target = if self.gizmo_target_at(x, y).is_some() {
+                    petunia_core::PressTarget::Handle(0)
+                } else {
+                    petunia_core::PressTarget::Surface
+                };
+                self.tool_press_extend = shift;
+                self.tool_session.press([x, y], target)
+            }
+            1 => self.tool_session.move_to([x, y]),
+            2 => self.tool_session.release([x, y]),
+            _ => {
+                if self.tool_session.is_gesture_active() {
+                    self.tool_session.key(petunia_core::ToolKey::Cancel)
+                } else {
+                    self.tool_session.reset();
+                    petunia_core::ToolEffect::Nothing
+                }
+            }
+        };
+        self.apply_tool_effect(effect, shift, ctrl)
+    }
+
+    fn apply_tool_effect(
+        &mut self,
+        effect: petunia_core::ToolEffect,
+        fine: bool,
+        snap: bool,
+    ) -> bool {
+        use petunia_core::ToolEffect as Effect;
+        match effect {
+            Effect::Nothing | Effect::TypedValue(_) | Effect::TypedCleared => false,
+            Effect::Click { at } => {
+                let [width, height] = self.viewport_size;
+                if width > 1.0 && height > 1.0 {
+                    self.select_viewport_ext(
+                        at[0] / width,
+                        at[1] / height,
+                        self.tool_press_extend,
+                        false,
+                    );
+                }
+                true
+            }
+            Effect::BeginDrag {
+                anchor,
+                current,
+                target,
+            } => {
+                if !self.begin_tool_gesture(anchor, target) {
+                    self.tool_session.reset();
+                    return true;
+                }
+                self.update_tool_gesture(current, fine, snap);
+                true
+            }
+            Effect::UpdateDrag { current, .. } => self.update_tool_gesture(current, fine, snap),
+            Effect::Commit => self.commit_tool_gesture(),
+            Effect::Cancel => self.cancel_tool_gesture(),
+            Effect::ExitTool => self.exit_grammar_tool(),
+            Effect::OpenContextMenu { at } => self.open_viewport_context_menu(at[0], at[1]),
+        }
+    }
+
+    fn begin_tool_gesture(&mut self, anchor: [f32; 2], target: petunia_core::PressTarget) -> bool {
+        let Some(tool) = self.grammar_tool() else {
+            return false;
+        };
+        let on_handle = matches!(target, petunia_core::PressTarget::Handle(_));
+        match tool {
+            GrammarTool::Transform(kind) => {
+                let begun = if on_handle {
+                    self.begin_gizmo_drag(anchor[0], anchor[1])
+                } else {
+                    self.begin_viewport_transform(kind, anchor[0], anchor[1])
+                };
+                if begun {
+                    self.tool_gesture = Some(ToolGesture::Transform { gizmo: on_handle });
+                }
+                begun
+            }
+            GrammarTool::Parametric(kind) => {
+                if self.tool_modal.is_none() {
+                    self.select_under_anchor_for(kind, anchor);
+                    if !self.begin_tool_modal(kind) {
+                        let id = if kind == ToolModalKind::Bevel {
+                            petunia_config::text_id::TOOL_GRAMMAR_NEEDS_EDGE
+                        } else {
+                            petunia_config::text_id::TOOL_GRAMMAR_NEEDS_FACE
+                        };
+                        let message = self.state.t_id(id).replace("{tool}", kind.title());
+                        self.state.set_status(message);
+                        return false;
+                    }
+                }
+                let kind = self.tool_modal.unwrap_or(kind);
+                let Some(frame) = self.drag_frame() else {
+                    self.cancel_tool_modal();
+                    return false;
+                };
+                self.tool_gesture = Some(ToolGesture::Parametric {
+                    kind,
+                    frame,
+                    anchor,
+                    start_value: self.tool_modal_value,
+                });
+                true
+            }
+        }
+    }
+
+    /// Arrastar sobre um elemento não selecionado o seleciona antes de operar
+    /// (como no Cinema 4D e no Modo). Clique sem arrasto continua sendo só
+    /// seleção.
+    fn select_under_anchor_for(&mut self, kind: ToolModalKind, anchor: [f32; 2]) {
+        let domain = match kind {
+            ToolModalKind::Bevel => SelectionDomain::Edge,
+            ToolModalKind::ScaleSelection => return,
+            _ => SelectionDomain::Face,
+        };
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return;
+        }
+        if self.state.selection_domain() == SelectionDomain::Object {
+            self.state.set_selection_domain(domain);
+            self.sync_viewport_context();
+        }
+        let (nx, ny) = (anchor[0] / width, anchor[1] / height);
+        let target = self.pick_target_for_domain(self.state.selection_domain(), nx, ny);
+        let Some(mesh) = self.state.project.active_mesh() else {
+            return;
+        };
+        let already_selected = match target {
+            petunia_core::HoverTarget::Face(index) => {
+                mesh.faces.get(index).is_some_and(|face| face.selected)
+            }
+            petunia_core::HoverTarget::Edge(a, b) => {
+                mesh.selected_edges.contains(&(a, b)) || mesh.selected_edges.contains(&(b, a))
+            }
+            petunia_core::HoverTarget::Vertex(index) => mesh
+                .verts
+                .get(index as usize)
+                .is_some_and(|vertex| vertex.selected),
+            // Nada sob o cursor: opera sobre a seleção atual.
+            petunia_core::HoverTarget::None | petunia_core::HoverTarget::Object(_) => true,
+        };
+        if !already_selected {
+            self.select_viewport_ext(nx, ny, self.tool_press_extend, false);
+        }
+    }
+
+    /// Geometria de tela da operação ativa, para o valor seguir o cursor.
+    fn drag_frame(&self) -> Option<petunia_core::DragFrame> {
+        use petunia_core::transform_projection::project_pixel;
+        let modal = self.state.session.tools.modal.as_ref()?;
+        let camera = &self.state.session.camera;
+        let viewport = glam::Vec2::from_array(self.viewport_size);
+        let pivot = project_pixel(camera, viewport, modal.pivot)?;
+        let world_per_pixel = project_pixel(camera, viewport, modal.pivot + camera.right())
+            .map(|right| (right - pivot).length())
+            .filter(|pixels| *pixels > 1.0e-3)
+            .map_or(camera.visible_height() / viewport.y.max(1.0), |pixels| {
+                1.0 / pixels
+            });
+        let normal_px_per_unit = project_pixel(camera, viewport, modal.pivot + modal.normal)
+            .map(|tip| (tip - pivot).to_array());
+        Some(petunia_core::DragFrame {
+            pivot_px: pivot.to_array(),
+            normal_px_per_unit,
+            world_per_pixel,
+        })
+    }
+
+    fn update_tool_gesture(&mut self, current: [f32; 2], fine: bool, snap: bool) -> bool {
+        match self.tool_gesture {
+            Some(ToolGesture::Transform { .. }) => {
+                self.update_viewport_transform_modified(current[0], current[1], fine, snap)
+            }
+            Some(ToolGesture::Parametric {
+                kind,
+                frame,
+                anchor,
+                start_value,
+            }) => {
+                if !self.modal_text.is_empty() {
+                    // O valor digitado vence o mouse (constituição 11).
+                    return false;
+                }
+                let mut value = petunia_core::drag_value(
+                    kind.modal_kind(),
+                    frame,
+                    anchor,
+                    current,
+                    start_value,
+                );
+                if fine {
+                    value = start_value + (value - start_value) * 0.1;
+                }
+                self.set_tool_modal_value(value)
+            }
+            None => false,
+        }
+    }
+
+    fn commit_tool_gesture(&mut self) -> bool {
+        match self.tool_gesture.take() {
+            Some(ToolGesture::Transform { gizmo: true }) => self.end_gizmo_drag(),
+            Some(ToolGesture::Transform { gizmo: false }) => self.end_viewport_transform(),
+            Some(ToolGesture::Parametric { .. }) => self.commit_tool_modal(),
+            None => false,
+        }
+    }
+
+    fn cancel_tool_gesture(&mut self) -> bool {
+        match self.tool_gesture.take() {
+            Some(ToolGesture::Transform { gizmo }) => {
+                if gizmo {
+                    self.gizmo_drag = None;
+                }
+                self.cancel_viewport_transform()
+            }
+            Some(ToolGesture::Parametric { .. }) => self.cancel_tool_modal(),
+            None => false,
+        }
+    }
+
+    /// `Esc` sem gesto: a ferramenta volta para Select (escada do Esc).
+    fn exit_grammar_tool(&mut self) -> bool {
+        if self.grammar_tool().is_none() {
+            return false;
+        }
+        self.tool_session.reset();
+        self.tool_gesture = None;
+        self.state.session.tools.active_tool = "select".to_string();
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Ajusta a última operação pelo texto do card (mesma entrada de Undo).
+    pub fn commit_last_operation_text(&mut self, text: &str) -> bool {
+        let Some(last) = self.last_operation.as_ref() else {
+            return false;
+        };
+        match numeric::parse_numeric_with_base(text, last.primary_value()) {
+            Ok(value) => self.adjust_last_operation(value),
+            Err(_) => false,
+        }
+    }
+
+    /// Reaplica a última operação com `value`, substituindo o gesto no
+    /// histórico sem aumentar a profundidade do Undo.
+    pub fn adjust_last_operation(&mut self, value: f32) -> bool {
+        let Some(last) = self.last_operation.clone() else {
+            return false;
+        };
+        if !self.state.last_operation_is_current(&last) {
+            self.last_operation = None;
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::TOOL_GRAMMAR_EXPIRED),
+            );
+            return false;
+        }
+        match self.state.adjust_last_operation(&last, value) {
+            Ok(next) => {
+                self.last_operation = next;
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::TOOL_GRAMMAR_ADJUSTED),
+                );
+                self.state.mark_dirty();
+                true
+            }
+            Err(error) => {
+                self.state.set_status(error.to_string());
+                false
+            }
+        }
+    }
+
+    /// A "Última operação" ainda pode ser ajustada.
+    pub fn last_operation_adjustable(&self) -> bool {
+        self.tool_modal.is_none()
+            && self
+                .last_operation
+                .as_ref()
+                .is_some_and(|last| self.state.last_operation_is_current(last))
+    }
+
+    /// Roda com Ctrl: contagens e raios da ferramenta ativa. A roda sem
+    /// modificador sempre faz zoom (constituição 11).
+    pub fn viewport_ctrl_scroll(&mut self, delta: f32) -> bool {
+        if !delta.is_finite() {
+            return false;
+        }
+        if self.state.session.tools.active_tool == "loop_cut" || self.loop_cut.is_some() {
+            self.scroll_loop_cut_count(delta);
+        } else if self.state.session.tools.modal.is_some()
+            && self.state.session.proportional_editing
+        {
+            let step = if delta > 0.0 { 0.25 } else { -0.25 };
+            self.adjust_proportional_radius(step);
+            if let Some(drag) = self.drag {
+                self.update_viewport_transform_modified(
+                    drag.last_pointer[0],
+                    drag.last_pointer[1],
+                    false,
+                    false,
+                );
+            }
+        } else {
+            self.state.session.camera.zoom(delta);
+        }
+        self.state.mark_dirty();
+        true
+    }
+
     /// Abre a sessão modal de uma ferramenta paramétrica com preview próprio.
     pub fn begin_tool_modal(&mut self, kind: ToolModalKind) -> bool {
+        // Um valor digitado numa operação anterior nunca vaza para a próxima.
+        self.modal_text.clear();
         if self.state.primitive_session_valid() {
             self.state.finalize_primitive_session();
         }
+        // Troca de domínio visível; nunca seleciona tudo por conta própria
+        // (constituição 11). Sem seleção aplicável, o core recusa com erro.
         if self.state.selection_domain() == SelectionDomain::Object {
             match kind {
                 ToolModalKind::Extrude
                 | ToolModalKind::ExtrudeIndividual
-                | ToolModalKind::Inset => {
+                | ToolModalKind::Inset
+                | ToolModalKind::PushPull => {
                     self.state.set_selection_domain(SelectionDomain::Face);
                     self.sync_viewport_context();
-                    if let Some(mesh) = self.state.project.active_mesh_mut()
-                        && !mesh.faces.iter().any(|f| f.selected)
-                        && !mesh.faces.is_empty()
-                    {
-                        mesh.select_all();
-                    }
                 }
                 ToolModalKind::Bevel => {
                     self.state.set_selection_domain(SelectionDomain::Edge);
                     self.sync_viewport_context();
-                    if let Some(mesh) = self.state.project.active_mesh_mut()
-                        && mesh.selected_edges.is_empty()
-                        && !mesh.edges_unique().is_empty()
-                    {
-                        mesh.select_all();
-                    }
                 }
-                _ => {}
+                ToolModalKind::ScaleSelection => {}
             }
         }
         match self.state.begin_modal(kind.modal_kind()) {
@@ -8787,6 +9215,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Some(kind) = self.tool_modal else {
             return false;
         };
+        if !self.modal_text.is_empty() {
+            // Enquanto houver texto digitado, ele controla o valor (constituição 11).
+            return false;
+        }
         let step = kind.step();
         let delta_y = delta_y
             * if fine { 0.1 } else { 1.0 }
@@ -8830,8 +9262,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.tool_modal.take().is_none() {
             return false;
         }
+        self.modal_text.clear();
         self.keyboard_tool_modal_active = false;
-        self.state.commit_modal();
+        self.last_operation = self.state.commit_modal_gesture();
         self.state.mark_dirty();
         true
     }
@@ -8840,6 +9273,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.tool_modal.take().is_none() {
             return false;
         }
+        self.modal_text.clear();
         self.keyboard_tool_modal_active = false;
         self.state.cancel_modal();
         self.state.mark_dirty();
@@ -9191,6 +9625,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.cancel_rename() {
             return true;
         }
+        if self.tool_session.is_gesture_active() {
+            let effect = self.tool_session.key(petunia_core::ToolKey::Cancel);
+            self.apply_tool_effect(effect, false, false);
+            return true;
+        }
         if self.cancel_paint_stroke() {
             return true;
         }
@@ -9229,7 +9668,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status("Profile editing finished");
             return true;
         }
-        if self.cancel_primitive() {
+        if self.state.primitive_session_valid() {
+            // A primitiva criada é um gesto confirmado: Esc fecha o card e a
+            // mantém; Undo a remove (constituição 11).
+            self.state.finalize_primitive_session();
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::TOOL_GRAMMAR_PRIMITIVE_KEPT),
+            );
+            self.state.mark_dirty();
             return true;
         }
         if self.cancel_slice() {
@@ -9249,10 +9696,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if let Some(entry) = self.overlays.esc() {
             self.hide_overlay(entry.id);
-            true
-        } else {
-            false
+            return true;
         }
+        self.exit_grammar_tool()
     }
 
     pub fn handle_click_away(&mut self) -> bool {
@@ -9386,6 +9832,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.delete_or_dissolve_selection();
             return Ok(());
         }
+        // Ações do card da faca: aplicar todos os segmentos como um Undo ou
+        // restaurar a malha original.
+        if id == "model.knife_apply" {
+            self.commit_knife();
+            return Ok(());
+        }
+        if id == "model.knife_cancel" {
+            self.cancel_knife();
+            return Ok(());
+        }
         if id == "model.duplicate" {
             self.duplicate_selection();
             return Ok(());
@@ -9437,27 +9893,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn execute_shortcut_tool(&mut self, id: &str) {
+        // Troca de domínio visível; nunca seleciona tudo (constituição 11).
         if self.state.selection_domain() == SelectionDomain::Object {
             match id {
-                "model.extrude" | "model.extrude_individual" | "model.inset" => {
+                "model.extrude"
+                | "model.extrude_individual"
+                | "model.inset"
+                | "model.push_pull" => {
                     self.state.set_selection_domain(SelectionDomain::Face);
                     self.sync_viewport_context();
-                    if let Some(mesh) = self.state.project.active_mesh_mut()
-                        && !mesh.faces.iter().any(|f| f.selected)
-                        && !mesh.faces.is_empty()
-                    {
-                        mesh.select_all();
-                    }
                 }
                 "model.bevel" => {
                     self.state.set_selection_domain(SelectionDomain::Edge);
                     self.sync_viewport_context();
-                    if let Some(mesh) = self.state.project.active_mesh_mut()
-                        && mesh.selected_edges.is_empty()
-                        && !mesh.edges_unique().is_empty()
-                    {
-                        mesh.select_all();
-                    }
                 }
                 "model.loop_cut" => {
                     self.state.set_selection_domain(SelectionDomain::Edge);
@@ -9497,18 +9945,47 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     label
                 ));
             }
+        } else if let Some(kind) = kind.filter(|kind| *kind != ToolModalKind::ScaleSelection) {
+            // Gramática única: a tecla seleciona a ferramenta persistente; a
+            // operação acontece pelo arrasto (ADR 006). O duplo toque continua
+            // abrindo o modo que segue o ponteiro.
+            self.last_tool_press = Some((id.to_string(), now));
+            self.keyboard_tool_modal_active = false;
+            self.activate_parametric_tool(kind);
         } else {
             self.last_tool_press = Some((id.to_string(), now));
             if self.tool_modal.is_none() {
                 let _ = self.execute_core_command(id);
             }
             self.keyboard_tool_modal_active = false;
-            let label = kind.map_or("Ferramenta", |k| k.title());
-            self.state.set_status(format!(
-                "Ferramenta {} ativa · Ajuste no card de opções ou aperte novamente para Modo Livre",
-                label
-            ));
         }
+    }
+
+    /// Distância, em px lógicos, que separa clique de arrasto.
+    pub fn set_drag_threshold_px(&mut self, pixels: f32) -> bool {
+        if !pixels.is_finite() {
+            return false;
+        }
+        let (minimum, maximum) = petunia_core::DRAG_THRESHOLD_RANGE;
+        let pixels = pixels.clamp(minimum, maximum);
+        if (self.preferences.drag_threshold_px - pixels).abs() < f32::EPSILON {
+            return false;
+        }
+        self.preferences.drag_threshold_px = pixels;
+        self.tool_session.set_drag_threshold_px(pixels);
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Clicar numa alça a faz seguir o ponteiro até o próximo clique.
+    pub fn set_click_move_click(&mut self, enabled: bool) -> bool {
+        if self.preferences.click_move_click == enabled {
+            return false;
+        }
+        self.preferences.click_move_click = enabled;
+        self.tool_session.set_click_move_click(enabled);
+        self.state.mark_dirty();
+        true
     }
 
     pub fn route_shortcut(&mut self, text: &str, ctrl: bool, shift: bool, alt: bool) -> bool {
@@ -10258,7 +10735,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn commit_transform(&mut self) -> bool {
-        self.state.commit_modal()
+        let had_operation = self.state.session.tools.modal.is_some();
+        self.last_operation = self.state.commit_modal_gesture();
+        had_operation
     }
 
     pub fn commit_transform_text(
@@ -11102,6 +11581,43 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.reduced_motion = self.state.ui.reduced_motion;
         vm.multiselection_measure_tag = self.state.ui.multiselection_measure_tag;
         vm.double_tap_interval_ms = self.preferences.double_tap_interval_ms as i32;
+        vm.tool_grammar_active = self.tool_grammar_active();
+        vm.tool_gesture_latched = self.tool_session.is_latched();
+        vm.drag_threshold_px = self.preferences.drag_threshold_px;
+        vm.click_move_click = self.preferences.click_move_click;
+        vm.label_drag_threshold = translated(petunia_config::text_id::PREFERENCES_DRAG_THRESHOLD);
+        vm.label_click_move_click =
+            translated(petunia_config::text_id::PREFERENCES_CLICK_MOVE_CLICK);
+        vm.label_click_move_click_hint =
+            translated(petunia_config::text_id::PREFERENCES_CLICK_MOVE_CLICK_HINT);
+        vm.label_last_operation = translated(petunia_config::text_id::TOOL_GRAMMAR_LAST_OPERATION);
+        vm.label_last_operation_hint =
+            translated(petunia_config::text_id::TOOL_GRAMMAR_ADJUST_HINT);
+        if self.last_operation_adjustable()
+            && let Some(last) = &self.last_operation
+        {
+            use petunia_core::ModalKind as Kind;
+            vm.last_operation_active = true;
+            vm.last_operation_title = match last.kind {
+                Kind::Move => self.state.t("tools.move"),
+                Kind::Rotate => self.state.t_id(petunia_config::text_id::TOOLS_ROTATE),
+                Kind::Scale => self.state.t_id(petunia_config::text_id::TOOLS_SCALE),
+                Kind::Extrude | Kind::ExtrudeIndividual => self.state.t("tools.extrude"),
+                Kind::Inset => self.state.t("tools.inset"),
+                Kind::Bevel => self.state.t("tools.bevel"),
+                Kind::PushPull => self.state.t_id(petunia_config::text_id::TOOLS_PUSH_PULL),
+            };
+            vm.last_operation_value = last.primary_value();
+            let (step, unit) = match last.kind {
+                Kind::Rotate => (5.0, "°"),
+                Kind::Scale => (0.1, "×"),
+                Kind::Inset => (0.01, ""),
+                Kind::Bevel => (0.01, "m"),
+                Kind::Move | Kind::Extrude | Kind::ExtrudeIndividual | Kind::PushPull => (0.1, "m"),
+            };
+            vm.last_operation_step = step;
+            vm.last_operation_unit = unit.to_string();
+        }
         vm.label_colorblind_axes = translated(petunia_config::text_id::PREFERENCES_COLORBLIND_AXES);
         vm.label_reduced_motion = translated(petunia_config::text_id::PREFERENCES_REDUCED_MOTION);
         vm.label_double_tap_interval =
@@ -11515,9 +12031,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
         if let Some(window) = initial_window.upgrade()
             && let Ok(mut bridge) = initial_bridge.lock()
         {
-            bridge.resize_viewport(
+            bridge.resize_viewport_scaled(
                 window.get_viewport_region_width().round().max(1.0) as u32,
                 window.get_viewport_region_height().round().max(1.0) as u32,
+                window.window().scale_factor(),
             );
             sync_window_properties(&window, &bridge.view_model());
             if let Some(frame) = bridge.render_viewport() {

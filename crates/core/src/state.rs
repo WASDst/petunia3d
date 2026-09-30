@@ -2813,9 +2813,14 @@ impl AppState {
             }
         };
 
-        let current = modal.pivot + modal.components;
+        let point = modal.current_point();
+        let current = point.unwrap_or(modal.pivot);
         let mut fb =
             crate::modal_feedback::ToolFeedback::new(modal.pivot, current, delta_text, modal.value);
+        if point.is_none() {
+            // Graus, fatores e frações não são posições: sem linha-guia de mundo.
+            fb.guide_line = None;
+        }
 
         match modal.constraint {
             crate::modal::ModalConstraint::Axis(i) => fb.axis_constraint = Some(i),
@@ -2823,7 +2828,8 @@ impl AppState {
             crate::modal::ModalConstraint::Free => {}
         }
 
-        fb.is_snapped = self.snap_enabled;
+        // Encaixou de fato, não apenas "snap ligado" (P3D-040).
+        fb.is_snapped = modal.snapped();
         Some(fb)
     }
 

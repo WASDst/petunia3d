@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **781**.
+Total de chaves de localização cadastradas: **793**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -22,7 +22,7 @@ Total de chaves de localização cadastradas: **781**.
 | `actions.angle` | Angle | Ângulo |
 | `actions.apply` | Apply | Aplicar |
 | `actions.apply_scale` | Apply scale | Aplicar escala |
-| `actions.bevel` | Bevel | Bevel |
+| `actions.bevel` | Round Edge | Round Edge |
 | `actions.cancel` | Cancel | Cancelar |
 | `actions.connect` | Bridge Faces | Conectar Faces |
 | `actions.cursor_to_origin` | Cursor to World Origin | Cursor para origem global |
@@ -156,7 +156,7 @@ Total de chaves de localização cadastradas: **781**.
 | `geometry.title` | Geometry | Geometria |
 | `geometry.tris` | Triangles | Triângulos |
 | `help.body` | MMB orbit • Shift+MMB pan • wheel zoom • Tab mode • Del delete • Home reset • H help • Ctrl+Z/Y undo | MMB orbita • Shift+MMB pan • scroll zoom • Tab modo • Del apaga • Home reseta • H ajuda • Ctrl+Z/Y desfaz |
-| `hints.bevel` | Ctrl+B: interactive bevel of one supported edge. | Ctrl+B: bevel interativo de um edge suportado. |
+| `hints.bevel` | Ctrl+B: interactive Round Edge of one supported edge. | Ctrl+B: Round Edge interativo de um edge suportado. |
 | `hints.connect` | B: bridge two loops or faces. | B: conecta (bridge) dois loops ou faces. |
 | `hints.dissolve` | X: dissolve selected edges/vertices cleanly. | X: dissolve edges/points sem deixar buracos. |
 | `hints.draw_profile` | Shift+P: click in ortho view to add points. Click near 1st to close. | Shift+P: clique na vista ortográfica p/ pontos. Perto do 1º fecha. |
@@ -185,7 +185,7 @@ Total de chaves de localização cadastradas: **781**.
 | `inspector.tab_object` | Object | Objeto |
 | `inspector.tab_selection` | Selection | Seleção |
 | `inspector.tool_active` | Active Tool | Ferramenta Ativa |
-| `inspector.tool_bevel` | Bevel tool | Ferramenta Bevel |
+| `inspector.tool_bevel` | Round Edge tool | Ferramenta Round Edge |
 | `inspector.tool_mirror` | Mirror tool | Ferramenta Mirror |
 | `inspector.tool_subdivide` | Subdivide tool | Ferramenta Subdivide |
 | `inspector.unpin` | Unpin | Soltar |
@@ -343,8 +343,11 @@ Total de chaves de localização cadastradas: **781**.
 | `pivot.origin_to_cursor` | Origin to 3D Cursor | Origem para o Cursor 3D |
 | `pivot.origin_to_geometry` | Origin to Geometry | Origem para a Geometria |
 | `pivot.origin_to_selection` | Origin to Selection | Origem para a Seleção |
+| `preferences.click_move_click` | Drag without holding the button (click, move, click) | Arrastar sem segurar o botão (clicar, mover, clicar) |
+| `preferences.click_move_click_hint` | Click a handle: it follows the mouse until the next click. | Clique numa alça: ela segue o mouse até o próximo clique. |
 | `preferences.colorblind_axes` | Colorblind axes differentiation (X, Y, Z labels) | Diferenciação não-cromática de eixos (Rótulos X, Y, Z) |
 | `preferences.double_tap_interval` | Double-tap shortcut interval (ms) | Intervalo de duplo toque de atalho (ms) |
+| `preferences.drag_threshold` | Distance before a drag starts (px) | Distância para começar a arrastar (px) |
 | `preferences.multiselection_measure_tag` | Display average measure tag on multiple edge selection | Exibir tag de média na multiseleção de arestas |
 | `preferences.reduced_motion` | Reduced motion (disable viewport animations) | Redução de movimento (desativa animações do viewport) |
 | `prims.body_length` | Body Length | Comprimento do Corpo |
@@ -501,8 +504,17 @@ Total de chaves de localização cadastradas: **781**.
 | `shading.tip_wireframe` | Wireframe (Z 4) | Arame (Z 4) |
 | `shading.unlit` | Unlit | Sem Luz |
 | `shading.wire` | Wireframe | Arame |
+| `tool_grammar.adjust_hint` | Type a value and press Enter to adjust (same Undo) | Digite um valor e Enter para ajustar (mesmo Undo) |
+| `tool_grammar.adjusted` | Last operation adjusted | Última operação ajustada |
+| `tool_grammar.expired` | The last operation can no longer be adjusted | A última operação não pode mais ser ajustada |
+| `tool_grammar.gesture_hint` | Drag or type a value · Esc cancels · Right button: menu | Arraste ou digite um valor · Esc cancela · Botão direito: menu |
+| `tool_grammar.last_operation` | Last operation | Última operação |
+| `tool_grammar.needs_edge` | {tool}: click or drag an edge | {tool}: clique ou arraste uma aresta |
+| `tool_grammar.needs_face` | {tool}: click or drag a face | {tool}: clique ou arraste uma face |
+| `tool_grammar.primitive_kept` | Primitive kept · Ctrl+Z undoes | Primitiva mantida · Ctrl+Z desfaz |
+| `tool_grammar.ready` | {tool}: drag on the mesh or click to select | {tool}: arraste sobre a malha ou clique para selecionar |
 | `tool_properties.bevel_hint` | Supports one manifold convex edge with simple corners; one segment. | Suporta um edge convexo manifold com cantos simples; um segmento. |
-| `tool_properties.bevel_width` | Bevel width | Largura do bevel |
+| `tool_properties.bevel_width` | Round Edge width | Largura do Round Edge |
 | `tool_properties.blocked` | Confirm or cancel the viewport operation before editing these fields. | Confirme ou cancele a operação na viewport antes de editar estes campos. |
 | `tool_properties.choose_transform` | Choose a transform handle or use G/R/S. | Escolha uma alça de transformação ou use G/R/S. |
 | `tool_properties.cuts` | Cuts | Cortes |
@@ -531,7 +543,7 @@ Total de chaves de localização cadastradas: **781**.
 | `toolbar.visible` | Visible | Visível |
 | `tools.add_primitive` | Add Primitive | Adicionar primitiva |
 | `tools.annotate` | Annotate | Anotar |
-| `tools.bevel` | Bevel | Bevel |
+| `tools.bevel` | Round Edge | Round Edge |
 | `tools.connect` | Connect | Conectar |
 | `tools.cursor_3d` | 3D Cursor | Cursor 3D |
 | `tools.dissolve` | Dissolve | Dissolver |
@@ -667,7 +679,7 @@ Total de chaves de localização cadastradas: **781**.
 | `ui.more_actions` | More actions | Mais ações |
 | `ui.more_model_tools` | More modeling tools | Mais ferramentas de modelagem |
 | `ui.no_tool` | Tool disabled in tools.toml | Ferramenta desligada no tools.toml |
-| `ui.no_tool_parameters` | Select Extrude, Inset, Bevel, Loop Cut or Profile to edit parameters here. | Selecione Extrude, Inset, Bevel, Loop Cut ou Profile para editar os parâmetros aqui. |
+| `ui.no_tool_parameters` | Select Extrude, Inset, Round Edge, Loop Cut or Profile to edit parameters here. | Selecione Extrude, Inset, Round Edge, Loop Cut ou Profile para editar os parâmetros aqui. |
 | `ui.numeric_field_hint` | Click to enter an exact value, or drag to adjust. Hold Shift for precision. | Clique para digitar um valor exato ou arraste para ajustar. Segure Shift para precisão. |
 | `ui.object_lock` | Lock | Bloqueio |
 | `ui.object_name` | Name | Nome |
