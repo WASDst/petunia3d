@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Plano de trabalho em destaque — Onda 6, parte 3 (30/09/2026)
+- **O plano de trabalho aparece no DRAW** (capítulo 05): um recorte translúcido com grade, centrado na origem do desenho e do mesmo tamanho na tela em qualquer zoom. Aparece quando o plano está decidido (travado, ou com um perfil em edição); antes do primeiro clique no modo automático, o destaque da face sob o cursor continua mostrando o candidato.
+- **Verificado por pixels** no renderer real, e as regras de quando aparecer por teste do bridge.
+- **Correção de registro**: os pontos do domínio Point já eram desenhados como discos; a parte 2 os listou como pendentes por engano.
+
 ### Paint e viewport dividida (30/09/2026)
 - **Ícones booleanos redesenhados**: Fuse (união sólida), Cut (união com mordida e contorno tracejado do volume removido), Intersect (interseção destacada com arcos tracejados) e Join (duas partes ligadas por ponte) agora são distinguíveis a 16–20 px; antes eram quatro variações do mesmo par quadrado+círculo.
 - **PiP do Paint**: botão no Canvas do Inspector troca os papéis — o canvas 2D ocupa a viewport e o 3D vira um inset ao vivo (clique para voltar); ao iniciar um traço, a câmera 3D enquadra a face cujo UV foi tocado. Limite: com o PiP aberto os cards flutuantes do Inspector ficam cobertos.

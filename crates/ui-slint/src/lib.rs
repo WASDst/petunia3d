@@ -76,6 +76,8 @@ pub struct ViewportRenderState {
     pub studio_light_follows_camera: bool,
     /// Aparência das arestas por modo (DRAW = forma, POLY = topologia).
     pub edge_mode: petunia_render_wgpu::EdgeMode,
+    /// Plano de trabalho em destaque (DRAW, ferramenta de desenho).
+    pub workplane: Option<petunia_render_wgpu::WorkplaneOverlay>,
 }
 
 impl Default for ViewportRenderState {
@@ -97,6 +99,7 @@ impl Default for ViewportRenderState {
             boolean_operand: None,
             studio_light_follows_camera: true,
             edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
+            workplane: None,
         }
     }
 }
@@ -1735,6 +1738,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             boolean_operand: self.state.session.tools.boolean_operand,
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
             edge_mode: self.edge_mode(),
+            workplane: self.workplane_overlay(),
         }
     }
 
@@ -9730,6 +9734,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
+    /// Plano de trabalho em destaque (capítulo 05) quando já está decidido:
+    /// travado pelo usuário ou fixado pelo perfil em edição. No automático,
+    /// antes do 1º clique, o destaque da face sob o cursor mostra o candidato.
+    fn workplane_overlay(&self) -> Option<petunia_render_wgpu::WorkplaneOverlay> {
+        let drawing = self.state.workspace == Workspace::Model
+            && self.modeling_mode == ModelingMode::Draw
+            && self.state.session.tools.active_tool == "draw_profile";
+        let decided =
+            self.state.profile.workplane_locked || self.active_profile_resources().is_some();
+        let profile = &self.state.profile;
+        (drawing && decided).then_some(petunia_render_wgpu::WorkplaneOverlay {
+            origin: profile.origin,
+            right: profile.right,
+            up: profile.up,
+        })
+    }
+
     /// Região de perfil sob o ponto (px lógicos da viewport), se não estiver
     /// escondida atrás da malha ativa. Os planos ficam em cache por revisão.
     fn region_hit_at(&mut self, pixel: [f32; 2]) -> Option<petunia_core::RegionHit> {
@@ -12966,6 +12987,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         boolean_operand: state.session.tools.boolean_operand,
         studio_light_follows_camera: true,
         edge_mode: ModelingMode::default().edge_mode(),
+        workplane: None,
     };
     if let Some(frame) = viewport.render_frame(
         &state.project,
