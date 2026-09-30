@@ -382,6 +382,39 @@ COMMAND_OVERRIDES = {
 }
 
 
+def redraw(key: str, label: str, outline: str, filled: str) -> None:
+    """Substitui a arte de um ID que antes só reaproveitava outro ícone (ambiguidade)."""
+    group, _, _, _, status = ICONS[key]
+    ICONS[key] = group, label, outline, filled, status
+
+
+HEX = 'M8.5 3h7L21 8.5v7L15.5 21h-7L3 15.5v-7z'
+FACET = 'M3.5 9h17M3.5 15h17'
+redraw('shade_flat', 'Shade Flat', ink(p(HEX), p(FACET)), solid(p(HEX)) + ink(p(FACET, stroke='#252735')))
+SMOOTH = 'M7.5 9.5a6 6 0 0 1 4-3.5M8 16c2.5 2 6.5 1.5 8.5-2'
+redraw('shade_smooth', 'Shade Smooth', ink(c(12, 12, 9), p(SMOOTH)), solid(c(12, 12, 9)) + ink(p(SMOOTH, stroke='#252735')))
+CORNERS = 'M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3'
+redraw('isolate', 'Isolate', ink(r(7, 7, 10, 10, 2), p(CORNERS)), solid(r(6, 6, 12, 12, 2)) + ink(p(CORNERS)))
+FACE = 'M4 17l8-4 8 4-8 4z'
+ARROW = 'M12 13V3m-3.5 3.5L12 3l3.5 3.5'
+redraw('normals_overlay', 'Normals Overlay', ink(p(FACE), p(ARROW)), solid(p(FACE)) + ink(p(ARROW)))
+FLIP = 'M8 20V9m-3 3 3-3 3 3M16 4v11m-3-3 3 3 3-3'
+redraw('flip_normals', 'Flip Normals', ink(p(FLIP)), ink(p(FLIP, stroke_width='2.5')))
+BACK = 'M12 12l9-5M12 12 3 7M12 12v10'
+redraw('backface_culling', 'Backface Culling', ink(p(CUBE), p(BACK, stroke_dasharray='2 2.4')), solid(p('M12 12l9-5v10l-9 5z')) + ink(p(CUBE)))
+redraw('bounding_box', 'Bounding Box', ink(r(4, 4, 16, 16, 1, stroke_dasharray='3 2.4')) + solid(c(4, 4, 1.8), c(20, 4, 1.8), c(4, 20, 1.8), c(20, 20, 1.8)), solid(r(7, 7, 10, 10, 1)) + ink(r(3, 3, 18, 18, 1, stroke_dasharray='3 2.4')) + solid(c(3, 3, 1.8), c(21, 3, 1.8), c(3, 21, 1.8), c(21, 21, 1.8)))
+MAX = 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'
+redraw('maximize', 'Maximize', ink(p(MAX)), solid(r(7, 7, 10, 10, 1)) + ink(p(MAX)))
+redraw('minimize', 'Minimize', ink(p('M6 18h12')), ink(p('M6 18h12'), ) + solid(r(6, 15, 12, 4, 1)))
+AXES = 'M12 3v18M3 12h18'
+redraw('origin', 'Origin', ink(p(AXES)) + solid(c(12, 12, 3)), solid(c(12, 12, 5)) + ink(p(AXES)))
+redraw('selection_center', 'Selection Center', ink(r(3, 3, 18, 18, 2, stroke_dasharray='3 2.4')) + solid(c(12, 12, 2.6)), solid(r(3, 3, 18, 18, 2)) + solid(c(12, 12, 3.4, fill='#252735')))
+redraw('paint', 'Paint Roller', ink(r(4, 3, 14, 6, 1.5), p('M18 6h2v5h-9v3'), r(9, 14, 4, 7, 1)), solid(r(4, 3, 14, 6, 1.5), r(9, 14, 4, 7, 1)) + ink(p('M18 6h2v5h-9v3')))
+REF = 'M9 14l3-3 3 3 2-2 2 2'
+redraw('reference_manager', 'Reference Manager', ink(r(6, 3, 15, 13, 2), p('M3 8v11a2 2 0 0 0 2 2h11'), c(11, 8, 1.4), p(REF)), solid(r(6, 3, 15, 13, 2)) + ink(p('M3 8v11a2 2 0 0 0 2 2h11')) + ink(p(REF, stroke='#252735')))
+redraw('object_mesh', 'Object Mesh', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7')) + solid(c(12, 2, 1.6), c(21, 7, 1.6), c(21, 17, 1.6), c(12, 22, 1.6), c(3, 17, 1.6), c(3, 7, 1.6), c(12, 12, 1.6)), solid(p(CUBE)) + solid(c(12, 12, 1.8, fill='#252735')))
+
+
 def command_map() -> dict[str, str]:
     repo = ROOT.parent.parent
     commands = set(re.findall(r'\| `(\w+\.\w+)` \|', (repo / 'docs/generated/COMMANDS.md').read_text()))
