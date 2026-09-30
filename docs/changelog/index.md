@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate procedural-first — documentação (30/09/2026)
+- **Decisão de produto registrada**: Animate acessível a quem não entende de animação, com **animação procedural primeiro**, **criaturas de primeira classe** (humanoide, quadrúpede, multi-leg, serpente, peixe, pássaro) e referência de animação por **batch de imagens** (sem vídeo, sem ML). Sem alteração de código.
+- **Caderno**: novo capítulo 45 (visão, UX em quatro camadas, Gap Matrix `AN-01…AN-15`, análise do Dust3D, pesquisa externa e fases F0–F5); novas specs **P3D-169** (Rig Roles & IK), **P3D-170** (Procedural Motion Generators), **P3D-171** (Ghosts & Trajectories), **P3D-172** (Reference Image Sequence), **P3D-173** (Secondary Motion & Ragdoll) e **P3D-174** (Layered Animation), todas em `SPEC DRAFT`.
+- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e [ADR 006](docs/architecture/adr/006-workspace-animate-pos-v1.md). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
+- **Achados registrados**: o domínio de rig/clipes existe em `petunia_project`, mas não alcança o Slint (AN-07) e o glTF não exporta skin/animação (AN-13).
+- **Gates**: `xtask bible-check` passa a validar P3D-001–174 e fundamentos 01–45.
+
 ### Iconografia vetorial Petunia oficial e temas configuráveis (28/09/2026)
 - **Integração nativa no shell Slint**: Os 249 ícones vetoriais SVG oficiais criados para o Petunia3D foram compilados em catálogo declarativo dinâmico (`PetuniaIcons` em `petunia_icons.slint`), fornecendo suporte unificado a duas variantes estéticas: `outline` (traço) e `filled` (preenchido).
 - **Troca dinâmica e reatividade imediata**: Alternância de estilo em tempo de execução via seletor em Configurações -> Aparência, com preview dos dois estilos e callback reativo conectado ao singleton global Slint sem reinicialização.
