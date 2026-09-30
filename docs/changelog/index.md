@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F0.2/F0.3 — glTF com skin, joints e animação (30/09/2026)
+- **Export** (`petunia_project::gltf_rig`, integrado a `export_gltf`): nós de joint com TRS de repouso, `skin` com `inverseBindMatrices`, `JOINTS_0`/`WEIGHTS_0` por vértice, `animations` por osso (translation/rotation/scale; LINEAR ou STEP) e `extras.petunia` para round-trip. Sem rig o GLB é idêntico ao anterior. Avisos em `export_report` quando a malha avaliada não casa com os pesos (skin omitida, nunca silenciosa).
+- **Import** (`import_rig`, `Project::add_imported_rig`, `ImportPayload.rig`): esqueleto a partir da IBM (com rotação de repouso), pesos `JOINTS_0` u8/u16, clipes (fps/loop/duração via extras), `scale` aplicado; CUBICSPLINE convertido e ancestrais/escala/canais ignorados geram **avisos**. O `ProjectService` liga esqueleto, pesos e clipes ao projeto.
+- **Rig Core**: `compute_bind_pose_matrices` respeita a rotação de repouso (rigs externos).
+- **Testes**: 9 novos de round-trip (nomes, hierarquia, heads, bind, pesos por vértice, poses amostradas, rotação de repouso, escala, pipeline) + GLB externo montado à mão + export (skin, pesos, animações, tempos inválidos, skin omitida).
+- **Registrado**: AN-17 (pesos guardam IDs, consumidores tratam como índice); o import de malha ainda ignora UV/normais.
+
 ### Animate F0.1 — correção do bind pose do Rig Core (30/09/2026)
 - **AN-16 corrigido**: `Skeleton::compute_bind_pose_matrices` tratava `head` (absoluto) como offset relativo ao pai, acumulando a hierarquia; ossos fora da origem não voltavam à identidade em repouso. Agora o bind é `translate(head)` e `local_transform.translation` guarda o offset de repouso (`head − head_do_pai`), a mesma convenção dos joints do glTF.
 - **Amostragem**: `AnimationClip::sample_pose` usa `BoneTrack::sample_transform_over`, e canais sem keyframes herdam o repouso (uma trilha só de rotação não solta mais o osso do pai). O clipe `Humanoid_Idle` passou a respirar em torno do repouso e o botão "Inserir Pose Key" do egui legado grava o repouso do osso.

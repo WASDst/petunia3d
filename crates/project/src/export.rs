@@ -2,6 +2,9 @@
 //! GLB escrito à mão (sem dependência pesada); validado em teste com `gltf`.
 
 use super::{Asset, Project};
+use crate::gltf_rig::{
+    BinBuilder, COMPONENT_U16, RigDoc, SkinBinding, TARGET_ARRAY_BUFFER, bind_skin, build_rig_doc,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExportError {
@@ -39,6 +42,9 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
         uv: Vec<f32>,
         idx: Vec<u32>,
         texture_png: Option<Vec<u8>>,
+        skin: Option<SkinBinding>,
+        joints: Vec<u16>,
+        weights: Vec<f32>,
     }
     let mut parts = Vec::new();
     for a in picked {
@@ -111,6 +117,9 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             uv: Vec::new(),
             idx: Vec::new(),
             texture_png,
+            skin: bind_skin(project, a, m.verts.len()),
+            joints: Vec::new(),
+            weights: Vec::new(),
         };
         let mut lut: std::collections::HashMap<(u32, u32), u32> = Default::default();
         for f in &m.faces {
@@ -129,6 +138,10 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
                     p.pos.extend_from_slice(&vv.pos);
                     p.nrm.extend_from_slice(&normals[vi as usize]);
                     p.uv.extend_from_slice(&[f.uv[k][0], f.uv[k][1]]);
+                    if let Some(skin) = &p.skin {
+                        p.joints.extend_from_slice(&skin.joints[vi as usize]);
+                        p.weights.extend_from_slice(&skin.weights[vi as usize]);
+                    }
                     id
                 });
                 p.idx.push(id);
@@ -144,25 +157,23 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
     }
 
     // monta BIN
-    let mut bin: Vec<u8> = Vec::new();
-    // views: (offset, len, target) — 34962 ARRAY_BUFFER, 34963 ELEMENT_ARRAY_BUFFER
-    let mut views: Vec<(usize, usize, u32)> = Vec::new();
-    /// (view, count, tipo, componente, min/max p/ POSITION).
-    type Acc = (usize, usize, String, usize, Option<([f32; 3], [f32; 3])>);
-    // accs: (view, count, type, comp, minmax)
-    let mut accs: Vec<Acc> = Vec::new();
-    let mut mesh_acc: Vec<[usize; 4]> = Vec::new();
+    let mut bb = BinBuilder::default();
+    /// Accessors de cada parte (JOINTS_0/WEIGHTS_0 só em partes com skin).
+    struct MeshAcc {
+        pos: usize,
+        nrm: usize,
+        uv: usize,
+        idx: usize,
+        skin_attrs: Option<(usize, usize)>,
+    }
+    let mut mesh_acc: Vec<MeshAcc> = Vec::new();
     for p in &parts {
-        let mut a = [0usize; 4];
+        let mut a = [0usize; 3];
         for (k, data) in [&p.pos, &p.nrm, &p.uv].iter().enumerate() {
-            let bytes: &[u8] = bytemuck::cast_slice(data);
-            let off = bin.len();
-            bin.extend_from_slice(bytes);
-            views.push((off, bytes.len(), 34962));
-            let ty = if k == 2 { "VEC2" } else { "VEC3" };
+            let comps = if k == 2 { 2 } else { 3 };
             let mm = if k == 0 {
-                let mut mn = [f32::MAX; 3];
-                let mut mx = [f32::MIN; 3];
+                let mut mn = vec![f32::MAX; 3];
+                let mut mx = vec![f32::MIN; 3];
                 for v in data.chunks(3) {
                     for c in 0..3 {
                         if let Some(&x) = v.get(c) {
@@ -175,58 +186,94 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             } else {
                 None
             };
-            accs.push((
-                views.len() - 1,
-                data.len() / if k == 2 { 2 } else { 3 },
-                ty.to_string(),
-                5126,
+            a[k] = bb.push_f32(
+                data,
+                if k == 2 { "VEC2" } else { "VEC3" },
+                comps,
+                TARGET_ARRAY_BUFFER,
                 mm,
-            ));
-            a[k] = accs.len() - 1;
+            );
         }
         let idx_bytes: Vec<u8> = p.idx.iter().flat_map(|i| i.to_le_bytes()).collect();
-        let off = bin.len();
-        bin.extend_from_slice(&idx_bytes);
-        views.push((off, idx_bytes.len(), 34963));
-        accs.push((
-            views.len() - 1,
-            p.idx.len(),
-            "SCALAR".to_string(),
-            5125,
-            None,
-        ));
-        a[3] = accs.len() - 1;
-        mesh_acc.push(a);
+        let view = bb.push_view(&idx_bytes, 34963);
+        let idx = bb.push_acc(view, p.idx.len(), "SCALAR", 5125, None);
+        let skin_attrs = if p.skin.is_some() {
+            let jv = bb.push_view(bytemuck::cast_slice(&p.joints), TARGET_ARRAY_BUFFER);
+            let j = bb.push_acc(jv, p.joints.len() / 4, "VEC4", COMPONENT_U16, None);
+            let w = bb.push_f32(&p.weights, "VEC4", 4, TARGET_ARRAY_BUFFER, None);
+            Some((j, w))
+        } else {
+            None
+        };
+        mesh_acc.push(MeshAcc {
+            pos: a[0],
+            nrm: a[1],
+            uv: a[2],
+            idx,
+            skin_attrs,
+        });
     }
-    while !bin.len().is_multiple_of(4) {
-        bin.push(0);
+
+    // Skins, joints e animações (uma skin por esqueleto usado).
+    let mut skeleton_ids: Vec<uuid::Uuid> = Vec::new();
+    for p in &parts {
+        if let Some(skin) = &p.skin
+            && !skeleton_ids.contains(&skin.skeleton_id)
+        {
+            skeleton_ids.push(skin.skeleton_id);
+        }
     }
+    let rig = if skeleton_ids.is_empty() {
+        RigDoc::default()
+    } else {
+        build_rig_doc(project, &skeleton_ids, parts.len(), &mut bb)?
+    };
 
     // monta JSON
     let mut j = String::from("{\"asset\":{\"version\":\"2.0\",\"generator\":\"Petunia3D\"},");
     j.push_str("\"scene\":0,\"scenes\":[{\"nodes\":[");
-    for (i, _) in parts.iter().enumerate() {
+    let scene_nodes: Vec<usize> = (0..parts.len())
+        .chain(rig.scene_roots.iter().copied())
+        .collect();
+    for (i, n) in scene_nodes.iter().enumerate() {
         if i > 0 {
             j.push(',');
         }
-        j.push_str(&i.to_string());
+        j.push_str(&n.to_string());
     }
     j.push_str("]}],\"nodes\":[");
     for (i, p) in parts.iter().enumerate() {
         if i > 0 {
             j.push(',');
         }
-        j.push_str(&format!("{{\"name\":{},\"mesh\":{i}}}", json_str(&p.name)));
+        let skin_field = p
+            .skin
+            .as_ref()
+            .and_then(|s| rig.skin_of.get(&s.skeleton_id))
+            .map(|k| format!(",\"skin\":{k}"))
+            .unwrap_or_default();
+        j.push_str(&format!(
+            "{{\"name\":{},\"mesh\":{i}{skin_field}}}",
+            json_str(&p.name)
+        ));
+    }
+    for node in &rig.nodes {
+        j.push(',');
+        j.push_str(&node.to_string());
     }
     j.push_str("],\"meshes\":[");
     for (i, p) in parts.iter().enumerate() {
         if i > 0 {
             j.push(',');
         }
-        let a = mesh_acc[i];
+        let a = &mesh_acc[i];
+        let skin_attrs = a
+            .skin_attrs
+            .map(|(jn, w)| format!(",\"JOINTS_0\":{jn},\"WEIGHTS_0\":{w}"))
+            .unwrap_or_default();
         j.push_str(&format!(
-            "{{\"name\":{},\"primitives\":[{{\"attributes\":{{\"POSITION\":{},\"NORMAL\":{},\"TEXCOORD_0\":{}}},\"indices\":{},\"material\":{i}}}]}}",
-            json_str(&p.name), a[0], a[1], a[2], a[3]
+            "{{\"name\":{},\"primitives\":[{{\"attributes\":{{\"POSITION\":{},\"NORMAL\":{},\"TEXCOORD_0\":{}{skin_attrs}}},\"indices\":{},\"material\":{i}}}]}}",
+            json_str(&p.name), a.pos, a.nrm, a.uv, a.idx
         ));
     }
     j.push_str("],\"materials\":[");
@@ -235,13 +282,7 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
     let mut image_views: Vec<usize> = Vec::new();
     for p in &parts {
         if let Some(png) = &p.texture_png {
-            while !bin.len().is_multiple_of(4) {
-                bin.push(0);
-            }
-            let off = bin.len();
-            bin.extend_from_slice(png);
-            views.push((off, png.len(), 0));
-            let view_idx = views.len() - 1;
+            let view_idx = bb.push_view(png, 0);
             image_views.push(view_idx);
             part_image.push(Some(image_views.len() - 1));
         } else {
@@ -283,8 +324,17 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             j.push_str(&format!("{{\"source\":{i}}}"));
         }
     }
-    j.push_str("],\"accessors\":[");
-    for (i, (v, count, ty, comp, mm)) in accs.iter().enumerate() {
+    j.push(']');
+    if !rig.skins.is_empty() {
+        j.push_str(",\"skins\":");
+        j.push_str(&serde_json::Value::Array(rig.skins.clone()).to_string());
+    }
+    if !rig.animations.is_empty() {
+        j.push_str(",\"animations\":");
+        j.push_str(&serde_json::Value::Array(rig.animations.clone()).to_string());
+    }
+    j.push_str(",\"accessors\":[");
+    for (i, (v, count, ty, comp, mm)) in bb.accs.iter().enumerate() {
         if i > 0 {
             j.push(',');
         }
@@ -292,19 +342,22 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             "{{\"bufferView\":{v},\"componentType\":{comp},\"count\":{count},\"type\":\"{ty}\""
         ));
         if let Some((mn, mx)) = mm {
-            j.push_str(&format!(
-                ",\"min\":[{:.6},{:.6},{:.6}],\"max\":[{:.6},{:.6},{:.6}]",
-                mn[0], mn[1], mn[2], mx[0], mx[1], mx[2]
-            ));
+            let fmt = |v: &Vec<f32>| {
+                v.iter()
+                    .map(|x| format!("{x:.6}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            j.push_str(&format!(",\"min\":[{}],\"max\":[{}]", fmt(mn), fmt(mx)));
         }
         j.push('}');
     }
     j.push_str("],\"bufferViews\":[");
-    for (i, (off, len, target)) in views.iter().enumerate() {
+    for (i, (off, len, target)) in bb.views.iter().enumerate() {
         if i > 0 {
             j.push(',');
         }
-        // Views de imagem não têm target (glTF: só vertex/index têm).
+        // Views sem target (imagens, IBM, animação): glTF só marca vertex/index.
         if *target == 0 {
             j.push_str(&format!(
                 "{{\"buffer\":0,\"byteOffset\":{off},\"byteLength\":{len}}}"
@@ -315,10 +368,12 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             ));
         }
     }
+    bb.align4();
     j.push_str(&format!(
         "],\"buffers\":[{{\"byteLength\":{}}}]}}",
-        bin.len()
+        bb.bin.len()
     ));
+    let bin = std::mem::take(&mut bb.bin);
 
     // chunk JSON (pad espaço)
     let mut json = j.into_bytes();
@@ -395,6 +450,12 @@ pub fn export_report(project: &Project, indices: &[usize], include_gltf: bool) -
             )),
             None => lines.push(format!("índice {i} inválido")),
         }
+        if include_gltf
+            && let Some(a) = project.assets.get(i)
+            && let Some(note) = crate::gltf_rig::skin_export_note(project, a)
+        {
+            lines.push(format!("aviso: {note}"));
+        }
     }
     lines
 }
@@ -439,6 +500,130 @@ mod tests {
             }
         }
         assert!(n >= 12, "verts insuficientes: {n}");
+    }
+
+    fn rigged_project() -> (Project, crate::rig::Skeleton) {
+        use crate::{AnimationAsset, AnimationLibrary, RigPreset, compute_auto_skin_weights};
+        let mut p = sample_project();
+        let skel = RigPreset::humanoid(1.0);
+        let mesh = p.assets[0].mesh.clone();
+        p.assets[0].skin_data = Some(compute_auto_skin_weights(&mesh, &skel));
+        p.assets[0].skeleton_id = Some(skel.id);
+        p.animations.push(AnimationAsset::new(
+            "Walk",
+            AnimationLibrary::humanoid_walk(&skel),
+        ));
+        p.animations.push(AnimationAsset::new(
+            "Idle",
+            AnimationLibrary::humanoid_idle(&skel),
+        ));
+        p.add_skeleton(skel.clone());
+        (p, skel)
+    }
+
+    fn node_world(doc: &gltf::Document) -> Vec<glam::Mat4> {
+        fn walk(node: gltf::Node, parent: glam::Mat4, out: &mut Vec<glam::Mat4>) {
+            let local = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
+            let world = parent * local;
+            out[node.index()] = world;
+            for c in node.children() {
+                walk(c, world, out);
+            }
+        }
+        let mut out = vec![glam::Mat4::IDENTITY; doc.nodes().len()];
+        for root in doc.default_scene().unwrap().nodes() {
+            walk(root, glam::Mat4::IDENTITY, &mut out);
+        }
+        out
+    }
+
+    #[test]
+    fn glb_exports_skin_joints_weights_and_animations() {
+        let (p, skel) = rigged_project();
+        let bytes = export_gltf(&p, &[0]).expect("glb");
+        let (doc, buffers, _) = gltf::import_slice(&bytes).expect("parse glb");
+        let get = |b: gltf::Buffer| Some(&buffers[b.index()][..]);
+
+        // Skin: um por esqueleto, um joint por osso, IBM idêntica à do Rig Core.
+        assert_eq!(doc.skins().count(), 1);
+        let skin = doc.skins().next().unwrap();
+        assert_eq!(skin.joints().count(), skel.bones.len());
+        let ibm: Vec<[[f32; 4]; 4]> = skin
+            .reader(get)
+            .read_inverse_bind_matrices()
+            .expect("IBM")
+            .collect();
+        assert_eq!(ibm.len(), skel.bones.len());
+        for (m, bone) in ibm.iter().zip(&skel.bones) {
+            let expected = glam::Mat4::from_cols_array(&bone.inverse_bind_matrix);
+            assert!(glam::Mat4::from_cols_array_2d(m).abs_diff_eq(expected, 1e-5));
+        }
+
+        // Nó da malha referencia o skin; pesos somam 1 e joints estão no intervalo.
+        let mesh_node = doc.nodes().find(|n| n.mesh().is_some()).unwrap();
+        assert!(mesh_node.skin().is_some());
+        let prim = mesh_node.mesh().unwrap().primitives().next().unwrap();
+        let r = prim.reader(get);
+        let joints: Vec<[u16; 4]> = r.read_joints(0).expect("JOINTS_0").into_u16().collect();
+        let weights: Vec<[f32; 4]> = r.read_weights(0).expect("WEIGHTS_0").into_f32().collect();
+        assert_eq!(joints.len(), weights.len());
+        assert!(!joints.is_empty());
+        for (j, w) in joints.iter().zip(&weights) {
+            assert!((w.iter().sum::<f32>() - 1.0).abs() < 1e-4);
+            assert!(j.iter().all(|&x| (x as usize) < skel.bones.len()));
+        }
+
+        // Em repouso a matriz de cada joint (mundo × IBM) é identidade.
+        let world = node_world(&doc);
+        for (joint, m) in skin.joints().zip(&ibm) {
+            let skin_m = world[joint.index()] * glam::Mat4::from_cols_array_2d(m);
+            assert!(skin_m.abs_diff_eq(glam::Mat4::IDENTITY, 1e-4), "{skin_m:?}");
+        }
+
+        // Animações: Walk (2 canais de rotação) e Idle (translação + escala).
+        assert_eq!(doc.animations().count(), 2);
+        let walk = doc.animations().find(|a| a.name() == Some("Walk")).unwrap();
+        assert_eq!(walk.channels().count(), 2);
+        for ch in walk.channels() {
+            assert_eq!(ch.target().property(), gltf::animation::Property::Rotation);
+            let cr = ch.reader(get);
+            let times: Vec<f32> = cr.read_inputs().unwrap().collect();
+            assert_eq!(times, vec![0.0, 0.5, 1.0]);
+        }
+        let idle = doc.animations().find(|a| a.name() == Some("Idle")).unwrap();
+        let props: Vec<_> = idle.channels().map(|c| c.target().property()).collect();
+        assert!(props.contains(&gltf::animation::Property::Translation));
+        assert!(props.contains(&gltf::animation::Property::Scale));
+    }
+
+    #[test]
+    fn glb_without_rig_keeps_no_skin_or_animation() {
+        let p = sample_project();
+        let bytes = export_gltf(&p, &[0]).expect("glb");
+        let (doc, _, _) = gltf::import_slice(&bytes).expect("parse glb");
+        assert_eq!(doc.skins().count(), 0);
+        assert_eq!(doc.animations().count(), 0);
+    }
+
+    #[test]
+    fn glb_skin_is_skipped_with_a_note_when_weights_do_not_match_the_mesh() {
+        let (mut p, _) = rigged_project();
+        p.assets[0].skin_data.as_mut().unwrap().vertex_weights.pop();
+        let note = crate::gltf_rig::skin_export_note(&p, &p.assets[0]).expect("nota");
+        assert!(note.contains("sem skin"), "{note}");
+        let bytes = export_gltf(&p, &[0]).expect("glb");
+        let (doc, _, _) = gltf::import_slice(&bytes).expect("parse glb");
+        assert_eq!(doc.skins().count(), 0);
+        assert_eq!(doc.animations().count(), 0);
+    }
+
+    #[test]
+    fn glb_rejects_non_monotonic_keyframe_times() {
+        let (mut p, _) = rigged_project();
+        let track = &mut p.animations[0].clip.tracks[0];
+        track.rotations[1].time = track.rotations[0].time; // empata os tempos
+        let err = export_gltf(&p, &[0]).unwrap_err();
+        assert!(err.to_string().contains("não crescentes"), "{err}");
     }
 
     #[test]

@@ -68,6 +68,7 @@ pub mod animation;
 pub mod autosave;
 pub mod export;
 pub mod format;
+pub mod gltf_rig;
 pub mod import_gltf;
 pub mod import_obj;
 pub mod io_atomic;
@@ -1446,6 +1447,47 @@ impl Project {
 
     pub fn get_animation_mut(&mut self, id: Uuid) -> Option<&mut AnimationAsset> {
         self.animations.iter_mut().find(|a| a.id == id)
+    }
+
+    /// Adiciona esqueletos e clipes importados (glTF) e liga os pesos aos assets
+    /// criados a partir de `first_new_asset` (casando pelo nome da malha).
+    /// Devolve avisos de pesos descartados (contagem de vértices divergente).
+    pub fn add_imported_rig(
+        &mut self,
+        rig: gltf_rig::ImportedRig,
+        first_new_asset: usize,
+    ) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for ms in rig.mesh_skins {
+            let skeleton = &rig.skeletons[ms.skeleton_index];
+            let Some(asset) = self
+                .assets
+                .iter_mut()
+                .skip(first_new_asset)
+                .find(|a| a.name == ms.mesh_name && a.skeleton_id.is_none())
+            else {
+                continue;
+            };
+            match ms
+                .skin
+                .validate(asset.mesh.verts.len(), skeleton.bones.len().max(1))
+            {
+                Ok(()) => {
+                    asset.skeleton_id = Some(skeleton.id);
+                    asset.skin_data = Some(ms.skin);
+                }
+                Err(e) => {
+                    warnings.push(format!("'{}': pesos de skin descartados ({e})", asset.name))
+                }
+            }
+        }
+        for skeleton in rig.skeletons {
+            self.add_skeleton(skeleton);
+        }
+        for animation in rig.animations {
+            self.add_animation(animation);
+        }
+        warnings
     }
 
     pub fn add_animation(&mut self, animation: AnimationAsset) {

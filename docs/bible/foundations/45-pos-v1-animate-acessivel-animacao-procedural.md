@@ -45,10 +45,11 @@ Auditoria estática do código em `main` (`e806225`); nada foi compilado para es
 | AN-10 | Secondary motion (spring/wiggle) | `MISSING` | — |
 | AN-11 | Ghosts e trajetórias | `MISSING` | — |
 | AN-12 | Referência em sequência de imagens | `MISSING` | `ReferenceImage` (P3D-013) é estática e sem tempo |
-| AN-13 | glTF com skin e animação | `MISSING` | `export.rs`, `pipeline.rs` e `import_gltf.rs` não referenciam skins/animations; o `.petunia` serializa `skeletons` e `animations` |
+| AN-13 | glTF com skin e animação | `MISSING` → `PARTIALLY_COMPLIANT` (F0.2/F0.3, 2026-09-30) | Export (`gltf_rig.rs`): joints com TRS de repouso, `skin` + `inverseBindMatrices`, `JOINTS_0`/`WEIGHTS_0`, `animations` (translation/rotation/scale, LINEAR/STEP) e `extras.petunia` (bone_id, tail, fps, loop). Import (`import_rig`): skeleton a partir da IBM, rotações de repouso, pesos (u8/u16), clipes (CUBICSPLINE convertido, com aviso) e `Project::add_imported_rig`. Round-trip e GLB externo testados. Pendente: UV/normais no import de malha (`import_glb_bytes` lê só posições), skins com mais de 4 influências, escala de bind ≠ 1, ancestral com transformação (avisos honestos) e UI de importação |
 | AN-14 | Undo/transações de rig e clipes | não auditado | depende do dono único de transação (D-02 da matriz de 2026-09-29) |
 | AN-15 | Morph Targets (P3D-162) | `MISSING` | — |
 | AN-16 | Bind pose e repouso do Rig Core | `BROKEN` → `COMPLIANT` (F0, 2026-09-30) | Achado ao preparar o glTF: `head` é absoluto, mas o bind compunha `pai × translate(head)` (acumulava a hierarquia) e `local_transform` nascia identidade; um osso fora da origem não voltava à identidade em repouso e trilhas só de rotação soltavam o osso do pai. Corrigido: bind = `translate(head)`, offset local de repouso = `head − head_do_pai`, canais sem keyframes herdam o repouso (`sample_transform_over`); testes de repouso/reparent/remoção |
+| AN-17 | Pesos de skin: ID de osso × índice | `PARTIALLY_COMPLIANT` (aberto) | O Auto-Skin grava **IDs** de osso em `VertexSkinWeight.bones`, mas `SkinData::deform_vertex`/`validate` os tratam como **índice** em `Skeleton.bones`; coincidem enquanto os IDs são densos (nenhuma remoção de osso). O export glTF resolve ID → índice (`bone_index`). Correção do consumidor exige política de `remove_bone` com pesos |
 
 Leitura: **o domínio de rig e clipes é sólido; o produto não o alcança**. O maior risco para "game-ready" é AN-13: sem skin/animação no glTF, nenhuma animação sai do Petunia.
 

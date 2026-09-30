@@ -374,31 +374,73 @@ impl Skeleton {
     }
 
     /// Recalcula a pose de repouso a partir de `head` (posição **absoluta** no
-    /// espaço do esqueleto, rotação de repouso identidade):
+    /// espaço do esqueleto) e da rotação local de repouso de cada osso
+    /// (`local_transform.rotation`, identidade por padrão):
     ///
-    /// - `inverse_bind_matrix` = inversa de `translate(head)`;
-    /// - `local_transform.translation` = `head - head_do_pai` (offset local de
-    ///   repouso, a mesma convenção dos nós de joint do glTF). Rotação e escala
-    ///   locais são preservadas.
+    /// - matriz de repouso mundial `W = translate(head) * R_mundial`, com
+    ///   `R_mundial = R_mundial(pai) * rotação_local`;
+    /// - `inverse_bind_matrix = W⁻¹`;
+    /// - `local_transform.translation` = offset de repouso **no referencial do
+    ///   pai** (`R_mundial(pai)⁻¹ * (head − head_do_pai)`), a mesma convenção dos
+    ///   nós de joint do glTF. Rotação e escala locais são preservadas
+    ///   (a escala de repouso é assumida 1).
     ///
     /// Assim, uma pose igual ao `local_transform` de cada osso produz matrizes de
-    /// skinning identidade (AN-16). Chamado a cada mudança estrutural.
+    /// skinning identidade (AN-16), inclusive com rotações de repouso (rigs
+    /// externos). Chamado a cada mudança estrutural.
     pub fn compute_bind_pose_matrices(&mut self) {
-        let heads: HashMap<u32, Vec3> = self
+        let n = self.bones.len();
+        let index: HashMap<u32, usize> = self
             .bones
             .iter()
-            .map(|b| (b.id, Vec3::from(b.head)))
+            .enumerate()
+            .map(|(i, b)| (b.id, i))
             .collect();
+        let mut world_rot: Vec<Option<Quat>> = vec![None; n];
 
-        for b in &mut self.bones {
-            let head = Vec3::from(b.head);
-            let parent_head = b
-                .parent
-                .and_then(|pid| heads.get(&pid).copied())
-                .unwrap_or(Vec3::ZERO);
-            let offset = head - parent_head;
-            b.local_transform.translation = [offset.x, offset.y, offset.z];
-            b.inverse_bind_matrix = Mat4::from_translation(-head).to_cols_array();
+        // Pais antes dos filhos; ossos com pai ausente/cíclico viram raízes.
+        let mut remaining = n;
+        let mut progressed = true;
+        while remaining > 0 {
+            if !progressed {
+                // Ciclo defensivo: resolve o primeiro pendente como raiz.
+                if let Some(i) = world_rot.iter().position(Option::is_none) {
+                    self.bones[i].parent = None;
+                }
+            }
+            progressed = false;
+            for i in 0..n {
+                if world_rot[i].is_some() {
+                    continue;
+                }
+                let parent = self.bones[i]
+                    .parent
+                    .and_then(|pid| index.get(&pid).copied());
+                let (parent_rot, parent_head) = match parent {
+                    None => (Quat::IDENTITY, Vec3::ZERO),
+                    Some(pi) => match world_rot[pi] {
+                        Some(r) => (r, Vec3::from(self.bones[pi].head)),
+                        None => continue,
+                    },
+                };
+                let head = Vec3::from(self.bones[i].head);
+                let raw = self.bones[i].local_transform.rotation;
+                let local_rot = Quat::from_xyzw(raw[0], raw[1], raw[2], raw[3]);
+                let local_rot = if local_rot.length_squared() > 1e-12 {
+                    local_rot.normalize()
+                } else {
+                    Quat::IDENTITY
+                };
+                let rot = parent_rot * local_rot;
+                let offset = parent_rot.inverse() * (head - parent_head);
+                let b = &mut self.bones[i];
+                b.local_transform.translation = [offset.x, offset.y, offset.z];
+                let world = Mat4::from_rotation_translation(rot, head);
+                b.inverse_bind_matrix = world.inverse().to_cols_array();
+                world_rot[i] = Some(rot);
+                remaining -= 1;
+                progressed = true;
+            }
         }
     }
 
@@ -766,6 +808,33 @@ mod tests {
                 "osso {} não é identidade em repouso: {m:?}",
                 bone.name
             );
+        }
+    }
+
+    #[test]
+    fn test_rest_rotation_is_respected_and_rest_pose_stays_identity() {
+        let mut skel = Skeleton::new("Rotated");
+        let a = skel
+            .add_bone("A", None, [0.0, 1.0, 0.0], [0.0, 2.0, 0.0])
+            .unwrap();
+        let b = skel
+            .add_bone("B", Some(a), [0.0, 2.0, 0.0], [1.0, 2.0, 0.0])
+            .unwrap();
+        // Rotação de repouso de 90° em Z no osso A (como em rigs externos).
+        let q = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+        skel.get_bone_mut(a).unwrap().local_transform.rotation = [q.x, q.y, q.z, q.w];
+        skel.compute_bind_pose_matrices();
+
+        // O offset de B é expresso no referencial (rotacionado) do pai.
+        let tb = skel.get_bone(b).unwrap().local_transform.translation;
+        assert!(
+            (Vec3::from(tb) - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-5,
+            "{tb:?}"
+        );
+
+        let rest: Vec<Transform3D> = skel.bones.iter().map(|b| b.local_transform).collect();
+        for m in skel.compute_skinning_matrices(&rest).unwrap() {
+            assert!(m.abs_diff_eq(Mat4::IDENTITY, 1e-5), "{m:?}");
         }
     }
 
