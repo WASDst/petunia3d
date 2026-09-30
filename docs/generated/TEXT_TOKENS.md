@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **802**.
+Total de chaves de localização cadastradas: **812**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -515,13 +515,17 @@ Total de chaves de localização cadastradas: **802**.
 | `snap_kind.point` | Point | Ponto |
 | `tool_grammar.adjust_hint` | Type a value and press Enter to adjust (same Undo) | Digite um valor e Enter para ajustar (mesmo Undo) |
 | `tool_grammar.adjusted` | Last operation adjusted | Última operação ajustada |
+| `tool_grammar.draw_ready` | Draw on {plane}: click to add points, drag for curves; with Auto, the face under the cursor becomes the plane | Desenhar em {plane}: clique para adicionar pontos, arraste para curvas; no Auto, a face sob o cursor vira o plano |
 | `tool_grammar.expired` | The last operation can no longer be adjusted | A última operação não pode mais ser ajustada |
 | `tool_grammar.gesture_hint` | Drag or type a value · Esc cancels · Right button: menu | Arraste ou digite um valor · Esc cancela · Botão direito: menu |
 | `tool_grammar.last_operation` | Last operation | Última operação |
 | `tool_grammar.needs_edge` | {tool}: click or drag an edge | {tool}: clique ou arraste uma aresta |
 | `tool_grammar.needs_face` | {tool}: click or drag a face | {tool}: clique ou arraste uma face |
+| `tool_grammar.no_face_selected` | No face selected; using Ground | Nenhuma face selecionada; usando o chão |
 | `tool_grammar.primitive_kept` | Primitive kept · Ctrl+Z undoes | Primitiva mantida · Ctrl+Z desfaz |
 | `tool_grammar.ready` | {tool}: drag on the mesh or click to select | {tool}: arraste sobre a malha ou clique para selecionar |
+| `tool_grammar.workplane_auto` | Automatic work plane: face under the cursor or the world plane most parallel to the view | Plano de trabalho automático: face sob o cursor ou plano do mundo mais paralelo à vista |
+| `tool_grammar.workplane_set` | Work plane: {plane} (locked) | Plano de trabalho: {plane} (travado) |
 | `tool_properties.bevel_hint` | Supports one manifold convex edge with simple corners; one segment. | Suporta um edge convexo manifold com cantos simples; um segmento. |
 | `tool_properties.bevel_width` | Round Edge width | Largura do Round Edge |
 | `tool_properties.blocked` | Confirm or cancel the viewport operation before editing these fields. | Confirme ou cancele a operação na viewport antes de editar estes campos. |
@@ -719,6 +723,12 @@ Total de chaves de localização cadastradas: **802**.
 | `ui.profile_depth` | Depth | Profundidade |
 | `ui.profile_generate` | Generate Volume | Gerar volume |
 | `ui.profile_hint` | Click to draw on the view plane; click the first point to close. Generate by extrude or revolve. | Clique para desenhar num plano da vista; clique no primeiro ponto para fechar. Depois gere por extrusão ou revolve. |
+| `ui.profile_look_at_plane` | Look at plane | Olhar para o plano |
+| `ui.profile_plane` | Plane | Plano |
+| `ui.profile_plane_auto` | Auto | Auto |
+| `ui.profile_plane_face` | Face | Face |
+| `ui.profile_plane_ground` | Ground | Chão |
+| `ui.profile_plane_view` | View | Vista |
 | `ui.profile_points` | Points | Pontos |
 | `ui.profile_presets` | 2D Profile Presets | Presets de perfil 2D |
 | `ui.profile_revolve` | Revolve | Revolve |

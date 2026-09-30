@@ -390,6 +390,16 @@ pub mod text_id {
     pub const TOOL_GRAMMAR_EXPIRED: TextId = TextId::new("tool_grammar.expired");
     pub const TOOL_GRAMMAR_ADJUSTED: TextId = TextId::new("tool_grammar.adjusted");
     pub const TOOL_GRAMMAR_PRIMITIVE_KEPT: TextId = TextId::new("tool_grammar.primitive_kept");
+    pub const UI_PROFILE_PLANE: TextId = TextId::new("ui.profile_plane");
+    pub const UI_PROFILE_PLANE_AUTO: TextId = TextId::new("ui.profile_plane_auto");
+    pub const UI_PROFILE_PLANE_GROUND: TextId = TextId::new("ui.profile_plane_ground");
+    pub const UI_PROFILE_PLANE_FACE: TextId = TextId::new("ui.profile_plane_face");
+    pub const UI_PROFILE_PLANE_VIEW: TextId = TextId::new("ui.profile_plane_view");
+    pub const UI_PROFILE_LOOK_AT_PLANE: TextId = TextId::new("ui.profile_look_at_plane");
+    pub const TOOL_GRAMMAR_DRAW_READY: TextId = TextId::new("tool_grammar.draw_ready");
+    pub const TOOL_GRAMMAR_WORKPLANE_SET: TextId = TextId::new("tool_grammar.workplane_set");
+    pub const TOOL_GRAMMAR_WORKPLANE_AUTO: TextId = TextId::new("tool_grammar.workplane_auto");
+    pub const TOOL_GRAMMAR_NO_FACE_SELECTED: TextId = TextId::new("tool_grammar.no_face_selected");
     pub const SNAP_KIND_POINT: TextId = TextId::new("snap_kind.point");
     pub const SNAP_KIND_MIDPOINT: TextId = TextId::new("snap_kind.midpoint");
     pub const SNAP_KIND_ON_EDGE: TextId = TextId::new("snap_kind.on_edge");
@@ -737,6 +747,16 @@ pub mod text_id {
         TOOL_GRAMMAR_EXPIRED,
         TOOL_GRAMMAR_ADJUSTED,
         TOOL_GRAMMAR_PRIMITIVE_KEPT,
+        UI_PROFILE_PLANE,
+        UI_PROFILE_PLANE_AUTO,
+        UI_PROFILE_PLANE_GROUND,
+        UI_PROFILE_PLANE_FACE,
+        UI_PROFILE_PLANE_VIEW,
+        UI_PROFILE_LOOK_AT_PLANE,
+        TOOL_GRAMMAR_DRAW_READY,
+        TOOL_GRAMMAR_WORKPLANE_SET,
+        TOOL_GRAMMAR_WORKPLANE_AUTO,
+        TOOL_GRAMMAR_NO_FACE_SELECTED,
         SNAP_KIND_POINT,
         SNAP_KIND_MIDPOINT,
         SNAP_KIND_ON_EDGE,

@@ -4,7 +4,7 @@
 //! Fluxo: ative numa vista ortográfica → cliques adicionam pontos → clique
 //! perto do 1º ponto (ou botão) fecha → Gerar (extrude/revolve).
 
-use petunia_core::{AppState, ProfileState};
+use petunia_core::{AppState, ProfileState, WorkplaneKind};
 use petunia_mesh::Mesh;
 
 use super::Tool;
@@ -196,6 +196,7 @@ pub fn profile_capture_ground(state: &mut AppState) {
     state.profile.up = [0.0, 0.0, -1.0];
     state.profile.normal = [0.0, 1.0, 0.0];
     state.profile.origin = state.session.cursor_3d;
+    state.profile.workplane_kind = WorkplaneKind::Ground;
     state.profile.points.clear();
     state.profile.nodes.clear();
     state.profile.closed = false;
@@ -204,16 +205,30 @@ pub fn profile_capture_ground(state: &mut AppState) {
 
 /// Captura o frame 2D alinhado à face selecionada da malha ativa (ou chão se nenhuma selecionada).
 pub fn profile_capture_face(state: &mut AppState) -> bool {
+    let selected = state
+        .project
+        .active_mesh()
+        .and_then(|mesh| mesh.faces.iter().position(|f| f.selected));
+    match selected {
+        Some(face) if profile_capture_face_index(state, face) => true,
+        _ => {
+            profile_capture_ground(state);
+            false
+        }
+    }
+}
+
+/// Captura o frame 2D da face `face` da malha ativa (face sob o cursor no
+/// modo automático). Não move a câmera. `false` se a face não existe ou é
+/// degenerada; o frame anterior é mantido.
+pub fn profile_capture_face_index(state: &mut AppState, face: usize) -> bool {
     let Some(mesh) = state.project.active_mesh() else {
-        profile_capture_ground(state);
         return false;
     };
-    let Some(face) = mesh.faces.iter().find(|f| f.selected) else {
-        profile_capture_ground(state);
+    let Some(face) = mesh.faces.get(face) else {
         return false;
     };
-    if face.verts.len() < 3 {
-        profile_capture_ground(state);
+    if face.verts.len() < 3 || face.verts.iter().any(|&v| v as usize >= mesh.verts.len()) {
         return false;
     }
     let p0 = mesh.verts[face.verts[0] as usize].vec();
@@ -226,11 +241,9 @@ pub fn profile_capture_face(state: &mut AppState) -> bool {
     center /= face.verts.len() as f32;
 
     let normal = (p1 - p0).cross(p2 - p0).normalize_or_zero();
-    let normal = if normal.length_squared() < 1e-4 {
-        glam::Vec3::Y
-    } else {
-        normal
-    };
+    if normal.length_squared() < 1e-4 {
+        return false;
+    }
 
     let right = (p1 - p0).normalize_or_zero();
     let right = if right.length_squared() < 1e-4 || right.abs_diff_eq(normal, 0.1) {
@@ -248,11 +261,42 @@ pub fn profile_capture_face(state: &mut AppState) -> bool {
     state.profile.up = up.to_array();
     state.profile.normal = normal.to_array();
     state.profile.origin = center.to_array();
+    state.profile.workplane_kind = WorkplaneKind::Face;
     state.profile.points.clear();
     state.profile.nodes.clear();
     state.profile.closed = false;
     state.mark_dirty();
     true
+}
+
+/// Plano do mundo mais paralelo à tela, pelo 3D Cursor (Workplane automático
+/// do Modo/C4D). Olhando de cima vira o chão; de frente ou de lado, o plano
+/// vertical correspondente. A câmera não é movida.
+pub fn profile_capture_world_plane_for_view(state: &mut AppState) {
+    let forward = state.session.camera.forward();
+    let dominant = forward.abs().max_element();
+    if (forward.y.abs() - dominant).abs() < 1e-6 {
+        profile_capture_ground(state);
+        return;
+    }
+    let axis = if (forward.x.abs() - dominant).abs() < 1e-6 {
+        glam::Vec3::X
+    } else {
+        glam::Vec3::Z
+    };
+    // Normal voltada para a câmera; right × up = normal.
+    let normal = if forward.dot(axis) > 0.0 { -axis } else { axis };
+    let up = glam::Vec3::Y;
+    let right = up.cross(normal).normalize_or_zero();
+    state.profile.right = right.to_array();
+    state.profile.up = up.to_array();
+    state.profile.normal = normal.to_array();
+    state.profile.origin = state.session.cursor_3d;
+    state.profile.workplane_kind = WorkplaneKind::View;
+    state.profile.points.clear();
+    state.profile.nodes.clear();
+    state.profile.closed = false;
+    state.mark_dirty();
 }
 
 /// Captura o frame 2D da câmera atual centrado no 3D Cursor.
@@ -265,31 +309,45 @@ pub fn profile_capture_view(state: &mut AppState) {
     state.profile.up = up;
     state.profile.origin = origin;
     state.profile.normal = normal;
+    state.profile.workplane_kind = WorkplaneKind::View;
     state.profile.points.clear();
     state.profile.nodes.clear();
     state.profile.closed = false;
     state.mark_dirty();
 }
 
-/// Captura automaticamente o melhor workplane para o contexto atual:
-/// 1. Se houver face selecionada -> Face
-/// 2. Se a câmera estiver alinhada com eixo ortogonal -> View
-/// 3. Caso contrário (perspectiva geral) -> Ground (XZ)
+/// Captura automaticamente o melhor workplane para o contexto atual, sem
+/// mover a câmera (capítulos 01 e 02):
+/// 1. face selecionada → Face;
+/// 2. caso contrário → plano do mundo mais paralelo à vista.
+///
+/// No desenho, o 1º clique de um perfil novo refina a escolha pela face sob o
+/// cursor ([`profile_capture_face_index`]).
 pub fn profile_capture_auto(state: &mut AppState) {
     let has_selected_face = state
         .project
         .active_mesh()
         .map(|m| m.faces.iter().any(|f| f.selected))
         .unwrap_or(false);
-    if has_selected_face {
-        profile_capture_face(state);
+    if has_selected_face && profile_capture_face(state) {
         return;
     }
-    let fwd = state.session.camera.forward();
-    if fwd.x.abs() > 0.95 || fwd.y.abs() > 0.95 || fwd.z.abs() > 0.95 {
-        profile_capture_view(state);
-    } else {
-        profile_capture_ground(state);
+    profile_capture_world_plane_for_view(state);
+}
+
+/// Recaptura o plano travado pelo tipo escolhido (o frame é limpo junto com o
+/// perfil); plano automático quando destravado.
+pub fn profile_capture_current(state: &mut AppState) {
+    if !state.profile.workplane_locked {
+        profile_capture_auto(state);
+        return;
+    }
+    match state.profile.workplane_kind {
+        WorkplaneKind::Ground => profile_capture_ground(state),
+        WorkplaneKind::Face => {
+            profile_capture_face(state);
+        }
+        WorkplaneKind::View => profile_capture_view(state),
     }
 }
 
@@ -298,18 +356,13 @@ pub fn profile_capture_frame(state: &mut AppState) {
     profile_capture_auto(state);
 }
 
-/// Rótulo descritivo do workplane atualmente configurado no ProfileState.
+/// Identificador estável do workplane atual (`Ground`, `Face` ou `View`),
+/// usado pela UI para marcar a pílula ativa; o texto visível vem de `TextId`.
 pub fn profile_workplane_label(state: &AppState) -> &'static str {
-    let n = glam::Vec3::from(state.profile.normal);
-    if (n - glam::Vec3::Y).length_squared() < 0.01 {
-        "Ground"
-    } else {
-        let has_selected_face = state
-            .project
-            .active_mesh()
-            .map(|m| m.faces.iter().any(|f| f.selected))
-            .unwrap_or(false);
-        if has_selected_face { "Face" } else { "View" }
+    match state.profile.workplane_kind {
+        WorkplaneKind::Ground => "Ground",
+        WorkplaneKind::Face => "Face",
+        WorkplaneKind::View => "View",
     }
 }
 
@@ -641,5 +694,72 @@ impl Tool for DrawProfileTool {
         profile_capture_frame(state);
         state.set_status(state.t("hints.draw_profile"));
         state.mark_dirty();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use petunia_core::ViewPreset;
+
+    fn frame(state: &AppState) -> (glam::Vec3, glam::Vec3, glam::Vec3) {
+        (
+            glam::Vec3::from(state.profile.right),
+            glam::Vec3::from(state.profile.up),
+            glam::Vec3::from(state.profile.normal),
+        )
+    }
+
+    #[test]
+    fn world_plane_for_view_faces_the_camera_and_is_right_handed() {
+        for preset in [
+            ViewPreset::Front,
+            ViewPreset::Back,
+            ViewPreset::Right,
+            ViewPreset::Left,
+            ViewPreset::Top,
+            ViewPreset::Persp,
+        ] {
+            let mut state = AppState::default();
+            state.session.camera.set_preset(preset);
+            let before = (state.session.camera.yaw, state.session.camera.pitch);
+            profile_capture_world_plane_for_view(&mut state);
+            let (right, up, normal) = frame(&state);
+            assert!(
+                right.cross(up).abs_diff_eq(normal, 1e-5),
+                "{preset:?}: right × up ≠ normal"
+            );
+            let forward = state.session.camera.forward();
+            // A normal é um eixo do mundo e aponta para a câmera (ou é o chão).
+            assert!(
+                (normal.abs().max_element() - 1.0).abs() < 1e-5,
+                "{preset:?}"
+            );
+            if state.profile.workplane_kind == WorkplaneKind::View {
+                assert!(normal.dot(forward) < 0.0, "{preset:?}");
+            }
+            // A câmera nunca é movida pela captura.
+            assert_eq!(
+                before,
+                (state.session.camera.yaw, state.session.camera.pitch)
+            );
+        }
+    }
+
+    #[test]
+    fn locked_kind_is_recaptured_after_clear() {
+        let mut state = AppState::default();
+        state.profile.workplane_locked = true;
+        profile_capture_ground(&mut state);
+        state.profile.clear();
+        assert!(state.profile.workplane_locked);
+        state.session.camera.set_preset(ViewPreset::Front);
+        profile_capture_current(&mut state);
+        assert_eq!(state.profile.workplane_kind, WorkplaneKind::Ground);
+        assert_eq!(state.profile.normal, [0.0, 1.0, 0.0]);
+
+        state.profile.workplane_locked = false;
+        profile_capture_current(&mut state);
+        assert_eq!(state.profile.workplane_kind, WorkplaneKind::View);
     }
 }

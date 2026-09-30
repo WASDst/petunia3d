@@ -2177,6 +2177,13 @@ fn draw_two_profile_points(snap: bool, grid_spacing: f32) -> [[f64; 3]; 2] {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.state.snap_enabled = snap;
     bridge.state.session.snap_settings.grid_spacing = grid_spacing;
+    // Vista Front: o plano automático (mais paralelo à vista) é o XY, e a
+    // horizontal da tela é o eixo `right` do plano. A câmera não se move.
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Front);
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
     // O segundo ponto fica ~4 px abaixo da horizontal do primeiro.
     for point in [[0.35, 0.35], [0.65, 0.355]] {
@@ -2211,6 +2218,138 @@ fn profile_snap_falls_back_to_workplane_grid() {
             "{value} fora da grade"
         );
     }
+}
+
+/// Cena padrão (cubo 2×2×2 na origem) vista de frente.
+fn front_view_bridge_with_cube() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(bridge.state.project.active_mesh().is_some());
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Front);
+    bridge.state.session.camera.target = glam::Vec3::ZERO;
+    bridge
+}
+
+fn camera_pose(bridge: &SlintUiBridge<PlaceholderViewport>) -> (f32, f32, bool) {
+    let camera = &bridge.state.session.camera;
+    (
+        camera.yaw,
+        camera.pitch,
+        camera.proj == petunia_core::Projection::Perspective,
+    )
+}
+
+#[test]
+fn draw_never_moves_the_camera_on_its_own() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let before = camera_pose(&bridge);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert_eq!(camera_pose(&bridge), before);
+    bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+    bridge.apply(UiIntent::ProfileSetWorkplaneView);
+    assert_eq!(camera_pose(&bridge), before);
+
+    // Só o comando explícito "Olhar para o plano" alinha a câmera.
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    bridge.apply(UiIntent::ProfileLookAtPlane);
+    assert_ne!(camera_pose(&bridge), before);
+    assert!(
+        !camera_pose(&bridge).2,
+        "olhar para o plano usa ortográfica"
+    );
+}
+
+#[test]
+fn auto_workplane_follows_the_view_when_there_is_no_face() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Top);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert!(!bridge.state.profile.workplane_locked);
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Right);
+    bridge.select_viewport_ext(0.4, 0.4, false, false);
+    bridge.profile_pointer_up();
+    // O 1º clique reavalia a vista: de lado, o plano vertical YZ (normal ±X).
+    let normal = glam::Vec3::from(bridge.state.profile.normal);
+    assert!(normal.x.abs() > 0.99, "{normal:?}");
+    assert_eq!(bridge.view_model().profile_workplane, "View");
+}
+
+#[test]
+fn auto_workplane_uses_the_face_under_the_cursor_on_the_first_click() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+
+    // Pré-seleção: a face frontal que viraria o plano aparece no hover, com rótulo.
+    assert!(bridge.hover_component(0.5, 0.5));
+    assert!(matches!(
+        bridge.state.session.tools.hover,
+        petunia_core::HoverTarget::Face(_)
+    ));
+    let vm = bridge.view_model();
+    assert!(vm.snap_marker_visible);
+    assert_eq!(
+        vm.snap_marker_label,
+        bridge
+            .state
+            .t_id(petunia_config::text_id::SNAP_KIND_ON_FACE)
+    );
+
+    bridge.select_viewport_ext(0.5, 0.5, false, false);
+    bridge.profile_pointer_up();
+    assert_eq!(bridge.view_model().profile_workplane, "Face");
+    let normal = glam::Vec3::from(bridge.state.profile.normal);
+    assert!(
+        normal.z > 0.99,
+        "face frontal voltada para a câmera: {normal:?}"
+    );
+    let origin = glam::Vec3::from(bridge.state.profile.origin);
+    let spline = active_profile_spline(&bridge);
+    let point = spline.points[0].position;
+    let world = origin
+        + glam::Vec3::from(bridge.state.profile.right) * point[0] as f32
+        + glam::Vec3::from(bridge.state.profile.up) * point[1] as f32;
+    // O ponto fica sobre a face (mesmo z da face), não no chão.
+    assert!((world.z - origin.z).abs() < 1.0e-4);
+
+    // Com um perfil em curso, o plano não muda mais a cada clique.
+    bridge.select_viewport_ext(0.55, 0.45, false, false);
+    bridge.profile_pointer_up();
+    assert!((glam::Vec3::from(bridge.state.profile.origin) - origin).length() < 1.0e-6);
+}
+
+#[test]
+fn locked_workplane_ignores_the_face_under_the_cursor() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    assert!(bridge.view_model().profile_workplane_locked);
+
+    assert!(bridge.hover_component(0.5, 0.5));
+    assert_eq!(
+        bridge.state.session.tools.hover,
+        petunia_core::HoverTarget::None
+    );
+    bridge.select_viewport_ext(0.5, 0.3, false, false);
+    bridge.profile_pointer_up();
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+
+    // Voltar para Auto destrava.
+    bridge.apply(UiIntent::ProfileSetWorkplaneAuto);
+    assert!(!bridge.view_model().profile_workplane_locked);
+    assert!(bridge.active_profile_id.is_none());
 }
 
 #[test]

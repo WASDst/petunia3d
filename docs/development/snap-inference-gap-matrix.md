@@ -1,8 +1,7 @@
-# Snapping com inferência — Implementation-vs-Spec Gap Matrix (Onda 3, parte 1)
+# Snapping, pré-seleção e plano de trabalho — Implementation-vs-Spec Gap Matrix (Onda 3)
 
-Escopo: primeira entrega da Onda 3 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)
-(snapping). Picking/pré-seleção universal e plano de trabalho automático ficam
-para a parte 2 desta onda.
+Escopo: Onda 3 do [ADR 006](../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md).
+Parte 1: snapping. Parte 2: pré-seleção no Draw e plano de trabalho automático.
 Autoridade: [P3D-040](../bible/specs/p3d-040-sistema-de-snap.md) (direção
 aprovada em 2026-09-29), [P3D-131](../bible/specs/p3d-131-modal-tool-feedback-system.md),
 [constituição 03](../bible/constitution/03-invariantes-de-ui-ux-design-system-e-acessib.md)
@@ -56,3 +55,49 @@ seções 2.2, 2.3 e 3.3.
   encaixa mais sozinho (P3D-040, "uma única passada").
 - `test_magnetic_snap_marker_projection`: `update_modal` sem tipo não mostra
   marcador; com `update_modal_snapped(.., Some(Point))` mostra forma e rótulo.
+
+---
+
+# Parte 2 — pré-seleção e plano de trabalho (2026-09-30)
+
+Autoridade adicional: [capítulo 01](../bible/foundations/01-visao-ux-referencias.md)
+(câmera contextual: "a câmera nunca se move sozinha"),
+[capítulo 02](../bible/foundations/02-workflow-modelagem-shape-first.md)
+(Draw on Face: a face sob o cursor vira o plano; "Olhar para o plano"),
+[constituição 11](../bible/constitution/11-contrato-de-mesh-selection-tools-e-undo.md)
+("Idle → pré-seleção + dica") e capítulo 45 (tabela de decisões: plano
+"automático pela vista, face sob o cursor, … travado; câmera não é forçada").
+
+## Auditoria antes da mudança
+
+| Aspecto | Encontrado (30/09) | Classificação |
+| --- | --- | --- |
+| Pré-seleção de componentes (Point/Edge/Face/Object) | `hover_component` usa o mesmo hit test do clique, em px, com oclusão | COMPLIANT (preservado) |
+| Pré-seleção no Draw | O ramo `draw_profile` só guardava a posição do ponteiro: nada indicava onde o clique cairia | MISSING |
+| Câmera ao ativar o Draw | `profile_align_camera_to_workplane` a cada ativação e ao escolher Face: vista e projeção trocadas sem pedido | BROKEN (cap. 01/02) |
+| Plano automático | Face **selecionada** → Face; vista alinhada a eixo → plano da câmera; senão chão | PARTIALLY_COMPLIANT |
+| Plano travado | Não existia: o rótulo Chão/Face/Vista era deduzido da normal e da seleção | MISSING |
+| Textos do card | "Plane:", "Ground", "Face", "View" e status em inglês fixo | BROKEN (constituição 03, `TextId`) |
+
+## Requisitos
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 9 | A câmera nunca se move sozinha; "Olhar para o plano" sob comando | Ativação usa `profile_capture_current` (sem câmera); intent `ProfileLookAtPlane` e botão no card. Teste `draw_never_moves_the_camera_on_its_own`. | COMPLIANT (2026-09-30) |
+| 10 | Plano automático pela vista | `profile_capture_world_plane_for_view`: plano do mundo cuja normal é o eixo dominante da direção da câmera, voltado para ela, pelo 3D Cursor; reavaliado no 1º clique. Testes `world_plane_for_view_faces_the_camera_and_is_right_handed`, `auto_workplane_follows_the_view_when_there_is_no_face`. | COMPLIANT |
+| 11 | Face sob o cursor vira o plano (Draw on Face) | `resolve_auto_workplane_at` no 1º clique de um perfil novo usa o mesmo picking de Face (com oclusão da cena); `profile_capture_face_index`. Teste `auto_workplane_uses_the_face_under_the_cursor_on_the_first_click`. | PARTIALLY_COMPLIANT — o perfil ainda gera volume como asset separado (sem imprint/Push-Pull na face hospedeira: Onda 4). |
+| 12 | Plano travado | `ProfileState::{workplane_kind, workplane_locked}`; Chão/Face/Vista travam, Auto destrava; o tipo sobrevive a `clear()` e é recapturado. Testes `locked_workplane_ignores_the_face_under_the_cursor`, `locked_kind_is_recaptured_after_clear`. | COMPLIANT |
+| 13 | Pré-seleção no Draw ("o usuário vê o que o clique fará") | `update_profile_preselection`: com Auto e sem perfil, destaca a face que viraria o plano e mostra o marcador "Na face"; depois, o ponto encaixado que o clique criaria (mesma passada do clique). `snap_marker_model` une operação e pré-seleção. | PARTIALLY_COMPLIANT — sem captura nativa; sem medição do orçamento de 1 quadro. |
+| 14 | Textos por `TextId` | `ui.profile_plane*`, `ui.profile_look_at_plane`, `tool_grammar.draw_ready`, `workplane_set`, `workplane_auto`, `no_face_selected` (en/pt-BR). | COMPLIANT para o card e os status tocados |
+
+## Pendências da parte 2
+
+- Plano a partir de 3 pontos ou de face + aresta, e plano médio entre faces
+  paralelas (Plasticity); "plano pelo ponto sob o cursor" em vez do 3D Cursor.
+- Em perspectiva comum (inclinação de ~29°), a regra do eixo dominante escolhe
+  um plano **vertical**, como no Modo/C4D; se o teste com usuários mostrar
+  surpresa, considerar viés para o chão (SketchUp). Decisão a validar na Onda 6.
+- Pré-seleção de regiões fechadas no Draw (Onda 4) e da ferramenta Move com snap
+  antes do arrasto.
+- O caminho legado `module-model::profile_screen_to_plane` (egui) mantém a grade
+  0,25; fora do escopo (crate legado).

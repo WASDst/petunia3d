@@ -4,6 +4,12 @@
 title = "Petunia3D"
 
 [ui]
+profile_look_at_plane = "Olhar para o plano"
+profile_plane_view = "Vista"
+profile_plane_face = "Face"
+profile_plane_ground = "Chão"
+profile_plane_auto = "Auto"
+profile_plane = "Plano"
 more_actions = "Mais ações"
 tools = "Ferramentas"
 assets = "Assets"
@@ -876,6 +882,10 @@ click_move_click_hint = "Clique numa alça: ela segue o mouse até o próximo cl
 multiselection_measure_tag = "Exibir tag de média na multiseleção de arestas"
 
 [tool_grammar]
+no_face_selected = "Nenhuma face selecionada; usando o chão"
+workplane_auto = "Plano de trabalho automático: face sob o cursor ou plano do mundo mais paralelo à vista"
+workplane_set = "Plano de trabalho: {plane} (travado)"
+draw_ready = "Desenhar em {plane}: clique para adicionar pontos, arraste para curvas; no Auto, a face sob o cursor vira o plano"
 last_operation = "Última operação"
 adjust_hint = "Digite um valor e Enter para ajustar (mesmo Undo)"
 ready = "{tool}: arraste sobre a malha ou clique para selecionar"

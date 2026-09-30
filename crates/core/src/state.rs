@@ -151,8 +151,19 @@ impl ReferenceImage {
     }
 }
 
-/// Perfil 2D do Draw Profile (spec §9), num frame right/up/origin capturado
-/// ao ativar a ferramenta numa vista ortográfica.
+/// Origem do plano de trabalho do desenho (ADR 006, Onda 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WorkplaneKind {
+    /// Chão do mundo (XZ, normal +Y).
+    #[default]
+    Ground,
+    /// Face plana da malha (sob o cursor ou selecionada).
+    Face,
+    /// Plano da câmera ou plano do mundo mais paralelo à vista.
+    View,
+}
+
+/// Perfil 2D do Draw Profile (spec §9), num frame right/up/origin conhecido.
 #[derive(Debug, Clone, Default)]
 pub struct ProfileState {
     pub points: Vec<[f32; 2]>,
@@ -168,6 +179,12 @@ pub struct ProfileState {
     pub wall_thickness: f32,
     pub curve_smoothness: f32,
     pub snap: bool,
+    /// De onde veio o frame atual (rótulo público do plano).
+    pub workplane_kind: WorkplaneKind,
+    /// `false` = automático: o 1º clique de um perfil novo escolhe a face sob
+    /// o cursor ou o plano do mundo mais paralelo à vista. Escolha explícita
+    /// (Chão/Face/Vista) trava o plano até voltar para Auto.
+    pub workplane_locked: bool,
 }
 
 impl ProfileState {
@@ -184,6 +201,7 @@ impl ProfileState {
             self.revolve_angle
         };
         let wall_thickness = self.wall_thickness;
+        let (workplane_kind, workplane_locked) = (self.workplane_kind, self.workplane_locked);
         let curve_smoothness = if self.curve_smoothness <= 0.0 {
             0.02
         } else {
@@ -195,6 +213,8 @@ impl ProfileState {
             revolve_angle,
             wall_thickness,
             curve_smoothness,
+            workplane_kind,
+            workplane_locked,
             ..Default::default()
         };
     }

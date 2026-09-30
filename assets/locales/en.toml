@@ -4,6 +4,12 @@
 title = "Petunia3D"
 
 [ui]
+profile_look_at_plane = "Look at plane"
+profile_plane_view = "View"
+profile_plane_face = "Face"
+profile_plane_ground = "Ground"
+profile_plane_auto = "Auto"
+profile_plane = "Plane"
 more_actions = "More actions"
 tools = "Tools"
 assets = "Asset Library"
@@ -874,6 +880,10 @@ click_move_click_hint = "Click a handle: it follows the mouse until the next cli
 multiselection_measure_tag = "Display average measure tag on multiple edge selection"
 
 [tool_grammar]
+no_face_selected = "No face selected; using Ground"
+workplane_auto = "Automatic work plane: face under the cursor or the world plane most parallel to the view"
+workplane_set = "Work plane: {plane} (locked)"
+draw_ready = "Draw on {plane}: click to add points, drag for curves; with Auto, the face under the cursor becomes the plane"
 last_operation = "Last operation"
 adjust_hint = "Type a value and press Enter to adjust (same Undo)"
 ready = "{tool}: drag on the mesh or click to select"

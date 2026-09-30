@@ -1284,18 +1284,28 @@ pub struct SnapMarkerModel {
 }
 
 pub(crate) fn compute_snap_marker(state: &AppState, width: f32, height: f32) -> SnapMarkerModel {
-    if width <= 1.0 || height <= 1.0 {
-        return SnapMarkerModel::default();
-    }
     let Some(fb) = state.current_tool_feedback() else {
         return SnapMarkerModel::default();
     };
     if !fb.is_snapped {
         return SnapMarkerModel::default();
     }
+    snap_marker_at(state, fb.current, fb.snap_kind, width, height)
+}
 
+/// Marcador (posição, forma e rótulo) para um ponto encaixado em mundo.
+pub(crate) fn snap_marker_at(
+    state: &AppState,
+    point: glam::Vec3,
+    kind: Option<petunia_core::SnapKind>,
+    width: f32,
+    height: f32,
+) -> SnapMarkerModel {
+    if width <= 1.0 || height <= 1.0 {
+        return SnapMarkerModel::default();
+    }
     let view_proj = state.session.camera.view_proj();
-    let clip = view_proj * fb.current.extend(1.0);
+    let clip = view_proj * point.extend(1.0);
     if clip.w <= 0.05 {
         return SnapMarkerModel::default();
     }
@@ -1308,12 +1318,11 @@ pub(crate) fn compute_snap_marker(state: &AppState, width: f32, height: f32) -> 
             visible: true,
             x,
             y,
-            label: fb
-                .snap_kind
+            label: kind
                 .map(|kind| state.t_id(kind.text_id()))
                 .unwrap_or_default(),
             round: !matches!(
-                fb.snap_kind,
+                kind,
                 Some(petunia_core::SnapKind::Point | petunia_core::SnapKind::Midpoint)
             ),
         }

@@ -3381,6 +3381,13 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-profile-depth: "";
     in-out property <string> label-profile-points: "";
     in-out property <string> label-profile-close: "";
+    in-out property <string> label-profile-plane: "";
+    in-out property <string> label-profile-plane-auto: "";
+    in-out property <string> label-profile-plane-ground: "";
+    in-out property <string> label-profile-plane-face: "";
+    in-out property <string> label-profile-plane-view: "";
+    in-out property <string> label-profile-look-at-plane: "";
+    in-out property <bool> profile-workplane-locked: false;
     in-out property <string> label-profile-generate: "";
     in-out property <string> label-profile-revolve: "";
     in-out property <string> label-profile-sweep: "";
@@ -3705,6 +3712,8 @@ export component PetuniaSlintShell inherits Window {
     callback profile-set-workplane-ground();
     callback profile-set-workplane-face();
     callback profile-set-workplane-view();
+    callback profile-set-workplane-auto();
+    callback profile-look-at-plane();
     callback profile-enter-extrude();
     callback profile-enter-revolve();
     callback profile-enter-sweep();
@@ -5950,28 +5959,42 @@ export component PetuniaSlintShell inherits Window {
                         HorizontalLayout {
                             spacing: 4px;
                             height: 24px;
-                            Text { text: "Plane:"; color: DesignTokens.text-secondary; font-size: 10px; width: 44px; vertical-alignment: center; }
+                            Text { text: root.label-profile-plane; color: DesignTokens.text-secondary; font-size: 10px; width: 44px; vertical-alignment: center; }
                             Rectangle {
                                 horizontal-stretch: 1; border-radius: 4px;
-                                background: root.profile-workplane == "Ground" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
-                                border-width: 1px; border-color: root.profile-workplane == "Ground" ? DesignTokens.accent : DesignTokens.border;
-                                Text { text: "Ground"; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                background: !root.profile-workplane-locked ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: !root.profile-workplane-locked ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: root.label-profile-plane-auto; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                TouchArea { clicked => { root.profile-set-workplane-auto(); } }
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1; border-radius: 4px;
+                                background: root.profile-workplane-locked && root.profile-workplane == "Ground" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: root.profile-workplane-locked && root.profile-workplane == "Ground" ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: root.label-profile-plane-ground; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
                                 TouchArea { clicked => { root.profile-set-workplane-ground(); } }
                             }
                             Rectangle {
                                 horizontal-stretch: 1; border-radius: 4px;
-                                background: root.profile-workplane == "Face" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
-                                border-width: 1px; border-color: root.profile-workplane == "Face" ? DesignTokens.accent : DesignTokens.border;
-                                Text { text: "Face"; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                background: root.profile-workplane-locked && root.profile-workplane == "Face" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: root.profile-workplane-locked && root.profile-workplane == "Face" ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: root.label-profile-plane-face; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
                                 TouchArea { clicked => { root.profile-set-workplane-face(); } }
                             }
                             Rectangle {
                                 horizontal-stretch: 1; border-radius: 4px;
-                                background: root.profile-workplane == "View" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
-                                border-width: 1px; border-color: root.profile-workplane == "View" ? DesignTokens.accent : DesignTokens.border;
-                                Text { text: "View"; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
+                                background: root.profile-workplane-locked && root.profile-workplane == "View" ? DesignTokens.accent.transparentize(0.7) : DesignTokens.surface;
+                                border-width: 1px; border-color: root.profile-workplane-locked && root.profile-workplane == "View" ? DesignTokens.accent : DesignTokens.border;
+                                Text { text: root.label-profile-plane-view; font-size: 9px; horizontal-alignment: center; vertical-alignment: center; color: DesignTokens.text-primary; }
                                 TouchArea { clicked => { root.profile-set-workplane-view(); } }
                             }
+                        }
+
+                        Rectangle {
+                            height: 24px; border-radius: 4px; background: DesignTokens.surface;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            Text { text: root.label-profile-look-at-plane; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
+                            TouchArea { clicked => { root.profile-look-at-plane(); } }
                         }
 
                         Text { text: "\{root.label-profile-points}: \{root.profile-point-count}"; color: DesignTokens.text-secondary; font-size: 10px; }

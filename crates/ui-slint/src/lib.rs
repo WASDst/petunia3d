@@ -433,6 +433,10 @@ pub enum UiIntent {
     ProfileSetWorkplaneGround,
     ProfileSetWorkplaneFace,
     ProfileSetWorkplaneView,
+    /// Plano automático: face sob o cursor ou plano mais paralelo à vista.
+    ProfileSetWorkplaneAuto,
+    /// "Olhar para o plano": alinha a câmera ao plano sob comando (cap. 01).
+    ProfileLookAtPlane,
 }
 
 // Presentation ViewModels and Data Transfer Objects (DTOs) for the Slint shell.
@@ -652,6 +656,9 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
     pub profile_drag_target: Option<ProfileHitTarget>,
     pub profile_selected_point: Option<uuid::Uuid>,
+    /// Pré-seleção do Draw: onde o próximo clique cairia (ponto encaixado ou
+    /// face que viraria o plano), mostrada com o marcador de snap.
+    pub profile_hover_snap: Option<petunia_core::ScreenSnapHit>,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_volume_original: Option<Project>,
@@ -899,6 +906,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_volume_mode: None,
             profile_drag_target: None,
             profile_selected_point: None,
+            profile_hover_snap: None,
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
             profile_volume_original: None,
@@ -1218,12 +1226,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.profile_selected_point = None;
                         self.profile_drag_target = None;
                         self.profile_edit_gesture = None;
-                        petunia_module_model::profile_capture_auto(&mut self.state);
-                        petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
-                        let wp = petunia_module_model::profile_workplane_label(&self.state);
-                        self.state.set_status(format!(
-                            "Sketch/Profile on {wp}: click to add points, click-drag for Bezier curves, then choose Extrude / Revolve / Sweep"
-                        ));
+                        // A câmera nunca se move sozinha (capítulos 01 e 02).
+                        petunia_module_model::profile_capture_current(&mut self.state);
+                        let plane = self.workplane_display_name();
+                        let message = self
+                            .state
+                            .t_id(petunia_config::text_id::TOOL_GRAMMAR_DRAW_READY)
+                            .replace("{plane}", &plane);
+                        self.state.set_status(message);
                     }
                     "loop_cut" => {
                         self.loop_cut_hover_ring = None;
@@ -1527,35 +1537,41 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.mark_dirty();
             }
             UiIntent::ProfileSetWorkplaneGround => {
-                self.profile_pointer_up();
-                self.cancel_profile_volume();
-                self.active_profile_id = None;
-                self.profile_selected_point = None;
+                self.reset_profile_for_workplane();
+                self.state.profile.workplane_locked = true;
                 petunia_module_model::profile_capture_ground(&mut self.state);
-                self.state.mark_dirty();
-                self.state.set_status("Profile Workplane: Ground (XZ)");
+                self.announce_locked_workplane();
             }
             UiIntent::ProfileSetWorkplaneFace => {
-                self.profile_pointer_up();
-                self.cancel_profile_volume();
-                self.active_profile_id = None;
-                self.profile_selected_point = None;
+                self.reset_profile_for_workplane();
+                self.state.profile.workplane_locked = true;
                 if petunia_module_model::profile_capture_face(&mut self.state) {
-                    petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
-                    self.state.set_status("Profile Workplane: Active Face");
+                    self.announce_locked_workplane();
                 } else {
-                    self.state.set_status("No face selected; using Ground (XZ)");
+                    let message = self
+                        .state
+                        .t_id(petunia_config::text_id::TOOL_GRAMMAR_NO_FACE_SELECTED);
+                    self.state.set_status(message);
                 }
-                self.state.mark_dirty();
             }
             UiIntent::ProfileSetWorkplaneView => {
-                self.profile_pointer_up();
-                self.cancel_profile_volume();
-                self.active_profile_id = None;
-                self.profile_selected_point = None;
+                self.reset_profile_for_workplane();
+                self.state.profile.workplane_locked = true;
                 petunia_module_model::profile_capture_view(&mut self.state);
+                self.announce_locked_workplane();
+            }
+            UiIntent::ProfileSetWorkplaneAuto => {
+                self.reset_profile_for_workplane();
+                self.state.profile.workplane_locked = false;
+                petunia_module_model::profile_capture_auto(&mut self.state);
+                let message = self
+                    .state
+                    .t_id(petunia_config::text_id::TOOL_GRAMMAR_WORKPLANE_AUTO);
+                self.state.set_status(message);
+            }
+            UiIntent::ProfileLookAtPlane => {
+                petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                 self.state.mark_dirty();
-                self.state.set_status("Profile Workplane: Camera View");
             }
         }
         self.sync_viewport_context();
@@ -2390,6 +2406,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 normalized_x * self.viewport_size[0],
                 normalized_y * self.viewport_size[1],
             ];
+            self.update_profile_preselection(normalized_x, normalized_y);
             return true;
         }
         if self.state.session.tools.active_tool == "loop_cut" && self.loop_cut.is_none() {
@@ -2420,6 +2437,66 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.session.tools.hover = next;
         true
+    }
+
+    /// Pré-seleção do Draw (constituição 11: "Idle → pré-seleção"). Com o
+    /// plano automático e nenhum perfil em curso, destaca a face que o clique
+    /// usaria como plano; depois, mostra o ponto encaixado que o clique criaria.
+    fn update_profile_preselection(&mut self, normalized_x: f32, normalized_y: f32) {
+        if !normalized_x.is_finite() || !normalized_y.is_finite() {
+            self.profile_hover_snap = None;
+            self.state.session.tools.hover = petunia_core::HoverTarget::None;
+            return;
+        }
+        let ndc = [normalized_x * 2.0 - 1.0, 1.0 - normalized_y * 2.0];
+        let choosing_plane =
+            !self.state.profile.workplane_locked && self.active_profile_resources().is_none();
+        let (hover, snap) = if choosing_plane {
+            let hover = match self.pick_target_for_domain(
+                SelectionDomain::Face,
+                normalized_x,
+                normalized_y,
+            ) {
+                face @ petunia_core::HoverTarget::Face(_) => face,
+                _ => petunia_core::HoverTarget::None,
+            };
+            let mut mask = if self.state.session.snap_enabled || self.state.profile.snap {
+                petunia_core::SnapMask::for_target(self.state.session.snap_settings.target)
+            } else {
+                petunia_core::SnapMask {
+                    points: false,
+                    edges: false,
+                    axes: false,
+                    faces: false,
+                    grid: false,
+                }
+            };
+            mask.faces = matches!(hover, petunia_core::HoverTarget::Face(_));
+            let cursor = glam::Vec2::new(
+                normalized_x * self.viewport_size[0],
+                normalized_y * self.viewport_size[1],
+            );
+            (hover, self.screen_snap(cursor, mask, None, None))
+        } else {
+            let snap = self
+                .profile_screen_to_plane_snapped(ndc[0], ndc[1])
+                .and_then(|(_, snap)| snap);
+            (petunia_core::HoverTarget::None, snap)
+        };
+        self.state.session.tools.hover = hover;
+        self.profile_hover_snap = snap;
+    }
+
+    /// Marcador de snap do quadro: o da operação em curso ou, no Draw, o da
+    /// pré-seleção.
+    fn snap_marker_model(&self, width: f32, height: f32) -> projection::SnapMarkerModel {
+        let marker = compute_snap_marker(&self.state, width, height);
+        if marker.visible || self.state.session.tools.active_tool != "draw_profile" {
+            return marker;
+        }
+        self.profile_hover_snap.map_or(marker, |hit| {
+            projection::snap_marker_at(&self.state, hit.point, Some(hit.kind), width, height)
+        })
     }
 
     fn pick_loop_cut_candidate(
@@ -3150,6 +3227,60 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
+    /// Nome traduzido do plano de trabalho atual (Chão/Face/Vista).
+    fn workplane_display_name(&self) -> String {
+        use petunia_config::text_id as t;
+        let id = match self.state.profile.workplane_kind {
+            petunia_core::WorkplaneKind::Ground => t::UI_PROFILE_PLANE_GROUND,
+            petunia_core::WorkplaneKind::Face => t::UI_PROFILE_PLANE_FACE,
+            petunia_core::WorkplaneKind::View => t::UI_PROFILE_PLANE_VIEW,
+        };
+        self.state.t_id(id)
+    }
+
+    /// Trocar de plano encerra o perfil em edição (um perfil vive num plano).
+    fn reset_profile_for_workplane(&mut self) {
+        self.profile_pointer_up();
+        self.cancel_profile_volume();
+        self.active_profile_id = None;
+        self.profile_selected_point = None;
+        self.profile_hover_snap = None;
+        self.state.mark_dirty();
+    }
+
+    fn announce_locked_workplane(&mut self) {
+        let plane = self.workplane_display_name();
+        let message = self
+            .state
+            .t_id(petunia_config::text_id::TOOL_GRAMMAR_WORKPLANE_SET)
+            .replace("{plane}", &plane);
+        self.state.set_status(message);
+    }
+
+    /// Plano automático no 1º clique de um perfil novo: a face sob o cursor
+    /// (se houver) ou o plano do mundo mais paralelo à vista atual. A câmera
+    /// não se move. Não faz nada com o plano travado ou com perfil em curso.
+    fn resolve_auto_workplane_at(&mut self, ndc_x: f32, ndc_y: f32) {
+        if self.state.profile.workplane_locked || self.active_profile_resources().is_some() {
+            return;
+        }
+        let normalized = [(ndc_x + 1.0) * 0.5, (1.0 - ndc_y) * 0.5];
+        let face = match self.pick_target_for_domain(
+            SelectionDomain::Face,
+            normalized[0],
+            normalized[1],
+        ) {
+            petunia_core::HoverTarget::Face(face) => Some(face),
+            _ => None,
+        };
+        let captured = face.is_some_and(|face| {
+            petunia_module_model::profile_capture_face_index(&mut self.state, face)
+        });
+        if !captured {
+            petunia_module_model::profile_capture_world_plane_for_view(&mut self.state);
+        }
+    }
+
     fn draft_profile_workplane(&self) -> petunia_core::ProfileWorkplane {
         petunia_core::ProfileWorkplane {
             origin: self.state.profile.origin.map(f64::from),
@@ -3162,6 +3293,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn profile_screen_to_plane(&self, ndc_x: f32, ndc_y: f32) -> Option<[f64; 2]> {
+        self.profile_screen_to_plane_snapped(ndc_x, ndc_y)
+            .map(|(point, _)| point)
+    }
+
+    /// Ponto no plano do perfil e o alvo de snap que o produziu, se houver.
+    fn profile_screen_to_plane_snapped(
+        &self,
+        ndc_x: f32,
+        ndc_y: f32,
+    ) -> Option<([f64; 2], Option<petunia_core::ScreenSnapHit>)> {
         let workplane = self.active_profile_resources().map_or_else(
             || self.draft_profile_workplane(),
             |(profile, _)| profile.workplane,
@@ -3181,6 +3322,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let right = glam::Vec3::from_array(workplane.right.map(|value| value as f32));
         let up = glam::Vec3::from_array(workplane.up.map(|value| value as f32));
         let mut hit = ray_origin + ray_direction * distance;
+        let mut snap_hit = None;
         if self.state.session.snap_enabled || self.state.profile.snap {
             // Mesma passada de snap das transformações (P3D-040): pontos e
             // arestas da malha, guias paralelas aos eixos do plano a partir do
@@ -3207,11 +3349,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             mask.grid = true;
             if let Some(snapped) = self.screen_snap(cursor, mask, anchor, Some(grid)) {
                 hit = snapped.point;
+                snap_hit = Some(snapped);
             }
         }
         // Pontos fora do plano (arestas de outra face) são projetados nele.
         let offset = hit - origin;
-        Some([f64::from(offset.dot(right)), f64::from(offset.dot(up))])
+        let point = [f64::from(offset.dot(right)), f64::from(offset.dot(up))];
+        // O marcador mostra o ponto que realmente entra no perfil (projetado).
+        let snap_hit = snap_hit.map(|snapped| petunia_core::ScreenSnapHit {
+            point: origin + right * point[0] as f32 + up * point[1] as f32,
+            ..snapped
+        });
+        Some((point, snap_hit))
     }
 
     fn update_profile_handle(
@@ -3296,6 +3445,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
+        self.resolve_auto_workplane_at(ndc_x, ndc_y);
         let Some(position) = self.profile_screen_to_plane(ndc_x, ndc_y) else {
             return false;
         };
@@ -4293,8 +4443,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Limpa a preselection (ponteiro saiu da viewport).
     pub fn clear_hover(&mut self) -> bool {
+        let had_preview = self.profile_hover_snap.take().is_some();
         if !self.state.session.tools.hover.is_some() {
-            return false;
+            return had_preview;
         }
         self.state.session.tools.hover = petunia_core::HoverTarget::None;
         true
@@ -11071,8 +11222,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.micro_inspector_x = self.micro_inspector_pos[0];
         vm.micro_inspector_y = self.micro_inspector_pos[1];
 
-        let snap_marker =
-            compute_snap_marker(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        let snap_marker = self.snap_marker_model(self.viewport_size[0], self.viewport_size[1]);
         vm.snap_marker_visible = snap_marker.visible;
         vm.snap_marker_x = snap_marker.x;
         vm.snap_marker_y = snap_marker.y;
@@ -11286,6 +11436,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_profile_depth = translated(petunia_config::text_id::UI_PROFILE_DEPTH);
         vm.label_profile_points = translated(petunia_config::text_id::UI_PROFILE_POINTS);
         vm.label_profile_close = translated(petunia_config::text_id::UI_PROFILE_CLOSE);
+        vm.label_profile_plane = translated(petunia_config::text_id::UI_PROFILE_PLANE);
+        vm.label_profile_plane_auto = translated(petunia_config::text_id::UI_PROFILE_PLANE_AUTO);
+        vm.label_profile_plane_ground =
+            translated(petunia_config::text_id::UI_PROFILE_PLANE_GROUND);
+        vm.label_profile_plane_face = translated(petunia_config::text_id::UI_PROFILE_PLANE_FACE);
+        vm.label_profile_plane_view = translated(petunia_config::text_id::UI_PROFILE_PLANE_VIEW);
+        vm.label_profile_look_at_plane =
+            translated(petunia_config::text_id::UI_PROFILE_LOOK_AT_PLANE);
         vm.label_profile_generate = translated(petunia_config::text_id::UI_PROFILE_GENERATE);
         vm.label_profile_revolve = translated(petunia_config::text_id::UI_PROFILE_REVOLVE);
         vm.label_profile_sweep = translated(petunia_config::text_id::UI_PROFILE_SWEEP);
@@ -11568,6 +11726,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         vm.profile_workplane =
             petunia_module_model::profile_workplane_label(&self.state).to_string();
+        vm.profile_workplane_locked = self.state.profile.workplane_locked;
         vm.profile_volume_mode = match self.profile_volume_mode {
             Some(petunia_module_model::ProfileVolumeMode::Extrude) => "extrude".to_string(),
             Some(petunia_module_model::ProfileVolumeMode::Revolve) => "revolve".to_string(),

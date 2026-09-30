@@ -167,7 +167,7 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
     window.set_dimension_x(dimension.label_x);
     window.set_dimension_y(dimension.label_y);
 
-    let snap_marker = compute_snap_marker(&bridge.state, width, height);
+    let snap_marker = bridge.snap_marker_model(width, height);
     window.set_snap_marker_visible(snap_marker.visible);
     window.set_snap_marker_x(snap_marker.x);
     window.set_snap_marker_y(snap_marker.y);
@@ -583,6 +583,13 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_profile_depth(vm.label_profile_depth.as_str().into());
     window.set_label_profile_points(vm.label_profile_points.as_str().into());
     window.set_label_profile_close(vm.label_profile_close.as_str().into());
+    window.set_label_profile_plane(vm.label_profile_plane.as_str().into());
+    window.set_label_profile_plane_auto(vm.label_profile_plane_auto.as_str().into());
+    window.set_label_profile_plane_ground(vm.label_profile_plane_ground.as_str().into());
+    window.set_label_profile_plane_face(vm.label_profile_plane_face.as_str().into());
+    window.set_label_profile_plane_view(vm.label_profile_plane_view.as_str().into());
+    window.set_label_profile_look_at_plane(vm.label_profile_look_at_plane.as_str().into());
+    window.set_profile_workplane_locked(vm.profile_workplane_locked);
     window.set_label_profile_generate(vm.label_profile_generate.as_str().into());
     window.set_label_profile_revolve(vm.label_profile_revolve.as_str().into());
     window.set_label_profile_sweep(vm.label_profile_sweep.as_str().into());
@@ -3651,6 +3658,28 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_profile_set_workplane_face(move || {
         if let Ok(mut bridge) = wp_face_bridge.lock() {
             bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let wp_auto_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_set_workplane_auto(move || {
+        if let Ok(mut bridge) = wp_auto_bridge.lock() {
+            bridge.apply(UiIntent::ProfileSetWorkplaneAuto);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let wp_look_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_look_at_plane(move || {
+        if let Ok(mut bridge) = wp_look_bridge.lock() {
+            bridge.apply(UiIntent::ProfileLookAtPlane);
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
             }
