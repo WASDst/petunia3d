@@ -265,6 +265,11 @@ duplicate = "Duplicar Movimento"
 remove = "Remover Movimento"
 playhead = "Cabeça de reprodução"
 workspace_tip = "Dê vida a criaturas com Movimentos prontos"
+fit_model = "Ajustar ao modelo"
+fit_model_tip = "Ajusta os ossos da criatura ao modelo selecionado para o modelo se mover com eles"
+fit_needs_model = "Selecione antes um modelo com pontos"
+fit_locked = "Destrave o modelo antes"
+linked_model = "Modelo ligado"
 
 [animate.motion]
 biped_cycle = "Andar / Correr"

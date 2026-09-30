@@ -25,9 +25,13 @@ struct Rig {
 
 impl Rig {
     fn new() -> Self {
+        Self::with_height(800.0)
+    }
+
+    fn with_height(height: f32) -> Self {
         i_slint_backend_testing::init_no_event_loop();
         let shell = PetuniaSlintShell::new().expect("Slint shell");
-        shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+        shell.window().set_size(LogicalSize::new(1280.0, height));
         shell.show().expect("headless window");
         let bridge = Arc::new(Mutex::new(SlintUiBridge::new(
             AppState::default(),
@@ -313,7 +317,9 @@ fn transport_plays_pauses_scrubs_and_applies_now() {
 
 #[test]
 fn advanced_controls_appear_on_demand_and_choices_are_immediate() {
-    let rig = Rig::new();
+    // Janela mais alta: com o Advanced aberto a lista passa da dobra de 800 px
+    // (no app o painel rola; o teste só precisa enxergar os controles).
+    let rig = Rig::with_height(1200.0);
     rig.intent(AnimateIntent::AddCreature(RigPresetKind::Quadruped));
     rig.intent(AnimateIntent::AddMotion(MotionGenerator::Gait));
     assert!(
@@ -332,6 +338,54 @@ fn advanced_controls_appear_on_demand_and_choices_are_immediate() {
     rig.button("Wave")
         .mock_single_click(PointerEventButton::Left);
     assert_eq!(rig.param("pattern"), 3.0, "a escolha é imediata");
+}
+
+#[test]
+fn fit_to_model_button_links_the_model_and_explains_when_blocked() {
+    let rig = Rig::new();
+    // Sem criatura o botão nem aparece; com criatura, aparece em destaque.
+    assert!(
+        ElementHandle::find_by_accessible_label(&rig.shell, "Fit to model")
+            .next()
+            .is_none()
+    );
+    rig.intent(AnimateIntent::AddCreature(RigPresetKind::Humanoid));
+    let fit = rig.button("Fit to model");
+    assert_eq!(fit.accessible_enabled(), Some(true));
+    assert!(
+        fit.accessible_description()
+            .is_some_and(|d| d.contains("bones")),
+        "a dica diz o que o botão faz"
+    );
+    assert_eq!(rig.shell.get_animate_linked_models(), "");
+    fit.mock_single_click(PointerEventButton::Left);
+    assert_ne!(
+        rig.shell.get_animate_linked_models(),
+        "",
+        "o modelo ficou ligado"
+    );
+    assert!(rig.bridge.lock().unwrap().animate_has_posed_model());
+
+    // Travar o modelo: desabilitado, com o motivo na descrição e na dica.
+    rig.bridge
+        .lock()
+        .unwrap()
+        .state
+        .project
+        .project
+        .active_mut()
+        .unwrap()
+        .locked = true;
+    rig.sync();
+    let fit = rig.button("Fit to model");
+    assert_eq!(fit.accessible_enabled(), Some(false));
+    assert_eq!(
+        fit.accessible_description().as_deref(),
+        Some("Unlock the model first")
+    );
+    let depth = rig.depth();
+    fit.mock_single_click(PointerEventButton::Left);
+    assert_eq!(rig.depth(), depth, "desabilitado não age");
 }
 
 #[test]

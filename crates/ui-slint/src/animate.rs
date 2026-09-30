@@ -27,7 +27,8 @@ use slint::{ComponentHandle as _, Model as _};
 
 use petunia_config::text_id as T;
 use petunia_core::{
-    AnimatePreview, CommandError, MotionUnavailable, PosePreview, RigPresetKind, motion_catalog,
+    AnimatePreview, CommandError, FitBlocked, MotionUnavailable, PosePreview, RigPresetKind,
+    fit_availability, motion_catalog,
 };
 use petunia_project::{MotionGenerator, MotionRecipe, MotionStyle, PoseOverride, RootMode};
 
@@ -101,6 +102,8 @@ pub enum AnimateIntent {
     },
     ToggleAdvanced,
     ToggleBones,
+    /// Ajusta a criatura em foco ao modelo ativo e os liga por skin.
+    FitToModel,
 }
 
 impl AnimateIntent {
@@ -144,6 +147,7 @@ impl AnimateIntent {
             },
             "toggle-advanced" => Self::ToggleAdvanced,
             "toggle-bones" => Self::ToggleBones,
+            "fit-to-model" => Self::FitToModel,
             _ => return None,
         })
     }
@@ -208,6 +212,8 @@ pub struct AnimateTexts {
     pub play: String,
     pub pause: String,
     pub play_tip: String,
+    pub fit_model: String,
+    pub linked_model: String,
 }
 
 /// Tudo que o painel Animate lê. Snapshot barato: nenhuma estrutura do core
@@ -240,6 +246,12 @@ pub struct AnimateViewModel {
     pub bone_commands: String,
     /// Articulações como cruzes pequenas (mesmo sistema de coordenadas).
     pub joint_commands: String,
+    /// Dá para ajustar a criatura ao modelo ativo (Fit to model)?
+    pub can_fit: bool,
+    /// Dica do botão: o que ele faz, ou por que está desabilitado.
+    pub fit_tip: String,
+    /// Nomes dos modelos já ligados à criatura em foco (separados por vírgula).
+    pub linked_models: String,
 }
 
 /// Id de ícone de cada gerador.
@@ -324,6 +336,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             play: t(T::ANIMATE_PLAY),
             pause: t(T::ANIMATE_PAUSE),
             play_tip: t(T::ANIMATE_TIP_PLAY),
+            fit_model: t(T::ANIMATE_FIT_MODEL),
+            linked_model: t(T::ANIMATE_LINKED_MODEL),
         }
     }
 
@@ -454,6 +468,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => 0.0,
         };
 
+        let fit = fit_availability(project, session.skeleton);
+        let fit_tip = st.t_id(match fit {
+            Ok(()) => T::ANIMATE_FIT_MODEL_TIP,
+            Err(FitBlocked::NoCreature) => T::ANIMATE_NO_RIG,
+            Err(FitBlocked::NoModel) => T::ANIMATE_FIT_NEEDS_MODEL,
+            Err(FitBlocked::Locked) => T::ANIMATE_FIT_LOCKED,
+        });
+        let linked_models = session.skeleton.map_or_else(String::new, |id| {
+            project
+                .assets
+                .iter()
+                .filter(|a| a.skin_data.as_ref().is_some_and(|s| s.skeleton_id == id))
+                .map(|a| a.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        });
+
         AnimateViewModel {
             available: cfg!(feature = "animation-workspace"),
             has_creature: session.skeleton.is_some(),
@@ -478,6 +509,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             root_motion_supported: recipe.is_some_and(|r| r.generator.supports_root_motion()),
             bone_commands,
             joint_commands,
+            can_fit: fit.is_ok(),
+            fit_tip,
+            linked_models,
         }
     }
 
@@ -668,6 +702,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 a.show_advanced = !a.show_advanced;
                 Ok(())
             }
+            A::FitToModel => self.state.animate_fit_to_model(),
             A::ToggleBones => {
                 let a = &mut self.state.session.animate;
                 a.show_skeleton = !a.show_skeleton;
@@ -810,6 +845,8 @@ impl From<&AnimateTexts> for crate::AnimateTexts {
             play: t.play.as_str().into(),
             pause: t.pause.as_str().into(),
             play_tip: t.play_tip.as_str().into(),
+            fit_model: t.fit_model.as_str().into(),
+            linked_model: t.linked_model.as_str().into(),
         }
     }
 }
@@ -844,6 +881,9 @@ pub fn sync_animate_properties(window: &PetuniaSlintShell, vm: &AnimateViewModel
     window.set_animate_stepped(vm.stepped);
     window.set_animate_root_motion(vm.root_motion);
     window.set_animate_root_motion_supported(vm.root_motion_supported);
+    window.set_animate_can_fit(vm.can_fit);
+    window.set_animate_fit_tip(vm.fit_tip.as_str().into());
+    window.set_animate_linked_models(vm.linked_models.as_str().into());
     sync_animate_playhead(window, vm);
 }
 
@@ -946,6 +986,10 @@ mod parse_tests {
         assert_eq!(
             AnimateIntent::parse("apply-now", "convert", 0.0),
             Some(AnimateIntent::ApplyNow { keep: false })
+        );
+        assert_eq!(
+            AnimateIntent::parse("fit-to-model", "", 0.0),
+            Some(AnimateIntent::FitToModel)
         );
         assert_eq!(AnimateIntent::parse("explode", "", 0.0), None);
     }
@@ -1392,6 +1436,67 @@ mod bridge_tests {
             b.render_viewport();
             assert!(b.viewport.last.clone().flatten().is_none());
         }
+    }
+
+    #[test]
+    fn fit_to_model_explains_itself_and_links_the_model_once() {
+        let mut b = bridge();
+        let vm = b.animate_view_model();
+        assert!(!vm.can_fit);
+        assert_eq!(vm.fit_tip, b.state.t_id(T::ANIMATE_NO_RIG));
+
+        act(&mut b, AnimateIntent::AddCreature(RigPresetKind::Quadruped));
+        let vm = b.animate_view_model();
+        assert!(vm.can_fit, "há criatura e o modelo padrão do projeto");
+        assert_eq!(vm.fit_tip, b.state.t_id(T::ANIMATE_FIT_MODEL_TIP));
+        assert_eq!(vm.linked_models, "");
+        assert!(!b.animate_has_posed_model());
+
+        let depth = undo_depth(&b);
+        act(&mut b, AnimateIntent::FitToModel);
+        assert_eq!(undo_depth(&b), depth + 1, "um passo de Undo");
+        let model = b.state.project.project.active().unwrap().name.clone();
+        let vm = b.animate_view_model();
+        assert_eq!(vm.linked_models, model);
+        assert!(b.animate_has_posed_model());
+
+        // Repetir não cria histórico nem mensagem de erro.
+        b.state.set_status("");
+        act(&mut b, AnimateIntent::FitToModel);
+        assert_eq!(undo_depth(&b), depth + 1);
+        assert!(b.state.ui.status.is_empty());
+
+        // Undo desfaz a ligação.
+        assert!(b.state.undo());
+        assert_eq!(b.animate_view_model().linked_models, "");
+    }
+
+    #[test]
+    fn fit_to_model_reports_a_locked_or_empty_model() {
+        let mut b = bridge();
+        act(&mut b, AnimateIntent::AddCreature(RigPresetKind::Bird));
+        b.state.project.project.active_mut().unwrap().locked = true;
+        let vm = b.animate_view_model();
+        assert!(!vm.can_fit);
+        assert_eq!(vm.fit_tip, b.state.t_id(T::ANIMATE_FIT_LOCKED));
+        let depth = undo_depth(&b);
+        act(&mut b, AnimateIntent::FitToModel);
+        assert_eq!(undo_depth(&b), depth);
+        assert!(!b.state.ui.status.is_empty(), "o usuário é avisado");
+
+        b.state.project.project.active_mut().unwrap().locked = false;
+        b.state
+            .project
+            .project
+            .active_mut()
+            .unwrap()
+            .mesh
+            .verts
+            .clear();
+        assert_eq!(
+            b.animate_view_model().fit_tip,
+            b.state.t_id(T::ANIMATE_FIT_NEEDS_MODEL)
+        );
     }
 
     #[test]

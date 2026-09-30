@@ -265,6 +265,11 @@ duplicate = "Duplicate Motion"
 remove = "Remove Motion"
 playhead = "Playhead"
 workspace_tip = "Bring creatures to life with ready-made Motions"
+fit_model = "Fit to model"
+fit_model_tip = "Fits this creature's bones to your selected model so the model moves with them"
+fit_needs_model = "Select a model with points first"
+fit_locked = "Unlock the model first"
+linked_model = "Linked model"
 
 [animate.motion]
 biped_cycle = "Walk / Run"

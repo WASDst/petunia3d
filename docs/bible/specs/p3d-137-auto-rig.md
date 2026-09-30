@@ -3,7 +3,7 @@
 <aside>
 🧩
 
-Novo item; implementar somente após Rig Core/Presets · Prioridade: P3.
+Novo item; implementar somente após Rig Core/Presets · Prioridade: P3. **Estado (2026-09-30, F2b do [cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md)):** existe um primeiro **Fit to model** genérico (qualquer preset ao volume do modelo, pesos por osso mais próximo com raio de mistura), editável e em um passo de Undo; landmarks, correção guiada e pintura de pesos seguem pendentes.
 
 </aside>
 

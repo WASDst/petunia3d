@@ -506,6 +506,11 @@ pub mod text_id {
     pub const ANIMATE_REMOVE: TextId = TextId::new("animate.remove");
     pub const ANIMATE_PLAYHEAD: TextId = TextId::new("animate.playhead");
     pub const ANIMATE_WORKSPACE_TIP: TextId = TextId::new("animate.workspace_tip");
+    pub const ANIMATE_FIT_MODEL: TextId = TextId::new("animate.fit_model");
+    pub const ANIMATE_FIT_MODEL_TIP: TextId = TextId::new("animate.fit_model_tip");
+    pub const ANIMATE_FIT_NEEDS_MODEL: TextId = TextId::new("animate.fit_needs_model");
+    pub const ANIMATE_FIT_LOCKED: TextId = TextId::new("animate.fit_locked");
+    pub const ANIMATE_LINKED_MODEL: TextId = TextId::new("animate.linked_model");
 
     pub const PAINT_RADIUS: TextId = TextId::new("paint.radius");
     pub const PAINT_COLOR: TextId = TextId::new("paint.color");
@@ -883,6 +888,11 @@ pub mod text_id {
         ANIMATE_REMOVE,
         ANIMATE_PLAYHEAD,
         ANIMATE_WORKSPACE_TIP,
+        ANIMATE_FIT_MODEL,
+        ANIMATE_FIT_MODEL_TIP,
+        ANIMATE_FIT_NEEDS_MODEL,
+        ANIMATE_FIT_LOCKED,
+        ANIMATE_LINKED_MODEL,
         PAINT_RADIUS,
         PAINT_COLOR,
         SETTINGS_INTERFACE,

@@ -60,6 +60,8 @@ export struct AnimateTexts {
     play: string,
     pause: string,
     play-tip: string,
+    fit-model: string,
+    linked-model: string,
 }
 
 /// Ícone por id estável (o Rust fala em `IconId`, nunca em desenho).
@@ -287,6 +289,7 @@ component AnimButton inherits Rectangle {
     border-color: btn-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
     accessible-role: button;
     accessible-label: root.label;
+    accessible-description: root.tip;
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
     forward-focus: btn-focus;
@@ -311,9 +314,10 @@ component AnimButton inherits Rectangle {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
             reject
         }
+        // Sempre ativo: um TouchArea desabilitado não recebe hover e a dica
+        // (o motivo, quando desabilitado) não apareceria.
         btn-touch := TouchArea {
-            enabled: root.enabled;
-            clicked => { root.clicked(); }
+            clicked => { if root.enabled { root.clicked(); } }
             if root.tip != "": Tooltip {
                 AnimTip { title: root.label; detail: root.tip; }
             }
@@ -501,11 +505,34 @@ export component AnimateMotionBody inherits VerticalLayout {
     in property <[AnimateRowEntry]> motions;
     in property <bool> has-motion;
     in property <bool> has-creature;
+    in property <bool> can-fit;
+    in property <string> fit-tip;
+    in property <string> linked-models;
     callback action(string, string, float);
 
     spacing: 6px;
     padding-top: 4px;
     padding-bottom: 4px;
+
+    // Ligar a criatura a um modelo é o que faz a malha se mover: o botão fica
+    // em destaque enquanto nenhum modelo está ligado.
+    if root.has-creature: VerticalLayout {
+        spacing: 4px;
+        padding-bottom: 4px;
+        AnimButton {
+            label: root.texts.fit-model;
+            tip: root.fit-tip;
+            enabled: root.can-fit;
+            primary: root.linked-models == "";
+            clicked => { root.action("fit-to-model", "", 0); }
+        }
+        if root.linked-models != "": Text {
+            text: root.texts.linked-model + ": " + root.linked-models;
+            color: DesignTokens.text-secondary;
+            font-size: 10px;
+            overflow: elide;
+        }
+    }
 
     GridLayout {
         spacing: 6px;

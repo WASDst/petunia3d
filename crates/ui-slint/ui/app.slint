@@ -3977,6 +3977,9 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> animate-stepped: false;
     in-out property <bool> animate-root-motion: false;
     in-out property <bool> animate-root-motion-supported: false;
+    in-out property <bool> animate-can-fit: false;
+    in-out property <string> animate-fit-tip: "";
+    in-out property <string> animate-linked-models: "";
     in-out property <float> animate-progress: 0;
     in-out property <string> animate-time-label: "";
     in-out property <string> animate-bone-commands: "";
@@ -9467,6 +9470,9 @@ export component PetuniaSlintShell inherits Window {
                                     motions: root.animate-motions;
                                     has-motion: root.animate-has-motion;
                                     has-creature: root.animate-has-creature;
+                                    can-fit: root.animate-can-fit;
+                                    fit-tip: root.animate-fit-tip;
+                                    linked-models: root.animate-linked-models;
                                     action(a, b, v) => { root.animate-action(a, b, v); }
                                 }
                             }
