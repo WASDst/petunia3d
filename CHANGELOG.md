@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Contorno de seleção de objetos — Onda 6, parte 4 (30/09/2026)
+- **Objetos selecionados agora aparecem no viewport**: antes, no modo de objetos, nada indicava quais estavam selecionados. Agora cada um ganha um contorno de largura constante em pixels, com a borda suavizada; o ativo usa a cor de seleção e os demais a mesma cor mais escura. A espessura segue a preferência de espessura da seleção.
+- **Verificado por pixels**: largura do anel medida, igual ao afastar a câmera, e o interior do objeto intacto.
+- **Escopo honesto**: o contorno ainda aparece por cima de objetos que estejam na frente, e não aparece no shading Wireframe nem no viewport por software.
+
 ### Plano de trabalho em destaque — Onda 6, parte 3 (30/09/2026)
 - **O plano de trabalho aparece no DRAW** (capítulo 05): um recorte translúcido com grade, centrado na origem do desenho e do mesmo tamanho na tela em qualquer zoom. Aparece quando o plano está decidido (travado, ou com um perfil em edição); antes do primeiro clique no modo automático, o destaque da face sob o cursor continua mostrando o candidato.
 - **Verificado por pixels** no renderer real, e as regras de quando aparecer por teste do bridge.

@@ -9612,3 +9612,22 @@ fn draw_highlights_the_workplane_only_once_it_is_decided() {
     bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
     assert_eq!(bridge.workplane_overlay(), None);
 }
+
+#[test]
+fn object_outline_follows_the_object_selection_only_in_the_object_domain() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let cube = bridge.state.project.assets[0].id;
+    bridge.state.session.selection.assets = vec![cube];
+    bridge.state.session.selection.asset = Some(cube);
+    bridge.state.set_selection_domain(SelectionDomain::Object);
+    assert_eq!(bridge.outlined_objects(), (vec![cube], Some(cube)));
+
+    // Nos domínios de componente, a camada de componentes é o destaque.
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    assert_eq!(bridge.outlined_objects(), (Vec::new(), None));
+
+    // PAINT e UV não contornam objetos.
+    bridge.state.set_selection_domain(SelectionDomain::Object);
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert_eq!(bridge.outlined_objects().0, Vec::<uuid::Uuid>::new());
+}
