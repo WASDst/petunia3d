@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Arestas nítidas e aparência por modo — Onda 6, parte 2 (30/09/2026)
+- **Arestas de largura constante**: as linhas do modelo têm a mesma espessura em pixels em qualquer zoom, distância ou escala de tela, com bordas suavizadas (antes eram linhas de 1 px físico).
+- **DRAW lê forma, POLY lê topologia** (capítulo 05): no DRAW aparecem só as arestas de feição (bordas e dobras acima de 30°); no POLY aparecem todas, as comuns mais finas e as de feição reforçadas; PAINT e UV mantêm as faces limpas.
+- **Verificado por pixels** no renderer real (Vulkan por software): largura medida e visibilidade de cada tipo de aresta por modo.
+- **Escopo honesto**: pontos visíveis no domínio Point, destaque do plano de trabalho, contorno de seleção por jump flooding e matcap ficam pendentes.
+
 ### Visual e acessibilidade — Onda 6, parte 1 (30/09/2026)
 - **Luz de estúdio que acompanha a câmera**: a forma continua clara e legível ao orbitar para qualquer lado (como no Plasticity e no Cinema 4D); a preferência "Luz de estúdio acompanha a câmera" volta à luz fixa no mundo. X-Ray e viewport por software usam a mesma luz.
 - **Raio do snap nas Configurações** (4–48 px): quem tem tremor ou pouca precisão pode aumentar a área de encaixe.

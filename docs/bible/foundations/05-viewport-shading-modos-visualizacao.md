@@ -56,6 +56,8 @@ Desde a revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-
 - **DRAW:** leitura de forma — iluminação de estúdio ou matcap, arestas de feição nítidas, plano de trabalho em destaque, regiões tingidas no hover e cotas visíveis.
 - **POLY:** leitura de topologia — flat shading, todas as arestas finas com arestas de feição reforçadas, pontos visíveis no domínio Point, pré-seleção clara e componentes de trás ocultos fora do X-Ray.
 
+Implementação (2026-09-30, Onda 6): arestas de feição = bordas e dobras acima de 30°; DRAW mostra só essas, POLY mostra todas com as de feição reforçadas; o overlay de wireframe continua acrescentando as arestas finas em qualquer modo. Pontos no domínio Point e o destaque do plano de trabalho estão pendentes.
+
 Em ambos: imagem renderizada em pixels físicos com antisserrilhado, linhas de largura constante em pixels e pré-seleção do elemento sob o cursor antes do clique ([capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)).
 
 # Apresentação na UI

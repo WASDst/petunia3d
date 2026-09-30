@@ -71,6 +71,8 @@ pub struct ViewportRenderState {
     pub boolean_operand: Option<uuid::Uuid>,
     /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
     pub studio_light_follows_camera: bool,
+    /// Aparência das arestas por modo (DRAW = forma, POLY = topologia).
+    pub edge_mode: petunia_render_wgpu::EdgeMode,
 }
 
 impl Default for ViewportRenderState {
@@ -91,6 +93,7 @@ impl Default for ViewportRenderState {
             hover: petunia_core::HoverTarget::None,
             boolean_operand: None,
             studio_light_follows_camera: true,
+            edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
         }
     }
 }
@@ -709,6 +712,14 @@ impl ModelingMode {
         match self {
             Self::Draw => "DRAW",
             Self::Poly => "POLY",
+        }
+    }
+
+    /// Aparência das arestas do viewport neste modo (capítulo 05).
+    pub fn edge_mode(self) -> petunia_render_wgpu::EdgeMode {
+        match self {
+            Self::Draw => petunia_render_wgpu::EdgeMode::Features,
+            Self::Poly => petunia_render_wgpu::EdgeMode::Topology,
         }
     }
 
@@ -1690,6 +1701,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             hover: self.state.session.tools.hover,
             boolean_operand: self.state.session.tools.boolean_operand,
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
+            edge_mode: self.edge_mode(),
         };
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
@@ -9496,6 +9508,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         commands
     }
 
+    /// Arestas por workspace: DRAW/POLY seguem o modo; PAINT e UV mantêm as
+    /// faces limpas com o overlay opcional.
+    fn edge_mode(&self) -> petunia_render_wgpu::EdgeMode {
+        if self.state.workspace == Workspace::Model {
+            self.modeling_mode.edge_mode()
+        } else {
+            petunia_render_wgpu::EdgeMode::Overlay
+        }
+    }
+
     /// Região de perfil sob o ponto (px lógicos da viewport), se não estiver
     /// escondida atrás da malha ativa. Os planos ficam em cache por revisão.
     fn region_hit_at(&mut self, pixel: [f32; 2]) -> Option<petunia_core::RegionHit> {
@@ -12718,6 +12740,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         hover: state.session.tools.hover,
         boolean_operand: state.session.tools.boolean_operand,
         studio_light_follows_camera: true,
+        edge_mode: ModelingMode::default().edge_mode(),
     };
     if let Some(frame) = viewport.render_frame(
         &state.project,

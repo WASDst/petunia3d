@@ -173,6 +173,7 @@ impl WgpuViewport {
         self.renderer.set_xray_opacity(state.xray_opacity);
         self.renderer
             .set_studio_light_follows_camera(state.studio_light_follows_camera);
+        self.renderer.set_edge_mode(state.edge_mode);
         self.renderer
             .set_selection_style(state.selection_rgb, state.selection_thickness);
         self.renderer.update(
@@ -306,6 +307,18 @@ mod tests {
 
     /// Lê o pixel RGBA do centro da textura exibida (teste de aparência).
     fn center_pixel(viewport: &WgpuViewport) -> [u8; 4] {
+        let pixels = read_pixels(viewport);
+        let offset = (((viewport.height / 2) * viewport.width + viewport.width / 2) * 4) as usize;
+        [
+            pixels[offset],
+            pixels[offset + 1],
+            pixels[offset + 2],
+            pixels[offset + 3],
+        ]
+    }
+
+    /// Todos os pixels RGBA da textura exibida, linha a linha, sem padding.
+    fn read_pixels(viewport: &WgpuViewport) -> Vec<u8> {
         let texture = viewport.target_texture.as_ref().expect("alvo");
         let bytes_per_row = (viewport.width * 4).div_ceil(256) * 256;
         let buffer = viewport.device.create_buffer(&wgpu::BufferDescriptor {
@@ -341,13 +354,82 @@ mod tests {
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("poll");
         let data = slice.get_mapped_range().expect("mapeado");
-        let offset = ((viewport.height / 2) * bytes_per_row + (viewport.width / 2) * 4) as usize;
-        [
-            data[offset],
-            data[offset + 1],
-            data[offset + 2],
-            data[offset + 3],
-        ]
+        let row = (viewport.width * 4) as usize;
+        (0..viewport.height as usize)
+            .flat_map(|y| {
+                let start = y * bytes_per_row as usize;
+                data[start..start + row].to_vec()
+            })
+            .collect()
+    }
+
+    /// Dois quads lado a lado (aresta compartilhada em x = 0), de frente.
+    fn two_quads() -> Project {
+        let mut mesh = petunia_core::Mesh::default();
+        for [x, y] in [
+            [-2.0f32, -1.0],
+            [0.0, -1.0],
+            [2.0, -1.0],
+            [2.0, 1.0],
+            [0.0, 1.0],
+            [-2.0, 1.0],
+        ] {
+            mesh.verts.push(petunia_mesh::Vertex::new(x, y, 0.0));
+        }
+        mesh.faces.push(petunia_mesh::Face::new(vec![0, 1, 4, 5]));
+        mesh.faces.push(petunia_mesh::Face::new(vec![1, 2, 3, 4]));
+        // `Project::new()` traz o cubo padrão, que cobriria os quads.
+        let mut project = Project::default();
+        project.add("Quads", mesh);
+        project
+    }
+
+    /// Pixels escuros da aresta central na linha do meio da imagem.
+    fn center_edge_width(viewport: &mut WgpuViewport, width: f32, half_height: f32) -> usize {
+        center_edge_width_in(
+            viewport,
+            width,
+            half_height,
+            petunia_render_wgpu::EdgeMode::Overlay,
+            true,
+        )
+    }
+
+    fn center_edge_width_in(
+        viewport: &mut WgpuViewport,
+        width: f32,
+        half_height: f32,
+        edge_mode: petunia_render_wgpu::EdgeMode,
+        overlay: bool,
+    ) -> usize {
+        viewport.renderer.set_line_width_px(width);
+        let mut camera = Camera::default();
+        camera.set_preset(petunia_core::ViewPreset::Front);
+        camera.target = glam::Vec3::ZERO;
+        camera.ortho_half_h = half_height;
+        let state = ViewportRenderState {
+            show_grid: false,
+            show_wireframe_overlay: overlay,
+            edge_mode,
+            ..ViewportRenderState::default()
+        };
+        viewport
+            .render_frame(&two_quads(), &[], &camera, state)
+            .unwrap();
+        let pixels = read_pixels(viewport);
+        let (width_px, y) = (viewport.width as usize, viewport.height as usize / 2);
+        let row: Vec<f32> = (0..width_px)
+            .map(|x| {
+                let i = (y * width_px + x) * 4;
+                luminance([pixels[i], pixels[i + 1], pixels[i + 2], 255])
+            })
+            .collect();
+        let center = width_px / 2;
+        // Amostra da face perto do centro: afastado, os quads ocupam só ±20 px.
+        let face = row[center - 9];
+        (center - 6..center + 6)
+            .filter(|&x| row[x] < face * 0.6)
+            .count()
     }
 
     fn luminance(pixel: [u8; 4]) -> f32 {
@@ -381,6 +463,42 @@ mod tests {
             sides[side] = luminance(center_pixel(viewport));
         }
         (sides[0], sides[1])
+    }
+
+    #[test]
+    fn wireframe_edges_have_constant_pixel_width() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
+            return;
+        };
+        // A aresta do meio é comum (0,67 da base): 3 px → 2 px, 6 px → 4 px.
+        let thin = center_edge_width(&mut viewport, 3.0, 2.0);
+        let thick = center_edge_width(&mut viewport, 6.0, 2.0);
+        assert!((1..=3).contains(&thin), "3 px → {thin}");
+        assert!((3..=5).contains(&thick), "6 px → {thick}");
+        assert!(thick > thin);
+        // Aproximar ou afastar não muda a espessura na tela.
+        let zoomed_out = center_edge_width(&mut viewport, 6.0, 6.0);
+        assert_eq!(zoomed_out, thick, "largura em pixels, não em mundo");
+    }
+
+    #[test]
+    fn draw_reads_shape_and_poly_reads_topology() {
+        use petunia_render_wgpu::EdgeMode;
+        let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
+            return;
+        };
+        // A aresta do meio é plana: não é de feição.
+        let draw = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Features, false);
+        let poly = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Topology, false);
+        let paint = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Overlay, false);
+        let overlay = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Features, true);
+        assert_eq!(draw, 0, "DRAW esconde a aresta plana");
+        assert!(poly >= 1, "POLY mostra a topologia");
+        assert_eq!(paint, 0, "PAINT/UV: faces limpas sem overlay");
+        assert!(overlay >= 1, "o overlay acrescenta as arestas finas");
+        // Aresta comum é mais fina que a de feição na mesma largura base.
+        let feature_like = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Overlay, true);
+        assert!(poly <= feature_like, "{poly} ≤ {feature_like}");
     }
 
     #[test]
@@ -435,6 +553,7 @@ mod tests {
                         hover: petunia_core::HoverTarget::None,
                         boolean_operand: None,
                         studio_light_follows_camera: true,
+                        edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
                     },
                 );
                 assert!(img.is_ok());

@@ -28,6 +28,69 @@ struct LineVertex {
     color: [f32; 3],
 }
 
+/// Canto de uma aresta larga: as duas pontas, a cor e `corner` =
+/// (ponta 0/1, lado −1/+1). O vertex shader expande a faixa em pixels.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct WideLineVertex {
+    a: [f32; 3],
+    b: [f32; 3],
+    color: [f32; 3],
+    /// (ponta 0/1, lado −1/+1, multiplicador da largura).
+    corner: [f32; 3],
+}
+
+/// Aparência das arestas no viewport (capítulo 05, aparência por workspace).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EdgeMode {
+    /// Faces limpas; arestas só com o overlay de wireframe (PAINT, UV).
+    #[default]
+    Overlay,
+    /// DRAW: leitura de forma — só arestas de feição (bordas e dobras).
+    Features,
+    /// POLY: leitura de topologia — todas as arestas finas, as de feição
+    /// reforçadas.
+    Topology,
+}
+
+/// Ângulo entre faces vizinhas acima do qual a aresta é "de feição".
+pub const CREASE_DEGREES: f32 = 30.0;
+/// Arestas comuns (não de feição) em relação à largura base.
+const THIN_EDGE_SCALE: f32 = 0.67;
+const FEATURE_EDGE_COLOR: [f32; 3] = [0.05, 0.05, 0.06];
+const THIN_EDGE_COLOR: [f32; 3] = [0.16, 0.17, 0.19];
+
+/// Converte pares de `LineVertex` (LineList) em faixas de dois triângulos;
+/// `widths[i]` multiplica a largura base do par `i`.
+fn wide_lines_from_pairs(pairs: &[LineVertex], widths: &[f32]) -> Vec<WideLineVertex> {
+    let mut out = Vec::with_capacity(pairs.len() * 3);
+    for (index, pair) in pairs.as_chunks::<2>().0.iter().enumerate() {
+        let width = widths.get(index).copied().unwrap_or(1.0);
+        let (a, b) = (pair[0].pos, pair[1].pos);
+        for (end, side) in [
+            (0.0, -1.0),
+            (0.0, 1.0),
+            (1.0, 1.0),
+            (0.0, -1.0),
+            (1.0, 1.0),
+            (1.0, -1.0),
+        ] {
+            let color = if end == 0.0 {
+                pair[0].color
+            } else {
+                pair[1].color
+            };
+            out.push(WideLineVertex {
+                a,
+                b,
+                color,
+                corner: [end, side, width],
+            });
+        }
+    }
+    out
+}
+
 /// Vértice da camada de seleção: posição + cor com alpha.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -69,6 +132,9 @@ fn append_point_disc(
         }
     }
 }
+
+/// Largura padrão das arestas em px (Plasticity: 1,5 px normais).
+pub const DEFAULT_LINE_WIDTH_PX: f32 = 1.5;
 
 /// Faixa de aresta voltada à câmera, com largura em pixels lógicos.
 fn append_edge_band(
@@ -156,7 +222,8 @@ struct CameraUniform {
     light_dir: [f32; 4],
     /// x = ambiente, y = difusa, z/w = livres.
     light_params: [f32; 4],
-    /// x = alpha do X-Ray, y/z/w = livres.
+    /// x = alpha do X-Ray, y/z = tamanho do alvo em px físicos, w = largura
+    /// das arestas em px físicos.
     xray: [f32; 4],
 }
 
@@ -220,7 +287,6 @@ pub struct Renderer {
     mesh_tex_pipeline: wgpu::RenderPipeline,
     mesh_tex_xray_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
-    line_xray_pipeline: wgpu::RenderPipeline,
     xray: bool,
     xray_opacity: f32,
     selection_rgb: [u8; 3],
@@ -238,6 +304,11 @@ pub struct Renderer {
     asset_tex: Vec<AssetTexGpu>,
     line_vb: Option<wgpu::Buffer>,
     line_count: u32,
+    wide_line_pipeline: wgpu::RenderPipeline,
+    wide_line_xray_pipeline: wgpu::RenderPipeline,
+    /// Largura das arestas em px lógicos; o uniform recebe × `pixel_ratio`.
+    line_width_px: f32,
+    edge_mode: EdgeMode,
     selection_tri_pipeline: wgpu::RenderPipeline,
     selection_line_pipeline: wgpu::RenderPipeline,
     selection_tri_xray_pipeline: wgpu::RenderPipeline,
@@ -495,6 +566,58 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// Arestas de largura constante em pixels (Bærentzen et al.; Plasticity):
+/// cada aresta vira uma faixa de dois triângulos expandida na tela; o MSAA
+/// suaviza as bordas. A largura não muda com zoom, distância ou DPI.
+const WIDE_LINE_WGSL: &str = r#"
+struct Camera {
+    view_proj: mat4x4<f32>,
+    light_dir: vec4<f32>,
+    light_params: vec4<f32>,
+    xray: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> cam: Camera;
+
+struct In {
+    @location(0) a: vec3<f32>,
+    @location(1) b: vec3<f32>,
+    @location(2) color: vec3<f32>,
+    @location(3) corner: vec3<f32>,
+};
+struct Out {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) color: vec3<f32>,
+};
+@vertex
+fn vs_main(in: In) -> Out {
+    var o: Out;
+    let ca = cam.view_proj * vec4<f32>(in.a, 1.0);
+    let cb = cam.view_proj * vec4<f32>(in.b, 1.0);
+    let size = max(cam.xray.yz, vec2<f32>(1.0, 1.0));
+    let sa = ca.xy / max(ca.w, 1e-5) * size * 0.5;
+    let sb = cb.xy / max(cb.w, 1e-5) * size * 0.5;
+    var dir = sb - sa;
+    if (length(dir) < 1e-5) {
+        dir = vec2<f32>(1.0, 0.0);
+    }
+    dir = normalize(dir);
+    let normal = vec2<f32>(-dir.y, dir.x);
+    var p = ca;
+    if (in.corner.x > 0.5) {
+        p = cb;
+    }
+    let half_width = max(cam.xray.w * in.corner.z, 1.0) * 0.5;
+    let offset_ndc = normal * in.corner.y * half_width / (size * 0.5);
+    o.clip = vec4<f32>(p.xy + offset_ndc * p.w, p.z - 0.0001 * p.w, p.w);
+    o.color = in.color;
+    return o;
+}
+@fragment
+fn fs_main(in: Out) -> @location(0) vec4<f32> {
+    return vec4<f32>(in.color, 1.0);
+}
+"#;
+
 const REF_WGSL: &str = r#"
 struct Camera {
     view_proj: mat4x4<f32>,
@@ -720,6 +843,58 @@ impl Renderer {
             cache: None,
         });
 
+        let wide_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("simple3d-wide-line-shader"),
+            source: wgpu::ShaderSource::Wgsl(WIDE_LINE_WGSL.into()),
+        });
+        let wide_line = |label: &'static str, compare: wgpu::CompareFunction| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&mesh_layout),
+                vertex: wgpu::VertexState {
+                    module: &wide_line_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<WideLineVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32x3],
+                    })],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &wide_line_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(compare),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: msaa,
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let wide_line_pipeline =
+            wide_line("simple3d-wide-line-pipe", wgpu::CompareFunction::LessEqual);
+        let wide_line_xray_pipeline = wide_line(
+            "simple3d-wide-line-xray-pipe",
+            wgpu::CompareFunction::Always,
+        );
+
         let mesh_xray_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("simple3d-mesh-xray-pipe"),
             layout: Some(&mesh_layout),
@@ -752,45 +927,6 @@ impl Renderer {
                 format: wgpu::TextureFormat::Depth24Plus,
                 depth_write_enabled: Some(false),
                 depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: msaa,
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let line_xray_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("simple3d-line-xray-pipe"),
-            layout: Some(&mesh_layout),
-            vertex: wgpu::VertexState {
-                module: &line_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<LineVertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
-                })],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &line_shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::LineList,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Always),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -1126,7 +1262,6 @@ impl Renderer {
             mesh_tex_pipeline,
             mesh_tex_xray_pipeline,
             line_pipeline,
-            line_xray_pipeline,
             xray: false,
             xray_opacity: 0.42,
             selection_rgb: [233, 106, 0],
@@ -1144,6 +1279,10 @@ impl Renderer {
             asset_tex: Vec::new(),
             line_vb: None,
             line_count: 0,
+            wide_line_pipeline,
+            wide_line_xray_pipeline,
+            line_width_px: DEFAULT_LINE_WIDTH_PX,
+            edge_mode: EdgeMode::Overlay,
             selection_tri_pipeline,
             selection_line_pipeline,
             selection_tri_xray_pipeline,
@@ -1177,6 +1316,11 @@ impl Renderer {
     }
 
     /// Quantas vezes os buffers de geometria foram reconstruídos (telemetria Wave 1).
+    /// Vértices de aresta enviados à GPU (6 por aresta: faixa de 2 triângulos).
+    pub fn edge_vertex_count(&self) -> u32 {
+        self.line_count
+    }
+
     pub fn mesh_rebuilds(&self) -> u64 {
         self.mesh_rebuilds
     }
@@ -1217,6 +1361,21 @@ impl Renderer {
     /// `false` a mantém fixa no mundo.
     pub fn set_studio_light_follows_camera(&mut self, follows: bool) {
         self.studio_light_follows_camera = follows;
+    }
+
+    /// Aparência das arestas (DRAW/POLY/overlay); mudar reconstrói as linhas.
+    pub fn set_edge_mode(&mut self, mode: EdgeMode) {
+        if self.edge_mode != mode {
+            self.edge_mode = mode;
+            self.last_fingerprint = None;
+        }
+    }
+
+    /// Largura das arestas em px lógicos (constante em qualquer zoom e DPI).
+    pub fn set_line_width_px(&mut self, width: f32) {
+        if width.is_finite() {
+            self.line_width_px = width.clamp(1.0, 8.0);
+        }
     }
 
     pub fn set_xray_opacity(&mut self, opacity: f32) {
@@ -1367,7 +1526,12 @@ impl Renderer {
                 view_proj: camera.view_proj().to_cols_array_2d(),
                 light_dir,
                 light_params: [ambient, diffuse, 0.0, 0.0],
-                xray: [self.xray_opacity, 0.0, 0.0, 0.0],
+                xray: [
+                    self.xray_opacity,
+                    self.depth_size.0.max(1) as f32,
+                    self.depth_size.1.max(1) as f32,
+                    self.line_width_px * self.pixel_ratio,
+                ],
             }]),
         );
 
@@ -1416,6 +1580,7 @@ impl Renderer {
         // malha
         let mut mv: Vec<MeshVertex> = Vec::new();
         let mut lv: Vec<LineVertex> = Vec::new();
+        let mut line_widths: Vec<f32> = Vec::new();
         let mut mesh_ranges: Vec<MeshRange> = Vec::new();
         // Wireframe não preenche; os outros três modos preenchem e diferem no
         // que amostram: cor do objeto, textura do material, ou material sob a
@@ -1545,19 +1710,32 @@ impl Renderer {
                     };
                     lv.push(LineVertex { pos: a, color: c });
                     lv.push(LineVertex { pos: b, color: c });
+                    line_widths.push(1.0);
                 }
-            } else if show_wireframe_overlay {
-                // Overlay de wireframe é opt-in: sem ele, Solid/Material/Rendered
-                // mostram faces limpas e só a camada de seleção destaca arestas.
-                for (a, b, _sel) in mesh.to_edges() {
-                    let c = [0.05, 0.05, 0.06];
-                    lv.push(LineVertex { pos: a, color: c });
-                    lv.push(LineVertex { pos: b, color: c });
+            } else {
+                // Aparência por modo (capítulo 05): DRAW lê forma (só arestas
+                // de feição), POLY lê topologia (todas, feição reforçada); o
+                // overlay de wireframe acrescenta as arestas finas em qualquer
+                // modo. Sem modo nem overlay, faces limpas.
+                for (a, b, _sel, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
+                    let show_thin = show_wireframe_overlay || self.edge_mode == EdgeMode::Topology;
+                    let show_feature = show_thin || self.edge_mode == EdgeMode::Features;
+                    let (visible, color, width) = if feature {
+                        (show_feature, FEATURE_EDGE_COLOR, 1.0)
+                    } else {
+                        (show_thin, THIN_EDGE_COLOR, THIN_EDGE_SCALE)
+                    };
+                    if visible {
+                        lv.push(LineVertex { pos: a, color });
+                        lv.push(LineVertex { pos: b, color });
+                        line_widths.push(width);
+                    }
                 }
             }
             if show_triangulation {
                 let diag_c = [0.3, 0.65, 0.95];
                 for (a, b) in mesh.triangulation_wireframe() {
+                    line_widths.push(THIN_EDGE_SCALE);
                     lv.push(LineVertex {
                         pos: a,
                         color: diag_c,
@@ -1592,14 +1770,15 @@ impl Renderer {
                 }),
             )
         };
-        self.line_count = lv.len() as u32;
-        self.line_vb = if lv.is_empty() {
+        let wide = wide_lines_from_pairs(&lv, &line_widths);
+        self.line_count = wide.len() as u32;
+        self.line_vb = if wide.is_empty() {
             None
         } else {
             Some(
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("simple3d-edge-vb"),
-                    contents: bytemuck::cast_slice(&lv),
+                    contents: bytemuck::cast_slice(&wide),
                     usage: wgpu::BufferUsages::VERTEX,
                 }),
             )
@@ -2234,12 +2413,12 @@ impl Renderer {
             pass.draw(0..self.selection_line_count, 0..1);
         }
 
-        // arestas
+        // arestas (faixas de largura constante)
         if let Some(vb) = &self.line_vb {
             if self.xray {
-                pass.set_pipeline(&self.line_xray_pipeline);
+                pass.set_pipeline(&self.wide_line_xray_pipeline);
             } else {
-                pass.set_pipeline(&self.line_pipeline);
+                pass.set_pipeline(&self.wide_line_pipeline);
             }
             pass.set_vertex_buffer(0, vb.slice(..));
             pass.draw(0..self.line_count, 0..1);
