@@ -9,6 +9,7 @@ use std::process::Command;
 
 mod bible;
 mod generator;
+mod icons_check;
 mod ui_guard;
 use generator::GeneratedCatalog;
 
@@ -28,6 +29,7 @@ fn main() -> Result<()> {
         "arch-check" => task_arch_check()?,
         "verify" => task_verify()?,
         "ui-check" => task_ui_check()?,
+        "icons-check" => icons_check::run(&root_dir())?,
         "ui-guard" => {
             let rest: Vec<String> = args.collect();
             let strict = rest.iter().any(|a| a == "--strict");

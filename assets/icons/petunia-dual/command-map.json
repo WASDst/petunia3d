@@ -51,6 +51,8 @@
   "model.scale_selection": "scale",
   "model.select_all": "select_all",
   "model.separate_selection": "separate",
+  "model.shade_flat": "shade_flat",
+  "model.shade_smooth": "shade_smooth",
   "model.slice": "slice",
   "model.spin": "spin",
   "model.subdivide": "subdivide",

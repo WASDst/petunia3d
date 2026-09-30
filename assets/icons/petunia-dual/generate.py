@@ -37,11 +37,11 @@ def solid(*bits: str) -> str:
 
 
 def ink(*bits: str) -> str:
-    return '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
+    return '<g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
 
 
 def detail(*bits: str) -> str:
-    return '<g fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
+    return '<g fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ''.join(bits) + '</g>'
 
 
 def add(key: str, group: str, label: str, outline: str, filled: str, status: str = 'current') -> None:
@@ -58,7 +58,7 @@ def badge(base: str, mark_o: str, mark_f: str, key: str, group: str, label: str,
     """A base silhouette occupies 17 px; an independently legible mark occupies the corner."""
     _, _, o, f, _ = ICONS[base]
     add(key, group, label,
-        f'<g transform="translate(1 1) scale(.78)">{o}</g>' + c(18, 18, 5, fill='#252735', stroke='currentColor', stroke_width='1.4') + ink(mark_o),
+        f'<g transform="translate(1 1) scale(.78)">{o}</g>' + c(18, 18, 5, fill='#252735', stroke='currentColor', stroke_width='1.75') + ink(mark_o),
         f'<g transform="translate(1 1) scale(.78)">{f}</g>' + c(18, 18, 5, fill='#252735') + solid(mark_f), status)
 
 

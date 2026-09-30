@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Outer boundary polygon -->
-  <rect x="3.5" y="3.5" width="17" height="17" rx="1.5" stroke="#A5AFBF" stroke-width="1.5"/>
-  <!-- Inset concentric polygon -->
-  <rect x="7.5" y="7.5" width="9" height="9" rx="1" fill="#CF7190" fill-opacity="0.22" stroke="#CF7190" stroke-width="1.8"/>
-  <!-- Corner miter guide lines -->
-  <path d="m3.5 3.5 4 4m13-4-4 4m4 13-4-4m-9 4 4-4" stroke="#E8EBF0" stroke-width="1.3"/>
-</svg>

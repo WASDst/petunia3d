@@ -6,6 +6,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
 ### Paint e viewport dividida (30/09/2026)
+- **Ícones**: traço padronizado em 1,75 px nos dois packs (antes 1,4 a 1,8), novo `cargo run -p xtask -- icons-check` (grade 24, só `currentColor`, larguras permitidas, paridade outline/filled) e remoção dos 26 SVGs legados não usados do shell Slint.
 - **Paint+UV unificado (primeiro passo)**: a pill UV saiu da barra de workspaces (MODEL | PAINT); "Preparar superfície" (Unwrap e Pack Islands) entra no Inspector do PAINT. O código do workspace UV ainda existe por trás de atalhos e será removido quando o wireframe UV do canvas cobrir a edição de ilhas.
 - **Pincel coerente**: `BRUSH_PX_PER_UNIT` é a única relação entre o slider "Size" e o pincel; o carimbo 3D, o clique na malha e o pincel do canvas 2D usam o mesmo diâmetro (o 2D estava preso em 4 px). Anel de preview na viewport PAINT com o mesmo diâmetro e cursor do sistema escondido nas ferramentas de pincel.
 - **Canvas 2D flutuante**: `PaintCanvasSurface` (raster, wireframe UV, grade, pan com botão do meio/direito, zoom por roda) no Inspector e em janela arrastável sincronizada com a viewport 3D.
