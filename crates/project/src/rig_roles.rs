@@ -427,14 +427,17 @@ fn role_from_name(name: &str) -> Option<RigRole> {
         "jaw" => return Some(RigRole::Jaw),
         _ => {}
     }
-    if b == "spine" {
-        return Some(RigRole::Spine(0));
-    }
-    if b == "spine1" {
-        return Some(RigRole::Spine(1));
+    if let Some(n) = numbered(b, "spine") {
+        return Some(RigRole::Spine(n)); // `spine`, `spine1` (Mixamo), `spine_2`
     }
     if let Some(n) = numbered(b, "tail") {
         return Some(RigRole::Tail(n));
+    }
+    if let Some(n) = numbered(b, "wing") {
+        return Some(RigRole::Wing {
+            limb: side_index(side),
+            segment: n,
+        });
     }
 
     // Multi-leg: `leg_{i}_coxa` / `leg_{i}_tibia`
@@ -538,6 +541,47 @@ mod tests {
         let limbs: Vec<u8> = legs.iter().map(|l| l.limb).collect();
         assert_eq!(limbs, (0..8).collect::<Vec<u8>>());
         assert!(legs.iter().all(|l| l.foot.is_none()));
+    }
+
+    #[test]
+    fn serpent_fish_and_bird_presets_have_their_roles() {
+        let snake = RigPreset::serpent(12, 1.0);
+        let m = RigRoleMap::infer(&snake);
+        assert_eq!(m.spine_chain().len(), 6);
+        assert_eq!(m.tail_chain().len(), 6);
+        assert_eq!(role(&snake, &m, "Root"), Some(RigRole::Root));
+        assert_eq!(role(&snake, &m, "Head"), Some(RigRole::Head));
+        assert_eq!(role(&snake, &m, "Spine_3"), Some(RigRole::Spine(3)));
+        assert!(m.legs().is_empty());
+        snake.validate().unwrap();
+
+        let fish = RigPreset::fish(1.0);
+        let m = RigRoleMap::infer(&fish);
+        assert_eq!(m.spine_chain().len() + m.tail_chain().len(), 9);
+        assert_eq!(role(&fish, &m, "Fin.L"), None, "nadadeiras sem papel");
+
+        let bird = RigPreset::bird(1.0);
+        bird.validate().unwrap();
+        let m = RigRoleMap::infer(&bird);
+        assert_eq!(m.legs().len(), 2);
+        assert!(m.legs().iter().all(|l| l.foot.is_some()));
+        assert_eq!(m.tail_chain().len(), 2);
+        assert_eq!(role(&bird, &m, "Hips"), Some(RigRole::Hips));
+        assert_eq!(role(&bird, &m, "Chest"), Some(RigRole::Chest));
+        assert_eq!(
+            role(&bird, &m, "Wing_2.R"),
+            Some(RigRole::Wing {
+                limb: 1,
+                segment: 2
+            })
+        );
+        assert_eq!(
+            role(&bird, &m, "Wing_0.L"),
+            Some(RigRole::Wing {
+                limb: 0,
+                segment: 0
+            })
+        );
     }
 
     #[test]

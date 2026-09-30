@@ -1,6 +1,7 @@
 //! Petunia3D core neutro: tipos compartilhados, eventos e contrato de módulo.
 //! Features conhecem estas abstrações — nunca umas às outras (§22).
 
+pub mod animate_session;
 pub mod brush;
 pub mod camera;
 pub mod command;
@@ -22,6 +23,7 @@ pub mod proportional;
 pub mod queries;
 pub mod recent_projects;
 pub mod render_revision;
+pub mod rig_commands;
 pub mod schema_contracts;
 pub mod selection;
 pub mod snap;
@@ -30,6 +32,10 @@ pub mod transform_projection;
 pub mod viewport;
 pub mod viewport_query;
 
+pub use animate_session::{
+    AnimatePreview, AnimateSession, MotionCatalogEntry, MotionUnavailable, PosePreview,
+    PreviewBone, motion_catalog,
+};
 pub use cutting_session::CutSession;
 pub use diagnostics::{DiagnosticCategory, DiagnosticEvent, log_event};
 pub use docs::DocsTopic;
@@ -82,6 +88,13 @@ pub use command::{
     UpdateSweepGeneratorCmd, UvPackIslandsCmd, UvProjectFromViewCmd, WeldCmd,
 };
 pub use project_service::{ProjectService, ProjectServiceError, sanitize_filename};
+pub use rig_commands::{
+    AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd,
+    AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearRigRoleCmd, DeleteBoneKeyCmd, DuplicateMotionCmd,
+    InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd, RemoveMotionCmd, RemoveSkeletonCmd,
+    RigPresetKind, SetBoneKeyCmd, SetMotionParamCmd, SetMotionStyleCmd, UpdateIkChainCmd,
+    UpdateMotionCmd,
+};
 
 pub use brush::{
     BrushLock, BrushPreviewKind, BrushPreviewStyle, BrushProjectionMode, BrushSettings, BrushType,

@@ -9,6 +9,7 @@
 //! joint; keyframes são valores locais absolutos. Os metadados do Petunia
 //! (`bone_id`, `tail`, fps, loop) viajam em `extras.petunia` para round-trip.
 
+use crate::animation::AnimationAsset;
 use crate::export::ExportError;
 use crate::rig::Skeleton;
 use crate::{Asset, Project};
@@ -167,6 +168,21 @@ pub fn skin_export_note(project: &Project, asset: &Asset) -> Option<String> {
     skin_problem(project, asset, verts).err()
 }
 
+/// Avisos de movimentos procedurais que não puderam ser baked no export.
+pub fn motion_export_notes(project: &Project, skeleton_id: Uuid) -> Vec<String> {
+    project
+        .motions
+        .iter()
+        .filter(|m| m.skeleton_id == skeleton_id)
+        .filter_map(|m| {
+            project
+                .bake_motion(m.id, &crate::motion::BakeOptions::default())
+                .err()
+                .map(|e| format!("movimento '{}' não exportado: {e}", m.name))
+        })
+        .collect()
+}
+
 /// Nós de joint, skins e animações prontos para inserir no JSON do GLB.
 #[derive(Default)]
 pub(crate) struct RigDoc {
@@ -299,7 +315,20 @@ fn build_animations(
     // com vários exige ID **e** nome iguais.
     let strict = skeletons.len() > 1;
 
-    for anim in &project.animations {
+    // Movimentos procedurais saem sempre baked (glTF não tem geradores).
+    let baked: Vec<AnimationAsset> = project
+        .motions
+        .iter()
+        .filter(|m| skeletons.iter().any(|s| s.id == m.skeleton_id))
+        .filter_map(|m| {
+            project
+                .bake_motion(m.id, &crate::motion::BakeOptions::default())
+                .ok()
+                .map(|r| AnimationAsset::new(m.name.clone(), r.clip))
+        })
+        .collect();
+
+    for anim in project.animations.iter().chain(baked.iter()) {
         let clip = &anim.clip;
         let mut samplers: Vec<Value> = Vec::new();
         let mut channels: Vec<Value> = Vec::new();
@@ -412,7 +441,7 @@ fn all_step(mut it: impl Iterator<Item = crate::animation::Interpolation>) -> bo
 // Importação
 // ---------------------------------------------------------------------------
 
-use crate::animation::{AnimationAsset, AnimationClip, Interpolation, Keyframe};
+use crate::animation::{AnimationClip, Interpolation, Keyframe};
 use crate::import_gltf::GltfImportError;
 use crate::rig::{SkinData, VertexSkinWeight};
 use glam::{Mat4, Quat, Vec3};

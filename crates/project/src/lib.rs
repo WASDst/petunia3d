@@ -75,6 +75,8 @@ pub mod import_obj;
 pub mod io_atomic;
 pub mod material;
 pub mod model_library;
+pub mod motion;
+mod motion_gen;
 pub mod package;
 pub mod paint_layers;
 pub mod palette;
@@ -93,12 +95,19 @@ pub use animation::{
 };
 pub use autosave::{AutosaveConfig, AutosaveService, RecoveryInfo, SessionLockInfo};
 pub use export::{ExportError, export_gltf, export_obj};
-pub use ik::{IkChain, IkError, IkOutcome, IkSolver, solve_chain, solve_fabrik, solve_two_bone};
+pub use ik::{
+    IkChain, IkError, IkOutcome, IkSolver, chain_end_position, solve_chain, solve_fabrik,
+    solve_two_bone,
+};
 pub use import_gltf::{GlbMeshes, GltfImportError, GltfSummary, import_glb_bytes, parse_gltf_json};
 pub use import_obj::{ObjImportError, import_obj_bytes};
 pub use io_atomic::{AtomicIoError, TempScope, atomic_write};
 pub use material::{AlphaMode, Material, ShaderProfile, TextureChannel};
 pub use model_library::{AssetSummary, ModelLibraryQuery, ModelLibraryService, ModelLibrarySort};
+pub use motion::{
+    BakeOptions, BakeResult, BakeTolerance, MotionError, MotionEvaluator, MotionGenerator,
+    MotionParam, MotionRecipe, MotionStyle, ParamSpec, RootMode, bake_motion,
+};
 pub use package::{
     Attachment, PACKAGE_VERSION, PackageError, PackageManifest, open_package, open_package_bytes,
     save_package, save_package_bytes,
@@ -900,6 +909,9 @@ pub struct Project {
     /// Cadeias de IK (P3D-169). Append-only, como `rig_roles`.
     #[serde(default)]
     pub ik_chains: Vec<IkChain>,
+    /// Receitas de movimento procedural (P3D-170). Append-only.
+    #[serde(default)]
+    pub motions: Vec<MotionRecipe>,
 }
 
 impl Project {
@@ -950,6 +962,7 @@ impl Default for Project {
             smooth_shaded_assets: Vec::new(),
             rig_roles: Vec::new(),
             ik_chains: Vec::new(),
+            motions: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1409,6 +1422,7 @@ impl Project {
             smooth_shaded_assets: Vec::new(),
             rig_roles: Vec::new(),
             ik_chains: Vec::new(),
+            motions: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1458,6 +1472,37 @@ impl Project {
             self.rig_roles.push(roles);
         }
         self.skeletons.push(skeleton);
+    }
+
+    pub fn get_motion(&self, id: Uuid) -> Option<&MotionRecipe> {
+        self.motions.iter().find(|m| m.id == id)
+    }
+
+    /// Avaliador do movimento com os papéis do esqueleto (um mapa vazio faz o
+    /// contrato de rig falhar com erro legível).
+    pub fn motion_evaluator(&self, id: Uuid) -> Result<MotionEvaluator, MotionError> {
+        let recipe = self.get_motion(id).ok_or(MotionError::SkeletonMismatch)?;
+        let skeleton = self
+            .get_skeleton(recipe.skeleton_id)
+            .ok_or(MotionError::SkeletonMismatch)?;
+        let roles = self
+            .rig_roles_of(skeleton.id)
+            .cloned()
+            .unwrap_or_else(|| RigRoleMap::new(skeleton.id));
+        MotionEvaluator::new(recipe, skeleton, &roles)
+    }
+
+    /// Apply Now: converte o movimento em um clipe editável (não altera o projeto).
+    pub fn bake_motion(&self, id: Uuid, options: &BakeOptions) -> Result<BakeResult, MotionError> {
+        let recipe = self.get_motion(id).ok_or(MotionError::SkeletonMismatch)?;
+        let skeleton = self
+            .get_skeleton(recipe.skeleton_id)
+            .ok_or(MotionError::SkeletonMismatch)?;
+        let roles = self
+            .rig_roles_of(skeleton.id)
+            .cloned()
+            .unwrap_or_else(|| RigRoleMap::new(skeleton.id));
+        bake_motion(recipe, skeleton, &roles, options)
     }
 
     /// Mapa de papéis do esqueleto, se houver algum papel atribuído.
@@ -1529,6 +1574,7 @@ impl Project {
         self.skeletons.retain(|s| s.id != id);
         self.rig_roles.retain(|m| m.skeleton_id != id);
         self.ik_chains.retain(|c| c.skeleton_id != id);
+        self.motions.retain(|m| m.skeleton_id != id);
         for a in &mut self.assets {
             if a.skeleton_id == Some(id) {
                 a.skeleton_id = None;
@@ -1971,6 +2017,11 @@ impl Project {
             .retain(|id| asset_ids.contains(id));
         self.smooth_shaded_assets.sort_unstable();
         self.smooth_shaded_assets.dedup();
+        // Movimentos: só os de esqueletos existentes, com ids únicos.
+        let mut motion_ids = std::collections::HashSet::new();
+        let skeletons = &self.skeletons;
+        self.motions
+            .retain(|m| skeletons.iter().any(|s| s.id == m.skeleton_id) && motion_ids.insert(m.id));
         // Cadeias de IK: só as válidas (esqueleto existente, ossos contíguos).
         let skeletons = &self.skeletons;
         self.ik_chains.retain(|c| {

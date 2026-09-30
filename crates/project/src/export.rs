@@ -450,11 +450,15 @@ pub fn export_report(project: &Project, indices: &[usize], include_gltf: bool) -
             )),
             None => lines.push(format!("índice {i} inválido")),
         }
-        if include_gltf
-            && let Some(a) = project.assets.get(i)
-            && let Some(note) = crate::gltf_rig::skin_export_note(project, a)
-        {
-            lines.push(format!("aviso: {note}"));
+        if include_gltf && let Some(a) = project.assets.get(i) {
+            if let Some(note) = crate::gltf_rig::skin_export_note(project, a) {
+                lines.push(format!("aviso: {note}"));
+            }
+            if let Some(sid) = a.skeleton_id {
+                for note in crate::gltf_rig::motion_export_notes(project, sid) {
+                    lines.push(format!("aviso: {note}"));
+                }
+            }
         }
     }
     lines

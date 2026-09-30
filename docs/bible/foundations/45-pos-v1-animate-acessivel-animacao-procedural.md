@@ -35,18 +35,19 @@ Auditoria estática do código em `main` (`e806225`); nada foi compilado para es
 | --- | --- | :---: | --- |
 | AN-01 | Skeleton & Rig Core (P3D-135) | `COMPLIANT` (domínio) | `crates/project/src/rig.rs`: hierarquia sem ciclos, bind pose, pesos normalizados (4 influências), Linear Blend Skinning |
 | AN-02 | Clipes e keyframes (P3D-067) | `COMPLIANT` (domínio) | `animation.rs`: trilhas por osso, lerp/slerp, `sample_pose`, `sample_skinning_matrices`, loop e FPS |
-| AN-03 | Rig Presets (P3D-136) | `PARTIALLY_COMPLIANT` | `RigPreset::{humanoid, quadruped, multi_leg}`; faltam **serpente, peixe e pássaro** |
+| AN-03 | Rig Presets (P3D-136) | `PARTIALLY_COMPLIANT` → `COMPLIANT` (F1.1, 2026-09-30) | `RigPreset::{humanoid, quadruped, multi_leg, serpent, fish, bird}`; todos com papéis inferidos (`Spine_n`, `Tail_n`, `Wing_n.L/R`, pernas) e testados |
 | AN-04 | Auto-Rig (P3D-137) | `RUDIMENTARY` | `auto_fit_humanoid` por bounding box e `compute_auto_skin_weights` por distância; sem landmarks, sem correção guiada, só humanoide |
 | AN-05 | Retargeting (P3D-138) | `PARTIALLY_COMPLIANT` | `RetargetProfile::mixamo_standard`; sem importação de clipes externos |
 | AN-06 | Animation Asset Library (P3D-139) | `RUDIMENTARY` | `AnimationLibrary` tem 2 clipes canônicos; o "walk" anima apenas 2 ossos com 3 keys (é uma demo) |
 | AN-07 | Animation Workspace (P3D-066) | `MISSING` no produto | UI existe só no egui legado atrás da feature `animation-workspace` (`crates/ui/src/modules_ui/animation_ui.rs`); `Workspace::Animate` é feature-gated no core; o Slint não tem referência a Bone/Skeleton |
 | AN-08 | IK e constraints | `MISSING` → `PARTIALLY_COMPLIANT` (F0.5, 2026-09-30) | `petunia_project::ik`: `solve_two_bone` (analítico, pole, soft IK), `solve_fabrik`, look-at e `solve_chain` sobre a pose (só rotações locais dos ossos da cadeia; preserva comprimentos e torção); `IkChain` como dado em `Project::ik_chains` (append-only, validado e podado). Determinístico e testado (alcance, clamps, pole, continuidade do soft IK, pesos). Pendente: comandos (F0.6), limites angulares no FABRIK, foot planting por fase de contato (F1) |
-| AN-09 | Animação procedural | `MISSING` | **não constava do roadmap**; "procedural" no caderno referia-se só a geometria (P3D-161/168) |
+| AN-09 | Animação procedural | `MISSING` → `PARTIALLY_COMPLIANT` (F1, 2026-09-30) | `petunia_project::{motion, motion_gen}`: `MotionRecipe` (dado serializável em `Project::motions`), `pose(t)` puro e determinístico, geradores **BipedCycle** (walk/run, pés plantados por IK, braços contralaterais), **Gait** de N pernas (alternado, sequência lateral, onda; tetrapod para aranhas; ondulação de coluna e cauda), **Serpentine** (serpente, peixe, cauda) e **IdleBreath**; controles universais, Styles, Stepped, In Place/Root Motion; **Apply Now** com redução de chaves; export glTF sempre baked. Pendentes: Wing Flap, Reaction (Hit/Die), Action (Attack/Eat/Wave/Jump), Look/Aim, Wiggle (P3D-173) e UI |
 | AN-10 | Secondary motion (spring/wiggle) | `MISSING` | — |
 | AN-11 | Ghosts e trajetórias | `MISSING` | — |
 | AN-12 | Referência em sequência de imagens | `MISSING` | `ReferenceImage` (P3D-013) é estática e sem tempo |
 | AN-13 | glTF com skin e animação | `MISSING` → `PARTIALLY_COMPLIANT` (F0.2/F0.3, 2026-09-30) | Export (`gltf_rig.rs`): joints com TRS de repouso, `skin` + `inverseBindMatrices`, `JOINTS_0`/`WEIGHTS_0`, `animations` (translation/rotation/scale, LINEAR/STEP) e `extras.petunia` (bone_id, tail, fps, loop). Import (`import_rig`): skeleton a partir da IBM, rotações de repouso, pesos (u8/u16), clipes (CUBICSPLINE convertido, com aviso) e `Project::add_imported_rig`. Round-trip e GLB externo testados. Pendente: UV/normais no import de malha (`import_glb_bytes` lê só posições), skins com mais de 4 influências, escala de bind ≠ 1, ancestral com transformação (avisos honestos) e UI de importação |
-| AN-14 | Undo/transações de rig e clipes | não auditado | depende do dono único de transação (D-02 da matriz de 2026-09-29) |
+| AN-14 | Undo/transações de rig e clipes | não auditado → `PARTIALLY_COMPLIANT` (F0.6, 2026-09-30) | `petunia_core::rig_commands`: `AddRigPresetCmd`, `AutoRigActiveAssetCmd`, `RemoveSkeletonCmd`, `AssignRigRoleCmd`, `ClearRigRoleCmd`, `InferRigRolesCmd`, `AddIkChainCmd`, `UpdateIkChainCmd`, `RemoveIkChainCmd`, `AddAnimationCmd`, `RemoveAnimationCmd`, `SetBoneKeyCmd`, `DeleteBoneKeyCmd` — todos via dispatcher (checkpoint e rollback do owner), `NoChange` sem histórico, `do → undo → redo` por hash e sem tocar revisões de render. Ainda **não registrados em `canonical()`** (palette/keymap/MCP): dependem da decisão D-21 do catálogo de comandos parametrizados. Edição de ossos (mover/criar) continua fora de comando (egui legado) |
+
 | AN-15 | Morph Targets (P3D-162) | `MISSING` | — |
 | AN-16 | Bind pose e repouso do Rig Core | `BROKEN` → `COMPLIANT` (F0, 2026-09-30) | Achado ao preparar o glTF: `head` é absoluto, mas o bind compunha `pai × translate(head)` (acumulava a hierarquia) e `local_transform` nascia identidade; um osso fora da origem não voltava à identidade em repouso e trilhas só de rotação soltavam o osso do pai. Corrigido: bind = `translate(head)`, offset local de repouso = `head − head_do_pai`, canais sem keyframes herdam o repouso (`sample_transform_over`); testes de repouso/reparent/remoção |
 | AN-17 | Pesos de skin: ID de osso × índice | `PARTIALLY_COMPLIANT` (aberto) | O Auto-Skin grava **IDs** de osso em `VertexSkinWeight.bones`, mas `SkinData::deform_vertex`/`validate` os tratam como **índice** em `Skeleton.bones`; coincidem enquanto os IDs são densos (nenhuma remoção de osso). O export glTF resolve ID → índice (`bone_index`). Correção do consumidor exige política de `remove_bone` com pesos |
@@ -171,6 +172,15 @@ A ordem respeita a regra de reconciliação (AGENTS §2): preservar o `COMPLIANT
 | **F5** Wiggle e biblioteca | Secondary motion e ragdoll simples (P3D-173); Animation Asset Library com UX (P3D-139) | F4 | Wiggle determinístico e scrubável |
 
 Cada fase encerra com os gates do AGENTS §4 e um registro de evidência; nenhuma fase é dada como concluída por presença de botão ou callback.
+
+# Estado da fase F1 (2026-09-30)
+
+A fase F1 está implementada **no domínio e nos comandos**, sem UI:
+
+- Geradores entregues: `BipedCycle`, `Gait` (N pernas), `Serpentine`, `IdleBreath`. Ainda não existem `Wing Flap`, `Reaction` (Hit/Die), `Action` (Attack/Eat/Wave/Jump) e `Look/Aim` — o catálogo "alvo" do capítulo continua sendo alvo.
+- Comandos: `AddMotionCmd`, `SetMotionParamCmd`, `SetMotionStyleCmd`, `UpdateMotionCmd`, `DuplicateMotionCmd`, `RemoveMotionCmd` e `ApplyMotionNowCmd` (`Keep Live` ou converter), todos transacionais. O "teste do iniciante" existe como teste de comandos (Auto-Rig → Motion → glTF), **sem** a medição com artistas que o capítulo exige.
+- Convenção de eixos: frente e lateral são derivadas do rig (Hips→Head, direção dos pés, eixo da raiz), sem convenção nova; o cap. 10 segue "a congelar".
+- Limitações conhecidas: a avaliação clona cadeias de IK por frame (sem orçamento de desempenho medido); pesos/parâmetros padrão são a recomendação inicial e **não passaram por avaliação visual**; nenhum gerador trata terreno (P3D-128).
 
 # Não objetivos
 
