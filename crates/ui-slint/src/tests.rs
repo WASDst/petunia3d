@@ -2173,6 +2173,552 @@ fn profile_tool_draws_closes_and_generates_transactionally() {
     assert_eq!(bridge.state.project.undo.depth(), (6, 0));
 }
 
+fn draw_two_profile_points(snap: bool, grid_spacing: f32) -> [[f64; 3]; 2] {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.snap_enabled = snap;
+    bridge.state.session.snap_settings.grid_spacing = grid_spacing;
+    // Vista Front: o plano automático (mais paralelo à vista) é o XY, e a
+    // horizontal da tela é o eixo `right` do plano. A câmera não se move.
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Front);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    // O segundo ponto fica ~4 px abaixo da horizontal do primeiro.
+    for point in [[0.35, 0.35], [0.65, 0.355]] {
+        bridge.select_viewport_ext(point[0], point[1], false, false);
+        bridge.profile_pointer_up();
+    }
+    let spline = active_profile_spline(&bridge);
+    [spline.points[0].position, spline.points[1].position]
+}
+
+#[test]
+fn profile_snap_infers_workplane_axis_from_last_point() {
+    // Sem snap, o tremor de 4 px entra no desenho.
+    let [a, b] = draw_two_profile_points(false, 1.0);
+    assert!((a[1] - b[1]).abs() > 1.0e-3);
+
+    // Com snap (grade fina, fora de alcance), a guia paralela ao eixo do
+    // plano a partir do último ponto vence: a linha sai exatamente reta.
+    let [a, b] = draw_two_profile_points(true, 1.0e-3);
+    assert!((a[1] - b[1]).abs() < 1.0e-5, "{a:?} {b:?}");
+    assert!((a[0] - b[0]).abs() > 0.1);
+}
+
+#[test]
+fn profile_snap_falls_back_to_workplane_grid() {
+    // 1º ponto na grade; o 2º segue a guia horizontal andando no passo da grade.
+    let [a, b] = draw_two_profile_points(true, 0.5);
+    assert!((a[1] - b[1]).abs() < 1.0e-5);
+    for value in [a[0], a[1], b[0]] {
+        assert!(
+            ((value / 0.5).round() * 0.5 - value).abs() < 1.0e-4,
+            "{value} fora da grade"
+        );
+    }
+}
+
+/// Cena padrão (cubo 2×2×2 na origem) vista de frente.
+fn front_view_bridge_with_cube() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(bridge.state.project.active_mesh().is_some());
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Front);
+    bridge.state.session.camera.target = glam::Vec3::ZERO;
+    bridge
+}
+
+fn camera_pose(bridge: &SlintUiBridge<PlaceholderViewport>) -> (f32, f32, bool) {
+    let camera = &bridge.state.session.camera;
+    (
+        camera.yaw,
+        camera.pitch,
+        camera.proj == petunia_core::Projection::Perspective,
+    )
+}
+
+#[test]
+fn draw_never_moves_the_camera_on_its_own() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let before = camera_pose(&bridge);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert_eq!(camera_pose(&bridge), before);
+    bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+    bridge.apply(UiIntent::ProfileSetWorkplaneView);
+    assert_eq!(camera_pose(&bridge), before);
+
+    // Só o comando explícito "Olhar para o plano" alinha a câmera.
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    bridge.apply(UiIntent::ProfileLookAtPlane);
+    assert_ne!(camera_pose(&bridge), before);
+    assert!(
+        !camera_pose(&bridge).2,
+        "olhar para o plano usa ortográfica"
+    );
+}
+
+#[test]
+fn auto_workplane_follows_the_view_when_there_is_no_face() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Top);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert!(!bridge.state.profile.workplane_locked);
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Right);
+    bridge.select_viewport_ext(0.4, 0.4, false, false);
+    bridge.profile_pointer_up();
+    // O 1º clique reavalia a vista: de lado, o plano vertical YZ (normal ±X).
+    let normal = glam::Vec3::from(bridge.state.profile.normal);
+    assert!(normal.x.abs() > 0.99, "{normal:?}");
+    assert_eq!(bridge.view_model().profile_workplane, "View");
+}
+
+#[test]
+fn auto_workplane_uses_the_face_under_the_cursor_on_the_first_click() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+
+    // Pré-seleção: a face frontal que viraria o plano aparece no hover, com rótulo.
+    assert!(bridge.hover_component(0.5, 0.5));
+    assert!(matches!(
+        bridge.state.session.tools.hover,
+        petunia_core::HoverTarget::Face(_)
+    ));
+    let vm = bridge.view_model();
+    assert!(vm.snap_marker_visible);
+    assert_eq!(
+        vm.snap_marker_label,
+        bridge
+            .state
+            .t_id(petunia_config::text_id::SNAP_KIND_ON_FACE)
+    );
+
+    bridge.select_viewport_ext(0.5, 0.5, false, false);
+    bridge.profile_pointer_up();
+    assert_eq!(bridge.view_model().profile_workplane, "Face");
+    let normal = glam::Vec3::from(bridge.state.profile.normal);
+    assert!(
+        normal.z > 0.99,
+        "face frontal voltada para a câmera: {normal:?}"
+    );
+    let origin = glam::Vec3::from(bridge.state.profile.origin);
+    let spline = active_profile_spline(&bridge);
+    let point = spline.points[0].position;
+    let world = origin
+        + glam::Vec3::from(bridge.state.profile.right) * point[0] as f32
+        + glam::Vec3::from(bridge.state.profile.up) * point[1] as f32;
+    // O ponto fica sobre a face (mesmo z da face), não no chão.
+    assert!((world.z - origin.z).abs() < 1.0e-4);
+
+    // Com um perfil em curso, o plano não muda mais a cada clique.
+    bridge.select_viewport_ext(0.55, 0.45, false, false);
+    bridge.profile_pointer_up();
+    assert!((glam::Vec3::from(bridge.state.profile.origin) - origin).length() < 1.0e-6);
+}
+
+#[test]
+fn workplane_ground_preference_is_a_setting() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    assert!(!vm.workplane_prefer_ground);
+    assert!(!vm.label_workplane_prefer_ground.is_empty());
+    assert!(!vm.label_workplane_prefer_ground_hint.is_empty());
+
+    bridge
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Persp);
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert_eq!(bridge.view_model().profile_workplane, "View");
+
+    assert!(bridge.set_workplane_prefer_ground(true));
+    assert!(!bridge.set_workplane_prefer_ground(true), "sem mudança");
+    assert!(bridge.preferences.workplane_prefer_ground);
+    bridge.apply(UiIntent::ProfileSetWorkplaneAuto);
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+    assert!(bridge.view_model().workplane_prefer_ground);
+
+    // Preferências carregadas do disco chegam ao estado do desenho.
+    let mut restored = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let preferences = petunia_config::UserPreferences {
+        workplane_prefer_ground: true,
+        ..Default::default()
+    };
+    restored.restore_section_layouts(&preferences);
+    assert!(restored.state.profile.workplane_prefer_ground);
+}
+
+/// Desenha um quadrado fechado na face frontal do cubo padrão (vista Front)
+/// e depois inclina a câmera, para a normal da face ter componente na tela.
+fn bridge_with_square_on_front_face() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    for point in [[0.46, 0.46], [0.54, 0.46], [0.54, 0.54], [0.46, 0.54]] {
+        bridge.select_viewport_ext(point[0], point[1], false, false);
+        bridge.profile_pointer_up();
+    }
+    assert!(bridge.close_profile());
+    assert_eq!(bridge.view_model().profile_workplane, "Face");
+    // Gira em torno do centro da face, que continua no centro da tela.
+    bridge.state.session.camera.target = glam::Vec3::new(0.0, 0.0, 1.0);
+    bridge.state.session.camera.yaw = 0.35;
+    bridge.state.session.camera.pitch = 0.25;
+    bridge
+}
+
+#[test]
+fn draw_tool_highlights_a_closed_region_on_hover() {
+    let mut bridge = bridge_with_square_on_front_face();
+    // Perfil fechado: o hover sobre a região mostra a tinta da região.
+    bridge.hover_component(0.5, 0.5);
+    assert!(bridge.region_hover.is_some());
+    assert!(!bridge.view_model().region_hover_commands.is_empty());
+    bridge.hover_component(0.9, 0.9);
+    assert!(bridge.view_model().region_hover_commands.is_empty());
+}
+
+#[test]
+fn push_pull_drag_on_a_region_imprints_and_extrudes_in_one_undo() {
+    let mut bridge = bridge_with_square_on_front_face();
+    let faces_before = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth_before = bridge.state.project.undo.depth().0;
+    bridge.activate_parametric_tool(ToolModalKind::PushPull);
+
+    let [width, height] = bridge.viewport_size;
+    let center = [width * 0.5, height * 0.5];
+    assert!(bridge.hover_component(0.5, 0.5));
+    assert!(!bridge.view_model().region_hover_commands.is_empty());
+
+    bridge.tool_pointer(0, center[0], center[1], false, false);
+    bridge.tool_pointer(1, center[0] + 30.0, center[1] - 60.0, false, false);
+    assert!(
+        bridge.state.session.tools.modal.is_some(),
+        "gesto de região aberto"
+    );
+    bridge.tool_pointer(2, center[0] + 30.0, center[1] - 60.0, false, false);
+    assert!(bridge.state.session.tools.modal.is_none());
+
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    // Anel (2) + face interna + 4 paredes.
+    assert_eq!(mesh.faces.len(), faces_before + 6);
+    assert_eq!(bridge.state.project.undo.depth().0, depth_before + 1);
+    assert!(
+        bridge.last_operation.is_some(),
+        "ajustável na Última operação"
+    );
+    assert_eq!(bridge.state.session.tools.active_tool, "push_pull");
+
+    assert!(bridge.state.undo());
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces_before
+    );
+}
+
+#[test]
+fn escape_during_a_region_push_restores_the_face() {
+    let mut bridge = bridge_with_square_on_front_face();
+    let before = bridge.state.project.active_mesh().unwrap().clone();
+    bridge.activate_parametric_tool(ToolModalKind::PushPull);
+    let [width, height] = bridge.viewport_size;
+    bridge.tool_pointer(0, width * 0.5, height * 0.5, false, false);
+    bridge.tool_pointer(1, width * 0.5 + 20.0, height * 0.5 - 50.0, false, false);
+    assert!(bridge.state.session.tools.modal.is_some());
+    assert!(bridge.route_shortcut("Escape", false, false, false));
+    let after = bridge.state.project.active_mesh().unwrap();
+    assert_eq!(after.faces.len(), before.faces.len());
+    assert_eq!(after.verts.len(), before.verts.len());
+}
+
+#[test]
+fn draw_and_poly_share_the_modeling_workspace() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    assert_eq!(vm.modeling_mode, "POLY", "padrão preserva o fluxo atual");
+    assert!(!vm.label_workspace_draw_title.is_empty());
+    assert!(!vm.label_workspace_poly_description.is_empty());
+
+    // DRAW a partir do PAINT volta ao workspace de modelagem.
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.workspace, Workspace::Model);
+    assert_eq!(bridge.view_model().modeling_mode, "DRAW");
+
+    // Mesmo documento e seleção: nada é convertido ao trocar de modo.
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let selection = bridge.state.session.selection.clone();
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces
+    );
+    assert_eq!(bridge.state.session.selection, selection);
+}
+
+#[test]
+fn switching_mode_drops_a_tool_the_new_rail_does_not_offer() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.activate_parametric_tool(ToolModalKind::Extrude);
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.session.tools.active_tool, "draw_profile");
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+
+    // Push/Pull e transformações existem nos dois trilhos.
+    bridge.activate_parametric_tool(ToolModalKind::PushPull);
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    assert_eq!(bridge.state.session.tools.active_tool, "push_pull");
+    assert!(crate::ModelingMode::Poly.offers_tool("extrude"));
+    assert!(!crate::ModelingMode::Draw.offers_tool("loop_cut"));
+}
+
+fn pixel_of(bridge: &SlintUiBridge<PlaceholderViewport>, point: glam::Vec3) -> [f32; 2] {
+    petunia_core::transform_projection::project_pixel(
+        &bridge.state.session.camera,
+        glam::Vec2::from_array(bridge.viewport_size),
+        point,
+    )
+    .expect("ponto visível")
+    .to_array()
+}
+
+fn pen_click(bridge: &mut SlintUiBridge<PlaceholderViewport>, at: [f32; 2], ctrl: bool) {
+    bridge.tool_pointer(0, at[0], at[1], false, ctrl);
+    bridge.tool_pointer(2, at[0], at[1], false, ctrl);
+}
+
+fn pen_drag(
+    bridge: &mut SlintUiBridge<PlaceholderViewport>,
+    from: [f32; 2],
+    to: [f32; 2],
+    ctrl: bool,
+) {
+    bridge.tool_pointer(0, from[0], from[1], false, ctrl);
+    bridge.tool_pointer(1, to[0], to[1], false, ctrl);
+    bridge.tool_pointer(2, to[0], to[1], false, ctrl);
+}
+
+/// Cena padrão de frente com o Poly Pen ativo.
+fn poly_pen_bridge() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    bridge.apply(UiIntent::SetActiveTool("poly_pen".into()));
+    assert!(bridge.tool_grammar_active());
+    bridge
+}
+
+/// Desenha um triângulo solto à direita do cubo; devolve seus 3 cantos.
+fn draw_triangle(bridge: &mut SlintUiBridge<PlaceholderViewport>) -> [glam::Vec3; 3] {
+    let corners = [
+        glam::Vec3::new(2.0, -0.5, 0.0),
+        glam::Vec3::new(3.0, -0.5, 0.0),
+        glam::Vec3::new(2.5, 0.5, 0.0),
+    ];
+    for corner in corners {
+        let at = pixel_of(bridge, corner);
+        pen_click(bridge, at, false);
+    }
+    assert_eq!(bridge.poly_pen_points.len(), 3);
+    assert!(!bridge.view_model().poly_pen_preview_commands.is_empty());
+    assert!(bridge.route_shortcut("Enter", false, false, false));
+    assert!(bridge.poly_pen_points.is_empty());
+    corners
+}
+
+#[test]
+fn poly_pen_draws_a_polygon_as_one_undo() {
+    let mut bridge = poly_pen_bridge();
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth = bridge.state.project.undo.depth().0;
+    draw_triangle(&mut bridge);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert_eq!(mesh.faces.len(), faces + 1);
+    let face = mesh.faces.len() - 1;
+    assert!(mesh.face_normal(face).z > 0.9, "voltado para a câmera");
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+    assert_eq!(
+        bridge.state.session.tools.active_tool, "poly_pen",
+        "ferramenta persistente"
+    );
+}
+
+#[test]
+fn poly_pen_collecting_follows_the_escape_and_backspace_ladder() {
+    let mut bridge = poly_pen_bridge();
+    for x in [2.0, 3.0] {
+        let at = pixel_of(&bridge, glam::Vec3::new(x, 0.0, 0.0));
+        pen_click(&mut bridge, at, false);
+    }
+    assert!(bridge.route_shortcut("Backspace", false, false, false));
+    assert_eq!(bridge.poly_pen_points.len(), 1);
+    assert!(bridge.route_shortcut("Escape", false, false, false));
+    assert!(bridge.poly_pen_points.is_empty());
+    assert_eq!(
+        bridge.state.session.tools.active_tool, "poly_pen",
+        "1º Esc só limpa"
+    );
+    // Clicar no primeiro ponto fecha o polígono.
+    let corners = [
+        glam::Vec3::new(2.0, -0.5, 0.0),
+        glam::Vec3::new(3.0, -0.5, 0.0),
+        glam::Vec3::new(2.5, 0.5, 0.0),
+    ];
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    for corner in corners {
+        let at = pixel_of(&bridge, corner);
+        pen_click(&mut bridge, at, false);
+    }
+    let first = pixel_of(&bridge, corners[0]);
+    pen_click(&mut bridge, first, false);
+    assert!(bridge.poly_pen_points.is_empty());
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces + 1
+    );
+}
+
+#[test]
+fn poly_pen_drag_moves_the_point_under_the_cursor() {
+    let mut bridge = poly_pen_bridge();
+    let corner = glam::Vec3::new(1.0, 1.0, 1.0);
+    let depth = bridge.state.project.undo.depth().0;
+    let from = pixel_of(&bridge, corner);
+    pen_drag(&mut bridge, from, [from[0] + 40.0, from[1]], false);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert!(
+        !mesh
+            .verts
+            .iter()
+            .any(|v| (v.vec() - corner).length() < 1e-4),
+        "o canto saiu do lugar"
+    );
+    assert!(
+        mesh.verts
+            .iter()
+            .any(|v| v.pos[0] > 1.1 && (v.pos[1] - 1.0).abs() < 1e-3)
+    );
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+}
+
+#[test]
+fn poly_pen_ctrl_drag_extrudes_a_border_edge() {
+    let mut bridge = poly_pen_bridge();
+    let corners = draw_triangle(&mut bridge);
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth = bridge.state.project.undo.depth().0;
+    let middle = (corners[0] + corners[1]) * 0.5;
+    let from = pixel_of(&bridge, middle);
+    pen_drag(&mut bridge, from, [from[0], from[1] + 50.0], true);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert_eq!(mesh.faces.len(), faces + 1, "quad novo a partir da aresta");
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+    assert!(mesh.verts.iter().any(|v| v.pos[1] < -0.6));
+}
+
+#[test]
+fn poly_pen_ctrl_click_melts_a_point() {
+    let mut bridge = poly_pen_bridge();
+    let corners = draw_triangle(&mut bridge);
+    // Ctrl-clique num canto do triângulo derrete o ponto (1 Undo).
+    let verts = bridge.state.project.active_mesh().unwrap().verts.len();
+    let at = pixel_of(&bridge, corners[2]);
+    pen_click(&mut bridge, at, true);
+    let after = bridge.state.project.active_mesh().unwrap().verts.len();
+    assert!(after < verts, "ponto derretido");
+}
+
+#[test]
+fn snap_radius_is_an_accessibility_setting_with_real_effect() {
+    let mut bridge = front_view_bridge_with_cube();
+    let vm = bridge.view_model();
+    assert_eq!(vm.snap_radius_px, 12.0);
+    assert!(!vm.label_snap_radius.is_empty());
+
+    let corner = pixel_of(&bridge, glam::Vec3::new(1.0, 1.0, 1.0));
+    let cursor = glam::Vec2::new(corner[0] + 20.0, corner[1]);
+    let points_only = petunia_core::SnapMask::for_target(petunia_core::SnapTarget::Vertex);
+    assert!(
+        bridge
+            .screen_snap(cursor, points_only, None, None)
+            .is_none(),
+        "20 px está fora do raio padrão"
+    );
+
+    assert!(bridge.set_snap_radius_px(30.0));
+    assert!(bridge.preferences.snap_radius_px == 30.0);
+    let hit = bridge.screen_snap(cursor, points_only, None, None).unwrap();
+    assert_eq!(hit.kind, petunia_core::SnapKind::Point);
+
+    // Faixa segura e restauração do disco.
+    assert!(bridge.set_snap_radius_px(500.0));
+    assert_eq!(bridge.state.session.snap_settings.radius_pixels, 48.0);
+    let mut restored = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let preferences = petunia_config::UserPreferences {
+        snap_radius_px: 24.0,
+        ..Default::default()
+    };
+    restored.restore_section_layouts(&preferences);
+    assert_eq!(restored.state.session.snap_settings.radius_pixels, 24.0);
+}
+
+#[test]
+fn studio_light_preference_reaches_the_render_state() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    assert!(
+        vm.studio_light_follows_camera,
+        "padrão: luz acompanha a câmera"
+    );
+    assert!(!vm.label_studio_light_follows_camera_hint.is_empty());
+    assert!(bridge.set_studio_light_follows_camera(false));
+    assert!(
+        !bridge.set_studio_light_follows_camera(false),
+        "sem mudança"
+    );
+    assert!(!bridge.view_model().studio_light_follows_camera);
+}
+
+#[test]
+fn locked_workplane_ignores_the_face_under_the_cursor() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    assert!(bridge.view_model().profile_workplane_locked);
+
+    assert!(bridge.hover_component(0.5, 0.5));
+    assert_eq!(
+        bridge.state.session.tools.hover,
+        petunia_core::HoverTarget::None
+    );
+    bridge.select_viewport_ext(0.5, 0.3, false, false);
+    bridge.profile_pointer_up();
+    assert_eq!(bridge.view_model().profile_workplane, "Ground");
+
+    // Voltar para Auto destrava.
+    bridge.apply(UiIntent::ProfileSetWorkplaneAuto);
+    assert!(!bridge.view_model().profile_workplane_locked);
+    assert!(bridge.active_profile_id.is_none());
+}
+
 #[test]
 fn paint_layer_panel_adds_removes_reorders_and_composites() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
@@ -3539,21 +4085,23 @@ fn selection_summary_and_inspector_follow_component_picks() {
 }
 
 #[test]
-fn viewport_right_click_triage_cancels_session_first() {
+fn viewport_right_click_never_cancels_an_active_transform() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.resize_viewport(1024, 768);
-    // Com modal ativo o botão direito cancela em vez de abrir menu.
+    // ADR 007: com operação aberta o botão direito é ignorado; cancelar é Esc.
     assert!(bridge.begin_viewport_transform(TransformKind::Position, 512.0, 384.0));
-    assert!(bridge.viewport_context_triage(700.0, 300.0));
-    assert!(bridge.drag.is_none());
+    assert!(!bridge.viewport_context_triage(700.0, 300.0));
+    assert!(bridge.drag.is_some(), "a operação continua");
     assert!(!bridge.view_model().context_menu_open);
+    assert!(bridge.handle_escape());
+    assert!(bridge.drag.is_none());
 }
 
 #[test]
 fn viewport_right_click_opens_selection_menu_without_session() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.resize_viewport(1024, 768);
-    assert!(!bridge.viewport_context_triage(700.0, 300.0));
+    assert!(bridge.viewport_context_triage(700.0, 300.0), "abre o menu");
     let vm = bridge.view_model();
     assert!(vm.context_menu_open);
     assert_eq!(vm.context_menu_mode, "viewport");
@@ -3803,14 +4351,14 @@ fn modeling_tool_shortcut_double_tap_behavior() {
     bridge.state.sync_selection();
     assert_eq!(bridge.view_model().tool_activation, "drag");
 
-    // 1-toque no atalho E: ativa a ferramenta paramétrica com card e alças,
-    // sem sequestrar o mouse no modo livre (Blender modal ainda inativo).
+    // 1 toque no atalho E (ADR 007): escolhe a ferramenta persistente sem
+    // abrir operação; o arrasto na viewport é que opera.
     assert!(bridge.route_shortcut("E", false, false, false));
-    assert!(bridge.tool_modal.is_some());
+    assert!(bridge.tool_modal.is_none());
+    assert_eq!(bridge.state.session.tools.active_tool, "extrude");
     assert!(!bridge.keyboard_tool_modal_active);
     assert!(!bridge.view_model().keyboard_tool_modal_active);
     assert!(!bridge.view_model().is_instant_tool_mode);
-    assert_eq!(bridge.view_model().hud_pill_badge, "1 face(s)");
 
     // 2-toque no atalho E (dentro do intervalo): entra no Modo Livre (mouse manipula).
     assert!(bridge.route_shortcut("E", false, false, false));
@@ -3854,9 +4402,10 @@ fn inset_and_bevel_shortcuts_support_single_and_double_tap() {
     bridge.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
     bridge.state.sync_selection();
 
-    // Inset (I): 1 toque -> Card / Direto
+    // Inset (I): 1 toque -> ferramenta persistente, sem operação aberta
     assert!(bridge.route_shortcut("I", false, false, false));
-    assert!(bridge.tool_modal.is_some());
+    assert!(bridge.tool_modal.is_none());
+    assert_eq!(bridge.state.session.tools.active_tool, "inset");
     assert!(!bridge.keyboard_tool_modal_active);
 
     // Inset (I): 2 toque -> Modo Livre
@@ -3864,9 +4413,10 @@ fn inset_and_bevel_shortcuts_support_single_and_double_tap() {
     assert!(bridge.keyboard_tool_modal_active);
     assert!(bridge.cancel_tool_modal());
 
-    // Bevel (Ctrl+B): 1 toque -> Card / Direto
+    // Bevel (Ctrl+B): 1 toque -> ferramenta persistente, sem operação aberta
     assert!(bridge.route_shortcut("B", true, false, false));
-    assert!(bridge.tool_modal.is_some());
+    assert!(bridge.tool_modal.is_none());
+    assert_eq!(bridge.state.session.tools.active_tool, "bevel");
     assert!(!bridge.keyboard_tool_modal_active);
 
     // Bevel (Ctrl+B): 2 toque -> Modo Livre
@@ -4979,15 +5529,21 @@ fn proportional_editing_radius_adjustment_and_falloff() {
     bridge.apply(UiIntent::SetProportionalFalloff("linear".into()));
     assert_eq!(bridge.view_model().proportional_falloff, "linear");
 
-    // Interactive mouse wheel zoom during modal adjusts radius
+    // ADR 007: durante a operação, Ctrl+roda ajusta o raio; a roda sozinha
+    // continua sendo zoom.
     bridge
         .state
         .begin_modal(petunia_core::ModalKind::Move)
         .unwrap();
-    bridge.apply_viewport_gesture(ViewportGesture::Zoom { delta: 1.0 });
+    assert!(bridge.viewport_ctrl_scroll(1.0));
     assert!((bridge.view_model().proportional_radius - 2.25).abs() < 1e-4);
-    bridge.apply_viewport_gesture(ViewportGesture::Zoom { delta: -1.0 });
+    assert!(bridge.viewport_ctrl_scroll(-1.0));
     assert!((bridge.view_model().proportional_radius - 2.0).abs() < 1e-4);
+    bridge.apply_viewport_gesture(ViewportGesture::Zoom { delta: 1.0 });
+    assert!(
+        (bridge.view_model().proportional_radius - 2.0).abs() < 1e-4,
+        "a roda sem Ctrl não muda o raio"
+    );
 }
 
 #[test]
@@ -5326,7 +5882,7 @@ fn tool_shortcut_with_double_tap_timer_disabled() {
 }
 
 #[test]
-fn wheel_scrubbing_adjusts_active_tool_modal() {
+fn wheel_zooms_even_with_a_tool_modal_open() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.resize_viewport(800, 600);
     bridge.state.set_edit_mode(petunia_core::EditMode::Edit);
@@ -5337,9 +5893,11 @@ fn wheel_scrubbing_adjusts_active_tool_modal() {
     assert_eq!(bridge.tool_modal, Some(ToolModalKind::Extrude));
     let initial_value = bridge.tool_modal_value;
 
-    // Rolar a rodinha do mouse (Zoom gesture) ajusta o valor da ferramenta
+    // ADR 007: a roda sempre faz zoom; o valor da ferramenta não muda.
+    let distance = bridge.state.session.camera.distance;
     bridge.apply_viewport_gesture(ViewportGesture::Zoom { delta: -1.0 });
-    assert!(bridge.tool_modal_value != initial_value);
+    assert_eq!(bridge.tool_modal_value, initial_value);
+    assert_ne!(bridge.state.session.camera.distance, distance);
 }
 
 #[test]
@@ -5418,7 +5976,7 @@ fn gizmo_center_and_plane_hit_testing() {
     bridge.apply(UiIntent::SetActiveTool("rotate".to_string()));
     let gizmo = bridge.view_model().gizmo;
     assert!(!gizmo.view_roll_commands.is_empty());
-    let roll_r = 96.0 * 1.18;
+    let roll_r = projection::GIZMO_VIEW_ROLL_RADIUS;
     assert_eq!(
         bridge.gizmo_handle_at(ox + roll_r, oy),
         Some(GizmoHandle::Center)
@@ -5691,13 +6249,39 @@ fn test_magnetic_snap_marker_projection() {
 
     // Ativa snap e inicia transformação
     bridge.state.snap_enabled = true;
+    bridge.state.session.snap_settings.enabled = true;
+    bridge.state.session.snap_settings.target = petunia_core::SnapTarget::Grid;
     bridge.apply(UiIntent::SetActiveTool("move".to_string()));
     let gizmo = bridge.view_model().gizmo;
     assert!(bridge.begin_gizmo_drag(gizmo.origin_x, gizmo.origin_y));
 
-    // Com snap ativo e modal em andamento: marcador é projetado
+    // Snap ligado não basta: nada encaixou ainda (Onda 1, P3D-040).
+    assert!(!compute_snap_marker(&bridge.state, 800.0, 600.0).visible);
+
+    // Sem encaixe informado, o core não encaixa sozinho (uma passada só).
+    bridge
+        .state
+        .update_modal(glam::Vec3::new(0.3, 0.0, 0.0), 0.3)
+        .unwrap();
+    assert!(!compute_snap_marker(&bridge.state, 800.0, 600.0).visible);
+
+    // Depois de um deslocamento que encaixou num ponto, o marcador é projetado
+    // com forma e rótulo do tipo de alvo.
+    bridge
+        .state
+        .update_modal_snapped(
+            glam::Vec3::new(0.3, 0.0, 0.0),
+            0.3,
+            Some(petunia_core::SnapKind::Point),
+        )
+        .unwrap();
     let marker_active = compute_snap_marker(&bridge.state, 800.0, 600.0);
     assert!(marker_active.visible);
+    assert!(!marker_active.round);
+    assert_eq!(
+        marker_active.label,
+        bridge.state.t_id(petunia_config::text_id::SNAP_KIND_POINT)
+    );
     assert!(marker_active.x >= 0.0 && marker_active.x <= 800.0);
     assert!(marker_active.y >= 0.0 && marker_active.y <= 600.0);
 
@@ -7679,26 +8263,37 @@ fn test_smart_contextual_selection_mode_switching() {
         petunia_core::SelectionDomain::Object
     );
 
-    // 3. Activating Extrude from Object mode switches to Face mode and auto-selects all faces
+    // 3. Extrude a partir de Object troca para Face de forma visível e,
+    // pelo ADR 007, nunca seleciona todas as faces sozinho.
     bridge.apply(UiIntent::SetSelectionDomain(
         petunia_core::SelectionDomain::Object,
     ));
     let has_mesh = bridge.state.project.active_mesh().is_some();
     assert!(has_mesh);
-    bridge.execute_shortcut_tool("model.extrude");
-    assert_eq!(
-        bridge.state.session.selection_domain,
-        petunia_core::SelectionDomain::Face
-    );
-    let faces_selected = bridge
+    let selected_before: Vec<bool> = bridge
         .state
         .project
         .active_mesh()
         .unwrap()
         .faces
         .iter()
-        .all(|f| f.selected);
-    assert!(faces_selected);
+        .map(|f| f.selected)
+        .collect();
+    bridge.execute_shortcut_tool("model.extrude");
+    assert_eq!(
+        bridge.state.session.selection_domain,
+        petunia_core::SelectionDomain::Face
+    );
+    let selected_after: Vec<bool> = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .faces
+        .iter()
+        .map(|f| f.selected)
+        .collect();
+    assert_eq!(selected_after, selected_before);
 
     // 4. Activating Bevel from Object mode switches to Edge mode
     bridge.apply(UiIntent::SetSelectionDomain(
@@ -8410,4 +9005,484 @@ fn test_2d_generated_object_has_quads_and_deleting_face_preserves_segment() {
             "as faces restantes continuam sendo quads"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Onda 1 (ADR 007): viewport nítido e bugs comprovados.
+// ---------------------------------------------------------------------------
+
+fn bridge_with_selected_face() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    bridge.state.set_edit_mode(petunia_core::EditMode::Edit);
+    bridge.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+    bridge.state.sync_selection();
+    bridge
+}
+
+#[test]
+fn typed_value_does_not_leak_into_the_next_tool_modal() {
+    let mut bridge = bridge_with_selected_face();
+
+    assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
+    assert!(bridge.route_shortcut("2", false, false, false));
+    assert!(bridge.route_shortcut("Enter", false, false, false));
+    assert!(bridge.modal_text.is_empty(), "confirmar limpa o buffer");
+
+    assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
+    assert!(bridge.modal_text.is_empty(), "iniciar começa sem texto");
+    assert!(bridge.route_shortcut("5", false, false, false));
+    assert!(
+        (bridge.tool_modal_value - 5.0).abs() < 1.0e-4,
+        "E → 2 → Enter → E → 5 deve extrudar 5, não 25 (valor: {})",
+        bridge.tool_modal_value
+    );
+    assert!(bridge.cancel_tool_modal());
+    assert!(bridge.modal_text.is_empty(), "cancelar limpa o buffer");
+}
+
+#[test]
+fn typed_value_wins_over_drag_and_shows_in_the_hud() {
+    let mut bridge = bridge_with_selected_face();
+
+    assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
+    assert!(bridge.route_shortcut("1", false, false, false));
+    assert!(bridge.route_shortcut(".", false, false, false));
+    assert!(bridge.route_shortcut("5", false, false, false));
+    assert!((bridge.tool_modal_value - 1.5).abs() < 1.0e-4);
+
+    assert!(
+        !bridge.scrub_tool_modal(-80.0, false),
+        "o arrasto não sobrescreve o texto"
+    );
+    assert!((bridge.tool_modal_value - 1.5).abs() < 1.0e-4);
+    assert!(
+        bridge
+            .view_model()
+            .operation_hud_lines
+            .iter()
+            .any(|line| line.contains("Input   1.5")),
+        "o HUD mostra o valor digitado"
+    );
+}
+
+#[test]
+fn view_roll_ring_is_clickable_on_the_drawn_radius() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1024, 768);
+    bridge.apply(UiIntent::SetActiveTool("rotate".to_string()));
+    let gizmo = bridge.view_model().gizmo;
+    assert!(gizmo.visible);
+
+    let drawn = projection::GIZMO_VIEW_ROLL_RADIUS;
+    assert!(
+        bridge
+            .gizmo_handle_at(gizmo.origin_x, gizmo.origin_y - drawn)
+            .is_some(),
+        "o anel responde onde é desenhado"
+    );
+    assert!(
+        bridge
+            .gizmo_handle_at(gizmo.origin_x, gizmo.origin_y - 96.0 * 1.18)
+            .is_none(),
+        "o raio antigo de hit-test não responde mais"
+    );
+}
+
+#[test]
+fn knife_card_actions_apply_and_cancel_the_cut_session() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+
+    assert!(bridge.execute_core_command("model.knife").is_ok());
+    assert_eq!(
+        bridge.view_model().active_tool,
+        "cut",
+        "o card testa o id `cut`"
+    );
+    assert!(bridge.execute_core_command("model.knife_cancel").is_ok());
+    assert!(bridge.state.session.tools.cut_session.is_none());
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+    assert!(!bridge.state.project.undo.can_undo());
+
+    assert!(bridge.execute_core_command("model.knife").is_ok());
+    assert!(bridge.execute_core_command("model.knife_apply").is_ok());
+    assert!(bridge.state.session.tools.cut_session.is_none());
+    assert!(
+        !bridge.state.project.undo.can_undo(),
+        "aplicar sem segmentos não cria histórico"
+    );
+}
+
+#[test]
+fn dimension_annotation_only_draws_linear_distances() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1024, 768);
+
+    bridge
+        .state
+        .begin_modal(petunia_core::ModalKind::Rotate)
+        .unwrap();
+    bridge.state.update_modal(glam::Vec3::ZERO, 45.0).unwrap();
+    assert!(
+        !compute_dimension_annotation(&bridge.state, 1024.0, 768.0).visible,
+        "graus não viram cota linear"
+    );
+    bridge.state.cancel_modal();
+
+    bridge
+        .state
+        .begin_modal(petunia_core::ModalKind::Move)
+        .unwrap();
+    bridge
+        .state
+        .update_modal(glam::Vec3::new(1.0, 0.0, 0.0), 1.0)
+        .unwrap();
+    let dimension = compute_dimension_annotation(&bridge.state, 1024.0, 768.0);
+    assert!(dimension.visible);
+    assert_eq!(dimension.text, "1.00 m");
+}
+
+#[test]
+fn hovering_the_same_empty_spot_requests_no_redraw() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    let _ = bridge.hover_component(0.02, 0.02);
+    assert!(
+        !bridge.hover_component(0.02, 0.02),
+        "mouse parado sobre o mesmo alvo não pede novo frame"
+    );
+}
+
+/// Viewport de teste que registra o tamanho pedido e a razão de pixels.
+#[derive(Default)]
+struct PhysicalPixelProbe {
+    size: (u32, u32),
+    ratio: f32,
+}
+
+impl PetuniaViewport for PhysicalPixelProbe {
+    fn resize(&mut self, width: u32, height: u32) {
+        self.size = (width, height);
+    }
+    fn update(&mut self, _dt_seconds: f32) {}
+    fn set_workspace(&mut self, _workspace: Workspace) {}
+    fn set_selection_domain(&mut self, _domain: SelectionDomain) {}
+    fn uses_physical_pixels(&self) -> bool {
+        true
+    }
+    fn set_pixel_ratio(&mut self, ratio: f32) {
+        self.ratio = ratio;
+    }
+}
+
+#[test]
+fn gpu_viewport_renders_in_physical_pixels_while_ui_math_stays_logical() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PhysicalPixelProbe::default());
+    bridge.resize_viewport_scaled(800, 600, 1.5);
+    assert_eq!(bridge.viewport.size, (1200, 900), "alvo em px físicos");
+    assert!((bridge.viewport.ratio - 1.5).abs() < f32::EPSILON);
+    assert_eq!(
+        bridge.viewport_size,
+        [800.0, 600.0],
+        "picking e overlays em px lógicos"
+    );
+
+    // Um resize sem razão explícita preserva a última razão medida.
+    bridge.resize_viewport(400, 300);
+    assert_eq!(bridge.viewport.size, (600, 450));
+
+    // Razões inválidas caem para 1.
+    bridge.resize_viewport_scaled(400, 300, f32::NAN);
+    assert_eq!(bridge.viewport.size, (400, 300));
+}
+
+#[test]
+fn cpu_viewport_keeps_logical_pixels() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport_scaled(800, 600, 2.0);
+    assert_eq!(bridge.viewport.width, 800);
+    assert_eq!(bridge.viewport.height, 600);
+}
+
+// ---------------------------------------------------------------------------
+// Onda 2 (ADR 007): gramática única de ferramenta.
+// ---------------------------------------------------------------------------
+
+/// Um ponto de tela (px lógicos) sobre uma face visível do asset ativo.
+fn visible_face_pixel(bridge: &SlintUiBridge<PlaceholderViewport>) -> (usize, [f32; 2]) {
+    let [width, height] = bridge.viewport_size;
+    let mesh = bridge.state.project.active_mesh().expect("active mesh");
+    for (index, face) in mesh.faces.iter().enumerate() {
+        let center = face
+            .verts
+            .iter()
+            .map(|&v| mesh.verts[v as usize].vec())
+            .sum::<glam::Vec3>()
+            / face.verts.len() as f32;
+        let ndc = bridge.state.session.camera.project_ndc(center);
+        let point = [(ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5];
+        if bridge.pick_target_for_domain(SelectionDomain::Face, point[0], point[1])
+            == petunia_core::HoverTarget::Face(index)
+        {
+            return (index, [point[0] * width, point[1] * height]);
+        }
+    }
+    panic!("nenhuma face visível no enquadramento padrão");
+}
+
+fn extrude_tool_bridge() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1024, 768);
+    bridge.execute_shortcut_tool("model.extrude");
+    bridge
+}
+
+#[test]
+fn tool_key_selects_the_persistent_tool_without_opening_an_operation() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1024, 768);
+    let selected_before = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .faces
+        .iter()
+        .filter(|face| face.selected)
+        .count();
+
+    bridge.execute_shortcut_tool("model.extrude");
+
+    assert_eq!(bridge.state.session.tools.active_tool, "extrude");
+    assert!(
+        bridge.tool_modal.is_none(),
+        "a tecla só escolhe a ferramenta"
+    );
+    assert_eq!(bridge.state.selection_domain(), SelectionDomain::Face);
+    let selected_after = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .faces
+        .iter()
+        .filter(|face| face.selected)
+        .count();
+    assert_eq!(
+        selected_after, selected_before,
+        "nunca seleciona tudo sozinho"
+    );
+    assert!(!bridge.state.project.undo.can_undo());
+    assert!(bridge.view_model().tool_grammar_active);
+}
+
+#[test]
+fn click_selects_and_drag_extrudes_the_face_under_the_cursor() {
+    let mut bridge = extrude_tool_bridge();
+    let (face, [x, y]) = visible_face_pixel(&bridge);
+
+    // Clique sem arrasto: só seleciona.
+    bridge.tool_pointer(0, x, y, false, false);
+    assert!(bridge.tool_pointer(2, x, y, false, false));
+    assert!(bridge.state.project.active_mesh().unwrap().faces[face].selected);
+    assert!(
+        !bridge.state.project.undo.can_undo(),
+        "clique não cria histórico"
+    );
+
+    // Arrasto: opera seguindo o cursor e confirma um único Undo.
+    let faces_before = bridge.state.project.active_mesh().unwrap().faces.len();
+    bridge.tool_pointer(0, x, y, false, false);
+    assert!(bridge.tool_pointer(1, x, y - 60.0, false, false));
+    assert!(bridge.tool_modal.is_some(), "o arrasto abriu a operação");
+    assert!(
+        bridge.tool_modal_value.abs() > 1.0e-4,
+        "o valor segue o cursor"
+    );
+    assert!(bridge.tool_pointer(2, x, y - 60.0, false, false));
+
+    assert!(bridge.tool_modal.is_none());
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert!(bridge.state.project.active_mesh().unwrap().faces.len() > faces_before);
+    assert_eq!(
+        bridge.state.session.tools.active_tool, "extrude",
+        "a ferramenta é persistente"
+    );
+    assert!(bridge.view_model().last_operation_active);
+}
+
+#[test]
+fn dragging_an_unselected_face_selects_it_before_extruding() {
+    let mut bridge = extrude_tool_bridge();
+    let (face, [x, y]) = visible_face_pixel(&bridge);
+    assert!(!bridge.state.project.active_mesh().unwrap().faces[face].selected);
+
+    bridge.tool_pointer(0, x, y, false, false);
+    bridge.tool_pointer(1, x, y - 50.0, false, false);
+    bridge.tool_pointer(2, x, y - 50.0, false, false);
+
+    assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+}
+
+#[test]
+fn last_operation_card_adjusts_within_the_same_undo_entry() {
+    let mut bridge = extrude_tool_bridge();
+    let (_, [x, y]) = visible_face_pixel(&bridge);
+    bridge.tool_pointer(0, x, y, false, false);
+    bridge.tool_pointer(1, x, y - 50.0, false, false);
+    bridge.tool_pointer(2, x, y - 50.0, false, false);
+    let faces_after_gesture = bridge.state.project.active_mesh().unwrap().faces.len();
+
+    assert!(bridge.commit_last_operation_text("1.5"));
+    assert_eq!(
+        bridge.state.project.undo.depth(),
+        (1, 0),
+        "sem entrada extra"
+    );
+    let last = bridge.last_operation.as_ref().expect("ainda ajustável");
+    assert!((last.primary_value() - 1.5).abs() < 1.0e-4);
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces_after_gesture,
+        "reaplica a partir do estado original"
+    );
+    assert!(
+        !bridge.commit_last_operation_text("abc"),
+        "texto inválido é recusado"
+    );
+}
+
+#[test]
+fn right_button_never_cancels_an_active_gesture() {
+    let mut bridge = extrude_tool_bridge();
+    let (_, [x, y]) = visible_face_pixel(&bridge);
+    bridge.tool_pointer(0, x, y, false, false);
+    bridge.tool_pointer(1, x, y - 50.0, false, false);
+    assert!(bridge.tool_modal.is_some());
+
+    assert!(!bridge.viewport_context_triage(x, y));
+    assert!(bridge.tool_modal.is_some(), "RMB não cancela");
+    assert!(
+        bridge.context_menu.is_none(),
+        "nem abre menu durante o gesto"
+    );
+
+    // Esc cancela e restaura.
+    assert!(bridge.handle_escape());
+    assert!(bridge.tool_modal.is_none());
+    assert!(!bridge.state.project.undo.can_undo());
+
+    // Fora de gesto, RMB abre o menu.
+    assert!(bridge.viewport_context_triage(x, y));
+    assert!(bridge.context_menu.is_some());
+}
+
+#[test]
+fn escape_ladder_returns_a_persistent_tool_to_select() {
+    let mut bridge = extrude_tool_bridge();
+    assert!(bridge.handle_escape());
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+}
+
+#[test]
+fn escape_keeps_a_newly_created_primitive() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    let assets_before = bridge.state.project.assets.len();
+    bridge.apply(UiIntent::AddPrimitive(
+        petunia_core::PrimitiveKind::Cylinder,
+    ));
+    assert!(bridge.view_model().primitive_active);
+
+    assert!(bridge.handle_escape());
+    assert!(!bridge.view_model().primitive_active, "Esc fecha o card");
+    assert_eq!(
+        bridge.state.project.assets.len(),
+        assets_before + 1,
+        "Esc não apaga a primitiva; Undo apaga"
+    );
+    assert!(bridge.state.project.undo.can_undo());
+}
+
+#[test]
+fn navigation_is_never_suspended_by_tools() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1024, 768);
+    bridge.apply(UiIntent::SetActiveTool("loop_cut".to_string()));
+    let before = bridge.state.session.camera.clone();
+    assert!(
+        bridge.orbit_viewport(12.0, 4.0),
+        "orbita com Loop Cut armado"
+    );
+    assert_ne!(bridge.state.session.camera.yaw, before.yaw);
+
+    let distance = bridge.state.session.camera.distance;
+    bridge.apply_viewport_gesture(ViewportGesture::Zoom { delta: 120.0 });
+    assert_ne!(
+        bridge.state.session.camera.distance, distance,
+        "a roda faz zoom"
+    );
+
+    // Com um anel sob o cursor, Ctrl+roda muda a contagem (e a roda não).
+    let (_, point) = visible_edge_points(&bridge)[0];
+    bridge.hover_component(point[0], point[1]);
+    let cuts = bridge.loop_cut_hover_cuts;
+    assert!(bridge.viewport_ctrl_scroll(120.0));
+    assert_ne!(
+        bridge.loop_cut_hover_cuts, cuts,
+        "Ctrl+roda muda a contagem"
+    );
+}
+
+#[test]
+fn click_move_click_on_a_gizmo_handle_follows_until_the_next_click() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1024, 768);
+    assert!(bridge.set_click_move_click(true));
+    bridge.apply(UiIntent::SetActiveTool("move".to_string()));
+    let gizmo = bridge.view_model().gizmo;
+    assert!(gizmo.visible);
+
+    // Clicar no centro do gizmo sem arrastar prende a alça ao ponteiro.
+    bridge.tool_pointer(0, gizmo.origin_x, gizmo.origin_y, false, false);
+    bridge.tool_pointer(2, gizmo.origin_x, gizmo.origin_y, false, false);
+    assert!(bridge.tool_session.is_latched());
+    assert!(bridge.view_model().tool_gesture_latched);
+
+    // Mover sem botão move o objeto; o próximo clique confirma.
+    bridge.tool_pointer(1, gizmo.origin_x + 80.0, gizmo.origin_y, false, false);
+    bridge.tool_pointer(0, gizmo.origin_x + 80.0, gizmo.origin_y, false, false);
+    bridge.tool_pointer(2, gizmo.origin_x + 80.0, gizmo.origin_y, false, false);
+
+    assert!(!bridge.tool_session.is_latched());
+    assert_eq!(
+        bridge.state.project.undo.depth(),
+        (1, 0),
+        "o gesto preso ao ponteiro virou uma transação"
+    );
+}
+
+#[test]
+fn drag_threshold_preference_separates_click_from_drag() {
+    let mut bridge = extrude_tool_bridge();
+    assert!(bridge.set_drag_threshold_px(12.0));
+    let (_, [x, y]) = visible_face_pixel(&bridge);
+
+    bridge.tool_pointer(0, x, y, false, false);
+    bridge.tool_pointer(1, x, y - 8.0, false, false);
+    bridge.tool_pointer(2, x, y - 8.0, false, false);
+    assert!(
+        !bridge.state.project.undo.can_undo(),
+        "8 px abaixo de um limiar de 12 px é clique"
+    );
+    assert!(
+        !bridge.set_drag_threshold_px(12.0),
+        "sem mudança não persiste"
+    );
+    assert!(bridge.set_drag_threshold_px(500.0));
+    assert_eq!(
+        bridge.preferences.drag_threshold_px, 16.0,
+        "limitado a 16 px"
+    );
 }

@@ -4,6 +4,14 @@
 title = "Petunia3D"
 
 [ui]
+view_gizmo = "Navegação da vista"
+view_gizmo_hint = "Arraste para orbitar; clique num eixo para alinhar a vista"
+profile_look_at_plane = "Olhar para o plano"
+profile_plane_view = "Vista"
+profile_plane_face = "Face"
+profile_plane_ground = "Chão"
+profile_plane_auto = "Auto"
+profile_plane = "Plano"
 more_actions = "Mais ações"
 tools = "Ferramentas"
 assets = "Assets"
@@ -423,6 +431,8 @@ frame = "Enquadrar"
 frame_all = "Enquadrar tudo"
 
 [tools]
+poly_pen = "Poly Pen"
+poly_pen_hint = "Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo"
 pivot = "Pivô"
 select = "Seleção"
 select_box = "Seleção em caixa"
@@ -866,7 +876,51 @@ conflict_title = "Conflito de atalhos detectado"
 conflict_shared = "compartilha o atalho com"
 
 [preferences]
+studio_light_follows_camera = "Luz de estúdio acompanha a câmera"
+studio_light_follows_camera_hint = "Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo."
+workplane_prefer_ground = "Plano automático favorece o chão"
+workplane_prefer_ground_hint = "Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D)."
+snap_radius = "Raio do snap (px)"
 colorblind_axes = "Diferenciação não-cromática de eixos (Rótulos X, Y, Z)"
 reduced_motion = "Redução de movimento (desativa animações do viewport)"
 double_tap_interval = "Intervalo de duplo toque de atalho (ms)"
+drag_threshold = "Distância para começar a arrastar (px)"
+click_move_click = "Arrastar sem segurar o botão (clicar, mover, clicar)"
+click_move_click_hint = "Clique numa alça: ela segue o mouse até o próximo clique."
 multiselection_measure_tag = "Exibir tag de média na multiseleção de arestas"
+
+[tool_grammar]
+no_face_selected = "Nenhuma face selecionada; usando o chão"
+workplane_auto = "Plano de trabalho automático: face sob o cursor ou plano do mundo mais paralelo à vista"
+workplane_set = "Plano de trabalho: {plane} (travado)"
+draw_ready = "Desenhar em {plane}: clique para adicionar pontos, arraste para curvas; no Auto, a face sob o cursor vira o plano"
+last_operation = "Última operação"
+adjust_hint = "Digite um valor e Enter para ajustar (mesmo Undo)"
+ready = "{tool}: arraste sobre a malha ou clique para selecionar"
+gesture_hint = "Arraste ou digite um valor · Esc cancela · Botão direito: menu"
+needs_face = "{tool}: clique ou arraste uma face"
+needs_edge = "{tool}: clique ou arraste uma aresta"
+expired = "A última operação não pode mais ser ajustada"
+adjusted = "Última operação ajustada"
+primitive_kept = "Primitiva mantida · Ctrl+Z desfaz"
+
+[snap_kind]
+point = "Ponto"
+midpoint = "Ponto médio"
+on_edge = "Na aresta"
+axis_x = "Paralelo ao eixo X"
+axis_y = "Paralelo ao eixo Y"
+axis_z = "Paralelo ao eixo Z"
+on_face = "Na face"
+grid = "Grade"
+
+[draw]
+shape_name = "Forma"
+
+[workspace]
+draw_title = "Workspace Desenho"
+draw_description = "Nível de forma: desenhe perfis em planos e faces, empurre e puxe regiões em sólidos"
+poly_title = "Workspace Polígonos"
+poly_description = "Nível de componente: edite pontos, arestas e faces com extrude, inset, round edge e cortes"
+draw_ready = "DRAW: ferramentas de forma — Sketch, Push/Pull em regiões"
+poly_ready = "POLY: ferramentas de componente — pontos, arestas e faces"

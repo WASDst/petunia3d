@@ -5,6 +5,75 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Arestas nítidas e aparência por modo — Onda 6, parte 2 (30/09/2026)
+- **Arestas de largura constante**: as linhas do modelo têm a mesma espessura em pixels em qualquer zoom, distância ou escala de tela, com bordas suavizadas (antes eram linhas de 1 px físico).
+- **DRAW lê forma, POLY lê topologia** (capítulo 05): no DRAW aparecem só as arestas de feição (bordas e dobras acima de 30°); no POLY aparecem todas, as comuns mais finas e as de feição reforçadas; PAINT e UV mantêm as faces limpas.
+- **Verificado por pixels** no renderer real (Vulkan por software): largura medida e visibilidade de cada tipo de aresta por modo.
+- **Escopo honesto**: pontos visíveis no domínio Point, destaque do plano de trabalho, contorno de seleção por jump flooding e matcap ficam pendentes.
+
+### Visual e acessibilidade — Onda 6, parte 1 (30/09/2026)
+- **Luz de estúdio que acompanha a câmera**: a forma continua clara e legível ao orbitar para qualquer lado (como no Plasticity e no Cinema 4D); a preferência "Luz de estúdio acompanha a câmera" volta à luz fixa no mundo. X-Ray e viewport por software usam a mesma luz.
+- **Raio do snap nas Configurações** (4–48 px): quem tem tremor ou pouca precisão pode aumentar a área de encaixe.
+- **Aparência testada por pixels**: os testes do renderer rodam com Vulkan por software (lavapipe) e medem o brilho do modelo visto de frente e de trás.
+- **Roteiro de teste com usuários**: `docs/development/user-test-protocol.md` reúne as 7 decisões em aberto das Ondas 3–6, tarefas, métricas (SEQ, SUS) e critérios de decisão, com um grupo de pessoas com limitação motora.
+- **Escopo honesto**: linhas de largura constante com AA, contorno por jump flooding, matcap, aparência por modo e girar a luz por arrasto ficam pendentes. Matriz em `docs/development/wave6-visual-accessibility-gap-matrix.md`.
+
+### Poly Pen — Onda 5, parte 1 (30/09/2026)
+- **Poly Pen no trilho POLY** (modelo: Polygon Pen do Cinema 4D): passar o mouse destaca ponto, aresta ou face; arrastar move o elemento sem selecionar antes.
+- **Ctrl-arrastar uma aresta de borda** cria uma face nova a partir dela (um gesto, um Undo; `Esc` restaura).
+- **Desenhar polígonos**: cada clique adiciona um ponto (ou reaproveita um existente); Enter ou clicar no primeiro ponto fecha; Backspace remove o último; `Esc` limpa. A face nova segue a orientação dos vizinhos ou fica de frente para a câmera; resultados não manifold são recusados.
+- **Ctrl-clique** num ponto o derrete.
+- **Escopo honesto**: ícone próprio, modificador pelo keymap, subdividir aresta por clique e pintar faces ficam pendentes. Matriz em `docs/development/poly-pen-gap-matrix.md`.
+
+### DRAW e POLY no seletor — Onda 4, parte 2 (30/09/2026)
+- **Seletor `DRAW · POLY · PAINT · UV`**: MODEL vira dois modos do mesmo workspace de modelagem — mesmo documento, seleção, câmera e Inspector; muda o trilho de ferramentas.
+- **Trilho por modo**: DRAW mostra Sketch, Retângulo, Círculo, Push/Pull e Duplicar; POLY mostra as ferramentas de componente (Extrude, Inset, Bevel, Knife, Loop Cut e demais). Trocar de modo nunca converte nem seleciona nada; uma ferramenta que não existe no novo trilho volta para Select.
+- **Correção**: empurrar uma região solta para o lado negativo agora gera um sólido voltado para fora.
+- **Escopo honesto**: seleção `Shape / Curve / Point / Region` no DRAW, aparência de viewport por modo, plano por 3 pontos e formas paramétricas com "Converter em polígonos" continuam pendentes; padrão POLY a validar com usuários.
+
+### Regiões e Push/Pull do DRAW — Onda 4, parte 1 (30/09/2026)
+- **Regiões fechadas como no Plasticity**: perfis que se cruzam no mesmo plano formam regiões (arranjo planar com furos); a região sob o cursor recebe tinta translúcida no Draw e no Push/Pull.
+- **Push/Pull na região**: arrastar uma região com Push/Pull gera volume na hora, com o mesmo gesto das outras ferramentas (valor segue o cursor, digitação vence o mouse, "Última operação" ajustável).
+- **Draw on Face**: uma região desenhada dentro de uma face é gravada nela (imprint); puxar para fora soma volume, empurrar para dentro cria um rebaixo. No vazio, a região vira um sólido fechado num objeto novo ("Forma").
+- **Um gesto, um Undo**: imprint e extrusão entram como uma única entrada de histórico; `Esc` restaura o documento exatamente; reajustar a "Última operação" não duplica o imprint.
+- **Escopo honesto**: pill DRAW e trilho de forma (parte 2), imprint de região que cruza arestas ou tem furos sobre face, e extrusão negativa de região solta ficam pendentes. Matriz em `docs/development/draw-regions-gap-matrix.md`.
+
+### Pré-seleção e plano de trabalho — Onda 3, parte 2 (30/09/2026)
+- **A câmera nunca se move sozinha**: ativar o Draw ou escolher o plano Face não troca mais a vista nem a projeção; o novo botão "Olhar para o plano" faz isso sob comando.
+- **Plano automático**: no 1º clique de um perfil novo, a face sob o cursor vira o plano (Draw on Face); sem face, o plano do mundo mais paralelo à vista, pelo 3D Cursor.
+- **Plano travado**: Chão, Face e Vista travam o plano até voltar para Auto; o card mostra a pílula Auto e textos traduzidos (en/pt-BR).
+- **Preferência de plano automático**: Configurações → "Plano automático favorece o chão". Ligada (estilo SketchUp), o desenho sem face sob o cursor vai para o chão, a menos que a câmera esteja quase na horizontal (< 20°); desligada (padrão, estilo Modo/Cinema 4D), usa o plano do mundo mais de frente para a vista.
+- **Pré-seleção no Draw**: o hover mostra a face que viraria o plano (marcador "Na face") e, depois, o ponto encaixado que o clique criaria.
+- **Escopo honesto**: plano por 3 pontos/face + aresta, regiões no hover e imprint na face hospedeira ficam para a Onda 4; a regra do eixo dominante em perspectiva será validada com usuários. Matriz em `docs/development/snap-inference-gap-matrix.md`.
+
+### Snapping com inferência — Onda 3, parte 1 (30/09/2026)
+- **Tolerância em pixels**: o snap passa a medir a distância na tela (padrão 12 px, faixa 4–48), com o mesmo alcance em qualquer zoom; antes era 0,35 unidade de mundo.
+- **Uma passada por gesto**: o Move encaixava duas vezes (bridge contra a malha em prévia e core); agora o bridge faz uma única consulta contra a malha de origem, ignora a geometria que se move e o core apenas registra o que encaixou. Reajustar a "Última operação" não reencaixa mais o valor digitado.
+- **Tipos nomeados com prioridade**: Ponto, Ponto médio, Na aresta, Guia de eixo X/Y/Z, Na face (ponto sob o cursor, não o centroide) e Grade; pontos atrás da malha só com raio-X/wireframe.
+- **Inferência de direção**: guias paralelas aos eixos a partir da âncora (snap-dragging); com grade, o comprimento ao longo da guia anda no passo da grade.
+- **Desenho de perfil**: usa a mesma passada (pontos da malha projetados no plano, guias do plano a partir do último ponto, grade do plano); a grade fixa de 0,25 foi removida.
+- **Nunca só cor**: marcador com forma por tipo e rótulo traduzido (en/pt-BR); o HUD mostra o tipo encaixado.
+- **Escopo honesto**: centro de face, interseção, paralelo/perpendicular a aresta, passos de 15°, snap entre objetos, campo de raio em Configurações, índice espacial e pré-seleção universal ficam pendentes. Matriz em `docs/development/snap-inference-gap-matrix.md`.
+
+### Gramática única de ferramenta — Onda 2 (30/09/2026)
+- **`ToolSession` no core**: uma máquina de estados (`Idle/Pressed/Dragging/Latched`) decide clique × arrasto com limiar configurável; clicar-mover-clicar em alças (WCAG 2.2, 2.5.7); valor digitado vence o mouse; testes de domínio sem toolkit.
+- **Ferramentas persistentes**: Extrude, Inset, Round Edge e Push/Pull deixam de abrir operação ao apertar a tecla; arrastar sobre uma face (ou aresta) a seleciona e opera seguindo o cursor pela normal projetada, estável sob zoom. Move/Rotate/Scale e o gizmo passam pela mesma máquina.
+- **"Última operação"**: cada gesto é 1 Undo e continua ajustável no card da ferramenta, reaplicado dentro da mesma entrada de histórico.
+- **Contrato de entrada**: RMB nunca cancela (abre menu fora de gesto); navegação nunca é suspensa; a roda sempre faz zoom e Ctrl+roda ajusta contagens; Esc em escada (gesto → overlays → ferramenta volta para Select); Esc mantém a primitiva recém-criada; nada é selecionado sozinho.
+- **Preferências de acessibilidade**: distância para começar a arrastar (2–16 px) e "arrastar sem segurar o botão".
+- **Escopo honesto**: Loop Cut, Slice, Knife e Profile ainda usam ciclos próprios (Ondas 4/5); `Space` = ferramenta anterior e alças dedicadas de Extrude/Inset ficam pendentes. Matriz em `docs/development/tool-session-gap-matrix.md`.
+
+### Viewport nítido e bugs comprovados — Onda 1 (30/09/2026)
+- **Nitidez**: a imagem 3D passa a ser renderizada em pixels físicos (HiDPI e UI scale), com MSAA 4× resolvido na textura exibida; larguras de linha continuam em px lógicos.
+- **Fluidez**: mouse parado sobre o mesmo alvo não reconstrói o view model nem redesenha o frame.
+- **Correções**: buffer numérico não vaza mais entre operações (E → 2 → Enter → E → 5 extrudava 25); card e Cancelar da faca funcionam (`cut`); hover do gizmo clareia; anel de View Roll clicável onde é desenhado; `is_snapped` significa "encaixou"; cota linear só para distâncias (não para graus/fatores); HUD mostra o valor digitado.
+- **Escopo honesto**: coalescer renders por quadro, linhas de largura constante com AA e contorno por jump flooding ficam para ondas seguintes. Matriz em `docs/development/viewport-crispness-gap-matrix.md`.
+
+### Decisão DRAW + POLY e gramática única de ferramenta — Onda 0 (29/09/2026)
+- **Pesquisa registrada**: novo capítulo 46 do Livro Vivo com a análise de Plasticity (incluindo o código aberto inicial), Cinema 4D, Modo e SketchUp, a literatura acadêmica aplicável (snap-dragging, beautification, κ-curves, bubble cursor, cursores de área para deficiência motora, WCAG 2.2) e o diagnóstico da implementação Slint.
+- **ADR 007 aceito**: workspaces **DRAW** (nível de forma) e **POLY** (nível de componente) substituem MODEL; todas as ferramentas passam a seguir uma gramática única — persistente, arrastar pela alça ou em qualquer lugar, valor digitado, clicar-mover-clicar, "Última operação" ajustável, RMB = menu, Esc cancela, navegação nunca suspensa.
+- **Referência canônica**: `Blender.svg` e o manual do Blender deixam de ser referências; caminhos absolutos quebrados (`Projetos/simple3d-modeling`) foram convertidos em caminhos relativos.
+- **Escopo honesto**: somente documentação. O código ainda exibe MODEL e mantém cinco mecanismos de sessão; as páginas revisadas marcam "decisão aprovada, implementação pendente".
 ### Animate F1 — geradores de movimento procedural (P3D-170) (30/09/2026)
 - **`MotionRecipe`** (`Project::motions`, append-only) avaliado por `MotionEvaluator` como `pose(t)` puro e determinístico (mesma receita ⇒ mesma pose); parâmetros com faixa (`speed`, `energy`, `weight`, `stride`, `lean`, `smoothness`, `variation` + específicos), **Styles** (Cartoon, Heavy, Stiff, Floaty), **Stepped** (quantização temporal), In Place/Root Motion e contrato de rig via Rig Roles com erro legível.
 - **Geradores**: `BipedCycle` (walk↔run, pés plantados por IK, braços contralaterais, lean/torção), `Gait` de N pernas (alternado, sequência lateral, onda; alternating tetrapod para aranhas; ondulação de coluna e cauda), `Serpentine` (serpente, peixe, cauda) e `IdleBreath`. Frente/lateral vêm do próprio rig.

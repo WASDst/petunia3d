@@ -84,9 +84,16 @@ pub(crate) fn parse_lasso_path(path: &str) -> Option<Vec<[f32; 2]>> {
     (polygon.len() >= 3).then_some(polygon)
 }
 
+/// Comprimento das hastes do gizmo de transformação, em px lógicos.
+pub(crate) const GIZMO_ROD_LENGTH: f32 = 72.0;
+/// Raio do anel externo de View Roll da ferramenta Rotate, em px lógicos.
+/// Desenho e hit-test usam a mesma constante.
+pub(crate) const GIZMO_VIEW_ROLL_RADIUS: f32 = GIZMO_ROD_LENGTH * 1.18;
+/// Meia-largura da faixa clicável de anéis: 24 px lógicos no total (WCAG 2.5.8).
+pub(crate) const GIZMO_RING_HIT_HALF_WIDTH: f32 = 12.0;
+
 pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoModel {
-    /// Comprimento das hastes do gizmo de transformação, em px lógicos.
-    const ROD_LENGTH: f32 = 72.0;
+    const ROD_LENGTH: f32 = GIZMO_ROD_LENGTH;
     /// Tamanho da seta: recuo da ponta e meia-largura da base.
     const ARROW_BACK: f32 = 13.0;
     const ARROW_HALF: f32 = 5.5;
@@ -412,7 +419,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
     // Anel externo de rotação da visão (View Roll) para Rotate
     if state.session.tools.active_tool == "rotate" {
-        let roll_r = ROD_LENGTH * 1.18;
+        let roll_r = GIZMO_VIEW_ROLL_RADIUS;
         let mut roll = String::new();
         for segment in 0..=64 {
             let angle = segment as f32 * std::f32::consts::TAU / 64.0;
@@ -753,12 +760,12 @@ pub(crate) fn compute_dimension_annotation(
         return DimensionAnnotationModel::default();
     };
 
-    let delta_val = match modal.kind {
-        petunia_core::ModalKind::Move => modal.components.length(),
-        petunia_core::ModalKind::Scale => (modal.value - 1.0).abs(),
-        petunia_core::ModalKind::Rotate => modal.value.abs(),
-        _ => modal.value.abs(),
+    // Uma cota linear só existe quando o valor é uma distância no mundo.
+    // Rotate (graus), Scale (fator), Inset e Bevel aparecem no HUD, não aqui.
+    let Some(p_end) = modal.current_point() else {
+        return DimensionAnnotationModel::default();
     };
+    let delta_val = (p_end - modal.pivot).length();
 
     if delta_val < 0.005 {
         return DimensionAnnotationModel::default();
@@ -766,7 +773,6 @@ pub(crate) fn compute_dimension_annotation(
 
     let view_proj = state.session.camera.view_proj();
     let p_start = modal.pivot;
-    let p_end = modal.pivot + modal.components;
 
     let clip_start = view_proj * p_start.extend(1.0);
     let clip_end = view_proj * p_end.extend(1.0);
@@ -812,12 +818,7 @@ pub(crate) fn compute_dimension_annotation(
         b[1],
     );
 
-    let text = match modal.kind {
-        petunia_core::ModalKind::Move => format!("{:.2} m", delta_val),
-        petunia_core::ModalKind::Rotate => format!("{:.1}°", delta_val),
-        petunia_core::ModalKind::Scale => format!("{:.2}×", modal.value),
-        _ => format!("{:.2}", delta_val),
-    };
+    let text = format!("{:.2} m", delta_val);
 
     let label_x = (a[0] + b[0]) * 0.5 + nx * 14.0;
     let label_y = (a[1] + b[1]) * 0.5 + ny * 14.0;
@@ -1275,21 +1276,36 @@ pub struct SnapMarkerModel {
     pub visible: bool,
     pub x: f32,
     pub y: f32,
+    /// Rótulo do alvo (TextId traduzido): o tipo nunca é comunicado só por cor.
+    pub label: String,
+    /// Forma do marcador: quadrado para pontos, círculo para arestas, guias,
+    /// faces e grade.
+    pub round: bool,
 }
 
 pub(crate) fn compute_snap_marker(state: &AppState, width: f32, height: f32) -> SnapMarkerModel {
-    if width <= 1.0 || height <= 1.0 {
-        return SnapMarkerModel::default();
-    }
     let Some(fb) = state.current_tool_feedback() else {
         return SnapMarkerModel::default();
     };
     if !fb.is_snapped {
         return SnapMarkerModel::default();
     }
+    snap_marker_at(state, fb.current, fb.snap_kind, width, height)
+}
 
+/// Marcador (posição, forma e rótulo) para um ponto encaixado em mundo.
+pub(crate) fn snap_marker_at(
+    state: &AppState,
+    point: glam::Vec3,
+    kind: Option<petunia_core::SnapKind>,
+    width: f32,
+    height: f32,
+) -> SnapMarkerModel {
+    if width <= 1.0 || height <= 1.0 {
+        return SnapMarkerModel::default();
+    }
     let view_proj = state.session.camera.view_proj();
-    let clip = view_proj * fb.current.extend(1.0);
+    let clip = view_proj * point.extend(1.0);
     if clip.w <= 0.05 {
         return SnapMarkerModel::default();
     }
@@ -1302,6 +1318,13 @@ pub(crate) fn compute_snap_marker(state: &AppState, width: f32, height: f32) -> 
             visible: true,
             x,
             y,
+            label: kind
+                .map(|kind| state.t_id(kind.text_id()))
+                .unwrap_or_default(),
+            round: !matches!(
+                kind,
+                Some(petunia_core::SnapKind::Point | petunia_core::SnapKind::Midpoint)
+            ),
         }
     } else {
         SnapMarkerModel::default()

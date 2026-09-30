@@ -17,7 +17,9 @@ Um modelo neutro como `ToolFeedback`/`OverlayPrimitive` pode conter origem, dire
 
 ## UX
 
-Linha pontilhada/guia discreta, valor quando útil, sem cobrir a geometria. Status bar pode mostrar LMB Confirm, RMB/Esc Cancel e modifiers atuais.
+Linha pontilhada/guia discreta, valor quando útil, sem cobrir a geometria. O HUD mostra valor, unidade, texto digitado, trava ativa e o snap que efetivamente encaixou. A status bar mostra o próximo passo em linguagem simples e as ações do gesto atual (por exemplo: "Arraste ou digite um valor · Esc cancela · RMB menu"), sempre a partir do keymap ativo.
+
+Revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)): **RMB abre menu de contexto e nunca cancela**; cancelar é `Esc`. A cota desenhada respeita o tipo do valor (distância, ângulo em arco, fator de escala). O buffer numérico é limpo ao iniciar, confirmar e cancelar.
 
 ## Arquitetura
 

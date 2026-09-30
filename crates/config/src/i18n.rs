@@ -295,6 +295,8 @@ pub mod text_id {
     pub const TOOLS_LOOP_CUT: TextId = TextId::new("tools.loop_cut");
     pub const TOOLS_SLICE: TextId = TextId::new("tools.slice");
     pub const TOOLS_PUSH_PULL: TextId = TextId::new("tools.push_pull");
+    pub const TOOLS_POLY_PEN: TextId = TextId::new("tools.poly_pen");
+    pub const TOOLS_POLY_PEN_HINT: TextId = TextId::new("tools.poly_pen_hint");
     pub const TOOLS_DRAW_PROFILE: TextId = TextId::new("tools.draw_profile");
     pub const TOOLS_PIVOT: TextId = TextId::new("tools.pivot");
     pub const UI_PIVOT_HINT: TextId = TextId::new("ui.pivot_hint");
@@ -305,6 +307,8 @@ pub mod text_id {
     pub const UI_PROFILE_DEPTH: TextId = TextId::new("ui.profile_depth");
     pub const UI_PROFILE_POINTS: TextId = TextId::new("ui.profile_points");
     pub const UI_PROFILE_CLOSE: TextId = TextId::new("ui.profile_close");
+    pub const UI_VIEW_GIZMO: TextId = TextId::new("ui.view_gizmo");
+    pub const UI_VIEW_GIZMO_HINT: TextId = TextId::new("ui.view_gizmo_hint");
     pub const UI_PROFILE_GENERATE: TextId = TextId::new("ui.profile_generate");
     pub const UI_PROFILE_REVOLVE: TextId = TextId::new("ui.profile_revolve");
     pub const UI_PROFILE_CUTS: TextId = TextId::new("ui.profile_cuts");
@@ -377,6 +381,53 @@ pub mod text_id {
         TextId::new("preferences.double_tap_interval");
     pub const PREFERENCES_MULTISELECTION_MEASURE: TextId =
         TextId::new("preferences.multiselection_measure_tag");
+    pub const PREFERENCES_DRAG_THRESHOLD: TextId = TextId::new("preferences.drag_threshold");
+    pub const PREFERENCES_CLICK_MOVE_CLICK: TextId = TextId::new("preferences.click_move_click");
+    pub const PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA: TextId =
+        TextId::new("preferences.studio_light_follows_camera");
+    pub const PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA_HINT: TextId =
+        TextId::new("preferences.studio_light_follows_camera_hint");
+    pub const PREFERENCES_WORKPLANE_PREFER_GROUND: TextId =
+        TextId::new("preferences.workplane_prefer_ground");
+    pub const PREFERENCES_WORKPLANE_PREFER_GROUND_HINT: TextId =
+        TextId::new("preferences.workplane_prefer_ground_hint");
+    pub const PREFERENCES_CLICK_MOVE_CLICK_HINT: TextId =
+        TextId::new("preferences.click_move_click_hint");
+    pub const TOOL_GRAMMAR_LAST_OPERATION: TextId = TextId::new("tool_grammar.last_operation");
+    pub const TOOL_GRAMMAR_ADJUST_HINT: TextId = TextId::new("tool_grammar.adjust_hint");
+    pub const TOOL_GRAMMAR_READY: TextId = TextId::new("tool_grammar.ready");
+    pub const TOOL_GRAMMAR_GESTURE_HINT: TextId = TextId::new("tool_grammar.gesture_hint");
+    pub const TOOL_GRAMMAR_NEEDS_FACE: TextId = TextId::new("tool_grammar.needs_face");
+    pub const TOOL_GRAMMAR_NEEDS_EDGE: TextId = TextId::new("tool_grammar.needs_edge");
+    pub const TOOL_GRAMMAR_EXPIRED: TextId = TextId::new("tool_grammar.expired");
+    pub const TOOL_GRAMMAR_ADJUSTED: TextId = TextId::new("tool_grammar.adjusted");
+    pub const TOOL_GRAMMAR_PRIMITIVE_KEPT: TextId = TextId::new("tool_grammar.primitive_kept");
+    pub const UI_PROFILE_PLANE: TextId = TextId::new("ui.profile_plane");
+    pub const UI_PROFILE_PLANE_AUTO: TextId = TextId::new("ui.profile_plane_auto");
+    pub const UI_PROFILE_PLANE_GROUND: TextId = TextId::new("ui.profile_plane_ground");
+    pub const UI_PROFILE_PLANE_FACE: TextId = TextId::new("ui.profile_plane_face");
+    pub const UI_PROFILE_PLANE_VIEW: TextId = TextId::new("ui.profile_plane_view");
+    pub const UI_PROFILE_LOOK_AT_PLANE: TextId = TextId::new("ui.profile_look_at_plane");
+    pub const TOOL_GRAMMAR_DRAW_READY: TextId = TextId::new("tool_grammar.draw_ready");
+    pub const TOOL_GRAMMAR_WORKPLANE_SET: TextId = TextId::new("tool_grammar.workplane_set");
+    pub const TOOL_GRAMMAR_WORKPLANE_AUTO: TextId = TextId::new("tool_grammar.workplane_auto");
+    pub const TOOL_GRAMMAR_NO_FACE_SELECTED: TextId = TextId::new("tool_grammar.no_face_selected");
+    pub const DRAW_SHAPE_NAME: TextId = TextId::new("draw.shape_name");
+    pub const WORKSPACE_DRAW_TITLE: TextId = TextId::new("workspace.draw_title");
+    pub const WORKSPACE_DRAW_DESCRIPTION: TextId = TextId::new("workspace.draw_description");
+    pub const WORKSPACE_POLY_TITLE: TextId = TextId::new("workspace.poly_title");
+    pub const WORKSPACE_POLY_DESCRIPTION: TextId = TextId::new("workspace.poly_description");
+    pub const WORKSPACE_DRAW_READY: TextId = TextId::new("workspace.draw_ready");
+    pub const WORKSPACE_POLY_READY: TextId = TextId::new("workspace.poly_ready");
+    pub const SNAP_KIND_POINT: TextId = TextId::new("snap_kind.point");
+    pub const SNAP_KIND_MIDPOINT: TextId = TextId::new("snap_kind.midpoint");
+    pub const SNAP_KIND_ON_EDGE: TextId = TextId::new("snap_kind.on_edge");
+    pub const SNAP_KIND_AXIS_X: TextId = TextId::new("snap_kind.axis_x");
+    pub const SNAP_KIND_AXIS_Y: TextId = TextId::new("snap_kind.axis_y");
+    pub const SNAP_KIND_AXIS_Z: TextId = TextId::new("snap_kind.axis_z");
+    pub const SNAP_KIND_ON_FACE: TextId = TextId::new("snap_kind.on_face");
+    pub const SNAP_KIND_GRID: TextId = TextId::new("snap_kind.grid");
+    pub const PREFERENCES_SNAP_RADIUS: TextId = TextId::new("preferences.snap_radius");
 
     // Diálogo de recuperação de autosave (P3D-002).
     pub const UI_RECOVERY_TITLE: TextId = TextId::new("ui.recovery_title");
@@ -627,6 +678,8 @@ pub mod text_id {
         TOOLS_LOOP_CUT,
         TOOLS_SLICE,
         TOOLS_PUSH_PULL,
+        TOOLS_POLY_PEN,
+        TOOLS_POLY_PEN_HINT,
         TOOLS_DRAW_PROFILE,
         TOOLS_PIVOT,
         UI_PIVOT_HINT,
@@ -637,6 +690,8 @@ pub mod text_id {
         UI_PROFILE_DEPTH,
         UI_PROFILE_POINTS,
         UI_PROFILE_CLOSE,
+        UI_VIEW_GIZMO,
+        UI_VIEW_GIZMO_HINT,
         UI_PROFILE_GENERATE,
         UI_PROFILE_REVOLVE,
         UI_PROFILE_CUTS,
@@ -703,6 +758,48 @@ pub mod text_id {
         PREFERENCES_REDUCED_MOTION,
         PREFERENCES_DOUBLE_TAP_INTERVAL,
         PREFERENCES_MULTISELECTION_MEASURE,
+        PREFERENCES_DRAG_THRESHOLD,
+        PREFERENCES_CLICK_MOVE_CLICK,
+        PREFERENCES_CLICK_MOVE_CLICK_HINT,
+        PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA,
+        PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA_HINT,
+        PREFERENCES_WORKPLANE_PREFER_GROUND,
+        PREFERENCES_WORKPLANE_PREFER_GROUND_HINT,
+        TOOL_GRAMMAR_LAST_OPERATION,
+        TOOL_GRAMMAR_ADJUST_HINT,
+        TOOL_GRAMMAR_READY,
+        TOOL_GRAMMAR_GESTURE_HINT,
+        TOOL_GRAMMAR_NEEDS_FACE,
+        TOOL_GRAMMAR_NEEDS_EDGE,
+        TOOL_GRAMMAR_EXPIRED,
+        TOOL_GRAMMAR_ADJUSTED,
+        TOOL_GRAMMAR_PRIMITIVE_KEPT,
+        UI_PROFILE_PLANE,
+        UI_PROFILE_PLANE_AUTO,
+        UI_PROFILE_PLANE_GROUND,
+        UI_PROFILE_PLANE_FACE,
+        UI_PROFILE_PLANE_VIEW,
+        UI_PROFILE_LOOK_AT_PLANE,
+        TOOL_GRAMMAR_DRAW_READY,
+        TOOL_GRAMMAR_WORKPLANE_SET,
+        TOOL_GRAMMAR_WORKPLANE_AUTO,
+        TOOL_GRAMMAR_NO_FACE_SELECTED,
+        DRAW_SHAPE_NAME,
+        WORKSPACE_DRAW_TITLE,
+        WORKSPACE_DRAW_DESCRIPTION,
+        WORKSPACE_POLY_TITLE,
+        WORKSPACE_POLY_DESCRIPTION,
+        WORKSPACE_DRAW_READY,
+        WORKSPACE_POLY_READY,
+        SNAP_KIND_POINT,
+        SNAP_KIND_MIDPOINT,
+        SNAP_KIND_ON_EDGE,
+        SNAP_KIND_AXIS_X,
+        SNAP_KIND_AXIS_Y,
+        SNAP_KIND_AXIS_Z,
+        SNAP_KIND_ON_FACE,
+        SNAP_KIND_GRID,
+        PREFERENCES_SNAP_RADIUS,
         FILE_NEW,
         FILE_OPEN_PROJECT,
         FILE_SAVE,

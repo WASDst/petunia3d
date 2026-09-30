@@ -8,6 +8,10 @@ use petunia_render_wgpu::Renderer;
 
 use crate::{PetuniaViewport, ViewportRenderState};
 
+/// Amostras por pixel do viewport. `Rgba8Unorm` e `Depth24Plus` têm MSAA 4x
+/// garantido pelo wgpu em todos os backends.
+pub const VIEWPORT_MSAA_SAMPLES: u32 = 4;
+
 /// Viewport acelerado por WGPU que renderiza a cena 3D para uma textura
 /// off-screen e converte em [`slint::Image`].
 pub struct WgpuViewport {
@@ -20,6 +24,8 @@ pub struct WgpuViewport {
     pub selection_domain: SelectionDomain,
     target_texture: Option<wgpu::Texture>,
     target_view: Option<wgpu::TextureView>,
+    /// Alvo multisample resolvido em `target_texture` a cada frame.
+    msaa_view: Option<wgpu::TextureView>,
 }
 
 impl WgpuViewport {
@@ -81,7 +87,11 @@ impl WgpuViewport {
         width: u32,
         height: u32,
     ) -> Self {
-        let renderer = Renderer::new(&device, wgpu::TextureFormat::Rgba8Unorm);
+        let renderer = Renderer::with_sample_count(
+            &device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            VIEWPORT_MSAA_SAMPLES,
+        );
         let mut viewport = Self {
             device,
             queue,
@@ -92,6 +102,7 @@ impl WgpuViewport {
             selection_domain: SelectionDomain::Object,
             target_texture: None,
             target_view: None,
+            msaa_view: None,
         };
         viewport.recreate_target();
         viewport
@@ -117,6 +128,25 @@ impl WgpuViewport {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         self.target_texture = Some(texture);
         self.target_view = Some(view);
+        let samples = self.renderer.sample_count();
+        self.msaa_view = (samples > 1).then(|| {
+            self.device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some("Petunia Slint Viewport MSAA"),
+                    size: wgpu::Extent3d {
+                        width: self.width.max(1),
+                        height: self.height.max(1),
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
+                })
+                .create_view(&wgpu::TextureViewDescriptor::default())
+        });
         self.renderer.resize(&self.device, self.width, self.height);
     }
 
@@ -141,6 +171,9 @@ impl WgpuViewport {
         // O uniforme da câmera é escrito em `update`; a opacidade precisa
         // estar no renderer antes dessa escrita, inclusive no primeiro frame.
         self.renderer.set_xray_opacity(state.xray_opacity);
+        self.renderer
+            .set_studio_light_follows_camera(state.studio_light_follows_camera);
+        self.renderer.set_edge_mode(state.edge_mode);
         self.renderer
             .set_selection_style(state.selection_rgb, state.selection_thickness);
         self.renderer.update(
@@ -172,9 +205,11 @@ impl WgpuViewport {
             let depth_view = self.renderer.depth_view();
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Slint Viewport Pass"),
+                // Com MSAA, desenha no alvo multisample e resolve na textura
+                // exibida pelo Slint; as amostras não precisam ser guardadas.
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
+                    view: self.msaa_view.as_ref().unwrap_or(view),
+                    resolve_target: self.msaa_view.as_ref().map(|_| view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.082,
@@ -182,7 +217,11 @@ impl WgpuViewport {
                             b: 0.098,
                             a: 1.0,
                         }),
-                        store: wgpu::StoreOp::Store,
+                        store: if self.msaa_view.is_some() {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
                     },
                     depth_slice: None,
                 })],
@@ -212,11 +251,22 @@ impl WgpuViewport {
 
 impl PetuniaViewport for WgpuViewport {
     fn resize(&mut self, width: u32, height: u32) {
+        let limit = self.device.limits().max_texture_dimension_2d.max(1);
+        let width = width.clamp(1, limit);
+        let height = height.clamp(1, limit);
         if self.width != width || self.height != height {
-            self.width = width.max(1);
-            self.height = height.max(1);
+            self.width = width;
+            self.height = height;
             self.recreate_target();
         }
+    }
+
+    fn uses_physical_pixels(&self) -> bool {
+        true
+    }
+
+    fn set_pixel_ratio(&mut self, ratio: f32) {
+        self.renderer.set_pixel_ratio(ratio);
     }
 
     fn update(&mut self, _dt_seconds: f32) {}
@@ -255,6 +305,220 @@ mod tests {
     use petunia_project::Canvas;
     use petunia_render::Shading;
 
+    /// Lê o pixel RGBA do centro da textura exibida (teste de aparência).
+    fn center_pixel(viewport: &WgpuViewport) -> [u8; 4] {
+        let pixels = read_pixels(viewport);
+        let offset = (((viewport.height / 2) * viewport.width + viewport.width / 2) * 4) as usize;
+        [
+            pixels[offset],
+            pixels[offset + 1],
+            pixels[offset + 2],
+            pixels[offset + 3],
+        ]
+    }
+
+    /// Todos os pixels RGBA da textura exibida, linha a linha, sem padding.
+    fn read_pixels(viewport: &WgpuViewport) -> Vec<u8> {
+        let texture = viewport.target_texture.as_ref().expect("alvo");
+        let bytes_per_row = (viewport.width * 4).div_ceil(256) * 256;
+        let buffer = viewport.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback"),
+            size: u64::from(bytes_per_row * viewport.height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = viewport
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(viewport.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: viewport.width,
+                height: viewport.height,
+                depth_or_array_layers: 1,
+            },
+        );
+        viewport.queue.submit(std::iter::once(encoder.finish()));
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        viewport
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("mapeado");
+        let row = (viewport.width * 4) as usize;
+        (0..viewport.height as usize)
+            .flat_map(|y| {
+                let start = y * bytes_per_row as usize;
+                data[start..start + row].to_vec()
+            })
+            .collect()
+    }
+
+    /// Dois quads lado a lado (aresta compartilhada em x = 0), de frente.
+    fn two_quads() -> Project {
+        let mut mesh = petunia_core::Mesh::default();
+        for [x, y] in [
+            [-2.0f32, -1.0],
+            [0.0, -1.0],
+            [2.0, -1.0],
+            [2.0, 1.0],
+            [0.0, 1.0],
+            [-2.0, 1.0],
+        ] {
+            mesh.verts.push(petunia_mesh::Vertex::new(x, y, 0.0));
+        }
+        mesh.faces.push(petunia_mesh::Face::new(vec![0, 1, 4, 5]));
+        mesh.faces.push(petunia_mesh::Face::new(vec![1, 2, 3, 4]));
+        // `Project::new()` traz o cubo padrão, que cobriria os quads.
+        let mut project = Project::default();
+        project.add("Quads", mesh);
+        project
+    }
+
+    /// Pixels escuros da aresta central na linha do meio da imagem.
+    fn center_edge_width(viewport: &mut WgpuViewport, width: f32, half_height: f32) -> usize {
+        center_edge_width_in(
+            viewport,
+            width,
+            half_height,
+            petunia_render_wgpu::EdgeMode::Overlay,
+            true,
+        )
+    }
+
+    fn center_edge_width_in(
+        viewport: &mut WgpuViewport,
+        width: f32,
+        half_height: f32,
+        edge_mode: petunia_render_wgpu::EdgeMode,
+        overlay: bool,
+    ) -> usize {
+        viewport.renderer.set_line_width_px(width);
+        let mut camera = Camera::default();
+        camera.set_preset(petunia_core::ViewPreset::Front);
+        camera.target = glam::Vec3::ZERO;
+        camera.ortho_half_h = half_height;
+        let state = ViewportRenderState {
+            show_grid: false,
+            show_wireframe_overlay: overlay,
+            edge_mode,
+            ..ViewportRenderState::default()
+        };
+        viewport
+            .render_frame(&two_quads(), &[], &camera, state)
+            .unwrap();
+        let pixels = read_pixels(viewport);
+        let (width_px, y) = (viewport.width as usize, viewport.height as usize / 2);
+        let row: Vec<f32> = (0..width_px)
+            .map(|x| {
+                let i = (y * width_px + x) * 4;
+                luminance([pixels[i], pixels[i + 1], pixels[i + 2], 255])
+            })
+            .collect();
+        let center = width_px / 2;
+        // Amostra da face perto do centro: afastado, os quads ocupam só ±20 px.
+        let face = row[center - 9];
+        (center - 6..center + 6)
+            .filter(|&x| row[x] < face * 0.6)
+            .count()
+    }
+
+    fn luminance(pixel: [u8; 4]) -> f32 {
+        0.2126 * f32::from(pixel[0]) + 0.7152 * f32::from(pixel[1]) + 0.0722 * f32::from(pixel[2])
+    }
+
+    /// Brilho do centro do cubo visto de frente e de trás.
+    fn front_and_back_luminance(viewport: &mut WgpuViewport, follows: bool) -> (f32, f32) {
+        let mut project = Project::new();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let state = ViewportRenderState {
+            show_grid: false,
+            show_wireframe_overlay: false,
+            studio_light_follows_camera: follows,
+            ..ViewportRenderState::default()
+        };
+        let mut sides = [0.0; 2];
+        for (side, preset) in [
+            petunia_core::ViewPreset::Front,
+            petunia_core::ViewPreset::Back,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut camera = Camera::default();
+            camera.set_preset(preset);
+            camera.target = glam::Vec3::ZERO;
+            viewport
+                .render_frame(&project, &[], &camera, state)
+                .unwrap();
+            sides[side] = luminance(center_pixel(viewport));
+        }
+        (sides[0], sides[1])
+    }
+
+    #[test]
+    fn wireframe_edges_have_constant_pixel_width() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
+            return;
+        };
+        // A aresta do meio é comum (0,67 da base): 3 px → 2 px, 6 px → 4 px.
+        let thin = center_edge_width(&mut viewport, 3.0, 2.0);
+        let thick = center_edge_width(&mut viewport, 6.0, 2.0);
+        assert!((1..=3).contains(&thin), "3 px → {thin}");
+        assert!((3..=5).contains(&thick), "6 px → {thick}");
+        assert!(thick > thin);
+        // Aproximar ou afastar não muda a espessura na tela.
+        let zoomed_out = center_edge_width(&mut viewport, 6.0, 6.0);
+        assert_eq!(zoomed_out, thick, "largura em pixels, não em mundo");
+    }
+
+    #[test]
+    fn draw_reads_shape_and_poly_reads_topology() {
+        use petunia_render_wgpu::EdgeMode;
+        let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
+            return;
+        };
+        // A aresta do meio é plana: não é de feição.
+        let draw = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Features, false);
+        let poly = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Topology, false);
+        let paint = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Overlay, false);
+        let overlay = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Features, true);
+        assert_eq!(draw, 0, "DRAW esconde a aresta plana");
+        assert!(poly >= 1, "POLY mostra a topologia");
+        assert_eq!(paint, 0, "PAINT/UV: faces limpas sem overlay");
+        assert!(overlay >= 1, "o overlay acrescenta as arestas finas");
+        // Aresta comum é mais fina que a de feição na mesma largura base.
+        let feature_like = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Overlay, true);
+        assert!(poly <= feature_like, "{poly} ≤ {feature_like}");
+    }
+
+    #[test]
+    fn studio_light_following_the_camera_reads_the_same_from_any_side() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
+            // Sem adaptador (nem lavapipe): nada a medir.
+            return;
+        };
+        let (front, back) = front_and_back_luminance(&mut viewport, true);
+        assert!(
+            (front - back).abs() < 6.0,
+            "frente {front:.1} × trás {back:.1}"
+        );
+        assert!(front > 120.0, "a face de frente fica clara: {front:.1}");
+
+        // Luz fixa no mundo: o lado de trás fica só com a luz ambiente.
+        let (front, back) = front_and_back_luminance(&mut viewport, false);
+        assert!(front - back > 30.0, "frente {front:.1} × trás {back:.1}");
+    }
+
     #[test]
     fn wgpu_viewport_initializes_or_skips_when_no_gpu() {
         match WgpuViewport::try_create_default(640, 480) {
@@ -288,6 +552,8 @@ mod tests {
                         show_grid: true,
                         hover: petunia_core::HoverTarget::None,
                         boolean_operand: None,
+                        studio_light_follows_camera: true,
+                        edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
                     },
                 );
                 assert!(img.is_ok());

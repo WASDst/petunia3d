@@ -28,13 +28,15 @@ integração**. Reabertura da arquitetura exige bloqueador estrutural real + ADR
 
 - viewport-first;
 - shell profissional simplificado, nunca “Blender amputado” nem aplicativo infantil;
-- barra de criação à esquerda; no workspace MODEL, `Parts` é a primeira seção do
-  `Inspector` à direita, seguida por `Transform`, `Material` e `Object`;
+- trilho de ferramentas do workspace à esquerda; em DRAW e POLY, `Parts` é a
+  primeira seção do `Inspector` à direita, seguida por `Transform`, `Material` e
+  `Object`;
   `Asset Library` permanece inferior;
 - painéis semi-flutuantes, retráteis e redimensionáveis dentro de limites explícitos;
-- `MODEL / PAINT / UV` como workspaces V1;
+- `DRAW / POLY / PAINT / UV` como workspaces V1 (revisão de 2026-09-29, ADR 007; antes `MODEL / PAINT / UV`);
 - toolbar contextual dentro do viewport;
-- seleção explícita `Object / Face / Edge / Point`;
+- seleção explícita por workspace: POLY `Object / Face / Edge / Point`; DRAW `Shape / Curve / Point / Region`;
+- uma única gramática de ferramenta para todas as ferramentas (constituição 11);
 - `Wireframe / Solid / Textured / Silhouette` como modos-base;
 - overlays como composição sobre modo-base;
 - Command Registry como fonte de ações, shortcuts, plugins e command palette;
@@ -49,8 +51,8 @@ Valores são em **logical px** antes de UI scaling.
 | Elemento | Baseline | Regra |
 | --- | --- | --- |
 | Top bar | 40 | menus/projeto à esquerda, workspace pills ao centro, ações globais à direita |
-| Barra de criação MODEL | 40–46 | primitivas e referências, sem duplicar edição |
-| Inspector MODEL | 320–360 default; 280–460 | Parts/Transform/Material/Object; seções recolhíveis, lista de Parts virtualizada e rolagem vertical |
+| Trilho de ferramentas DRAW/POLY | 40–46 | ferramentas persistentes do workspace, sem duplicar o Inspector |
+| Inspector DRAW/POLY | 320–360 default; 280–460 | Parts/Transform/Material/Object; seções recolhíveis, lista de Parts virtualizada e rolagem vertical |
 | Asset Library | 176 default; 120–360 | resize vertical + collapse |
 | Panel Header | 28 | um contrato único |
 | Control | 28 | 30–32 somente quando a hierarquia justificar |
@@ -86,9 +88,9 @@ Baseline:
 ```
 Top Bar
 └ Main Workspace
-  ├ Left Region    → barra de criação MODEL + extension panels autorizados
+  ├ Left Region    → trilho de ferramentas do workspace + extension panels autorizados
   ├ Center Region  → Viewport / workspace editor
-  ├ Right Region   → Inspector + extension panels autorizados; MODEL: Parts → Transform → Material → Object
+  ├ Right Region   → Inspector + extension panels autorizados; DRAW/POLY: Parts → Transform → Material → Object
   └ Bottom Region  → Asset Library + extension panels autorizados
 ```
 
@@ -113,6 +115,28 @@ um drawer controlado à direita; ele não é uma segunda lista independente.
 Os slots de extensão permanecem controlados e nenhum plugin pode deslocar as
 seções centrais nem reintroduzir docking livre. PAINT e UV mantêm contratos
 próprios até revisão explícita.
+
+## Revisão de workspaces DRAW e POLY — 2026-09-29
+
+Aprovada explicitamente pelo responsável do produto
+([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md);
+pesquisa no [capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)).
+O workspace MODEL é substituído por dois workspaces que compartilham documento,
+seleção de objeto, câmera, snapping, gramática de ferramenta e Inspector:
+
+- **DRAW** — nível de forma (perfis, regiões, volumes paramétricos, desenho sobre
+  faces, Push/Pull). Seleção `Shape / Curve / Point / Region`.
+- **POLY** — nível de componente. Seleção `Object / Face / Edge / Point`.
+
+As medidas, regiões e regras da revisão de 2026-09-23 valem para os dois. O
+trilho esquerdo passa a conter as ferramentas persistentes do workspace; o
+Inspector é o mesmo. A conversão de forma (DRAW) para malha editável (POLY) é
+explícita e reversível por Undo.
+
+**Decisão aprovada, implementação pendente.** Até que DRAW e POLY estejam
+funcionais, a UI mantém a pill MODEL, conforme a regra "workspace não
+implementado não aparece como pill desabilitada". `Blender.svg` e o manual do
+Blender deixam de ser referências canônicas desta baseline.
 
 # Design System Final V1
 
@@ -322,12 +346,12 @@ Core regions fornecem slots controlados:
 
 ```
 LEFT
-  Parts
+  Trilho de ferramentas do workspace
   Plugin Panel A
   Plugin Panel B
 
 RIGHT
-  Context
+  Inspector (Parts → Transform → Material → Object)
   Plugin Panel C
 
 BOTTOM
@@ -504,20 +528,23 @@ próprios Petunia quando Lucide não representar semanticamente a operação.
 
 # Input e navigation baseline
 
-- LMB: selecionar/operar;
+- LMB: clique sem movimento seleciona; arrasto além do limiar opera a ferramenta
+  ativa (alça ou "haul"); clicar-mover-clicar é alternativa a todo arrasto;
 - Shift+LMB: add/toggle selection;
-- RMB: context menu;
+- RMB: context menu — nunca cancela;
 - MMB: orbit;
 - Shift+MMB: pan;
-- wheel/pinch: zoom;
-- Esc: cancel;
+- wheel/pinch: zoom — sempre, inclusive com ferramenta ativa; contagens de
+  ferramenta usam `+`/`−` ou Ctrl+wheel;
+- navegação nunca é suspensa por ferramenta;
+- Esc: cancela em escada (arrasto → ferramenta → Select);
 - Enter: confirm quando há operação pendente;
 - F6 / Shift+F6: navegar regiões principais;
 - Tab / Shift+Tab: navegar controles dentro da região;
 - arrows: segmented/tree/navigation contextual;
 - Space/Enter: ativação acessível do controle focado.
 
-Click fora nunca confirma silenciosamente operação destrutiva.
+Click fora nunca confirma silenciosamente uma operação pendente de vários passos. Um gesto de arrasto concluído é uma transação desfazível, ajustável no card "Última operação" (constituição 11).
 
 # Shortcuts
 
@@ -537,10 +564,25 @@ Remapping é orientado por `CommandId`, com busca, captura de teclas, detecção
 
 # Workspaces finais V1
 
-## MODEL
+## DRAW
 
-Viewport dominante + barra de criação à esquerda + Inspector direito
-(`Parts → Transform → Material → Object`) + Asset Library inferior.
+Viewport dominante + trilho de ferramentas de forma à esquerda (desenho de
+perfis, Push/Pull, Revolve, primitivas, plano de trabalho) + Inspector direito
+(`Parts → Transform → Material → Object`) + Asset Library inferior. Aparência do
+viewport para leitura de forma (capítulo 05).
+
+## POLY
+
+Mesma estrutura de DRAW, com trilho de ferramentas de componente (Move/Rotate/
+Scale, Extrude, Inset, Round Edge, Loop Cut, Cut, Poly Pen etc.) e aparência do
+viewport para leitura de topologia (capítulo 05).
+
+> Implementação (2026-09-30): o seletor do topo mostra `DRAW · POLY · PAINT · UV`.
+> DRAW e POLY são modos do mesmo workspace de modelagem (mesmos documento,
+> seleção, câmera, snapping e Inspector); muda o trilho de ferramentas. O
+> conjunto de seleção `Shape / Curve / Point / Region` do DRAW e a aparência de
+> viewport por modo (capítulo 05) ainda estão pendentes — ver
+> [`draw-regions-gap-matrix.md`](../../development/draw-regions-gap-matrix.md).
 
 ## PAINT
 

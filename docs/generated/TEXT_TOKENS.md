@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **781**.
+Total de chaves de localização cadastradas: **827**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -137,6 +137,7 @@ Total de chaves de localização cadastradas: **781**.
 | `dock.side` | Dock side | Lado do dock |
 | `dock.side_by_side` | Side by side | Lado a lado |
 | `dock.stacked` | Stacked | Empilhados |
+| `draw.shape_name` | Shape | Forma |
 | `edit.redo` | Redo | Refazer |
 | `edit.undo` | Undo | Desfazer |
 | `empty.no_selection` | Nothing selected | Nada selecionado |
@@ -343,10 +344,18 @@ Total de chaves de localização cadastradas: **781**.
 | `pivot.origin_to_cursor` | Origin to 3D Cursor | Origem para o Cursor 3D |
 | `pivot.origin_to_geometry` | Origin to Geometry | Origem para a Geometria |
 | `pivot.origin_to_selection` | Origin to Selection | Origem para a Seleção |
+| `preferences.click_move_click` | Drag without holding the button (click, move, click) | Arrastar sem segurar o botão (clicar, mover, clicar) |
+| `preferences.click_move_click_hint` | Click a handle: it follows the mouse until the next click. | Clique numa alça: ela segue o mouse até o próximo clique. |
 | `preferences.colorblind_axes` | Colorblind axes differentiation (X, Y, Z labels) | Diferenciação não-cromática de eixos (Rótulos X, Y, Z) |
 | `preferences.double_tap_interval` | Double-tap shortcut interval (ms) | Intervalo de duplo toque de atalho (ms) |
+| `preferences.drag_threshold` | Distance before a drag starts (px) | Distância para começar a arrastar (px) |
 | `preferences.multiselection_measure_tag` | Display average measure tag on multiple edge selection | Exibir tag de média na multiseleção de arestas |
 | `preferences.reduced_motion` | Reduced motion (disable viewport animations) | Redução de movimento (desativa animações do viewport) |
+| `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
+| `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
+| `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
+| `preferences.workplane_prefer_ground` | Automatic work plane favors the ground | Plano automático favorece o chão |
+| `preferences.workplane_prefer_ground_hint` | With no face under the cursor, drawing goes on the ground unless the camera is almost level. Off: the world plane that most faces the view (Modo/Cinema 4D style). | Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D). |
 | `prims.body_length` | Body Length | Comprimento do Corpo |
 | `prims.bottom_radius` | Bottom Radius | Raio da Base |
 | `prims.cancel` | Cancel | Cancelar |
@@ -501,6 +510,27 @@ Total de chaves de localização cadastradas: **781**.
 | `shading.tip_wireframe` | Wireframe (Z 4) | Arame (Z 4) |
 | `shading.unlit` | Unlit | Sem Luz |
 | `shading.wire` | Wireframe | Arame |
+| `snap_kind.axis_x` | Along X axis | Paralelo ao eixo X |
+| `snap_kind.axis_y` | Along Y axis | Paralelo ao eixo Y |
+| `snap_kind.axis_z` | Along Z axis | Paralelo ao eixo Z |
+| `snap_kind.grid` | Grid | Grade |
+| `snap_kind.midpoint` | Midpoint | Ponto médio |
+| `snap_kind.on_edge` | On edge | Na aresta |
+| `snap_kind.on_face` | On face | Na face |
+| `snap_kind.point` | Point | Ponto |
+| `tool_grammar.adjust_hint` | Type a value and press Enter to adjust (same Undo) | Digite um valor e Enter para ajustar (mesmo Undo) |
+| `tool_grammar.adjusted` | Last operation adjusted | Última operação ajustada |
+| `tool_grammar.draw_ready` | Draw on {plane}: click to add points, drag for curves; with Auto, the face under the cursor becomes the plane | Desenhar em {plane}: clique para adicionar pontos, arraste para curvas; no Auto, a face sob o cursor vira o plano |
+| `tool_grammar.expired` | The last operation can no longer be adjusted | A última operação não pode mais ser ajustada |
+| `tool_grammar.gesture_hint` | Drag or type a value · Esc cancels · Right button: menu | Arraste ou digite um valor · Esc cancela · Botão direito: menu |
+| `tool_grammar.last_operation` | Last operation | Última operação |
+| `tool_grammar.needs_edge` | {tool}: click or drag an edge | {tool}: clique ou arraste uma aresta |
+| `tool_grammar.needs_face` | {tool}: click or drag a face | {tool}: clique ou arraste uma face |
+| `tool_grammar.no_face_selected` | No face selected; using Ground | Nenhuma face selecionada; usando o chão |
+| `tool_grammar.primitive_kept` | Primitive kept · Ctrl+Z undoes | Primitiva mantida · Ctrl+Z desfaz |
+| `tool_grammar.ready` | {tool}: drag on the mesh or click to select | {tool}: arraste sobre a malha ou clique para selecionar |
+| `tool_grammar.workplane_auto` | Automatic work plane: face under the cursor or the world plane most parallel to the view | Plano de trabalho automático: face sob o cursor ou plano do mundo mais paralelo à vista |
+| `tool_grammar.workplane_set` | Work plane: {plane} (locked) | Plano de trabalho: {plane} (travado) |
 | `tool_properties.bevel_hint` | Supports one manifold convex edge with simple corners; one segment. | Suporta um edge convexo manifold com cantos simples; um segmento. |
 | `tool_properties.bevel_width` | Round Edge width | Largura do Round Edge |
 | `tool_properties.blocked` | Confirm or cancel the viewport operation before editing these fields. | Confirme ou cancele a operação na viewport antes de editar estes campos. |
@@ -550,6 +580,8 @@ Total de chaves de localização cadastradas: **781**.
 | `tools.paint` | Paint | Pintar |
 | `tools.picker` | Picker | Conta-gotas |
 | `tools.pivot` | Pivot | Pivô |
+| `tools.poly_pen` | Poly Pen | Poly Pen |
+| `tools.poly_pen_hint` | Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it | Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo |
 | `tools.primitives` | Add | Adicionar |
 | `tools.push_pull` | Push/Pull | Push/Pull |
 | `tools.pushpull` | Push/Pull | Push/Pull |
@@ -698,6 +730,12 @@ Total de chaves de localização cadastradas: **781**.
 | `ui.profile_depth` | Depth | Profundidade |
 | `ui.profile_generate` | Generate Volume | Gerar volume |
 | `ui.profile_hint` | Click to draw on the view plane; click the first point to close. Generate by extrude or revolve. | Clique para desenhar num plano da vista; clique no primeiro ponto para fechar. Depois gere por extrusão ou revolve. |
+| `ui.profile_look_at_plane` | Look at plane | Olhar para o plano |
+| `ui.profile_plane` | Plane | Plano |
+| `ui.profile_plane_auto` | Auto | Auto |
+| `ui.profile_plane_face` | Face | Face |
+| `ui.profile_plane_ground` | Ground | Chão |
+| `ui.profile_plane_view` | View | Vista |
 | `ui.profile_points` | Points | Pontos |
 | `ui.profile_presets` | 2D Profile Presets | Presets de perfil 2D |
 | `ui.profile_revolve` | Revolve | Revolve |
@@ -764,6 +802,8 @@ Total de chaves de localização cadastradas: **781**.
 | `ui.vertical_drag_inverted` | Vertical tool drag inverted | Arrasto vertical invertido |
 | `ui.vertical_drag_normal` | Vertical tool drag normal | Arrasto vertical normal |
 | `ui.vertical_tool_drag` | Vertical tool drag | Arrasto vertical das ferramentas |
+| `ui.view_gizmo` | View navigation | Navegação da vista |
+| `ui.view_gizmo_hint` | Drag to orbit; click an axis to align the view | Arraste para orbitar; clique num eixo para alinhar a vista |
 | `ui.view_lit` | Scene lighting | Iluminação da cena |
 | `ui.view_lit_hint` | Preview scene lighting and materials together. | Pré-visualiza a iluminação da cena junto com os materiais. |
 | `ui.view_material` | Material preview | Prévia de material |
@@ -796,6 +836,12 @@ Total de chaves de localização cadastradas: **781**.
 | `viewport.snap_tip` | Magnetic Snapping · Shift+Tab | Snapping Magnético · Shift+Tab |
 | `viewport.tri_tip` | Triangulation inspection (internal diagonals of quads/n-gons) | Inspeção de triangulação (diagonais internas de quads/n-gons) |
 | `viewport.xray_tip` | X-Ray / Mesh transparency mode · Alt+Z | Modo Raio-X / Transparência de Malha · Alt+Z |
+| `workspace.draw_description` | Shape level: draw profiles on planes and faces, push and pull regions into solids | Nível de forma: desenhe perfis em planos e faces, empurre e puxe regiões em sólidos |
+| `workspace.draw_ready` | DRAW: shape tools — Sketch, Push/Pull on regions | DRAW: ferramentas de forma — Sketch, Push/Pull em regiões |
+| `workspace.draw_title` | Draw Workspace | Workspace Desenho |
+| `workspace.poly_description` | Component level: edit points, edges and faces with extrude, inset, round edge and cuts | Nível de componente: edite pontos, arestas e faces com extrude, inset, round edge e cortes |
+| `workspace.poly_ready` | POLY: component tools — points, edges and faces | POLY: ferramentas de componente — pontos, arestas e faces |
+| `workspace.poly_title` | Poly Workspace | Workspace Polígonos |
 | `ws.model` | MODEL | MODEL |
 | `ws.paint` | PAINT | PAINT |
 | `ws.uv` | UV | UV |

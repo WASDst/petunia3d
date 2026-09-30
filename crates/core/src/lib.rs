@@ -10,6 +10,7 @@ pub mod diagnostics;
 pub mod docs;
 pub mod events;
 pub mod handles;
+pub mod inference;
 pub mod jobs;
 pub mod loop_cut;
 pub mod mesh_preview;
@@ -17,17 +18,20 @@ pub mod modal;
 pub mod modal_feedback;
 pub mod module;
 pub mod picking;
+pub mod poly_pen;
 pub mod primitive_session;
 pub mod project_service;
 pub mod proportional;
 pub mod queries;
 pub mod recent_projects;
+pub mod region_push;
 pub mod render_revision;
 pub mod rig_commands;
 pub mod schema_contracts;
 pub mod selection;
 pub mod snap;
 pub mod state;
+pub mod tool_session;
 pub mod transform_projection;
 pub mod viewport;
 pub mod viewport_query;
@@ -102,12 +106,19 @@ pub use brush::{
 };
 pub use camera::{Camera, Projection, ViewPreset};
 pub use events::{AppEvent, EventBus};
+pub use inference::{
+    DEFAULT_SNAP_RADIUS_PIXELS, ScreenSnapHit, ScreenSnapQuery, SnapAnchor, SnapGrid, SnapKind,
+    SnapMask, clamp_snap_radius, snap_screen,
+};
 pub use modal_feedback::ToolFeedback;
 pub use module::{Module, ModuleRegistry};
+pub use petunia_mesh::poly_pen::PenPoint;
+pub use poly_pen::PolyPenCommandError;
 pub use primitive_session::{
     CircleFill, PrimitiveCreationSession, PrimitiveDescriptor, PrimitiveDescriptorExt,
 };
 pub use proportional::{ProportionalFalloff, ProportionalSettings, calculate_falloff_weight};
+pub use region_push::{RegionHit, RegionPlane, RegionPlanes, RegionPushError, region_at_ray};
 pub use selection::{SelectMode, Selection, SelectionDomain, Workspace};
 pub use snap::{
     SnapElement, SnapQuery, SnapResult, SnapSettings, SnapTarget, snap_point, snap_point_to_edges,
@@ -121,7 +132,7 @@ pub use state::{
     RenderResources, RenderStats, SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT,
     SHELL_ASSET_LIBRARY_MAX_HEIGHT, SHELL_ASSET_LIBRARY_MIN_HEIGHT, SceneFilter, SceneObjectState,
     Shading, TOOLBAR_DEFAULT_WIDTH, TextureDirtyRect, TextureUpdate, ToolActivation, ToolState,
-    TransformOrientation, UiDensity, UiState, WorkspaceUiMemory, workspace_index,
+    TransformOrientation, UiDensity, UiState, WorkplaneKind, WorkspaceUiMemory, workspace_index,
 };
 pub use viewport::{
     LogicalRect, PhysicalViewport, unproject_cursor_or_vertex_snap,
@@ -132,6 +143,10 @@ pub use viewport_query::{ViewportQueryBuffer, ViewportQuerySample};
 pub type AttachmentValidity = SurfaceAttachmentStatus;
 
 pub use modal::{ModalConstraint, ModalError, ModalKind, ModalOp};
+pub use tool_session::{
+    DEFAULT_DRAG_THRESHOLD_PX, DRAG_THRESHOLD_RANGE, DragFrame, LastOperation, PressTarget,
+    ToolEffect, ToolKey, ToolPhase, ToolSession, drag_value,
+};
 
 /// Malha, reexportada para os shells que manipulam geometria sem depender de `petunia_mesh`.
 pub use petunia_mesh::Mesh;
