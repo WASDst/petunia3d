@@ -346,7 +346,99 @@ struct MeshRange {
     start: u32,
     count: u32,
     asset_id: Option<uuid::Uuid>,
+    /// Objeto dono da faixa (máscara do contorno de seleção).
+    object: uuid::Uuid,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct OutlineUniform {
+    color: [f32; 4],
+    active_color: [f32; 4],
+    /// x = raio em px físicos.
+    params: [f32; 4],
+}
+
+/// Máscara dos objetos selecionados: R = selecionado, G = ativo.
+const OUTLINE_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg8Unorm;
+
+const OUTLINE_MASK_WGSL: &str = r#"
+struct Camera {
+    view_proj: mat4x4<f32>,
+    light_dir: vec4<f32>,
+    light_params: vec4<f32>,
+    xray: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> cam: Camera;
+
+@vertex
+fn vs_main(@location(0) pos: vec3<f32>) -> @builtin(position) vec4<f32> {
+    return cam.view_proj * vec4<f32>(pos, 1.0);
+}
+@fragment
+fn fs_selected() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+@fragment
+fn fs_active() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 1.0, 0.0, 1.0);
+}
+"#;
+
+/// Contorno de largura constante em pixels ao redor da máscara: cada pixel
+/// fora dela procura a máscara mais próxima num raio pequeno (Rong & Tan
+/// usam jump flooding para raios grandes; para 1–6 px a busca direta basta).
+/// A borda externa é suavizada pela distância.
+const OUTLINE_WGSL: &str = r#"
+struct Outline {
+    color: vec4<f32>,
+    active_color: vec4<f32>,
+    params: vec4<f32>,
+};
+@group(0) @binding(0) var mask: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> outline: Outline;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let uv = vec2<f32>(f32((index << 1u) & 2u), f32(index & 2u));
+    return vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let dims = vec2<i32>(textureDimensions(mask));
+    let p = vec2<i32>(position.xy);
+    if (textureLoad(mask, p, 0).r > 0.5) {
+        discard;
+    }
+    let radius = outline.params.x;
+    let reach = i32(ceil(radius)) + 1;
+    var best = 1e9;
+    var nearest_active = 0.0;
+    for (var dy = -reach; dy <= reach; dy = dy + 1) {
+        for (var dx = -reach; dx <= reach; dx = dx + 1) {
+            let q = p + vec2<i32>(dx, dy);
+            if (q.x < 0 || q.y < 0 || q.x >= dims.x || q.y >= dims.y) {
+                continue;
+            }
+            let m = textureLoad(mask, q, 0);
+            if (m.r > 0.5) {
+                let d = length(vec2<f32>(f32(dx), f32(dy)));
+                if (d < best || (d == best && m.g > nearest_active)) {
+                    best = d;
+                    nearest_active = m.g;
+                }
+            }
+        }
+    }
+    let alpha = clamp(radius + 1.0 - best, 0.0, 1.0);
+    if (alpha <= 0.0) {
+        discard;
+    }
+    let color = mix(outline.color, outline.active_color, nearest_active);
+    return vec4<f32>(color.rgb, color.a * alpha);
+}
+"#;
 
 pub struct Renderer {
     depth_format: wgpu::TextureFormat,
@@ -385,6 +477,18 @@ pub struct Renderer {
     line_width_px: f32,
     edge_mode: EdgeMode,
     workplane: Option<WorkplaneOverlay>,
+    /// Objetos selecionados (domínio Object) e o ativo, para o contorno.
+    outlined_objects: Vec<uuid::Uuid>,
+    outlined_active: Option<uuid::Uuid>,
+    /// A máscara deste quadro foi gravada (o contorno só é composto então).
+    outline_encoded: bool,
+    outline_mask_view: Option<wgpu::TextureView>,
+    outline_bind_group: Option<wgpu::BindGroup>,
+    outline_layout: wgpu::BindGroupLayout,
+    outline_uniform: wgpu::Buffer,
+    outline_mask_pipeline: wgpu::RenderPipeline,
+    outline_mask_active_pipeline: wgpu::RenderPipeline,
+    outline_pipeline: wgpu::RenderPipeline,
     /// A camada de seleção precisa ser refeita (mudou algo fora da cena).
     selection_dirty: bool,
     selection_tri_pipeline: wgpu::RenderPipeline,
@@ -934,6 +1038,121 @@ impl Renderer {
             cache: None,
         });
 
+        let outline_mask_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("selection-outline-mask-shader"),
+            source: wgpu::ShaderSource::Wgsl(OUTLINE_MASK_WGSL.into()),
+        });
+        let outline_mask = |label: &'static str, entry: &'static str| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&mesh_layout),
+                vertex: wgpu::VertexState {
+                    module: &outline_mask_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<MeshVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                    })],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &outline_mask_shader,
+                    entry_point: Some(entry),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: OUTLINE_MASK_FORMAT,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let outline_mask_pipeline = outline_mask("selection-outline-mask", "fs_selected");
+        let outline_mask_active_pipeline =
+            outline_mask("selection-outline-mask-active", "fs_active");
+        let outline_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("selection-outline-layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let outline_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("selection-outline-uniform"),
+            size: std::mem::size_of::<OutlineUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let outline_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("selection-outline-shader"),
+            source: wgpu::ShaderSource::Wgsl(OUTLINE_WGSL.into()),
+        });
+        let outline_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("selection-outline-pipeline-layout"),
+                bind_group_layouts: &[Some(&outline_layout)],
+                immediate_size: 0,
+            });
+        let outline_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("selection-outline"),
+            layout: Some(&outline_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &outline_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &outline_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth24Plus,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: msaa,
+            multiview_mask: None,
+            cache: None,
+        });
+
         let wide_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("simple3d-wide-line-shader"),
             source: wgpu::ShaderSource::Wgsl(WIDE_LINE_WGSL.into()),
@@ -1375,6 +1594,16 @@ impl Renderer {
             line_width_px: DEFAULT_LINE_WIDTH_PX,
             edge_mode: EdgeMode::Overlay,
             workplane: None,
+            outlined_objects: Vec::new(),
+            outlined_active: None,
+            outline_encoded: false,
+            outline_mask_view: None,
+            outline_bind_group: None,
+            outline_layout,
+            outline_uniform,
+            outline_mask_pipeline,
+            outline_mask_active_pipeline,
+            outline_pipeline,
             selection_dirty: false,
             selection_tri_pipeline,
             selection_line_pipeline,
@@ -1456,6 +1685,77 @@ impl Renderer {
     /// `false` a mantém fixa no mundo.
     pub fn set_studio_light_follows_camera(&mut self, follows: bool) {
         self.studio_light_follows_camera = follows;
+    }
+
+    /// Objetos com contorno de seleção (domínio Object); o ativo é mais claro.
+    pub fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
+        if self.outlined_objects != selected {
+            self.outlined_objects = selected.to_vec();
+        }
+        self.outlined_active = active.filter(|id| selected.contains(id));
+    }
+
+    /// Grava a máscara dos objetos selecionados antes do passe principal. Sem
+    /// esta chamada no quadro, `render` não desenha o contorno.
+    pub fn encode_selection_outline_mask(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.outline_encoded = false;
+        let (Some(mask_view), Some(vb)) = (&self.outline_mask_view, &self.mesh_vb) else {
+            return;
+        };
+        if self.outlined_objects.is_empty() {
+            return;
+        }
+        let rgb = self.selection_rgb.map(|channel| channel as f32 / 255.0);
+        let uniform = OutlineUniform {
+            color: [rgb[0] * 0.62, rgb[1] * 0.62, rgb[2] * 0.62, 1.0],
+            active_color: [rgb[0], rgb[1], rgb[2], 1.0],
+            params: [
+                self.selection_thickness.clamp(1.0, 4.0) * self.pixel_ratio,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        };
+        queue.write_buffer(&self.outline_uniform, 0, bytemuck::bytes_of(&uniform));
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("selection-outline-mask"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: mask_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_bind_group(0, &self.cam_bind_group, &[]);
+        pass.set_vertex_buffer(0, vb.slice(..));
+        let mut drew = false;
+        for active_pass in [false, true] {
+            pass.set_pipeline(if active_pass {
+                &self.outline_mask_active_pipeline
+            } else {
+                &self.outline_mask_pipeline
+            });
+            for range in &self.mesh_ranges {
+                let selected = self.outlined_objects.contains(&range.object);
+                let is_active = self.outlined_active == Some(range.object);
+                if selected && is_active == active_pass {
+                    pass.draw(range.start..range.start + range.count, 0..1);
+                    drew = true;
+                }
+            }
+        }
+        self.outline_encoded = drew;
     }
 
     /// Plano de trabalho em destaque (DRAW com a ferramenta de desenho).
@@ -1555,6 +1855,36 @@ impl Renderer {
         });
         self.depth_view = Some(tex.create_view(&Default::default()));
         self.depth_size = (width, height);
+        let mask = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("selection-outline-mask"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OUTLINE_MASK_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let mask_view = mask.create_view(&Default::default());
+        self.outline_bind_group = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("selection-outline-bind-group"),
+            layout: &self.outline_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&mask_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.outline_uniform.as_entire_binding(),
+                },
+            ],
+        }));
+        self.outline_mask_view = Some(mask_view);
     }
 
     /// Atualiza uniforms de câmera todo frame; reconstrói buffers de geometria
@@ -1804,6 +2134,7 @@ impl Renderer {
                 mesh_ranges.push(MeshRange {
                     start: range_start,
                     count: range_count,
+                    object: obj.id,
                     // Material Preview e Rendered sempre amostram o material; nos
                     // outros modos a textura é opt-in pelo toggle `textured`.
                     asset_id: if (textured || shading.samples_material()) && tex_canvas.is_some() {
@@ -2563,6 +2894,17 @@ impl Renderer {
         }
 
         let _ = Vec3::ZERO;
+
+        // Contorno de seleção de objetos por cima de tudo, em largura
+        // constante; a máscara foi gravada antes do passe principal.
+        if self.outline_encoded
+            && let Some(bind_group) = &self.outline_bind_group
+        {
+            pass.set_pipeline(&self.outline_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.draw(0..3, 0..1);
+            pass.set_bind_group(0, &self.cam_bind_group, &[]);
+        }
     }
 
     pub fn depth_view(&self) -> Option<&wgpu::TextureView> {

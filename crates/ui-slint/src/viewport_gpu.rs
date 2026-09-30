@@ -201,6 +201,8 @@ impl WgpuViewport {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Slint Viewport Encoder"),
             });
+        self.renderer
+            .encode_selection_outline_mask(&self.queue, &mut encoder);
 
         {
             let depth_view = self.renderer.depth_view();
@@ -268,6 +270,10 @@ impl PetuniaViewport for WgpuViewport {
 
     fn set_pixel_ratio(&mut self, ratio: f32) {
         self.renderer.set_pixel_ratio(ratio);
+    }
+
+    fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
+        self.renderer.set_outlined_objects(selected, active);
     }
 
     fn update(&mut self, _dt_seconds: f32) {}
@@ -545,6 +551,74 @@ mod tests {
         );
         // Desligar remove o destaque.
         assert_eq!(render(None), plain);
+    }
+
+    /// Linha do meio da imagem com o cubo padrão de frente; `outline` liga o
+    /// contorno de seleção do cubo.
+    fn cube_row(viewport: &mut WgpuViewport, outline: bool, half_height: f32) -> Vec<[u8; 3]> {
+        let project = Project::new();
+        let cube = project.assets[0].id;
+        if outline {
+            viewport.renderer.set_outlined_objects(&[cube], Some(cube));
+        } else {
+            viewport.renderer.set_outlined_objects(&[], None);
+        }
+        let mut camera = Camera::default();
+        camera.set_preset(petunia_core::ViewPreset::Front);
+        camera.target = glam::Vec3::ZERO;
+        camera.ortho_half_h = half_height;
+        let state = ViewportRenderState {
+            show_grid: false,
+            selection_thickness: 2.0,
+            ..ViewportRenderState::default()
+        };
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        let pixels = read_pixels(viewport);
+        let (width, y) = (viewport.width as usize, viewport.height as usize / 2);
+        (0..width)
+            .map(|x| {
+                let i = (y * width + x) * 4;
+                [pixels[i], pixels[i + 1], pixels[i + 2]]
+            })
+            .collect()
+    }
+
+    /// Pixels do anel de contorno à direita do cubo (diferem da imagem sem
+    /// contorno fora da silhueta) e se o interior ficou intacto.
+    fn outline_ring(viewport: &mut WgpuViewport, half_height: f32) -> (usize, bool) {
+        let plain = cube_row(viewport, false, half_height);
+        let outlined = cube_row(viewport, true, half_height);
+        let background = plain[plain.len() - 1];
+        let center = plain.len() / 2;
+        let edge = (center..plain.len())
+            .find(|&x| plain[x] == background)
+            .expect("borda do cubo");
+        // O anel inclui o pixel suavizado da borda, que fica fora da máscara.
+        let ring = (center..plain.len())
+            .filter(|&x| outlined[x] != plain[x])
+            .count();
+        let interior_intact = (center..edge - 2).all(|x| outlined[x] == plain[x]);
+        (ring, interior_intact)
+    }
+
+    #[test]
+    fn selected_objects_get_a_constant_width_outline() {
+        let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
+            return;
+        };
+        let (ring, interior_intact) = outline_ring(&mut viewport, 3.0);
+        assert!((2..=3).contains(&ring), "2 px de contorno → {ring}");
+        assert!(interior_intact, "o contorno fica fora da silhueta");
+        // Afastar a câmera não afina nem engrossa o contorno.
+        let (far_ring, _) = outline_ring(&mut viewport, 8.0);
+        assert_eq!(far_ring, ring, "largura em pixels, não em mundo");
+        // Sem seleção, nada muda.
+        assert_eq!(
+            cube_row(&mut viewport, false, 3.0),
+            cube_row(&mut viewport, false, 3.0)
+        );
     }
 
     #[test]

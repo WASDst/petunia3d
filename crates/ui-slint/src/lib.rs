@@ -493,6 +493,8 @@ pub trait PetuniaViewport: Send {
     /// Malhas deformadas por skin (preview do Animate) que substituem, só ao
     /// desenhar, as malhas em repouso do documento. `None` volta ao repouso.
     fn set_pose_override(&mut self, _pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {}
+    /// Objetos com contorno de seleção (domínio Object) e o ativo.
+    fn set_outlined_objects(&mut self, _selected: &[uuid::Uuid], _active: Option<uuid::Uuid>) {}
     fn render_frame(
         &mut self,
         _project: &Project,
@@ -560,6 +562,10 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn set_pose_override(&mut self, pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {
         (**self).set_pose_override(pose);
+    }
+
+    fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
+        (**self).set_outlined_objects(selected, active);
     }
 
     fn render_frame(
@@ -1762,6 +1768,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .queue_texture_updates(self.state.render.take_texture_updates());
         let pose = self.animate_pose_override();
         self.viewport.set_pose_override(pose);
+        let (outlined, active) = self.outlined_objects();
+        self.viewport.set_outlined_objects(&outlined, active);
         self.viewport.render_frame(
             &self.state.project,
             &self.state.project.refs,
@@ -9748,6 +9756,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         } else {
             petunia_render_wgpu::EdgeMode::Overlay
         }
+    }
+
+    /// Objetos contornados: a seleção de objetos no domínio Object. Nos
+    /// domínios de componente a camada de componentes é o destaque.
+    fn outlined_objects(&self) -> (Vec<uuid::Uuid>, Option<uuid::Uuid>) {
+        if self.state.selection_domain() != SelectionDomain::Object
+            || self.state.workspace != Workspace::Model
+        {
+            return (Vec::new(), None);
+        }
+        let selection = &self.state.session.selection;
+        (selection.assets.clone(), selection.asset)
     }
 
     /// Plano de trabalho em destaque (capítulo 05) quando já está decidido:
