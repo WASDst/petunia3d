@@ -40,7 +40,9 @@ confirmação e cancelamento, respeitando a semântica própria do Petunia.
 | Profile permite desenho, fechamento, preview e saída por extrude/revolve | RUDIMENTARY | Estado e algoritmos existiam no módulo, mas o shell de produção Slint não ativava a captura nem fornecia fluxo de gerar. Adicionados seleção de ferramenta, preview da linha, fechamento explícito, profundidade e ações Generate/Revolve. Extrude e Revolve respeitam frame right/up/normal do Profile. | PARTIALLY_COMPLIANT — teste headless fecha perfil e gera mesh com um Undo; falta precisão do plano sob vistas ortográficas/perspectiva e interação de cancelamento visual. |
 | Pivot tem selector acessível no viewport e política atual chega ao transform core | RUDIMENTARY | Enum, cálculo e uso pelo modal já existem no domínio; Slint não mostrava selector. Adicionado popover localizado para Median, Bounds, Cursor e Individual Origins. | PARTIALLY_COMPLIANT — teste valida escolha Cursor e VM; Active Element permanece fora da enum/spec aprovada e casos de seleção múltipla ainda precisam auditoria P3D-027. |
 
-### Fontes Blender consultadas
+### Fontes Blender consultadas (histórico)
+
+Desde o ADR 006 (2026-09-29), o manual do Blender não é referência de interação; a referência é a constituição 11 e o capítulo 45 do Livro Vivo. As fontes abaixo ficam como registro desta rodada.
 
 - [Loop Cut](https://docs.blender.org/manual/en/latest/modeling/meshes/tools/loop.html)
 - [Loop Cut and Slide](https://docs.blender.org/manual/en/latest/modeling/meshes/editing/edge/loopcut_slide.html)

@@ -26,13 +26,15 @@ flowchart LR
 
 **Star não faz parte do Core V1.** Pode ser adicionada posteriormente como conveniência V1.x ou por plugin, sem aumentar a superfície inicial de criação.
 
-A Pen Tool inicial gera linhas poligonais. Bézier verdadeira fica para uma evolução posterior, evitando que o projeto dependa de um sistema completo de curvas paramétricas.
+A Pen Tool inicial gera linhas poligonais. Bézier verdadeira fica para uma evolução posterior, evitando que o projeto dependa de um sistema completo de curvas paramétricas. Quando a curva livre entrar no workspace DRAW, a direção preferida é interpolar os pontos clicados sem alças (κ-curves, [capítulo 45](45-pesquisa-interacao-modelagem-referencias.md)), sempre discretizada com contagem de segmentos explícita.
 
 O desenho do Petunia é **planar 3D modeling**, não desenho 2D ambíguo: cada Profile está associado a um Work Plane conhecido no espaço 3D. O sistema conhece origem, eixos do plano, normal, posição e contexto de operação. Isso elimina a necessidade de inferir livremente onde um stroke existe no espaço.
 
 ## Profile → Volume
 
-Ao fechar uma forma válida, o software pode mostrar preenchimento e uma **Depth Handle**. Arrastar a alça gera uma extrusão imediatamente.
+Ao fechar uma forma válida, o software mostra preenchimento e uma **Depth Handle**. Arrastar a alça — ou arrastar em qualquer lugar com a ferramenta Push/Pull — gera a extrusão imediatamente, com valor digitável (constituição 11).
+
+No workspace DRAW, regiões fechadas (inclusive as formadas por perfis que se cruzam no mesmo plano) são destacadas no hover e podem ser empurradas diretamente. Sobre uma face existente, puxar para fora soma volume e empurrar para dentro corta, por operação topológica local (imprint + extrusão).
 
 ## Low-poly durante a criação
 
@@ -56,7 +58,7 @@ As primitivas podem permanecer como **generators paramétricos** enquanto o usu�
 
 # Draw on Face
 
-Selecionar uma face plana e ativar Draw alinha a câmera temporariamente à face. Um profile desenhado nela pode:
+Com Draw ativo, a face plana sob o cursor vira o plano de trabalho. A câmera **não** é movida automaticamente; o comando "Olhar para o plano" (ou uma preferência) a alinha quando o usuário quiser. Um profile desenhado nela pode:
 
 - Splitar a face.
 - Ser puxado para fora como detalhe.
@@ -85,4 +87,4 @@ Mirror
 Bevel
 ```
 
-Cada estágio pode ser ajustável até o usuário decidir converter para mesh editável. A história procedural deve permanecer pequena; operações mesh arbitrárias continuam apoiadas pelo Undo/Redo transacional normal.
+Cada estágio pode ser ajustável até o usuário decidir converter para mesh editável. No workspace DRAW, formas permanecem paramétricas; "Converter em polígonos" é a passagem explícita, reversível por Undo, para edição de componente no workspace POLY. A história procedural deve permanecer pequena; operações mesh arbitrárias continuam apoiadas pelo Undo/Redo transacional normal.

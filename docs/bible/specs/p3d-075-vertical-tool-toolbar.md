@@ -15,6 +15,11 @@ Toolbar vertical para tools persistentes de interação, não catálogo de todos
 
 Select/Cursor, Move, Rotate, Scale, Universal Transform, Annotate/Measure e outras tools realmente persistentes.
 
+Desde 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)), o trilho é do workspace e todas as ferramentas de operação são persistentes (constituição 11):
+
+- **DRAW:** Select, Linha/Polilinha, Retângulo, Círculo, Arco, Polígono, Push/Pull, Revolve, primitivas, plano de trabalho, Medir.
+- **POLY:** Select, Move, Rotate, Scale, Universal, Extrude, Inset, Round Edge, Loop Cut, Cut, Poly Pen, Medir.
+
 ## Regras
 
 Commands como Delete/Add Cube não ocupam a toolbar apenas por disponibilidade de espaço. Tool ativa tem estado inequívoco, hitbox adequada e tooltip com keybind atual.

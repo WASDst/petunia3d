@@ -42,6 +42,15 @@ Manter extremamente simples:
 
 O usuário deve trocar a forma de enxergar o modelo sem mudar de workspace ou configurar dezenas de opções. O software adapta a visualização ao contexto: desenhar sobre referência favorece ortográfica + silhouette/reference; orbitar favorece perspective + solid/textured; editar topology ativa overlays relevantes.
 
+## Aparência por workspace
+
+Desde a revisão de 2026-09-29 ([ADR 006](../../architecture/adr/006-workspaces-draw-poly-e-gramatica-unica.md)), os dois workspaces de criação usam os mesmos modos-base com defaults de overlay diferentes:
+
+- **DRAW:** leitura de forma — iluminação de estúdio ou matcap, arestas de feição nítidas, plano de trabalho em destaque, regiões tingidas no hover e cotas visíveis.
+- **POLY:** leitura de topologia — flat shading, todas as arestas finas com arestas de feição reforçadas, pontos visíveis no domínio Point, pré-seleção clara e componentes de trás ocultos fora do X-Ray.
+
+Em ambos: imagem renderizada em pixels físicos com antisserrilhado, linhas de largura constante em pixels e pré-seleção do elemento sob o cursor antes do clique ([capítulo 45](45-pesquisa-interacao-modelagem-referencias.md)).
+
 # Apresentação na UI
 
 A apresentação dos modos de viewport deve seguir a linguagem de controles compactos documentada na análise do Figma, mas com semântica Petunia.

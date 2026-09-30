@@ -13,7 +13,7 @@ Shelf flutuante inferior dedicada a ações contextuais, não a repetir Selectio
 
 ## Decisão
 
-Remover Vertex/Edge/Face da shelf. Em Model pode mostrar Extrude/Inset/Bevel/Loop Cut/Knife/Subdivide/Merge etc. Paint/UV/Animation exibem conjuntos próprios.
+Remover Point/Edge/Face da shelf. A shelf mostra **commands** de um disparo do contexto atual; ferramentas persistentes (Extrude, Inset, Round Edge, Loop Cut, Cut) vivem no trilho do workspace (P3D-075, revisão de 2026-09-29). Em POLY, a shelf pode mostrar Connect, Subdivide, Merge, Dissolve, Flip Diagonal etc.; em DRAW, Converter em polígonos, Fechar perfil, Mirror etc. Paint/UV/Animation exibem conjuntos próprios.
 
 ## UX
 
