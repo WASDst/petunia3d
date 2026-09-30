@@ -636,7 +636,7 @@ impl ToolState {
             paint_radius: 0.8,
             paint_strength: 1.0,
             paint_stroke: None,
-            canvas_brush: 4,
+            canvas_brush: 13,
             paint_brush_kind: 0,
             // 0.0 = falloff quadrático legado do Soft (semântica de duas zonas
             // do motor: hardness é a fração de núcleo sólido). A UI migra para

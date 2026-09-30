@@ -452,3 +452,27 @@ mod tests {
         assert!((style.fill_alpha - 0.4).abs() < 1e-6);
     }
 }
+
+/// Pixels de diâmetro por unidade do controle "Size" (`paint_radius`).
+///
+/// Fonte única da relação entre o slider e o pincel: o carimbo na viewport 3D,
+/// o clique direto na malha, o pincel do canvas 2D e o anel de preview usam
+/// **este** fator, sem constantes soltas.
+pub const BRUSH_PX_PER_UNIT: f32 = 16.0;
+
+/// Diâmetro em pixels equivalente ao valor do slider "Size".
+pub fn brush_size_px_from_slider(size: f32) -> f32 {
+    (size * BRUSH_PX_PER_UNIT).max(2.0)
+}
+
+#[cfg(test)]
+mod brush_size_contract_tests {
+    use super::*;
+
+    #[test]
+    fn slider_maps_to_pixels_with_a_floor() {
+        assert_eq!(brush_size_px_from_slider(0.8), 12.8);
+        assert_eq!(brush_size_px_from_slider(0.01), 2.0);
+        assert_eq!(brush_size_px_from_slider(10.0), 160.0);
+    }
+}

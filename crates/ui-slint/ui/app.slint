@@ -4825,7 +4825,7 @@ export component PetuniaSlintShell inherits Window {
                     viewport-touch := TouchArea {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
-                            : (root.active-workspace == "PAINT") ? crosshair
+                            : (root.active-workspace == "PAINT") ? ((root.active-tool == "brush" || root.active-tool == "eraser" || root.active-tool == "airbrush" || root.active-tool == "pixel") ? none : crosshair)
                             : (root.active-tool == "slice" || root.active-tool == "knife" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
                             : (root.active-tool == "extrude" || root.active-tool == "push_pull") ? ns-resize
                             : root.active-tool == "bevel" ? nesw-resize
@@ -4835,6 +4835,38 @@ export component PetuniaSlintShell inherits Window {
                             : root.active-tool == "move" ? move
                             : root.gizmo-has-hover ? grab
                             : default;
+                        // Anel do pincel: mesmo diâmetro (px) que o carimbo e o pincel 2D usam.
+                        if root.active-workspace == "PAINT" && viewport-touch.has-hover && (root.active-tool == "brush" || root.active-tool == "eraser" || root.active-tool == "airbrush" || root.active-tool == "pixel"): Rectangle {
+                            width: max(root.brush-size * 16px, 2px);
+                            height: self.width;
+                            x: viewport-touch.mouse-x - self.width / 2;
+                            y: viewport-touch.mouse-y - self.height / 2;
+                            border-radius: self.width / 2;
+                            border-width: 1.5px;
+                            border-color: root.active-tool == "eraser" ? DesignTokens.danger : #ffffffee;
+                            background: root.active-tool == "eraser" ? DesignTokens.danger.with-alpha(0.10) : root.paint-color.with-alpha(0.14);
+                            // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
+                            // Ponto central: substitui o cursor do sistema, escondido nas ferramentas de pincel.
+                            Rectangle {
+                                x: (parent.width - 3px) / 2;
+                                y: (parent.height - 3px) / 2;
+                                width: 3px;
+                                height: 3px;
+                                border-radius: 1.5px;
+                                background: #ffffffee;
+                                border-width: 1px;
+                                border-color: #000000aa;
+                            }
+                            Rectangle {
+                                x: 1.5px;
+                                y: 1.5px;
+                                width: parent.width - 3px;
+                                height: parent.height - 3px;
+                                border-radius: self.width / 2;
+                                border-width: 1px;
+                                border-color: #000000aa;
+                            }
+                        }
                         property <length> last-x;
                         property <length> last-y;
                         property <bool> is-box-select: false;

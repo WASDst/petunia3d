@@ -1106,7 +1106,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             UiIntent::SetBrushSize(size) => {
-                self.state.session.tools.paint_radius = size.clamp(0.01, 100.0);
+                let size = size.clamp(0.01, 100.0);
+                self.state.session.tools.paint_radius = size;
+                // O pincel do canvas 2D usa o mesmo tamanho (px) do slider.
+                self.state.session.tools.canvas_brush =
+                    petunia_core::brush_size_px_from_slider(size).round().max(1.0) as u32;
             }
             UiIntent::SetBrushOpacity(opacity) => {
                 self.state.session.tools.paint_strength = opacity.clamp(0.0, 1.0);
@@ -8951,7 +8955,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "pixel" => petunia_core::BrushType::Pixel,
             _ => settings.kind,
         };
-        settings.size_px = (self.state.session.tools.paint_radius * 16.0).max(2.0);
+        settings.size_px =
+            petunia_core::brush_size_px_from_slider(self.state.session.tools.paint_radius);
         settings.sanitized()
     }
 
@@ -9115,7 +9120,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         color,
                     );
                 } else {
-                    let radius = (self.state.session.tools.paint_radius * 8.0).max(1.0) as u32;
+                    let radius = (petunia_core::brush_size_px_from_slider(self.state.session.tools.paint_radius)
+                        * 0.5)
+                        .max(1.0) as u32;
                     let strength = self.state.session.tools.paint_strength;
                     let isolate = self.state.session.tools.paint_isolate_selection;
                     petunia_module_paint::PaintModule::paint_mesh_3d(
