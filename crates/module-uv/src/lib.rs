@@ -245,36 +245,6 @@ impl UvModule {
         state.emit_uv_changed();
     }
 
-    /// Costura as arestas de costura (seams) no espaço UV das faces selecionadas (ou todas se nada selecionado).
-    pub fn stitch(state: &mut AppState) -> Result<usize, String> {
-        state.checkpoint("uv stitch");
-        let count = if let Some(m) = state.project.active_mesh_mut() {
-            let res = m.stitch_uv(&state.session.uv_selected);
-            state.mark_dirty();
-            res
-        } else {
-            0
-        };
-        state.emit_uv_changed();
-        state.set_status(format!("Stitched {count} UV seam edge(s)"));
-        Ok(count)
-    }
-
-    /// Suaviza / relaxa coordenadas UV para minimizar distorção.
-    pub fn relax(state: &mut AppState, iterations: usize) -> Result<usize, String> {
-        state.checkpoint("uv relax");
-        let count = if let Some(m) = state.project.active_mesh_mut() {
-            let res = m.relax_uv(&state.session.uv_selected, iterations);
-            state.mark_dirty();
-            res
-        } else {
-            0
-        };
-        state.emit_uv_changed();
-        state.set_status(format!("Relaxed {count} UV face(s)"));
-        Ok(count)
-    }
-
     pub fn diagnostics(state: &AppState) -> Option<petunia_mesh::uv_tools::UvDiagnostics> {
         state.project.active_mesh().map(|m| m.uv_diagnostics())
     }
