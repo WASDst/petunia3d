@@ -5660,7 +5660,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             dismiss_on_escape: true,
             dismiss_on_click_away: true,
         });
-        self.state.set_status("Reference Sets · P3D-013");
+        self.state.set_status(self.state.t("sl.reference_images"));
         true
     }
 

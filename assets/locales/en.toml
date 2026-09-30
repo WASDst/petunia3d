@@ -1214,7 +1214,6 @@ reduced_motion_vestibular_sensitivity = "Reduced Motion (Vestibular Sensitivity)
 ref_images = "Ref Images"
 reference_images = "Reference Images"
 reference_images_manager_for_background_blue = "Reference Images manager for background blueprints and modeling guides"
-reference_images_p3d_013 = "Reference Images · P3D-013"
 region = "Region"
 relax = "Relax"
 relax_uv = "Relax UV"

@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1282**.
+Total de chaves de localização cadastradas: **1281**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -844,7 +844,6 @@ Total de chaves de localização cadastradas: **1282**.
 | `sl.ref_images` | Ref Images | Imagens ref. |
 | `sl.reference_images` | Reference Images | Imagens de referência |
 | `sl.reference_images_manager_for_background_blue` | Reference Images manager for background blueprints and modeling guides | Gerenciador de imagens de referência para blueprints de fundo e guias de modelagem |
-| `sl.reference_images_p3d_013` | Reference Images · P3D-013 | Imagens de referência · P3D-013 |
 | `sl.region` | Region | Região |
 | `sl.relax` | Relax | Relaxar |
 | `sl.relax_uv` | Relax UV | Relaxar UV |

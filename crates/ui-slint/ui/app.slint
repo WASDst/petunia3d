@@ -455,6 +455,31 @@ component MenuButton inherits Rectangle {
     }
 }
 
+/// Alça de arraste de painéis flutuantes não modais (cap. 36, revisão 2026-09-30).
+/// O pai guarda a posição; duplo clique recentraliza (posição negativa = centro).
+component PanelDragHandle inherits TouchArea {
+    in property <length> panel-x;
+    in property <length> panel-y;
+    in property <length> max-x;
+    in property <length> max-y;
+    callback moved-to(length, length);
+    property <length> start-x;
+    property <length> start-y;
+    mouse-cursor: MouseCursor.move;
+    pointer-event(event) => {
+        if event.kind == PointerEventKind.down {
+            root.start-x = root.panel-x;
+            root.start-y = root.panel-y;
+        }
+    }
+    moved => {
+        root.moved-to(
+            clamp(root.start-x + (self.mouse-x - self.pressed-x), 0px, max(root.max-x, 0px)),
+            clamp(root.start-y + (self.mouse-y - self.pressed-y), 0px, max(root.max-y, 0px)));
+    }
+    double-clicked => { root.moved-to(-1px, -1px); }
+}
+
 /// Item de menu: rótulo, atalho, check opcional, estado desativado e realce de teclado.
 component ContextMenuItem inherits Rectangle {
     in property <string> label;
@@ -2979,6 +3004,8 @@ component ReferenceSlotCard inherits Rectangle {
                     color: DesignTokens.text-muted;
                     font-size: 11px;
                     vertical-alignment: center;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
                 }
             }
         }
@@ -3033,6 +3060,11 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> scene-drawer-pinned: false;
     in-out property <bool> settings-visible: false;
     in-out property <bool> reference-manager-visible: false;
+    // Posição dos painéis flutuantes; negativo = centralizado.
+    in-out property <length> ref-panel-x: -1px;
+    in-out property <length> ref-panel-y: -1px;
+    in-out property <length> settings-panel-x: -1px;
+    in-out property <length> settings-panel-y: -1px;
     in-out property <[ReferenceSlotData]> reference-slots: [];
     in-out property <int> reference-total-count: 0;
     in-out property <string> active-keymap-id: "petunia-default";
@@ -3990,7 +4022,7 @@ export component PetuniaSlintShell inherits Window {
                 root.escape-requested();
                 return accept;
             }
-            if !root.command-search-visible && !root.settings-visible && !root.reference-manager-visible {
+            if !root.command-search-visible && !root.settings-visible {
                 let key-name = event.text == Key.Tab ? "Tab" :
                     event.text == Key.Return ? "Enter" :
                     event.text == Key.Backspace ? "Backspace" :
@@ -10483,20 +10515,13 @@ export component PetuniaSlintShell inherits Window {
             y: 0;
             width: parent.width;
             height: parent.height;
-            background: DesignTokens.scrim;
-
-            TouchArea {
-                clicked => {
-                    root.reference-manager-visible = false;
-                    root.reference-manager-closed();
-                }
-            }
-
-            Rectangle {
-                width: min(780px, parent.width - 40px);
-                height: min(600px, parent.height - 40px);
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
+            // Painel flutuante não modal: sem scrim, a viewport continua visível e utilizável.
+            ref-panel := Rectangle {
+                // Compacto e ancorado à esquerda por padrão: a viewport segue visível.
+                width: min(440px, parent.width - 40px);
+                height: min(640px, parent.height - 80px);
+                x: root.ref-panel-x < 0px ? min(60px, max(parent.width - self.width, 0px)) : clamp(root.ref-panel-x, 0px, max(parent.width - self.width, 0px));
+                y: root.ref-panel-y < 0px ? min(56px, max(parent.height - self.height, 0px)) : clamp(root.ref-panel-y, 0px, max(parent.height - self.height, 0px));
                 border-radius: 8px;
                 background: DesignTokens.surface-raised;
                 border-width: 1px;
@@ -10518,12 +10543,20 @@ export component PetuniaSlintShell inherits Window {
                         border-top-left-radius: 8px;
                         border-top-right-radius: 8px;
 
+                        PanelDragHandle {
+                            panel-x: ref-panel.x;
+                            panel-y: ref-panel.y;
+                            max-x: root.width - ref-panel.width;
+                            max-y: root.height - ref-panel.height;
+                            moved-to(x, y) => { root.ref-panel-x = x; root.ref-panel-y = y; }
+                        }
+
                         HorizontalLayout {
                             padding-left: 16px;
                             padding-right: 16px;
                             alignment: space-between;
 
-                            HorizontalLayout {
+                            VerticalLayout { alignment: center; HorizontalLayout {
                                 spacing: 8px;
                                 alignment: center;
                                 IconDisplay {
@@ -10532,21 +10565,21 @@ export component PetuniaSlintShell inherits Window {
                                     stroke: DesignTokens.accent;
                                 }
                                 Text {
-                                    text: Tr.t("sl.reference_images_p3d_013");
+                                    text: Tr.t("sl.reference_images");
                                     color: DesignTokens.text-primary;
                                     font-size: 14px;
                                     font-weight: 700;
                                     vertical-alignment: center;
                                 }
                                 Text {
-                                    text: "(\{root.reference-total-count} active)";
+                                    text: "(\{root.reference-total-count} " + Tr.t("sl.active").to-lowercase() + ")";
                                     color: DesignTokens.text-muted;
                                     font-size: 12px;
                                     vertical-alignment: center;
                                 }
-                            }
+                            } }
 
-                            HorizontalLayout {
+                            VerticalLayout { alignment: center; HorizontalLayout {
                                 spacing: 8px;
                                 alignment: center;
 
@@ -10577,7 +10610,7 @@ export component PetuniaSlintShell inherits Window {
                                         root.reference-manager-closed();
                                     }
                                 }
-                            }
+                            } }
                         }
                     }
 
@@ -10611,20 +10644,11 @@ export component PetuniaSlintShell inherits Window {
             y: 0;
             width: parent.width;
             height: parent.height;
-            background: DesignTokens.scrim;
-
-            TouchArea {
-                clicked => {
-                    root.settings-visible = false;
-                    root.settings-closed();
-                }
-            }
-
-            Rectangle {
-                width: 660px;
-                height: 520px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
+            settings-panel := Rectangle {
+                width: min(660px, parent.width - 40px);
+                height: min(520px, parent.height - 40px);
+                x: root.settings-panel-x < 0px ? (parent.width - self.width) / 2 : clamp(root.settings-panel-x, 0px, max(parent.width - self.width, 0px));
+                y: root.settings-panel-y < 0px ? (parent.height - self.height) / 2 : clamp(root.settings-panel-y, 0px, max(parent.height - self.height, 0px));
                 border-radius: 8px;
                 background: DesignTokens.surface-raised;
                 border-width: 1px;
@@ -10640,19 +10664,27 @@ export component PetuniaSlintShell inherits Window {
                     padding: 0px;
                     spacing: 0px;
 
-                    // Cabeçalho da modal
+                    // Cabeçalho do painel (arraste para mover, duplo clique recentraliza)
                     Rectangle {
                         height: 48px;
                         background: DesignTokens.surface;
                         border-top-left-radius: 8px;
                         border-top-right-radius: 8px;
 
+                        PanelDragHandle {
+                            panel-x: settings-panel.x;
+                            panel-y: settings-panel.y;
+                            max-x: root.width - settings-panel.width;
+                            max-y: root.height - settings-panel.height;
+                            moved-to(x, y) => { root.settings-panel-x = x; root.settings-panel-y = y; }
+                        }
+
                         HorizontalLayout {
                             padding-left: 16px;
                             padding-right: 16px;
                             alignment: space-between;
 
-                            HorizontalLayout {
+                            VerticalLayout { alignment: center; HorizontalLayout {
                                 spacing: 8px;
                                 alignment: center;
                                 IconDisplay {
@@ -10667,8 +10699,9 @@ export component PetuniaSlintShell inherits Window {
                                     font-weight: 700;
                                     vertical-alignment: center;
                                 }
-                            }
+                            } }
 
+                            VerticalLayout { alignment: center;
                             TopAction {
                                 icon: IconSet.X;
                                 semantic-label: Tr.t("sl.close_settings");
@@ -10676,6 +10709,7 @@ export component PetuniaSlintShell inherits Window {
                                     root.settings-visible = false;
                                     root.settings-closed();
                                 }
+                            }
                             }
                         }
                     }
@@ -10709,7 +10743,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Palette; size: 14px; stroke: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Palette; size: 14px; stroke: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.appearance"); color: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab0-touch := TouchArea { clicked => { root.settings-tab = 0; } }
@@ -10726,7 +10760,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Globe; size: 14px; stroke: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Globe; size: 14px; stroke: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.language_region"); color: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab1-touch := TouchArea { clicked => { root.settings-tab = 1; } }
@@ -10743,7 +10777,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Keyboard; size: 14px; stroke: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Keyboard; size: 14px; stroke: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.keyboard_shortcuts"); color: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab2-touch := TouchArea { clicked => { root.settings-tab = 2; } }
@@ -10760,7 +10794,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Eye; size: 14px; stroke: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Eye; size: 14px; stroke: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.accessibility"); color: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab3-touch := TouchArea { clicked => { root.settings-tab = 3; } }
@@ -10777,7 +10811,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Box; size: 14px; stroke: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Box; size: 14px; stroke: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.tools"); color: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab4-touch := TouchArea { clicked => { root.settings-tab = 4; } }
@@ -10794,7 +10828,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Monitor; size: 14px; stroke: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Monitor; size: 14px; stroke: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.3d_viewport"); color: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab5-touch := TouchArea { clicked => { root.settings-tab = 5; } }
@@ -10811,7 +10845,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Cpu; size: 14px; stroke: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Cpu; size: 14px; stroke: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.plugins"); color: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab6-touch := TouchArea { clicked => { root.settings-tab = 6; } }
@@ -10828,7 +10862,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        IconDisplay { icon: IconSet.Terminal; size: 14px; stroke: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-secondary; }
+                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Terminal; size: 14px; stroke: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.mcp_automation"); color: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab7-touch := TouchArea { clicked => { root.settings-tab = 7; } }
