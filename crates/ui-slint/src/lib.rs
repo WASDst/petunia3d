@@ -16,6 +16,7 @@ mod input;
 pub mod numeric;
 pub mod overlay;
 pub mod theme;
+pub mod tr;
 pub mod viewport_gpu;
 pub mod viewport_soft;
 
@@ -645,6 +646,9 @@ pub struct ContextMenuState {
     pub viewport: bool,
 }
 
+/// Id reservado que representa um divisor entre grupos de itens de menu.
+pub const MENU_SEPARATOR: &str = "-";
+
 /// Menus da barra superior do shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuKind {
@@ -686,24 +690,29 @@ impl MenuKind {
             Self::File => &[
                 ("file.new", T::FILE_NEW, "Ctrl+N"),
                 ("file.open", T::FILE_OPEN_PROJECT, "Ctrl+O"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("file.save", T::FILE_SAVE, "Ctrl+S"),
                 ("file.save_as", T::FILE_SAVE_AS, "Ctrl+Shift+S"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("file.import_obj", T::FILE_IMPORT_OBJ, ""),
             ],
             Self::Edit => &[
                 ("edit.undo", T::EDIT_UNDO, "Ctrl+Z"),
                 ("edit.redo", T::EDIT_REDO, "Ctrl+Shift+Z"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("edit.duplicate", T::UI_DUPLICATE, "Shift+D"),
             ],
             Self::View => &[
                 ("view.frame_selection", T::VIEW_FRAME, "F"),
                 ("view.frame_all", T::VIEW_FRAME_ALL, "Home"),
+                ("view.reset_camera", T::VIEW_RESET_CAMERA, "Shift+Home"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("view.toggle_projection", T::VIEW_TOGGLE_PROJECTION, "O"),
                 ("view.toggle_wireframe", T::VIEW_TOGGLE_WIREFRAME, "Z"),
-                ("view.reset_camera", T::VIEW_RESET_CAMERA, "Shift+Home"),
             ],
             Self::Window => &[
                 ("window.command_palette", T::MENU_COMMAND_PALETTE, "Ctrl+P"),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("window.settings", T::MENU_PREFERENCES, ""),
             ],
         }
@@ -10832,8 +10841,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .iter()
                 .map(|(id, label, shortcut)| MenuEntryModel {
                     id: (*id).to_string(),
-                    label: translated(*label),
+                    label: if *id == MENU_SEPARATOR {
+                        String::new()
+                    } else {
+                        translated(*label)
+                    },
                     shortcut: (*shortcut).to_string(),
+                    separator: *id == MENU_SEPARATOR,
+                    disabled: match *id {
+                        "edit.undo" => !vm.can_undo,
+                        "edit.redo" => !vm.can_redo,
+                        _ => false,
+                    },
+                    checked: match *id {
+                        "view.toggle_wireframe" => vm.is_wireframe,
+                        "view.toggle_projection" => vm.is_orthographic,
+                        _ => false,
+                    },
                 })
                 .collect();
             match kind {

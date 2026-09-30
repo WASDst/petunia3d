@@ -1,8 +1,8 @@
 import { Icon, IconDisplay, IconSet } from "@lucide";
 import { ListView, ScrollView, Slider } from "std-widgets.slint";
-import { DesignTokens } from "tokens.slint";
+import { DesignTokens, Motion, Tr } from "tokens.slint";
 import { PetuniaIcons } from "petunia_icons.slint";
-export { DesignTokens, PetuniaIcons }
+export { DesignTokens, Motion, PetuniaIcons, Tr }
 
 export struct CommandItem {
     id: string,
@@ -41,6 +41,9 @@ export struct MenuEntry {
     id: string,
     label: string,
     shortcut: string,
+    separator: bool,
+    disabled: bool,
+    checked: bool,
 }
 
 export struct SceneItem {
@@ -305,9 +308,13 @@ component ViewportBarButton inherits Rectangle {
     border-radius: 5px;
     background: root.active
         ? DesignTokens.accent
-        : (bar-touch.has-hover ? DesignTokens.surface-hover : transparent);
+        : (bar-touch.pressed ? DesignTokens.surface-pressed : (bar-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
     border-width: bar-focus.has-focus || (root.emphasized && root.active) ? 2px : 0px;
     border-color: DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: bar-touch.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
@@ -362,9 +369,13 @@ component ViewportSvgButton inherits Rectangle {
     width: 32px;
     height: 28px;
     border-radius: 5px;
-    background: root.live-mode ? DesignTokens.live-mode : (root.active ? DesignTokens.accent : (touch.has-hover ? DesignTokens.surface-hover : transparent));
+    background: root.live-mode ? DesignTokens.live-mode : (root.active ? DesignTokens.accent : (touch.pressed ? DesignTokens.surface-pressed : (touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0))));
     border-width: svg-focus.has-focus ? 2px : ((root.active || root.live-mode) ? 1px : 0px);
     border-color: root.live-mode ? DesignTokens.live-mode-ring : DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: touch.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
     Image {
         source: root.glyph;
         width: 20px;
@@ -412,7 +423,9 @@ component MenuButton inherits Rectangle {
     border-radius: 4px;
     background: root.open
         ? DesignTokens.accent
-        : (touch-area.has-hover ? DesignTokens.surface-hover : transparent);
+        : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
 
     menu-label := Text {
         text: root.label;
@@ -440,41 +453,59 @@ component MenuButton inherits Rectangle {
     }
 }
 
-/// Item do menu de contexto: rótulo, atalho opcional e variante de perigo.
+/// Item de menu: rótulo, atalho, check opcional, estado desativado e realce de teclado.
 component ContextMenuItem inherits Rectangle {
     in property <string> label;
     in property <string> shortcut;
     in property <bool> danger: false;
+    in property <bool> disabled: false;
+    in property <bool> checked: false;
+    in property <bool> highlighted: false;
     callback clicked;
 
     accessible-role: button;
     accessible-label: root.label;
+    accessible-enabled: !root.disabled;
+    accessible-checkable: root.checked;
+    accessible-checked: root.checked;
     height: 26px;
     border-radius: 4px;
-    background: touch-area.has-hover ? DesignTokens.surface-hover : transparent;
+    background: root.disabled ? DesignTokens.surface-hover.with-alpha(0)
+        : (touch-area.pressed ? DesignTokens.surface-pressed
+        : ((touch-area.has-hover || root.highlighted) ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    animate background { duration: Motion.fast; easing: ease-out; }
 
     HorizontalLayout {
-        padding-left: 8px;
+        padding-left: 6px;
         padding-right: 8px;
-        spacing: 8px;
+        spacing: 6px;
         alignment: center;
 
+        Rectangle {
+            width: 14px;
+            if root.checked: IconDisplay {
+                icon: IconSet.Check;
+                size: 12px;
+                stroke: DesignTokens.accent;
+            }
+        }
         Text {
             text: root.label;
-            color: root.danger ? DesignTokens.danger : DesignTokens.text-primary;
+            color: root.disabled ? DesignTokens.disabled : (root.danger ? DesignTokens.danger : DesignTokens.text-primary);
             font-size: 11px;
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
         Text {
             text: root.shortcut;
-            color: DesignTokens.text-muted;
+            color: root.disabled ? DesignTokens.disabled : DesignTokens.text-muted;
             font-size: 10px;
             vertical-alignment: center;
         }
     }
 
     touch-area := TouchArea {
+        enabled: !root.disabled;
         clicked => { root.clicked(); }
     }
 }
@@ -482,6 +513,7 @@ component ContextMenuItem inherits Rectangle {
 /// Dropdown de um menu da barra superior.
 component MenuDropdown inherits Rectangle {
     in property <[MenuEntry]> entries;
+    in property <int> highlight: -1;
     callback invoked(string);
 
     width: 216px;
@@ -498,10 +530,23 @@ component MenuDropdown inherits Rectangle {
         padding: 4px;
         spacing: 1px;
 
-        for entry in root.entries: ContextMenuItem {
-            label: entry.label;
-            shortcut: entry.shortcut;
-            clicked => { root.invoked(entry.id); }
+        for entry[index] in root.entries: VerticalLayout {
+            if entry.separator: Rectangle {
+                height: 9px;
+                Rectangle {
+                    y: 4px;
+                    height: 1px;
+                    background: DesignTokens.border;
+                }
+            }
+            if !entry.separator: ContextMenuItem {
+                label: entry.label;
+                shortcut: entry.shortcut;
+                disabled: entry.disabled;
+                checked: entry.checked;
+                highlighted: index == root.highlight;
+                clicked => { root.invoked(entry.id); }
+            }
         }
     }
 }
@@ -526,9 +571,13 @@ component TopAction inherits Rectangle {
     width: 32px;
     height: 28px;
     border-radius: 5px;
-    background: root.active ? DesignTokens.accent : ((touch-area.pressed || touch-area.has-hover) ? DesignTokens.surface-hover : transparent);
+    background: root.active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
     border-width: top-focus.has-focus ? 2px : (touch-area.has-hover ? 1px : 0px);
-    border-color: DesignTokens.focus-ring;
+    border-color: top-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: touch-area.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
 
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
@@ -874,7 +923,11 @@ component ToolButton inherits Rectangle {
     width: 32px;
     height: 32px;
     border-radius: 6px;
-    background: active ? DesignTokens.accent : (touch-area.has-hover ? DesignTokens.surface-hover : transparent);
+    background: active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: touch-area.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
     border-width: tool-focus.has-focus ? 2px : (root.double-tap-armed ? 2px : ((!active && touch-area.has-hover) ? 1px : 0px));
     border-color: root.double-tap-armed ? #ffd54f : DesignTokens.focus-ring;
 
@@ -1194,6 +1247,8 @@ component InspectorSection inherits Rectangle {
 
     width: 100%;
     height: root.open ? section-layout.preferred-height : 36px;
+    animate height { duration: Motion.medium; easing: ease-in-out; }
+    clip: true;
     vertical-stretch: 0;
     border-radius: 8px;
     background: DesignTokens.surface-raised.with-alpha(0.96);
@@ -3064,6 +3119,29 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> can-undo: false;
     in-out property <bool> can-redo: false;
     in-out property <string> status-message: "Ready";
+    /// 0 info, 1 sucesso, 2 aviso, 3 erro.
+    in-out property <int> status-severity: 0;
+    property <bool> toast-visible: false;
+    property <color> status-color: root.status-severity == 3 ? DesignTokens.danger
+        : (root.status-severity == 2 ? DesignTokens.warning
+        : (root.status-severity == 1 ? DesignTokens.success : DesignTokens.info));
+    changed status-message => {
+        if root.status-severity > 0 {
+            root.toast-visible = true;
+            toast-timer.running = false;
+            toast-timer.running = true;
+        } else {
+            root.toast-visible = false;
+        }
+    }
+    toast-timer := Timer {
+        interval: 3200ms;
+        running: false;
+        triggered => {
+            root.toast-visible = false;
+            self.running = false;
+        }
+    }
     in-out property <color> paint-color: #b58cff;
     in-out property <float> brush-size: 0.8;
     in-out property <float> brush-opacity: 1.0;
@@ -3233,6 +3311,25 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> boolean-keep-parts: false;
     in-out property <bool> rename-active: false;
     in-out property <string> menu-open: "";
+    in-out property <int> menu-highlight: -1;
+    property <[MenuEntry]> current-menu-entries: root.menu-open == "file"
+        ? root.menu-file-items
+        : (root.menu-open == "edit"
+            ? root.menu-edit-items
+            : (root.menu-open == "view" ? root.menu-view-items : root.menu-window-items));
+    pure function menu-selectable(i: int) -> bool {
+        return i >= 0 && i < root.current-menu-entries.length
+            && !root.current-menu-entries[i].separator
+            && !root.current-menu-entries[i].disabled;
+    }
+    function menu-step(delta: int) {
+        let n = max(root.current-menu-entries.length, 1);
+        let start = root.menu-highlight < 0 ? (delta > 0 ? -1 : n) : root.menu-highlight;
+        let c1 = Math.mod(start + delta + n, n);
+        let c2 = Math.mod(c1 + delta + n, n);
+        root.menu-highlight = root.menu-selectable(c1) ? c1 : (root.menu-selectable(c2) ? c2 : root.menu-highlight);
+    }
+    changed menu-open => { root.menu-highlight = -1; }
     property <length> menu-anchor-x: 0px;
     in-out property <string> menu-file-label: "";
     in-out property <string> menu-edit-label: "";
@@ -3845,6 +3942,28 @@ export component PetuniaSlintShell inherits Window {
                     root-focus.focus();
                 }
                 return accept;
+            }
+            if root.menu-open != "" {
+                if event.text == Key.DownArrow { root.menu-step(1); return accept; }
+                if event.text == Key.UpArrow { root.menu-step(-1); return accept; }
+                if event.text == Key.RightArrow {
+                    root.menu-opened(root.menu-open == "file" ? "edit" : (root.menu-open == "edit" ? "view" : (root.menu-open == "view" ? "window" : "file")));
+                    return accept;
+                }
+                if event.text == Key.LeftArrow {
+                    root.menu-opened(root.menu-open == "file" ? "window" : (root.menu-open == "edit" ? "file" : (root.menu-open == "view" ? "edit" : "view")));
+                    return accept;
+                }
+                if event.text == Key.Return {
+                    if root.menu-selectable(root.menu-highlight) {
+                        root.menu-item-invoked(root.current-menu-entries[root.menu-highlight].id);
+                    }
+                    return accept;
+                }
+                if event.text == Key.Escape {
+                    root.click-away-requested();
+                    return accept;
+                }
             }
             if event.text == Key.Escape {
                 if root.context-menu-open {
@@ -9211,7 +9330,8 @@ export component PetuniaSlintShell inherits Window {
                         width: 7px;
                         height: 7px;
                         border-radius: 3.5px;
-                        background: DesignTokens.success;
+                        background: root.status-color;
+                        animate background { duration: Motion.medium; easing: ease-out; }
                     }
 
                     Text { text: root.status-message; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; overflow: elide; max-width: 340px; }
@@ -9542,6 +9662,7 @@ export component PetuniaSlintShell inherits Window {
                     : (root.menu-open == "edit"
                         ? root.menu-edit-items
                         : (root.menu-open == "view" ? root.menu-view-items : root.menu-window-items));
+                highlight: root.menu-highlight;
                 invoked(id) => { root.menu-item-invoked(id); }
             }
         }
@@ -10306,6 +10427,47 @@ export component PetuniaSlintShell inherits Window {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Toast de status (sucesso, aviso, erro): não bloqueia entrada e some sozinho.
+        Rectangle {
+            width: min(root.width - 32px, max(220px, toast-text.preferred-width + 44px));
+            height: 34px;
+            x: (root.width - self.width) / 2;
+            y: root.toast-visible ? root.height - 30px - self.height - 20px : root.height - 30px - self.height - 6px;
+            opacity: root.toast-visible ? 1.0 : 0.0;
+            animate opacity { duration: Motion.medium; easing: ease-out; }
+            animate y { duration: Motion.medium; easing: ease-out; }
+            border-radius: DesignTokens.radius-panel;
+            background: DesignTokens.surface-raised;
+            border-width: 1px;
+            border-color: root.status-color;
+            drop-shadow-blur: 14px;
+            drop-shadow-color: DesignTokens.shadow;
+            drop-shadow-offset-y: 4px;
+            accessible-role: text;
+            accessible-label: root.status-message;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+                alignment: center;
+                Rectangle {
+                    width: 3px;
+                    height: 16px;
+                    border-radius: 1.5px;
+                    background: root.status-color;
+                    y: (parent.height - self.height) / 2;
+                }
+                toast-text := Text {
+                    text: root.status-message;
+                    color: DesignTokens.text-primary;
+                    font-size: 12px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    overflow: elide;
                 }
             }
         }

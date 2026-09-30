@@ -318,6 +318,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_can_undo(vm.can_undo);
     window.set_can_redo(vm.can_redo);
     window.set_shortcuts((&vm.shortcuts).into());
+    window.set_status_severity(vm.status_severity);
     window.set_status_message(vm.status_message.as_str().into());
     window.set_active_tool(vm.active_tool.as_str().into());
     let domain_str = match vm.selection_domain {
@@ -466,6 +467,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
                 id: item.id.as_str().into(),
                 label: item.label.as_str().into(),
                 shortcut: item.shortcut.as_str().into(),
+                separator: item.separator,
+                disabled: item.disabled,
+                checked: item.checked,
             })
             .collect()
     };
@@ -778,6 +782,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_invert_vertical_drag(vm.invert_vertical_drag);
     window.set_colorblind_axes(vm.colorblind_axes);
     window.set_reduced_motion(vm.reduced_motion);
+    window
+        .global::<crate::Motion>()
+        .set_reduced(vm.reduced_motion);
     window.set_double_tap_interval_ms(vm.double_tap_interval_ms);
     window.set_multiselection_measure_tag(vm.multiselection_measure_tag);
     window.set_label_colorblind_axes(vm.label_colorblind_axes.as_str().into());
@@ -786,6 +793,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window
         .set_label_multiselection_measure_tag(vm.label_multiselection_measure_tag.as_str().into());
     window.set_active_language(vm.active_language.as_str().into());
+    crate::tr::install(window, &vm.active_language);
     window.set_ui_scale(vm.ui_scale);
     apply_ui_scale(window, vm.ui_scale);
     window.set_icon_theme(vm.icon_theme.as_str().into());
@@ -1117,6 +1125,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 let vm = bridge.view_model();
                 if let Some(window) = window_weak.upgrade() {
                     window.set_saved(vm.saved);
+                    window.set_status_severity(vm.status_severity);
                     window.set_status_message(vm.status_message.as_str().into());
                 }
             }
@@ -1134,6 +1143,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 let vm = bridge.view_model();
                 if let Some(window) = window_weak.upgrade() {
                     window.set_saved(vm.saved);
+                    window.set_status_severity(vm.status_severity);
                     window.set_status_message(vm.status_message.as_str().into());
                 }
             }
@@ -1594,6 +1604,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         {
             bridge.state.set_status(error.to_string());
             if let Some(window) = window_weak.upgrade() {
+                window.set_status_severity(3);
                 window.set_status_message(error.to_string().into());
             }
         }

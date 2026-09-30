@@ -241,6 +241,8 @@ pub struct ShellViewModel {
     pub paint_target_vertex: bool,
     pub paint_mask_selection: bool,
     pub status_message: String,
+    /// 0 info, 1 sucesso, 2 aviso, 3 erro (ver [`classify_status`]).
+    pub status_severity: i32,
     /// Resumo persistente da seleção para a pill da viewport
     /// ("2 objects selected", "Selected: 3 points · 1 edge", "No selection").
     pub selection_summary: String,
@@ -786,6 +788,8 @@ impl ShellViewModel {
             state.ui.status.clone()
         };
 
+        let status_severity = classify_status(&status_message);
+
         let creation_active = state.primitive_session_valid();
         let active_desc = if creation_active {
             state
@@ -1119,6 +1123,7 @@ impl ShellViewModel {
             paint_target_vertex: false,
             paint_mask_selection: state.session.tools.paint_isolate_selection,
             status_message,
+            status_severity,
             selection_summary: format_selection_summary(state),
             position: [0.0, 0.0, 0.0],
             rotation: [0.0, 0.0, 0.0],
@@ -1685,4 +1690,71 @@ pub struct MenuEntryModel {
     pub id: String,
     pub label: String,
     pub shortcut: String,
+    /// Divisor visual entre grupos de itens (id `-`).
+    pub separator: bool,
+    pub disabled: bool,
+    pub checked: bool,
+}
+
+/// Severidade visual de uma mensagem de status.
+///
+/// O estado do domínio guarda o status como texto livre; até que cada emissor
+/// carregue a severidade explícita, a UI a infere por marcadores em `pt-BR` e
+/// `en`. Erro tem precedência sobre aviso, que tem precedência sobre sucesso.
+pub fn classify_status(message: &str) -> i32 {
+    const DANGER: [&str; 12] = [
+        "erro",
+        "error",
+        "falh",
+        "fail",
+        "inválid",
+        "invalid",
+        "não foi possível",
+        "cannot",
+        "can't",
+        "negad",
+        "denied",
+        "rejeit",
+    ];
+    const WARNING: [&str; 5] = ["aviso", "warning", "atenção", "cuidado", "truncad"];
+    const SUCCESS: [&str; 12] = [
+        "salv",
+        "saved",
+        "criad",
+        "created",
+        "aplicad",
+        "applied",
+        "exportad",
+        "exported",
+        "importad",
+        "imported",
+        "duplicad",
+        "duplicated",
+    ];
+    let m = message.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| m.contains(w));
+    if has(&DANGER) {
+        3
+    } else if has(&WARNING) {
+        2
+    } else if has(&SUCCESS) {
+        1
+    } else {
+        0
+    }
+}
+
+#[cfg(test)]
+mod status_severity_tests {
+    use super::classify_status;
+
+    #[test]
+    fn classifies_status_messages_by_severity() {
+        assert_eq!(classify_status("Ready"), 0);
+        assert_eq!(classify_status("Projeto salvo"), 1);
+        assert_eq!(classify_status("Object duplicated"), 1);
+        assert_eq!(classify_status("Aviso: malha truncada"), 2);
+        assert_eq!(classify_status("Falha ao salvar o projeto"), 3);
+        assert_eq!(classify_status("Cannot apply: invalid selection"), 3);
+    }
 }

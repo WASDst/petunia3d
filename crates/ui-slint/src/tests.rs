@@ -1573,7 +1573,7 @@ fn every_menu_item_publishes_a_real_translated_label_and_command_id() {
     ];
     for (menu, items) in menus {
         assert!(!items.is_empty(), "menu {menu} sem itens");
-        for item in items {
+        for item in items.iter().filter(|item| !item.separator) {
             assert!(!item.label.is_empty(), "{} tem rótulo vazio", item.id);
             assert!(
                 !item.label.contains('.'),
@@ -1583,6 +1583,31 @@ fn every_menu_item_publishes_a_real_translated_label_and_command_id() {
             );
         }
     }
+}
+
+#[test]
+fn menus_group_items_with_separators_and_reflect_undo_state() {
+    let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    for items in [
+        &vm.menu_file_items,
+        &vm.menu_edit_items,
+        &vm.menu_view_items,
+    ] {
+        assert!(items.iter().any(|item| item.separator), "menu sem divisor");
+        assert!(!items.first().is_some_and(|item| item.separator));
+        assert!(!items.last().is_some_and(|item| item.separator));
+        assert!(
+            !items.windows(2).any(|w| w[0].separator && w[1].separator),
+            "divisores consecutivos"
+        );
+    }
+    let undo = vm
+        .menu_edit_items
+        .iter()
+        .find(|i| i.id == "edit.undo")
+        .unwrap();
+    assert!(undo.disabled, "sem histórico, Undo deve estar desativado");
 }
 
 #[test]
@@ -7055,7 +7080,7 @@ fn test_viewport_context_menu_modeling_actions_and_dismissal() {
     assert!(bridge.context_menu_action("shade_smooth"));
     assert_eq!(
         bridge.view_model().status_message,
-        "Normais recalculadas (suave)"
+        "Smooth shading"
     );
 
     bridge.open_viewport_context_menu(200.0, 150.0);

@@ -55,3 +55,22 @@ export global DesignTokens {
     in-out property <length> space-sm: 8px;
     in-out property <length> space-md: 12px;
 }
+
+/// Tradução por chave do catálogo (`assets/locales/*.toml`, tabela `[sl]`).
+/// `revision` muda quando o idioma muda, reavaliando todo `Tr.t(...)`.
+export global Tr {
+    in property <int> revision: 0;
+    pure callback lookup(string) -> string;
+    pure public function t(key: string) -> string {
+        return self.revision >= 0 ? self.lookup(key) : "";
+    }
+}
+
+/// Tempos de movimento (cap. 36: hover ~90-120 ms, collapse ~140 ms, estrutural <= 180 ms).
+/// `reduced` é sincronizado com a preferência de movimento reduzido.
+export global Motion {
+    in-out property <bool> reduced: false;
+    out property <duration> fast: self.reduced ? 0ms : 100ms;
+    out property <duration> medium: self.reduced ? 0ms : 140ms;
+    out property <duration> slow: self.reduced ? 0ms : 180ms;
+}
