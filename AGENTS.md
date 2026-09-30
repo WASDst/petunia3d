@@ -6,9 +6,9 @@
 
 ## 0. Fonte única da verdade
 
-O caderno canônico vive em **`docs/bible/`** — 250 páginas: raiz `index.md`
-(Petunia3D — Livro Vivo), `constitution/` (00–16), `foundations/` (01–44),
-`specs/` (P3D-001 a P3D-168), `sections/` (A–O), `addenda/` e `status/`.
+O caderno canônico vive em **`docs/bible/`** — 257 páginas: raiz `index.md`
+(Petunia3D — Livro Vivo), `constitution/` (00–16), `foundations/` (01–45),
+`specs/` (P3D-001 a P3D-174), `sections/` (A–O), `addenda/` e `status/`.
 
 - Toda decisão de arquitetura, produto, UX, escopo, vocabulário e documentação
   deve sair do caderno. Nenhuma outra documentação pode contradizê-lo.

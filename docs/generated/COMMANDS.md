@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **98**.
+Total de comandos registrados no motor: **100**.
 
 ## Tabela Geral de Comandos
 
@@ -68,6 +68,8 @@ Total de comandos registrados no motor: **98**.
 | `model.revolve` | **Revolve 360** | `Model` | Sim | Modeling | Revolve selected profile 360 degrees around an axis |
 | `model.scale_selection` | **Scale Selection** | `Model` | Sim | Modeling | Scale selected geometry uniformly around its center |
 | `model.separate_selection` | **Separate Selection** | `Model` | Sim | Modeling | Separate selected geometry into a new object |
+| `model.shade_flat` | **Shade Flat** | `Model` | Sim | Modeling | Use faceted normals on the active object |
+| `model.shade_smooth` | **Shade Smooth** | `Model` | Sim | Modeling | Interpolate normals across faces of the active object |
 | `model.spin` | **Spin** | `Model` | Sim | Modeling | Extrude and spin selected geometry in an arc around axis |
 | `model.subdivide` | **Subdivide** | `Model` | Sim | LoopCut | Subdivide selected geometry |
 | `model.symmetrize` | **Symmetrize** | `Model` | Sim | Modeling | Copy one side to the other across an axis |

@@ -5,6 +5,37 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Animate F0.5 — IK mínimo (P3D-169) (30/09/2026)
+- **Solvers puros** (`petunia_project::ik`): `solve_two_bone` (analítico com pole vector e soft IK exponencial), `solve_fabrik` (raiz fixa, comprimentos preservados) e look-at; alvos inalcançáveis/próximos demais são limitados sem NaN.
+- **Aplicação na pose**: `solve_chain` altera somente as rotações locais dos ossos da cadeia (swing até a nova direção, preservando a torção) com mistura por `weight`; `Skeleton::world_pose_matrices` exposto.
+- **Dados**: `IkChain` (`Project::ik_chains`, append-only) com validação (ossos existentes e contíguos) e `IkChain::two_bone_leg` a partir dos Rig Roles; poda em `validate()`.
+- **Testes**: alcance, comprimentos, pole, continuidade do soft IK, FABRIK/look-at no esqueleto, pesos, determinismo e persistência. Limites angulares e comandos ficam para a sequência da F0.
+
+### Animate F0.4 — Rig Roles (P3D-169, dados) (30/09/2026)
+- **Domínio** (`petunia_project::rig_roles`): `RigRole` (Root, Hips, Spine(n), Chest, Neck, Head, Jaw, Leg/Arm por membro e parte, Wing, Tail(n), Tentacle, Wiggle(n)) e `RigRoleMap` com atribuição validada (osso existente, papel único por osso — o erro nomeia o dono), pernas completas, cadeias de coluna/cauda e `RigRequirement` com mensagens legíveis.
+- **Inferência por nomes**: presets Petunia (humanoide, quadrúpede, multi-leg com 2–16 pernas), Mixamo e nomes genéricos; nomes desconhecidos ficam sem papel.
+- **Projeto**: `Project::rig_roles` (append-only, `serde(default)`; arquivos antigos abrem sem o campo), `add_skeleton` infere os papéis, `validate()` poda ossos/esqueletos ausentes; `assign_rig_role`/`clear_rig_role`/`infer_rig_roles`.
+- **glTF**: papéis em `skin.extras.petunia.roles` (por nome de osso); import restaura ou infere para rigs externos.
+
+### Animate F0.2/F0.3 — glTF com skin, joints e animação (30/09/2026)
+- **Export** (`petunia_project::gltf_rig`, integrado a `export_gltf`): nós de joint com TRS de repouso, `skin` com `inverseBindMatrices`, `JOINTS_0`/`WEIGHTS_0` por vértice, `animations` por osso (translation/rotation/scale; LINEAR ou STEP) e `extras.petunia` para round-trip. Sem rig o GLB é idêntico ao anterior. Avisos em `export_report` quando a malha avaliada não casa com os pesos (skin omitida, nunca silenciosa).
+- **Import** (`import_rig`, `Project::add_imported_rig`, `ImportPayload.rig`): esqueleto a partir da IBM (com rotação de repouso), pesos `JOINTS_0` u8/u16, clipes (fps/loop/duração via extras), `scale` aplicado; CUBICSPLINE convertido e ancestrais/escala/canais ignorados geram **avisos**. O `ProjectService` liga esqueleto, pesos e clipes ao projeto.
+- **Rig Core**: `compute_bind_pose_matrices` respeita a rotação de repouso (rigs externos).
+- **Testes**: 9 novos de round-trip (nomes, hierarquia, heads, bind, pesos por vértice, poses amostradas, rotação de repouso, escala, pipeline) + GLB externo montado à mão + export (skin, pesos, animações, tempos inválidos, skin omitida).
+- **Registrado**: AN-17 (pesos guardam IDs, consumidores tratam como índice); o import de malha ainda ignora UV/normais.
+
+### Animate F0.1 — correção do bind pose do Rig Core (30/09/2026)
+- **AN-16 corrigido**: `Skeleton::compute_bind_pose_matrices` tratava `head` (absoluto) como offset relativo ao pai, acumulando a hierarquia; ossos fora da origem não voltavam à identidade em repouso. Agora o bind é `translate(head)` e `local_transform.translation` guarda o offset de repouso (`head − head_do_pai`), a mesma convenção dos joints do glTF.
+- **Amostragem**: `AnimationClip::sample_pose` usa `BoneTrack::sample_transform_over`, e canais sem keyframes herdam o repouso (uma trilha só de rotação não solta mais o osso do pai). O clipe `Humanoid_Idle` passou a respirar em torno do repouso e o botão "Inserir Pose Key" do egui legado grava o repouso do osso.
+- **Testes**: repouso ⇒ skinning identidade em hierarquia deslocada, offsets após reparent/remoção e amostragem só-rotação.
+
+### Animate procedural-first — documentação (30/09/2026)
+- **Decisão de produto registrada**: Animate acessível a quem não entende de animação, com **animação procedural primeiro**, **criaturas de primeira classe** (humanoide, quadrúpede, multi-leg, serpente, peixe, pássaro) e referência de animação por **batch de imagens** (sem vídeo, sem ML). Sem alteração de código.
+- **Caderno**: novo capítulo 45 (visão, UX em quatro camadas, Gap Matrix `AN-01…AN-15`, análise do Dust3D, pesquisa externa e fases F0–F5); novas specs **P3D-169** (Rig Roles & IK), **P3D-170** (Procedural Motion Generators), **P3D-171** (Ghosts & Trajectories), **P3D-172** (Reference Image Sequence), **P3D-173** (Secondary Motion & Ragdoll) e **P3D-174** (Layered Animation), todas em `SPEC DRAFT`.
+- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e [ADR 006](docs/architecture/adr/006-workspace-animate-pos-v1.md). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
+- **Achados registrados**: o domínio de rig/clipes existe em `petunia_project`, mas não alcança o Slint (AN-07) e o glTF não exporta skin/animação (AN-13).
+- **Gates**: `xtask bible-check` passa a validar P3D-001–174 e fundamentos 01–45.
+
 ### Iconografia vetorial Petunia oficial e temas configuráveis (28/09/2026)
 - **Integração nativa no shell Slint**: Os 249 ícones vetoriais SVG oficiais criados para o Petunia3D foram compilados em catálogo declarativo dinâmico (`PetuniaIcons` em `petunia_icons.slint`), fornecendo suporte unificado a duas variantes estéticas: `outline` (traço) e `filled` (preenchido).
 - **Troca dinâmica e reatividade imediata**: Alternância de estilo em tempo de execução via seletor em Configurações -> Aparência, com preview dos dois estilos e callback reativo conectado ao singleton global Slint sem reinicialização.

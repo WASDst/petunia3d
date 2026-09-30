@@ -33,6 +33,8 @@ pub enum GltfImportError {
     Validation(String),
 }
 
+/// Skin/animação de um GLB (cap. 45 F0). Ver [`crate::gltf_rig::import_rig`].
+pub use crate::gltf_rig::import_rig;
 use gltf_json::validation::Validate;
 use petunia_mesh::{Face, Mesh, Vertex};
 

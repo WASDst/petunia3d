@@ -3,7 +3,7 @@
 - Project: **Petunia3D**
 - Prumo: **0.5.1**
 - Current phase: **Wave 11 — Extensibility, Plugins & Automation (Ativa)**
-- Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (155 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 36 capítulos de fundação unificados)
+- Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (174 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 45 capítulos de fundação)
 - Canonical UI Golden Reference: [`docs/image-references/Blender.svg`](file:///home/raillen/Documentos/Projetos/simple3d-modeling/docs/image-references/Blender.svg) (component catalog in [`docs/image-references/extracted/`](file:///home/raillen/Documentos/Projetos/simple3d-modeling/docs/image-references/extracted/))
 - Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Nesta rodada, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
 - **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, 169 testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
@@ -272,6 +272,17 @@ unitários verdes. Gaps conhecidos em relação ao caderno (capítulos 23/36):
   refinamento de responsividade e densidade.
 
 Esses gaps estão registrados na [auditoria Slint](docs/ui/slint-modern-audit.md).
+
+### Animate procedural-first — decisão de 2026-09-30
+
+Documentação apenas; **nenhum código foi alterado**. Registradas no caderno
+(cap. 45, ADR 006, P3D-169–174 em `SPEC DRAFT`): procedural primeiro, criaturas
+de primeira classe, referência de animação por **batch de imagens** (sem vídeo,
+sem ML) e Animate como primeiro workspace **pós-V1** (a UI Baseline V1
+`MODEL / PAINT / UV` não é reaberta). Gap Matrix real: domínio de rig/clipes
+`COMPLIANT`, mas **sem alcance no Slint** e **sem skin/animação no glTF**
+(AN-07, AN-13). A ordem de entrega (F0–F5) e os pré-requisitos (D-02, AX-03)
+estão no cap. 45. Prioridades vigentes (Sprint A–E de 2026-09-29) não mudam.
 
 ## Recovery order
 

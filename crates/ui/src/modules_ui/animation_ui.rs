@@ -7,7 +7,6 @@ use petunia_core::state::AppState;
 use petunia_project::animation::{
     AnimationClip, AnimationLibrary, RigPreset, auto_fit_humanoid, compute_auto_skin_weights,
 };
-use petunia_project::rig::Transform3D;
 
 /// Renderiza o painel lateral de propriedades do workspace Animate.
 pub fn draw_animation_panel(ui: &mut Ui, state: &mut AppState) {
@@ -445,14 +444,22 @@ fn draw_transport_section(ui: &mut Ui, state: &mut AppState) {
                     .unwrap_or(0)
             });
 
+            // Chave local absoluta: usa o repouso do osso (AN-16), não a origem.
+            let rest = state
+                .project
+                .skeletons
+                .iter()
+                .find_map(|s| s.get_bone(selected_bone_id))
+                .map(|b| b.local_transform)
+                .unwrap_or_default();
             if let Some(anim) = state.project.animations.first_mut() {
                 let time = (state.ui.timeline_frame as f32 / anim.clip.fps).max(0.0);
                 let track = anim
                     .clip
                     .get_or_create_track(selected_bone_id, &format!("Bone_{selected_bone_id}"));
-                track.add_translation(time, [0.0, 0.0, 0.0]);
-                track.add_rotation(time, Transform3D::default().rotation);
-                track.add_scale(time, [1.0, 1.0, 1.0]);
+                track.add_translation(time, rest.translation);
+                track.add_rotation(time, rest.rotation);
+                track.add_scale(time, rest.scale);
                 state.mark_dirty();
             }
         }

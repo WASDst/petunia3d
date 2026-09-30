@@ -22,7 +22,7 @@ Total de chaves de localização cadastradas: **781**.
 | `actions.angle` | Angle | Ângulo |
 | `actions.apply` | Apply | Aplicar |
 | `actions.apply_scale` | Apply scale | Aplicar escala |
-| `actions.bevel` | Bevel | Bevel |
+| `actions.bevel` | Round Edge | Round Edge |
 | `actions.cancel` | Cancel | Cancelar |
 | `actions.connect` | Bridge Faces | Conectar Faces |
 | `actions.cursor_to_origin` | Cursor to World Origin | Cursor para origem global |
@@ -156,7 +156,7 @@ Total de chaves de localização cadastradas: **781**.
 | `geometry.title` | Geometry | Geometria |
 | `geometry.tris` | Triangles | Triângulos |
 | `help.body` | MMB orbit • Shift+MMB pan • wheel zoom • Tab mode • Del delete • Home reset • H help • Ctrl+Z/Y undo | MMB orbita • Shift+MMB pan • scroll zoom • Tab modo • Del apaga • Home reseta • H ajuda • Ctrl+Z/Y desfaz |
-| `hints.bevel` | Ctrl+B: interactive bevel of one supported edge. | Ctrl+B: bevel interativo de um edge suportado. |
+| `hints.bevel` | Ctrl+B: interactive Round Edge of one supported edge. | Ctrl+B: Round Edge interativo de um edge suportado. |
 | `hints.connect` | B: bridge two loops or faces. | B: conecta (bridge) dois loops ou faces. |
 | `hints.dissolve` | X: dissolve selected edges/vertices cleanly. | X: dissolve edges/points sem deixar buracos. |
 | `hints.draw_profile` | Shift+P: click in ortho view to add points. Click near 1st to close. | Shift+P: clique na vista ortográfica p/ pontos. Perto do 1º fecha. |
@@ -185,7 +185,7 @@ Total de chaves de localização cadastradas: **781**.
 | `inspector.tab_object` | Object | Objeto |
 | `inspector.tab_selection` | Selection | Seleção |
 | `inspector.tool_active` | Active Tool | Ferramenta Ativa |
-| `inspector.tool_bevel` | Bevel tool | Ferramenta Bevel |
+| `inspector.tool_bevel` | Round Edge tool | Ferramenta Round Edge |
 | `inspector.tool_mirror` | Mirror tool | Ferramenta Mirror |
 | `inspector.tool_subdivide` | Subdivide tool | Ferramenta Subdivide |
 | `inspector.unpin` | Unpin | Soltar |
@@ -502,7 +502,7 @@ Total de chaves de localização cadastradas: **781**.
 | `shading.unlit` | Unlit | Sem Luz |
 | `shading.wire` | Wireframe | Arame |
 | `tool_properties.bevel_hint` | Supports one manifold convex edge with simple corners; one segment. | Suporta um edge convexo manifold com cantos simples; um segmento. |
-| `tool_properties.bevel_width` | Bevel width | Largura do bevel |
+| `tool_properties.bevel_width` | Round Edge width | Largura do Round Edge |
 | `tool_properties.blocked` | Confirm or cancel the viewport operation before editing these fields. | Confirme ou cancele a operação na viewport antes de editar estes campos. |
 | `tool_properties.choose_transform` | Choose a transform handle or use G/R/S. | Escolha uma alça de transformação ou use G/R/S. |
 | `tool_properties.cuts` | Cuts | Cortes |
@@ -531,7 +531,7 @@ Total de chaves de localização cadastradas: **781**.
 | `toolbar.visible` | Visible | Visível |
 | `tools.add_primitive` | Add Primitive | Adicionar primitiva |
 | `tools.annotate` | Annotate | Anotar |
-| `tools.bevel` | Bevel | Bevel |
+| `tools.bevel` | Round Edge | Round Edge |
 | `tools.connect` | Connect | Conectar |
 | `tools.cursor_3d` | 3D Cursor | Cursor 3D |
 | `tools.dissolve` | Dissolve | Dissolver |
@@ -667,7 +667,7 @@ Total de chaves de localização cadastradas: **781**.
 | `ui.more_actions` | More actions | Mais ações |
 | `ui.more_model_tools` | More modeling tools | Mais ferramentas de modelagem |
 | `ui.no_tool` | Tool disabled in tools.toml | Ferramenta desligada no tools.toml |
-| `ui.no_tool_parameters` | Select Extrude, Inset, Bevel, Loop Cut or Profile to edit parameters here. | Selecione Extrude, Inset, Bevel, Loop Cut ou Profile para editar os parâmetros aqui. |
+| `ui.no_tool_parameters` | Select Extrude, Inset, Round Edge, Loop Cut or Profile to edit parameters here. | Selecione Extrude, Inset, Round Edge, Loop Cut ou Profile para editar os parâmetros aqui. |
 | `ui.numeric_field_hint` | Click to enter an exact value, or drag to adjust. Hold Shift for precision. | Clique para digitar um valor exato ou arraste para ajustar. Segure Shift para precisão. |
 | `ui.object_lock` | Lock | Bloqueio |
 | `ui.object_name` | Name | Nome |

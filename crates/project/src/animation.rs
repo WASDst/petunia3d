@@ -214,11 +214,37 @@ impl BoneTrack {
         self.scales[0].value
     }
 
+    /// Amostra a transformação com **identidade** nos canais sem keyframes.
+    /// Para posar um osso use [`Self::sample_transform_over`], que preserva o repouso.
     pub fn sample_transform(&self, time: f32) -> Transform3D {
         Transform3D {
             translation: self.sample_translation(time),
             rotation: self.sample_rotation(time),
             scale: self.sample_scale(time),
+        }
+    }
+
+    /// Amostra a transformação local: canais **sem keyframes** herdam o repouso
+    /// (`rest`, normalmente `Bone::local_transform`). Uma trilha só de rotação não
+    /// desloca o osso do pai (AN-16). Keyframes são valores locais absolutos, a
+    /// mesma convenção dos canais de animação do glTF.
+    pub fn sample_transform_over(&self, time: f32, rest: &Transform3D) -> Transform3D {
+        Transform3D {
+            translation: if self.translations.is_empty() {
+                rest.translation
+            } else {
+                self.sample_translation(time)
+            },
+            rotation: if self.rotations.is_empty() {
+                rest.rotation
+            } else {
+                self.sample_rotation(time)
+            },
+            scale: if self.scales.is_empty() {
+                rest.scale
+            } else {
+                self.sample_scale(time)
+            },
         }
     }
 }
@@ -298,7 +324,7 @@ impl AnimationClip {
             .iter()
             .map(|b| {
                 if let Some(track) = self.get_track(b.id) {
-                    track.sample_transform(time)
+                    track.sample_transform_over(time, &b.local_transform)
                 } else {
                     b.local_transform
                 }
@@ -883,10 +909,15 @@ impl AnimationLibrary {
         let mut clip = AnimationClip::new("Humanoid_Idle", 2.0);
         let chest_id = skeleton.find_bone("Chest").unwrap_or(0);
 
+        // Keyframes são locais absolutos: o respirar é um delta sobre o repouso.
+        let rest = skeleton
+            .get_bone(chest_id)
+            .map_or([0.0; 3], |b| b.local_transform.translation);
+        let up = [rest[0], rest[1] + 0.03, rest[2]];
         let track = clip.get_or_create_track(chest_id, "Chest");
-        track.add_translation(0.0, [0.0, 0.0, 0.0]);
-        track.add_translation(1.0, [0.0, 0.03, 0.0]);
-        track.add_translation(2.0, [0.0, 0.0, 0.0]);
+        track.add_translation(0.0, rest);
+        track.add_translation(1.0, up);
+        track.add_translation(2.0, rest);
 
         track.add_scale(0.0, [1.0, 1.0, 1.0]);
         track.add_scale(1.0, [1.04, 1.02, 1.04]);
@@ -921,6 +952,32 @@ impl AnimationLibrary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// AN-16: trilha só de rotação não pode soltar o osso do pai.
+    #[test]
+    fn rotation_only_track_keeps_rest_offset_and_rest_frame_is_identity() {
+        let skel = RigPreset::humanoid(1.0);
+        let walk = AnimationLibrary::humanoid_walk(&skel);
+        let pose = walk.sample_pose(&skel, 0.0);
+        let uleg = skel.find_bone("UpperLeg.L").unwrap();
+        let idx = skel.bone_index(uleg).unwrap();
+        // Translação de repouso preservada; só a rotação é animada.
+        assert_eq!(
+            pose[idx].translation,
+            skel.bones[idx].local_transform.translation
+        );
+        assert_ne!(pose[idx].rotation, skel.bones[idx].local_transform.rotation);
+
+        // Ossos sem trilha ficam em repouso => skinning identidade.
+        let empty = AnimationClip::new("Empty", 1.0);
+        let mats = empty.sample_skinning_matrices(&skel, 0.5).unwrap();
+        assert!(mats.iter().all(|m| m.abs_diff_eq(Mat4::IDENTITY, 1e-5)));
+
+        // Idle respira em torno do repouso: frame 0 e 2 s == repouso do Chest.
+        let idle = AnimationLibrary::humanoid_idle(&skel);
+        let mats0 = idle.sample_skinning_matrices(&skel, 0.0).unwrap();
+        assert!(mats0.iter().all(|m| m.abs_diff_eq(Mat4::IDENTITY, 1e-4)));
+    }
 
     #[test]
     fn test_animation_track_sampling_and_interpolation() {
