@@ -277,7 +277,7 @@ impl CommandDispatcher {
         // permite restaurar o estado de sessão junto com o projeto se falhar.
         let original_primitive_session = (
             state.session.primitive_session.clone(),
-            state.session.last_primitive.clone(),
+            state.session.last_primitive,
         );
         if cmd.is_destructive() {
             state.freeze_active_primitive_for_command();

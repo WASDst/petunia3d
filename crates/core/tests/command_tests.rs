@@ -2084,9 +2084,7 @@ fn shade_smooth_is_per_object_transactional_and_persistent() {
     assert!(!state.project.project.is_smooth_shaded(id));
     let normals_before = state.project.project.normal_revision;
 
-    state
-        .dispatch(&SetShadeSmoothCmd { smooth: true })
-        .unwrap();
+    state.dispatch(&SetShadeSmoothCmd { smooth: true }).unwrap();
     assert!(state.project.project.is_smooth_shaded(id));
     assert!(state.project.project.normal_revision > normals_before);
     // Repetir é no-op: sem entrada de histórico.
