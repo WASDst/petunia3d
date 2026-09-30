@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1308**.
+Total de chaves de localização cadastradas: **1310**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -798,6 +798,8 @@ Total de chaves de localização cadastradas: **1308**.
 | `sl.paint` | PAINT | PINTAR |
 | `sl.paint_canvas_close` | Close canvas window | Fechar janela do canvas |
 | `sl.paint_canvas_open` | Open the canvas in a floating window | Abrir o canvas em janela flutuante |
+| `sl.paint_pip` | Paint on the 2D canvas with a live 3D inset | Pintar no canvas 2D com inset 3D ao vivo |
+| `sl.paint_pip_back` | Back to the 3D view | Voltar para a vista 3D |
 | `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
 | `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
 | `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |

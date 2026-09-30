@@ -449,6 +449,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_prefab_items(std::rc::Rc::new(slint::VecModel::from(prefab_items)).into());
     window.set_asset_only_favorites(vm.asset_only_favorites);
     window.set_split_enabled(vm.split_enabled);
+    window.set_paint_pip(vm.paint_pip);
     window.set_split_preset(vm.split_preset.as_str().into());
     window.set_asset_query(vm.asset_query.as_str().into());
     window.set_asset_sort_by_name(vm.asset_sort_by_name);
@@ -3862,6 +3863,22 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let pip_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_pip_toggle_requested(move || {
+        if let Ok(mut bridge) = pip_bridge.lock() {
+            bridge.toggle_paint_pip();
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });

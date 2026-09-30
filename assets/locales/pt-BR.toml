@@ -1395,6 +1395,8 @@ split_toggle = "Dividir viewport"
 split_toggle_hint = "Mostra uma segunda vista 3D para ver outro lado do modelo"
 split_too_narrow = "A viewport está estreita demais para dividir."
 prepare_surface = "Preparar superfície"
+paint_pip = "Pintar no canvas 2D com inset 3D ao vivo"
+paint_pip_back = "Voltar para a vista 3D"
 
 
 # Biblioteca de prefabs (mensagens de status; {name} é substituído)
