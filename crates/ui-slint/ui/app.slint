@@ -9544,7 +9544,8 @@ export component PetuniaSlintShell inherits Window {
                     if root.paint-pip && root.active-workspace == "PAINT": Rectangle {
                         x: 0px;
                         y: 0px;
-                        width: parent.width;
+                        // Deixa a coluna do Inspector livre: os controles do pincel seguem acessíveis.
+                        width: parent.width - (inspector-visible && !compact-shell ? inspector-width + 8px : 0px);
                         height: parent.height;
                         background: DesignTokens.canvas;
 
@@ -9561,6 +9562,45 @@ export component PetuniaSlintShell inherits Window {
                             zoom-step(direction) => {
                                 if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                 if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
+                            }
+                        }
+
+                        // Controles do pincel sempre à mão durante o PiP.
+                        Rectangle {
+                            x: 12px;
+                            y: 12px;
+                            width: 250px;
+                            height: 92px;
+                            border-radius: DesignTokens.radius-panel;
+                            background: DesignTokens.surface-raised.with-alpha(0.94);
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            drop-shadow-blur: 10px;
+                            drop-shadow-color: DesignTokens.shadow-subtle;
+                            TouchArea { }
+                            VerticalLayout {
+                                padding: 10px;
+                                spacing: 6px;
+                                for row in [
+                                    { label: Tr.t("sl.size"), kind: 0 },
+                                    { label: Tr.t("sl.opacity"), kind: 1 },
+                                    { label: Tr.t("sl.hardness"), kind: 2 },
+                                ]: HorizontalLayout {
+                                    spacing: 8px;
+                                    height: 18px;
+                                    Text { text: row.label; color: DesignTokens.text-secondary; font-size: 10px; width: 56px; vertical-alignment: center; }
+                                    PetuniaSlider {
+                                        horizontal-stretch: 1;
+                                        minimum: row.kind == 0 ? 0.05 : (row.kind == 1 ? 0.05 : 0.0);
+                                        maximum: row.kind == 0 ? 8.0 : 1.0;
+                                        value: row.kind == 0 ? root.brush-size : (row.kind == 1 ? root.brush-opacity : root.brush-hardness);
+                                        changed(v) => {
+                                            if row.kind == 0 { root.brush-size-changed(v); }
+                                            if row.kind == 1 { root.brush-opacity-changed(v); }
+                                            if row.kind == 2 { root.brush-hardness-changed(v); }
+                                        }
+                                    }
+                                }
                             }
                         }
 
