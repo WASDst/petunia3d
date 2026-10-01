@@ -218,13 +218,18 @@ impl Default for UserPreferences {
 }
 
 impl UserPreferences {
-    pub fn default_path() -> PathBuf {
+    /// Diretório de configuração do usuário (`…/petunia3d`).
+    pub fn config_dir() -> PathBuf {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
             .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
             .unwrap_or_else(std::env::temp_dir);
-        base.join("petunia3d").join("preferences.toml")
+        base.join("petunia3d")
+    }
+
+    pub fn default_path() -> PathBuf {
+        Self::config_dir().join("preferences.toml")
     }
 
     pub fn load_from_path(path: &Path) -> io::Result<Self> {

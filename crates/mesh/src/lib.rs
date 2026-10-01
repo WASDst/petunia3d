@@ -239,6 +239,7 @@ pub mod sweep;
 pub mod topology;
 pub mod triangulate;
 pub mod uv;
+pub mod uv_layout;
 pub mod uv_tools;
 pub mod uv_xatlas;
 
@@ -250,6 +251,7 @@ pub use path_frames::{PathFrame, PathFrameError, compute_parallel_transport_fram
 pub use primitives::{CircleFill, PrimitiveAudit, PrimitiveDescriptor, primitive_audit};
 pub use sweep::{SweepFrame, SweepOptions, compute_rmf_frames, generate_sweep};
 pub use topology::{DirtyDomains, ElementRemap, TopologyResult};
+pub use uv_layout::CoverageMask;
 pub use uv_tools::{UvDiagnostics, UvIsland};
 
 impl Mesh {

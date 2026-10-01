@@ -85,7 +85,7 @@ impl Mesh {
             .iter()
             .all(|f| f.uv.iter().all(|u| *u == [0.0, 0.0]))
         {
-            m.project_planar();
+            m.layout_uv_charts(crate::primitives::DEFAULT_UV_PADDING);
         }
         m
     }

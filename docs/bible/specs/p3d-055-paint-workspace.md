@@ -100,3 +100,7 @@ O modelo de dados do Surface Recipe graph começa **headless**: DAG, sockets,
 avaliador determinístico e cache. **Sem editor visual** nesta fase; o editor
 gráfico de nodes fica para o ciclo pós-Paint, quando a pilha de efeitos estiver
 estável.
+
+## Estado de implementação (2026-09-30)
+
+PAINT tem ferramenta **Select** (troca de objeto, face e ilha UV) e **Isolar objeto**; entrar no workspace ativa o pincel. Do adendo pós-V1: Elipse e Gradiente (linear e radial, compondo por cima) existem; Decal por importação, Projection/Stencil e Path Paint seguem ausentes. Detalhes em [`paint-uv-gap-matrix`](../../development/paint-uv-gap-matrix.md).

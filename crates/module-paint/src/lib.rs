@@ -10,6 +10,9 @@
 //! - Isolamento de seleção / Paint Masks (P3D-132).
 //! - Sincronização direta com o modelo canônico de Material (P3D-050).
 
+mod engine;
+pub use engine::dab_falloff;
+
 use std::collections::VecDeque;
 
 use glam::Vec3;
@@ -48,6 +51,7 @@ impl DirtyTiles {
         self.indices.len()
     }
 
+    #[cfg(test)]
     fn mark_dab(&mut self, x: u32, y: u32, radius: u32, canvas_w: u32, canvas_h: u32) {
         use petunia_project::paint_layers::TILE_SIZE;
 
@@ -587,6 +591,25 @@ impl PaintModule {
         }
     }
 
+    /// Elipse preenchida inscrita no retângulo entre dois cantos (ordem qualquer).
+    pub fn stroke_ellipse(canvas: &mut Canvas, stroke: &ShapeStroke) {
+        let (xa, xb) = (stroke.x0.min(stroke.x1), stroke.x0.max(stroke.x1));
+        let (ya, yb) = (stroke.y0.min(stroke.y1), stroke.y0.max(stroke.y1));
+        let (cx, cy) = ((xa + xb) as f32 * 0.5, (ya + yb) as f32 * 0.5);
+        // Meia-largura/altura em texels (pelo menos meio texel: um clique é um ponto).
+        let rx = ((xb - xa) as f32 * 0.5).max(0.5);
+        let ry = ((yb - ya) as f32 * 0.5).max(0.5);
+        for y in ya..=yb {
+            for x in xa..=xb {
+                let nx = (x as f32 - cx) / rx;
+                let ny = (y as f32 - cy) / ry;
+                if nx * nx + ny * ny <= 1.0 {
+                    canvas.set(x, y, stroke.color);
+                }
+            }
+        }
+    }
+
     /// Retângulo preenchido entre dois cantos (ordem qualquer).
     pub fn stroke_rect(canvas: &mut Canvas, stroke: &ShapeStroke) {
         let (xa, xb) = (stroke.x0.min(stroke.x1), stroke.x0.max(stroke.x1));
@@ -726,7 +749,6 @@ impl PaintModule {
             (state.paint_color[2] * 255.0) as u8,
             255,
         ];
-        let radius = s.radius_px();
 
         let active_idx = state.project.active;
         // Conta-gotas amostra o composto (o que o usuário vê — P3D-060).
@@ -752,40 +774,24 @@ impl PaintModule {
             return DirtyTiles::default();
         }
 
-        let mut dirty = DirtyTiles::default();
-        if let Some(o) = state.project.assets.get_mut(active_idx)
-            && let Some(stack) = o.paint_stack.as_mut()
-            && let Some(layer) = stack.active_mut()
-            && let Some(cv) = layer.canvas_mut()
-        {
-            let (canvas_w, canvas_h) = (cv.w, cv.h);
-            for &(x, y) in points {
-                match s.kind {
-                    BrushType::Pixel => Self::stamp_pixel_brush(cv, x, y, radius, color),
-                    BrushType::Soft => {
-                        Self::stamp_soft_brush_hard(cv, x, y, radius, color, s.strength, s.hardness)
-                    }
-                    // Airbrush: falloff máximo + força modulada pelo fluxo.
-                    BrushType::Airbrush => Self::stamp_soft_brush_hard(
-                        cv,
-                        x,
-                        y,
-                        radius,
-                        color,
-                        (s.strength * s.flow).clamp(0.0, 1.0),
-                        0.0,
-                    ),
-                    BrushType::Eraser => Self::stamp_eraser(cv, x, y, radius, s.strength),
-                    BrushType::Fill => Self::flood_fill(cv, x, y, color, 16),
-                    BrushType::Line | BrushType::Rectangle | BrushType::Eyedropper => {}
+        let mut dirty = if s.kind == BrushType::Fill {
+            // O balde preenche uma região conectada: não usa dabs nem buffer.
+            let mut dirty = DirtyTiles::default();
+            if let Some(o) = state.project.assets.get_mut(active_idx)
+                && let Some(stack) = o.paint_stack.as_mut()
+                && let Some(layer) = stack.active_mut()
+                && !layer.locked
+                && let Some(cv) = layer.canvas_mut()
+            {
+                for &(x, y) in points {
+                    Self::flood_fill(cv, x, y, color, 16);
                 }
-                if s.kind == BrushType::Fill {
-                    dirty.mark_all(canvas_w, canvas_h);
-                } else {
-                    dirty.mark_dab(x, y, radius, canvas_w, canvas_h);
-                }
+                dirty.mark_all(cv.w, cv.h);
             }
-        }
+            dirty
+        } else {
+            Self::stamp_dabs_2d(state, points, s)
+        };
         dirty.normalize();
         if !dirty.is_empty() {
             Self::composite_active_tiles(state, dirty.as_slice());
@@ -850,18 +856,12 @@ impl PaintModule {
     /// Roteia o estilo pelo pincel ativo (Pixel=sólido, Soft=suave,
     /// Eraser=apaga). Quem chama faz 1 checkpoint antes.
     pub fn commit_shape(state: &mut AppState, stroke: ShapeStroke) {
-        Self::ensure_stack(state);
-        let active_idx = state.project.active;
-        if let Some(o) = state.project.assets.get_mut(active_idx)
-            && let Some(stack) = o.paint_stack.as_mut()
-            && let Some(layer) = stack.active_mut()
-            && let Some(cv) = layer.canvas_mut()
-        {
-            match stroke.brush {
-                BrushType::Rectangle => Self::stroke_rect(cv, &stroke),
-                _ => Self::stroke_line(cv, &stroke),
-            }
-        }
+        let first_face = Self::face_at_texel_of_active(state, stroke.x0, stroke.y0);
+        Self::restricted_edit(state, first_face, |cv| match stroke.brush {
+            BrushType::Rectangle => Self::stroke_rect(cv, &stroke),
+            BrushType::Ellipse => Self::stroke_ellipse(cv, &stroke),
+            _ => Self::stroke_line(cv, &stroke),
+        });
         Self::composite_active(state);
     }
 
@@ -877,27 +877,38 @@ impl PaintModule {
 
     /// Preenche a camada ativa com a cor selecionada.
     pub fn canvas_fill(state: &mut AppState) {
-        Self::ensure_stack(state);
-        let color = [
-            (state.paint_color[0] * 255.0) as u8,
-            (state.paint_color[1] * 255.0) as u8,
-            (state.paint_color[2] * 255.0) as u8,
-            255,
-        ];
-
-        let active_idx = state.project.active;
-        if let Some(o) = state.project.assets.get_mut(active_idx)
-            && let Some(stack) = o.paint_stack.as_mut()
-            && let Some(layer) = stack.active_mut()
-            && let Some(cv) = layer.canvas_mut()
-        {
-            cv.fill(color);
-        }
-
+        let color = Self::paint_color_rgba(state);
+        Self::restricted_edit(state, None, |cv| cv.fill(color));
         Self::composite_active(state);
     }
 
-    /// Aplica um gradiente linear na camada ativa de (x0, y0) até (x1, y1) entre duas cores RGBA.
+    /// Composição "over" (alfa reto) de `src` sobre `dst`.
+    fn over(dst: [u8; 4], src: [f32; 4]) -> [u8; 4] {
+        let sa = (src[3] / 255.0).clamp(0.0, 1.0);
+        let da = dst[3] as f32 / 255.0;
+        let out_a = sa + da * (1.0 - sa);
+        if out_a <= 0.0 {
+            return [0, 0, 0, 0];
+        }
+        let mut out = [0u8; 4];
+        for c in 0..3 {
+            let v = (src[c] * sa + dst[c] as f32 * da * (1.0 - sa)) / out_a;
+            out[c] = v.round().clamp(0.0, 255.0) as u8;
+        }
+        out[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
+        out
+    }
+
+    fn lerp_color(a: [u8; 4], b: [u8; 4], t: f32) -> [f32; 4] {
+        let mut out = [0.0; 4];
+        for c in 0..4 {
+            out[c] = a[c] as f32 * (1.0 - t) + b[c] as f32 * t;
+        }
+        out
+    }
+
+    /// Aplica um gradiente linear na camada ativa de (x0, y0) até (x1, y1) entre duas cores RGBA,
+    /// **por cima** do que já existe (a transparência da cor final preserva a pintura abaixo).
     pub fn canvas_gradient_linear(
         state: &mut AppState,
         x0: u32,
@@ -907,17 +918,11 @@ impl PaintModule {
         color_start: [u8; 4],
         color_end: [u8; 4],
     ) {
-        Self::ensure_stack(state);
-        let active_idx = state.project.active;
-        if let Some(o) = state.project.assets.get_mut(active_idx)
-            && let Some(stack) = o.paint_stack.as_mut()
-            && let Some(layer) = stack.active_mut()
-            && let Some(cv) = layer.canvas_mut()
-        {
+        let first_face = Self::face_at_texel_of_active(state, x0, y0);
+        Self::restricted_edit(state, first_face, |cv| {
             let dx = x1 as f32 - x0 as f32;
             let dy = y1 as f32 - y0 as f32;
             let len_sq = dx * dx + dy * dy;
-
             for y in 0..cv.h {
                 for x in 0..cv.w {
                     let t = if len_sq < 1.0 {
@@ -926,14 +931,40 @@ impl PaintModule {
                         let proj = (x as f32 - x0 as f32) * dx + (y as f32 - y0 as f32) * dy;
                         (proj / len_sq).clamp(0.0, 1.0)
                     };
-                    let r = (color_start[0] as f32 * (1.0 - t) + color_end[0] as f32 * t) as u8;
-                    let g = (color_start[1] as f32 * (1.0 - t) + color_end[1] as f32 * t) as u8;
-                    let b = (color_start[2] as f32 * (1.0 - t) + color_end[2] as f32 * t) as u8;
-                    let a = (color_start[3] as f32 * (1.0 - t) + color_end[3] as f32 * t) as u8;
-                    cv.set(x, y, [r, g, b, a]);
+                    let src = Self::lerp_color(color_start, color_end, t);
+                    if let Some(dst) = cv.get(x, y) {
+                        cv.set(x, y, Self::over(dst, src));
+                    }
                 }
             }
-        }
+        });
+        Self::composite_active(state);
+    }
+
+    /// Gradiente radial: `color_start` no centro `(cx, cy)` até `color_end` a `radius` texels.
+    pub fn canvas_gradient_radial(
+        state: &mut AppState,
+        cx: u32,
+        cy: u32,
+        radius: f32,
+        color_start: [u8; 4],
+        color_end: [u8; 4],
+    ) {
+        let first_face = Self::face_at_texel_of_active(state, cx, cy);
+        let radius = radius.max(1.0);
+        Self::restricted_edit(state, first_face, |cv| {
+            for y in 0..cv.h {
+                for x in 0..cv.w {
+                    let d =
+                        ((x as f32 - cx as f32).powi(2) + (y as f32 - cy as f32).powi(2)).sqrt();
+                    let t = (d / radius).clamp(0.0, 1.0);
+                    let src = Self::lerp_color(color_start, color_end, t);
+                    if let Some(dst) = cv.get(x, y) {
+                        cv.set(x, y, Self::over(dst, src));
+                    }
+                }
+            }
+        });
         Self::composite_active(state);
     }
 
@@ -1043,12 +1074,10 @@ impl PaintModule {
         scope: petunia_core::FillScope,
     ) {
         Self::ensure_stack(state);
-        let color = [
-            (state.paint_color[0] * 255.0) as u8,
-            (state.paint_color[1] * 255.0) as u8,
-            (state.paint_color[2] * 255.0) as u8,
-            255,
-        ];
+        let color = Self::paint_color_rgba(state);
+        // No canvas 2D não há face sob o cursor: a semente (texel) a revela.
+        let face_hint = face_hint
+            .or_else(|| seed.and_then(|(x, y)| Self::face_at_texel_of_active(state, x, y)));
         let scope = if face_hint.is_none()
             && matches!(
                 scope,
@@ -1099,36 +1128,90 @@ impl PaintModule {
                 .unwrap_or_default(),
         };
 
-        let active_idx = state.project.active;
-        if let Some(o) = state.project.assets.get_mut(active_idx)
-            && let Some(stack) = o.paint_stack.as_mut()
-            && let Some(layer) = stack.active_mut()
-            && let Some(cv) = layer.canvas_mut()
-        {
-            match scope {
-                petunia_core::FillScope::ConnectedPixels => {
-                    if let Some((x, y)) = seed {
-                        Self::flood_fill(cv, x, y, color, 16);
-                    } else {
-                        cv.fill(color);
-                    }
-                }
-                petunia_core::FillScope::Object => cv.fill(color),
-                _ => {
-                    if polygons.is_empty() {
-                        cv.fill(color);
-                    }
-                    for polygon in &polygons {
-                        Self::fill_uv_polygon(cv, polygon, color);
-                    }
-                    if matches!(scope, petunia_core::FillScope::UvIsland) {
-                        Self::dilate_canvas(cv, color, 2);
-                    }
+        Self::restricted_edit(state, face_hint, |cv| match scope {
+            petunia_core::FillScope::ConnectedPixels => {
+                if let Some((x, y)) = seed {
+                    Self::flood_fill(cv, x, y, color, 16);
+                } else {
+                    cv.fill(color);
                 }
             }
-        }
+            petunia_core::FillScope::Object => cv.fill(color),
+            _ => {
+                if polygons.is_empty() {
+                    cv.fill(color);
+                }
+                for polygon in &polygons {
+                    Self::fill_uv_polygon(cv, polygon, color);
+                }
+                if matches!(scope, petunia_core::FillScope::UvIsland) {
+                    Self::dilate_canvas(cv, color, 2);
+                }
+            }
+        });
 
         Self::composite_active(state);
+    }
+
+    /// Primeira face (em ordem de índice) cuja UV cobre o texel da camada ativa.
+    fn face_at_texel_of_active(state: &AppState, x: u32, y: u32) -> Option<usize> {
+        let (w, h) = Self::active_canvas_dims(state)?;
+        state
+            .project
+            .active_mesh()?
+            .faces_at_texel(x, y, w, h)
+            .first()
+            .copied()
+    }
+
+    /// Edita a camada ativa respeitando a restrição de faces (P3D-132).
+    ///
+    /// Operações de região inteira (balde, gradiente, forma) rodam sobre a
+    /// camada e depois devolvem os texels fora da máscara ao estado anterior.
+    /// Retorna `false` se a camada está travada ou a restrição não deixa
+    /// nenhuma face elegível.
+    pub(crate) fn restricted_edit(
+        state: &mut AppState,
+        first_face: Option<usize>,
+        edit: impl FnOnce(&mut Canvas),
+    ) -> bool {
+        Self::ensure_stack(state);
+        let in_stroke = state.session.tools.paint_stroke.is_some();
+        if !in_stroke {
+            state.session.tools.paint_restriction = None;
+            state.session.tools.paint_lock_face = None;
+        }
+        let restriction = Self::resolve_restriction(state, first_face);
+        let blocked = Self::restriction_blocks_everything(restriction.as_ref());
+        let mut done = false;
+        if !blocked {
+            let active = state.project.active;
+            if let Some(asset) = state.project.assets.get_mut(active)
+                && let Some(stack) = asset.paint_stack.as_mut()
+                && let Some(layer) = stack.active_mut()
+                && !layer.locked
+                && layer.is_paintable()
+                && let Some(cv) = layer.canvas_mut()
+            {
+                let snapshot = restriction.as_ref().map(|_| cv.pixels.clone());
+                edit(cv);
+                if let (Some(r), Some(snapshot)) = (restriction.as_ref(), snapshot) {
+                    let mask = r.mask(&asset.mesh, cv.w, cv.h);
+                    for (i, allowed) in mask.texels.iter().enumerate() {
+                        if *allowed == 0 {
+                            cv.pixels[i * 4..i * 4 + 4]
+                                .copy_from_slice(&snapshot[i * 4..i * 4 + 4]);
+                        }
+                    }
+                }
+                done = true;
+            }
+        }
+        if !in_stroke {
+            state.session.tools.paint_restriction = None;
+            state.session.tools.paint_lock_face = None;
+        }
+        done
     }
 
     /// Limpa a camada ativa (alfa zero).
@@ -1309,7 +1392,12 @@ impl PaintModule {
         )
     }
 
-    /// Projeta vários hits 3D, agrega simetria e compõe o canvas uma única vez.
+    /// Pinta vários hits 3D com pincel esférico, respeitando simetria, seleção
+    /// e trava de pincel, e compõe o canvas uma única vez.
+    ///
+    /// `isolate_selection` força a restrição pela seleção mesmo que o isolamento
+    /// não esteja ligado na sessão. Fora de um traço (`begin_paint_stroke`) a
+    /// restrição e o buffer valem só para esta chamada.
     pub fn paint_mesh_3d_batch_with_settings(
         state: &mut AppState,
         hits: &[(usize, Vec3)],
@@ -1320,59 +1408,32 @@ impl PaintModule {
         if hits.is_empty() || s.kind.is_shape() {
             return false;
         }
-
         Self::ensure_canvas(state);
-        let sym_x = state.session.tools.paint_symmetry_x;
-        let sym_y = state.session.tools.paint_symmetry_y;
-        let sym_z = state.session.tools.paint_symmetry_z;
-        let mut dabs = Vec::with_capacity(hits.len() * 8);
+        Self::ensure_stack(state);
 
-        for &(face_idx, hit_pos) in hits {
-            let Some(uv) = Self::face_hit_uv(state, face_idx, hit_pos, isolate_selection) else {
-                continue;
-            };
-            let Some(primary) = Self::uv_to_px(state, uv) else {
-                continue;
-            };
-            let mut sample = vec![primary];
-            let mut sym_points = Vec::with_capacity(7);
-            if sym_x {
-                sym_points.push(Vec3::new(-hit_pos.x, hit_pos.y, hit_pos.z));
-            }
-            if sym_y {
-                sym_points.push(Vec3::new(hit_pos.x, -hit_pos.y, hit_pos.z));
-            }
-            if sym_z {
-                sym_points.push(Vec3::new(hit_pos.x, hit_pos.y, -hit_pos.z));
-            }
-            if sym_x && sym_y {
-                sym_points.push(Vec3::new(-hit_pos.x, -hit_pos.y, hit_pos.z));
-            }
-            if sym_x && sym_z {
-                sym_points.push(Vec3::new(-hit_pos.x, hit_pos.y, -hit_pos.z));
-            }
-            if sym_y && sym_z {
-                sym_points.push(Vec3::new(hit_pos.x, -hit_pos.y, -hit_pos.z));
-            }
-            if sym_x && sym_y && sym_z {
-                sym_points.push(Vec3::new(-hit_pos.x, -hit_pos.y, -hit_pos.z));
-            }
-
-            for p_sym in sym_points {
-                if let Some(uv_sym) = Self::find_mesh_uv_at_pos(state, p_sym, isolate_selection)
-                    && let Some((px_sym, py_sym)) = Self::uv_to_px(state, uv_sym)
-                {
-                    sample.push((px_sym, py_sym));
-                }
-            }
-            sample.sort_unstable();
-            sample.dedup();
-            dabs.extend(sample);
+        let in_stroke = state.session.tools.paint_stroke.is_some();
+        let forced = isolate_selection && !state.session.tools.paint_isolate_selection;
+        if !in_stroke {
+            state.session.tools.paint_restriction = None;
+            state.session.tools.paint_buffer = None;
         }
-        if dabs.is_empty() {
+        if forced {
+            state.session.tools.paint_isolate_selection = true;
+        }
+        let dirty = Self::stamp_dabs_3d(state, hits, s);
+        if forced {
+            state.session.tools.paint_isolate_selection = false;
+        }
+        if !in_stroke {
+            state.session.tools.paint_restriction = None;
+            state.session.tools.paint_buffer = None;
+        }
+        let mut dirty = dirty;
+        dirty.normalize();
+        if dirty.is_empty() {
             return false;
         }
-        Self::canvas_brush_batch(state, &dabs, s);
+        Self::composite_active_tiles(state, dirty.as_slice());
         true
     }
 
@@ -1695,6 +1756,26 @@ mod tests {
         assert_eq!(state.project.palette, p8);
     }
 
+    /// Face do ativo mais voltada para `dir` e o centro dela.
+    fn face_toward(state: &AppState, dir: Vec3) -> (usize, Vec3) {
+        let mesh = state.project.active_mesh().expect("malha ativa");
+        let fi = (0..mesh.faces.len())
+            .max_by(|&a, &b| {
+                mesh.face_normal(a)
+                    .dot(dir)
+                    .partial_cmp(&mesh.face_normal(b).dot(dir))
+                    .unwrap()
+            })
+            .expect("face");
+        let verts = &mesh.faces[fi].verts;
+        let center = verts
+            .iter()
+            .map(|&v| mesh.verts[v as usize].vec())
+            .sum::<Vec3>()
+            / verts.len() as f32;
+        (fi, center)
+    }
+
     #[test]
     fn test_pixel_brush_and_canvas_stamp() {
         let mut cv = Canvas::new(8, 8, [0, 0, 0, 255]);
@@ -1784,19 +1865,51 @@ mod tests {
     fn test_paint_mesh_3d_with_settings_uses_radius() {
         let mut state = AppState::new("en");
         state.paint_color = [0.2, 0.8, 0.4];
-        let hit = Vec3::new(0.0, 0.0, 1.0);
+        let (face, hit) = face_toward(&state, Vec3::Z);
         let settings = petunia_core::BrushSettings {
             kind: BrushType::Pixel,
             size_px: 8.0,
             ..Default::default()
         };
-        let painted = PaintModule::paint_mesh_3d_with_settings(&mut state, 0, hit, settings, false);
+        let painted =
+            PaintModule::paint_mesh_3d_with_settings(&mut state, face, hit, settings, false);
         assert!(painted);
         assert!(PaintModule::has_canvas(&state));
-        // Dab de raio 4 (size 8) deve ter coberto vizinhança ao redor do centro UV.
         let tex = state.project.active().unwrap().texture.as_ref().unwrap();
         let painted_px = tex.pixels.chunks(4).any(|p| p[1] > 150 && p[0] < 120);
         assert!(painted_px, "textura deve conter a cor pintada (51,204,102)");
+    }
+
+    #[test]
+    fn painting_one_face_does_not_paint_the_others() {
+        let mut state = AppState::new("en");
+        state.paint_color = [1.0, 0.0, 0.0];
+        let (front, hit) = face_toward(&state, Vec3::Z);
+        let (back, _) = face_toward(&state, -Vec3::Z);
+        let settings = BrushSettings {
+            kind: BrushType::Pixel,
+            size_px: 30.0,
+            ..Default::default()
+        };
+        assert!(PaintModule::paint_mesh_3d_with_settings(
+            &mut state, front, hit, settings, false
+        ));
+        let asset = state.project.active().unwrap();
+        let tex = asset.texture.as_ref().unwrap();
+        let painted = |face: usize| {
+            let mask = asset.mesh.uv_coverage_mask([face], tex.w, tex.h, 0.0);
+            (0..tex.w * tex.h).any(|i| {
+                mask.texels[i as usize] != 0
+                    && tex.pixels[i as usize * 4..i as usize * 4 + 3] == [255, 0, 0]
+            })
+        };
+        assert!(painted(front));
+        assert!(!painted(back), "a face oposta não pode receber tinta");
+        // Nenhuma outra face além das vizinhas ao redor do pincel.
+        let others = (0..asset.mesh.faces.len())
+            .filter(|&f| f != front && painted(f))
+            .count();
+        assert!(others <= 4, "{others} faces pintadas");
     }
 
     #[test]
@@ -1846,10 +1959,9 @@ mod tests {
         let mut state = AppState::new("en");
         state.paint_color = [0.2, 0.8, 0.4];
 
-        // Face frontal do cubo padrão
-        let hit_pos = Vec3::new(0.0, 0.0, 1.0);
+        let (face, hit_pos) = face_toward(&state, Vec3::Z);
         let painted =
-            PaintModule::paint_mesh_3d(&mut state, 0, hit_pos, BrushType::Pixel, 2, 1.0, false);
+            PaintModule::paint_mesh_3d(&mut state, face, hit_pos, BrushType::Pixel, 2, 1.0, false);
 
         assert!(painted);
         assert!(PaintModule::has_canvas(&state));
@@ -2004,29 +2116,110 @@ mod tests {
     #[test]
     fn test_paint_mask_selection_isolation() {
         let mut state = AppState::new("en");
+        let (front, front_hit) = face_toward(&state, Vec3::Z);
+        let (right, right_hit) = face_toward(&state, Vec3::X);
 
-        // Seleciona apenas a face 1
+        // Seleciona apenas a face da direita
         if let Some(m) = state.project.active_mesh_mut() {
-            m.faces[1].selected = true;
+            m.faces[right].selected = true;
         }
 
-        // Tenta pintar na face 0 com isolamento ativado -> deve ser rejeitado (P3D-132)
-        let hit_pos = Vec3::new(0.0, 0.0, 1.0);
+        // Pintar na face da frente com isolamento ativado -> rejeitado (P3D-132)
         let painted = PaintModule::paint_mesh_3d(
             &mut state,
-            0,
-            hit_pos,
+            front,
+            front_hit,
             BrushType::Pixel,
             2,
             1.0,
-            true, // isolate_selection = true
+            true,
         );
         assert!(!painted);
 
-        // Tenta pintar na face 1 com isolamento ativado -> deve ser aceito
-        let painted =
-            PaintModule::paint_mesh_3d(&mut state, 1, hit_pos, BrushType::Pixel, 2, 1.0, true);
+        // Pintar na face selecionada com isolamento ativado -> aceito
+        let painted = PaintModule::paint_mesh_3d(
+            &mut state,
+            right,
+            right_hit,
+            BrushType::Pixel,
+            2,
+            1.0,
+            true,
+        );
         assert!(painted);
+    }
+
+    #[test]
+    fn mask_with_nothing_selected_paints_nothing() {
+        let mut state = AppState::new("en");
+        state.session.tools.paint_isolate_selection = true;
+        let (face, hit) = face_toward(&state, Vec3::Z);
+        let settings = BrushSettings {
+            kind: BrushType::Pixel,
+            size_px: 10.0,
+            ..Default::default()
+        };
+        assert!(!PaintModule::paint_mesh_3d_with_settings(
+            &mut state, face, hit, settings, false
+        ));
+    }
+
+    #[test]
+    fn mask_restricts_the_2d_canvas_to_the_selected_faces() {
+        let mut state = AppState::new("en");
+        let (right, _) = face_toward(&state, Vec3::X);
+        state.project.active_mesh_mut().unwrap().faces[right].selected = true;
+        state.session.tools.paint_isolate_selection = true;
+        state.paint_color = [0.0, 1.0, 0.0];
+        PaintModule::ensure_stack(&mut state);
+        let (w, h) = PaintModule::active_canvas_dims(&state).unwrap();
+        // Dab enorme no centro do canvas: só o que cai na UV da face escolhida pinta.
+        let settings = BrushSettings {
+            kind: BrushType::Pixel,
+            size_px: 2.0 * w as f32,
+            ..Default::default()
+        };
+        PaintModule::canvas_brush_batch_with_symmetry(&mut state, &[(w / 2, h / 2)], settings);
+        let asset = state.project.active().unwrap();
+        let tex = asset.texture.as_ref().unwrap();
+        let allowed = asset.mesh.uv_coverage_mask([right], w, h, 1.0);
+        let mut inside = 0;
+        for (i, px) in tex.pixels.chunks(4).enumerate() {
+            let green = px[..3] == [0, 255, 0];
+            if green {
+                assert!(allowed.texels[i] != 0, "texel {i} fora da face selecionada");
+                inside += 1;
+            }
+        }
+        assert!(inside > 0);
+    }
+
+    #[test]
+    fn overlapping_flow_does_not_darken_past_the_strength_cap() {
+        let mut state = AppState::new("en");
+        state.paint_color = [1.0, 1.0, 1.0];
+        PaintModule::ensure_stack(&mut state);
+        state.begin_paint_stroke();
+        let settings = BrushSettings {
+            kind: BrushType::Soft,
+            size_px: 10.0,
+            hardness: 1.0,
+            strength: 0.5,
+            flow: 1.0,
+            spacing: 0.1,
+        };
+        for _ in 0..6 {
+            PaintModule::canvas_brush_batch_with_symmetry(&mut state, &[(20, 20)], settings);
+        }
+        state.finish_paint_stroke(false);
+        let tex = state.project.active().unwrap().texture.as_ref().unwrap();
+        let base = state.project.active().unwrap().base_color;
+        let expected = (base[0] * 255.0 * 0.5 + 255.0 * 0.5) as i32;
+        let got = tex.get(20, 20).unwrap()[0] as i32;
+        assert!(
+            (got - expected).abs() <= 2,
+            "got {got}, expected ~{expected}"
+        );
     }
 
     #[test]
@@ -2135,18 +2328,12 @@ mod tests {
         asset.mesh = petunia_mesh::Mesh::cube(2.0);
         asset.texture = Some(Canvas::new(64, 64, [0, 0, 0, 255]));
 
-        // Cubo tem faces em x = +1.0 e x = -1.0.
-        // Testa busca de UV por posição no espaço 3D
-        let hit_pos = Vec3::new(1.0, 0.0, 0.0);
-        let uv = PaintModule::find_mesh_uv_at_pos(&state, hit_pos, false);
-        assert!(uv.is_some(), "deve encontrar UV na face x = +1.0");
-
-        let sym_pos = Vec3::new(-1.0, 0.0, 0.0);
-        let sym_uv = PaintModule::find_mesh_uv_at_pos(&state, sym_pos, false);
-        assert!(
-            sym_uv.is_some(),
-            "deve encontrar UV na face simétrica x = -1.0"
-        );
+        // Cubo tem faces em x = +1.0 e x = -1.0 (centros em (±1, 0, 0)).
+        let (fi, hit_pos) = face_toward(&state, Vec3::X);
+        let (mirror_fi, mirror_pos) = face_toward(&state, -Vec3::X);
+        assert!((hit_pos - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-4);
+        assert!((mirror_pos - Vec3::new(-1.0, 0.0, 0.0)).length() < 1e-4);
+        assert_ne!(fi, mirror_fi);
 
         // Habilita simetria no eixo X
         state.session.tools.paint_symmetry_x = true;
@@ -2161,26 +2348,22 @@ mod tests {
             spacing: 0.1,
         };
 
-        // Identifica qual face tem x = +1.0
-        let fi = state.project.assets[active]
-            .mesh
-            .faces
-            .iter()
-            .position(|f| {
-                f.verts.iter().all(|&vi| {
-                    (state.project.assets[active].mesh.verts[vi as usize].pos[0] - 1.0).abs() < 1e-4
-                })
-            })
-            .unwrap();
-
         let ok = PaintModule::paint_mesh_3d_with_settings(&mut state, fi, hit_pos, settings, false);
         assert!(ok);
 
+        // O UV do centro de cada face vira um texel; ambos devem estar pintados.
+        let mesh = &state.project.assets[active].mesh;
+        let centroid = |face: usize| {
+            let uv = &mesh.faces[face].uv;
+            let n = uv.len() as f32;
+            [
+                uv.iter().map(|u| u[0]).sum::<f32>() / n,
+                uv.iter().map(|u| u[1]).sum::<f32>() / n,
+            ]
+        };
+        let px_hit = PaintModule::uv_to_px(&state, centroid(fi)).unwrap();
+        let px_sym = PaintModule::uv_to_px(&state, centroid(mirror_fi)).unwrap();
         let canvas = state.project.assets[active].texture.as_ref().unwrap();
-        // Converte UV do hit e UV simétrico em pixels e verifica se ambos foram pintados
-        let px_hit = PaintModule::uv_to_px(&state, uv.unwrap()).unwrap();
-        let px_sym = PaintModule::uv_to_px(&state, sym_uv.unwrap()).unwrap();
-
         assert_eq!(canvas.get(px_hit.0, px_hit.1), Some([255, 0, 0, 255]));
         assert_eq!(canvas.get(px_sym.0, px_sym.1), Some([255, 0, 0, 255]));
     }
@@ -2310,5 +2493,227 @@ mod tests {
         let right = canvas.get(15, 0).unwrap();
         assert_eq!(left, [255, 0, 0, 255]);
         assert_eq!(right, [0, 0, 255, 255]);
+    }
+
+    // ---- Brush system (2E) ----
+
+    fn fresh_state_with_canvas(size: u32, fill: [u8; 4]) -> AppState {
+        let mut state = AppState::new("en");
+        let active = state.project.active;
+        state.project.assets[active].texture = Some(Canvas::new(size, size, fill));
+        PaintModule::ensure_stack(&mut state);
+        state
+    }
+
+    fn texture(state: &AppState) -> &Canvas {
+        state.project.active().unwrap().texture.as_ref().unwrap()
+    }
+
+    fn brush(kind: BrushType, size: f32) -> BrushSettings {
+        BrushSettings {
+            kind,
+            size_px: size,
+            hardness: 1.0,
+            strength: 1.0,
+            flow: 1.0,
+            spacing: 0.15,
+        }
+    }
+
+    #[test]
+    fn square_tip_fills_the_corners_that_a_round_tip_leaves_empty() {
+        let corner = |tip: petunia_core::BrushTip| {
+            let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+            state.session.tools.brush_style.tip = tip;
+            state.paint_color = [1.0, 1.0, 1.0];
+            PaintModule::canvas_brush_with_settings(
+                &mut state,
+                32,
+                32,
+                brush(BrushType::Pixel, 20.0),
+            );
+            texture(&state).get(32 + 9, 32 + 9).unwrap()[0]
+        };
+        assert_eq!(corner(petunia_core::BrushTip::Round), 0);
+        assert_eq!(corner(petunia_core::BrushTip::Square), 255);
+    }
+
+    #[test]
+    fn spray_is_deterministic_and_sparser_than_a_solid_dab() {
+        let paint = |density: f32| {
+            let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+            state.session.tools.brush_style.spray_density = density;
+            state.paint_color = [1.0, 1.0, 1.0];
+            PaintModule::canvas_brush_with_settings(
+                &mut state,
+                32,
+                32,
+                brush(BrushType::Spray, 30.0),
+            );
+            texture(&state).pixels.clone()
+        };
+        let a = paint(0.3);
+        assert_eq!(a, paint(0.3), "mesma semente, mesmo resultado");
+        let lit = |px: &Vec<u8>| px.chunks(4).filter(|p| p[0] > 0).count();
+        assert!(lit(&a) > 0);
+        assert!(lit(&a) < lit(&paint(1.0)));
+    }
+
+    #[test]
+    fn dodge_lightens_and_burn_darkens_the_existing_color() {
+        let run = |kind: BrushType| {
+            let mut state = fresh_state_with_canvas(32, [100, 100, 100, 255]);
+            PaintModule::canvas_brush_with_settings(&mut state, 16, 16, brush(kind, 10.0));
+            texture(&state).get(16, 16).unwrap()[0]
+        };
+        assert!(run(BrushType::Dodge) > 100);
+        assert!(run(BrushType::Burn) < 100);
+    }
+
+    #[test]
+    fn blur_softens_a_hard_edge() {
+        let mut state = fresh_state_with_canvas(32, [0, 0, 0, 255]);
+        {
+            let active = state.project.active;
+            let stack = state.project.assets[active].paint_stack.as_mut().unwrap();
+            let cv = stack.active_mut().unwrap().canvas_mut().unwrap();
+            for y in 0..32 {
+                for x in 16..32 {
+                    cv.set(x, y, [255, 255, 255, 255]);
+                }
+            }
+        }
+        PaintModule::composite_active(&mut state);
+        PaintModule::canvas_brush_with_settings(&mut state, 16, 16, brush(BrushType::Blur, 14.0));
+        let edge = texture(&state).get(15, 16).unwrap()[0];
+        assert!(
+            edge > 0 && edge < 255,
+            "borda deve ficar intermediária: {edge}"
+        );
+    }
+
+    #[test]
+    fn clone_copies_from_the_source_offset_and_does_nothing_without_one() {
+        let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+        {
+            let active = state.project.active;
+            let stack = state.project.assets[active].paint_stack.as_mut().unwrap();
+            let cv = stack.active_mut().unwrap().canvas_mut().unwrap();
+            for y in 8..16 {
+                for x in 8..16 {
+                    cv.set(x, y, [200, 40, 40, 255]);
+                }
+            }
+        }
+        PaintModule::composite_active(&mut state);
+        // sem origem: nada muda
+        PaintModule::canvas_brush_with_settings(&mut state, 40, 40, brush(BrushType::Clone, 8.0));
+        assert_eq!(texture(&state).get(40, 40).unwrap(), [0, 0, 0, 255]);
+        // origem em (12, 12): o dab em (40, 40) copia o quadrado vermelho
+        state.session.tools.clone_source = Some([12.0, 12.0]);
+        PaintModule::canvas_brush_with_settings(&mut state, 40, 40, brush(BrushType::Clone, 8.0));
+        assert_eq!(texture(&state).get(40, 40).unwrap(), [200, 40, 40, 255]);
+    }
+
+    #[test]
+    fn smudge_drags_color_along_the_stroke() {
+        let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+        {
+            let active = state.project.active;
+            let stack = state.project.assets[active].paint_stack.as_mut().unwrap();
+            let cv = stack.active_mut().unwrap().canvas_mut().unwrap();
+            for y in 0..64 {
+                for x in 0..24 {
+                    cv.set(x, y, [255, 255, 255, 255]);
+                }
+            }
+        }
+        PaintModule::composite_active(&mut state);
+        state.begin_paint_stroke();
+        let s = brush(BrushType::Smudge, 12.0);
+        for x in [20u32, 24, 28, 32, 36] {
+            PaintModule::canvas_brush_with_settings(&mut state, x, 32, s);
+        }
+        state.finish_paint_stroke(false);
+        // a cor branca foi arrastada para a direita da borda original (x = 24)
+        assert!(texture(&state).get(30, 32).unwrap()[0] > 0);
+    }
+
+    #[test]
+    fn jitter_changes_the_stroke_but_the_same_seed_repeats_it() {
+        let run = |seed: u32| {
+            let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+            state.session.tools.brush_style.size_jitter = 0.8;
+            state.session.tools.brush_style.scatter = 1.0;
+            state.session.tools.brush_style.seed = seed;
+            state.paint_color = [1.0, 1.0, 1.0];
+            state.begin_paint_stroke();
+            for x in [10u32, 20, 30, 40, 50] {
+                PaintModule::canvas_brush_with_settings(
+                    &mut state,
+                    x,
+                    32,
+                    brush(BrushType::Pixel, 8.0),
+                );
+            }
+            state.finish_paint_stroke(false);
+            texture(&state).pixels.clone()
+        };
+        assert_eq!(run(7), run(7));
+        assert_ne!(run(7), run(8));
+    }
+
+    #[test]
+    fn ellipse_fills_the_inscribed_oval_and_leaves_the_corners() {
+        let mut cv = Canvas::new(32, 32, [0, 0, 0, 255]);
+        PaintModule::stroke_ellipse(
+            &mut cv,
+            &ShapeStroke {
+                x0: 4,
+                y0: 4,
+                x1: 27,
+                y1: 27,
+                brush: BrushType::Ellipse,
+                color: [255, 255, 255, 255],
+                strength: 1.0,
+            },
+        );
+        assert_eq!(cv.get(16, 16), Some([255, 255, 255, 255]));
+        assert_eq!(
+            cv.get(4, 4),
+            Some([0, 0, 0, 255]),
+            "o canto do retângulo fica de fora"
+        );
+        assert_eq!(
+            cv.get(16, 5),
+            Some([255, 255, 255, 255]),
+            "perto do topo da elipse"
+        );
+    }
+
+    #[test]
+    fn gradients_composite_over_existing_paint() {
+        let mut state = fresh_state_with_canvas(32, [0, 0, 255, 255]);
+        // radial: vermelho opaco no centro -> transparente na borda; o azul de baixo aparece
+        PaintModule::canvas_gradient_radial(
+            &mut state,
+            16,
+            16,
+            10.0,
+            [255, 0, 0, 255],
+            [255, 0, 0, 0],
+        );
+        let tex = texture(&state);
+        assert_eq!(tex.get(16, 16), Some([255, 0, 0, 255]));
+        assert_eq!(
+            tex.get(0, 0),
+            Some([0, 0, 255, 255]),
+            "fora do raio nada muda"
+        );
+        let mid = tex.get(21, 16).unwrap();
+        assert!(
+            mid[0] > 0 && mid[2] > 0,
+            "meio-termo mistura as duas cores: {mid:?}"
+        );
     }
 }

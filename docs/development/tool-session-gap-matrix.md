@@ -38,8 +38,9 @@ origem: [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-refe
 
 ## Pendências registradas
 
-- `Space` = ferramenta anterior: não implementado (hoje `Space` ainda abre o
-  micro-inspector ou confirma sessões antigas).
+- ~~`Space` = ferramenta anterior~~ → implementado (2026-09-30): `Space` ocioso alterna com a
+  ferramenta anterior (a do workspace atual; senão Select); durante uma sessão ele continua
+  confirmando. O micro-inspector passou para `Shift+Space`. Ação de keymap `global.previous_tool`.
 - Um único buffer numérico: o bridge ainda usa `modal_text`; o buffer de
   `ToolSession::text` está pronto para frontends futuros (MCP/Lua).
 - Loop Cut, Slice, Knife e Profile migram para `Collecting` nas Ondas 4 e 5.
