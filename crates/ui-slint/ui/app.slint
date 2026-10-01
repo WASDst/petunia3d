@@ -468,6 +468,16 @@ component MenuButton inherits Rectangle {
     }
 }
 
+/// Ícone do pack Petunia tingido por token (`stroke`), no lugar dos ícones Lucide.
+component PIcon inherits Image {
+    in property <length> size: 16px;
+    in property <color> stroke: DesignTokens.text-primary;
+    colorize: root.stroke;
+    width: root.size;
+    height: root.size;
+    image-fit: contain;
+}
+
 /// Slider Petunia: trilho fino, preenchimento no accent, alça com feedback e teclado.
 component PetuniaSlider inherits Rectangle {
     in-out property <float> value;
@@ -705,8 +715,8 @@ component ContextMenuItem inherits Rectangle {
 
         Rectangle {
             width: 14px;
-            if root.checked: IconDisplay {
-                icon: IconSet.Check;
+            if root.checked: PIcon {
+                source: PetuniaIcons.check;
                 size: 12px;
                 stroke: DesignTokens.accent;
             }
@@ -963,8 +973,8 @@ component ToolCard inherits Rectangle {
                 height: 20px;
                 accessible-role: button;
                 accessible-label: root.collapsed ? Tr.t("sl.expand") : Tr.t("sl.collapse");
-                IconDisplay {
-                    icon: root.collapsed ? IconSet.ChevronDown : IconSet.ChevronUp;
+                PIcon {
+                    source: root.collapsed ? PetuniaIcons.chevron-down : PetuniaIcons.chevron-up;
                     size: 13px;
                     stroke: DesignTokens.text-secondary;
                 }
@@ -1020,7 +1030,7 @@ component PartsFilterRow inherits Rectangle {
                 padding-right: 7px;
                 spacing: 5px;
                 alignment: center;
-                IconDisplay { icon: IconSet.Search; size: 13px; stroke: DesignTokens.text-muted; }
+                PIcon { source: PetuniaIcons.search; size: 13px; stroke: DesignTokens.text-muted; }
                 TextInput {
                     text <=> root.query;
                     color: DesignTokens.text-primary;
@@ -1033,14 +1043,14 @@ component PartsFilterRow inherits Rectangle {
             }
         }
         TopAction {
-            icon: IconSet.MousePointer2;
+            icon-svg: PetuniaIcons.pointer;
             semantic-label: root.selected-only-label;
             active: root.selected-only;
             toggle-button: true;
             clicked => { root.selected-only-changed(!root.selected-only); }
         }
         TopAction {
-            icon: IconSet.ArrowDownAz;
+            icon-svg: PetuniaIcons.sort-az;
             semantic-label: root.sort-label;
             active: root.sort-by-name;
             toggle-button: true;
@@ -1484,8 +1494,8 @@ component InspectorSection inherits Rectangle {
                     height: 100%;
                     spacing: 6px;
                     alignment: start;
-                    IconDisplay {
-                        icon: root.open ? IconSet.ChevronDown : IconSet.ChevronRight;
+                    PIcon {
+                        source: root.open ? PetuniaIcons.chevron-down : PetuniaIcons.chevron-right;
                         size: 12px;
                         stroke: DesignTokens.text-muted;
                     }
@@ -1547,8 +1557,8 @@ component InspectorSection inherits Rectangle {
                         reject
                     }
                 }
-                IconDisplay {
-                    icon: IconSet.Pin;
+                PIcon {
+                    source: PetuniaIcons.pin;
                     size: 11px;
                     stroke: root.pin-open ? DesignTokens.on-accent : DesignTokens.text-secondary;
                 }
@@ -1745,8 +1755,8 @@ component QuickActionsBody inherits VerticalLayout {
             height: 24px;
             border-radius: 4px;
             background: root.customize-open ? DesignTokens.accent : DesignTokens.surface-raised;
-            IconDisplay {
-                icon: IconSet.Settings2;
+            PIcon {
+                source: PetuniaIcons.tune;
                 size: 12px;
                 stroke: root.customize-open ? DesignTokens.on-accent : DesignTokens.text-primary;
             }
@@ -1914,7 +1924,7 @@ component PartsBody inherits VerticalLayout {
                     HorizontalLayout {
                         spacing: 5px;
                         alignment: center;
-                        IconDisplay { icon: IconSet.Box; size: 12px; stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted; }
+                        PIcon { source: PetuniaIcons.cube; size: 12px; stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted; }
                         if root.rename-active && item.selected: TextInput {
                             text: root.rename-value;
                             horizontal-stretch: 1;
@@ -1940,14 +1950,14 @@ component PartsBody inherits VerticalLayout {
                     width: 22px; height: 22px;
                     accessible-role: button;
                     accessible-label: item.visible ? root.hide-label : root.show-label;
-                    IconDisplay { icon: item.visible ? IconSet.Eye : IconSet.EyeOff; size: 13px; stroke: item.visible ? DesignTokens.text-secondary : DesignTokens.text-muted; }
+                    PIcon { source: item.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden; size: 13px; stroke: item.visible ? DesignTokens.text-secondary : DesignTokens.text-muted; }
                     TouchArea { clicked => { root.scene-toggle-visibility(item.id); } }
                 }
                 Rectangle {
                     width: 22px; height: 22px;
                     accessible-role: button;
                     accessible-label: item.locked ? root.unlock-label : root.lock-label;
-                    IconDisplay { icon: item.locked ? IconSet.Lock : IconSet.LockOpen; size: 13px; stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted; }
+                    PIcon { source: item.locked ? PetuniaIcons.lock : PetuniaIcons.unlock; size: 13px; stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted; }
                     TouchArea { clicked => { root.scene-toggle-lock(item.id); } }
                 }
             }
@@ -2047,7 +2057,7 @@ component MaterialBody inherits VerticalLayout {
             border-color: DesignTokens.border;
             accessible-role: button;
             accessible-label: root.new-label;
-            IconDisplay { icon: IconSet.Plus; size: 13px; stroke: DesignTokens.text-primary; }
+            PIcon { source: PetuniaIcons.plus; size: 13px; stroke: DesignTokens.text-primary; }
             TouchArea {
                 clicked => { root.create-material(); }
                 Tooltip {
@@ -2068,7 +2078,7 @@ component MaterialBody inherits VerticalLayout {
             border-color: DesignTokens.border;
             accessible-role: button;
             accessible-label: root.duplicate-label;
-            IconDisplay { icon: IconSet.Copy; size: 13px; stroke: DesignTokens.text-primary; }
+            PIcon { source: PetuniaIcons.duplicate; size: 13px; stroke: DesignTokens.text-primary; }
             TouchArea {
                 clicked => { root.duplicate-material(root.active-slot); }
                 Tooltip {
@@ -2089,7 +2099,7 @@ component MaterialBody inherits VerticalLayout {
             border-color: DesignTokens.border;
             accessible-role: button;
             accessible-label: root.remove-label;
-            IconDisplay { icon: IconSet.Trash2; size: 13px; stroke: DesignTokens.danger; }
+            PIcon { source: PetuniaIcons.delete; size: 13px; stroke: DesignTokens.danger; }
             TouchArea {
                 clicked => { root.remove-material(root.active-slot); }
                 Tooltip {
@@ -2149,8 +2159,8 @@ component MaterialBody inherits VerticalLayout {
         HorizontalLayout {
             alignment: center;
             spacing: 4px;
-            IconDisplay {
-                icon: IconSet.Check;
+            PIcon {
+                source: PetuniaIcons.check;
                 size: 12px;
                 stroke: DesignTokens.on-accent;
             }
@@ -2487,8 +2497,8 @@ component ObjectBody inherits VerticalLayout {
                 border-width: 1px;
                 border-color: root.object-visible ? DesignTokens.border : DesignTokens.disabled;
                 accessible-role: button;
-                IconDisplay {
-                    icon: root.object-visible ? IconSet.Eye : IconSet.EyeOff;
+                PIcon {
+                    source: root.object-visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
                     size: 13px;
                     stroke: root.object-visible ? DesignTokens.text-primary : DesignTokens.text-muted;
                 }
@@ -2502,8 +2512,8 @@ component ObjectBody inherits VerticalLayout {
                 border-width: 1px;
                 border-color: root.object-locked ? DesignTokens.accent : DesignTokens.border;
                 accessible-role: button;
-                IconDisplay {
-                    icon: root.object-locked ? IconSet.Lock : IconSet.LockOpen;
+                PIcon {
+                    source: root.object-locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
                     size: 13px;
                     stroke: root.object-locked ? DesignTokens.on-accent : DesignTokens.text-primary;
                 }
@@ -2660,8 +2670,8 @@ component ObjectBody inherits VerticalLayout {
                 HorizontalLayout {
                     alignment: center;
                     spacing: 6px;
-                    IconDisplay {
-                        icon: IconSet.Box;
+                    PIcon {
+                        source: PetuniaIcons.cube;
                         size: 13px;
                         stroke: DesignTokens.accent;
                     }
@@ -2697,8 +2707,8 @@ component ObjectBody inherits VerticalLayout {
             HorizontalLayout {
                 alignment: center;
                 spacing: 6px;
-                IconDisplay {
-                    icon: IconSet.Copy;
+                PIcon {
+                    source: PetuniaIcons.duplicate;
                     size: 13px;
                     stroke: DesignTokens.text-primary;
                 }
@@ -2723,8 +2733,8 @@ component ObjectBody inherits VerticalLayout {
             HorizontalLayout {
                 alignment: center;
                 spacing: 6px;
-                IconDisplay {
-                    icon: IconSet.Trash2;
+                PIcon {
+                    source: PetuniaIcons.delete;
                     size: 13px;
                     stroke: DesignTokens.danger;
                 }
@@ -2807,8 +2817,8 @@ component ModifiersBody inherits VerticalLayout {
                     height: 22px;
                     border-radius: 4px;
                     background: modifier.enabled ? DesignTokens.accent : DesignTokens.surface-raised;
-                    IconDisplay {
-                        icon: IconSet.Monitor;
+                    PIcon {
+                        source: PetuniaIcons.display;
                         size: 12px;
                         stroke: modifier.enabled ? DesignTokens.on-accent : DesignTokens.text-muted;
                     }
@@ -2825,8 +2835,8 @@ component ModifiersBody inherits VerticalLayout {
                 Rectangle {
                     width: 20px;
                     height: 20px;
-                    IconDisplay {
-                        icon: IconSet.ChevronUp;
+                    PIcon {
+                        source: PetuniaIcons.chevron-up;
                         size: 13px;
                         stroke: modifier.can-move-up ? DesignTokens.text-secondary : DesignTokens.disabled;
                     }
@@ -2835,8 +2845,8 @@ component ModifiersBody inherits VerticalLayout {
                 Rectangle {
                     width: 20px;
                     height: 20px;
-                    IconDisplay {
-                        icon: IconSet.ChevronDown;
+                    PIcon {
+                        source: PetuniaIcons.chevron-down;
                         size: 13px;
                         stroke: modifier.can-move-down ? DesignTokens.text-secondary : DesignTokens.disabled;
                     }
@@ -2845,8 +2855,8 @@ component ModifiersBody inherits VerticalLayout {
                 Rectangle {
                     width: 20px;
                     height: 20px;
-                    IconDisplay {
-                        icon: IconSet.X;
+                    PIcon {
+                        source: PetuniaIcons.close;
                         size: 13px;
                         stroke: DesignTokens.danger;
                     }
@@ -2990,8 +3000,8 @@ component ReferenceSlotCard inherits Rectangle {
                     align-touch := TouchArea {
                         clicked => { root.align-view(); }
                     }
-                    IconDisplay {
-                        icon: IconSet.Camera;
+                    PIcon {
+                        source: PetuniaIcons.camera;
                         size: 13px;
                         stroke: DesignTokens.text-secondary;
                     }
@@ -3006,8 +3016,8 @@ component ReferenceSlotCard inherits Rectangle {
                     vis-touch := TouchArea {
                         clicked => { root.toggle-visible(); }
                     }
-                    IconDisplay {
-                        icon: slot.visible ? IconSet.Eye : IconSet.EyeOff;
+                    PIcon {
+                        source: slot.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
                         size: 13px;
                         stroke: slot.visible ? DesignTokens.accent : DesignTokens.text-muted;
                     }
@@ -3022,8 +3032,8 @@ component ReferenceSlotCard inherits Rectangle {
                     lock-touch := TouchArea {
                         clicked => { root.toggle-lock(); }
                     }
-                    IconDisplay {
-                        icon: slot.locked ? IconSet.Lock : IconSet.LockOpen;
+                    PIcon {
+                        source: slot.locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
                         size: 13px;
                         stroke: slot.locked ? DesignTokens.accent : DesignTokens.text-muted;
                     }
@@ -3038,8 +3048,8 @@ component ReferenceSlotCard inherits Rectangle {
                     remove-touch := TouchArea {
                         clicked => { root.remove-image(); }
                     }
-                    IconDisplay {
-                        icon: IconSet.Trash2;
+                    PIcon {
+                        source: PetuniaIcons.delete;
                         size: 13px;
                         stroke: DesignTokens.danger;
                     }
@@ -3075,8 +3085,8 @@ component ReferenceSlotCard inherits Rectangle {
                 if !slot.has-image: VerticalLayout {
                     alignment: center;
                     spacing: 4px;
-                    IconDisplay {
-                        icon: IconSet.Plus;
+                    PIcon {
+                        source: PetuniaIcons.plus;
                         size: 16px;
                         stroke: DesignTokens.text-muted;
                     }
@@ -4359,7 +4369,6 @@ export component PetuniaSlintShell inherits Window {
                         spacing: 4px;
 
                         TopAction {
-                            icon: IconSet.Undo;
                             icon-svg: PetuniaIcons.undo;
                             semantic-label: Tr.t("sl.undo");
                             shortcut: root.shortcuts.undo;
@@ -4368,7 +4377,6 @@ export component PetuniaSlintShell inherits Window {
                             clicked => { root.undo-requested(); }
                         }
                         TopAction {
-                            icon: IconSet.Redo;
                             icon-svg: PetuniaIcons.redo;
                             semantic-label: Tr.t("sl.redo");
                             shortcut: root.shortcuts.redo;
@@ -4380,7 +4388,6 @@ export component PetuniaSlintShell inherits Window {
                         Rectangle { width: 1px; height: 16px; background: DesignTokens.border; }
 
                         TopAction {
-                            icon: IconSet.PanelLeft;
                             icon-svg: PetuniaIcons.parts;
                             semantic-label: Tr.t("sl.parts");
                             shortcut: root.shortcuts.parts;
@@ -4388,28 +4395,28 @@ export component PetuniaSlintShell inherits Window {
                             clicked => { root.scene-requested(); }
                         }
                         TopAction {
-                            icon: IconSet.FolderOpen;
+                            icon-svg: PetuniaIcons.open-project;
                             semantic-label: Tr.t("sl.open_project");
                             shortcut: root.shortcuts.open;
                             description: Tr.t("sl.open_an_existing_project_from_disk_p3d");
                             clicked => { root.open-project-requested(); }
                         }
                         TopAction {
-                            icon: IconSet.Save;
+                            icon-svg: PetuniaIcons.save;
                             semantic-label: Tr.t("sl.save_project");
                             shortcut: root.shortcuts.save;
                             description: Tr.t("sl.save_the_current_project_and_scene_to_disk");
                             clicked => { root.save-requested(); }
                         }
                         TopAction {
-                            icon: IconSet.Search;
+                            icon-svg: PetuniaIcons.search;
                             semantic-label: Tr.t("sl.command_search");
                             shortcut: root.shortcuts.search;
                             description: Tr.t("sl.quick_search_and_execute_any_command_tool_or");
                             clicked => { root.search-requested(); }
                         }
                         TopAction {
-                            icon: IconSet.Image;
+                            icon-svg: PetuniaIcons.reference-image;
                             semantic-label: Tr.t("sl.reference_images");
                             shortcut: "F4";
                             description: Tr.t("sl.open_reference_image_manager_to_load_bluepri");
@@ -4417,7 +4424,6 @@ export component PetuniaSlintShell inherits Window {
                             clicked => { root.reference-manager-toggle(); }
                         }
                         TopAction {
-                            icon: IconSet.Settings;
                             icon-svg: PetuniaIcons.settings;
                             semantic-label: Tr.t("sl.settings");
                             shortcut: root.shortcuts.settings;
@@ -4461,7 +4467,7 @@ export component PetuniaSlintShell inherits Window {
                                     padding: 2px;
                                     spacing: 2px;
                                     ToolButton {
-                                        icon: IconSet.MousePointer2;
+                                        icon-svg: PetuniaIcons.pointer;
                                         semantic-label: root.label-model-select;
                                         shortcut: root.shortcuts.model-select;
                                         description: Tr.t("sl.box_click_selection_of_scene_points_edges_an");
@@ -4469,7 +4475,7 @@ export component PetuniaSlintShell inherits Window {
                                         clicked => { root.active-tool-changed("select"); }
                                     }
                                     ToolButton {
-                                        icon: IconSet.Spline;
+                                        icon-svg: PetuniaIcons.spline-curve;
                                         semantic-label: root.label-model-lasso;
                                         shortcut: root.shortcuts.model-lasso;
                                         description: Tr.t("sl.freehand_polygon_loop_lasso_selection");
@@ -4481,7 +4487,7 @@ export component PetuniaSlintShell inherits Window {
 
                             // 3D Cursor / Ponto Âncora 3D
                             ToolButton {
-                                icon: IconSet.Crosshair;
+                                icon-svg: PetuniaIcons.cursor-3d;
                                 semantic-label: Tr.t("sl.3d_cursor");
                                 shortcut: root.shortcuts.model-cursor;
                                 description: Tr.t("sl.place_3d_cursor_as_origin_for_new_objects_an");
@@ -4491,7 +4497,7 @@ export component PetuniaSlintShell inherits Window {
 
                             // Quick Measure Tool (Fase 6: Fita Métrica 3D)
                             ToolButton {
-                                icon: IconSet.ArrowUpDown;
+                                icon-svg: PetuniaIcons.sort-updown;
                                 semantic-label: Tr.t("sl.measure");
                                 shortcut: root.shortcuts.model-measure;
                                 description: Tr.t("sl.measure_distances_and_angles_between_geometr");
@@ -4556,14 +4562,14 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("draw_profile"); }
                             }
                             ToolButton {
-                                icon: IconSet.Square;
+                                icon-svg: PetuniaIcons.shape-square;
                                 semantic-label: Tr.t("sl.2d_rectangle");
                                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
                                 active: false;
                                 clicked => { root.add-profile-rectangle(2.0, 1.5); }
                             }
                             ToolButton {
-                                icon: IconSet.Circle;
+                                icon-svg: PetuniaIcons.shape-circle;
                                 semantic-label: Tr.t("sl.2d_circle");
                                 description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
                                 active: false;
@@ -4577,7 +4583,7 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             ToolButton {
-                                icon: IconSet.Plus;
+                                icon-svg: PetuniaIcons.plus;
                                 semantic-label: Tr.t("sl.add_primitive");
                                 shortcut: root.shortcuts.model-add-primitive;
                                 description: Tr.t("sl.quick_menu_to_create_standard_3d_parametric_");
@@ -4616,7 +4622,7 @@ export component PetuniaSlintShell inherits Window {
                         if active-workspace == "PAINT": VerticalLayout {
                             spacing: 6px;
                             ToolButton {
-                                icon: IconSet.Paintbrush;
+                                icon-svg: PetuniaIcons.paint-brush;
                                 semantic-label: Tr.t("sl.brush");
                                 shortcut: root.shortcuts.paint-brush;
                                 description: Tr.t("sl.freehand_raster_texture_painting_with_adjust");
@@ -4624,7 +4630,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("brush"); }
                             }
                             ToolButton {
-                                icon: IconSet.Eraser;
+                                icon-svg: PetuniaIcons.paint-eraser;
                                 semantic-label: Tr.t("sl.eraser");
                                 shortcut: root.shortcuts.paint-eraser;
                                 description: Tr.t("sl.erase_pixel_color_values_and_alpha_transpare");
@@ -4632,7 +4638,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("eraser"); }
                             }
                             ToolButton {
-                                icon: IconSet.Pipette;
+                                icon-svg: PetuniaIcons.paint-picker;
                                 semantic-label: Tr.t("sl.color_picker");
                                 shortcut: root.shortcuts.paint-picker;
                                 description: Tr.t("sl.sample_color_from_viewport_pixels_under_mous");
@@ -4640,7 +4646,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("picker"); }
                             }
                             ToolButton {
-                                icon: IconSet.PaintBucket;
+                                icon-svg: PetuniaIcons.paint-fill;
                                 semantic-label: Tr.t("sl.fill_bucket");
                                 shortcut: root.shortcuts.paint-fill;
                                 description: Tr.t("sl.flood_fill_contiguous_color_areas_on_active_");
@@ -4648,7 +4654,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("fill"); }
                             }
                             ToolButton {
-                                icon: IconSet.SquareDashed;
+                                icon-svg: PetuniaIcons.shape-square-dashed;
                                 semantic-label: Tr.t("sl.line");
                                 shortcut: root.shortcuts.paint-line;
                                 description: Tr.t("sl.draw_straight_brush_strokes_between_clicked_");
@@ -4656,7 +4662,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("line"); }
                             }
                             ToolButton {
-                                icon: IconSet.Square;
+                                icon-svg: PetuniaIcons.shape-square;
                                 semantic-label: Tr.t("sl.rectangle");
                                 shortcut: root.shortcuts.paint-rectangle;
                                 description: Tr.t("sl.fill_or_stroke_rectangular_2d_shapes_on_text");
@@ -4668,7 +4674,7 @@ export component PetuniaSlintShell inherits Window {
                         if active-workspace == "UV": VerticalLayout {
                             spacing: 6px;
                             ToolButton {
-                                icon: IconSet.MousePointer2;
+                                icon-svg: PetuniaIcons.pointer;
                                 semantic-label: Tr.t("sl.uv_select");
                                 shortcut: root.shortcuts.uv-select;
                                 description: Tr.t("sl.select_uv_vertices_edges_and_polygon_islands");
@@ -4676,7 +4682,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("uv_select"); }
                             }
                             ToolButton {
-                                icon: IconSet.Maximize2;
+                                icon-svg: PetuniaIcons.expand;
                                 semantic-label: Tr.t("sl.unwrap");
                                 shortcut: root.shortcuts.uv-unwrap;
                                 description: Tr.t("sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou");
@@ -4684,7 +4690,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("uv.unwrap"); }
                             }
                             ToolButton {
-                                icon: IconSet.Grid2x2;
+                                icon-svg: PetuniaIcons.grid-view;
                                 semantic-label: Tr.t("sl.pack_islands");
                                 shortcut: root.shortcuts.uv-pack;
                                 description: Tr.t("sl.pack_and_arrange_uv_islands_efficiently_with");
@@ -4702,7 +4708,7 @@ export component PetuniaSlintShell inherits Window {
                             background: DesignTokens.border;
                         }
                         ToolButton {
-                            icon: IconSet.Layers3;
+                            icon-svg: PetuniaIcons.paint-layer;
                             semantic-label: root.label-parts;
                             shortcut: "F4";
                             description: Tr.t("sl.open_or_collapse_the_scene_parts_hierarchy_o");
@@ -4710,7 +4716,7 @@ export component PetuniaSlintShell inherits Window {
                             clicked => { root.scene-requested(); }
                         }
                         ToolButton {
-                            icon: IconSet.FolderArchive;
+                            icon-svg: PetuniaIcons.library;
                             semantic-label: root.label-asset-library;
                             shortcut: "Shift+F5";
                             description: Tr.t("sl.open_or_collapse_the_bottom_project_asset_li");
@@ -5725,7 +5731,7 @@ export component PetuniaSlintShell inherits Window {
                             Rectangle { width: 1px; height: 18px; background: DesignTokens.border; }
 
                             ViewportBarButton {
-                                icon: IconSet.Camera;
+                                icon-svg: PetuniaIcons.camera;
                                 label: Tr.t("sl.projection");
                                 shortcut: root.shortcuts.view-proj;
                                 description: Tr.t("sl.toggle_between_perspective_3d_projection_and");
@@ -5733,7 +5739,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.toggle-projection-requested(); }
                             }
                             ViewportBarButton {
-                                icon: IconSet.Maximize2;
+                                icon-svg: PetuniaIcons.expand;
                                 label: Tr.t("sl.frame");
                                 shortcut: root.shortcuts.view-frame;
                                 description: Tr.t("sl.frame_and_center_camera_view_on_currently_se");
@@ -5741,7 +5747,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("view.frame_selection"); }
                             }
                             ViewportBarButton {
-                                icon: IconSet.RotateCcw;
+                                icon-svg: PetuniaIcons.reset-view;
                                 label: Tr.t("sl.reset_view");
                                 shortcut: root.shortcuts.view-reset;
                                 description: Tr.t("sl.reset_camera_zoom_orientation_and_position_t");
@@ -5749,7 +5755,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.reset-camera-requested(); }
                             }
                             ViewportBarButton {
-                                icon: IconSet.Columns2;
+                                icon-svg: PetuniaIcons.split-view;
                                 label: Tr.t("sl.split_toggle");
                                 description: Tr.t("sl.split_toggle_hint");
                                 active: root.split-enabled;
@@ -5792,7 +5798,7 @@ export component PetuniaSlintShell inherits Window {
                                 Rectangle { width: 1px; height: 18px; background: DesignTokens.border; }
 
                                 ViewportBarButton {
-                                    icon: IconSet.Eye;
+                                    icon-svg: PetuniaIcons.eye;
                                     label: Tr.t("sl.x_ray");
                                     shortcut: root.shortcuts.view-xray;
                                     description: Tr.t("sl.semi_transparent_surfaces_allowing_selection");
@@ -5800,7 +5806,7 @@ export component PetuniaSlintShell inherits Window {
                                     clicked => { root.toggle-xray-requested(); }
                                 }
                                 ViewportBarButton {
-                                    icon: IconSet.Settings2;
+                                    icon-svg: PetuniaIcons.tune;
                                     label: Tr.t("sl.shading_options");
                                     shortcut: "";
                                     description: Tr.t("sl.configure_studio_matcaps_cavity_highlights_a");
@@ -5808,7 +5814,7 @@ export component PetuniaSlintShell inherits Window {
                                     clicked => { root.shading-popover-toggled(!root.shading-popover-open); }
                                 }
                                 ViewportBarButton {
-                                    icon: IconSet.Image;
+                                    icon-svg: PetuniaIcons.reference-image;
                                     label: Tr.t("sl.ref_images");
                                     shortcut: "F4";
                                     description: Tr.t("sl.reference_images_manager_for_background_blue");
@@ -5838,7 +5844,7 @@ export component PetuniaSlintShell inherits Window {
                                 alignment: center;
 
                                 ViewportBarButton {
-                                    icon: IconSet.Crosshair;
+                                    icon-svg: PetuniaIcons.cursor-3d;
                                     label: "\{root.label-model-pivot}: \{root.pivot-label}";
                                     shortcut: root.shortcuts.view-pivot;
                                     description: Tr.t("sl.change_pivot_point_origin_for_transformation");
@@ -5846,7 +5852,7 @@ export component PetuniaSlintShell inherits Window {
                                     clicked => { root.pivot-menu-toggled(!root.pivot-menu-open); }
                                 }
                                 if root.viewport-region-width >= 680: ViewportBarButton {
-                                    icon: IconSet.Magnet;
+                                    icon-svg: PetuniaIcons.snap-magnet;
                                     label: root.snap-enabled ? Tr.t("sl.snap_2") + " (\{root.snap-target})" : Tr.t("sl.snap_2");
                                     shortcut: root.shortcuts.view-snap;
                                     description: Tr.t("sl.snap_transformations_to_grid_intervals_verti");
@@ -5854,7 +5860,7 @@ export component PetuniaSlintShell inherits Window {
                                     clicked => { root.toggle-snap-enabled(); }
                                 }
                                 if root.viewport-region-width >= 750: ViewportBarButton {
-                                    icon: IconSet.CircleDot;
+                                    icon-svg: PetuniaIcons.circle-dot;
                                     label: root.proportional-editing ? Tr.t("sl.prop") + " (\{round(root.proportional-radius * 10) / 10})" : Tr.t("sl.prop");
                                     shortcut: root.shortcuts.view-prop;
                                     description: Tr.t("sl.smoothly_deform_neighboring_vertices_with_pr");
@@ -5944,8 +5950,8 @@ export component PetuniaSlintShell inherits Window {
                             spacing: 6px;
                             alignment: center;
 
-                            IconDisplay {
-                                icon: IconSet.ArrowUpDown;
+                            PIcon {
+                                source: PetuniaIcons.sort-updown;
                                 size: 12px;
                                 stroke: #f59e0b;
                             }
@@ -6624,8 +6630,8 @@ export component PetuniaSlintShell inherits Window {
                                 HorizontalLayout {
                                     alignment: center;
                                     spacing: 3px;
-                                    IconDisplay {
-                                        icon: IconSet.Magnet;
+                                    PIcon {
+                                        source: PetuniaIcons.snap-magnet;
                                         size: 11px;
                                         stroke: root.snap-enabled ? DesignTokens.accent : DesignTokens.text-secondary;
                                     }
@@ -6649,8 +6655,8 @@ export component PetuniaSlintShell inherits Window {
                                 HorizontalLayout {
                                     alignment: center;
                                     spacing: 3px;
-                                    IconDisplay {
-                                        icon: IconSet.CircleDot;
+                                    PIcon {
+                                        source: PetuniaIcons.circle-dot;
                                         size: 11px;
                                         stroke: root.proportional-editing ? DesignTokens.accent : DesignTokens.text-secondary;
                                     }
@@ -7176,13 +7182,13 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("draw_profile"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Square;
+                                icon-svg: PetuniaIcons.shape-square;
                                 semantic-label: Tr.t("sl.rect_2d");
                                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
                                 clicked => { root.add-profile-rectangle(2.0, 1.5); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Circle;
+                                icon-svg: PetuniaIcons.shape-circle;
                                 semantic-label: Tr.t("sl.circle_2d");
                                 description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
                                 clicked => { root.add-profile-circle(1.0, 16); }
@@ -7283,7 +7289,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("model.connect"); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width >= 720: ToolButton {
-                                icon: IconSet.Square;
+                                icon-svg: PetuniaIcons.shape-square;
                                 semantic-label: Tr.t("sl.make_face");
                                 shortcut: "F";
                                 description: Tr.t("sl.create_face_or_edge_connecting_selected_vert");
@@ -7305,7 +7311,7 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Paintbrush;
+                                icon-svg: PetuniaIcons.paint-brush;
                                 semantic-label: Tr.t("sl.brush");
                                 shortcut: root.shortcuts.paint-brush;
                                 description: Tr.t("sl.freehand_raster_texture_painting_with_adjust");
@@ -7313,7 +7319,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("brush"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Spline;
+                                icon-svg: PetuniaIcons.spline-curve;
                                 semantic-label: Tr.t("sl.airbrush");
                                 shortcut: root.shortcuts.paint-airbrush;
                                 description: Tr.t("sl.smooth_gradual_airbrush_spray_effect_onto_ac");
@@ -7321,7 +7327,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("airbrush"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Eraser;
+                                icon-svg: PetuniaIcons.paint-eraser;
                                 semantic-label: Tr.t("sl.eraser");
                                 shortcut: root.shortcuts.paint-eraser;
                                 description: Tr.t("sl.erase_pixel_color_values_and_alpha_transpare");
@@ -7329,7 +7335,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("eraser"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Pipette;
+                                icon-svg: PetuniaIcons.paint-picker;
                                 semantic-label: Tr.t("sl.color_picker");
                                 shortcut: root.shortcuts.paint-picker;
                                 description: Tr.t("sl.sample_color_from_viewport_pixels_under_mous");
@@ -7337,7 +7343,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("picker"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.PaintBucket;
+                                icon-svg: PetuniaIcons.paint-fill;
                                 semantic-label: Tr.t("sl.fill");
                                 shortcut: root.shortcuts.paint-fill;
                                 description: Tr.t("sl.flood_fill_contiguous_color_areas_on_active_");
@@ -7345,7 +7351,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("fill"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.SquareDashed;
+                                icon-svg: PetuniaIcons.shape-square-dashed;
                                 semantic-label: Tr.t("sl.line");
                                 shortcut: root.shortcuts.paint-line;
                                 description: Tr.t("sl.draw_straight_brush_strokes_between_clicked_");
@@ -7353,7 +7359,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("line"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Square;
+                                icon-svg: PetuniaIcons.shape-square;
                                 semantic-label: Tr.t("sl.rectangle");
                                 shortcut: root.shortcuts.paint-rectangle;
                                 description: Tr.t("sl.fill_or_stroke_rectangular_2d_shapes_on_text");
@@ -7361,7 +7367,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("rectangle"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Sliders;
+                                icon-svg: PetuniaIcons.tune;
                                 semantic-label: Tr.t("sl.gradient");
                                 shortcut: root.shortcuts.paint-gradient;
                                 description: Tr.t("sl.draw_linear_color_gradients_between_endpoint");
@@ -7370,35 +7376,35 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "UV": ToolButton {
-                                icon: IconSet.Maximize2;
+                                icon-svg: PetuniaIcons.expand;
                                 semantic-label: Tr.t("sl.unwrap");
                                 shortcut: root.shortcuts.uv-unwrap;
                                 description: Tr.t("sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou");
                                 clicked => { root.command-executed("uv.unwrap_auto"); }
                             }
                             if active-workspace == "UV": ToolButton {
-                                icon: IconSet.Grid2x2;
+                                icon-svg: PetuniaIcons.grid-view;
                                 semantic-label: Tr.t("sl.pack_islands");
                                 shortcut: root.shortcuts.uv-pack;
                                 description: Tr.t("sl.pack_and_arrange_uv_islands_efficiently_with");
                                 clicked => { root.command-executed("uv.pack_islands"); }
                             }
                             if active-workspace == "UV": ToolButton {
-                                icon: IconSet.Camera;
+                                icon-svg: PetuniaIcons.camera;
                                 semantic-label: Tr.t("sl.project_ref");
                                 shortcut: root.shortcuts.uv-project-ref;
                                 description: Tr.t("sl.project_uv_coordinates_from_active_camera_pe");
                                 clicked => { root.command-executed("uv.project_reference"); }
                             }
                             if active-workspace == "UV": ToolButton {
-                                icon: IconSet.Link;
+                                icon-svg: PetuniaIcons.link;
                                 semantic-label: Tr.t("sl.stitch");
                                 shortcut: root.shortcuts.uv-stitch;
                                 description: Tr.t("sl.weld_coincident_3d_edges_that_have_split_uv_");
                                 clicked => { root.command-executed("uv.stitch"); }
                             }
                             if active-workspace == "UV": ToolButton {
-                                icon: IconSet.Minimize2;
+                                icon-svg: PetuniaIcons.collapse;
                                 semantic-label: Tr.t("sl.relax");
                                 shortcut: root.shortcuts.uv-relax;
                                 description: Tr.t("sl.smooth_unpinned_uv_island_corners_to_minimiz");
@@ -7411,14 +7417,14 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
                             if active-workspace != "MODEL" || root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Trash2;
+                                icon-svg: PetuniaIcons.delete;
                                 semantic-label: Tr.t("sl.delete");
                                 shortcut: root.shortcuts.model-delete;
                                 description: Tr.t("sl.remove_selected_points_edges_faces_or_entire");
                                 clicked => { root.delete-requested(); }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width < 760: ToolButton {
-                                icon: IconSet.MoreHorizontal;
+                                icon-svg: PetuniaIcons.more-horiz;
                                 semantic-label: root.label-more-model-tools;
                                 shortcut: "";
                                 description: Tr.t("sl.open_overflow_menu_with_additional_modeling_");
@@ -7519,8 +7525,8 @@ export component PetuniaSlintShell inherits Window {
                                     height: 18px;
                                     border-radius: 4px;
                                     background: close-touch.has-hover ? DesignTokens.surface-hover : transparent;
-                                    IconDisplay {
-                                        icon: IconSet.X;
+                                    PIcon {
+                                        source: PetuniaIcons.close;
                                         size: 12px;
                                         stroke: DesignTokens.text-muted;
                                     }
@@ -7720,7 +7726,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.add-primitive-requested("torus"); root.add-menu-changed(false); }
                             }
                             ToolButton {
-                                icon-svg: PetuniaIcons.circle;
+                                icon-svg: PetuniaIcons.shape-circle;
                                 semantic-label: Tr.t("sl.circle");
                                 shortcut: "8";
                                 description: Tr.t("sl.2d_planar_boundary_circle_polygon_or_n_gon_d");
@@ -8219,7 +8225,7 @@ export component PetuniaSlintShell inherits Window {
                                                 accessible-role: button;
                                                 accessible-checked: root.paint-pip;
                                                 accessible-label: Tr.t("sl.paint_pip");
-                                                IconDisplay { icon: IconSet.PictureInPicture2; size: 11px; stroke: root.paint-pip ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                                PIcon { source: PetuniaIcons.picture-in-picture; size: 11px; stroke: root.paint-pip ? DesignTokens.on-accent : DesignTokens.text-primary; }
                                                 pipbtn-touch := TouchArea {
                                                     clicked => { root.paint-pip-toggle-requested(); }
                                                     Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_pip"); color: DesignTokens.text-primary; font-size: 10px; } } }
@@ -8235,7 +8241,7 @@ export component PetuniaSlintShell inherits Window {
                                                 border-color: DesignTokens.border;
                                                 accessible-role: button;
                                                 accessible-label: Tr.t("sl.paint_canvas_open");
-                                                IconDisplay { icon: IconSet.Maximize2; size: 11px; stroke: root.paint-canvas-panel-visible ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                                PIcon { source: PetuniaIcons.expand; size: 11px; stroke: root.paint-canvas-panel-visible ? DesignTokens.on-accent : DesignTokens.text-primary; }
                                                 expand-touch := TouchArea {
                                                     clicked => { root.paint-canvas-panel-visible = !root.paint-canvas-panel-visible; }
                                                     Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_canvas_open"); color: DesignTokens.text-primary; font-size: 10px; } } }
@@ -8438,8 +8444,8 @@ export component PetuniaSlintShell inherits Window {
                                         HorizontalLayout {
                                             alignment: center;
                                             spacing: 6px;
-                                            IconDisplay {
-                                                icon: IconSet.Camera;
+                                            PIcon {
+                                                source: PetuniaIcons.camera;
                                                 size: 13px;
                                                 stroke: DesignTokens.accent;
                                             }
@@ -8515,7 +8521,7 @@ export component PetuniaSlintShell inherits Window {
                                             background: DesignTokens.surface-raised;
                                             border-width: 1px;
                                             border-color: DesignTokens.border;
-                                            IconDisplay { icon: IconSet.Plus; size: 12px; stroke: DesignTokens.text-secondary; }
+                                            PIcon { source: PetuniaIcons.plus; size: 12px; stroke: DesignTokens.text-secondary; }
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.add_layer");
                                             TouchArea { clicked => { root.paint-layer-added(); } }
@@ -8527,7 +8533,7 @@ export component PetuniaSlintShell inherits Window {
                                             background: DesignTokens.surface-raised;
                                             border-width: 1px;
                                             border-color: DesignTokens.border;
-                                            IconDisplay { icon: IconSet.FolderOpen; size: 12px; stroke: DesignTokens.text-secondary; }
+                                            PIcon { source: PetuniaIcons.open-project; size: 12px; stroke: DesignTokens.text-secondary; }
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.add_group");
                                             TouchArea { clicked => { root.paint-layer-group-added(); } }
@@ -8539,7 +8545,7 @@ export component PetuniaSlintShell inherits Window {
                                             background: DesignTokens.surface-raised;
                                             border-width: 1px;
                                             border-color: DesignTokens.border;
-                                            IconDisplay { icon: IconSet.Square; size: 12px; stroke: DesignTokens.text-secondary; }
+                                            PIcon { source: PetuniaIcons.shape-square; size: 12px; stroke: DesignTokens.text-secondary; }
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.add_decal_layer");
                                             TouchArea { clicked => { root.paint-decal-layer-added(); } }
@@ -8567,8 +8573,8 @@ export component PetuniaSlintShell inherits Window {
                                                     spacing: 6px;
                                                     alignment: center;
 
-                                                    IconDisplay {
-                                                        icon: layer.is-group ? IconSet.FolderOpen : IconSet.Square;
+                                                    PIcon {
+                                                        source: layer.is-group ? PetuniaIcons.open-project : PetuniaIcons.shape-square;
                                                         size: 12px;
                                                         stroke: layer.active ? DesignTokens.accent : DesignTokens.text-muted;
                                                     }
@@ -8593,7 +8599,7 @@ export component PetuniaSlintShell inherits Window {
                                             Rectangle {
                                                 width: 18px;
                                                 height: 18px;
-                                                IconDisplay { icon: IconSet.ChevronUp; size: 11px; stroke: DesignTokens.text-muted; }
+                                                PIcon { source: PetuniaIcons.chevron-up; size: 11px; stroke: DesignTokens.text-muted; }
                                                 accessible-role: button;
                                                 accessible-label: Tr.t("sl.move_layer_up");
                                                 TouchArea { clicked => { root.paint-layer-moved(layer.id, 1); } }
@@ -8601,7 +8607,7 @@ export component PetuniaSlintShell inherits Window {
                                             Rectangle {
                                                 width: 18px;
                                                 height: 18px;
-                                                IconDisplay { icon: IconSet.ChevronDown; size: 11px; stroke: DesignTokens.text-muted; }
+                                                PIcon { source: PetuniaIcons.chevron-down; size: 11px; stroke: DesignTokens.text-muted; }
                                                 accessible-role: button;
                                                 accessible-label: Tr.t("sl.move_layer_down");
                                                 TouchArea { clicked => { root.paint-layer-moved(layer.id, -1); } }
@@ -8609,8 +8615,8 @@ export component PetuniaSlintShell inherits Window {
                                             Rectangle {
                                                 width: 18px;
                                                 height: 18px;
-                                                IconDisplay {
-                                                    icon: layer.visible ? IconSet.Eye : IconSet.EyeOff;
+                                                PIcon {
+                                                    source: layer.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
                                                     size: 12px;
                                                     stroke: layer.visible ? DesignTokens.text-secondary : DesignTokens.text-muted;
                                                 }
@@ -8622,8 +8628,8 @@ export component PetuniaSlintShell inherits Window {
                                             Rectangle {
                                                 width: 18px;
                                                 height: 18px;
-                                                IconDisplay {
-                                                    icon: layer.locked ? IconSet.Lock : IconSet.LockOpen;
+                                                PIcon {
+                                                    source: layer.locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
                                                     size: 12px;
                                                     stroke: layer.locked ? DesignTokens.accent : DesignTokens.text-muted;
                                                 }
@@ -8635,7 +8641,7 @@ export component PetuniaSlintShell inherits Window {
                                             Rectangle {
                                                 width: 18px;
                                                 height: 18px;
-                                                IconDisplay { icon: IconSet.Merge; size: 11px; stroke: DesignTokens.text-muted; }
+                                                PIcon { source: PetuniaIcons.merge; size: 11px; stroke: DesignTokens.text-muted; }
                                                 accessible-role: button;
                                                 accessible-label: Tr.t("sl.merge_layer_down");
                                                 TouchArea { clicked => { root.paint-layer-merged-down(layer.id); } }
@@ -8643,7 +8649,7 @@ export component PetuniaSlintShell inherits Window {
                                             Rectangle {
                                                 width: 18px;
                                                 height: 18px;
-                                                IconDisplay { icon: IconSet.Trash2; size: 11px; stroke: DesignTokens.danger; }
+                                                PIcon { source: PetuniaIcons.delete; size: 11px; stroke: DesignTokens.danger; }
                                                 accessible-role: button;
                                                 accessible-label: Tr.t("sl.remove_layer");
                                                 TouchArea { clicked => { root.paint-layer-removed(layer.id); } }
@@ -8781,7 +8787,7 @@ export component PetuniaSlintShell inherits Window {
                                             HorizontalLayout {
                                                 alignment: center;
                                                 spacing: 6px;
-                                                IconDisplay { icon: IconSet.Check; size: 12px; stroke: DesignTokens.accent; }
+                                                PIcon { source: PetuniaIcons.check; size: 12px; stroke: DesignTokens.accent; }
                                                 Text {
                                                     text: root.label-decal-bake;
                                                     color: DesignTokens.text-primary;
@@ -8888,7 +8894,7 @@ export component PetuniaSlintShell inherits Window {
                                             HorizontalLayout {
                                                 alignment: center;
                                                 spacing: 4px;
-                                                IconDisplay { icon: IconSet.Download; size: 12px; stroke: DesignTokens.text-primary; }
+                                                PIcon { source: PetuniaIcons.import; size: 12px; stroke: DesignTokens.text-primary; }
                                                 Text { text: Tr.t("sl.import"); color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; vertical-alignment: center; }
                                             }
                                             TouchArea { clicked => { root.command-file-action("palette.import"); } }
@@ -8903,7 +8909,7 @@ export component PetuniaSlintShell inherits Window {
                                             HorizontalLayout {
                                                 alignment: center;
                                                 spacing: 4px;
-                                                IconDisplay { icon: IconSet.Upload; size: 12px; stroke: DesignTokens.text-primary; }
+                                                PIcon { source: PetuniaIcons.export; size: 12px; stroke: DesignTokens.text-primary; }
                                                 Text { text: Tr.t("sl.export"); color: DesignTokens.text-primary; font-size: 10px; font-weight: 600; vertical-alignment: center; }
                                             }
                                             TouchArea { clicked => { root.command-file-action("palette.export"); } }
@@ -9101,7 +9107,7 @@ export component PetuniaSlintShell inherits Window {
                                             padding-right: 6px;
                                             spacing: 6px;
                                             alignment: center;
-                                            IconDisplay { icon: IconSet.Layers3; size: 14px; stroke: DesignTokens.accent; }
+                                            PIcon { source: PetuniaIcons.paint-layer; size: 14px; stroke: DesignTokens.accent; }
                                             Text { text: root.label-albedo-base-color; color: DesignTokens.text-primary; font-size: 11px; vertical-alignment: center; }
                                             Rectangle { horizontal-stretch: 1; }
                                             Text { text: Tr.t("sl.active"); color: DesignTokens.success; font-size: 10px; font-weight: 700; vertical-alignment: center; }
@@ -9130,7 +9136,7 @@ export component PetuniaSlintShell inherits Window {
                                         HorizontalLayout {
                                             alignment: center;
                                             spacing: 6px;
-                                            IconDisplay { icon: IconSet.Maximize2; size: 14px; stroke: DesignTokens.on-accent; }
+                                            PIcon { source: PetuniaIcons.expand; size: 14px; stroke: DesignTokens.on-accent; }
                                             Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: 11px; font-weight: 700; vertical-alignment: center; }
                                         }
                                         TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
@@ -9145,7 +9151,7 @@ export component PetuniaSlintShell inherits Window {
                                         HorizontalLayout {
                                             alignment: center;
                                             spacing: 6px;
-                                            IconDisplay { icon: IconSet.Grid2x2; size: 14px; stroke: DesignTokens.text-primary; }
+                                            PIcon { source: PetuniaIcons.grid-view; size: 14px; stroke: DesignTokens.text-primary; }
                                             Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                         }
                                         TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
@@ -9678,7 +9684,7 @@ export component PetuniaSlintShell inherits Window {
                                     pill-touch := TouchArea { clicked => { root.split-preset-requested(entry.id); } }
                                 }
                                 TopAction {
-                                    icon: IconSet.X;
+                                    icon-svg: PetuniaIcons.close;
                                     semantic-label: Tr.t("sl.split_close");
                                     width: 24px;
                                     height: 22px;
@@ -9714,7 +9720,6 @@ export component PetuniaSlintShell inherits Window {
                         InspectorPill {
                             focus-token: root.f6-rail-token;
                             section-id: "parts";
-                            icon: IconSet.Layers3;
                             icon-svg: PetuniaIcons.parts;
                             semantic-label: root.label-tab-parts;
                             description: Tr.t("sl.manage_scene_parts_groups_and_hierarchy");
@@ -9724,7 +9729,6 @@ export component PetuniaSlintShell inherits Window {
                         }
                         InspectorPill {
                             section-id: "transform";
-                            icon: IconSet.Move3d;
                             icon-svg: PetuniaIcons.transform;
                             semantic-label: root.label-tab-transform;
                             description: Tr.t("sl.position_rotation_and_scale_coordinates");
@@ -9734,7 +9738,6 @@ export component PetuniaSlintShell inherits Window {
                         }
                         InspectorPill {
                             section-id: "material";
-                            icon: IconSet.Paintbrush;
                             icon-svg: PetuniaIcons.material;
                             semantic-label: root.label-tab-material;
                             description: Tr.t("sl.surface_shaders_colors_and_textures");
@@ -9744,7 +9747,6 @@ export component PetuniaSlintShell inherits Window {
                         }
                         InspectorPill {
                             section-id: "object";
-                            icon: IconSet.Box;
                             icon-svg: PetuniaIcons.object-mesh;
                             semantic-label: root.label-tab-object;
                             description: Tr.t("sl.object_metadata_visibility_and_display_optio");
@@ -9754,7 +9756,6 @@ export component PetuniaSlintShell inherits Window {
                         }
                         InspectorPill {
                             section-id: "modifiers";
-                            icon: IconSet.Settings;
                             icon-svg: PetuniaIcons.modifier;
                             semantic-label: root.label-tab-modifiers;
                             description: Tr.t("sl.generative_and_deformer_modifier_stack");
@@ -9764,7 +9765,6 @@ export component PetuniaSlintShell inherits Window {
                         }
                         InspectorPill {
                             section-id: "quick_actions";
-                            icon: IconSet.Zap;
                             icon-svg: PetuniaIcons.tool-profile;
                             semantic-label: root.label-quick-actions;
                             description: Tr.t("sl.quick_actions_and_modeling_tools");
@@ -9876,7 +9876,7 @@ export component PetuniaSlintShell inherits Window {
                     }
                     Rectangle { horizontal-stretch: 1; }
                     TopAction {
-                        icon: IconSet.Pin;
+                        icon-svg: PetuniaIcons.pin;
                         semantic-label: scene-drawer-pinned ? Tr.t("sl.unpin_parts") : Tr.t("sl.pin_parts");
                         clicked => {
                             root.scene-drawer-pinned = !root.scene-drawer-pinned;
@@ -9884,7 +9884,7 @@ export component PetuniaSlintShell inherits Window {
                         }
                     }
                     TopAction {
-                        icon: IconSet.X;
+                        icon-svg: PetuniaIcons.close;
                         semantic-label: Tr.t("sl.close_scene_drawer");
                         clicked => { root.scene-requested(); }
                     }
@@ -9961,8 +9961,8 @@ export component PetuniaSlintShell inherits Window {
                                         spacing: 6px;
                                         alignment: center;
 
-                                        IconDisplay {
-                                            icon: IconSet.Box;
+                                        PIcon {
+                                            source: PetuniaIcons.cube;
                                             size: 12px;
                                             stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted;
                                         }
@@ -10000,8 +10000,8 @@ export component PetuniaSlintShell inherits Window {
                                 Rectangle {
                                     width: 20px;
                                     height: 20px;
-                                    IconDisplay {
-                                        icon: item.visible ? IconSet.Eye : IconSet.EyeOff;
+                                    PIcon {
+                                        source: item.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
                                         size: 13px;
                                         stroke: item.visible ? DesignTokens.text-secondary : DesignTokens.text-muted;
                                     }
@@ -10013,8 +10013,8 @@ export component PetuniaSlintShell inherits Window {
                                 Rectangle {
                                     width: 20px;
                                     height: 20px;
-                                    IconDisplay {
-                                        icon: item.locked ? IconSet.Lock : IconSet.LockOpen;
+                                    PIcon {
+                                        source: item.locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
                                         size: 13px;
                                         stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted;
                                     }
@@ -10576,7 +10576,7 @@ export component PetuniaSlintShell inherits Window {
 
                     VerticalLayout {
                         alignment: center;
-                        IconDisplay { icon: IconSet.FolderArchive; size: 16px; stroke: DesignTokens.accent; }
+                        PIcon { source: PetuniaIcons.library; size: 16px; stroke: DesignTokens.accent; }
                     }
 
                     Text {
@@ -10611,7 +10611,7 @@ export component PetuniaSlintShell inherits Window {
                                 padding-right: 10px;
                                 spacing: 5px;
                                 alignment: center;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.BookmarkPlus; size: 12px; stroke: DesignTokens.on-accent; } }
+                                VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.bookmark-add; size: 12px; stroke: DesignTokens.on-accent; } }
                                 save-label := Text { text: root.label-save-active-as-asset; color: DesignTokens.on-accent; font-size: 10px; font-weight: 700; vertical-alignment: center; }
                             }
                             save-touch := TouchArea { clicked => { root.save-active-as-asset-requested(); } }
@@ -10619,7 +10619,7 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     TopAction {
-                        icon: IconSet.X;
+                        icon-svg: PetuniaIcons.close;
                         semantic-label: Tr.t("sl.close_asset_library");
                         clicked => { root.asset-library-requested(); }
                     }
@@ -10644,7 +10644,7 @@ export component PetuniaSlintShell inherits Window {
                             padding-left: 7px;
                             padding-right: 7px;
                             spacing: 5px;
-                            VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Search; size: 13px; stroke: DesignTokens.text-muted; } }
+                            VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.search; size: 13px; stroke: DesignTokens.text-muted; } }
                             asset-search-input := TextInput {
                                 text: root.asset-query;
                                 color: DesignTokens.text-primary;
@@ -10668,7 +10668,7 @@ export component PetuniaSlintShell inherits Window {
                         accessible-role: button;
                         accessible-label: Tr.t("sl.prefab_only_favorites");
                         accessible-checked: root.asset-only-favorites;
-                        IconDisplay { icon: IconSet.Star; size: 13px; stroke: root.asset-only-favorites ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                        PIcon { source: PetuniaIcons.favorite; size: 13px; stroke: root.asset-only-favorites ? DesignTokens.on-accent : DesignTokens.text-primary; }
                         fav-filter-touch := TouchArea {
                             clicked => { root.asset-only-favorites-changed(!root.asset-only-favorites); }
                             Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.prefab_only_favorites"); color: DesignTokens.text-primary; font-size: 10px; } } }
@@ -10685,7 +10685,7 @@ export component PetuniaSlintShell inherits Window {
                         accessible-role: button;
                         accessible-label: root.label-sort-assets;
                         accessible-checked: root.asset-sort-by-name;
-                        IconDisplay { icon: IconSet.ArrowDownAz; size: 14px; stroke: root.asset-sort-by-name ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                        PIcon { source: PetuniaIcons.sort-az; size: 14px; stroke: root.asset-sort-by-name ? DesignTokens.on-accent : DesignTokens.text-primary; }
                         sort-touch := TouchArea { clicked => { root.asset-sort-changed(!root.asset-sort-by-name); } }
                     }
                     Text { text: root.label-thumbnail-size; color: DesignTokens.text-secondary; font-size: 10px; vertical-alignment: center; }
@@ -10754,8 +10754,8 @@ export component PetuniaSlintShell inherits Window {
                                         height: 100%;
                                         image-fit: contain;
                                     }
-                                    if !item.has-thumbnail: IconDisplay {
-                                        icon: IconSet.Box;
+                                    if !item.has-thumbnail: PIcon {
+                                        source: PetuniaIcons.cube;
                                         size: 24px;
                                         stroke: DesignTokens.text-muted;
                                         x: (parent.width - self.width) / 2;
@@ -10776,7 +10776,7 @@ export component PetuniaSlintShell inherits Window {
                                         accessible-checked: item.favorite;
                                         opacity: (item.favorite || card-touch.has-hover || fav-touch.has-hover) ? 1.0 : 0.0;
                                         animate opacity { duration: Motion.fast; easing: ease-out; }
-                                        IconDisplay { icon: IconSet.Star; size: 12px; stroke: item.favorite ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                        PIcon { source: PetuniaIcons.favorite; size: 12px; stroke: item.favorite ? DesignTokens.on-accent : DesignTokens.text-primary; }
                                         fav-touch := TouchArea { clicked => { root.prefab-favorite-requested(item.id, !item.favorite); } }
                                     }
 
@@ -10816,7 +10816,7 @@ export component PetuniaSlintShell inherits Window {
                                             background: upd-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised.with-alpha(0.92);
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.prefab_update");
-                                            IconDisplay { icon: IconSet.RefreshCw; size: 12px; stroke: DesignTokens.text-primary; }
+                                            PIcon { source: PetuniaIcons.refresh; size: 12px; stroke: DesignTokens.text-primary; }
                                             upd-touch := TouchArea {
                                                 clicked => { root.prefab-update-requested(item.id); }
                                                 Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.prefab_update"); color: DesignTokens.text-primary; font-size: 10px; } } }
@@ -10829,7 +10829,7 @@ export component PetuniaSlintShell inherits Window {
                                             background: del-touch.has-hover ? DesignTokens.danger : DesignTokens.surface-raised.with-alpha(0.92);
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.prefab_delete");
-                                            IconDisplay { icon: IconSet.Trash2; size: 12px; stroke: del-touch.has-hover ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                            PIcon { source: PetuniaIcons.delete; size: 12px; stroke: del-touch.has-hover ? DesignTokens.on-accent : DesignTokens.text-primary; }
                                             del-touch := TouchArea {
                                                 clicked => { root.prefab-delete-requested(item.id); }
                                                 Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.prefab_delete"); color: DesignTokens.text-primary; font-size: 10px; } } }
@@ -10889,8 +10889,8 @@ export component PetuniaSlintShell inherits Window {
                         spacing: 8px;
                         alignment: center;
 
-                        IconDisplay {
-                            icon: IconSet.Search;
+                        PIcon {
+                            source: PetuniaIcons.search;
                             size: 16px;
                             stroke: DesignTokens.text-secondary;
                         }
@@ -11060,7 +11060,7 @@ export component PetuniaSlintShell inherits Window {
                             padding-left: 12px;
                             padding-right: 8px;
                             spacing: 6px;
-                            VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Image; size: 14px; stroke: DesignTokens.accent; } }
+                            VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.reference-image; size: 14px; stroke: DesignTokens.accent; } }
                             Text { text: Tr.t("sl.canvas") + "  " + root.paint-canvas-size; color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                             VerticalLayout {
                                 alignment: center;
@@ -11080,7 +11080,7 @@ export component PetuniaSlintShell inherits Window {
                                 }
                             }
                             TopAction {
-                                icon: IconSet.X;
+                                icon-svg: PetuniaIcons.close;
                                 semantic-label: Tr.t("sl.paint_canvas_close");
                                 clicked => { root.paint-canvas-panel-visible = false; }
                             }
@@ -11155,8 +11155,8 @@ export component PetuniaSlintShell inherits Window {
                             VerticalLayout { alignment: center; HorizontalLayout {
                                 spacing: 8px;
                                 alignment: center;
-                                IconDisplay {
-                                    icon: IconSet.Image;
+                                PIcon {
+                                    source: PetuniaIcons.reference-image;
                                     size: 16px;
                                     stroke: DesignTokens.accent;
                                 }
@@ -11193,13 +11193,13 @@ export component PetuniaSlintShell inherits Window {
                                         padding-right: 8px;
                                         spacing: 4px;
                                         alignment: center;
-                                        IconDisplay { icon: IconSet.Trash2; size: 12px; stroke: DesignTokens.text-secondary; }
+                                        PIcon { source: PetuniaIcons.delete; size: 12px; stroke: DesignTokens.text-secondary; }
                                         Text { text: Tr.t("sl.clear_all"); color: DesignTokens.text-secondary; font-size: 11px; vertical-alignment: center; }
                                     }
                                 }
 
                                 TopAction {
-                                    icon: IconSet.X;
+                                    icon-svg: PetuniaIcons.close;
                                     semantic-label: Tr.t("sl.close_reference_manager");
                                     clicked => {
                                         root.reference-manager-visible = false;
@@ -11283,8 +11283,8 @@ export component PetuniaSlintShell inherits Window {
                             VerticalLayout { alignment: center; HorizontalLayout {
                                 spacing: 8px;
                                 alignment: center;
-                                IconDisplay {
-                                    icon: IconSet.Settings2;
+                                PIcon {
+                                    source: PetuniaIcons.tune;
                                     size: 16px;
                                     stroke: DesignTokens.accent;
                                 }
@@ -11299,7 +11299,7 @@ export component PetuniaSlintShell inherits Window {
 
                             VerticalLayout { alignment: center;
                             TopAction {
-                                icon: IconSet.X;
+                                icon-svg: PetuniaIcons.close;
                                 semantic-label: Tr.t("sl.close_settings");
                                 clicked => {
                                     root.settings-visible = false;
@@ -11339,7 +11339,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Palette; size: 14px; stroke: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.paint-palette; size: 14px; stroke: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.appearance"); color: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab0-touch := TouchArea { clicked => { root.settings-tab = 0; } }
@@ -11356,7 +11356,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Globe; size: 14px; stroke: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.language; size: 14px; stroke: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.language_region"); color: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab1-touch := TouchArea { clicked => { root.settings-tab = 1; } }
@@ -11373,7 +11373,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Keyboard; size: 14px; stroke: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.keyboard; size: 14px; stroke: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.keyboard_shortcuts"); color: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab2-touch := TouchArea { clicked => { root.settings-tab = 2; } }
@@ -11390,7 +11390,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Eye; size: 14px; stroke: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.eye; size: 14px; stroke: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.accessibility"); color: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab3-touch := TouchArea { clicked => { root.settings-tab = 3; } }
@@ -11407,7 +11407,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Box; size: 14px; stroke: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.cube; size: 14px; stroke: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.tools"); color: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab4-touch := TouchArea { clicked => { root.settings-tab = 4; } }
@@ -11424,7 +11424,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Monitor; size: 14px; stroke: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.display; size: 14px; stroke: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.3d_viewport"); color: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab5-touch := TouchArea { clicked => { root.settings-tab = 5; } }
@@ -11441,7 +11441,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Cpu; size: 14px; stroke: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.cpu; size: 14px; stroke: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.plugins"); color: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab6-touch := TouchArea { clicked => { root.settings-tab = 6; } }
@@ -11458,7 +11458,7 @@ export component PetuniaSlintShell inherits Window {
                                         padding-left: 10px;
                                         spacing: 8px;
                                         alignment: start;
-                                        VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Terminal; size: 14px; stroke: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                        VerticalLayout { alignment: center; PIcon { source: PetuniaIcons.terminal; size: 14px; stroke: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
                                         Text { text: Tr.t("sl.mcp_automation"); color: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; }
                                     }
                                     tab7-touch := TouchArea { clicked => { root.settings-tab = 7; } }

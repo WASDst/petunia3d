@@ -63,7 +63,7 @@ def badge(base: str, mark_o: str, mark_f: str, key: str, group: str, label: str,
 
 
 G = 'Interface'
-add('search', G, 'Search', ink(c(10.5, 10.5, 6.5), p('15.5 15.5 21 21')), solid(p('M10.5 2a8.5 8.5 0 0 1 6.54 13.92L22 20.9 20.9 22l-4.98-4.96A8.5 8.5 0 1 1 10.5 2zm0 2.2a6.3 6.3 0 1 0 0 12.6 6.3 6.3 0 0 0 0-12.6z', fill_rule='evenodd')))
+add('search', G, 'Search', ink(c(10.5, 10.5, 6.5), p('M15.5 15.5 21 21')), solid(p('M10.5 2a8.5 8.5 0 0 1 6.54 13.92L22 20.9 20.9 22l-4.98-4.96A8.5 8.5 0 1 1 10.5 2zm0 2.2a6.3 6.3 0 1 0 0 12.6 6.3 6.3 0 0 0 0-12.6z', fill_rule='evenodd')))
 add('settings', G, 'Settings', ink(c(12, 12, 3), p('M10 2h4l.5 2.3 1.7.7 2-.9 2.8 2.8-.9 2 .7 1.7L23 11v3l-2.2.5-.7 1.7.9 2-2.8 2.8-2-.9-1.7.7L14 23h-4l-.5-2.2-1.7-.7-2 .9L3 18.2l.9-2-.7-1.7L1 14v-3l2.2-.5.7-1.7-.9-2L5.8 4l2 .9 1.7-.7z')), solid(p('M9.2 2h5.6l.47 2.2 1.26.52 1.88-1.2 3.96 3.96-1.2 1.88.52 1.26L24 11v5.6l-2.31.47-.52 1.26 1.2 1.88-3.96 3.96-1.88-1.2-1.26.52L14.8 24H9.2l-.47-2.31-1.26-.52-1.88 1.2-3.96-3.96 1.2-1.88-.52-1.26L0 14.8V9.2l2.31-.47.52-1.26-1.2-1.88 3.96-3.96 1.88 1.2 1.26-.52zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', fill_rule='evenodd')))
 add('folder', G, 'Folder', ink(p('M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z')), solid(p('M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z')))
 add('file', G, 'File', ink(p('M5 2h9l5 5v15H5z'), p('M14 2v5h5')), solid(p('M5 2h9l5 5v15H5z')))
@@ -415,6 +415,61 @@ redraw('reference_manager', 'Reference Manager', ink(r(6, 3, 15, 13, 2), p('M3 8
 redraw('object_mesh', 'Object Mesh', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7')) + solid(c(12, 2, 1.6), c(21, 7, 1.6), c(21, 17, 1.6), c(12, 22, 1.6), c(3, 17, 1.6), c(3, 7, 1.6), c(12, 12, 1.6)), solid(p(CUBE)) + solid(c(12, 12, 1.8, fill='#252735')))
 
 
+# --- Ícones de interface adicionais (substituem os Lucide que o shell ainda usava) ---
+def heavy(d: str) -> str:
+    return ink(p(d, stroke_width='2.5'))
+
+
+def knock(*bits: str) -> str:
+    return ink(*bits)
+
+
+STAR = 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z'
+BOOKMARK = 'M6 3h12v18l-6-4-6 4z'
+FRAME = (3, 4, 18, 16, 2)
+add('check', G, 'Check', ink(p('M4 12.5l5 5L20 6.5')), solid(c(12, 12, 10)) + ink(p('M7.5 12.5l3 3 6-6', stroke='#252735')))
+add('favorite', G, 'Favorite', ink(p(STAR)), solid(p(STAR)))
+add('bookmark_add', G, 'Save as Prefab', ink(p(BOOKMARK), p('M12 7v6m-3-3h6')), solid(p(BOOKMARK)) + ink(p('M12 7v6m-3-3h6', stroke='#252735')))
+LINK = 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'
+add('link', G, 'Link', ink(p(LINK)), heavy(LINK))
+BOLT = 'M13 2 4 14h7l-1 8 9-12h-7z'
+add('bolt', G, 'Quick Action', ink(p(BOLT)), solid(p(BOLT)))
+SORT_BARS = 'M4 7h9M4 12h6M4 17h3'
+add('sort_az', G, 'Sort by Name', ink(p(SORT_BARS), p('M17 5v14m-3-3 3 3 3-3')), heavy(SORT_BARS + 'M17 5v14m-3-3 3 3 3-3'))
+SORT_UD = 'M8 4v16m-3-3 3 3 3-3M16 20V4m-3 3 3-3 3 3'
+add('sort_updown', G, 'Sort', ink(p(SORT_UD)), heavy(SORT_UD))
+TUNE = 'M4 7h9M17 7h3M4 17h3M11 17h9'
+add('tune', G, 'Adjust', ink(p(TUNE), c(15, 7, 2), c(9, 17, 2)), ink(p(TUNE)) + solid(c(15, 7, 2.6), c(9, 17, 2.6)))
+add('more_horiz', G, 'More', ink(c(5, 12, 1.6), c(12, 12, 1.6), c(19, 12, 1.6)), solid(c(5, 12, 2), c(12, 12, 2), c(19, 12, 2)))
+KEYS = 'M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10'
+add('keyboard', G, 'Keyboard', ink(r(2, 6, 20, 12, 2), p(KEYS)), solid(r(2, 6, 20, 12, 2)) + ink(p(KEYS, stroke='#252735')))
+TRANSLATE = 'M4 5h8M8 3v2M6 5c0 4 3 7 6 8M11 5c-1 4-4 7-8 8M13 21l4-10 4 10M14.5 17.5h5'
+add('language', G, 'Language', ink(p(TRANSLATE)), heavy(TRANSLATE))
+add('display', G, 'Display', ink(r(3, 4, 18, 12, 2), p('M8 20h8M12 16v4')), solid(r(3, 4, 18, 12, 2)) + ink(p('M8 20h8M12 16v4')))
+PROMPT = 'M5 7l5 5-5 5M12 18h7'
+add('terminal', G, 'Terminal', ink(p(PROMPT)), heavy(PROMPT))
+PINS = 'M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4'
+add('cpu', G, 'Processor', ink(r(6, 6, 12, 12, 2), r(9, 9, 6, 6, 1), p(PINS)), solid(r(6, 6, 12, 12, 2)) + ink(p(PINS)) + solid(r(9, 9, 6, 6, 1, fill='#252735')))
+add('split_view', G, 'Split View', ink(r(*FRAME), p('M12 4v16')), solid(p('M5 4h7v16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')) + ink(r(*FRAME), p('M12 4v16')))
+add('picture_in_picture', G, 'Picture in Picture', ink(r(3, 5, 18, 14, 2), r(12, 11, 7, 5, 1)), ink(r(3, 5, 18, 14, 2)) + solid(r(12, 11, 7, 5, 1)))
+add('panel_left', G, 'Side Panel', ink(r(*FRAME), p('M9 4v16')), solid(p('M5 4h4v16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z')) + ink(r(*FRAME), p('M9 4v16')))
+LIB = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'
+add('library', V, 'Library', ink(p(LIB), p('M3 11h18')), solid(p(LIB)) + ink(p('M3 11h18', stroke='#252735')))
+add('spline_curve', H, 'Spline', ink(p('M3 18c4-12 9 4 18-12'), c(3, 18, 1.8), c(21, 6, 1.8)), ink(p('M3 18c4-12 9 4 18-12')) + solid(c(3, 18, 2.4), c(21, 6, 2.4)))
+add('shape_circle', G, 'Circle Shape', ink(c(12, 12, 9)), solid(c(12, 12, 9)))
+add('shape_square', G, 'Square', ink(r(4, 4, 16, 16, 2)), solid(r(4, 4, 16, 16, 2)))
+add('shape_square_dashed', G, 'Dashed Square', ink(r(4, 4, 16, 16, 2, stroke_dasharray='3 2.4')), ink(r(4, 4, 16, 16, 2, stroke_dasharray='3 2.4')) + solid(r(8, 8, 8, 8, 1)))
+add('circle_dot', G, 'Circle Dot', ink(c(12, 12, 9)) + solid(c(12, 12, 2.6)), solid(c(12, 12, 9)) + solid(c(12, 12, 3, fill='#252735')))
+RESET = 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5'
+add('reset_view', G, 'Reset View', ink(p(RESET)), heavy(RESET))
+POINTER = 'M5 3l14 7-6 2-2 6z'
+add('pointer', G, 'Pointer', ink(p(POINTER)), solid(p(POINTER)))
+EXPAND = 'M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7'
+add('expand', G, 'Expand', ink(p(EXPAND)), heavy(EXPAND))
+COLLAPSE = 'M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7'
+add('collapse', G, 'Collapse', ink(p(COLLAPSE)), heavy(COLLAPSE))
+
+
 def command_map() -> dict[str, str]:
     repo = ROOT.parent.parent
     commands = set(re.findall(r'\| `(\w+\.\w+)` \|', (repo / 'docs/generated/COMMANDS.md').read_text()))
@@ -584,6 +639,15 @@ def main() -> None:
     (SOURCE / 'catalog.json').write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + '\n')
     (SOURCE / 'command-map.json').write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + '\n')
     (SOURCE / 'gallery.html').write_text(gallery(catalog))
+    lines = ['// Autogenerated Petunia3D Dual SVG Icon System (assets/icons/petunia-dual/generate.py)',
+             '// Provides both Outline and Filled variants of all official Petunia icons.', '',
+             'export global PetuniaIcons {', '    in-out property <bool> filled: false;', '']
+    for key, (group, *_rest) in sorted(ICONS.items()):
+        rel = f'svg/{slug(group)}/{key}.svg'
+        name = key.replace('_', '-')
+        lines.append(f'    out property <image> {name}: root.filled ? @image-url("../../../assets/icons/petunia-filled/{rel}") : @image-url("../../../assets/icons/petunia-outline/{rel}");')
+    lines.append('}')
+    (repo / 'crates/ui-slint/ui/petunia_icons.slint').write_text('\n'.join(lines) + '\n')
     print(f'{len(ICONS)} semantic IDs × 2 variants; {len(mapping)} commands mapped')
 
 
