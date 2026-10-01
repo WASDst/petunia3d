@@ -49,7 +49,7 @@ Fonte: P3D-055 (adendo), P3D-133, P3D-134, capítulo 44 e capítulo 42.
 | Face / UV Island Fill | Existe (`FillScope`), restrito pela máscara. |
 | **Smudge, Blur, Dodge, Burn, Spray, Clone** | **Novos** (2E). Clone: origem por Ctrl+clique. Sem pressão de tablet. |
 | Ponta, ângulo, achatamento, mistura, estabilizador, jitter, espalhamento, presets | **Novos** (2E): `BrushStyle`/`BrushPreset`. |
-| Decal (P3D-133) | Camada de decal existe e é transformável. **Faltam** importar PNG/JPEG/SVG pela UI com validação, máscara/clip, fonte ausente e bake/export. |
+| Decal (P3D-133) | Camada de decal transformável (existia só com um quadrado amarelo de teste). **Novo:** importar PNG/JPEG pelo botão de imagem da pilha de camadas (decodificação validada, lado maior limitado a 512 texels, proporção preservada, 1 Undo; arquivo inválido não muda o documento). **Faltam** SVG (exigiria `resvg` como dependência direta), máscara/clip, fonte ausente e bake/export. |
 | Projection / Stencil | `MISSING`. |
 | Clone / Patch (cópia de região com máscara) | O pincel Clone cobre o uso básico; Patch (remendo com costura) segue `MISSING`. |
 | Path Paint | `MISSING` (o Spline Core existe; falta a ferramenta). |

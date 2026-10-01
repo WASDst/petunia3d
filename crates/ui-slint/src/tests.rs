@@ -9645,3 +9645,195 @@ fn object_outline_follows_the_object_selection_only_in_the_object_domain() {
     bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
     assert_eq!(bridge.outlined_objects().0, Vec::<uuid::Uuid>::new());
 }
+
+#[test]
+fn paint_select_tool_picks_faces_and_clears_on_empty_space() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.resize_viewport(800, 600);
+    // Entrar no PAINT ativa o pincel; a seleção é uma escolha explícita.
+    assert_eq!(bridge.state.session.tools.active_tool, "brush");
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+
+    bridge.select_viewport(0.5, 0.5, false);
+    let selected = |bridge: &SlintUiBridge<PlaceholderViewport>| {
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .iter()
+            .filter(|f| f.selected)
+            .count()
+    };
+    assert_eq!(selected(&bridge), 1, "o clique escolhe a face sob o cursor");
+    // Pintar com a ferramenta Select não pinta nada.
+    assert!(!bridge.begin_paint_stroke_at(400.0, 300.0));
+
+    bridge.select_viewport(0.01, 0.01, false);
+    assert_eq!(selected(&bridge), 0, "clicar no vazio limpa as faces");
+}
+
+#[test]
+fn paint_isolate_follows_the_active_object() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::AddPrimitive(petunia_core::PrimitiveKind::Plane));
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert!(bridge.state.project.assets.len() >= 2);
+    assert!(bridge.execute_core_command("view.isolate").is_ok());
+    assert!(bridge.state.session.isolate_active);
+    let visible = bridge
+        .state
+        .project
+        .assets
+        .iter()
+        .filter(|a| a.visible)
+        .count();
+    assert_eq!(visible, 1, "só o ativo fica visível");
+    // Trocar o objeto ativo (pelo Outliner) move o isolamento junto.
+    let other = (0..bridge.state.project.assets.len())
+        .find(|&i| i != bridge.state.project.active)
+        .unwrap();
+    bridge.state.project.assets[other].visible = true;
+    bridge.state.select_object(Some(other), false);
+    bridge.state.refresh_isolation();
+    let visible: Vec<bool> = bridge
+        .state
+        .project
+        .assets
+        .iter()
+        .map(|a| a.visible)
+        .collect();
+    assert_eq!(visible.iter().filter(|v| **v).count(), 1);
+    assert!(bridge.state.project.assets[bridge.state.project.active].visible);
+    assert!(bridge.execute_core_command("view.isolate").is_ok());
+    assert!(!bridge.state.session.isolate_active);
+    assert!(bridge.state.project.assets.iter().all(|a| a.visible));
+}
+
+#[test]
+fn leaving_paint_drops_paint_only_tools() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetActiveTool("eraser".into()));
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Model));
+    assert_eq!(bridge.state.session.tools.active_tool, "select");
+}
+
+#[test]
+fn fill_tool_in_paint_does_not_recolor_the_vertices() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetPaintColor([0.0, 1.0, 0.0]));
+    let before: Vec<[f32; 3]> = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .verts
+        .iter()
+        .map(|v| v.color)
+        .collect();
+    bridge.apply(UiIntent::SetActiveTool("fill".into()));
+    let after: Vec<[f32; 3]> = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .verts
+        .iter()
+        .map(|v| v.color)
+        .collect();
+    assert_eq!(before, after, "escolher o balde não pinta os vértices");
+}
+
+#[test]
+fn draw_shapes_stay_visible_and_can_be_edited_after_closing() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert!(bridge.add_profile_rectangle(2.0, 2.0));
+    // Mudar de ferramenta encerra a edição, mas a forma continua no documento e visível.
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+    assert!(bridge.active_profile_id.is_none());
+    assert!(
+        !bridge.region_shapes_commands().is_empty(),
+        "a região continua desenhada sem estar em edição"
+    );
+    assert!(
+        !bridge.profile_outline_commands().is_empty(),
+        "o contorno continua desenhado"
+    );
+    // No POLY as formas não aparecem.
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    assert!(bridge.region_shapes_commands().is_empty());
+}
+
+#[test]
+fn profile_edge_click_inserts_a_node_and_double_click_toggles_curves() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    bridge.add_profile_rectangle(2.0, 2.0);
+    assert_eq!(active_profile_spline(&bridge).points.len(), 4);
+
+    // meio da aresta inferior (entre os pontos 0 e 1) projetado na tela
+    let profile = bridge.active_profile_state().unwrap();
+    let a = profile.nodes[0].point;
+    let b = profile.nodes[1].point;
+    let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    let matrix = bridge.state.session.camera.view_proj();
+    let clip = matrix * profile.to_3d_point(mid).extend(1.0);
+    let (sx, sy) = (
+        (clip.x / clip.w * 0.5 + 0.5) * 800.0,
+        (0.5 - clip.y / clip.w * 0.5) * 600.0,
+    );
+    assert!(bridge.profile_pointer_down(sx, sy, false));
+    bridge.profile_pointer_up();
+    assert_eq!(
+        active_profile_spline(&bridge).points.len(),
+        5,
+        "um nó novo na aresta"
+    );
+
+    // o ponto novo está no meio da aresta (forma preservada)
+    let spline = active_profile_spline(&bridge);
+    let inserted = &spline.points[1];
+    assert!((inserted.position[0] - f64::from(mid[0])).abs() < 0.2);
+
+    // alternar reto ↔ curva no ponto 0 (duplo clique em < 400 ms)
+    let id = active_profile_spline(&bridge).points[0].id;
+    bridge.profile_set_point_curved(Some(id), true);
+    assert!(active_profile_spline(&bridge).point_is_curved(id));
+    bridge.profile_set_point_curved(Some(id), false);
+    assert!(!active_profile_spline(&bridge).point_is_curved(id));
+}
+
+#[test]
+fn decal_import_reads_an_image_and_rejects_garbage_without_touching_the_document() {
+    let dir = tempfile::tempdir().unwrap();
+    let png = dir.path().join("logo.png");
+    image::RgbaImage::from_pixel(40, 20, image::Rgba([10, 200, 30, 255]))
+        .save(&png)
+        .unwrap();
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
+    let before = bridge.state.project.undo.depth().0;
+    assert!(bridge.import_decal_image(&png));
+    assert!(bridge.active_layer_is_decal());
+    let decal = bridge.active_decal().unwrap();
+    assert_eq!((decal.image.w, decal.image.h), (40, 20));
+    // proporção 2:1 preservada na escala UV
+    assert!((decal.scale_uv[0] / decal.scale_uv[1] - 2.0).abs() < 0.01);
+    assert_eq!(bridge.state.project.undo.depth().0, before + 1);
+
+    let garbage = dir.path().join("not-an-image.png");
+    std::fs::write(&garbage, b"definitely not a png").unwrap();
+    let depth = bridge.state.project.undo.depth();
+    assert!(!bridge.import_decal_image(&garbage));
+    assert_eq!(bridge.state.project.undo.depth(), depth);
+    assert!(bridge.state.ui.status.starts_with("Decal:"));
+}

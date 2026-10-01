@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1449**.
+Total de chaves de localização cadastradas: **1495**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -656,8 +656,41 @@ Total de chaves de localização cadastradas: **1449**.
 | `sl.box_click_selection_of_scene_points_edges_an` | Box / click selection of scene points, edges and faces | Seleção por caixa ou clique de Points, arestas e faces da cena |
 | `sl.bridge_edge_loops_with_configurable_quad_seg` | Bridge edge loops with configurable quad segments and twist | Conecta loops de arestas com segmentos de quads e torção configuráveis |
 | `sl.brush` | Brush | Pincel |
+| `sl.brush_angle` | Angle | Ângulo |
+| `sl.brush_blend` | Blend | Mistura |
+| `sl.brush_blend_add` | Add | Somar |
+| `sl.brush_blend_darken` | Darken | Escurecer |
+| `sl.brush_blend_lighten` | Lighten | Clarear |
+| `sl.brush_blend_multiply` | Multiply | Multiplicar |
+| `sl.brush_blend_normal` | Normal | Normal |
+| `sl.brush_blend_screen` | Screen | Tela |
+| `sl.brush_clone_hint` | Ctrl+click on the surface to set the clone source. | Ctrl+clique na superfície para definir a origem do clone. |
+| `sl.brush_clone_ready` | Clone source set. Ctrl+click to change it. | Origem do clone definida. Ctrl+clique para trocar. |
+| `sl.brush_flow` | Flow | Fluxo |
 | `sl.brush_lock` | Brush lock | Bloquear pincel |
+| `sl.brush_opacity_jitter` | Opacity jitter | Variação de opacidade |
+| `sl.brush_preset_delete` | Delete preset | Apagar preset |
+| `sl.brush_preset_save` | Save brush | Salvar pincel |
+| `sl.brush_presets` | Presets | Presets |
+| `sl.brush_roundness` | Roundness | Achatamento |
+| `sl.brush_scatter` | Scatter | Espalhamento |
 | `sl.brush_settings` | Brush Settings | Configurações do pincel |
+| `sl.brush_size_jitter` | Size jitter | Variação de tamanho |
+| `sl.brush_smoothing` | Stabilizer | Estabilizador |
+| `sl.brush_spacing` | Spacing | Espaçamento |
+| `sl.brush_spray_density` | Spray density | Densidade do spray |
+| `sl.brush_tip` | Tip | Ponta |
+| `sl.brush_tip_diamond` | Diamond | Losango |
+| `sl.brush_tip_round` | Round | Redonda |
+| `sl.brush_tip_square` | Square | Quadrada |
+| `sl.brush_type` | Brush type | Tipo de pincel |
+| `sl.brush_type_blur` | Blur | Desfoque |
+| `sl.brush_type_burn` | Burn | Queimar |
+| `sl.brush_type_clone` | Clone | Clone |
+| `sl.brush_type_dodge` | Dodge | Clarear |
+| `sl.brush_type_pixel` | Pixel | Pixel |
+| `sl.brush_type_smudge` | Smudge | Borrar |
+| `sl.brush_type_spray` | Spray | Spray |
 | `sl.camera_projection` | Camera Projection | Projeção da Câmera |
 | `sl.camera_viewpoints_viewport_overlays_and_rend` | Camera viewpoints, viewport overlays and rendering display modes | Pontos de vista da câmera, overlays da viewport e modos de exibição |
 | `sl.cancel` | Cancel | Cancelar |
@@ -748,6 +781,8 @@ Total de chaves de localização cadastradas: **1449**.
 | `sl.duplicate` | Duplicate | Duplicar |
 | `sl.edge` | Edge | Aresta |
 | `sl.effects` | Effects | Efeitos |
+| `sl.ellipse` | Ellipse | Elipse |
+| `sl.ellipse_description` | Fill an ellipse inscribed between two points on the surface | Preenche uma elipse inscrita entre dois pontos da superfície |
 | `sl.enabled` | Enabled | Ativado |
 | `sl.english_us` | English (US) | English (US) |
 | `sl.enter_confirm_esc_cancel` | Enter confirm · Esc cancel | Enter confirma · Esc cancela |
@@ -795,6 +830,8 @@ Total de chaves de localização cadastradas: **1449**.
 | `sl.generate_volume_directly_by_dragging_depth_o` | • Generate volume directly by dragging depth or pressing Enter | • Gerar volume direto por arraste de profundidade ou Enter |
 | `sl.generative_and_deformer_modifier_stack` | Generative and deformer modifier stack | Pilha de modificadores generativos e deformadores |
 | `sl.gradient` | Gradient | Gradiente |
+| `sl.gradient_radial` | Radial gradient | Gradiente radial |
+| `sl.gradient_radial_description` | Radial gradient from the click to the release point, fading out | Gradiente radial do clique até o ponto de soltar, esmaecendo |
 | `sl.grid` | Grid | Grade |
 | `sl.ground` | Ground | Chão |
 | `sl.ground_grid` | Ground Grid | Grade de Chão (Ground Grid) |
@@ -805,6 +842,7 @@ Total de chaves de localização cadastradas: **1449**.
 | `sl.icon_style` | Icon Style | Estilo dos Ícones |
 | `sl.icosphere` | Icosphere | Icosfera |
 | `sl.import` | Import | Importar |
+| `sl.import_decal_image` | Import image as decal | Importar imagem como decalque |
 | `sl.individual` | Individual | Individual |
 | `sl.individual_alt_e` | Individual (Alt+E) | Individual (Alt+E) |
 | `sl.insert` | Insert | Inserir |
@@ -829,6 +867,12 @@ Total de chaves de localização cadastradas: **1449**.
 | `sl.keyboard_global_shortcuts_work_tab_focus_bet` | Keyboard: global shortcuts work; Tab focus between controls is still partial. | Teclado: atalhos globais funcionam; foco por Tab entre controles ainda é parcial. |
 | `sl.keyboard_shortcut_profile` | Keyboard Shortcut Profile | Perfil de Atalhos de Teclado |
 | `sl.keyboard_shortcuts` | Keyboard & Shortcuts | Teclado & Atalhos |
+| `sl.keymap_custom_badge` | custom | personalizado |
+| `sl.keymap_delete_profile` | Delete profile | Apagar perfil |
+| `sl.keymap_editor_hint` | Click a shortcut, then press the new keys (Esc cancels). Editing a built-in profile creates your own copy. | Clique num atalho e pressione as novas teclas (Esc cancela). Editar um perfil embutido cria uma cópia sua. |
+| `sl.keymap_new_profile` | New profile from current | Novo perfil a partir do atual |
+| `sl.keymap_press_key` | Press keys… | Pressione as teclas… |
+| `sl.keymap_reset_binding` | Restore default | Restaurar padrão |
 | `sl.knife` | Knife | Knife |
 | `sl.language_region` | Language & Region | Idioma & Região |
 | `sl.layer_locked` | Layer locked | Camada bloqueada |
@@ -898,8 +942,10 @@ Total de chaves de localização cadastradas: **1449**.
 | `sl.paint` | PAINT | PINTAR |
 | `sl.paint_canvas_close` | Close canvas window | Fechar janela do canvas |
 | `sl.paint_canvas_open` | Open the canvas in a floating window | Abrir o canvas em janela flutuante |
+| `sl.paint_isolate_description` | Hide every other object so only the active one shows; click again to bring them back | Esconde os outros objetos para mostrar só o ativo; clique de novo para trazê-los de volta |
 | `sl.paint_pip` | Paint on the 2D canvas with a live 3D inset | Pintar no canvas 2D com inset 3D ao vivo |
 | `sl.paint_pip_back` | Back to the 3D view | Voltar para a vista 3D |
+| `sl.paint_select_description` | Switch the object being painted or pick faces to paint; Shift adds, double-click picks a whole UV island | Troca o objeto que está sendo pintado ou escolhe faces para pintar; Shift soma, duplo clique escolhe a ilha UV inteira |
 | `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
 | `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
 | `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |

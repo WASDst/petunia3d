@@ -35,9 +35,75 @@ pub enum PolyPenError {
     NonManifold,
     #[error("only border edges can be extruded")]
     NotBorderEdge,
+    #[error("the edge does not exist")]
+    MissingEdge,
 }
 
 impl Mesh {
+    /// Divide a aresta `a–b` com um ponto novo em `t` (`0..1`, de `a` para `b`).
+    ///
+    /// O ponto entra em **todas** as faces que usam a aresta (sem T-junction); as
+    /// faces ganham um vértice e mantêm a forma. UV é interpolada por canto e a
+    /// costura (`uv_seams`) é dividida em duas. Devolve o índice do ponto novo.
+    pub fn split_edge(&mut self, a: u32, b: u32, t: f32) -> Result<u32, PolyPenError> {
+        let n = self.verts.len() as u32;
+        if a >= n || b >= n || a == b {
+            return Err(PolyPenError::MissingPoint);
+        }
+        let faces = self.edge_faces(a, b);
+        if faces.is_empty() {
+            return Err(PolyPenError::MissingEdge);
+        }
+        let t = if t.is_finite() {
+            t.clamp(0.02, 0.98)
+        } else {
+            0.5
+        };
+        let pa = self.verts[a as usize].vec();
+        let pb = self.verts[b as usize].vec();
+        let mut vertex = Vertex::new(0.0, 0.0, 0.0);
+        vertex.pos = pa.lerp(pb, t).to_array();
+        for c in 0..3 {
+            vertex.color[c] =
+                self.verts[a as usize].color[c] * (1.0 - t) + self.verts[b as usize].color[c] * t;
+        }
+        let new_index = n;
+        self.verts.push(vertex);
+        for fi in faces {
+            let len = self.faces[fi].verts.len();
+            for k in 0..len {
+                let (from, to) = (self.faces[fi].verts[k], self.faces[fi].verts[(k + 1) % len]);
+                let forward = (from, to) == (a, b);
+                if !forward && (from, to) != (b, a) {
+                    continue;
+                }
+                // fração ao longo de `from → to` no sentido em que a face percorre a aresta
+                let u = if forward { t } else { 1.0 - t };
+                let uv_from = self.faces[fi].uv.get(k).copied().unwrap_or([0.0; 2]);
+                let uv_to = self.faces[fi]
+                    .uv
+                    .get((k + 1) % len)
+                    .copied()
+                    .unwrap_or([0.0; 2]);
+                let uv = [
+                    uv_from[0] + (uv_to[0] - uv_from[0]) * u,
+                    uv_from[1] + (uv_to[1] - uv_from[1]) * u,
+                ];
+                self.faces[fi].verts.insert(k + 1, new_index);
+                if self.faces[fi].uv.len() == len {
+                    self.faces[fi].uv.insert(k + 1, uv);
+                }
+                break;
+            }
+        }
+        if self.uv_seams.remove(&edge_key(a, b)) {
+            self.uv_seams.insert(edge_key(a, new_index));
+            self.uv_seams.insert(edge_key(new_index, b));
+        }
+        self.selected_edges.remove(&edge_key(a, b));
+        Ok(new_index)
+    }
+
     /// Faces que usam cada aresta dirigida `a → b`.
     fn directed_edges(&self) -> HashMap<(u32, u32), usize> {
         let mut edges = HashMap::new();
@@ -324,5 +390,46 @@ mod tests {
         .unwrap();
         assert_eq!(mesh.extrude_edge(1, 2), Err(PolyPenError::NotBorderEdge));
         assert_eq!(mesh.extrude_edge(1, 1), Err(PolyPenError::MissingPoint));
+    }
+
+    #[test]
+    fn split_edge_adds_one_point_to_every_face_that_uses_it() {
+        let mut cube = Mesh::cube(2.0);
+        let (a, b) = (cube.faces[0].verts[0], cube.faces[0].verts[1]);
+        let users = cube.edge_faces(a, b);
+        assert_eq!(users.len(), 2, "uma aresta do cubo tem duas faces");
+        let faces_before = cube.faces.len();
+        let verts_before = cube.verts.len();
+        let p = cube.split_edge(a, b, 0.5).unwrap();
+        assert_eq!(cube.verts.len(), verts_before + 1);
+        assert_eq!(cube.faces.len(), faces_before, "nenhuma face nova");
+        for fi in users {
+            assert_eq!(cube.faces[fi].verts.len(), 5);
+            assert_eq!(cube.faces[fi].uv.len(), 5);
+            assert!(cube.faces[fi].verts.contains(&p));
+        }
+        let mid = (cube.verts[a as usize].vec() + cube.verts[b as usize].vec()) * 0.5;
+        assert!(cube.verts[p as usize].vec().distance(mid) < 1e-5);
+        // as duas metades continuam sendo arestas de duas faces
+        assert_eq!(cube.edge_faces(a, p).len(), 2);
+        assert_eq!(cube.edge_faces(p, b).len(), 2);
+        assert!(cube.edge_faces(a, b).is_empty());
+    }
+
+    #[test]
+    fn split_edge_rejects_missing_edges_and_clamps_t() {
+        let mut cube = Mesh::cube(2.0);
+        assert_eq!(cube.split_edge(0, 99, 0.5), Err(PolyPenError::MissingPoint));
+        // 0 e 2 são diagonais de uma face: não há aresta
+        assert_eq!(cube.split_edge(0, 6, 0.5), Err(PolyPenError::MissingEdge));
+        let (a, b) = (cube.faces[0].verts[0], cube.faces[0].verts[1]);
+        let p = cube.split_edge(a, b, 5.0).unwrap();
+        let t = cube.verts[p as usize]
+            .vec()
+            .distance(cube.verts[a as usize].vec())
+            / cube.verts[b as usize]
+                .vec()
+                .distance(cube.verts[a as usize].vec());
+        assert!(t > 0.9 && t < 1.0, "t fora da faixa é limitado: {t}");
     }
 }
