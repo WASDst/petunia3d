@@ -104,5 +104,5 @@ i18n en/pt-BR em paridade.
 
 ## Licença
 
-MIT — veja [`LICENSE`](LICENSE). Se o projeto te ajuda, considere apoiar em
+GNU GPL v3 ou posterior (GPL-3.0-or-later) — veja [`LICENSE`](LICENSE). Se o projeto te ajuda, considere apoiar em
 [ko-fi.com/raillen](https://ko-fi.com/raillen).
