@@ -9874,6 +9874,170 @@ fn orbiting_refreshes_the_draw_overlays_on_the_window() {
     );
 }
 
+/// Dois quadrados que se cruzam num plano à frente do cubo padrão (z = 5).
+fn bridge_with_two_overlapping_squares() -> SlintUiBridge<PlaceholderViewport> {
+    use petunia_core::{ProfileResource, ProfileWorkplane, SplineResource, ViewPreset};
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.state.session.camera.set_preset(ViewPreset::Front);
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    let plane = ProfileWorkplane {
+        origin: [0.0, 0.0, 5.0],
+        right: [1.0, 0.0, 0.0],
+        up: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    };
+    for (x, y) in [(0.0, 0.0), (1.0, 1.0)] {
+        let points = [
+            [x, y, 0.0],
+            [x + 2.0, y, 0.0],
+            [x + 2.0, y + 2.0, 0.0],
+            [x, y + 2.0, 0.0],
+        ];
+        let spline = SplineResource::from_polyline("curve", &points, true);
+        let profile = ProfileResource::new("profile", spline.id, plane);
+        bridge.state.project.project.splines.push(spline);
+        bridge.state.project.project.profiles.push(profile);
+    }
+    bridge.apply(UiIntent::SetActiveTool("shape_builder".into()));
+    bridge
+}
+
+fn world_pixel<V: PetuniaViewport>(bridge: &SlintUiBridge<V>, x: f32, y: f32) -> [f32; 2] {
+    let ndc = bridge
+        .state
+        .session
+        .camera
+        .project_ndc(glam::Vec3::new(x, y, 5.0));
+    [
+        (ndc.x * 0.5 + 0.5) * bridge.viewport_size[0],
+        (0.5 - ndc.y * 0.5) * bridge.viewport_size[1],
+    ]
+}
+
+fn shape_face_areas<V: PetuniaViewport>(bridge: &SlintUiBridge<V>) -> Vec<f64> {
+    let mut areas: Vec<f64> = bridge
+        .state
+        .shape_planes()
+        .iter()
+        .flat_map(|p| p.regions.iter().map(|r| r.area()))
+        .collect();
+    areas.sort_by(f64::total_cmp);
+    areas
+}
+
+fn drag_between<V: PetuniaViewport>(
+    bridge: &mut SlintUiBridge<V>,
+    from: [f32; 2],
+    to: [f32; 2],
+    ctrl: bool,
+) {
+    bridge.tool_pointer(0, from[0], from[1], false, ctrl);
+    for step in 1..=12 {
+        let t = step as f32 / 12.0;
+        bridge.tool_pointer(
+            1,
+            from[0] + (to[0] - from[0]) * t,
+            from[1] + (to[1] - from[1]) * t,
+            false,
+            ctrl,
+        );
+    }
+}
+
+#[test]
+fn shape_builder_drag_merges_the_touched_faces_in_one_undo_step() {
+    let mut bridge = bridge_with_two_overlapping_squares();
+    assert_eq!(bridge.grammar_tool(), Some(GrammarTool::ShapeBuilder));
+    assert_eq!(shape_face_areas(&bridge), vec![1.0, 3.0, 3.0]);
+    let from = world_pixel(&bridge, 0.5, 0.5);
+    let to = world_pixel(&bridge, 1.5, 1.5);
+    let depth = bridge.state.project.undo.depth().0;
+    drag_between(&mut bridge, from, to, false);
+    assert!(
+        !bridge.region_hover_commands().is_empty(),
+        "as faces tocadas ficam destacadas durante o arrasto"
+    );
+    assert_eq!(
+        shape_face_areas(&bridge),
+        vec![1.0, 3.0, 3.0],
+        "nada muda antes de soltar"
+    );
+    bridge.tool_pointer(2, to[0], to[1], false, false);
+    assert_eq!(shape_face_areas(&bridge), vec![3.0, 4.0]);
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+    assert!(bridge.region_hover_commands().is_empty());
+    assert!(bridge.state.undo());
+    assert_eq!(shape_face_areas(&bridge), vec![1.0, 3.0, 3.0]);
+}
+
+#[test]
+fn shape_builder_escape_cancels_without_touching_the_document() {
+    let mut bridge = bridge_with_two_overlapping_squares();
+    let before = bridge.state.project.project.profiles.len();
+    let from = world_pixel(&bridge, 0.5, 0.5);
+    let to = world_pixel(&bridge, 1.5, 1.5);
+    drag_between(&mut bridge, from, to, false);
+    bridge.tool_pointer(3, to[0], to[1], false, false);
+    assert_eq!(bridge.state.project.project.profiles.len(), before);
+    assert_eq!(shape_face_areas(&bridge), vec![1.0, 3.0, 3.0]);
+    assert!(bridge.region_hover_commands().is_empty());
+}
+
+#[test]
+fn shape_builder_ctrl_drag_deletes_and_click_extracts() {
+    let mut bridge = bridge_with_two_overlapping_squares();
+    let from = world_pixel(&bridge, 0.5, 0.5);
+    let to = world_pixel(&bridge, 0.4, 0.6);
+    drag_between(&mut bridge, from, to, true);
+    bridge.tool_pointer(2, to[0], to[1], false, true);
+    assert_eq!(
+        shape_face_areas(&bridge),
+        vec![1.0, 3.0],
+        "o L do primeiro saiu"
+    );
+
+    let mut bridge = bridge_with_two_overlapping_squares();
+    let click = world_pixel(&bridge, 1.5, 1.5);
+    bridge.tool_pointer(0, click[0], click[1], false, false);
+    bridge.tool_pointer(2, click[0], click[1], false, false);
+    assert_eq!(
+        shape_face_areas(&bridge),
+        vec![1.0, 3.0, 3.0],
+        "extrair não muda a silhueta"
+    );
+}
+
+#[test]
+fn pathfinder_runs_on_the_sketch_plane_and_is_exposed_in_the_context_menu() {
+    let mut bridge = bridge_with_two_overlapping_squares();
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+    assert!(bridge.run_pathfinder(petunia_core::PathfinderOp::Unite));
+    assert_eq!(shape_face_areas(&bridge), vec![7.0]);
+    assert!(bridge.state.undo());
+
+    bridge.context_menu = Some(ContextMenuState {
+        x: 0.0,
+        y: 0.0,
+        asset: uuid::Uuid::nil(),
+        viewport: true,
+        edge: None,
+        face: None,
+    });
+    assert!(bridge.context_menu_action("draw_subtract"));
+    assert_eq!(shape_face_areas(&bridge), vec![3.0]);
+}
+
+#[test]
+fn shape_builder_is_a_draw_only_tool() {
+    let mut bridge = bridge_with_two_overlapping_squares();
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    assert_ne!(
+        bridge.state.session.tools.active_tool, "shape_builder",
+        "o POLY não oferece o Shape Builder"
+    );
+}
+
 #[test]
 fn profile_edge_click_inserts_a_node_and_double_click_toggles_curves() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());

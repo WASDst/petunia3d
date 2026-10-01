@@ -38,10 +38,17 @@ impl RegionPlane {
         self.origin + self.right * p[0] as f32 + self.up * p[1] as f32
     }
 
-    fn to_plane(self, p: Vec3) -> [f64; 2] {
+    pub fn to_plane(self, p: Vec3) -> [f64; 2] {
         let d = p - self.origin;
         [f64::from(d.dot(self.right)), f64::from(d.dot(self.up))]
     }
+}
+
+/// Perfis coplanares e suas polilinhas no espaço do plano.
+pub(crate) struct ProfileGroup {
+    pub plane: RegionPlane,
+    pub profiles: Vec<uuid::Uuid>,
+    pub lines: Vec<Polyline2>,
 }
 
 /// Região sob o cursor.
@@ -116,9 +123,28 @@ pub fn region_at_ray(
 impl AppState {
     /// Planos de perfis com suas regiões fechadas (todas as do documento).
     pub fn profile_region_planes(&self) -> RegionPlanes {
+        self.profile_groups(false)
+            .into_iter()
+            .map(|group| (group.plane, planar_regions(&group.lines)))
+            .filter(|(_, regions)| !regions.is_empty())
+            .collect()
+    }
+
+    /// Perfis agrupados por plano. Com `editable_only`, os usados por um Path
+    /// Generator (como perfil ou como caminho) ficam de fora: o Shape Builder não
+    /// pode substituí-los sem quebrar o gerador.
+    pub(crate) fn profile_groups(&self, editable_only: bool) -> Vec<ProfileGroup> {
         let project = &self.project.project;
-        let mut groups: Vec<(RegionPlane, Vec<Polyline2>)> = Vec::new();
+        let in_use = |profile: &petunia_project::ProfileResource| {
+            project.path_generators.iter().any(|generator| {
+                generator.profile_id == profile.id || generator.path_id == profile.spline_id
+            })
+        };
+        let mut groups: Vec<ProfileGroup> = Vec::new();
         for profile in &project.profiles {
+            if editable_only && in_use(profile) {
+                continue;
+            }
             let Some(spline) = project.get_spline(profile.spline_id) else {
                 continue;
             };
@@ -139,33 +165,31 @@ impl AppState {
                 .map(|p| origin + right * p[0] as f32 + up * p[1] as f32)
                 .collect();
             let normal = normal.normalize();
-            let index = groups.iter().position(|(plane, _)| {
-                plane.normal.dot(normal).abs() > 0.9999
-                    && (origin - plane.origin).dot(plane.normal).abs() < 1.0e-4
+            let index = groups.iter().position(|group| {
+                group.plane.normal.dot(normal).abs() > 0.9999
+                    && (origin - group.plane.origin).dot(group.plane.normal).abs() < 1.0e-4
             });
             let index = index.unwrap_or_else(|| {
-                groups.push((
-                    RegionPlane {
+                groups.push(ProfileGroup {
+                    plane: RegionPlane {
                         origin,
                         right: right.normalize_or_zero(),
                         up: up.normalize_or_zero(),
                         normal,
                     },
-                    Vec::new(),
-                ));
+                    profiles: Vec::new(),
+                    lines: Vec::new(),
+                });
                 groups.len() - 1
             });
-            let plane = groups[index].0;
-            groups[index].1.push(Polyline2 {
+            let plane = groups[index].plane;
+            groups[index].profiles.push(profile.id);
+            groups[index].lines.push(Polyline2 {
                 points: world.iter().map(|p| plane.to_plane(*p)).collect(),
                 closed: spline.closed,
             });
         }
         groups
-            .into_iter()
-            .map(|(plane, lines)| (plane, planar_regions(&lines)))
-            .filter(|(_, regions)| !regions.is_empty())
-            .collect()
     }
 
     /// Região de perfil mais próxima atravessada pelo raio do cursor.

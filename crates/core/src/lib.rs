@@ -29,6 +29,7 @@ pub mod render_revision;
 pub mod rig_commands;
 pub mod schema_contracts;
 pub mod selection;
+pub mod shape_builder;
 pub mod snap;
 pub mod state;
 pub mod tool_session;
@@ -122,6 +123,9 @@ pub use primitive_session::{
 pub use proportional::{ProportionalFalloff, ProportionalSettings, calculate_falloff_weight};
 pub use region_push::{RegionHit, RegionPlane, RegionPlanes, RegionPushError, region_at_ray};
 pub use selection::{SelectMode, Selection, SelectionDomain, Workspace};
+pub use shape_builder::{
+    PathfinderOp, ShapeEdit, ShapeEditCmd, ShapeEditError, ShapeEditReport, ShapePlane,
+};
 pub use snap::{
     SnapElement, SnapQuery, SnapResult, SnapSettings, SnapTarget, snap_point, snap_point_to_edges,
     snap_point_to_faces, snap_point_to_grid, snap_point_to_increment, snap_point_to_vertices,
