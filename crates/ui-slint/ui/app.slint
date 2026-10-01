@@ -1,4 +1,3 @@
-import { Icon, IconDisplay, IconSet } from "@lucide";
 import { ListView, ScrollView } from "std-widgets.slint";
 import { DesignTokens, Motion, Tr } from "tokens.slint";
 import { PetuniaIcons } from "petunia_icons.slint";
@@ -302,7 +301,6 @@ component SplitterHorizontal inherits Rectangle {
 
 /// Botão compacto da barra da viewport (visão e domínio de seleção).
 component ViewportBarButton inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> label;
     in property <string> shortcut: "";
@@ -337,11 +335,6 @@ component ViewportBarButton inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    if root.icon-svg.width == 0: bar-icon := IconDisplay {
-        icon: root.icon;
-        size: 14px;
-        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
     }
     bar-focus := FocusScope {
         key-pressed(event) => {
@@ -784,7 +777,6 @@ component MenuDropdown inherits Rectangle {
 }
 
 component TopAction inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> semantic-label;
     in property <string> shortcut: "";
@@ -819,11 +811,6 @@ component TopAction inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    if root.icon-svg.width == 0: IconDisplay {
-        icon: root.icon;
-        size: 16px;
-        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
     }
     top-focus := FocusScope {
         key-pressed(event) => {
@@ -1114,7 +1101,6 @@ component PartsRowSizeControl inherits Rectangle {
 }
 
 component ToolButton inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> semantic-label;
     in property <string> shortcut: "";
@@ -1146,11 +1132,6 @@ component ToolButton inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    if root.icon-svg.width == 0: IconDisplay {
-        icon: root.icon;
-        size: 16px;
-        stroke: active ? DesignTokens.on-accent : DesignTokens.text-primary;
     }
     tool-focus := FocusScope {
         key-pressed(event) => {
@@ -1590,7 +1571,6 @@ component InspectorSection inherits Rectangle {
 /// Pílula de ícone do rail colapsado do Inspector: 36px, separada das
 /// vizinhas, com hover visível e Tooltip com o nome da seção.
 component InspectorPill inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> semantic-label;
     in property <string> description: "";
@@ -1633,11 +1613,6 @@ component InspectorPill inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    if root.icon-svg.width == 0: IconDisplay {
-        icon: root.icon;
-        size: 17px;
-        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
     }
 
     pill-touch := TouchArea {
@@ -5992,12 +5967,11 @@ export component PetuniaSlintShell inherits Window {
                             spacing: 3px;
                             alignment: center;
                             for domain in [
-                                { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.object"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_and_manipulate_entire_objects_as_disc") },
-                                { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
-                                { id: "EDGE", icon: IconSet.SquareDashed, icon-svg: PetuniaIcons.select-edge, label: Tr.t("sl.edge"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_and_transform_polygonal_boundary_edge") },
-                                { id: "FACE", icon: IconSet.Square, icon-svg: PetuniaIcons.select-face, label: Tr.t("sl.face"), shortcut: root.shortcuts.select-face, description: Tr.t("sl.select_and_transform_polygonal_planar_faces") },
+                                { id: "OBJECT", icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.object"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_and_manipulate_entire_objects_as_disc") },
+                                { id: "POINT", icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
+                                { id: "EDGE", icon-svg: PetuniaIcons.select-edge, label: Tr.t("sl.edge"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_and_transform_polygonal_boundary_edge") },
+                                { id: "FACE", icon-svg: PetuniaIcons.select-face, label: Tr.t("sl.face"), shortcut: root.shortcuts.select-face, description: Tr.t("sl.select_and_transform_polygonal_planar_faces") },
                             ]: ViewportBarButton {
-                                icon: domain.icon;
                                 icon-svg: domain.icon-svg;
                                 label: domain.label;
                                 shortcut: domain.shortcut;
@@ -7545,11 +7519,11 @@ export component PetuniaSlintShell inherits Window {
                                 spacing: 4px;
                                 alignment: stretch;
                                 for tool in [
-                                    { id: "select", label: Tr.t("sl.select"), icon: IconSet.MousePointer2 },
-                                    { id: "move", label: Tr.t("sl.move"), icon: IconSet.Move3d },
-                                    { id: "rotate", label: Tr.t("sl.rotate"), icon: IconSet.RotateCcw },
-                                    { id: "scale", label: Tr.t("sl.scale"), icon: IconSet.Maximize2 },
-                                    { id: "measure", label: Tr.t("sl.measure"), icon: IconSet.ArrowUpDown },
+                                    { id: "select", label: Tr.t("sl.select"), icon: PetuniaIcons.pointer },
+                                    { id: "move", label: Tr.t("sl.move"), icon: PetuniaIcons.move },
+                                    { id: "rotate", label: Tr.t("sl.rotate"), icon: PetuniaIcons.reset-view },
+                                    { id: "scale", label: Tr.t("sl.scale"), icon: PetuniaIcons.expand },
+                                    { id: "measure", label: Tr.t("sl.measure"), icon: PetuniaIcons.sort-updown },
                                 ]: Rectangle {
                                     horizontal-stretch: 1;
                                     height: 28px;
@@ -7560,8 +7534,8 @@ export component PetuniaSlintShell inherits Window {
                                     HorizontalLayout {
                                         alignment: center;
                                         spacing: 4px;
-                                        IconDisplay {
-                                            icon: tool.icon;
+                                        PIcon {
+                                            source: tool.icon;
                                             size: 13px;
                                             stroke: root.active-tool == tool.id ? DesignTokens.accent : DesignTokens.text-primary;
                                         }

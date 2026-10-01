@@ -35,7 +35,6 @@ slint = { version = "=1.18.0", default-features = false, features = [
 ] }
 [build-dependencies]
 slint-build = { version = "=1.18.0", default-features = false, features = ["compat-1-18"] }
-lucide-slint = "=1.47.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }

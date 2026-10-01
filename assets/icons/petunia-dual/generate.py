@@ -319,15 +319,28 @@ for key, target in {
     if key not in ICONS:
         alias(key, target, key.replace('_', ' ').title())
 
-for number, source, label in [
-    (1, 'transform', 'Tool'), (2, 'render', 'Render'), (3, 'output', 'Output'),
-    (4, 'paint_layer', 'View Layer'), (5, 'hierarchy', 'Scene'),
-    (6, 'shading_rendered', 'World'), (7, 'collection', 'Collection'),
-    (8, 'cube', 'Object'), (9, 'modifier', 'Modifier'),
-    (10, 'object_mesh', 'Data'), (11, 'material', 'Material'),
-    (12, 'texture', 'Texture'), (13, 'particles', 'Particles'),
-    (14, 'bone', 'Rig'), (15, 'paint_3d', 'Paint')]:
-    alias(f'data_tab_{number:02}', source, label, 'Properties')
+PR = 'Properties'
+WRENCH = 'M14.7 6.3a4 4 0 0 0 5 5L10 21a2.1 2.1 0 0 1-3-3z'
+add('data_tab_01', PR, 'Tool', ink(p(WRENCH), p('M14.7 6.3 17 4l3 3-2.3 2.3')), solid(p(WRENCH)) + ink(p('M14.7 6.3 17 4l3 3-2.3 2.3')))
+CLAP = 'M3 9h18v11H3zM3 9l2-5 4 1M9 5l-1.5 4M13 5.5 11.5 9M17 6.5 15.5 9'
+add('data_tab_02', PR, 'Render', ink(p(CLAP)), solid(r(3, 9, 18, 11, 1)) + ink(p('M3 9l2-5 4 1M9 5l-1.5 4M13 5.5 11.5 9M17 6.5 15.5 9')))
+PRINT = 'M7 9V3h10v6M6 18H4v-7h16v7h-2M7 14h10v7H7z'
+add('data_tab_03', PR, 'Output', ink(p(PRINT)), solid(p('M4 11h16v7h-2v-4H6v4H4z')) + ink(p('M7 9V3h10v6M7 14h10v7H7z')))
+add('data_tab_04', PR, 'View Layer', ink(p('M12 3 3 8l9 5 9-5zM3 13l9 5 9-5')), solid(p('M12 3 3 8l9 5 9-5z')) + ink(p('M3 13l9 5 9-5')))
+add('data_tab_05', PR, 'Scene', ink(p('M4 9l5-3 5 3v6l-5 3-5-3zM4 9l5 3 5-3M9 12v6'), c(18, 17, 3.5)), solid(p('M4 9l5-3 5 3v6l-5 3-5-3z')) + solid(c(18, 17, 3.8)))
+add('data_tab_06', PR, 'World', ink(c(12, 12, 5.5), p('M3 14c0-3 4-5 9-5s9 2 9 5-4 5-9 5')), solid(c(12, 12, 6)) + ink(p('M3 14c0-3 4-5 9-5s9 2 9 5-4 5-9 5')))
+add('data_tab_07', PR, 'Collection', ink(r(4, 9, 16, 11, 1.5), p('M7 6h10M9.5 3h5')), solid(r(4, 9, 16, 11, 1.5)) + ink(p('M7 6h10M9.5 3h5')))
+add('data_tab_08', PR, 'Object', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7')) + solid(c(12, 12, 1.8)), solid(p(CUBE)) + solid(c(12, 12, 2, fill='#252735')))
+WAND = 'M4 20 15 9M14 4v3M12.5 5.5h3M19 10v3M17.5 11.5h3'
+add('data_tab_09', PR, 'Modifier', ink(p(WAND)), ink(p(WAND, stroke_width='2.5')))
+MESHD = 'M12 3 3 19h18zM12 3v16M7.5 11h9'
+add('data_tab_10', PR, 'Data', ink(p(MESHD)) + solid(c(12, 3, 1.6), c(3, 19, 1.6), c(21, 19, 1.6)), solid(p('M12 3 3 19h18z')) + ink(p('M12 3v16M7.5 11h9', stroke='#252735')))
+add('data_tab_11', PR, 'Material', ink(c(12, 12, 9), p('M8 9a5 5 0 0 1 4-3')) + solid(c(16, 15.5, 1.3)), solid(c(12, 12, 9)) + ink(p('M8 9a5 5 0 0 1 4-3', stroke='#252735')))
+add('data_tab_12', PR, 'Texture', ink(r(3, 3, 18, 18, 1.5), p('M12 3v18M3 12h18')) + solid(r(3, 3, 9, 9, 0), r(12, 12, 9, 9, 0)), solid(r(3, 3, 9, 9, 1)) + solid(r(12, 12, 9, 9, 1)) + ink(r(3, 3, 18, 18, 1.5)))
+add('data_tab_13', PR, 'Particles', ink(c(6, 7, 1.6), c(14, 5, 1.2), c(19, 10, 1.8), c(9, 13, 2), c(16, 17, 1.4), c(5, 19, 1.2)), solid(c(6, 7, 2.2), c(14, 5, 1.8), c(19, 10, 2.4), c(9, 13, 2.8), c(16, 17, 2), c(5, 19, 1.8)))
+add('data_tab_14', PR, 'Rig', ink(p('M7.5 16.5 16.5 7.5'), c(6, 18, 2.4), c(18, 6, 2.4), c(12, 12, 1.6)), ink(p('M7.5 16.5 16.5 7.5', stroke_width='2.5')) + solid(c(6, 18, 3), c(18, 6, 3), c(12, 12, 2)))
+BRUSH = 'M4 20c3 0 4-1 4-3a3 3 0 0 1 3-3l8-8a2.1 2.1 0 0 0-3-3l-8 8a3 3 0 0 1-3 3c0 3-1 4-1 6'
+add('data_tab_15', PR, 'Paint', ink(p(BRUSH)), solid(p('M4 20c3 0 4-1 4-3a3 3 0 0 1 3-3l-2-2a3 3 0 0 1-3 3c0 3-1 4-2 5z')) + ink(p('M11 14l8-8a2.1 2.1 0 0 0-3-3l-8 8')))
 
 
 COMMAND_OVERRIDES = {

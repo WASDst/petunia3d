@@ -4477,12 +4477,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lucide-slint"
-version = "1.47.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4dfa1b264bc706c9e6ec1f6c3c5bfec514f89dcf61477cb8174956b6d8e31a4"
-
-[[package]]
 name = "lyon_algorithms"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5841,7 +5835,6 @@ dependencies = [
  "glam 0.27.0",
  "i-slint-backend-testing",
  "image",
- "lucide-slint",
  "petunia_config",
  "petunia_core",
  "petunia_mesh",
