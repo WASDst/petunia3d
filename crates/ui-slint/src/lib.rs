@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 pub mod animate;
 mod brush_panel;
+pub mod color_wheel;
 pub mod commands;
 mod draw_shapes;
 pub mod files;
@@ -6374,6 +6375,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Define a cor customizada de overlay de seleção de uma parte (`None` para usar a geral).
+    pub fn set_part_selection_color(&mut self, asset_id_str: &str, color: Option<[u8; 3]>) -> bool {
+        if let Ok(id) = uuid::Uuid::parse_str(asset_id_str) {
+            let res = self
+                .state
+                .project
+                .project
+                .set_asset_selection_overlay_color(id, color);
+            if res {
+                self.state.mark_dirty();
+            }
+            res
+        } else {
+            false
+        }
+    }
+
     pub fn set_selection_thickness(&mut self, thickness: f32) -> bool {
         if !thickness.is_finite() {
             return false;
@@ -9570,6 +9588,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.apply(UiIntent::SetActiveTool("slice".to_string()));
                     true
                 }
+                "separate_selection" => {
+                    let _ = self.execute_core_command("model.separate_selection");
+                    true
+                }
                 "flip_normals" => {
                     let _ = self.execute_core_command("model.flip_normals");
                     true
@@ -11284,6 +11306,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             CommandId::OriginToSelection => self.apply(UiIntent::SetOriginSelection),
             CommandId::GeometryToOrigin => self.apply(UiIntent::SetGeometryToOrigin),
             CommandId::ToggleEditPivot => self.apply(UiIntent::ToggleEditPivot),
+            CommandId::SeparateSelection => {
+                let _ = self.execute_core_command("model.separate_selection");
+            }
         }
     }
 

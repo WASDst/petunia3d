@@ -478,6 +478,7 @@ pub struct Renderer {
     xray: bool,
     xray_opacity: f32,
     selection_rgb: [u8; 3],
+    active_selection_rgb: [u8; 3],
     selection_thickness: f32,
     ref_pipeline: wgpu::RenderPipeline,
     ref_xray_pipeline: wgpu::RenderPipeline,
@@ -1596,6 +1597,7 @@ impl Renderer {
             xray: false,
             xray_opacity: 0.42,
             selection_rgb: [233, 106, 0],
+            active_selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
             ref_pipeline,
             ref_xray_pipeline,
@@ -1731,9 +1733,12 @@ impl Renderer {
             return;
         }
         let rgb = self.selection_rgb.map(|channel| channel as f32 / 255.0);
+        let active_rgb = self
+            .active_selection_rgb
+            .map(|channel| channel as f32 / 255.0);
         let uniform = OutlineUniform {
             color: [rgb[0] * 0.62, rgb[1] * 0.62, rgb[2] * 0.62, 1.0],
-            active_color: [rgb[0], rgb[1], rgb[2], 1.0],
+            active_color: [active_rgb[0], active_rgb[1], active_rgb[2], 1.0],
             params: [
                 self.selection_thickness.clamp(1.0, 4.0) * self.pixel_ratio,
                 0.0,
@@ -1930,6 +1935,10 @@ impl Renderer {
     ) {
         puffin::profile_function!();
         self.xray = xray;
+        self.active_selection_rgb = scene
+            .active()
+            .and_then(|a| a.effective_selection_overlay_color())
+            .unwrap_or(self.selection_rgb);
         // Trocar de domínio muda a camada de seleção, não só a malha.
         let domain_changed = self.last_domain != Some(edit_domain);
         self.last_domain = Some(edit_domain);
@@ -2316,9 +2325,11 @@ impl Renderer {
         if let Some(asset) = scene.assets.get(scene.active) {
             let mesh = mesh_to_draw(pose.as_deref(), asset);
             let domain = edit_domain;
-            // Seleção: laranja quente com alpha, como Blender/C4D. Legível
-            // sobre qualquer shading porque o shader não aplica luz.
-            let selected = self.selection_rgb.map(|channel| channel as f32 / 255.0);
+            // Seleção: respeita a cor customizada da parte se configurada.
+            let active_rgb = asset
+                .effective_selection_overlay_color()
+                .unwrap_or(self.selection_rgb);
+            let selected = active_rgb.map(|channel| channel as f32 / 255.0);
             let face_color = [selected[0], selected[1], selected[2], 0.32];
             let edge_color = [selected[0], selected[1], selected[2], 1.0];
             let point_color = edge_color;

@@ -1941,6 +1941,10 @@ impl Command for SeparateSelectionCmd {
         true
     }
 
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::ALL
+    }
+
     fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
         let Some(mesh) = state.project.active_mesh() else {
             return Err("No active mesh");
@@ -1956,7 +1960,25 @@ impl Command for SeparateSelectionCmd {
             return Err(CommandError::NoActiveAsset);
         };
         let orig_name = active_asset.name.clone();
-        let orig_mesh = active_asset.mesh.clone();
+        let mut orig_mesh = active_asset.mesh.clone();
+        let mat_id = active_asset.material_id;
+        let base_color = active_asset.base_color;
+        let collection = active_asset.collection.clone();
+        let custom_overlay_color = active_asset.selection_overlay_color;
+
+        let has_selected_faces = orig_mesh.faces.iter().any(|f| f.selected);
+        if has_selected_faces {
+            orig_mesh.sync_vert_selection_from_faces();
+        } else if !orig_mesh.selected_edges.is_empty() {
+            for &(a, b) in &orig_mesh.selected_edges {
+                if let Some(v) = orig_mesh.verts.get_mut(a as usize) {
+                    v.selected = true;
+                }
+                if let Some(v) = orig_mesh.verts.get_mut(b as usize) {
+                    v.selected = true;
+                }
+            }
+        }
 
         // 1. Constrói a malha separada a partir dos elementos selecionados
         let mut sep_mesh = petunia_mesh::Mesh::default();
@@ -1973,26 +1995,52 @@ impl Command for SeparateSelectionCmd {
         }
 
         for f in &orig_mesh.faces {
-            if f.selected || f.verts.iter().all(|vi| vert_map.contains_key(vi)) {
-                let new_verts: Vec<u32> = f.verts.iter().map(|vi| vert_map[vi]).collect();
-                let mut nf = petunia_mesh::Face::with_uv(new_verts, f.uv.clone());
-                nf.selected = false;
-                sep_mesh.push_face(nf);
+            let include_face = if has_selected_faces {
+                f.selected
+            } else {
+                f.verts.iter().all(|vi| vert_map.contains_key(vi))
+            };
+            if include_face {
+                if let Some(new_verts) = f
+                    .verts
+                    .iter()
+                    .map(|vi| vert_map.get(vi).copied())
+                    .collect::<Option<Vec<u32>>>()
+                {
+                    let mut nf = petunia_mesh::Face::with_uv(new_verts, f.uv.clone());
+                    nf.selected = false;
+                    nf.material_slot = f.material_slot;
+                    sep_mesh.push_face(nf);
+                }
             }
         }
 
-        if sep_mesh.verts.is_empty() || sep_mesh.faces.is_empty() {
+        if sep_mesh.verts.is_empty() {
             return Err(CommandError::Execution("No geometry separated".into()));
         }
+        sep_mesh.validate();
 
         // 2. Remove os elementos selecionados da malha original
         if let Some(active_mesh) = state.project.active_mesh_mut() {
+            // Aplica a mesma sincronização antes de deletar
+            if active_mesh.faces.iter().any(|f| f.selected) {
+                active_mesh.sync_vert_selection_from_faces();
+            }
             active_mesh.delete_selected();
+            active_mesh.validate();
         }
 
         // 3. Adiciona a malha separada como novo objeto/asset na cena
         let new_name = format!("{}_sep", orig_name);
-        state.project.add(&new_name, sep_mesh);
+        let mut new_asset = petunia_project::Asset::new(&new_name, sep_mesh);
+        new_asset.material_id = mat_id;
+        new_asset.base_color = base_color;
+        new_asset.collection = collection;
+        new_asset.selection_overlay_color = custom_overlay_color;
+        state.project.assets.push(new_asset);
+        state.project.active = state.project.assets.len() - 1;
+        state.sync_selection();
+        state.emit_mesh_changed();
         state.set_status(format!("Separated selection into {}", new_name));
         Ok(())
     }

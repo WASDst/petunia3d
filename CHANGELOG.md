@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Cor de overlay de seleção por parte e separar parte da seleção (01/10/2026)
+- **Overlay customizado por parte**: cada `Asset` ganha o campo persistente opcional `selection_overlay_color: Option<[u8; 3]>`. Ao criar partes, herdam `None` (usam a cor global do projeto); na lista de partes (Inspector e Outliner flutuante), após o botão de bloqueio (lock), um quadrado colorido exibe a cor ativa da parte e abre popover com roda de cores circular HSV interativa (`crates/ui-slint/src/color_wheel.rs`), presets rápidos, input hex e botão de restaurar cor padrão (`None`).
+- **Renderização com cores de parte**: os renderers WGPU, software e a camada de overlay 2D do Slint usam a cor da parte ativa com fallback transparente para a cor global.
+- **Criar parte a partir da seleção**: botão "Criar nova parte da seleção" adicionado à seção Parts e atalho contextual no menu do viewport (`P` / `model.separate_selection` / `SeparateSelectionCmd`), permitindo subdividir malhas complexas em partes independentes preservando materiais, UVs e histórico transacional de Undo/Redo.
+- **Testes**: testes unitários para a roda de cores HSV, testes de integração de separação de geometria por faces e por vértices com ciclo de Undo/Redo.
+
 ### Correção: toggle do wireframe overlay (01/10/2026)
 - **Causa-raiz**: no renderer WGPU, `edge_mode == Topology` (modo POLY, o padrão) forçava todas as arestas finas sempre visíveis — o toggle virava no-op justamente no workspace padrão. Apurado por eliminação (comando, sync de propriedades, `TouchArea`, cache de fingerprint e viewport software, todos conformes) + leitura do código.
 - **Fix** (`petunia_render_wgpu::edge_overlay_visible`, cap. 05 "Overlays, não novos modos" + Princípio de UX): o toggle é o mestre das arestas finas em qualquer modo; DRAW/POLY contribuem com as arestas de feição como leitura de forma/topologia. Default (overlay ON) pixel-idêntico ao anterior; OFF agora limpa as finas em todos os modos.

@@ -632,6 +632,7 @@ mod tests {
                 paint_stack: None,
                 eval_cache: None,
                 parametric: None,
+                selection_overlay_color: None,
             }],
             active: 42,
             palette: vec![],

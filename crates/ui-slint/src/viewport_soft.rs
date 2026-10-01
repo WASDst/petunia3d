@@ -391,8 +391,11 @@ impl PetuniaViewport for Software3dViewport {
                 } else if *asset_index == project.active
                     && state.selection_domain == SelectionDomain::Face
                 {
+                    let sel_rgb = asset
+                        .effective_selection_overlay_color()
+                        .unwrap_or(state.selection_rgb);
                     if face.selected {
-                        Some((state.selection_rgb.map(|value| value as f32 / 255.0), 0.32))
+                        Some((sel_rgb.map(|value| value as f32 / 255.0), 0.32))
                     } else if state.hover == HoverTarget::Face(fi) {
                         Some(([0.49, 0.86, 1.0], 0.2))
                     } else {
@@ -486,6 +489,9 @@ impl PetuniaViewport for Software3dViewport {
         for (asset_index, asset, mesh) in &meshes {
             let active = *asset_index == project.active;
             let is_boolean_operand = state.boolean_operand == Some(asset.id);
+            let sel_rgb = asset
+                .effective_selection_overlay_color()
+                .unwrap_or(state.selection_rgb);
             if state.show_wireframe_overlay
                 || state.show_triangulation
                 || state.shading == Shading::Wireframe
@@ -502,7 +508,7 @@ impl PetuniaViewport for Software3dViewport {
                     let color = if is_boolean_operand {
                         [0.71, 0.55, 1.0]
                     } else if selected {
-                        state.selection_rgb.map(|value| value as f32 / 255.0)
+                        sel_rgb.map(|value| value as f32 / 255.0)
                     } else if is_seam {
                         [0.96, 0.48, 0.12]
                     } else if hover {
@@ -560,7 +566,7 @@ impl PetuniaViewport for Software3dViewport {
                     } else if vertex.selected {
                         (
                             (state.selection_thickness * 2.0).min(6.0).round() as i32,
-                            state.selection_rgb.map(|value| value as f32 / 255.0),
+                            sel_rgb.map(|value| value as f32 / 255.0),
                         )
                     } else {
                         (

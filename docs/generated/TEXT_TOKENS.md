@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1508**.
+Total de chaves de localização cadastradas: **1511**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -956,6 +956,7 @@ Total de chaves de localização cadastradas: **1508**.
 | `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
 | `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
 | `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |
+| `sl.part_selection_color` | Part selection color | Cor de seleção da parte |
 | `sl.partial_coverage_menus_and_tooltips_are_tran` | Partial coverage: menus and tooltips are translated; several status messages still mix Portuguese and English. | Cobertura parcial: menus e tooltips traduzidos; várias mensagens de status ainda misturam português e inglês. |
 | `sl.parts` | Parts | Peças |
 | `sl.persp` | Persp | Persp |
@@ -1025,6 +1026,7 @@ Total de chaves de localização cadastradas: **1508**.
 | `sl.reset_0_0_0` | Reset (0,0,0) | Resetar (0,0,0) |
 | `sl.reset_camera_zoom_orientation_and_position_t` | Reset camera zoom, orientation and position to default origin | Restaura zoom, orientação e posição da câmera para a origem padrão |
 | `sl.reset_e96a00` | Reset (#E96A00) | Reset (#E96A00) |
+| `sl.reset_to_default_color` | Reset to default color | Restaurar cor padrão |
 | `sl.reset_view` | Reset view | Resetar vista |
 | `sl.resize_active_selection_proportionally_or_al` | Resize active selection proportionally or along specific axes | Redimensiona a seleção ativa de forma proporcional ou por eixo |
 | `sl.resize_panel_height` | Resize panel height | Redimensionar altura do painel |
@@ -1068,6 +1070,7 @@ Total de chaves de localização cadastradas: **1508**.
 | `sl.select_second_part_to_combine` | Select second part to Combine: | Selecione a segunda parte para combinar: |
 | `sl.select_uv_vertices_edges_and_polygon_islands` | Select UV vertices, edges and polygon islands | Seleciona vértices, arestas e ilhas de polígonos UV |
 | `sl.semi_transparent_surfaces_allowing_selection` | Semi-transparent surfaces allowing selection of occluded geometry | Superfícies semitransparentes que permitem selecionar geometria oculta |
+| `sl.separate_selection` | Separate to new part | Criar nova parte da seleção |
 | `sl.set_as_boolean_operand` | Set as Boolean Operand | Definir como operando booleano |
 | `sl.set_origin` | Set Origin | Definir origem |
 | `sl.settings` | Settings | Configurações |

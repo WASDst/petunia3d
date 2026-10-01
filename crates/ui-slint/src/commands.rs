@@ -49,6 +49,7 @@ pub enum CommandId {
     OriginToSelection,
     GeometryToOrigin,
     ToggleEditPivot,
+    SeparateSelection,
 }
 
 impl CommandId {
@@ -99,6 +100,7 @@ impl CommandId {
             Self::OriginToSelection => "object.origin_to_selection",
             Self::GeometryToOrigin => "object.geometry_to_origin",
             Self::ToggleEditPivot => "object.toggle_edit_pivot",
+            Self::SeparateSelection => "model.separate_selection",
         }
     }
 
@@ -149,6 +151,7 @@ impl CommandId {
             "object.origin_to_selection" => Some(Self::OriginToSelection),
             "object.geometry_to_origin" => Some(Self::GeometryToOrigin),
             "object.toggle_edit_pivot" => Some(Self::ToggleEditPivot),
+            "model.separate_selection" => Some(Self::SeparateSelection),
             _ => None,
         }
     }
@@ -434,6 +437,12 @@ impl CommandRegistry {
                 id: CommandId::ToggleEditPivot,
                 label_key: "pivot.edit_pivot",
                 shortcut: Some("Insert"),
+                workspace: Some(Workspace::Model),
+            },
+            CommandDescriptor {
+                id: CommandId::SeparateSelection,
+                label_key: "commands.separate",
+                shortcut: Some("P"),
                 workspace: Some(Workspace::Model),
             },
         ]

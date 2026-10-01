@@ -2183,3 +2183,44 @@ fn shade_smooth_is_per_object_transactional_and_persistent() {
         .unwrap();
     assert!(!state.project.project.is_smooth_shaded(id));
 }
+
+#[test]
+fn separate_selection_creates_new_part_from_selected_faces() {
+    use petunia_core::{AppState, SeparateSelectionCmd};
+    let mut state = AppState::new("en");
+    // Cube has 6 faces. Select 2 faces.
+    state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+    state.project.active_mesh_mut().unwrap().faces[1].selected = true;
+
+    let initial_assets = state.project.assets.len();
+    state.dispatch(&SeparateSelectionCmd).unwrap();
+
+    assert_eq!(state.project.assets.len(), initial_assets + 1);
+    let sep_asset = state.project.active().unwrap();
+    assert!(sep_asset.name.contains("_sep"));
+    assert_eq!(sep_asset.mesh.faces.len(), 2);
+    // Original cube now has 4 faces
+    assert_eq!(state.project.assets[0].mesh.faces.len(), 4);
+
+    // Undo restores the original mesh and drops the separated part
+    assert!(state.undo());
+    assert_eq!(state.project.assets.len(), initial_assets);
+    assert_eq!(state.project.assets[0].mesh.faces.len(), 6);
+}
+
+#[test]
+fn separate_selection_with_vertex_selection() {
+    use petunia_core::{AppState, SeparateSelectionCmd};
+    let mut state = AppState::new("en");
+    // Select top 4 vertices of a cube (which form face 1)
+    let top_indices: Vec<u32> = state.project.active_mesh().unwrap().faces[1].verts.clone();
+    for &i in &top_indices {
+        state.project.active_mesh_mut().unwrap().verts[i as usize].selected = true;
+    }
+
+    state.dispatch(&SeparateSelectionCmd).unwrap();
+    assert_eq!(state.project.assets.len(), 2);
+    let sep_asset = state.project.active().unwrap();
+    assert_eq!(sep_asset.mesh.faces.len(), 1);
+    assert_eq!(sep_asset.mesh.verts.len(), 4);
+}

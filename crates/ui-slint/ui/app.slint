@@ -85,6 +85,8 @@ export struct SceneItem {
     active: bool,
     verts: int,
     tris: int,
+    has-custom-color: bool,
+    custom-color: color,
 }
 
 export struct PrefabItem {
@@ -2050,6 +2052,8 @@ component PartsBody inherits VerticalLayout {
     callback scene-toggle-visibility(string);
     callback scene-toggle-lock(string);
     callback scene-context-requested(string, float, float);
+    callback part-color-picker-open(string);
+    callback separate-selection-requested;
     callback rename-edited(string);
     callback rename-committed(string);
     spacing: 6px;
@@ -2146,7 +2150,52 @@ component PartsBody inherits VerticalLayout {
                     IconDisplay { icon: item.locked ? IconSet.Lock : IconSet.LockOpen; size: 13px; stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted; }
                     TouchArea { clicked => { root.scene-toggle-lock(item.id); } }
                 }
+                Rectangle {
+                    width: 22px; height: 22px;
+                    accessible-role: button;
+                    accessible-label: Tr.t("sl.part_selection_color");
+                    Rectangle {
+                        width: 13px; height: 13px;
+                        border-radius: 3px;
+                        background: item.has-custom-color ? item.custom-color : DesignTokens.selection;
+                        border-width: 1px;
+                        border-color: item.has-custom-color ? DesignTokens.text-primary : DesignTokens.border;
+                    }
+                    TouchArea {
+                        clicked => {
+                            root.part-color-picker-open(item.id);
+                        }
+                    }
+                }
             }
+        }
+    }
+    Rectangle {
+        height: 24px;
+        border-radius: 4px;
+        background: sep-btn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        accessible-role: button;
+        accessible-label: Tr.t("sl.separate_selection");
+        HorizontalLayout {
+            alignment: center;
+            spacing: 5px;
+            IconDisplay {
+                icon: IconSet.Copy;
+                size: 11px;
+                stroke: DesignTokens.text-primary;
+            }
+            Text {
+                text: Tr.t("sl.separate_selection");
+                color: DesignTokens.text-primary;
+                font-size: 10px;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+        sep-btn-touch := TouchArea {
+            clicked => { root.separate-selection-requested(); }
         }
     }
 }
@@ -3477,6 +3526,15 @@ export component PetuniaSlintShell inherits Window {
     in-out property <image> split-view-image;
     in-out property <bool> has-gpu-viewport: false;
 
+    in-out property <bool> part-color-popover-open: false;
+    in-out property <string> part-color-popover-id: "";
+    in-out property <string> part-color-popover-name: "";
+    in-out property <color> part-color-preview: DesignTokens.selection;
+    in-out property <string> part-color-hex: "#E96A00";
+    in-out property <bool> part-color-has-custom: false;
+    in-out property <image> color-wheel-image;
+    in-out property <color> active-selection-color: DesignTokens.selection-active;
+
     in-out property <[CommandItem]> command-results: [];
     in-out property <string> command-query: "";
     property <int> command-selection: 0;
@@ -4338,6 +4396,12 @@ export component PetuniaSlintShell inherits Window {
     callback paste-requested();
     callback inspector-width-changed(float);
     callback asset-library-height-changed(float);
+    callback part-color-picker-open(string);
+    callback part-color-wheel-interacted(float, float);
+    callback part-color-hex-entered(string);
+    callback part-color-preset-clicked(color);
+    callback part-color-reset-requested();
+    callback separate-selection-requested;
     callback rename-committed(string);
     callback rename-edited(string);
     callback rename-cancelled;
@@ -5152,7 +5216,7 @@ export component PetuniaSlintShell inherits Window {
                     if selection-overlay-visible: Path {
                         fit: ImageFit.preserve;
                         fill: transparent;
-                        stroke: DesignTokens.selection-active;
+                        stroke: root.active-selection-color;
                         stroke-width: root.selection-thickness * 1.2 * 1px;
                         commands: root.selection-active-outline-commands;
                     }
@@ -5164,7 +5228,7 @@ export component PetuniaSlintShell inherits Window {
                     }
                     if selection-overlay-visible: Path {
                         fit: ImageFit.preserve;
-                        fill: root.selection-color;
+                        fill: root.active-selection-color;
                         stroke: transparent;
                         commands: root.selection-point-commands;
                     }
@@ -8379,6 +8443,8 @@ export component PetuniaSlintShell inherits Window {
                                     scene-toggle-visibility(id) => { root.scene-toggle-visibility(id); }
                                     scene-toggle-lock(id) => { root.scene-toggle-lock(id); }
                                     scene-context-requested(id, x, y) => { root.scene-context-requested(id, x, y); }
+                                    part-color-picker-open(id) => { root.part-color-picker-open(id); }
+                                    separate-selection-requested => { root.separate-selection-requested(); }
                                     rename-edited(text) => { root.rename-edited(text); }
                                     rename-committed(text) => { root.rename-committed(text); }
                                 }
@@ -10768,18 +10834,38 @@ export component PetuniaSlintShell inherits Window {
                                     }
                                 }
 
-                                Rectangle {
-                                    width: 20px;
-                                    height: 20px;
-                                    IconDisplay {
-                                        icon: item.locked ? IconSet.Lock : IconSet.LockOpen;
-                                        size: 13px;
-                                        stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted;
-                                    }
-                                    TouchArea {
-                                        clicked => { root.scene-toggle-lock(item.id); }
-                                    }
-                                }
+                                 Rectangle {
+                                     width: 20px;
+                                     height: 20px;
+                                     IconDisplay {
+                                         icon: item.locked ? IconSet.Lock : IconSet.LockOpen;
+                                         size: 13px;
+                                         stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                                     }
+                                     TouchArea {
+                                         clicked => { root.scene-toggle-lock(item.id); }
+                                     }
+                                 }
+
+                                 Rectangle {
+                                     width: 20px;
+                                     height: 20px;
+                                     accessible-role: button;
+                                     accessible-label: Tr.t("sl.part_selection_color");
+                                     Rectangle {
+                                         width: 13px;
+                                         height: 13px;
+                                         border-radius: 3px;
+                                         background: item.has-custom-color ? item.custom-color : DesignTokens.selection;
+                                         border-width: 1px;
+                                         border-color: item.has-custom-color ? DesignTokens.text-primary : DesignTokens.border;
+                                     }
+                                     TouchArea {
+                                         clicked => {
+                                             root.part-color-picker-open(item.id);
+                                         }
+                                     }
+                                 }
                             }
                         }
                     }
@@ -11067,6 +11153,165 @@ export component PetuniaSlintShell inherits Window {
             }
         }
 
+        // Popover da roda de cores para seleção de parte
+        if part-color-popover-open: Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+
+            TouchArea {
+                clicked => { root.part-color-popover-open = false; }
+            }
+
+            Rectangle {
+                x: min(max(8px, parent.width - self.width - 340px), parent.width - self.width - 8px);
+                y: 80px;
+                width: 220px;
+                height: part-color-layout.preferred-height + 20px;
+                border-radius: 8px;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                drop-shadow-blur: 14px;
+                drop-shadow-color: #00000090;
+                drop-shadow-offset-y: 4px;
+
+                TouchArea { clicked => {} }
+
+                part-color-layout := VerticalLayout {
+                    width: parent.width;
+                    padding: 10px;
+                    spacing: 8px;
+
+                    HorizontalLayout {
+                        Text {
+                            text: root.part-color-popover-name != "" ? "\{Tr.t("sl.part_selection_color")}: \{root.part-color-popover-name}" : Tr.t("sl.part_selection_color");
+                            color: DesignTokens.text-primary;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                        Rectangle {
+                            width: 18px; height: 18px; border-radius: 3px;
+                            IconDisplay { icon: IconSet.X; size: 12px; stroke: DesignTokens.text-secondary; }
+                            TouchArea { clicked => { root.part-color-popover-open = false; } }
+                        }
+                    }
+
+                    // Roda de cores circular interativa
+                    HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 130px;
+                            height: 130px;
+                            border-radius: 65px;
+                            clip: true;
+
+                            Image {
+                                width: 130px;
+                                height: 130px;
+                                source: root.color-wheel-image;
+                            }
+
+                            TouchArea {
+                                pointer-event(event) => {
+                                    if event.button == PointerEventButton.left && (event.kind == PointerEventKind.down || event.kind == PointerEventKind.move) {
+                                        root.part-color-wheel-interacted(self.mouse-x / 1px, self.mouse-y / 1px);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Amostra + Hex
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: center;
+                        Rectangle {
+                            width: 24px; height: 24px; border-radius: 4px;
+                            background: root.part-color-preview;
+                            border-width: 1px; border-color: DesignTokens.border;
+                        }
+                        Rectangle {
+                            width: 90px; height: 24px; border-radius: 4px;
+                            background: DesignTokens.surface;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TextInput {
+                                x: 6px; y: 2px; width: parent.width - 12px; height: parent.height - 4px;
+                                text: root.part-color-hex;
+                                color: DesignTokens.text-primary;
+                                font-size: 11px;
+                                single-line: true;
+                                accepted => { root.part-color-hex-entered(self.text); }
+                            }
+                        }
+                    }
+
+                    // Presets
+                    HorizontalLayout {
+                        spacing: 4px;
+                        alignment: center;
+
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 3px; background: #e96a00;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TouchArea { clicked => { root.part-color-preset-clicked(#e96a00); } }
+                        }
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 3px; background: #00d2ff;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TouchArea { clicked => { root.part-color-preset-clicked(#00d2ff); } }
+                        }
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 3px; background: #b58cff;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TouchArea { clicked => { root.part-color-preset-clicked(#b58cff); } }
+                        }
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 3px; background: #10b981;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TouchArea { clicked => { root.part-color-preset-clicked(#10b981); } }
+                        }
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 3px; background: #f59e0b;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TouchArea { clicked => { root.part-color-preset-clicked(#f59e0b); } }
+                        }
+                        Rectangle {
+                            width: 20px; height: 20px; border-radius: 3px; background: #ef4444;
+                            border-width: 1px; border-color: DesignTokens.border;
+                            TouchArea { clicked => { root.part-color-preset-clicked(#ef4444); } }
+                        }
+                    }
+
+                    // Botão Restaurar cor padrão
+                    Rectangle {
+                        height: 24px;
+                        border-radius: 4px;
+                        background: rst-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        HorizontalLayout {
+                            alignment: center;
+                            spacing: 4px;
+                            IconDisplay { icon: IconSet.RotateCcw; size: 11px; stroke: DesignTokens.text-secondary; }
+                            Text {
+                                text: Tr.t("sl.reset_to_default_color");
+                                color: DesignTokens.text-secondary;
+                                font-size: 10px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                        rst-touch := TouchArea { clicked => { root.part-color-reset-requested(); } }
+                    }
+                }
+            }
+        }
+
         // Overlay: menu de contexto do Outliner (botão direito numa linha).
         if context-menu-open: Rectangle {
             x: 0;
@@ -11205,6 +11450,11 @@ export component PetuniaSlintShell inherits Window {
                         label: Tr.t("sl.face_loop");
                         shortcut: "";
                         clicked => { root.context-menu-open = false; root.context-menu-action("face_loop"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.separate_selection");
+                        shortcut: "P";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("separate_selection"); }
                     }
                     if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
                         label: Tr.t("sl.extrude");

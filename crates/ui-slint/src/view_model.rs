@@ -16,6 +16,8 @@ pub struct SceneItemModel {
     pub active: bool,
     pub verts: usize,
     pub tris: usize,
+    pub has_custom_color: bool,
+    pub custom_color_rgb: [u8; 3],
 }
 
 /// Prefab da biblioteca já resumido para a grade do Asset Library.
@@ -302,6 +304,7 @@ pub struct ShellViewModel {
     pub shading_mode: String,
     pub xray_opacity: f32,
     pub selection_rgb: [u8; 3],
+    pub active_selection_rgb: [u8; 3],
     pub selection_thickness: f32,
     pub selection_color_hex: String,
     pub show_xray: bool,
@@ -820,6 +823,10 @@ impl ShellViewModel {
                 active: active_id == Some(asset.id),
                 verts: asset.mesh.verts.len(),
                 tris: asset.mesh.tri_count(),
+                has_custom_color: asset.selection_overlay_color.is_some(),
+                custom_color_rgb: asset
+                    .selection_overlay_color
+                    .unwrap_or(state.ui.selection_rgb),
             })
             .collect();
 
@@ -1261,6 +1268,11 @@ impl ShellViewModel {
             shading_mode: state.shading.id().to_string(),
             xray_opacity: state.session.xray_opacity,
             selection_rgb: state.ui.selection_rgb,
+            active_selection_rgb: state
+                .project
+                .active()
+                .and_then(|a| a.effective_selection_overlay_color())
+                .unwrap_or(state.ui.selection_rgb),
             selection_thickness: state.ui.selection_thickness,
             selection_color_hex: format!(
                 "#{:02X}{:02X}{:02X}",

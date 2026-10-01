@@ -474,6 +474,12 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         active: item.active,
         verts: item.verts as i32,
         tris: item.tris as i32,
+        has_custom_color: item.has_custom_color,
+        custom_color: slint::Color::from_rgb_u8(
+            item.custom_color_rgb[0],
+            item.custom_color_rgb[1],
+            item.custom_color_rgb[2],
+        ),
     };
     let scene_items: Vec<SceneItem> = vm.scene_items.iter().map(to_scene_item).collect();
     let model = std::rc::Rc::new(slint::VecModel::from(scene_items));
@@ -716,6 +722,11 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         vm.selection_rgb[0],
         vm.selection_rgb[1],
         vm.selection_rgb[2],
+    ));
+    window.set_active_selection_color(slint::Color::from_rgb_u8(
+        vm.active_selection_rgb[0],
+        vm.active_selection_rgb[1],
+        vm.active_selection_rgb[2],
     ));
     window.set_selection_color_hex(vm.selection_color_hex.as_str().into());
     window.set_selection_thickness(vm.selection_thickness);
@@ -4461,6 +4472,170 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let part_color_open_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_picker_open(move |id| {
+        let id_str = id.to_string();
+        if let Ok(bridge) = part_color_open_bridge.lock() {
+            if let Some(window) = window_weak.upgrade() {
+                if let Ok(asset_id) = uuid::Uuid::parse_str(&id_str) {
+                    if let Some(asset) = bridge
+                        .state
+                        .project
+                        .project
+                        .assets
+                        .iter()
+                        .find(|a| a.id == asset_id)
+                    {
+                        let custom_color = asset.selection_overlay_color;
+                        let eff = custom_color.unwrap_or(bridge.state.ui.selection_rgb);
+                        let hex = format!("#{:02X}{:02X}{:02X}", eff[0], eff[1], eff[2]);
+                        window.set_part_color_popover_id(id_str.as_str().into());
+                        window.set_part_color_popover_name(asset.name.as_str().into());
+                        window.set_part_color_preview(slint::Color::from_rgb_u8(
+                            eff[0], eff[1], eff[2],
+                        ));
+                        window.set_part_color_hex(hex.into());
+                        window.set_part_color_has_custom(custom_color.is_some());
+                        window.set_color_wheel_image(
+                            crate::color_wheel::generate_color_wheel_image(130),
+                        );
+                        window.set_part_color_popover_open(true);
+                    }
+                }
+            }
+        }
+    });
+
+    let wheel_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_wheel_interacted(move |x, y| {
+        if let Some(window) = window_weak.upgrade() {
+            let id = window.get_part_color_popover_id().to_string();
+            let dx = x - 65.0;
+            let dy = y - 65.0;
+            let rgb = crate::color_wheel::sample_wheel_color(dx, dy, 64.0);
+            let hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+            window.set_part_color_preview(slint::Color::from_rgb_u8(rgb[0], rgb[1], rgb[2]));
+            window.set_part_color_hex(hex.into());
+            window.set_part_color_has_custom(true);
+
+            if let Ok(mut bridge) = wheel_bridge.lock() {
+                bridge.set_part_selection_color(&id, Some(rgb));
+                let vm = bridge.view_model();
+                let new_frame = bridge.render_viewport();
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let hex_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_hex_entered(move |hex| {
+        let clean = hex.trim().strip_prefix('#').unwrap_or(hex.trim());
+        if let Ok(val) = u32::from_str_radix(clean, 16) {
+            let rgb = match clean.len() {
+                6 => [
+                    ((val >> 16) & 0xFF) as u8,
+                    ((val >> 8) & 0xFF) as u8,
+                    (val & 0xFF) as u8,
+                ],
+                3 => [
+                    (((val >> 8) & 0xF) * 17) as u8,
+                    (((val >> 4) & 0xF) * 17) as u8,
+                    ((val & 0xF) * 17) as u8,
+                ],
+                _ => return,
+            };
+            if let Some(window) = window_weak.upgrade() {
+                let id = window.get_part_color_popover_id().to_string();
+                window.set_part_color_preview(slint::Color::from_rgb_u8(rgb[0], rgb[1], rgb[2]));
+                window.set_part_color_has_custom(true);
+                if let Ok(mut bridge) = hex_bridge.lock() {
+                    bridge.set_part_selection_color(&id, Some(rgb));
+                    let vm = bridge.view_model();
+                    let new_frame = bridge.render_viewport();
+                    sync_window_properties(&window, &vm);
+                    if let Some(frame) = new_frame {
+                        window.set_viewport_image(frame);
+                    }
+                }
+            }
+        }
+    });
+
+    let preset_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_preset_clicked(move |color| {
+        if let Some(window) = window_weak.upgrade() {
+            let id = window.get_part_color_popover_id().to_string();
+            let rgb = [color.red(), color.green(), color.blue()];
+            let hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+            window.set_part_color_preview(color);
+            window.set_part_color_hex(hex.into());
+            window.set_part_color_has_custom(true);
+
+            if let Ok(mut bridge) = preset_bridge.lock() {
+                bridge.set_part_selection_color(&id, Some(rgb));
+                let vm = bridge.view_model();
+                let new_frame = bridge.render_viewport();
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let reset_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_reset_requested(move || {
+        if let Some(window) = window_weak.upgrade() {
+            let id = window.get_part_color_popover_id().to_string();
+            if let Ok(mut bridge) = reset_bridge.lock() {
+                bridge.set_part_selection_color(&id, None);
+                let default_rgb = bridge.state.ui.selection_rgb;
+                let hex = format!(
+                    "#{:02X}{:02X}{:02X}",
+                    default_rgb[0], default_rgb[1], default_rgb[2]
+                );
+                window.set_part_color_preview(slint::Color::from_rgb_u8(
+                    default_rgb[0],
+                    default_rgb[1],
+                    default_rgb[2],
+                ));
+                window.set_part_color_hex(hex.into());
+                window.set_part_color_has_custom(false);
+
+                let vm = bridge.view_model();
+                let new_frame = bridge.render_viewport();
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let sep_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_separate_selection_requested(move || {
+        if let Ok(mut bridge) = sep_bridge.lock() {
+            let _ = bridge.execute_core_command("model.separate_selection");
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
