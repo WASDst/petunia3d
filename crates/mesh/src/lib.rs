@@ -237,6 +237,7 @@ pub mod path_frames;
 pub mod poly_pen;
 pub mod primitives;
 pub mod profile_geo;
+pub mod shape_ops;
 pub mod sweep;
 pub mod topology;
 pub mod triangulate;

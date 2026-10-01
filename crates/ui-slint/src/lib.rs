@@ -20,6 +20,7 @@ pub mod keymap_edit;
 pub mod numeric;
 pub mod overlay;
 mod scene_cache;
+mod shape_builder_tool;
 pub mod split_view;
 pub mod theme;
 pub mod thumbnail;
@@ -272,6 +273,9 @@ pub enum GrammarTool {
     /// Poly Pen: arrastar move o elemento sob o cursor; Ctrl-arrastar aresta
     /// extruda; cliques desenham um polígono; Ctrl-clique derrete o ponto.
     PolyPen,
+    /// Shape Builder (DRAW): arrastar sobre faces as funde; Ctrl-arrastar as apaga;
+    /// clique extrai a face.
+    ShapeBuilder,
 }
 
 /// Gesto da gramática única em andamento.
@@ -286,6 +290,8 @@ enum ToolGesture {
         anchor: [f32; 2],
         start_value: f32,
     },
+    /// O estado vive em `SlintUiBridge::shape_builder`.
+    ShapeBuilder,
 }
 
 /// Id persistente da ferramenta paramétrica no trilho.
@@ -732,6 +738,10 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub modeling_mode: ModelingMode,
     /// Regiões por plano, recalculadas só quando o documento muda.
     region_planes_cache: std::cell::RefCell<Option<draw_shapes::ShapeCache>>,
+    /// Planos editáveis do Shape Builder, por revisão (perfis em uso por geradores ficam de fora).
+    shape_planes_cache: std::cell::RefCell<Option<([u64; 4], Vec<petunia_core::ShapePlane>)>>,
+    /// Gesto do Shape Builder em andamento.
+    shape_builder: Option<shape_builder_tool::ShapeBuilderGesture>,
     /// Último clique num nó do perfil (duplo clique alterna reto ↔ curva).
     profile_last_anchor_click: Option<(uuid::Uuid, std::time::Instant)>,
     /// Ferramenta usada antes da atual; `Space` alterna entre as duas.
@@ -786,7 +796,7 @@ impl ModelingMode {
     /// A ferramenta persistente pertence ao trilho deste modo.
     pub fn offers_tool(self, tool: &str) -> bool {
         const SHARED: [&str; 5] = ["select", "move", "rotate", "scale", "push_pull"];
-        const DRAW: [&str; 1] = ["draw_profile"];
+        const DRAW: [&str; 2] = ["draw_profile", "shape_builder"];
         SHARED.contains(&tool)
             || match self {
                 Self::Draw => DRAW.contains(&tool),
@@ -1056,6 +1066,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             region_hover: None,
             modeling_mode: ModelingMode::default(),
             region_planes_cache: std::cell::RefCell::new(None),
+            shape_planes_cache: std::cell::RefCell::new(None),
+            shape_builder: None,
             profile_last_anchor_click: None,
             previous_tool: "select".to_string(),
             scene_query_cache: std::cell::RefCell::new(None),
@@ -2657,6 +2669,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.session.tools.hover = next;
             // A linha até o cursor acompanha o mouse durante a coleta.
             return changed || !self.poly_pen_points.is_empty();
+        }
+        if self.state.session.tools.active_tool == "shape_builder" && self.shape_builder.is_none() {
+            return self.hover_shape_builder([
+                normalized_x * self.viewport_size[0],
+                normalized_y * self.viewport_size[1],
+            ]);
         }
         if self.state.session.tools.active_tool == "push_pull" && self.tool_modal.is_none() {
             let previous = self.region_hover.take();
@@ -9556,6 +9574,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let _ = self.execute_core_command("model.flip_normals");
                     true
                 }
+                "draw_unite" => self.run_pathfinder(petunia_core::PathfinderOp::Unite),
+                "draw_subtract" => self.run_pathfinder(petunia_core::PathfinderOp::Subtract),
+                "draw_intersect" => self.run_pathfinder(petunia_core::PathfinderOp::Intersect),
+                "draw_exclude" => self.run_pathfinder(petunia_core::PathfinderOp::Exclude),
                 "edge_loop" => self.select_loop_from_context(menu.edge, false),
                 "edge_ring" => self.select_loop_from_context(menu.edge, true),
                 "face_loop" => self.select_face_loop_from_context(menu.face, menu.edge),
@@ -9749,6 +9771,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "bevel" => parametric(ToolModalKind::Bevel),
             "push_pull" => parametric(ToolModalKind::PushPull),
             "poly_pen" => Some(GrammarTool::PolyPen),
+            "shape_builder" if self.modeling_mode == ModelingMode::Draw => {
+                Some(GrammarTool::ShapeBuilder)
+            }
             _ => None,
         }
     }
@@ -9837,6 +9862,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::PolyPen) => {
                 self.poly_pen_click(at)
             }
+            Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::ShapeBuilder) => {
+                self.shape_builder_click(at)
+            }
             Effect::Click { at } => {
                 let [width, height] = self.viewport_size;
                 if width > 1.0 && height > 1.0 {
@@ -9887,6 +9915,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 begun
             }
             GrammarTool::PolyPen => self.begin_poly_pen_drag(anchor),
+            GrammarTool::ShapeBuilder => self.begin_shape_builder(anchor),
             GrammarTool::Parametric(kind) => {
                 if self.tool_modal.is_none()
                     && kind == ToolModalKind::PushPull
@@ -10254,17 +10283,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    /// Contorno (e furos) da região em hover, em px da viewport.
+    /// Contorno (e furos) da região em hover, em px da viewport. Durante o
+    /// gesto do Shape Builder também desenha todas as faces já tocadas.
     fn region_hover_commands(&self) -> String {
-        let Some(hit) = &self.region_hover else {
-            return String::new();
-        };
         let mut commands = String::new();
-        for ring in std::iter::once(&hit.region.outer).chain(hit.region.holes.iter()) {
+        if let Some(hit) = &self.region_hover {
+            for ring in std::iter::once(&hit.region.outer).chain(hit.region.holes.iter()) {
+                crate::projection::write_clipped_path(
+                    &self.state.session.camera,
+                    self.viewport_size,
+                    ring.iter().map(|p| hit.plane.to_world(*p)),
+                    true,
+                    &mut commands,
+                );
+            }
+        }
+        for ring in self.shape_builder_touched_rings() {
             crate::projection::write_clipped_path(
                 &self.state.session.camera,
                 self.viewport_size,
-                ring.iter().map(|p| hit.plane.to_world(*p)),
+                ring,
                 true,
                 &mut commands,
             );
@@ -10362,12 +10400,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 self.set_tool_modal_value(value)
             }
+            Some(ToolGesture::ShapeBuilder) => self.update_shape_builder(current),
             None => false,
         }
     }
 
     fn commit_tool_gesture(&mut self) -> bool {
         match self.tool_gesture.take() {
+            Some(ToolGesture::ShapeBuilder) => self.commit_shape_builder(),
             Some(ToolGesture::Transform { gizmo: true }) => self.end_gizmo_drag(),
             Some(ToolGesture::Transform { gizmo: false }) => self.end_viewport_transform(),
             Some(ToolGesture::Parametric { .. }) => self.commit_tool_modal(),
@@ -10384,6 +10424,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.cancel_viewport_transform()
             }
             Some(ToolGesture::Parametric { .. }) => self.cancel_tool_modal(),
+            Some(ToolGesture::ShapeBuilder) => self.cancel_shape_builder(),
             None => false,
         }
     }
@@ -11992,6 +12033,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.draw_profile" => {
                 self.apply(UiIntent::SetActiveTool("draw_profile".to_string()));
             }
+            "model.shape_builder" => {
+                self.apply(UiIntent::SetActiveTool("shape_builder".to_string()));
+            }
+            "draw.unite" => return self.run_pathfinder(petunia_core::PathfinderOp::Unite),
+            "draw.subtract" => return self.run_pathfinder(petunia_core::PathfinderOp::Subtract),
+            "draw.intersect" => {
+                return self.run_pathfinder(petunia_core::PathfinderOp::Intersect);
+            }
+            "draw.exclude" => return self.run_pathfinder(petunia_core::PathfinderOp::Exclude),
             "global.save_project" => self.apply(UiIntent::SaveProject),
             "global.help" => {
                 let _ = self.execute_core_command("help.documentation");

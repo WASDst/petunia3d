@@ -650,6 +650,7 @@ impl Keybinds {
             ("model.merge", "M"),
             ("model.primitives", "A"),
             ("model.draw_profile", "Shift+P"),
+            ("model.shape_builder", "Shift+M"),
             ("model.slice", "Shift+K"),
             ("model.knife", "K"),
             ("model.loop_cut", "Ctrl+R"),

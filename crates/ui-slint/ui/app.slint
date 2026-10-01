@@ -4904,6 +4904,13 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("draw_profile"); }
                             }
                             ToolButton {
+                                icon-svg: PetuniaIcons.boolean-fuse;
+                                semantic-label: Tr.t("sl.shape_builder");
+                                description: Tr.t("sl.shape_builder_description");
+                                active: active-tool == "shape_builder";
+                                clicked => { root.active-tool-changed("shape_builder"); }
+                            }
+                            ToolButton {
                                 icon: IconSet.Square;
                                 semantic-label: Tr.t("sl.2d_rectangle");
                                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
@@ -7685,6 +7692,13 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.draw_2d_profile_curves_on_ground_face_or_vie");
                                 active: active-tool == "draw_profile";
                                 clicked => { root.active-tool-changed("draw_profile"); }
+                            }
+                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW": ToolButton {
+                                icon-svg: PetuniaIcons.boolean-fuse;
+                                semantic-label: Tr.t("sl.shape_builder");
+                                description: Tr.t("sl.shape_builder_description");
+                                active: active-tool == "shape_builder";
+                                clicked => { root.active-tool-changed("shape_builder"); }
                             }
                             if active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.viewport-region-width >= 760: ToolButton {
                                 icon: IconSet.Square;
@@ -11156,6 +11170,26 @@ export component PetuniaSlintShell inherits Window {
                         label: Tr.t("sl.invert_selection");
                         shortcut: "Ctrl+I";
                         clicked => { root.context-menu-open = false; root.context-menu-action("invert_selection"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.modeling-mode == "DRAW": ContextMenuItem {
+                        label: Tr.t("sl.shape_unite");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("draw_unite"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.modeling-mode == "DRAW": ContextMenuItem {
+                        label: Tr.t("sl.shape_subtract");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("draw_subtract"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.modeling-mode == "DRAW": ContextMenuItem {
+                        label: Tr.t("sl.shape_intersect");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("draw_intersect"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.modeling-mode == "DRAW": ContextMenuItem {
+                        label: Tr.t("sl.shape_exclude");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("draw_exclude"); }
                     }
                     if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
                         label: Tr.t("sl.edge_loop");

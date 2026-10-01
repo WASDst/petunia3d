@@ -767,6 +767,54 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "draw.unite",
+                "Unite",
+                "Merge the closed shapes of the sketch plane into one",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::shape_builder::ShapeEditCmd::pathfinder(
+                crate::shape_builder::PathfinderOp::Unite,
+            ),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "draw.subtract",
+                "Subtract",
+                "Cut the shapes in front out of the shape at the back",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::shape_builder::ShapeEditCmd::pathfinder(
+                crate::shape_builder::PathfinderOp::Subtract,
+            ),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "draw.intersect",
+                "Intersect Shapes",
+                "Keep only the area all closed shapes share",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::shape_builder::ShapeEditCmd::pathfinder(
+                crate::shape_builder::PathfinderOp::Intersect,
+            ),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "draw.exclude",
+                "Exclude",
+                "Remove the areas where shapes overlap",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::shape_builder::ShapeEditCmd::pathfinder(
+                crate::shape_builder::PathfinderOp::Exclude,
+            ),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.bevel",
                 "Bevel Edges",
                 "Bevel selected mesh edges",
