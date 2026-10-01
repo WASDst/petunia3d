@@ -3370,6 +3370,8 @@ export component PetuniaSlintShell inherits Window {
     in-out property <float> brush-size: 0.8;
     in-out property <float> brush-opacity: 1.0;
     in-out property <float> brush-hardness: 0.0;
+    in-out property <float> brush-flow: 1.0;
+    in-out property <float> brush-spacing: 0.15;
     in-out property <bool> paint-symmetry-x: false;
     in-out property <bool> paint-symmetry-y: false;
     in-out property <bool> paint-symmetry-z: false;
@@ -4084,6 +4086,8 @@ export component PetuniaSlintShell inherits Window {
     callback brush-size-changed(float);
     callback brush-opacity-changed(float);
     callback brush-hardness-changed(float);
+    callback brush-flow-changed(float);
+    callback brush-spacing-changed(float);
     callback paint-symmetry-x-toggled;
     callback paint-symmetry-y-toggled;
     callback paint-symmetry-z-toggled;
@@ -9044,6 +9048,24 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
 
+                                    for row in [
+                                        { label: Tr.t("sl.flow"), kind: 0 },
+                                        { label: Tr.t("sl.spacing"), kind: 1 },
+                                    ]: HorizontalLayout {
+                                        spacing: 8px;
+                                        height: 20px;
+                                        Text { text: row.label; color: DesignTokens.text-secondary; font-size: 11px; width: 56px; vertical-alignment: center; }
+                                        PetuniaSlider {
+                                            horizontal-stretch: 1;
+                                            minimum: row.kind == 0 ? 0.05 : 0.01;
+                                            maximum: 1.0;
+                                            value: row.kind == 0 ? root.brush-flow : root.brush-spacing;
+                                            changed(v) => {
+                                                if row.kind == 0 { root.brush-flow-changed(v); } else { root.brush-spacing-changed(v); }
+                                            }
+                                        }
+                                    }
+
                                     HorizontalLayout {
                                         alignment: center;
                                         Text {
@@ -9570,7 +9592,7 @@ export component PetuniaSlintShell inherits Window {
                             x: 12px;
                             y: 12px;
                             width: 250px;
-                            height: 92px;
+                            height: 152px;
                             border-radius: DesignTokens.radius-panel;
                             background: DesignTokens.surface-raised.with-alpha(0.94);
                             border-width: 1px;
@@ -9585,19 +9607,23 @@ export component PetuniaSlintShell inherits Window {
                                     { label: Tr.t("sl.size"), kind: 0 },
                                     { label: Tr.t("sl.opacity"), kind: 1 },
                                     { label: Tr.t("sl.hardness"), kind: 2 },
+                                    { label: Tr.t("sl.flow"), kind: 3 },
+                                    { label: Tr.t("sl.spacing"), kind: 4 },
                                 ]: HorizontalLayout {
                                     spacing: 8px;
                                     height: 18px;
                                     Text { text: row.label; color: DesignTokens.text-secondary; font-size: 10px; width: 56px; vertical-alignment: center; }
                                     PetuniaSlider {
                                         horizontal-stretch: 1;
-                                        minimum: row.kind == 0 ? 0.05 : (row.kind == 1 ? 0.05 : 0.0);
+                                        minimum: row.kind == 4 ? 0.01 : (row.kind == 2 ? 0.0 : 0.05);
                                         maximum: row.kind == 0 ? 8.0 : 1.0;
-                                        value: row.kind == 0 ? root.brush-size : (row.kind == 1 ? root.brush-opacity : root.brush-hardness);
+                                        value: row.kind == 0 ? root.brush-size : (row.kind == 1 ? root.brush-opacity : (row.kind == 2 ? root.brush-hardness : (row.kind == 3 ? root.brush-flow : root.brush-spacing)));
                                         changed(v) => {
                                             if row.kind == 0 { root.brush-size-changed(v); }
                                             if row.kind == 1 { root.brush-opacity-changed(v); }
                                             if row.kind == 2 { root.brush-hardness-changed(v); }
+                                            if row.kind == 3 { root.brush-flow-changed(v); }
+                                            if row.kind == 4 { root.brush-spacing-changed(v); }
                                         }
                                     }
                                 }

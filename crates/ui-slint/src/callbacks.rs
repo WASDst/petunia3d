@@ -389,6 +389,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_brush_size(vm.brush_size);
     window.set_brush_opacity(vm.brush_opacity);
     window.set_brush_hardness(vm.brush_hardness);
+    window.set_brush_flow(vm.brush_flow);
+    window.set_brush_spacing(vm.brush_spacing);
     window.set_paint_symmetry_x(vm.paint_symmetry_x);
     window.set_paint_symmetry_y(vm.paint_symmetry_y);
     window.set_paint_symmetry_z(vm.paint_symmetry_z);
@@ -4271,6 +4273,30 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_brush_hardness_changed(move |hardness| {
         if let Ok(mut bridge) = hardness_bridge.lock() {
             bridge.apply(UiIntent::SetBrushHardness(hardness));
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let flow_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_brush_flow_changed(move |value| {
+        if let Ok(mut bridge) = flow_bridge.lock() {
+            bridge.apply(UiIntent::SetBrushFlow(value));
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let spacing_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_brush_spacing_changed(move |value| {
+        if let Ok(mut bridge) = spacing_bridge.lock() {
+            bridge.apply(UiIntent::SetBrushSpacing(value));
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

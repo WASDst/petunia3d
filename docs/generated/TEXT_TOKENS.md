@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1310**.
+Total de chaves de localização cadastradas: **1312**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -681,6 +681,7 @@ Total de chaves de localização cadastradas: **1310**.
 | `sl.flat_2d_quad_rectangular_plane_surface_posit` | Flat 2D quad rectangular plane surface positioned on ground plane | Superfície plana retangular 2D posicionada no plano do chão |
 | `sl.flip_normals` | Flip Normals | Inverter normais |
 | `sl.flood_fill_contiguous_color_areas_on_active_` | Flood fill contiguous color areas on active UV map | Preenche áreas contíguas de cor no mapa UV ativo |
+| `sl.flow` | Flow | Fluxo |
 | `sl.focus_camera` | Focus Camera | Focar câmera |
 | `sl.frame` | Frame | Enquadrar |
 | `sl.frame_and_center_camera_view_on_currently_se` | Frame and center camera view on currently selected geometry | Enquadra e centraliza a câmera na geometria selecionada |
@@ -941,6 +942,7 @@ Total de chaves de localização cadastradas: **1310**.
 | `sl.snap_transformations_to_grid_intervals_verti` | Snap transformations to grid intervals, vertices, edges or faces | Ajusta transformações a intervalos da grade, vértices, arestas ou faces |
 | `sl.space_close_esc_cancel` | Space: close · Esc: cancel | Space: fechar · Esc: cancelar |
 | `sl.space_floating_micro_inspector` | Space: Floating Micro-Inspector | Espaço: Micro-Inspector flutuante |
+| `sl.spacing` | Spacing | Espaçamento |
 | `sl.sphere` | Sphere | Esfera |
 | `sl.spin` | Spin | Spin |
 | `sl.spin_lathe` | Spin / Lathe | Girar / Torno |

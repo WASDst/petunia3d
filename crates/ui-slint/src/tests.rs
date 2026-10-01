@@ -8504,3 +8504,20 @@ fn paint_pip_frames_the_camera_on_the_painted_face() {
     assert!(hit, "algum UV do cubo deve enquadrar uma face");
     assert!(!bridge.toggle_paint_pip());
 }
+
+#[test]
+fn brush_flow_and_spacing_reach_the_effective_brush() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetBrushFlow(0.4));
+    bridge.apply(UiIntent::SetBrushSpacing(0.5));
+    let settings = bridge.state.brush_settings();
+    assert!((settings.flow - 0.4).abs() < 1e-6);
+    assert!((settings.spacing - 0.5).abs() < 1e-6);
+    let vm = bridge.view_model();
+    assert!((vm.brush_flow - 0.4).abs() < 1e-6 && (vm.brush_spacing - 0.5).abs() < 1e-6);
+    // Valores inválidos são ignorados ou limitados.
+    bridge.apply(UiIntent::SetBrushFlow(f32::NAN));
+    bridge.apply(UiIntent::SetBrushSpacing(9.0));
+    assert!((bridge.state.session.tools.brush_flow - 0.4).abs() < 1e-6);
+    assert_eq!(bridge.state.session.tools.brush_spacing, 1.0);
+}

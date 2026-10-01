@@ -1395,6 +1395,8 @@ split_too_narrow = "The viewport is too narrow to split."
 prepare_surface = "Prepare surface"
 paint_pip = "Paint on the 2D canvas with a live 3D inset"
 paint_pip_back = "Back to the 3D view"
+flow = "Flow"
+spacing = "Spacing"
 
 
 # Biblioteca de prefabs (mensagens de status; {name} é substituído)

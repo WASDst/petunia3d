@@ -275,6 +275,8 @@ pub enum UiIntent {
     SetBrushSize(f32),
     SetBrushOpacity(f32),
     SetBrushHardness(f32),
+    SetBrushFlow(f32),
+    SetBrushSpacing(f32),
     TogglePaintSymmetryX,
     TogglePaintSymmetryY,
     TogglePaintSymmetryZ,
@@ -1124,6 +1126,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::SetBrushOpacity(opacity) => {
                 self.state.session.tools.paint_strength = opacity.clamp(0.0, 1.0);
+            }
+            UiIntent::SetBrushFlow(flow) => {
+                if flow.is_finite() {
+                    self.state.session.tools.brush_flow = flow.clamp(0.0, 1.0);
+                }
+            }
+            UiIntent::SetBrushSpacing(spacing) => {
+                if spacing.is_finite() {
+                    self.state.session.tools.brush_spacing = spacing.clamp(0.01, 1.0);
+                }
             }
             UiIntent::SetBrushHardness(hardness) => {
                 self.state.session.tools.brush_hardness = hardness.clamp(0.0, 1.0);
