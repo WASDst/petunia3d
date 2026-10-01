@@ -11146,6 +11146,21 @@ export component PetuniaSlintShell inherits Window {
                         clicked => { root.context-menu-open = false; root.context-menu-action("invert_selection"); }
                     }
                     if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.edge_loop");
+                        shortcut: "Alt+Click";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("edge_loop"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.edge_ring");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("edge_ring"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.face_loop");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("face_loop"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
                         label: Tr.t("sl.extrude");
                         shortcut: "E";
                         clicked => { root.context-menu-open = false; root.context-menu-action("extrude"); }

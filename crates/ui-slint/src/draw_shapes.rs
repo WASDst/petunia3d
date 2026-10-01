@@ -16,8 +16,6 @@
 //! - **Reto ↔ curva** (`profile_set_point_curved`): vale para um ponto ou para
 //!   todos, em qualquer forma (polígono, retângulo, círculo).
 
-use std::fmt::Write as _;
-
 use glam::Vec3;
 
 use crate::projection::project_world_point;
@@ -126,28 +124,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
-    /// Escreve um anel projetado; devolve `false` se algum ponto sai da tela.
+    /// Escreve um anel projetado e recortado no plano próximo; `false` se nada aparece.
     fn write_ring(
         &self,
         points: impl Iterator<Item = Vec3>,
         close: bool,
         out: &mut String,
     ) -> bool {
-        let camera = &self.state.session.camera;
-        let mut first = true;
-        let start = out.len();
-        for world in points {
-            let Some([x, y]) = project_world_point(camera, self.viewport_size, world) else {
-                out.truncate(start);
-                return false;
-            };
-            let action = if std::mem::take(&mut first) { 'M' } else { 'L' };
-            let _ = write!(out, "{action} {x:.2} {y:.2} ");
-        }
-        if close && !first {
-            out.push_str("Z ");
-        }
-        !first
+        crate::projection::write_clipped_path(
+            &self.state.session.camera,
+            self.viewport_size,
+            points,
+            close,
+            out,
+        )
     }
 
     /// Todas as regiões fechadas (tinta leve), para a forma nunca se perder.

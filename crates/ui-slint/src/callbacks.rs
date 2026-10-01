@@ -229,6 +229,25 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
     window.set_protractor_visible(protractor.visible);
     window.set_protractor_wedge_commands(protractor.wedge_commands.as_str().into());
     window.set_protractor_ticks_commands(protractor.ticks_commands.as_str().into());
+    sync_draw_camera_overlays(window, bridge);
+}
+
+/// Overlays do DRAW/POLY que projetam pontos de mundo com a câmera corrente.
+///
+/// Orbitar, mover e dar zoom só passam por `sync_viewport_overlays`; sem refazer
+/// estes traçados a região, o contorno e a prévia do perfil ficavam parados na
+/// posição da câmera antiga (a "mancha" laranja desalinhada da malha).
+pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
+    window: &PetuniaSlintShell,
+    bridge: &SlintUiBridge<V>,
+) {
+    window.set_region_hover_commands(bridge.region_hover_commands().as_str().into());
+    window.set_region_shapes_commands(bridge.region_shapes_commands().as_str().into());
+    window.set_profile_outline_commands(bridge.profile_outline_commands().as_str().into());
+    window.set_poly_pen_preview_commands(bridge.poly_pen_preview_commands().as_str().into());
+    if bridge.state.session.tools.active_tool == "draw_profile" {
+        window.set_profile_preview_commands(bridge.profile_preview_commands().as_str().into());
+    }
 }
 
 impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {

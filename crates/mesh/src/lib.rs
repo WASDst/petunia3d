@@ -229,6 +229,7 @@ pub mod half_edge;
 pub mod imprint;
 pub mod knife;
 pub mod loop_cut;
+mod loops;
 pub mod obj;
 pub mod ops;
 pub mod path_frames;

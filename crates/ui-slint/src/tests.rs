@@ -7958,6 +7958,77 @@ fn test_loop_selection_edge_face_vertex_and_double_click() {
 }
 
 #[test]
+fn context_menu_selects_the_cap_loop_of_a_cylinder() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    // Extrusão de um perfil de 12 pontos: tampas n-gon, como no fluxo DRAW.
+    let profile: Vec<[f32; 2]> = (0..12)
+        .map(|k| {
+            let a = k as f32 / 12.0 * std::f32::consts::TAU;
+            [a.cos(), a.sin()]
+        })
+        .collect();
+    *bridge.state.project.active_mesh_mut().expect("malha ativa") =
+        petunia_mesh::Mesh::from_polygon(&profile, 2.0).expect("perfil válido");
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge));
+    let (seed, face) = {
+        let mesh = bridge.state.project.active_mesh().expect("malha ativa");
+        let cap = mesh
+            .faces
+            .iter()
+            .position(|f| f.verts.len() > 4)
+            .expect("tampa n-gon");
+        let verts = &mesh.faces[cap].verts;
+        ((verts[0], verts[1]), cap)
+    };
+    bridge.context_menu = Some(ContextMenuState {
+        x: 0.0,
+        y: 0.0,
+        asset: uuid::Uuid::nil(),
+        viewport: true,
+        edge: Some(seed),
+        face: Some(face),
+    });
+    assert!(bridge.context_menu_action("edge_loop"));
+    let mesh = bridge.state.project.active_mesh().expect("malha ativa");
+    assert_eq!(mesh.selected_edges.len(), 12, "o anel inteiro da tampa");
+
+    bridge.context_menu = Some(ContextMenuState {
+        x: 0.0,
+        y: 0.0,
+        asset: uuid::Uuid::nil(),
+        viewport: true,
+        edge: Some(seed),
+        face: Some(face),
+    });
+    assert!(bridge.context_menu_action("edge_ring"));
+    let mesh = bridge.state.project.active_mesh().expect("malha ativa");
+    assert!(
+        mesh.selected_edges.len() >= 1,
+        "o ring parte da aresta apontada"
+    );
+}
+
+#[test]
+fn context_menu_loop_without_a_target_reports_instead_of_failing_silently() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(800, 600);
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Edge));
+    if let Some(mesh) = bridge.state.project.active_mesh_mut() {
+        mesh.selected_edges.clear();
+    }
+    bridge.context_menu = Some(ContextMenuState {
+        x: 0.0,
+        y: 0.0,
+        asset: uuid::Uuid::nil(),
+        viewport: true,
+        edge: None,
+        face: None,
+    });
+    assert!(!bridge.context_menu_action("edge_loop"));
+}
+
+#[test]
 fn test_primitives_created_at_3d_cursor() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let cursor_pos = [5.0, 3.0, -4.0];
@@ -9769,6 +9840,38 @@ fn draw_shapes_stay_visible_and_can_be_edited_after_closing() {
     // No POLY as formas não aparecem.
     bridge.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
     assert!(bridge.region_shapes_commands().is_empty());
+}
+
+#[test]
+fn orbiting_refreshes_the_draw_overlays_on_the_window() {
+    // Regressão: orbitar só passava por `sync_viewport_overlays`, que não refazia a
+    // região/contorno do DRAW; a "mancha" ficava na posição da câmera antiga.
+    i_slint_backend_testing::init_no_event_loop();
+    let window = PetuniaSlintShell::new().expect("Slint shell");
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert!(bridge.add_profile_rectangle(2.0, 2.0));
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+
+    callbacks::sync_viewport_overlays(&window, &bridge);
+    let before = window.get_region_shapes_commands().to_string();
+    assert!(!before.is_empty(), "a região aparece após o primeiro sync");
+
+    bridge.orbit_viewport(180.0, 40.0);
+    callbacks::sync_viewport_overlays(&window, &bridge);
+    let after = window.get_region_shapes_commands().to_string();
+    assert_ne!(before, after, "orbitar reprojeta a região na janela");
+    assert_eq!(
+        after,
+        bridge.region_shapes_commands(),
+        "o que a janela mostra é a projeção da câmera atual"
+    );
+    assert_eq!(
+        window.get_profile_outline_commands().to_string(),
+        bridge.profile_outline_commands()
+    );
 }
 
 #[test]
