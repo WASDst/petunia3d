@@ -7,9 +7,9 @@ O usuário deve conseguir começar por uma imagem de referência e sentir que es
 | Contexto | Projeção padrão | Comportamento |
 | --- | --- | --- |
 | Front / Side / Top | Ortográfica | Traçado e alinhamento sem distorção de perspectiva. |
-| Reference / Trace | Ortográfica | Câmera bloqueada ao plano da referência enquanto desenha. |
+| Reference / Trace | Ortográfica | O plano de desenho fica travado na referência; a câmera continua navegável (orbitar, deslocar, aproximar). |
 | Orbit | Perspectiva | Inspeção natural do volume. |
-| Draw on Face | Ortográfica à face | Face temporariamente tratada como uma folha 2D. |
+| Draw on Face | Câmera inalterada por padrão | A face vira o plano de trabalho (folha 2D). "Olhar para o plano" alinha a câmera sob comando ou por preferência; a câmera nunca se move sozinha. |
 
 ## Reference Sets
 
@@ -31,11 +31,11 @@ O modo iniciante pode apresentar **Width / Height / Depth** em vez de exigir X/Y
 
 ## Seleção contextual
 
-Evitar obrigar o iniciante a compreender imediatamente uma separação rígida entre Object Mode e Edit Mode. A interface pode expor pills discretas: **Object · Face · Edge · Point**, além de inferência contextual por clique/duplo clique.
+Evitar obrigar o iniciante a compreender imediatamente uma separação rígida entre Object Mode e Edit Mode. Desde a revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)), o nível de trabalho é escolhido pelo workspace: **DRAW** expõe **Shape · Curve · Point · Region**; **POLY** expõe **Object · Face · Edge · Point**, além de inferência contextual por clique/duplo clique.
 
 ## Smart Snap
 
-Por padrão, snapping contextual detecta Vertex, Edge, Midpoint, Center, Grid, centerline da referência e interseções de profiles. Configuração avançada permanece disponível.
+Por padrão, snapping contextual detecta Vertex, Edge, Midpoint, Center, Grid, centerline da referência e interseções de profiles, com inferência de direção (eixos, paralelo, perpendicular) no estilo snap-dragging/SketchUp. Cada snap é mostrado com forma, cor **e rótulo**, nunca só por cor ([capítulo 46](46-pesquisa-interacao-modelagem-referencias.md)). Configuração avançada permanece disponível.
 
 ## Filosofia de nomenclatura
 

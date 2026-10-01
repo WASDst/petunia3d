@@ -1,0 +1,84 @@
+name: UI Slint
+
+# Gate do frontend de produção (`petunia_ui_slint`, AGENTS.md §0.1).
+#
+# Até aqui nenhum workflow cobria `crates/ui-slint/`: o `ui-guard.yml` vale só
+# para a UI egui legada. Este gate roda os mesmos comandos documentados no
+# README do crate e no AGENTS.md, e protege a refatoração modular (ADR 008).
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'crates/ui-slint/**'
+      - 'crates/config/**'
+      - 'crates/core/**'
+      - 'assets/locales/**'
+      - 'assets/themes/**'
+      - 'assets/icons/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ui-slint.yml'
+  pull_request:
+    paths:
+      - 'crates/ui-slint/**'
+      - 'crates/config/**'
+      - 'crates/core/**'
+      - 'assets/locales/**'
+      - 'assets/themes/**'
+      - 'assets/icons/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ui-slint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-slint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui-slint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Slint (winit + femtovg) e wgpu precisam de headers de sistema em runner limpo.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libfontconfig1-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-ui-slint-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Format
+        run: cargo fmt -p petunia_ui_slint -- --check
+
+      - name: Clippy
+        run: cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test -p petunia_ui_slint --lib
+
+      - name: Integration tests (Animate workspace + viewport gestures)
+        run: >
+          cargo test -p petunia_ui_slint --features animation-workspace
+          --lib --test animate_shell --test viewport_gestures

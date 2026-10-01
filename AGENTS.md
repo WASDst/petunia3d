@@ -6,9 +6,9 @@
 
 ## 0. Fonte única da verdade
 
-O caderno canônico vive em **`docs/bible/`** — 250 páginas: raiz `index.md`
-(Petunia3D — Livro Vivo), `constitution/` (00–16), `foundations/` (01–44),
-`specs/` (P3D-001 a P3D-168), `sections/` (A–O), `addenda/` e `status/`.
+O caderno canônico vive em **`docs/bible/`** — 258 páginas: raiz `index.md`
+(Petunia3D — Livro Vivo), `constitution/` (00–16), `foundations/` (01–46),
+`specs/` (P3D-001 a P3D-174), `sections/` (A–O), `addenda/` e `status/`.
 
 - Toda decisão de arquitetura, produto, UX, escopo, vocabulário e documentação
   deve sair do caderno. Nenhuma outra documentação pode contradizê-lo.
@@ -57,10 +57,15 @@ definido em `ui/app.slint`. Regras derivadas:
 
 - **Viewport-first**: o viewport ocupa a região central e mantém ~`480 × 360`
   logical px antes de ceder espaço a painéis (capítulo 36).
-- **Shell estrutural**: em MODEL, barra de criação à esquerda e Inspector à direita
+- **Shell estrutural**: em DRAW e POLY (que substituem MODEL, ADR 007 de
+  2026-09-29), trilho de ferramentas do workspace à esquerda e Inspector à direita
   com `Parts → Transform → Material → Object` (revisão de baseline aprovada em
   2026-09-23 no cap. 36); `Asset Library` inferior e `Top Bar` no topo. Nenhum
-  docking irrestrito na V1.
+  docking irrestrito na V1. Até DRAW/POLY estarem funcionais, a UI mantém MODEL.
+- **Gramática única de ferramenta** (constituição 11, ADR 007): ferramenta
+  persistente, arrastar (alça ou em qualquer lugar), valor digitado,
+  clicar-mover-clicar, RMB = menu, Esc cancela, navegação nunca suspensa. Não
+  crie um ciclo próprio de sessão para uma ferramenta nova.
 - **Componentes reutilizáveis**: componentes Slint declarativos em `ui/app.slint`
   (ex.: `TopAction`, `ToolButton`, `NumericField`, `Vector3Field`,
   `InspectorSection`, `ColorSwatch`) são a linguagem visual pública. Não reimplemente
@@ -124,9 +129,12 @@ Motivo: o caderno canônico em `docs/bible/` é a única fonte da verdade; o sit
 - Cadeia funcional: `Tool → Command → Algorithm → Data`. Tool não chama Tool.
 - Mutations são transacionais; documento com single-writer; jobs operam em snapshots.
 - `unsafe` isolado e auditável.
-- UI Baseline V1 congelada, com revisões de 2026-09-23 (MODEL) e 2026-09-30 (painéis flutuantes não modais, até 2 viewports opcionais, tema claro, Paint+UV unificados; cap. 36): workspaces
-  `MODEL / PAINT / UV`, barra de criação-esquerda / Inspector-direita com Parts
-  como primeira seção / Asset Library-abaixo, dark oficial,
+- UI Baseline V1 congelada, com revisões de 2026-09-23, 2026-09-29 (DRAW / POLY,
+  ADR 007) e 2026-09-30 (painéis flutuantes não modais, até 2 viewports opcionais,
+  tema claro, Paint+UV unificados; cap. 36): workspaces `DRAW / POLY / PAINT` (a
+  edição de UV vive em "Preparar superfície" dentro do PAINT), trilho de
+  ferramentas-esquerda / Inspector-direita com Parts como primeira seção /
+  Asset Library-abaixo, dark oficial,
   Petunia Components como linguagem visual. Não reintroduzir docking irrestrito,
   clone de Blender, acesso cru a egui/wgpu para plugins nem reabrir `UI-OPEN`.
 - Vocabulário de usuário (cap. 13): **Point**, **Round Edge**, **Fuse**, **Cut**,

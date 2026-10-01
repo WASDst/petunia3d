@@ -11,26 +11,28 @@ Separar claramente Workspace, Selection Domain, Tool, Command, Object Property, 
 # Regiões
 
 - Header do viewport: seleção/contexto, menus, orientação/pivot, aids e shading.
-- Toolbar vertical: tools persistentes.
+- Toolbar vertical: tools persistentes do workspace (DRAW ou POLY, ADR 007).
 - Shelf contextual: commands/tools do contexto atual, sem duplicar Selection Domain.
-- Direita: Outliner + Inspector/Properties; Tool Properties separadas.
+- Direita: Inspector (`Parts → Transform → Material → Object`); Tool Properties e "Última operação" separadas do Inspector.
 - Assets: browser rápido; Project Model Library: gerenciador amplo separado.
 
 # Tokens e metadata
 
 Todo texto visível usa `TextId`; ícones usam `IconId`; cores/spacing/radius/states usam `ThemeToken`; atalhos exibidos vêm do keymap ativo.
 
-# egui
+# Toolkit
 
-Respeitar capacidades do egui. Priorizar spacing, hierarchy, icons, grouping, responsive overflow e states. Não exigir blur/glass/CSS complexo. Caches evitam parse/rasterização por frame.
+Slint é o frontend de produção; egui é legado de transição (capítulo 36). Respeitar as capacidades do toolkit. Priorizar spacing, hierarchy, icons, grouping, responsive overflow e states. Não exigir blur/glass/CSS complexo. Caches evitam parse/rasterização por frame.
 
 # Acessibilidade
 
-Hitboxes adequadas, keyboard navigation, foco visível, tooltips, baixa ambiguidade e layouts úteis em 1366×768 até telas maiores.
+Hitboxes adequadas (alças e alvos do viewport com pelo menos 24×24 px lógicos), keyboard navigation, foco visível, tooltips, baixa ambiguidade e layouts úteis em 1366×768 até telas maiores. Todo arrasto tem alternativa sem arrastar (clicar-mover-clicar e valor digitado); limiar de arrasto e raio de picking são configuráveis (design baseado em habilidades, capítulo 46).
 
 ## Input routing e foco
 
 Definir prioridade explícita: Modal > TextInput/FocusedWidget > painel/workspace > viewport context > Global. Text fields bloqueiam atalhos de tools; modal destrutivo não deixa command global atravessar; drag/drop e pointer capture possuem owner único até release/cancel.
+
+Navegação do viewport (orbitar, deslocar, aproximar) é exceção: permanece disponível durante qualquer ferramenta ou gesto, usando botões e gestos que a ferramenta não consome. RMB abre menu de contexto e nunca cancela; `Esc` cancela (constituição 11).
 
 ## Escala e legibilidade
 

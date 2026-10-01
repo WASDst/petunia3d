@@ -1,0 +1,781 @@
+// Workspace Animate (cap. 45 F2, P3D-169/170).
+//
+// Componentes declarativos que só LEEM propriedades e só EMITEM a ação
+// semântica `action(ação, argumento, valor)`. Não há regra de animação aqui:
+// tudo vem pronto do view-model Rust (`crates/ui-slint/src/animate.rs`), com
+// textos por `TextId` (nenhuma string visível é fixa neste arquivo).
+//
+// Regras herdadas do AGENTS.md §0.1: cores só por `DesignTokens`, tamanhos por
+// layout nativo, controles focáveis por teclado (Tab, Enter/Espaço, setas).
+
+import { IconDisplay, IconSet } from "@lucide";
+import { DesignTokens } from "tokens.slint";
+
+export struct AnimateRowEntry {
+    id: string,
+    label: string,
+    detail: string,
+    icon: string,
+    available: bool,
+    selected: bool,
+}
+
+export struct AnimateParamEntry {
+    key: string,
+    label: string,
+    tip: string,
+    minimum: float,
+    maximum: float,
+    value: float,
+    value-label: string,
+    advanced: bool,
+    choices: [string],
+    choice-index: int,
+}
+
+export struct AnimateTexts {
+    workspace-label: string,
+    workspace-tip: string,
+    title-picker: string,
+    title-creature: string,
+    title-motion: string,
+    title-style: string,
+    add-creature: string,
+    empty-creature: string,
+    empty-motion: string,
+    rig-error: string,
+    advanced: string,
+    show-bones: string,
+    stepped: string,
+    stepped-tip: string,
+    root-motion: string,
+    root-motion-tip: string,
+    apply-now: string,
+    apply-now-tip: string,
+    keep-live: string,
+    keep-live-tip: string,
+    duplicate: string,
+    remove: string,
+    playhead: string,
+    play: string,
+    pause: string,
+    play-tip: string,
+    fit-model: string,
+    linked-model: string,
+}
+
+/// Ícone por id estável (o Rust fala em `IconId`, nunca em desenho).
+component AnimIcon inherits Rectangle {
+    in property <string> icon-id;
+    in property <length> size: 16px;
+    in property <color> stroke: DesignTokens.text-primary;
+    width: root.size;
+    height: root.size;
+    IconDisplay {
+        icon: root.icon-id == "footprints" ? IconSet.Footprints
+            : root.icon-id == "paw-print" ? IconSet.PawPrint
+            : root.icon-id == "waves-horizontal" ? IconSet.WavesHorizontal
+            : root.icon-id == "wind" ? IconSet.Wind
+            : root.icon-id == "person-standing" ? IconSet.PersonStanding
+            : root.icon-id == "bug" ? IconSet.Bug
+            : root.icon-id == "fish" ? IconSet.Fish
+            : root.icon-id == "bird" ? IconSet.Bird
+            : IconSet.Bone;
+        size: root.size;
+        stroke: root.stroke;
+    }
+}
+
+/// Bolha de dica; o texto vem do Rust.
+component AnimTip inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    background: DesignTokens.surface-raised;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    VerticalLayout {
+        padding: 8px;
+        spacing: 3px;
+        max-width: 260px;
+        Text { text: root.title; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; wrap: word-wrap; }
+        if root.detail != "": Text { text: root.detail; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
+    }
+}
+
+/// Slider próprio: arrastar emite `previewed` (draft ao vivo, sem histórico) e
+/// soltar emite `committed` (um passo de Undo). Teclado: setas passo a passo,
+/// Home/End nos extremos — cada tecla confirma na hora.
+export component AnimSlider inherits Rectangle {
+    in property <string> label;
+    in property <string> tip;
+    in property <string> value-text;
+    in property <float> minimum: 0;
+    in property <float> maximum: 1;
+    in property <float> value;
+    in property <bool> compact: false;
+    callback previewed(float);
+    callback committed();
+
+    property <float> span: max(root.maximum - root.minimum, 0.0001);
+    property <float> drag-value: root.value;
+    property <float> shown: touch.pressed ? root.drag-value : root.value;
+    property <float> fraction: clamp((root.shown - root.minimum) / root.span, 0.0, 1.0);
+
+    height: root.compact ? 26px : 40px;
+    accessible-role: slider;
+    accessible-label: root.label;
+    accessible-value: root.value-text;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: root.span / 20;
+    accessible-action-increment => { root.step-by(1); }
+    accessible-action-decrement => { root.step-by(-1); }
+    forward-focus: focus;
+
+    function step-by(direction: int) {
+        root.previewed(clamp(root.value + direction * root.span / 20, root.minimum, root.maximum));
+        root.committed();
+    }
+
+    VerticalLayout {
+        spacing: 2px;
+        if !root.compact: HorizontalLayout {
+            height: 16px;
+            Text { text: root.label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; }
+            Text { text: root.value-text; color: DesignTokens.text-secondary; font-size: 11px; vertical-alignment: center; horizontal-alignment: right; }
+        }
+        track-area := Rectangle {
+            height: 22px;
+            border-width: focus.has-focus ? 1px : 0px;
+            border-color: DesignTokens.focus-ring;
+            border-radius: 4px;
+
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                height: 6px;
+                border-radius: 3px;
+                background: DesignTokens.border;
+            }
+            Rectangle {
+                y: (parent.height - self.height) / 2;
+                width: parent.width * root.fraction;
+                height: 6px;
+                border-radius: 3px;
+                background: DesignTokens.accent;
+            }
+            Rectangle {
+                x: (parent.width - self.width) * root.fraction;
+                y: (parent.height - self.height) / 2;
+                width: 14px;
+                height: 14px;
+                border-radius: 7px;
+                background: touch.pressed || focus.has-focus ? DesignTokens.focus-ring : DesignTokens.text-primary;
+                border-width: 1px;
+                border-color: DesignTokens.border-strong;
+            }
+
+            // O TouchArea vive DENTRO do FocusScope (padrão do shell): como
+            // irmãos, o FocusScope por cima engoliria os cliques.
+            focus := FocusScope {
+                key-pressed(event) => {
+                    if event.text == Key.LeftArrow || event.text == Key.DownArrow {
+                        root.step-by(-1);
+                        return accept;
+                    }
+                    if event.text == Key.RightArrow || event.text == Key.UpArrow {
+                        root.step-by(1);
+                        return accept;
+                    }
+                    if event.text == Key.Home {
+                        root.previewed(root.minimum);
+                        root.committed();
+                        return accept;
+                    }
+                    if event.text == Key.End {
+                        root.previewed(root.maximum);
+                        root.committed();
+                        return accept;
+                    }
+                    reject
+                }
+
+                touch := TouchArea {
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                            root.drag-value = root.minimum + clamp(self.mouse-x / self.width, 0.0, 1.0) * root.span;
+                            root.previewed(root.drag-value);
+                        } else if event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel {
+                            root.committed();
+                        }
+                    }
+                    moved => {
+                        if self.pressed {
+                            root.drag-value = root.minimum + clamp(self.mouse-x / self.width, 0.0, 1.0) * root.span;
+                            root.previewed(root.drag-value);
+                        }
+                    }
+                    if root.tip != "": Tooltip {
+                        AnimTip { title: root.label; detail: root.tip; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Chip de escolha (estilos, padrão de passo, alternâncias).
+component AnimChip inherits Rectangle {
+    in property <string> label;
+    in property <string> tip;
+    in property <bool> selected;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    height: 26px;
+    border-radius: 13px;
+    background: !root.enabled ? transparent
+        : root.selected ? DesignTokens.accent
+        : chip-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.canvas;
+    border-width: chip-focus.has-focus ? 2px : 1px;
+    border-color: chip-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.selected;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    forward-focus: chip-focus;
+
+    Text {
+        text: root.label;
+        color: !root.enabled ? DesignTokens.disabled : root.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: 11px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    chip-focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        chip-touch := TouchArea {
+            enabled: root.enabled;
+            clicked => { root.clicked(); }
+            if root.tip != "": Tooltip {
+                AnimTip { title: root.label; detail: root.tip; }
+            }
+        }
+    }
+}
+
+/// Botão de ação com rótulo (Apply Now, duplicar, remover).
+component AnimButton inherits Rectangle {
+    in property <string> label;
+    in property <string> tip;
+    in property <bool> primary: false;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    height: 28px;
+    min-width: 72px;
+    border-radius: 5px;
+    background: !root.enabled ? transparent
+        : root.primary ? DesignTokens.accent
+        : btn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+    border-width: btn-focus.has-focus ? 2px : 1px;
+    border-color: btn-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-description: root.tip;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    forward-focus: btn-focus;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        alignment: center;
+        Text {
+            text: root.label;
+            color: !root.enabled ? DesignTokens.disabled
+                : root.primary ? DesignTokens.on-accent
+                : root.danger ? DesignTokens.danger : DesignTokens.text-primary;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+    btn-focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        // Sempre ativo: um TouchArea desabilitado não recebe hover e a dica
+        // (o motivo, quando desabilitado) não apareceria.
+        btn-touch := TouchArea {
+            clicked => { if root.enabled { root.clicked(); } }
+            if root.tip != "": Tooltip {
+                AnimTip { title: root.label; detail: root.tip; }
+            }
+        }
+    }
+}
+
+/// Cartão do seletor: ícone, nome e descrição (ou o motivo de estar indisponível).
+component AnimCard inherits Rectangle {
+    in property <AnimateRowEntry> entry;
+    /// Compacto: só ícone e nome; a descrição (ou o motivo de estar
+    /// indisponível) vai para a dica e para a descrição acessível.
+    in property <bool> compact: false;
+    callback clicked;
+
+    height: root.compact ? 34px : 46px;
+    border-radius: 6px;
+    background: !root.entry.available ? transparent
+        : root.entry.selected ? DesignTokens.accent.with-alpha(0.22)
+        : card-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.canvas;
+    border-width: card-focus.has-focus ? 2px : 1px;
+    border-color: card-focus.has-focus ? DesignTokens.focus-ring
+        : root.entry.selected ? DesignTokens.accent : DesignTokens.border;
+    accessible-role: button;
+    accessible-label: root.entry.label;
+    accessible-description: root.entry.detail;
+    accessible-checked: root.entry.selected;
+    accessible-enabled: root.entry.available;
+    accessible-action-default => { if root.entry.available { root.clicked(); } }
+    forward-focus: card-focus;
+
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 10px;
+        AnimIcon {
+            icon-id: root.entry.icon;
+            size: root.compact ? 16px : 20px;
+            stroke: root.entry.available ? DesignTokens.text-primary : DesignTokens.disabled;
+            y: (parent.height - self.height) / 2;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.entry.label;
+                color: root.entry.available ? DesignTokens.text-primary : DesignTokens.disabled;
+                font-size: root.compact ? 11px : 12px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            if !root.compact: Text {
+                text: root.entry.detail;
+                color: root.entry.available ? DesignTokens.text-secondary : DesignTokens.disabled;
+                font-size: 10px;
+                overflow: elide;
+            }
+        }
+    }
+    card-focus := FocusScope {
+        enabled: root.entry.available;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        // Sempre ativo: um TouchArea desabilitado não recebe hover e a dica com
+        // o motivo (modo compacto) não apareceria justamente nos indisponíveis.
+        card-touch := TouchArea {
+            clicked => { if root.entry.available { root.clicked(); } }
+            if root.compact: Tooltip {
+                AnimTip { title: root.entry.label; detail: root.entry.detail; }
+            }
+        }
+    }
+}
+
+/// Botão quadrado de ícone da bandeja esquerda (um por Motion do catálogo).
+export component AnimTile inherits Rectangle {
+    in property <AnimateRowEntry> entry;
+    callback clicked;
+
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: !root.entry.available ? transparent
+        : root.entry.selected ? DesignTokens.accent
+        : tile-touch.has-hover ? DesignTokens.surface-hover : transparent;
+    border-width: tile-focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
+    accessible-role: button;
+    accessible-label: root.entry.label;
+    accessible-description: root.entry.detail;
+    accessible-enabled: root.entry.available;
+    accessible-action-default => { if root.entry.available { root.clicked(); } }
+    forward-focus: tile-focus;
+
+    AnimIcon {
+        icon-id: root.entry.icon;
+        size: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        stroke: !root.entry.available ? DesignTokens.disabled
+            : root.entry.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
+    }
+    tile-focus := FocusScope {
+        enabled: root.entry.available;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        tile-touch := TouchArea {
+            enabled: root.entry.available;
+            clicked => { root.clicked(); }
+            Tooltip {
+                AnimTip { title: root.entry.label; detail: root.entry.detail; }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Corpos das seções do Inspector (a moldura `InspectorSection` vem do shell)
+// ---------------------------------------------------------------------------
+
+/// Criatura: lista de criaturas do projeto + "adicionar criatura" (6 presets).
+export component AnimateCreatureBody inherits VerticalLayout {
+    in property <AnimateTexts> texts;
+    in property <[AnimateRowEntry]> creatures;
+    in property <[AnimateRowEntry]> presets;
+    in property <bool> has-creature;
+    callback action(string, string, float);
+
+    spacing: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+
+    // Primeiro uso: tudo rotulado, para quem nunca animou. Depois: compacto,
+    // para os sliders caberem na tela sem rolar.
+    if !root.has-creature: VerticalLayout {
+        spacing: 8px;
+        Text {
+            text: root.texts.empty-creature;
+            color: DesignTokens.text-secondary;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+        GridLayout {
+            spacing: 6px;
+            for preset[i] in root.presets: AnimCard {
+                row: floor(i / 3);
+                col: mod(i, 3);
+                height: 56px;
+                entry: preset;
+                clicked => { root.action("add-creature", preset.id, 0); }
+            }
+        }
+    }
+    if root.has-creature: VerticalLayout {
+        spacing: 6px;
+        for creature in root.creatures: AnimChip {
+            label: creature.label;
+            selected: creature.selected;
+            clicked => { root.action("select-creature", creature.id, 0); }
+        }
+        Text {
+            text: root.texts.add-creature;
+            color: DesignTokens.text-muted;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: start;
+            for preset in root.presets: AnimTile {
+                entry: preset;
+                clicked => { root.action("add-creature", preset.id, 0); }
+            }
+        }
+    }
+}
+
+/// Motions: catálogo com prévia em texto simples e os Motions da criatura.
+export component AnimateMotionBody inherits VerticalLayout {
+    in property <AnimateTexts> texts;
+    in property <[AnimateRowEntry]> catalog;
+    in property <[AnimateRowEntry]> motions;
+    in property <bool> has-motion;
+    in property <bool> has-creature;
+    in property <bool> can-fit;
+    in property <string> fit-tip;
+    in property <string> linked-models;
+    callback action(string, string, float);
+
+    spacing: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+
+    // Ligar a criatura a um modelo é o que faz a malha se mover: o botão fica
+    // em destaque enquanto nenhum modelo está ligado.
+    if root.has-creature: VerticalLayout {
+        spacing: 4px;
+        padding-bottom: 4px;
+        AnimButton {
+            label: root.texts.fit-model;
+            tip: root.fit-tip;
+            enabled: root.can-fit;
+            primary: root.linked-models == "";
+            clicked => { root.action("fit-to-model", "", 0); }
+        }
+        if root.linked-models != "": Text {
+            text: root.texts.linked-model + ": " + root.linked-models;
+            color: DesignTokens.text-secondary;
+            font-size: 10px;
+            overflow: elide;
+        }
+    }
+
+    GridLayout {
+        spacing: 6px;
+        for item[i] in root.catalog: AnimCard {
+            row: floor(i / 2);
+            col: mod(i, 2);
+            compact: true;
+            entry: item;
+            clicked => { root.action("add-motion", item.id, 0); }
+        }
+    }
+    if root.has-creature && !root.has-motion: Text {
+        text: root.texts.empty-motion;
+        color: DesignTokens.text-secondary;
+        font-size: 11px;
+        wrap: word-wrap;
+    }
+    if root.motions.length > 1: VerticalLayout {
+        spacing: 4px;
+        Rectangle { height: 1px; background: DesignTokens.border; }
+        for motion in root.motions: AnimChip {
+            label: motion.label;
+            selected: motion.selected;
+            clicked => { root.action("select-motion", motion.id, 0); }
+        }
+    }
+    if root.has-motion: HorizontalLayout {
+        spacing: 6px;
+        AnimButton {
+            label: root.texts.duplicate;
+            clicked => { root.action("duplicate-motion", "", 0); }
+        }
+        AnimButton {
+            label: root.texts.remove;
+            danger: true;
+            clicked => { root.action("remove-motion", "", 0); }
+        }
+    }
+}
+
+/// Ajustes do Motion: Styles (presets que só preenchem parâmetros), sliders
+/// universais, "Advanced", Stepped e Root Motion.
+export component AnimateTweakBody inherits VerticalLayout {
+    in property <AnimateTexts> texts;
+    in property <[AnimateRowEntry]> styles;
+    in property <[AnimateParamEntry]> params;
+    in property <bool> has-motion;
+    in property <bool> rig-error;
+    in property <bool> show-advanced;
+    in property <bool> show-bones;
+    in property <bool> stepped;
+    in property <bool> root-motion;
+    in property <bool> root-motion-supported;
+    callback action(string, string, float);
+
+    spacing: 0px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+
+    if root.rig-error: Text {
+        text: root.texts.rig-error;
+        color: DesignTokens.warning;
+        font-size: 11px;
+        wrap: word-wrap;
+    }
+    Text {
+        text: root.texts.title-style;
+        color: DesignTokens.text-muted;
+        font-size: 10px;
+        font-weight: 700;
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        padding-top: 4px;
+        padding-bottom: 8px;
+        alignment: start;
+        for style in root.styles: AnimChip {
+            label: style.label;
+            selected: style.selected;
+            enabled: style.available;
+            clicked => { root.action("set-style", style.id, 0); }
+        }
+    }
+    for param in root.params: VerticalLayout {
+        if !param.advanced && param.choices.length == 0: AnimSlider {
+            label: param.label;
+            tip: param.tip;
+            value-text: param.value-label;
+            minimum: param.minimum;
+            maximum: param.maximum;
+            value: param.value;
+            previewed(v) => { root.action("param-preview", param.key, v); }
+            committed => { root.action("param-commit", "", 0); }
+        }
+    }
+    AnimChip {
+        label: root.texts.advanced;
+        selected: root.show-advanced;
+        clicked => { root.action("toggle-advanced", "", 0); }
+    }
+    if root.show-advanced: VerticalLayout {
+        padding-top: 8px;
+        for param in root.params: VerticalLayout {
+            if param.advanced && param.choices.length == 0: AnimSlider {
+                label: param.label;
+                tip: param.tip;
+                value-text: param.value-label;
+                minimum: param.minimum;
+                maximum: param.maximum;
+                value: param.value;
+                previewed(v) => { root.action("param-preview", param.key, v); }
+                committed => { root.action("param-commit", "", 0); }
+            }
+            if param.advanced && param.choices.length > 0: VerticalLayout {
+                padding-bottom: 8px;
+                spacing: 4px;
+                Text { text: param.label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    for choice[i] in param.choices: AnimChip {
+                        label: choice;
+                        selected: i == param.choice-index;
+                        clicked => { root.action("param-set", param.key, i); }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            padding-bottom: 4px;
+            AnimChip {
+                label: root.texts.stepped;
+                tip: root.texts.stepped-tip;
+                selected: root.stepped;
+                enabled: root.has-motion;
+                clicked => { root.action("set-stepped", "", root.stepped ? 0 : 1); }
+            }
+            if root.root-motion-supported: AnimChip {
+                label: root.texts.root-motion;
+                tip: root.texts.root-motion-tip;
+                selected: root.root-motion;
+                clicked => { root.action("set-root-motion", "", root.root-motion ? 0 : 1); }
+            }
+        }
+    }
+    AnimChip {
+        label: root.texts.show-bones;
+        selected: root.show-bones;
+        clicked => { root.action("toggle-bones", "", 0); }
+    }
+}
+
+/// Barra de transporte flutuante *in-canvas*: play/pause, scrub, Apply Now.
+export component AnimateTransport inherits Rectangle {
+    in property <AnimateTexts> texts;
+    in property <bool> playing;
+    in property <bool> has-motion;
+    in property <float> progress;
+    in property <string> time-label;
+    callback action(string, string, float);
+
+    height: 44px;
+    border-radius: 8px;
+    background: DesignTokens.hud-surface;
+    border-width: 1px;
+    border-color: DesignTokens.hud-border;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 8px;
+
+        Rectangle {
+            width: 28px;
+            height: 28px;
+            border-radius: 14px;
+            background: !root.has-motion ? transparent
+                : play-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.accent;
+            border-width: play-focus.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus-ring;
+            accessible-role: button;
+            accessible-label: root.playing ? root.texts.pause : root.texts.play;
+            accessible-description: root.texts.play-tip;
+            accessible-enabled: root.has-motion;
+            accessible-action-default => { root.action("toggle-play", "", 0); }
+            forward-focus: play-focus;
+
+            IconDisplay {
+                icon: root.playing ? IconSet.Pause : IconSet.Play;
+                size: 14px;
+                stroke: root.has-motion ? DesignTokens.on-accent : DesignTokens.disabled;
+            }
+            play-focus := FocusScope {
+                enabled: root.has-motion;
+                key-pressed(event) => {
+                    if event.text == Key.Return || event.text == " " { root.action("toggle-play", "", 0); return accept; }
+                    reject
+                }
+                play-touch := TouchArea {
+                    enabled: root.has-motion;
+                    clicked => { root.action("toggle-play", "", 0); }
+                    Tooltip {
+                        AnimTip { title: root.playing ? root.texts.pause : root.texts.play; detail: root.texts.play-tip; }
+                    }
+                }
+            }
+        }
+
+        AnimSlider {
+            horizontal-stretch: 1;
+            compact: true;
+            label: root.texts.playhead;
+            value-text: root.time-label;
+            minimum: 0;
+            maximum: 1;
+            value: root.progress;
+            previewed(v) => { root.action("seek", "", v); }
+            committed => { }
+        }
+
+        Text {
+            text: root.time-label;
+            color: DesignTokens.text-secondary;
+            font-size: 11px;
+            font-family: "monospace";
+            vertical-alignment: center;
+            min-width: 84px;
+        }
+
+        AnimButton {
+            label: root.texts.keep-live;
+            tip: root.texts.keep-live-tip;
+            enabled: root.has-motion;
+            clicked => { root.action("apply-now", "keep", 0); }
+        }
+        AnimButton {
+            label: root.texts.apply-now;
+            tip: root.texts.apply-now-tip;
+            primary: true;
+            enabled: root.has-motion;
+            clicked => { root.action("apply-now", "convert", 0); }
+        }
+    }
+}

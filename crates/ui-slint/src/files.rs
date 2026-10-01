@@ -123,6 +123,15 @@ impl FileDialogService {
             .map(|file| file.path().to_path_buf())
     }
 
+    /// Seleciona uma imagem para virar camada de decalque.
+    pub async fn open_decal_image(&self) -> Option<PathBuf> {
+        rfd::AsyncFileDialog::new()
+            .add_filter("Image", &["png", "jpg", "jpeg"])
+            .pick_file()
+            .await
+            .map(|file| file.path().to_path_buf())
+    }
+
     /// Seleciona uma imagem de referência do disco.
     pub async fn open_reference_image(&self) -> Option<PathBuf> {
         rfd::AsyncFileDialog::new()

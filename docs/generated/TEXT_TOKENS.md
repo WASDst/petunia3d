@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1312**.
+Total de chaves de localização cadastradas: **1495**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -65,18 +65,108 @@ Total de chaves de localização cadastradas: **1312**.
 | `actions.symmetrize_dir_pos` | + to − | + para − |
 | `actions.triangulate` | Triangulate | Triangular |
 | `actions.weld_eps` | Weld | Solda |
+| `animate.add_creature` | Add creature | Adicionar criatura |
+| `animate.advanced` | Advanced | Avançado |
+| `animate.apply_now` | Apply Now | Aplicar agora |
+| `animate.apply_now_tip` | Turn this Motion into an editable clip and remove the live Motion | Transforma o Movimento em um clipe editável e remove o Movimento vivo |
 | `animate.auto_rig` | Auto-Rig | Auto-Rig |
+| `animate.choice.pattern_alternate` | Alternate | Alternado |
+| `animate.choice.pattern_auto` | Automatic | Automático |
+| `animate.choice.pattern_lateral` | Side by side | Lado a lado |
+| `animate.choice.pattern_wave` | Wave | Onda |
+| `animate.creature.bird` | Bird | Pássaro |
+| `animate.creature.fish` | Fish | Peixe |
+| `animate.creature.humanoid` | Humanoid | Humanoide |
+| `animate.creature.multi_leg` | Many legs | Muitas pernas |
+| `animate.creature.quadruped` | Four legs | Quadrúpede |
+| `animate.creature.serpent` | Serpent | Serpente |
+| `animate.duplicate` | Duplicate Motion | Duplicar Movimento |
+| `animate.empty_creature` | Start by adding a creature. It comes with bones ready to animate. | Comece adicionando uma criatura. Ela já vem com ossos prontos para animar. |
+| `animate.empty_motion` | Pick a Motion on the left to bring your creature to life. | Escolha um Movimento à esquerda para dar vida à criatura. |
 | `animate.first_frame` | First frame | Primeiro frame |
+| `animate.fit_locked` | Unlock the model first | Destrave o modelo antes |
+| `animate.fit_model` | Fit to model | Ajustar ao modelo |
+| `animate.fit_model_tip` | Fits this creature's bones to your selected model so the model moves with them | Ajusta os ossos da criatura ao modelo selecionado para o modelo se mover com eles |
+| `animate.fit_needs_model` | Select a model with points first | Selecione antes um modelo com pontos |
 | `animate.frame` | Frame | Frame |
 | `animate.humanoid` | Humanoid | Humanoide |
+| `animate.keep_live` | Bake a copy | Gerar cópia |
+| `animate.keep_live_tip` | Add an editable clip but keep the live Motion too | Adiciona um clipe editável e mantém também o Movimento vivo |
 | `animate.last_frame` | Last frame | Último frame |
+| `animate.linked_model` | Linked model | Modelo ligado |
+| `animate.motion.biped_cycle` | Walk / Run | Andar / Correr |
+| `animate.motion.gait` | Walk (legs) | Andar (pernas) |
+| `animate.motion.idle_breath` | Breathe | Respirar |
+| `animate.motion.serpentine` | Slither / Swim | Deslizar / Nadar |
+| `animate.motion_tip.biped_cycle` | Walk or run on two legs | Andar ou correr sobre duas pernas |
+| `animate.motion_tip.gait` | Walk, trot or crawl on four or more legs | Andar, trotar ou rastejar com quatro ou mais pernas |
+| `animate.motion_tip.idle_breath` | Breathe and sway in place | Respirar e balançar no lugar |
+| `animate.motion_tip.serpentine` | Slither, swim or sway a tail | Deslizar, nadar ou balançar uma cauda |
+| `animate.needs_body` | Needs a body bone | Precisa de um osso de corpo |
+| `animate.needs_chain` | Needs a longer spine or tail | Precisa de coluna ou cauda mais longa |
+| `animate.needs_legs` | Needs at least two legs | Precisa de pelo menos duas pernas |
+| `animate.param.arm_swing` | Arm swing | Balanço dos braços |
+| `animate.param.duty` | Foot contact | Contato do pé |
+| `animate.param.energy` | Energy | Energia |
+| `animate.param.head_hold` | Head steady | Cabeça firme |
+| `animate.param.lean` | Lean | Inclinação |
+| `animate.param.pattern` | Step pattern | Padrão de passo |
+| `animate.param.run_blend` | Walk ↔ Run | Andar ↔ Correr |
+| `animate.param.smoothness` | Smoothness | Suavidade |
+| `animate.param.speed` | Speed | Velocidade |
+| `animate.param.spine_wave` | Spine wave | Onda da coluna |
+| `animate.param.step_height` | Step height | Altura do passo |
+| `animate.param.stride` | Stride | Passada |
+| `animate.param.sway` | Sway | Balanço |
+| `animate.param.tail_boost` | Tail boost | Reforço da cauda |
+| `animate.param.tail_sway` | Tail sway | Balanço da cauda |
+| `animate.param.variation` | Variation | Variação |
+| `animate.param.wavelength` | Wave length | Comprimento da onda |
+| `animate.param.weight` | Weight | Peso |
+| `animate.param_tip.arm_swing` | How much the arms swing | Quanto os braços balançam |
+| `animate.param_tip.duty` | How long each foot stays on the ground | Por quanto tempo cada pé fica no chão |
+| `animate.param_tip.energy` | How big and lively the movement is | Quão grande e animado é o movimento |
+| `animate.param_tip.head_hold` | Keeps the head steadier than the body | Mantém a cabeça mais firme que o corpo |
+| `animate.param_tip.lean` | Lean the body backward or forward | Inclina o corpo para trás ou para a frente |
+| `animate.param_tip.pattern` | Which legs move together | Quais pernas se movem juntas |
+| `animate.param_tip.run_blend` | 0 walks, 1 runs | 0 anda, 1 corre |
+| `animate.param_tip.smoothness` | Snappy at 0, flowing at 1 | Seco em 0, fluido em 1 |
+| `animate.param_tip.speed` | How fast the Motion plays | Quão rápido o Movimento toca |
+| `animate.param_tip.spine_wave` | How much the spine bends while walking | Quanto a coluna dobra ao andar |
+| `animate.param_tip.step_height` | How high the feet lift | Quão alto os pés levantam |
+| `animate.param_tip.stride` | Length of each step | Comprimento de cada passo |
+| `animate.param_tip.sway` | Side-to-side body sway | Balanço lateral do corpo |
+| `animate.param_tip.tail_boost` | Extra motion toward the tail tip | Movimento extra na ponta da cauda |
+| `animate.param_tip.tail_sway` | How much the tail swings | Quanto a cauda balança |
+| `animate.param_tip.variation` | Adds small natural differences | Adiciona pequenas diferenças naturais |
+| `animate.param_tip.wavelength` | How many bends fit along the body | Quantas curvas cabem ao longo do corpo |
+| `animate.param_tip.weight` | Heavier bodies bounce and settle more | Corpos mais pesados quicam e assentam mais |
 | `animate.pause` | Pause | Pausar |
 | `animate.play` | Play | Reproduzir |
+| `animate.playhead` | Playhead | Cabeça de reprodução |
+| `animate.remove` | Remove Motion | Remover Movimento |
+| `animate.rig_error` | This creature cannot do this Motion. Check its bones. | Esta criatura não consegue fazer este Movimento. Confira os ossos dela. |
+| `animate.root_motion` | Move forward | Avançar |
+| `animate.root_motion_tip` | The whole body travels instead of walking in place | O corpo todo se desloca em vez de andar no lugar |
+| `animate.show_bones` | Show bones | Mostrar ossos |
+| `animate.stepped` | Stepped (retro) | Em degraus (retrô) |
+| `animate.stepped_tip` | Holds each pose for a moment, like classic 12 fps animation | Segura cada pose por um instante, como na animação clássica de 12 fps |
+| `animate.style.cartoon` | Cartoon | Cartoon |
+| `animate.style.custom` | Custom | Personalizado |
+| `animate.style.floaty` | Floaty | Flutuante |
+| `animate.style.heavy` | Heavy | Pesado |
+| `animate.style.stiff` | Stiff | Rígido |
 | `animate.tip_first` | Jump to First Frame · Shift+Left | Ir ao Primeiro Frame · Shift+Left |
 | `animate.tip_last` | Jump to Last Frame · Shift+Right | Ir ao Último Frame · Shift+Right |
 | `animate.tip_next` | Step 1 Frame Forward · Right | Avançar 1 Frame · Right |
 | `animate.tip_play` | Play / Pause Animation · Space | Reproduzir / Pausar Animação · Space |
 | `animate.tip_prev` | Step 1 Frame Backward · Left | Voltar 1 Frame · Left |
+| `animate.title_creature` | Creature | Criatura |
+| `animate.title_motion` | Motion | Movimento |
+| `animate.title_picker` | Motions | Movimentos |
+| `animate.title_style` | Style | Estilo |
+| `animate.unavailable_no_rig` | Add a creature first | Adicione uma criatura primeiro |
+| `animate.workspace_tip` | Bring creatures to life with ready-made Motions | Dê vida a criaturas com Movimentos prontos |
 | `app.title` | Petunia3D | Petunia3D |
 | `camera.back` | Back | Traseira |
 | `camera.bottom` | Bottom | Inferior |
@@ -137,6 +227,7 @@ Total de chaves de localização cadastradas: **1312**.
 | `dock.side` | Dock side | Lado do dock |
 | `dock.side_by_side` | Side by side | Lado a lado |
 | `dock.stacked` | Stacked | Empilhados |
+| `draw.shape_name` | Shape | Forma |
 | `edit.redo` | Redo | Refazer |
 | `edit.undo` | Undo | Desfazer |
 | `empty.no_selection` | Nothing selected | Nada selecionado |
@@ -348,10 +439,18 @@ Total de chaves de localização cadastradas: **1312**.
 | `prefab.renamed` | Prefab renamed to '{name}' | Prefab renomeado para '{name}' |
 | `prefab.saved` | Prefab '{name}' saved to the library | Prefab '{name}' salvo na biblioteca |
 | `prefab.updated` | Prefab '{name}' updated from the selection | Prefab '{name}' atualizado com a seleção |
+| `preferences.click_move_click` | Drag without holding the button (click, move, click) | Arrastar sem segurar o botão (clicar, mover, clicar) |
+| `preferences.click_move_click_hint` | Click a handle: it follows the mouse until the next click. | Clique numa alça: ela segue o mouse até o próximo clique. |
 | `preferences.colorblind_axes` | Colorblind axes differentiation (X, Y, Z labels) | Diferenciação não-cromática de eixos (Rótulos X, Y, Z) |
 | `preferences.double_tap_interval` | Double-tap shortcut interval (ms) | Intervalo de duplo toque de atalho (ms) |
+| `preferences.drag_threshold` | Distance before a drag starts (px) | Distância para começar a arrastar (px) |
 | `preferences.multiselection_measure_tag` | Display average measure tag on multiple edge selection | Exibir tag de média na multiseleção de arestas |
 | `preferences.reduced_motion` | Reduced motion (disable viewport animations) | Redução de movimento (desativa animações do viewport) |
+| `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
+| `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
+| `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
+| `preferences.workplane_prefer_ground` | Automatic work plane favors the ground | Plano automático favorece o chão |
+| `preferences.workplane_prefer_ground_hint` | With no face under the cursor, drawing goes on the ground unless the camera is almost level. Off: the world plane that most faces the view (Modo/Cinema 4D style). | Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D). |
 | `prims.body_length` | Body Length | Comprimento do Corpo |
 | `prims.bottom_radius` | Bottom Radius | Raio da Base |
 | `prims.cancel` | Cancel | Cancelar |
@@ -557,8 +656,41 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.box_click_selection_of_scene_points_edges_an` | Box / click selection of scene points, edges and faces | Seleção por caixa ou clique de Points, arestas e faces da cena |
 | `sl.bridge_edge_loops_with_configurable_quad_seg` | Bridge edge loops with configurable quad segments and twist | Conecta loops de arestas com segmentos de quads e torção configuráveis |
 | `sl.brush` | Brush | Pincel |
+| `sl.brush_angle` | Angle | Ângulo |
+| `sl.brush_blend` | Blend | Mistura |
+| `sl.brush_blend_add` | Add | Somar |
+| `sl.brush_blend_darken` | Darken | Escurecer |
+| `sl.brush_blend_lighten` | Lighten | Clarear |
+| `sl.brush_blend_multiply` | Multiply | Multiplicar |
+| `sl.brush_blend_normal` | Normal | Normal |
+| `sl.brush_blend_screen` | Screen | Tela |
+| `sl.brush_clone_hint` | Ctrl+click on the surface to set the clone source. | Ctrl+clique na superfície para definir a origem do clone. |
+| `sl.brush_clone_ready` | Clone source set. Ctrl+click to change it. | Origem do clone definida. Ctrl+clique para trocar. |
+| `sl.brush_flow` | Flow | Fluxo |
 | `sl.brush_lock` | Brush lock | Bloquear pincel |
+| `sl.brush_opacity_jitter` | Opacity jitter | Variação de opacidade |
+| `sl.brush_preset_delete` | Delete preset | Apagar preset |
+| `sl.brush_preset_save` | Save brush | Salvar pincel |
+| `sl.brush_presets` | Presets | Presets |
+| `sl.brush_roundness` | Roundness | Achatamento |
+| `sl.brush_scatter` | Scatter | Espalhamento |
 | `sl.brush_settings` | Brush Settings | Configurações do pincel |
+| `sl.brush_size_jitter` | Size jitter | Variação de tamanho |
+| `sl.brush_smoothing` | Stabilizer | Estabilizador |
+| `sl.brush_spacing` | Spacing | Espaçamento |
+| `sl.brush_spray_density` | Spray density | Densidade do spray |
+| `sl.brush_tip` | Tip | Ponta |
+| `sl.brush_tip_diamond` | Diamond | Losango |
+| `sl.brush_tip_round` | Round | Redonda |
+| `sl.brush_tip_square` | Square | Quadrada |
+| `sl.brush_type` | Brush type | Tipo de pincel |
+| `sl.brush_type_blur` | Blur | Desfoque |
+| `sl.brush_type_burn` | Burn | Queimar |
+| `sl.brush_type_clone` | Clone | Clone |
+| `sl.brush_type_dodge` | Dodge | Clarear |
+| `sl.brush_type_pixel` | Pixel | Pixel |
+| `sl.brush_type_smudge` | Smudge | Borrar |
+| `sl.brush_type_spray` | Spray | Spray |
 | `sl.camera_projection` | Camera Projection | Projeção da Câmera |
 | `sl.camera_viewpoints_viewport_overlays_and_rend` | Camera viewpoints, viewport overlays and rendering display modes | Pontos de vista da câmera, overlays da viewport e modos de exibição |
 | `sl.cancel` | Cancel | Cancelar |
@@ -640,6 +772,7 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.double_tap_interval_modal_shortcut` | Double-Tap Interval (Modal Shortcut) | Intervalo do Duplo Toque (Atalho Modal) |
 | `sl.drag_a_cut_line_across_the_mesh_to_bisect` | Drag a cut line across the mesh to bisect | Arraste uma linha de corte pela malha para dividi-la |
 | `sl.drag_direction` | Drag Direction | Direção de Arraste |
+| `sl.draw` | DRAW | DRAW |
 | `sl.draw_2d_profile_curves_on_ground_face_or_vie` | Draw 2D profile curves on ground, face, or viewplane to extrude or revolve | Desenhe curvas de perfil 2D no chão, em uma face ou no plano da vista para extrudar ou revolver |
 | `sl.draw_linear_color_gradients_between_endpoint` | Draw linear color gradients between endpoints across active canvas | Desenha gradientes lineares de cor entre dois pontos na tela ativa |
 | `sl.draw_straight_brush_strokes_between_clicked_` | Draw straight brush strokes between clicked endpoints | Desenha pinceladas retas entre os pontos clicados |
@@ -648,6 +781,8 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.duplicate` | Duplicate | Duplicar |
 | `sl.edge` | Edge | Aresta |
 | `sl.effects` | Effects | Efeitos |
+| `sl.ellipse` | Ellipse | Elipse |
+| `sl.ellipse_description` | Fill an ellipse inscribed between two points on the surface | Preenche uma elipse inscrita entre dois pontos da superfície |
 | `sl.enabled` | Enabled | Ativado |
 | `sl.english_us` | English (US) | English (US) |
 | `sl.enter_confirm_esc_cancel` | Enter confirm · Esc cancel | Enter confirma · Esc cancela |
@@ -681,7 +816,6 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.flat_2d_quad_rectangular_plane_surface_posit` | Flat 2D quad rectangular plane surface positioned on ground plane | Superfície plana retangular 2D posicionada no plano do chão |
 | `sl.flip_normals` | Flip Normals | Inverter normais |
 | `sl.flood_fill_contiguous_color_areas_on_active_` | Flood fill contiguous color areas on active UV map | Preenche áreas contíguas de cor no mapa UV ativo |
-| `sl.flow` | Flow | Fluxo |
 | `sl.focus_camera` | Focus Camera | Focar câmera |
 | `sl.frame` | Frame | Enquadrar |
 | `sl.frame_and_center_camera_view_on_currently_se` | Frame and center camera view on currently selected geometry | Enquadra e centraliza a câmera na geometria selecionada |
@@ -696,6 +830,8 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.generate_volume_directly_by_dragging_depth_o` | • Generate volume directly by dragging depth or pressing Enter | • Gerar volume direto por arraste de profundidade ou Enter |
 | `sl.generative_and_deformer_modifier_stack` | Generative and deformer modifier stack | Pilha de modificadores generativos e deformadores |
 | `sl.gradient` | Gradient | Gradiente |
+| `sl.gradient_radial` | Radial gradient | Gradiente radial |
+| `sl.gradient_radial_description` | Radial gradient from the click to the release point, fading out | Gradiente radial do clique até o ponto de soltar, esmaecendo |
 | `sl.grid` | Grid | Grade |
 | `sl.ground` | Ground | Chão |
 | `sl.ground_grid` | Ground Grid | Grade de Chão (Ground Grid) |
@@ -706,6 +842,7 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.icon_style` | Icon Style | Estilo dos Ícones |
 | `sl.icosphere` | Icosphere | Icosfera |
 | `sl.import` | Import | Importar |
+| `sl.import_decal_image` | Import image as decal | Importar imagem como decalque |
 | `sl.individual` | Individual | Individual |
 | `sl.individual_alt_e` | Individual (Alt+E) | Individual (Alt+E) |
 | `sl.insert` | Insert | Inserir |
@@ -730,6 +867,12 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.keyboard_global_shortcuts_work_tab_focus_bet` | Keyboard: global shortcuts work; Tab focus between controls is still partial. | Teclado: atalhos globais funcionam; foco por Tab entre controles ainda é parcial. |
 | `sl.keyboard_shortcut_profile` | Keyboard Shortcut Profile | Perfil de Atalhos de Teclado |
 | `sl.keyboard_shortcuts` | Keyboard & Shortcuts | Teclado & Atalhos |
+| `sl.keymap_custom_badge` | custom | personalizado |
+| `sl.keymap_delete_profile` | Delete profile | Apagar perfil |
+| `sl.keymap_editor_hint` | Click a shortcut, then press the new keys (Esc cancels). Editing a built-in profile creates your own copy. | Clique num atalho e pressione as novas teclas (Esc cancela). Editar um perfil embutido cria uma cópia sua. |
+| `sl.keymap_new_profile` | New profile from current | Novo perfil a partir do atual |
+| `sl.keymap_press_key` | Press keys… | Pressione as teclas… |
+| `sl.keymap_reset_binding` | Restore default | Restaurar padrão |
 | `sl.knife` | Knife | Knife |
 | `sl.language_region` | Language & Region | Idioma & Região |
 | `sl.layer_locked` | Layer locked | Camada bloqueada |
@@ -799,8 +942,10 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.paint` | PAINT | PINTAR |
 | `sl.paint_canvas_close` | Close canvas window | Fechar janela do canvas |
 | `sl.paint_canvas_open` | Open the canvas in a floating window | Abrir o canvas em janela flutuante |
+| `sl.paint_isolate_description` | Hide every other object so only the active one shows; click again to bring them back | Esconde os outros objetos para mostrar só o ativo; clique de novo para trazê-los de volta |
 | `sl.paint_pip` | Paint on the 2D canvas with a live 3D inset | Pintar no canvas 2D com inset 3D ao vivo |
 | `sl.paint_pip_back` | Back to the 3D view | Voltar para a vista 3D |
+| `sl.paint_select_description` | Switch the object being painted or pick faces to paint; Shift adds, double-click picks a whole UV island | Troca o objeto que está sendo pintado ou escolhe faces para pintar; Shift soma, duplo clique escolhe a ilha UV inteira |
 | `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
 | `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
 | `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |
@@ -826,6 +971,7 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.point` | Point | Point |
 | `sl.point_mode_off` | Point Mode (Off) | Modo Point (desligado) |
 | `sl.point_vertex_mode` | ✓ Point (Vertex) Mode | ✓ Modo Point (vértice) |
+| `sl.poly` | POLY | POLY |
 | `sl.polyhedral_geodesic_sphere_composed_of_equil` | Polyhedral geodesic sphere composed of equilateral triangles | Esfera geodésica poliédrica feita de triângulos equiláteros |
 | `sl.portugues_brasil` | Português (Brasil) | Português (Brasil) |
 | `sl.pos` | Pos:  | Pos:  |
@@ -942,7 +1088,6 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.snap_transformations_to_grid_intervals_verti` | Snap transformations to grid intervals, vertices, edges or faces | Ajusta transformações a intervalos da grade, vértices, arestas ou faces |
 | `sl.space_close_esc_cancel` | Space: close · Esc: cancel | Space: fechar · Esc: cancelar |
 | `sl.space_floating_micro_inspector` | Space: Floating Micro-Inspector | Espaço: Micro-Inspector flutuante |
-| `sl.spacing` | Spacing | Espaçamento |
 | `sl.sphere` | Sphere | Esfera |
 | `sl.spin` | Spin | Spin |
 | `sl.spin_lathe` | Spin / Lathe | Girar / Torno |
@@ -1031,6 +1176,27 @@ Total de chaves de localização cadastradas: **1312**.
 | `sl.x_ray_enabled` | X-Ray enabled | X-Ray ativado |
 | `sl.x_ray_off` | X-Ray off | X-Ray desligado |
 | `sl.x_ray_on` | X-Ray on | X-Ray ligado |
+| `snap_kind.axis_x` | Along X axis | Paralelo ao eixo X |
+| `snap_kind.axis_y` | Along Y axis | Paralelo ao eixo Y |
+| `snap_kind.axis_z` | Along Z axis | Paralelo ao eixo Z |
+| `snap_kind.grid` | Grid | Grade |
+| `snap_kind.midpoint` | Midpoint | Ponto médio |
+| `snap_kind.on_edge` | On edge | Na aresta |
+| `snap_kind.on_face` | On face | Na face |
+| `snap_kind.point` | Point | Ponto |
+| `tool_grammar.adjust_hint` | Type a value and press Enter to adjust (same Undo) | Digite um valor e Enter para ajustar (mesmo Undo) |
+| `tool_grammar.adjusted` | Last operation adjusted | Última operação ajustada |
+| `tool_grammar.draw_ready` | Draw on {plane}: click to add points, drag for curves; with Auto, the face under the cursor becomes the plane | Desenhar em {plane}: clique para adicionar pontos, arraste para curvas; no Auto, a face sob o cursor vira o plano |
+| `tool_grammar.expired` | The last operation can no longer be adjusted | A última operação não pode mais ser ajustada |
+| `tool_grammar.gesture_hint` | Drag or type a value · Esc cancels · Right button: menu | Arraste ou digite um valor · Esc cancela · Botão direito: menu |
+| `tool_grammar.last_operation` | Last operation | Última operação |
+| `tool_grammar.needs_edge` | {tool}: click or drag an edge | {tool}: clique ou arraste uma aresta |
+| `tool_grammar.needs_face` | {tool}: click or drag a face | {tool}: clique ou arraste uma face |
+| `tool_grammar.no_face_selected` | No face selected; using Ground | Nenhuma face selecionada; usando o chão |
+| `tool_grammar.primitive_kept` | Primitive kept · Ctrl+Z undoes | Primitiva mantida · Ctrl+Z desfaz |
+| `tool_grammar.ready` | {tool}: drag on the mesh or click to select | {tool}: arraste sobre a malha ou clique para selecionar |
+| `tool_grammar.workplane_auto` | Automatic work plane: face under the cursor or the world plane most parallel to the view | Plano de trabalho automático: face sob o cursor ou plano do mundo mais paralelo à vista |
+| `tool_grammar.workplane_set` | Work plane: {plane} (locked) | Plano de trabalho: {plane} (travado) |
 | `tool_properties.bevel_hint` | Supports one manifold convex edge with simple corners; one segment. | Suporta um edge convexo manifold com cantos simples; um segmento. |
 | `tool_properties.bevel_width` | Round Edge width | Largura do Round Edge |
 | `tool_properties.blocked` | Confirm or cancel the viewport operation before editing these fields. | Confirme ou cancele a operação na viewport antes de editar estes campos. |
@@ -1080,6 +1246,8 @@ Total de chaves de localização cadastradas: **1312**.
 | `tools.paint` | Paint | Pintar |
 | `tools.picker` | Picker | Conta-gotas |
 | `tools.pivot` | Pivot | Pivô |
+| `tools.poly_pen` | Poly Pen | Poly Pen |
+| `tools.poly_pen_hint` | Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it | Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo |
 | `tools.primitives` | Add | Adicionar |
 | `tools.push_pull` | Push/Pull | Push/Pull |
 | `tools.pushpull` | Push/Pull | Push/Pull |
@@ -1228,6 +1396,12 @@ Total de chaves de localização cadastradas: **1312**.
 | `ui.profile_depth` | Depth | Profundidade |
 | `ui.profile_generate` | Generate Volume | Gerar volume |
 | `ui.profile_hint` | Click to draw on the view plane; click the first point to close. Generate by extrude or revolve. | Clique para desenhar num plano da vista; clique no primeiro ponto para fechar. Depois gere por extrusão ou revolve. |
+| `ui.profile_look_at_plane` | Look at plane | Olhar para o plano |
+| `ui.profile_plane` | Plane | Plano |
+| `ui.profile_plane_auto` | Auto | Auto |
+| `ui.profile_plane_face` | Face | Face |
+| `ui.profile_plane_ground` | Ground | Chão |
+| `ui.profile_plane_view` | View | Vista |
 | `ui.profile_points` | Points | Pontos |
 | `ui.profile_presets` | 2D Profile Presets | Presets de perfil 2D |
 | `ui.profile_revolve` | Revolve | Revolve |
@@ -1294,6 +1468,8 @@ Total de chaves de localização cadastradas: **1312**.
 | `ui.vertical_drag_inverted` | Vertical tool drag inverted | Arrasto vertical invertido |
 | `ui.vertical_drag_normal` | Vertical tool drag normal | Arrasto vertical normal |
 | `ui.vertical_tool_drag` | Vertical tool drag | Arrasto vertical das ferramentas |
+| `ui.view_gizmo` | View navigation | Navegação da vista |
+| `ui.view_gizmo_hint` | Drag to orbit; click an axis to align the view | Arraste para orbitar; clique num eixo para alinhar a vista |
 | `ui.view_lit` | Scene lighting | Iluminação da cena |
 | `ui.view_lit_hint` | Preview scene lighting and materials together. | Pré-visualiza a iluminação da cena junto com os materiais. |
 | `ui.view_material` | Material preview | Prévia de material |
@@ -1327,6 +1503,13 @@ Total de chaves de localização cadastradas: **1312**.
 | `viewport.snap_tip` | Magnetic Snapping · Shift+Tab | Snapping Magnético · Shift+Tab |
 | `viewport.tri_tip` | Triangulation inspection (internal diagonals of quads/n-gons) | Inspeção de triangulação (diagonais internas de quads/n-gons) |
 | `viewport.xray_tip` | X-Ray / Mesh transparency mode · Alt+Z | Modo Raio-X / Transparência de Malha · Alt+Z |
+| `workspace.draw_description` | Shape level: draw profiles on planes and faces, push and pull regions into solids | Nível de forma: desenhe perfis em planos e faces, empurre e puxe regiões em sólidos |
+| `workspace.draw_ready` | DRAW: shape tools — Sketch, Push/Pull on regions | DRAW: ferramentas de forma — Sketch, Push/Pull em regiões |
+| `workspace.draw_title` | Draw Workspace | Workspace Desenho |
+| `workspace.poly_description` | Component level: edit points, edges and faces with extrude, inset, round edge and cuts | Nível de componente: edite pontos, arestas e faces com extrude, inset, round edge e cortes |
+| `workspace.poly_ready` | POLY: component tools — points, edges and faces | POLY: ferramentas de componente — pontos, arestas e faces |
+| `workspace.poly_title` | Poly Workspace | Workspace Polígonos |
+| `ws.animate` | ANIMATE | ANIMATE |
 | `ws.model` | MODEL | MODEL |
 | `ws.paint` | PAINT | PAINT |
 | `ws.uv` | UV | UV |

@@ -41,3 +41,7 @@ P3D-055, P3D-061, P3D-132.
 ## Testes / DoD
 
 Pressure somente se suportado, strokes rápidos/lentos, opacity acumulada, mask e undo agrupado por stroke.
+
+## Estado de implementação (2026-09-30)
+
+Opacidade × fluxo: `StrokeBuffer` acumula o fluxo e limita pela opacidade (dabs sobrepostos não escurecem além do teto). Além do descriptor básico há `BrushStyle` (ponta, ângulo, achatamento, mistura, estabilizador, jitter determinístico por semente, espalhamento, densidade do spray) e presets (`BrushPreset`, embutidos e do usuário). Novos pincéis: Smudge, Blur, Dodge, Burn, Spray e Clone. Pressão: sem tablet no shell atual (gancho previsto).

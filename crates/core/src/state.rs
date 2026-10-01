@@ -151,8 +151,19 @@ impl ReferenceImage {
     }
 }
 
-/// Perfil 2D do Draw Profile (spec §9), num frame right/up/origin capturado
-/// ao ativar a ferramenta numa vista ortográfica.
+/// Origem do plano de trabalho do desenho (ADR 007, Onda 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WorkplaneKind {
+    /// Chão do mundo (XZ, normal +Y).
+    #[default]
+    Ground,
+    /// Face plana da malha (sob o cursor ou selecionada).
+    Face,
+    /// Plano da câmera ou plano do mundo mais paralelo à vista.
+    View,
+}
+
+/// Perfil 2D do Draw Profile (spec §9), num frame right/up/origin conhecido.
 #[derive(Debug, Clone, Default)]
 pub struct ProfileState {
     pub points: Vec<[f32; 2]>,
@@ -168,6 +179,14 @@ pub struct ProfileState {
     pub wall_thickness: f32,
     pub curve_smoothness: f32,
     pub snap: bool,
+    /// De onde veio o frame atual (rótulo público do plano).
+    pub workplane_kind: WorkplaneKind,
+    /// `false` = automático: o 1º clique de um perfil novo escolhe a face sob
+    /// o cursor ou o plano do mundo mais paralelo à vista. Escolha explícita
+    /// (Chão/Face/Vista) trava o plano até voltar para Auto.
+    pub workplane_locked: bool,
+    /// Preferência do usuário: no plano automático sem face, favorecer o chão.
+    pub workplane_prefer_ground: bool,
 }
 
 impl ProfileState {
@@ -184,6 +203,11 @@ impl ProfileState {
             self.revolve_angle
         };
         let wall_thickness = self.wall_thickness;
+        let (workplane_kind, workplane_locked, workplane_prefer_ground) = (
+            self.workplane_kind,
+            self.workplane_locked,
+            self.workplane_prefer_ground,
+        );
         let curve_smoothness = if self.curve_smoothness <= 0.0 {
             0.02
         } else {
@@ -195,6 +219,9 @@ impl ProfileState {
             revolve_angle,
             wall_thickness,
             curve_smoothness,
+            workplane_kind,
+            workplane_locked,
+            workplane_prefer_ground,
             ..Default::default()
         };
     }
@@ -564,10 +591,19 @@ pub struct ToolState {
     /// Espaçamento entre dabs como fração do diâmetro (0.01..=1.0).
     pub brush_spacing: f32,
     pub paint_isolate_selection: bool,
+    /// Estilo do traço: ponta, mistura, estabilizador, jitter, spray (2E).
+    pub brush_style: crate::brush::BrushStyle,
+    /// Origem do Clone em texels (Ctrl+clique define).
+    pub clone_source: Option<[f32; 2]>,
     pub brush_projection: crate::brush::BrushProjectionMode,
     pub brush_lock: crate::brush::BrushLock,
     /// Face travada pelo `BrushLock` no primeiro toque do traço atual.
     pub paint_lock_face: Option<Option<usize>>,
+    /// Faces elegíveis no traço atual (P3D-132). Camada externa `None` = ainda
+    /// não resolvido; interna `None` = sem restrição. Vale por traço.
+    pub paint_restriction: Option<Option<std::sync::Arc<crate::brush::PaintRestriction>>>,
+    /// Cobertura acumulada do traço atual (opacidade × fluxo).
+    pub paint_buffer: Option<crate::brush::StrokeBuffer>,
     pub fill_scope: crate::brush::FillScope,
     /// Canal de textura alvo da pintura (P3D-062). V1: só Albedo opera;
     /// demais canais ficam desabilitados na UI até V1.x.
@@ -645,9 +681,13 @@ impl ToolState {
             brush_flow: 1.0,
             brush_spacing: 0.15,
             paint_isolate_selection: false,
+            brush_style: crate::brush::BrushStyle::default(),
+            clone_source: None,
             brush_projection: crate::brush::BrushProjectionMode::Surface,
             brush_lock: crate::brush::BrushLock::None,
             paint_lock_face: None,
+            paint_restriction: None,
+            paint_buffer: None,
             tool_activation: ToolActivation::Drag,
             hover: HoverTarget::None,
             fill_scope: crate::brush::FillScope::ConnectedPixels,
@@ -820,6 +860,8 @@ pub struct EditorSession {
     pub primitive_session: Option<crate::primitive_session::PrimitiveCreationSession>,
     /// Último descritor confirmado (reabertura explícita).
     pub last_primitive: Option<crate::primitive_session::PrimitiveDescriptor>,
+    /// Criatura, Motion e playhead do workspace Animate (não persistido).
+    pub animate: crate::animate_session::AnimateSession,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -881,6 +923,7 @@ impl EditorSession {
             tools: ToolState::new(),
             primitive_session: None,
             last_primitive: None,
+            animate: crate::animate_session::AnimateSession::default(),
         }
     }
 
@@ -2061,6 +2104,10 @@ impl AppState {
         self.ui.right_width = restored.right_width;
         self.ui.shell_asset_library_height = restored.shell_asset_library_height;
         self.session.workspace = next;
+        #[cfg(feature = "animation-workspace")]
+        if next == Workspace::Animate {
+            self.animate_resolve();
+        }
         self.mark_dirty();
     }
 
@@ -2813,9 +2860,14 @@ impl AppState {
             }
         };
 
-        let current = modal.pivot + modal.components;
+        let point = modal.current_point();
+        let current = point.unwrap_or(modal.pivot);
         let mut fb =
             crate::modal_feedback::ToolFeedback::new(modal.pivot, current, delta_text, modal.value);
+        if point.is_none() {
+            // Graus, fatores e frações não são posições: sem linha-guia de mundo.
+            fb.guide_line = None;
+        }
 
         match modal.constraint {
             crate::modal::ModalConstraint::Axis(i) => fb.axis_constraint = Some(i),
@@ -2823,7 +2875,9 @@ impl AppState {
             crate::modal::ModalConstraint::Free => {}
         }
 
-        fb.is_snapped = self.snap_enabled;
+        // Encaixou de fato, não apenas "snap ligado" (P3D-040).
+        fb.is_snapped = modal.snapped();
+        fb.snap_kind = modal.snap_kind();
         Some(fb)
     }
 
@@ -2851,6 +2905,12 @@ impl AppState {
     /// e o carimbo real usam **o mesmo** valor. Deriva o tamanho em pixels de
     /// tela para mundo pela projeção da câmera na profundidade do ponto.
     pub fn brush_world_radius(&self, hit: Vec3) -> f32 {
+        self.world_radius_for_px(hit, self.brush_settings().size_px)
+    }
+
+    /// Raio de mundo (metade do diâmetro) de um pincel de `size_px` pixels de
+    /// tela na profundidade de `hit`.
+    pub fn world_radius_for_px(&self, hit: Vec3, size_px: f32) -> f32 {
         let view_dir = self.camera.forward();
         let depth = (hit - self.camera.eye()).dot(view_dir).max(0.05);
         let half_fov = (self.camera.fov_y * 0.5).to_radians();
@@ -2861,7 +2921,7 @@ impl AppState {
             .map(|r| (r.max[1] - r.min[1]) * self.ui.viewport_pixels_per_point)
             .unwrap_or(1080.0);
         let world_per_px = world_height / px_height.max(1.0);
-        self.brush_settings().size_px * world_per_px * 0.5
+        size_px * world_per_px * 0.5
     }
 
     /// Pinta vértices próximos do ponto 3D (vertex paint).
@@ -3005,6 +3065,8 @@ impl AppState {
             // A trava de pincel vale por traço: o próximo traço pode começar em
             // outra superfície.
             self.session.tools.paint_lock_face = None;
+            self.session.tools.paint_restriction = None;
+            self.session.tools.paint_buffer = None;
         }
     }
 
@@ -3012,6 +3074,9 @@ impl AppState {
         let Some(original) = self.session.tools.paint_stroke.take() else {
             return;
         };
+        self.session.tools.paint_restriction = None;
+        self.session.tools.paint_buffer = None;
+        self.session.tools.paint_lock_face = None;
         let colors_changed = original.assets.len() != self.project.assets.len()
             || original
                 .assets
@@ -3618,6 +3683,22 @@ impl AppState {
                 .map(|a| a.name.clone())
                 .unwrap_or_else(|| "Ativo".to_string());
             self.set_status(format!("Objeto '{name}' isolado na cena"));
+        }
+        self.mark_dirty();
+    }
+
+    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
+    ///
+    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
+    /// escondido. As visibilidades originais continuam guardadas para o
+    /// desfazer do isolamento.
+    pub fn refresh_isolation(&mut self) {
+        if !self.session.isolate_active {
+            return;
+        }
+        let active = self.project.active;
+        for (i, asset) in self.project.assets.iter_mut().enumerate() {
+            asset.visible = i == active;
         }
         self.mark_dirty();
     }

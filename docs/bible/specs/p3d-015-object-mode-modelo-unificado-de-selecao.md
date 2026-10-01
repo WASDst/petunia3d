@@ -9,11 +9,11 @@ Decisão consolidada: **não expor Object Mode e Edit Mode como dois mundos sepa
 
 ## Objetivo
 
-Unificar a interação em quatro domínios: **Object / Vertex / Edge / Face**. Object permite editar o objeto completo; os demais operam componentes da mesh.
+Unificar a interação em quatro domínios: **Object / Face / Edge / Point** (`Point` é o termo público para vértice). Object permite editar o objeto completo; os demais operam componentes da mesh. Desde a revisão de 2026-09-29 ([ADR 007](../../architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)), esses domínios pertencem ao workspace **POLY**; o workspace **DRAW** usa `Shape / Curve / Point / Region`.
 
 ## UX
 
-`Tab` alterna Object ↔ último domínio de componente utilizado. A UI mostra claramente o domínio ativo e não exige ritual de entrar/sair de Edit Mode.
+A troca de domínio é feita pelo segmented control do workspace e por atalhos do keymap (por exemplo, 1–4). `Tab` **não** alterna domínio: ele navega controles (capítulo 36). A UI mostra claramente o domínio ativo e não exige ritual de entrar/sair de Edit Mode. Implementação pendente: o código ainda usa `Tab` para alternar.
 
 ## Auditoria
 
@@ -29,4 +29,4 @@ P3D-016–020, P3D-074, P3D-076, P3D-090.
 
 ## Testes / DoD
 
-Troca por UI/Tab, manutenção do último domínio, tools corretas por domínio, seleção sincronizada, undo e ausência de duplicação de Vertex/Edge/Face em regiões diferentes.
+Troca por UI/atalho, manutenção do último domínio por workspace, tools corretas por domínio, seleção sincronizada entre DRAW e POLY, undo e ausência de duplicação de Point/Edge/Face em regiões diferentes.

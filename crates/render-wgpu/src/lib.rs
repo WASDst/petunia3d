@@ -9,8 +9,9 @@ use wgpu::util::DeviceExt;
 use petunia_core::Camera;
 use petunia_core::RefAxis;
 use petunia_core::{FingerprintFlags, SceneFingerprint, TextureUpdate, fingerprint_scene};
-use petunia_project::Project;
+use petunia_project::{PoseOverride, Project, mesh_to_draw};
 use petunia_render::Shading;
+use std::sync::Arc;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -26,6 +27,143 @@ struct MeshVertex {
 struct LineVertex {
     pos: [f32; 3],
     color: [f32; 3],
+}
+
+/// Canto de uma aresta larga: as duas pontas, a cor e `corner` =
+/// (ponta 0/1, lado −1/+1). O vertex shader expande a faixa em pixels.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct WideLineVertex {
+    a: [f32; 3],
+    b: [f32; 3],
+    color: [f32; 3],
+    /// (ponta 0/1, lado −1/+1, multiplicador da largura).
+    corner: [f32; 3],
+}
+
+/// Aparência das arestas no viewport (capítulo 05, aparência por workspace).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EdgeMode {
+    /// Faces limpas; arestas só com o overlay de wireframe (PAINT, UV).
+    #[default]
+    Overlay,
+    /// DRAW: leitura de forma — só arestas de feição (bordas e dobras).
+    Features,
+    /// POLY: leitura de topologia — todas as arestas finas, as de feição
+    /// reforçadas.
+    Topology,
+}
+
+/// Plano de trabalho do DRAW em destaque (capítulo 05): origem e eixos do
+/// frame do perfil, em coordenadas de mundo.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WorkplaneOverlay {
+    pub origin: [f32; 3],
+    pub right: [f32; 3],
+    pub up: [f32; 3],
+}
+
+/// Fração da altura visível coberta pelo recorte do plano (meia largura).
+const WORKPLANE_HALF_EXTENT: f32 = 0.3;
+/// Divisões da grade do recorte em cada metade.
+const WORKPLANE_HALF_CELLS: i32 = 4;
+const WORKPLANE_FILL: [f32; 4] = [0.36, 0.62, 0.95, 0.10];
+const WORKPLANE_GRID: [f32; 4] = [0.46, 0.70, 0.98, 0.35];
+const WORKPLANE_AXIS: [f32; 4] = [0.56, 0.78, 1.0, 0.75];
+
+/// Recorte translúcido do plano de trabalho com grade, centrado na origem.
+/// O tamanho acompanha a altura visível, então lê igual em qualquer zoom; o
+/// recorte é empurrado um pouco para a câmera para não brigar com a face.
+fn append_workplane(
+    triangles: &mut Vec<SelectionVertex>,
+    plane: WorkplaneOverlay,
+    camera: &Camera,
+    viewport_height: u32,
+) {
+    let origin = Vec3::from(plane.origin);
+    let right = Vec3::from(plane.right).normalize_or_zero();
+    let up = Vec3::from(plane.up).normalize_or_zero();
+    let mut normal = right.cross(up).normalize_or_zero();
+    if right == Vec3::ZERO || up == Vec3::ZERO || normal == Vec3::ZERO {
+        return;
+    }
+    let perspective_scale = if camera.proj == petunia_core::Projection::Perspective {
+        ((origin - camera.eye()).dot(camera.forward()) / camera.distance.max(0.01)).max(0.01)
+    } else {
+        1.0
+    };
+    let visible = camera.visible_height() * perspective_scale;
+    if normal.dot(camera.eye() - origin) < 0.0 {
+        normal = -normal;
+    }
+    let center = origin + normal * visible * 0.002;
+    let half = visible * WORKPLANE_HALF_EXTENT;
+    let corner = |u: f32, v: f32| center + right * u + up * v;
+    let quad = [
+        corner(-half, -half),
+        corner(half, -half),
+        corner(half, half),
+        corner(-half, half),
+    ];
+    for index in [0usize, 1, 2, 0, 2, 3] {
+        triangles.push(SelectionVertex {
+            pos: quad[index].to_array(),
+            color: WORKPLANE_FILL,
+        });
+    }
+    let step = half / WORKPLANE_HALF_CELLS as f32;
+    for cell in -WORKPLANE_HALF_CELLS..=WORKPLANE_HALF_CELLS {
+        let offset = cell as f32 * step;
+        let (color, width) = if cell == 0 {
+            (WORKPLANE_AXIS, 1.5)
+        } else {
+            (WORKPLANE_GRID, 1.0)
+        };
+        for (start, end) in [
+            (corner(offset, -half), corner(offset, half)),
+            (corner(-half, offset), corner(half, offset)),
+        ] {
+            append_edge_band(triangles, start, end, camera, viewport_height, width, color);
+        }
+    }
+}
+
+/// Ângulo entre faces vizinhas acima do qual a aresta é "de feição".
+pub const CREASE_DEGREES: f32 = 30.0;
+/// Arestas comuns (não de feição) em relação à largura base.
+const THIN_EDGE_SCALE: f32 = 0.67;
+const FEATURE_EDGE_COLOR: [f32; 3] = [0.05, 0.05, 0.06];
+const THIN_EDGE_COLOR: [f32; 3] = [0.16, 0.17, 0.19];
+
+/// Converte pares de `LineVertex` (LineList) em faixas de dois triângulos;
+/// `widths[i]` multiplica a largura base do par `i`.
+fn wide_lines_from_pairs(pairs: &[LineVertex], widths: &[f32]) -> Vec<WideLineVertex> {
+    let mut out = Vec::with_capacity(pairs.len() * 3);
+    for (index, pair) in pairs.as_chunks::<2>().0.iter().enumerate() {
+        let width = widths.get(index).copied().unwrap_or(1.0);
+        let (a, b) = (pair[0].pos, pair[1].pos);
+        for (end, side) in [
+            (0.0, -1.0),
+            (0.0, 1.0),
+            (1.0, 1.0),
+            (0.0, -1.0),
+            (1.0, 1.0),
+            (1.0, -1.0),
+        ] {
+            let color = if end == 0.0 {
+                pair[0].color
+            } else {
+                pair[1].color
+            };
+            out.push(WideLineVertex {
+                a,
+                b,
+                color,
+                corner: [end, side, width],
+            });
+        }
+    }
+    out
 }
 
 /// Vértice da camada de seleção: posição + cor com alpha.
@@ -69,6 +207,9 @@ fn append_point_disc(
         }
     }
 }
+
+/// Largura padrão das arestas em px (Plasticity: 1,5 px normais).
+pub const DEFAULT_LINE_WIDTH_PX: f32 = 1.5;
 
 /// Faixa de aresta voltada à câmera, com largura em pixels lógicos.
 fn append_edge_band(
@@ -156,7 +297,8 @@ struct CameraUniform {
     light_dir: [f32; 4],
     /// x = ambiente, y = difusa, z/w = livres.
     light_params: [f32; 4],
-    /// x = alpha do X-Ray, y/z/w = livres.
+    /// x = alpha do X-Ray, y/z = tamanho do alvo em px físicos, w = largura
+    /// das arestas em px físicos.
     xray: [f32; 4],
 }
 
@@ -204,18 +346,114 @@ struct MeshRange {
     start: u32,
     count: u32,
     asset_id: Option<uuid::Uuid>,
+    /// Objeto dono da faixa (máscara do contorno de seleção).
+    object: uuid::Uuid,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct OutlineUniform {
+    color: [f32; 4],
+    active_color: [f32; 4],
+    /// x = raio em px físicos.
+    params: [f32; 4],
+}
+
+/// Máscara dos objetos selecionados: R = selecionado, G = ativo.
+const OUTLINE_MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg8Unorm;
+
+const OUTLINE_MASK_WGSL: &str = r#"
+struct Camera {
+    view_proj: mat4x4<f32>,
+    light_dir: vec4<f32>,
+    light_params: vec4<f32>,
+    xray: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> cam: Camera;
+
+@vertex
+fn vs_main(@location(0) pos: vec3<f32>) -> @builtin(position) vec4<f32> {
+    return cam.view_proj * vec4<f32>(pos, 1.0);
+}
+@fragment
+fn fs_selected() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+@fragment
+fn fs_active() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 1.0, 0.0, 1.0);
+}
+"#;
+
+/// Contorno de largura constante em pixels ao redor da máscara: cada pixel
+/// fora dela procura a máscara mais próxima num raio pequeno (Rong & Tan
+/// usam jump flooding para raios grandes; para 1–6 px a busca direta basta).
+/// A borda externa é suavizada pela distância.
+const OUTLINE_WGSL: &str = r#"
+struct Outline {
+    color: vec4<f32>,
+    active_color: vec4<f32>,
+    params: vec4<f32>,
+};
+@group(0) @binding(0) var mask: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> outline: Outline;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let uv = vec2<f32>(f32((index << 1u) & 2u), f32(index & 2u));
+    return vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+    let dims = vec2<i32>(textureDimensions(mask));
+    let p = vec2<i32>(position.xy);
+    if (textureLoad(mask, p, 0).r > 0.5) {
+        discard;
+    }
+    let radius = outline.params.x;
+    let reach = i32(ceil(radius)) + 1;
+    var best = 1e9;
+    var nearest_active = 0.0;
+    for (var dy = -reach; dy <= reach; dy = dy + 1) {
+        for (var dx = -reach; dx <= reach; dx = dx + 1) {
+            let q = p + vec2<i32>(dx, dy);
+            if (q.x < 0 || q.y < 0 || q.x >= dims.x || q.y >= dims.y) {
+                continue;
+            }
+            let m = textureLoad(mask, q, 0);
+            if (m.r > 0.5) {
+                let d = length(vec2<f32>(f32(dx), f32(dy)));
+                if (d < best || (d == best && m.g > nearest_active)) {
+                    best = d;
+                    nearest_active = m.g;
+                }
+            }
+        }
+    }
+    let alpha = clamp(radius + 1.0 - best, 0.0, 1.0);
+    if (alpha <= 0.0) {
+        discard;
+    }
+    let color = mix(outline.color, outline.active_color, nearest_active);
+    return vec4<f32>(color.rgb, color.a * alpha);
+}
+"#;
 
 pub struct Renderer {
     depth_format: wgpu::TextureFormat,
     depth_view: Option<wgpu::TextureView>,
     depth_size: (u32, u32),
+    /// Amostras por pixel de todas as pipelines e do depth (1 = sem MSAA).
+    sample_count: u32,
+    /// Pixels físicos do alvo por pixel lógico da UI. Larguras e raios de
+    /// overlays são especificados em px lógicos e convertidos por esta razão.
+    pixel_ratio: f32,
     mesh_pipeline: wgpu::RenderPipeline,
     mesh_xray_pipeline: wgpu::RenderPipeline,
     mesh_tex_pipeline: wgpu::RenderPipeline,
     mesh_tex_xray_pipeline: wgpu::RenderPipeline,
     line_pipeline: wgpu::RenderPipeline,
-    line_xray_pipeline: wgpu::RenderPipeline,
     xray: bool,
     xray_opacity: f32,
     selection_rgb: [u8; 3],
@@ -233,6 +471,26 @@ pub struct Renderer {
     asset_tex: Vec<AssetTexGpu>,
     line_vb: Option<wgpu::Buffer>,
     line_count: u32,
+    wide_line_pipeline: wgpu::RenderPipeline,
+    wide_line_xray_pipeline: wgpu::RenderPipeline,
+    /// Largura das arestas em px lógicos; o uniform recebe × `pixel_ratio`.
+    line_width_px: f32,
+    edge_mode: EdgeMode,
+    workplane: Option<WorkplaneOverlay>,
+    /// Objetos selecionados (domínio Object) e o ativo, para o contorno.
+    outlined_objects: Vec<uuid::Uuid>,
+    outlined_active: Option<uuid::Uuid>,
+    /// A máscara deste quadro foi gravada (o contorno só é composto então).
+    outline_encoded: bool,
+    outline_mask_view: Option<wgpu::TextureView>,
+    outline_bind_group: Option<wgpu::BindGroup>,
+    outline_layout: wgpu::BindGroupLayout,
+    outline_uniform: wgpu::Buffer,
+    outline_mask_pipeline: wgpu::RenderPipeline,
+    outline_mask_active_pipeline: wgpu::RenderPipeline,
+    outline_pipeline: wgpu::RenderPipeline,
+    /// A camada de seleção precisa ser refeita (mudou algo fora da cena).
+    selection_dirty: bool,
     selection_tri_pipeline: wgpu::RenderPipeline,
     selection_line_pipeline: wgpu::RenderPipeline,
     selection_tri_xray_pipeline: wgpu::RenderPipeline,
@@ -251,11 +509,16 @@ pub struct Renderer {
     pub show_overlays: bool,
     pub show_grid: bool,
     last_fingerprint: Option<SceneFingerprint>,
+    /// Malhas deformadas por skin (preview de pose) e a última revisão desenhada.
+    /// O documento continua em repouso; isto só substitui a malha ao desenhar.
+    pose: Option<Arc<PoseOverride>>,
+    last_pose_revision: Option<u64>,
     last_domain: Option<petunia_core::SelectionDomain>,
     /// Passo do grid atualmente na GPU, para reconstruir só ao cruzar degrau.
     grid_step: f32,
     /// Último alvo de preselection desenhado.
     last_hover: petunia_core::HoverTarget,
+    studio_light_follows_camera: bool,
     last_selection_view_proj: Option<[f32; 16]>,
     mesh_rebuilds: u64,
     skipped_frames: u64,
@@ -348,11 +611,10 @@ fn fs_xray(in: Out) -> @location(0) vec4<f32> {
     if (length(in.normal) < 0.1) {
         return vec4<f32>(in.color, cam.xray.x);
     }
-    let light = normalize(vec3<f32>(LIGHT_X, LIGHT_Y, LIGHT_Z));
+    let light = normalize(cam.light_dir.xyz);
     let n = normalize(in.normal);
     let diff = max(dot(n, light), 0.0);
-    let amb = LIGHT_AMB;
-    let c = in.color * (amb + LIGHT_DIF * diff);
+    let c = in.color * (cam.light_params.x + cam.light_params.y * diff);
     return vec4<f32>(c, cam.xray.x);
 }
 "#;
@@ -420,11 +682,10 @@ fn fs_tex_xray(in: Out) -> @location(0) vec4<f32> {
     if (length(in.normal) < 0.1) {
         return vec4<f32>(base, cam.xray.x);
     }
-    let light = normalize(vec3<f32>(LIGHT_X, LIGHT_Y, LIGHT_Z));
+    let light = normalize(cam.light_dir.xyz);
     let n = normalize(in.normal);
     let diff = max(dot(n, light), 0.0);
-    let amb = LIGHT_AMB;
-    let c = base * (amb + LIGHT_DIF * diff);
+    let c = base * (cam.light_params.x + cam.light_params.y * diff);
     return vec4<f32>(c, cam.xray.x);
 }
 "#;
@@ -491,6 +752,58 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// Arestas de largura constante em pixels (Bærentzen et al.; Plasticity):
+/// cada aresta vira uma faixa de dois triângulos expandida na tela; o MSAA
+/// suaviza as bordas. A largura não muda com zoom, distância ou DPI.
+const WIDE_LINE_WGSL: &str = r#"
+struct Camera {
+    view_proj: mat4x4<f32>,
+    light_dir: vec4<f32>,
+    light_params: vec4<f32>,
+    xray: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> cam: Camera;
+
+struct In {
+    @location(0) a: vec3<f32>,
+    @location(1) b: vec3<f32>,
+    @location(2) color: vec3<f32>,
+    @location(3) corner: vec3<f32>,
+};
+struct Out {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) color: vec3<f32>,
+};
+@vertex
+fn vs_main(in: In) -> Out {
+    var o: Out;
+    let ca = cam.view_proj * vec4<f32>(in.a, 1.0);
+    let cb = cam.view_proj * vec4<f32>(in.b, 1.0);
+    let size = max(cam.xray.yz, vec2<f32>(1.0, 1.0));
+    let sa = ca.xy / max(ca.w, 1e-5) * size * 0.5;
+    let sb = cb.xy / max(cb.w, 1e-5) * size * 0.5;
+    var dir = sb - sa;
+    if (length(dir) < 1e-5) {
+        dir = vec2<f32>(1.0, 0.0);
+    }
+    dir = normalize(dir);
+    let normal = vec2<f32>(-dir.y, dir.x);
+    var p = ca;
+    if (in.corner.x > 0.5) {
+        p = cb;
+    }
+    let half_width = max(cam.xray.w * in.corner.z, 1.0) * 0.5;
+    let offset_ndc = normal * in.corner.y * half_width / (size * 0.5);
+    o.clip = vec4<f32>(p.xy + offset_ndc * p.w, p.z - 0.0001 * p.w, p.w);
+    o.color = in.color;
+    return o;
+}
+@fragment
+fn fs_main(in: Out) -> @location(0) vec4<f32> {
+    return vec4<f32>(in.color, 1.0);
+}
+"#;
+
 const REF_WGSL: &str = r#"
 struct Camera {
     view_proj: mat4x4<f32>,
@@ -527,6 +840,15 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 "#;
 
 /// Passo do grid correspondente a uma escala visível.
+/// A revisão do override de pose mudou desde o último quadro desenhado?
+/// (Aparecer, sumir ou avançar de revisão contam; repetir a mesma, não.)
+fn pose_revision_changed(last: &mut Option<u64>, pose: Option<&PoseOverride>) -> bool {
+    let now = pose.map(|p| p.revision);
+    let changed = *last != now;
+    *last = now;
+    changed
+}
+
 fn adaptive_grid_step(visible_height: f32) -> f32 {
     if visible_height > 60.0 {
         10.0
@@ -573,6 +895,23 @@ fn adaptive_grid_lines(visible_height: f32) -> Vec<LineVertex> {
 
 impl Renderer {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        Self::with_sample_count(device, format, 1)
+    }
+
+    /// Cria o renderer para um alvo com `sample_count` amostras (MSAA).
+    ///
+    /// O adaptador deve fornecer um alvo de cor multisample com o mesmo número
+    /// de amostras e resolvê-lo para a textura exibida.
+    pub fn with_sample_count(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        sample_count: u32,
+    ) -> Self {
+        let sample_count = sample_count.max(1);
+        let msaa = wgpu::MultisampleState {
+            count: sample_count,
+            ..Default::default()
+        };
         let cam_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("simple3d-cam"),
             size: std::mem::size_of::<CameraUniform>() as u64,
@@ -655,7 +994,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -694,10 +1033,177 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
+
+        let outline_mask_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("selection-outline-mask-shader"),
+            source: wgpu::ShaderSource::Wgsl(OUTLINE_MASK_WGSL.into()),
+        });
+        let outline_mask = |label: &'static str, entry: &'static str| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&mesh_layout),
+                vertex: wgpu::VertexState {
+                    module: &outline_mask_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<MeshVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                    })],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &outline_mask_shader,
+                    entry_point: Some(entry),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: OUTLINE_MASK_FORMAT,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let outline_mask_pipeline = outline_mask("selection-outline-mask", "fs_selected");
+        let outline_mask_active_pipeline =
+            outline_mask("selection-outline-mask-active", "fs_active");
+        let outline_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("selection-outline-layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let outline_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("selection-outline-uniform"),
+            size: std::mem::size_of::<OutlineUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let outline_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("selection-outline-shader"),
+            source: wgpu::ShaderSource::Wgsl(OUTLINE_WGSL.into()),
+        });
+        let outline_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("selection-outline-pipeline-layout"),
+                bind_group_layouts: &[Some(&outline_layout)],
+                immediate_size: 0,
+            });
+        let outline_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("selection-outline"),
+            layout: Some(&outline_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &outline_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &outline_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth24Plus,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: msaa,
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let wide_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("simple3d-wide-line-shader"),
+            source: wgpu::ShaderSource::Wgsl(WIDE_LINE_WGSL.into()),
+        });
+        let wide_line = |label: &'static str, compare: wgpu::CompareFunction| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&mesh_layout),
+                vertex: wgpu::VertexState {
+                    module: &wide_line_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<WideLineVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32x3],
+                    })],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &wide_line_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(compare),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: msaa,
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let wide_line_pipeline =
+            wide_line("simple3d-wide-line-pipe", wgpu::CompareFunction::LessEqual);
+        let wide_line_xray_pipeline = wide_line(
+            "simple3d-wide-line-xray-pipe",
+            wgpu::CompareFunction::Always,
+        );
 
         let mesh_xray_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("simple3d-mesh-xray-pipe"),
@@ -734,46 +1240,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let line_xray_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("simple3d-line-xray-pipe"),
-            layout: Some(&mesh_layout),
-            vertex: wgpu::VertexState {
-                module: &line_shader,
-                entry_point: Some("vs_main"),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<LineVertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
-                })],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &line_shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::LineList,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Always),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -831,7 +1298,7 @@ impl Renderer {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: Default::default(),
+                multisample: msaa,
                 multiview_mask: None,
                 cache: None,
             })
@@ -926,7 +1393,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -966,7 +1433,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -1045,7 +1512,7 @@ impl Renderer {
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
-            multisample: Default::default(),
+            multisample: msaa,
             multiview_mask: None,
             cache: None,
         });
@@ -1081,7 +1548,7 @@ impl Renderer {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: Default::default(),
+                multisample: msaa,
                 multiview_mask: None,
                 cache: None,
             });
@@ -1098,12 +1565,13 @@ impl Renderer {
             depth_format: wgpu::TextureFormat::Depth24Plus,
             depth_view: None,
             depth_size: (0, 0),
+            sample_count,
+            pixel_ratio: 1.0,
             mesh_pipeline,
             mesh_xray_pipeline,
             mesh_tex_pipeline,
             mesh_tex_xray_pipeline,
             line_pipeline,
-            line_xray_pipeline,
             xray: false,
             xray_opacity: 0.42,
             selection_rgb: [233, 106, 0],
@@ -1121,6 +1589,22 @@ impl Renderer {
             asset_tex: Vec::new(),
             line_vb: None,
             line_count: 0,
+            wide_line_pipeline,
+            wide_line_xray_pipeline,
+            line_width_px: DEFAULT_LINE_WIDTH_PX,
+            edge_mode: EdgeMode::Overlay,
+            workplane: None,
+            outlined_objects: Vec::new(),
+            outlined_active: None,
+            outline_encoded: false,
+            outline_mask_view: None,
+            outline_bind_group: None,
+            outline_layout,
+            outline_uniform,
+            outline_mask_pipeline,
+            outline_mask_active_pipeline,
+            outline_pipeline,
+            selection_dirty: false,
             selection_tri_pipeline,
             selection_line_pipeline,
             selection_tri_xray_pipeline,
@@ -1137,9 +1621,12 @@ impl Renderer {
             show_overlays: true,
             show_grid: true,
             last_fingerprint: None,
+            pose: None,
+            last_pose_revision: None,
             last_domain: None,
             grid_step: 1.0,
             last_hover: petunia_core::HoverTarget::None,
+            studio_light_follows_camera: true,
             last_selection_view_proj: None,
             mesh_rebuilds: 0,
             skipped_frames: 0,
@@ -1153,6 +1640,11 @@ impl Renderer {
     }
 
     /// Quantas vezes os buffers de geometria foram reconstruídos (telemetria Wave 1).
+    /// Vértices de aresta enviados à GPU (6 por aresta: faixa de 2 triângulos).
+    pub fn edge_vertex_count(&self) -> u32 {
+        self.line_count
+    }
+
     pub fn mesh_rebuilds(&self) -> u64 {
         self.mesh_rebuilds
     }
@@ -1188,6 +1680,113 @@ impl Renderer {
     }
 
     /// Opacidade da geometria em X-Ray, aplicada no uniform do shader.
+    /// Luz de estúdio (Solid/Material): `true` acompanha a câmera, como no
+    /// Plasticity e no Cinema 4D — a forma continua legível de qualquer lado;
+    /// `false` a mantém fixa no mundo.
+    pub fn set_studio_light_follows_camera(&mut self, follows: bool) {
+        self.studio_light_follows_camera = follows;
+    }
+
+    /// Objetos com contorno de seleção (domínio Object); o ativo é mais claro.
+    pub fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
+        if self.outlined_objects != selected {
+            self.outlined_objects = selected.to_vec();
+        }
+        self.outlined_active = active.filter(|id| selected.contains(id));
+    }
+
+    /// Grava a máscara dos objetos selecionados antes do passe principal. Sem
+    /// esta chamada no quadro, `render` não desenha o contorno.
+    pub fn encode_selection_outline_mask(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.outline_encoded = false;
+        let (Some(mask_view), Some(vb)) = (&self.outline_mask_view, &self.mesh_vb) else {
+            return;
+        };
+        if self.outlined_objects.is_empty() {
+            return;
+        }
+        let rgb = self.selection_rgb.map(|channel| channel as f32 / 255.0);
+        let uniform = OutlineUniform {
+            color: [rgb[0] * 0.62, rgb[1] * 0.62, rgb[2] * 0.62, 1.0],
+            active_color: [rgb[0], rgb[1], rgb[2], 1.0],
+            params: [
+                self.selection_thickness.clamp(1.0, 4.0) * self.pixel_ratio,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        };
+        queue.write_buffer(&self.outline_uniform, 0, bytemuck::bytes_of(&uniform));
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("selection-outline-mask"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: mask_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_bind_group(0, &self.cam_bind_group, &[]);
+        pass.set_vertex_buffer(0, vb.slice(..));
+        let mut drew = false;
+        for active_pass in [false, true] {
+            pass.set_pipeline(if active_pass {
+                &self.outline_mask_active_pipeline
+            } else {
+                &self.outline_mask_pipeline
+            });
+            for range in &self.mesh_ranges {
+                let selected = self.outlined_objects.contains(&range.object);
+                let is_active = self.outlined_active == Some(range.object);
+                if selected && is_active == active_pass {
+                    pass.draw(range.start..range.start + range.count, 0..1);
+                    drew = true;
+                }
+            }
+        }
+        self.outline_encoded = drew;
+    }
+
+    /// Plano de trabalho em destaque (DRAW com a ferramenta de desenho).
+    pub fn set_workplane(&mut self, workplane: Option<WorkplaneOverlay>) {
+        if self.workplane != workplane {
+            self.workplane = workplane;
+            self.selection_dirty = true;
+        }
+    }
+
+    /// Aparência das arestas (DRAW/POLY/overlay); mudar reconstrói as linhas.
+    pub fn set_edge_mode(&mut self, mode: EdgeMode) {
+        if self.edge_mode != mode {
+            self.edge_mode = mode;
+            self.last_fingerprint = None;
+        }
+    }
+
+    /// Largura das arestas em px lógicos (constante em qualquer zoom e DPI).
+    pub fn set_line_width_px(&mut self, width: f32) {
+        if width.is_finite() {
+            self.line_width_px = width.clamp(1.0, 8.0);
+        }
+    }
+
+    /// Define (ou remove) as malhas deformadas por skin. A geometria só é
+    /// reconstruída quando a revisão do override muda (ou ele aparece/some).
+    pub fn set_pose_override(&mut self, pose: Option<Arc<PoseOverride>>) {
+        self.pose = pose;
+    }
+
     pub fn set_xray_opacity(&mut self, opacity: f32) {
         self.xray_opacity = opacity.clamp(0.1, 0.9);
     }
@@ -1200,6 +1799,32 @@ impl Renderer {
             self.selection_thickness = thickness;
             self.last_selection_view_proj = None;
         }
+    }
+
+    /// Amostras por pixel usadas pelas pipelines deste renderer.
+    pub fn sample_count(&self) -> u32 {
+        self.sample_count
+    }
+
+    /// Define quantos pixels físicos do alvo correspondem a um pixel lógico.
+    pub fn set_pixel_ratio(&mut self, ratio: f32) {
+        let ratio = if ratio.is_finite() && ratio > 0.0 {
+            ratio.clamp(0.5, 4.0)
+        } else {
+            1.0
+        };
+        if (self.pixel_ratio - ratio).abs() > f32::EPSILON {
+            self.pixel_ratio = ratio;
+            // Bandas e discos de seleção dependem da altura lógica.
+            self.last_selection_view_proj = None;
+        }
+    }
+
+    /// Altura do alvo em px lógicos: base das larguras de overlay.
+    fn logical_height(&self) -> u32 {
+        (self.depth_size.1 as f32 / self.pixel_ratio)
+            .round()
+            .max(1.0) as u32
     }
 
     pub fn set_overlays(&mut self, show_overlays: bool, show_grid: bool) {
@@ -1222,7 +1847,7 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: self.sample_count,
             dimension: wgpu::TextureDimension::D2,
             format: self.depth_format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -1230,6 +1855,36 @@ impl Renderer {
         });
         self.depth_view = Some(tex.create_view(&Default::default()));
         self.depth_size = (width, height);
+        let mask = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("selection-outline-mask"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OUTLINE_MASK_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let mask_view = mask.create_view(&Default::default());
+        self.outline_bind_group = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("selection-outline-bind-group"),
+            layout: &self.outline_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&mask_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.outline_uniform.as_entire_binding(),
+                },
+            ],
+        }));
+        self.outline_mask_view = Some(mask_view);
     }
 
     /// Atualiza uniforms de câmera todo frame; reconstrói buffers de geometria
@@ -1290,16 +1945,18 @@ impl Renderer {
                     petunia_render::scene::LIGHT_DIFFUSE * intensity,
                 )
             }
-            _ => (
-                [
-                    petunia_render::scene::LIGHT_DIR[0],
-                    petunia_render::scene::LIGHT_DIR[1],
-                    petunia_render::scene::LIGHT_DIR[2],
-                    0.0,
-                ],
-                petunia_render::scene::LIGHT_AMBIENT,
-                petunia_render::scene::LIGHT_DIFFUSE,
-            ),
+            _ => {
+                let [x, y, z] = if self.studio_light_follows_camera {
+                    petunia_render::scene::studio_light_for_camera(camera)
+                } else {
+                    petunia_render::scene::LIGHT_DIR
+                };
+                (
+                    [x, y, z, 0.0],
+                    petunia_render::scene::LIGHT_AMBIENT,
+                    petunia_render::scene::LIGHT_DIFFUSE,
+                )
+            }
         };
         queue.write_buffer(
             &self.cam_buffer,
@@ -1308,7 +1965,12 @@ impl Renderer {
                 view_proj: camera.view_proj().to_cols_array_2d(),
                 light_dir,
                 light_params: [ambient, diffuse, 0.0, 0.0],
-                xray: [self.xray_opacity, 0.0, 0.0, 0.0],
+                xray: [
+                    self.xray_opacity,
+                    self.depth_size.0.max(1) as f32,
+                    self.depth_size.1.max(1) as f32,
+                    self.line_width_px * self.pixel_ratio,
+                ],
             }]),
         );
 
@@ -1326,7 +1988,9 @@ impl Renderer {
                 show_uv_checker,
             },
         );
-        let mesh_changed = self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh);
+        let pose = self.pose.clone();
+        let pose_changed = pose_revision_changed(&mut self.last_pose_revision, pose.as_deref());
+        let mesh_changed = pose_changed || self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh);
         let texture_changed = self.last_fingerprint.map(|f| f.textures) != Some(fp.textures);
         let refs_changed = self.last_fingerprint.map(|f| f.refs_layout) != Some(fp.refs_layout);
         let texture_updates = std::mem::take(&mut self.pending_texture_updates);
@@ -1343,7 +2007,11 @@ impl Renderer {
                 );
             }
             self.last_fingerprint = Some(fp);
-            if hover_changed || camera_changed || domain_changed {
+            if hover_changed
+                || camera_changed
+                || domain_changed
+                || std::mem::take(&mut self.selection_dirty)
+            {
                 self.update_selection_layer(device, scene, camera, edit_domain, hover);
             }
             self.skipped_frames += 1;
@@ -1357,6 +2025,7 @@ impl Renderer {
         // malha
         let mut mv: Vec<MeshVertex> = Vec::new();
         let mut lv: Vec<LineVertex> = Vec::new();
+        let mut line_widths: Vec<f32> = Vec::new();
         let mut mesh_ranges: Vec<MeshRange> = Vec::new();
         // Wireframe não preenche; os outros três modos preenchem e diferem no
         // que amostram: cor do objeto, textura do material, ou material sob a
@@ -1369,7 +2038,7 @@ impl Renderer {
                 continue;
             }
             let range_start = mv.len() as u32;
-            let mesh = obj.evaluated_mesh_ref();
+            let mesh = mesh_to_draw(pose.as_deref(), obj);
             if !is_wire {
                 let (mat_profile, mat_color, has_emission, emission_color) =
                     if let Some(mat) = obj.material(scene) {
@@ -1465,6 +2134,7 @@ impl Renderer {
                 mesh_ranges.push(MeshRange {
                     start: range_start,
                     count: range_count,
+                    object: obj.id,
                     // Material Preview e Rendered sempre amostram o material; nos
                     // outros modos a textura é opt-in pelo toggle `textured`.
                     asset_id: if (textured || shading.samples_material()) && tex_canvas.is_some() {
@@ -1486,19 +2156,32 @@ impl Renderer {
                     };
                     lv.push(LineVertex { pos: a, color: c });
                     lv.push(LineVertex { pos: b, color: c });
+                    line_widths.push(1.0);
                 }
-            } else if show_wireframe_overlay {
-                // Overlay de wireframe é opt-in: sem ele, Solid/Material/Rendered
-                // mostram faces limpas e só a camada de seleção destaca arestas.
-                for (a, b, _sel) in mesh.to_edges() {
-                    let c = [0.05, 0.05, 0.06];
-                    lv.push(LineVertex { pos: a, color: c });
-                    lv.push(LineVertex { pos: b, color: c });
+            } else {
+                // Aparência por modo (capítulo 05): DRAW lê forma (só arestas
+                // de feição), POLY lê topologia (todas, feição reforçada); o
+                // overlay de wireframe acrescenta as arestas finas em qualquer
+                // modo. Sem modo nem overlay, faces limpas.
+                for (a, b, _sel, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
+                    let show_thin = show_wireframe_overlay || self.edge_mode == EdgeMode::Topology;
+                    let show_feature = show_thin || self.edge_mode == EdgeMode::Features;
+                    let (visible, color, width) = if feature {
+                        (show_feature, FEATURE_EDGE_COLOR, 1.0)
+                    } else {
+                        (show_thin, THIN_EDGE_COLOR, THIN_EDGE_SCALE)
+                    };
+                    if visible {
+                        lv.push(LineVertex { pos: a, color });
+                        lv.push(LineVertex { pos: b, color });
+                        line_widths.push(width);
+                    }
                 }
             }
             if show_triangulation {
                 let diag_c = [0.3, 0.65, 0.95];
                 for (a, b) in mesh.triangulation_wireframe() {
+                    line_widths.push(THIN_EDGE_SCALE);
                     lv.push(LineVertex {
                         pos: a,
                         color: diag_c,
@@ -1533,14 +2216,15 @@ impl Renderer {
                 }),
             )
         };
-        self.line_count = lv.len() as u32;
-        self.line_vb = if lv.is_empty() {
+        let wide = wide_lines_from_pairs(&lv, &line_widths);
+        self.line_count = wide.len() as u32;
+        self.line_vb = if wide.is_empty() {
             None
         } else {
             Some(
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("simple3d-edge-vb"),
-                    contents: bytemuck::cast_slice(&lv),
+                    contents: bytemuck::cast_slice(&wide),
                     usage: wgpu::BufferUsages::VERTEX,
                 }),
             )
@@ -1601,10 +2285,13 @@ impl Renderer {
         // Camada de seleção: geometria própria, com depth test no render. Só o
         // ativo contribui, e só o domínio atual — um vértice selecionado não
         // pode virar face pintada, que era a contaminação antiga.
+        // Larguras e raios em px lógicos, mesmo com o alvo em px físicos.
+        let logical_height = self.logical_height();
         let mut sel_tri: Vec<SelectionVertex> = Vec::new();
         let mut sel_line: Vec<SelectionVertex> = Vec::new();
+        let pose = self.pose.clone();
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh_ref();
+            let mesh = mesh_to_draw(pose.as_deref(), asset);
             let domain = edit_domain;
             // Seleção: laranja quente com alpha, como Blender/C4D. Legível
             // sobre qualquer shading porque o shader não aplica luz.
@@ -1642,7 +2329,7 @@ impl Renderer {
                         &mut sel_tri,
                         vertex.vec(),
                         camera,
-                        self.depth_size.1,
+                        logical_height,
                         (self.selection_thickness * 1.5).clamp(3.5, 5.5),
                         guide_color,
                     );
@@ -1684,7 +2371,7 @@ impl Renderer {
                         va.vec(),
                         vb.vec(),
                         camera,
-                        self.depth_size.1,
+                        logical_height,
                         self.selection_thickness.max(2.5),
                         edge_color,
                     );
@@ -1697,7 +2384,7 @@ impl Renderer {
                         &mut sel_tri,
                         vertex.vec(),
                         camera,
-                        self.depth_size.1,
+                        logical_height,
                         (self.selection_thickness * 2.0).clamp(5.0, 7.0),
                         point_color,
                     );
@@ -1711,7 +2398,7 @@ impl Renderer {
         let hover_line = [0.49f32, 0.86, 1.0, 0.85];
         let hover_tri = [0.49f32, 0.86, 1.0, 0.18];
         if let Some(asset) = scene.assets.get(scene.active) {
-            let mesh = asset.evaluated_mesh_ref();
+            let mesh = mesh_to_draw(pose.as_deref(), asset);
             match hover {
                 petunia_core::HoverTarget::Vertex(index) => {
                     if let Some(vertex) = mesh.verts.get(index as usize) {
@@ -1719,7 +2406,7 @@ impl Renderer {
                             &mut sel_tri,
                             vertex.vec(),
                             camera,
-                            self.depth_size.1,
+                            logical_height,
                             (self.selection_thickness * 2.5).clamp(6.5, 8.5),
                             hover_line,
                         );
@@ -1734,7 +2421,7 @@ impl Renderer {
                             va.vec(),
                             vb.vec(),
                             camera,
-                            self.depth_size.1,
+                            logical_height,
                             self.selection_thickness * 1.35,
                             hover_line,
                         );
@@ -1759,6 +2446,10 @@ impl Renderer {
                 petunia_core::HoverTarget::Object(_) | petunia_core::HoverTarget::None => {}
             }
         }
+        if let Some(plane) = self.workplane {
+            append_workplane(&mut sel_tri, plane, camera, logical_height);
+        }
+        self.selection_dirty = false;
         self.selection_tri_count = sel_tri.len() as u32;
         self.selection_tri_vb = if sel_tri.is_empty() {
             None
@@ -2173,12 +2864,12 @@ impl Renderer {
             pass.draw(0..self.selection_line_count, 0..1);
         }
 
-        // arestas
+        // arestas (faixas de largura constante)
         if let Some(vb) = &self.line_vb {
             if self.xray {
-                pass.set_pipeline(&self.line_xray_pipeline);
+                pass.set_pipeline(&self.wide_line_xray_pipeline);
             } else {
-                pass.set_pipeline(&self.line_pipeline);
+                pass.set_pipeline(&self.wide_line_pipeline);
             }
             pass.set_vertex_buffer(0, vb.slice(..));
             pass.draw(0..self.line_count, 0..1);
@@ -2203,9 +2894,50 @@ impl Renderer {
         }
 
         let _ = Vec3::ZERO;
+
+        // Contorno de seleção de objetos por cima de tudo, em largura
+        // constante; a máscara foi gravada antes do passe principal.
+        if self.outline_encoded
+            && let Some(bind_group) = &self.outline_bind_group
+        {
+            pass.set_pipeline(&self.outline_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.draw(0..3, 0..1);
+            pass.set_bind_group(0, &self.cam_bind_group, &[]);
+        }
     }
 
     pub fn depth_view(&self) -> Option<&wgpu::TextureView> {
         self.depth_view.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod pose_override_tests {
+    use super::*;
+
+    #[test]
+    fn rebuilds_only_when_the_pose_revision_changes() {
+        let mut last = None;
+        assert!(
+            !pose_revision_changed(&mut last, None),
+            "sem pose desde o início"
+        );
+        let p1 = PoseOverride::new(1);
+        assert!(
+            pose_revision_changed(&mut last, Some(&p1)),
+            "a pose aparece"
+        );
+        assert!(
+            !pose_revision_changed(&mut last, Some(&p1)),
+            "mesma revisão"
+        );
+        let p2 = PoseOverride::new(2);
+        assert!(pose_revision_changed(&mut last, Some(&p2)), "nova revisão");
+        assert!(
+            pose_revision_changed(&mut last, None),
+            "a pose some: volta ao repouso"
+        );
+        assert!(!pose_revision_changed(&mut last, None));
     }
 }

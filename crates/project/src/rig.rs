@@ -10,7 +10,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 /// Erros estruturados do subsistema de Skeleton & Rigging.
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Clone, Error, PartialEq)]
 pub enum RigError {
     #[error("Osso com ID {0} não encontrado")]
     BoneNotFound(u32),
@@ -373,51 +373,80 @@ impl Skeleton {
         Ok(())
     }
 
-    /// Calcula as matrizes mundiais da pose de repouso (Bind Pose) e armazena
-    /// a Matriz Inversa de Bind (`inverse_bind_matrix`) para cada osso.
+    /// Recalcula a pose de repouso a partir de `head` (posição **absoluta** no
+    /// espaço do esqueleto) e da rotação local de repouso de cada osso
+    /// (`local_transform.rotation`, identidade por padrão):
+    ///
+    /// - matriz de repouso mundial `W = translate(head) * R_mundial`, com
+    ///   `R_mundial = R_mundial(pai) * rotação_local`;
+    /// - `inverse_bind_matrix = W⁻¹`;
+    /// - `local_transform.translation` = offset de repouso **no referencial do
+    ///   pai** (`R_mundial(pai)⁻¹ * (head − head_do_pai)`), a mesma convenção dos
+    ///   nós de joint do glTF. Rotação e escala locais são preservadas
+    ///   (a escala de repouso é assumida 1).
+    ///
+    /// Assim, uma pose igual ao `local_transform` de cada osso produz matrizes de
+    /// skinning identidade (AN-16), inclusive com rotações de repouso (rigs
+    /// externos). Chamado a cada mudança estrutural.
     pub fn compute_bind_pose_matrices(&mut self) {
-        let mut world_bind_matrices = HashMap::new();
+        let n = self.bones.len();
+        let index: HashMap<u32, usize> = self
+            .bones
+            .iter()
+            .enumerate()
+            .map(|(i, b)| (b.id, i))
+            .collect();
+        let mut world_rot: Vec<Option<Quat>> = vec![None; n];
 
-        // Processa em ordem topológica (pais antes de filhos)
-        let mut resolved = HashSet::new();
-        let total = self.bones.len();
-
-        for _ in 0..total {
-            for b in &self.bones {
-                if resolved.contains(&b.id) {
+        // Pais antes dos filhos; ossos com pai ausente/cíclico viram raízes.
+        let mut remaining = n;
+        let mut progressed = true;
+        while remaining > 0 {
+            if !progressed {
+                // Ciclo defensivo: resolve o primeiro pendente como raiz.
+                if let Some(i) = world_rot.iter().position(Option::is_none) {
+                    self.bones[i].parent = None;
+                }
+            }
+            progressed = false;
+            for i in 0..n {
+                if world_rot[i].is_some() {
                     continue;
                 }
-
-                let parent_mat = match b.parent {
-                    None => Mat4::IDENTITY,
-                    Some(pid) => match world_bind_matrices.get(&pid) {
-                        Some(&m) => m,
-                        None => continue, // Pai ainda não resolvido nesta iteração
+                let parent = self.bones[i]
+                    .parent
+                    .and_then(|pid| index.get(&pid).copied());
+                let (parent_rot, parent_head) = match parent {
+                    None => (Quat::IDENTITY, Vec3::ZERO),
+                    Some(pi) => match world_rot[pi] {
+                        Some(r) => (r, Vec3::from(self.bones[pi].head)),
+                        None => continue,
                     },
                 };
-
-                let head = Vec3::from(b.head);
-                let local_mat = Mat4::from_translation(head);
-                let world_mat = parent_mat * local_mat;
-
-                world_bind_matrices.insert(b.id, world_mat);
-                resolved.insert(b.id);
+                let head = Vec3::from(self.bones[i].head);
+                let raw = self.bones[i].local_transform.rotation;
+                let local_rot = Quat::from_xyzw(raw[0], raw[1], raw[2], raw[3]);
+                let local_rot = if local_rot.length_squared() > 1e-12 {
+                    local_rot.normalize()
+                } else {
+                    Quat::IDENTITY
+                };
+                let rot = parent_rot * local_rot;
+                let offset = parent_rot.inverse() * (head - parent_head);
+                let b = &mut self.bones[i];
+                b.local_transform.translation = [offset.x, offset.y, offset.z];
+                let world = Mat4::from_rotation_translation(rot, head);
+                b.inverse_bind_matrix = world.inverse().to_cols_array();
+                world_rot[i] = Some(rot);
+                remaining -= 1;
+                progressed = true;
             }
-        }
-
-        for b in &mut self.bones {
-            let world_mat = world_bind_matrices
-                .get(&b.id)
-                .copied()
-                .unwrap_or(Mat4::IDENTITY);
-            let inv = world_mat.inverse();
-            b.inverse_bind_matrix = inv.to_cols_array();
         }
     }
 
-    /// Calcula as matrizes de skinning finais para uma pose fornecida.
-    /// `pose_transforms` deve possuir uma transformação para cada osso (na mesma ordem de `self.bones`).
-    pub fn compute_skinning_matrices(
+    /// Matrizes **mundiais** de cada osso (na ordem de `self.bones`) para uma pose
+    /// de transformações locais. `pose_transforms` tem uma entrada por osso.
+    pub fn world_pose_matrices(
         &self,
         pose_transforms: &[Transform3D],
     ) -> Result<Vec<Mat4>, RigError> {
@@ -454,18 +483,31 @@ impl Skeleton {
             }
         }
 
-        let mut skinning_matrices = Vec::with_capacity(self.bones.len());
-        for b in &self.bones {
-            let world_pose = world_pose_matrices
-                .get(&b.id)
-                .copied()
-                .unwrap_or(Mat4::IDENTITY);
-            let inv_bind = Mat4::from_cols_array(&b.inverse_bind_matrix);
-            let skinning_mat = world_pose * inv_bind;
-            skinning_matrices.push(skinning_mat);
-        }
+        Ok(self
+            .bones
+            .iter()
+            .map(|b| {
+                world_pose_matrices
+                    .get(&b.id)
+                    .copied()
+                    .unwrap_or(Mat4::IDENTITY)
+            })
+            .collect())
+    }
 
-        Ok(skinning_matrices)
+    /// Calcula as matrizes de skinning finais para uma pose fornecida.
+    /// `pose_transforms` deve possuir uma transformação para cada osso (na mesma ordem de `self.bones`).
+    pub fn compute_skinning_matrices(
+        &self,
+        pose_transforms: &[Transform3D],
+    ) -> Result<Vec<Mat4>, RigError> {
+        let world = self.world_pose_matrices(pose_transforms)?;
+        Ok(self
+            .bones
+            .iter()
+            .zip(world)
+            .map(|(b, world_pose)| world_pose * Mat4::from_cols_array(&b.inverse_bind_matrix))
+            .collect())
     }
 }
 
@@ -754,6 +796,112 @@ mod tests {
         assert!((deformed_pt[1] - pt[1]).abs() < 1e-4);
         assert!((deformed_pt[2] - pt[2]).abs() < 1e-4);
         assert!((deformed_norm[1] - 1.0).abs() < 1e-4);
+    }
+
+    /// AN-16: em repouso (pose = `local_transform` de cada osso) as matrizes de
+    /// skinning precisam ser identidade, mesmo com hierarquia deslocada da origem.
+    #[test]
+    fn test_rest_pose_yields_identity_skinning_for_offset_hierarchy() {
+        let mut skel = Skeleton::new("Chain");
+        let hips = skel
+            .add_bone("Hips", None, [0.0, 1.0, 0.0], [0.0, 1.2, 0.0])
+            .unwrap();
+        let spine = skel
+            .add_bone("Spine", Some(hips), [0.0, 1.2, 0.0], [0.0, 1.4, 0.0])
+            .unwrap();
+        let _head = skel
+            .add_bone("Head", Some(spine), [0.0, 1.4, 0.0], [0.0, 1.6, 0.0])
+            .unwrap();
+
+        let rest: Vec<Transform3D> = skel.bones.iter().map(|b| b.local_transform).collect();
+        let mats = skel.compute_skinning_matrices(&rest).unwrap();
+        for (bone, m) in skel.bones.iter().zip(&mats) {
+            assert!(
+                m.abs_diff_eq(Mat4::IDENTITY, 1e-5),
+                "osso {} não é identidade em repouso: {m:?}",
+                bone.name
+            );
+        }
+    }
+
+    #[test]
+    fn test_rest_rotation_is_respected_and_rest_pose_stays_identity() {
+        let mut skel = Skeleton::new("Rotated");
+        let a = skel
+            .add_bone("A", None, [0.0, 1.0, 0.0], [0.0, 2.0, 0.0])
+            .unwrap();
+        let b = skel
+            .add_bone("B", Some(a), [0.0, 2.0, 0.0], [1.0, 2.0, 0.0])
+            .unwrap();
+        // Rotação de repouso de 90° em Z no osso A (como em rigs externos).
+        let q = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+        skel.get_bone_mut(a).unwrap().local_transform.rotation = [q.x, q.y, q.z, q.w];
+        skel.compute_bind_pose_matrices();
+
+        // O offset de B é expresso no referencial (rotacionado) do pai.
+        let tb = skel.get_bone(b).unwrap().local_transform.translation;
+        assert!(
+            (Vec3::from(tb) - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-5,
+            "{tb:?}"
+        );
+
+        let rest: Vec<Transform3D> = skel.bones.iter().map(|b| b.local_transform).collect();
+        for m in skel.compute_skinning_matrices(&rest).unwrap() {
+            assert!(m.abs_diff_eq(Mat4::IDENTITY, 1e-5), "{m:?}");
+        }
+    }
+
+    #[test]
+    fn test_rest_local_translation_is_offset_from_parent_and_bind_is_absolute() {
+        let mut skel = Skeleton::new("Chain");
+        let a = skel
+            .add_bone("A", None, [1.0, 2.0, 3.0], [1.0, 3.0, 3.0])
+            .unwrap();
+        let b = skel
+            .add_bone("B", Some(a), [1.0, 3.0, 3.0], [1.0, 4.0, 3.0])
+            .unwrap();
+        assert_eq!(
+            skel.get_bone(a).unwrap().local_transform.translation,
+            [1.0, 2.0, 3.0]
+        );
+        assert_eq!(
+            skel.get_bone(b).unwrap().local_transform.translation,
+            [0.0, 1.0, 0.0]
+        );
+        // Bind mundial = translate(head) absoluto.
+        let inv_b = Mat4::from_cols_array(&skel.get_bone(b).unwrap().inverse_bind_matrix);
+        let world_b = inv_b.inverse();
+        assert!(world_b.abs_diff_eq(Mat4::from_translation(Vec3::new(1.0, 3.0, 3.0)), 1e-5));
+    }
+
+    #[test]
+    fn test_reparent_and_remove_keep_bind_and_recompute_rest_offsets() {
+        let mut skel = Skeleton::new("Chain");
+        let a = skel
+            .add_bone("A", None, [0.0, 1.0, 0.0], [0.0, 2.0, 0.0])
+            .unwrap();
+        let b = skel
+            .add_bone("B", Some(a), [0.0, 2.0, 0.0], [0.0, 3.0, 0.0])
+            .unwrap();
+        let c = skel
+            .add_bone("C", Some(b), [0.0, 3.0, 0.0], [0.0, 4.0, 0.0])
+            .unwrap();
+        skel.remove_bone(b).unwrap();
+        // C passa a filho de A; head absoluto permanece, offset local é recalculado.
+        assert_eq!(skel.get_bone(c).unwrap().parent, Some(a));
+        assert_eq!(
+            skel.get_bone(c).unwrap().local_transform.translation,
+            [0.0, 2.0, 0.0]
+        );
+        skel.reparent_bone(c, None).unwrap();
+        assert_eq!(
+            skel.get_bone(c).unwrap().local_transform.translation,
+            [0.0, 3.0, 0.0]
+        );
+        let rest: Vec<Transform3D> = skel.bones.iter().map(|b| b.local_transform).collect();
+        for m in skel.compute_skinning_matrices(&rest).unwrap() {
+            assert!(m.abs_diff_eq(Mat4::IDENTITY, 1e-5));
+        }
     }
 
     #[test]

@@ -28,6 +28,8 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Shift+Z</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -64,7 +66,7 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 | `model.select_edge` | <kbd>2</kbd> |
 | `model.select_face` | <kbd>3</kbd> |
 | `model.select_linked` | <kbd>L</kbd> |
-| `model.select_object` | <kbd>0</kbd> |
+| `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
@@ -75,7 +77,16 @@ description: Atalhos do perfil canônico Petunia, gerados a partir do keymap (P3
 
 | Ação | Atalho |
 | :--- | :---: |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 
 ## UV
 

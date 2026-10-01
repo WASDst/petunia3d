@@ -214,11 +214,37 @@ impl BoneTrack {
         self.scales[0].value
     }
 
+    /// Amostra a transformação com **identidade** nos canais sem keyframes.
+    /// Para posar um osso use [`Self::sample_transform_over`], que preserva o repouso.
     pub fn sample_transform(&self, time: f32) -> Transform3D {
         Transform3D {
             translation: self.sample_translation(time),
             rotation: self.sample_rotation(time),
             scale: self.sample_scale(time),
+        }
+    }
+
+    /// Amostra a transformação local: canais **sem keyframes** herdam o repouso
+    /// (`rest`, normalmente `Bone::local_transform`). Uma trilha só de rotação não
+    /// desloca o osso do pai (AN-16). Keyframes são valores locais absolutos, a
+    /// mesma convenção dos canais de animação do glTF.
+    pub fn sample_transform_over(&self, time: f32, rest: &Transform3D) -> Transform3D {
+        Transform3D {
+            translation: if self.translations.is_empty() {
+                rest.translation
+            } else {
+                self.sample_translation(time)
+            },
+            rotation: if self.rotations.is_empty() {
+                rest.rotation
+            } else {
+                self.sample_rotation(time)
+            },
+            scale: if self.scales.is_empty() {
+                rest.scale
+            } else {
+                self.sample_scale(time)
+            },
         }
     }
 }
@@ -298,7 +324,7 @@ impl AnimationClip {
             .iter()
             .map(|b| {
                 if let Some(track) = self.get_track(b.id) {
-                    track.sample_transform(time)
+                    track.sample_transform_over(time, &b.local_transform)
                 } else {
                     b.local_transform
                 }
@@ -603,6 +629,172 @@ impl RigPreset {
         skel
     }
 
+    /// Serpente/cadeia (P3D-136): `Root` no meio do corpo, coluna `Spine_n` até a
+    /// `Head` (frente, +Z) e cauda `Tail_n` para trás. `segments` (6..=32) é o
+    /// total de segmentos de coluna + cauda.
+    pub fn serpent(segments: usize, scale: f32) -> Skeleton {
+        let s = scale.max(0.1);
+        let total = segments.clamp(6, 32);
+        let front = total / 2;
+        let back = total - front;
+        let seg = 2.0 * s / total as f32;
+        let y = 0.1 * s;
+        let mut skel = Skeleton::new("Serpent_Rig");
+        let root = skel
+            .add_bone("Root", None, [0.0, y, 0.0], [0.0, y, seg])
+            .unwrap();
+        let mut prev = root;
+        let mut z = 0.0;
+        for i in 0..front {
+            z += seg;
+            prev = skel
+                .add_bone(
+                    format!("Spine_{i}"),
+                    Some(prev),
+                    [0.0, y, z],
+                    [0.0, y, z + seg],
+                )
+                .unwrap();
+        }
+        skel.add_bone(
+            "Head",
+            Some(prev),
+            [0.0, y, z + seg],
+            [0.0, y, z + 1.6 * seg],
+        )
+        .unwrap();
+        let mut prev = root;
+        let mut z = 0.0;
+        for i in 0..back {
+            prev = skel
+                .add_bone(
+                    format!("Tail_{i}"),
+                    Some(prev),
+                    [0.0, y, z],
+                    [0.0, y, z - seg],
+                )
+                .unwrap();
+            z -= seg;
+        }
+        skel
+    }
+
+    /// Peixe (P3D-136): corpo de serpente com 9 segmentos e nadadeiras `Fin.L/R`.
+    pub fn fish(scale: f32) -> Skeleton {
+        let s = scale.max(0.1);
+        let mut skel = Self::serpent(9, s);
+        skel.name = "Fish_Rig".into();
+        if let Some(anchor) = skel.find_bone("Spine_1").or_else(|| skel.find_bone("Root")) {
+            let head = skel.get_bone(anchor).map(|b| b.head).unwrap_or([0.0; 3]);
+            for (name, sx) in [("Fin.L", 1.0f32), ("Fin.R", -1.0)] {
+                skel.add_bone(
+                    name,
+                    Some(anchor),
+                    head,
+                    [
+                        head[0] + sx * 0.25 * s,
+                        head[1] - 0.05 * s,
+                        head[2] - 0.1 * s,
+                    ],
+                )
+                .unwrap();
+            }
+        }
+        skel
+    }
+
+    /// Pássaro (P3D-136): coluna horizontal, pernas de dois ossos + pé, asas de
+    /// três segmentos (`Wing_n.L/R`) e cauda de dois.
+    pub fn bird(scale: f32) -> Skeleton {
+        let s = scale.max(0.1);
+        let mut skel = Skeleton::new("Bird_Rig");
+        let hips = skel
+            .add_bone("Hips", None, [0.0, 0.5 * s, 0.0], [0.0, 0.5 * s, 0.2 * s])
+            .unwrap();
+        let spine = skel
+            .add_bone(
+                "Spine",
+                Some(hips),
+                [0.0, 0.5 * s, 0.2 * s],
+                [0.0, 0.55 * s, 0.4 * s],
+            )
+            .unwrap();
+        let chest = skel
+            .add_bone(
+                "Chest",
+                Some(spine),
+                [0.0, 0.55 * s, 0.4 * s],
+                [0.0, 0.62 * s, 0.55 * s],
+            )
+            .unwrap();
+        let neck = skel
+            .add_bone(
+                "Neck",
+                Some(chest),
+                [0.0, 0.62 * s, 0.55 * s],
+                [0.0, 0.8 * s, 0.6 * s],
+            )
+            .unwrap();
+        skel.add_bone(
+            "Head",
+            Some(neck),
+            [0.0, 0.8 * s, 0.6 * s],
+            [0.0, 0.85 * s, 0.75 * s],
+        )
+        .unwrap();
+        for (side, sx) in [("L", 1.0f32), ("R", -1.0)] {
+            let mut prev = chest;
+            for n in 0..3 {
+                let x0 = sx * (0.05 + 0.3 * n as f32) * s;
+                prev = skel
+                    .add_bone(
+                        format!("Wing_{n}.{side}"),
+                        Some(prev),
+                        [x0, 0.62 * s, 0.45 * s],
+                        [x0 + sx * 0.3 * s, 0.62 * s, 0.45 * s],
+                    )
+                    .unwrap();
+            }
+            let x = sx * 0.08 * s;
+            let up = skel
+                .add_bone(
+                    format!("UpperLeg.{side}"),
+                    Some(hips),
+                    [x, 0.5 * s, 0.1 * s],
+                    [x, 0.3 * s, 0.1 * s],
+                )
+                .unwrap();
+            let low = skel
+                .add_bone(
+                    format!("LowerLeg.{side}"),
+                    Some(up),
+                    [x, 0.3 * s, 0.1 * s],
+                    [x, 0.08 * s, 0.1 * s],
+                )
+                .unwrap();
+            skel.add_bone(
+                format!("Foot.{side}"),
+                Some(low),
+                [x, 0.08 * s, 0.1 * s],
+                [x, 0.0, 0.18 * s],
+            )
+            .unwrap();
+        }
+        let mut prev = hips;
+        for n in 0..2 {
+            let z = -0.2 * n as f32 * s;
+            prev = skel
+                .add_bone(
+                    format!("Tail_{n}"),
+                    Some(prev),
+                    [0.0, 0.5 * s, z],
+                    [0.0, 0.5 * s, z - 0.2 * s],
+                )
+                .unwrap();
+        }
+        skel
+    }
+
     /// Gera um esqueleto canônico Multi-Leg (para aranhas, escorpiões, centopéias).
     pub fn multi_leg(legs_count: usize, scale: f32) -> Skeleton {
         let mut skel = Skeleton::new("MultiLeg_Rig");
@@ -883,10 +1075,15 @@ impl AnimationLibrary {
         let mut clip = AnimationClip::new("Humanoid_Idle", 2.0);
         let chest_id = skeleton.find_bone("Chest").unwrap_or(0);
 
+        // Keyframes são locais absolutos: o respirar é um delta sobre o repouso.
+        let rest = skeleton
+            .get_bone(chest_id)
+            .map_or([0.0; 3], |b| b.local_transform.translation);
+        let up = [rest[0], rest[1] + 0.03, rest[2]];
         let track = clip.get_or_create_track(chest_id, "Chest");
-        track.add_translation(0.0, [0.0, 0.0, 0.0]);
-        track.add_translation(1.0, [0.0, 0.03, 0.0]);
-        track.add_translation(2.0, [0.0, 0.0, 0.0]);
+        track.add_translation(0.0, rest);
+        track.add_translation(1.0, up);
+        track.add_translation(2.0, rest);
 
         track.add_scale(0.0, [1.0, 1.0, 1.0]);
         track.add_scale(1.0, [1.04, 1.02, 1.04]);
@@ -921,6 +1118,32 @@ impl AnimationLibrary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// AN-16: trilha só de rotação não pode soltar o osso do pai.
+    #[test]
+    fn rotation_only_track_keeps_rest_offset_and_rest_frame_is_identity() {
+        let skel = RigPreset::humanoid(1.0);
+        let walk = AnimationLibrary::humanoid_walk(&skel);
+        let pose = walk.sample_pose(&skel, 0.0);
+        let uleg = skel.find_bone("UpperLeg.L").unwrap();
+        let idx = skel.bone_index(uleg).unwrap();
+        // Translação de repouso preservada; só a rotação é animada.
+        assert_eq!(
+            pose[idx].translation,
+            skel.bones[idx].local_transform.translation
+        );
+        assert_ne!(pose[idx].rotation, skel.bones[idx].local_transform.rotation);
+
+        // Ossos sem trilha ficam em repouso => skinning identidade.
+        let empty = AnimationClip::new("Empty", 1.0);
+        let mats = empty.sample_skinning_matrices(&skel, 0.5).unwrap();
+        assert!(mats.iter().all(|m| m.abs_diff_eq(Mat4::IDENTITY, 1e-5)));
+
+        // Idle respira em torno do repouso: frame 0 e 2 s == repouso do Chest.
+        let idle = AnimationLibrary::humanoid_idle(&skel);
+        let mats0 = idle.sample_skinning_matrices(&skel, 0.0).unwrap();
+        assert!(mats0.iter().all(|m| m.abs_diff_eq(Mat4::IDENTITY, 1e-4)));
+    }
 
     #[test]
     fn test_animation_track_sampling_and_interpolation() {

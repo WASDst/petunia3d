@@ -31,7 +31,9 @@ Aprofundar Material/Paint/UV com masks, Surface Paint Toolbox, decal channels av
 
 # Era 3 — Characters & Animation
 
-Evoluir Skeleton/Rig Core, skinning, keyframe animation, rig presets, retargeting, auto-rig e Animation Asset Library nessa ordem. Auto-rig só entra após a base manual estar sólida.
+Evoluir Skeleton/Rig Core, skinning, rig presets, retargeting, auto-rig e Animation Asset Library, **com animação procedural primeiro** (revisão de 2026-09-30, [cap. 45](../foundations/45-pos-v1-animate-acessivel-animacao-procedural.md) e [ADR 006](../../architecture/adr/006-workspace-animate-pos-v1.md)).
+
+Ordem interna revisada: (F0) Rig Roles, IK e glTF com skin/animação → (F1) Motion Generators headless, com criaturas de primeira classe → (F2) workspace **Animate** pós-V1 com escolha de Motion e sliders → (F3) timeline, Ghosts e Trails → (F4) Reference Frames (batch de imagens) e Tweak Layers → (F5) Wiggle, ragdoll simples e Animation Asset Library. O auto-rig continua exigindo rig manual sólido e edição posterior. **Vídeo, estimativa de pose, mocap e geração por IA não fazem parte da Era 3.**
 
 # Era 4 — Programmable & Intelligent Petunia
 
@@ -68,6 +70,12 @@ Petunia3D continua independente. Map Editor e Game Engine devem ser produtos sep
 - **P3D-166 — Parts Hierarchy & Linked Instances.**
 - **P3D-167 — Asset States & Variant Composition.**
 - **P3D-168 — Procedural Path Generators.**
+- **P3D-169 — Rig Roles & IK Foundation** (SPEC DRAFT, 2026-09-30).
+- **P3D-170 — Procedural Motion Generators** (SPEC DRAFT).
+- **P3D-171 — Animation Ghosts & Trajectories** (SPEC DRAFT).
+- **P3D-172 — Reference Image Sequence** (SPEC DRAFT).
+- **P3D-173 — Secondary Motion & Simple Ragdoll** (SPEC DRAFT).
+- **P3D-174 — Layered Animation** (SPEC DRAFT).
 
 # Recursos complementares aprovados como candidatos
 
@@ -204,3 +212,15 @@ Cada P3D pós-V1 deve passar por `SPEC READY` antes do código e declarar: objet
 [P3D-167 — Asset States & Variant Composition](../specs/p3d-167-asset-states-variant-composition.md)
 
 [P3D-168 — Procedural Path Generators](../specs/p3d-168-procedural-path-generators.md)
+
+[P3D-169 — Rig Roles & IK Foundation](../specs/p3d-169-rig-roles-ik-foundation.md)
+
+[P3D-170 — Procedural Motion Generators](../specs/p3d-170-procedural-motion-generators.md)
+
+[P3D-171 — Animation Ghosts & Trajectories](../specs/p3d-171-animation-ghosts-trajectories.md)
+
+[P3D-172 — Reference Image Sequence](../specs/p3d-172-reference-image-sequence.md)
+
+[P3D-173 — Secondary Motion & Simple Ragdoll](../specs/p3d-173-secondary-motion-simple-ragdoll.md)
+
+[P3D-174 — Layered Animation](../specs/p3d-174-layered-animation.md)

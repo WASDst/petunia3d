@@ -2,8 +2,9 @@
 
 use glam::{Mat4, Vec3, Vec4};
 use petunia_core::{Camera, HoverTarget, SelectionDomain, Workspace};
-use petunia_project::{Canvas, Project};
+use petunia_project::{Canvas, PoseOverride, Project, mesh_to_draw};
 use petunia_render::{Shading, scene};
+use std::sync::Arc;
 
 use crate::{PetuniaViewport, ViewportRenderState};
 
@@ -31,6 +32,8 @@ pub struct Software3dViewport {
     pub selection_domain: SelectionDomain,
     pub depth_buffer: Vec<f32>,
     pub color_buffer: Vec<u8>,
+    /// Malhas deformadas por skin (preview de pose); o documento fica em repouso.
+    pose: Option<Arc<PoseOverride>>,
 }
 
 impl Software3dViewport {
@@ -43,6 +46,7 @@ impl Software3dViewport {
             selection_domain: SelectionDomain::Object,
             depth_buffer: vec![1.0; (width * height) as usize],
             color_buffer: vec![0; (width * height * 4) as usize],
+            pose: None,
         }
     }
 
@@ -274,6 +278,10 @@ impl PetuniaViewport for Software3dViewport {
         true
     }
 
+    fn set_pose_override(&mut self, pose: Option<Arc<PoseOverride>>) {
+        self.pose = pose;
+    }
+
     fn render_frame(
         &mut self,
         project: &Project,
@@ -293,22 +301,27 @@ impl PetuniaViewport for Software3dViewport {
                 self.world_line(Vec3::from_array(a), Vec3::from_array(b), &vp, color, true);
             }
         }
+        let pose = self.pose.clone();
         let meshes: Vec<_> = project
             .assets
             .iter()
             .enumerate()
             .filter(|(_, a)| a.visible)
-            .map(|(index, asset)| (index, asset, asset.evaluated_mesh_ref()))
+            .map(|(index, asset)| (index, asset, mesh_to_draw(pose.as_deref(), asset)))
             .collect();
         let scene_light = if state.shading.uses_scene_light() {
             project.active_light()
         } else {
             None
         };
-        let light_dir = scene_light
-            .map_or(Vec3::from_array(scene::LIGHT_DIR).normalize(), |light| {
-                Vec3::from_array(light.normalized_direction())
-            });
+        let light_dir = scene_light.map_or(
+            if state.studio_light_follows_camera {
+                Vec3::from_array(scene::studio_light_for_camera(camera))
+            } else {
+                Vec3::from_array(scene::LIGHT_DIR).normalize()
+            },
+            |light| Vec3::from_array(light.normalized_direction()),
+        );
         let ambient = if scene_light.is_some() {
             scene::LIGHT_AMBIENT * 0.35
         } else {
@@ -584,6 +597,42 @@ mod tests {
     }
 
     #[test]
+    fn software_pose_override_replaces_the_mesh_only_while_drawing() {
+        let mut viewport = Software3dViewport::new(240, 180);
+        let mut project = Project::default();
+        project.add("Hero", petunia_core::Mesh::cube(2.0));
+        let asset_id = project.assets.last().unwrap().id;
+        let camera = Camera::default();
+        let state = ViewportRenderState {
+            show_grid: false,
+            ..ViewportRenderState::default()
+        };
+        viewport.render_frame(&project, &[], &camera, state);
+        let rest = viewport.color_buffer.clone();
+
+        // A mesma malha, deslocada: o documento não muda, o desenho sim.
+        let mut moved = project.assets.last().unwrap().mesh.clone();
+        for v in &mut moved.verts {
+            v.pos[0] += 1.5;
+        }
+        let mut pose = PoseOverride::new(1);
+        pose.insert(asset_id, moved);
+        viewport.set_pose_override(Some(Arc::new(pose)));
+        viewport.render_frame(&project, &[], &camera, state);
+        assert_ne!(viewport.color_buffer, rest, "a pose muda os pixels");
+        assert_eq!(
+            project.assets.last().unwrap().mesh.verts[0].pos,
+            petunia_core::Mesh::cube(2.0).verts[0].pos,
+            "o documento segue em repouso"
+        );
+
+        // Sem override, volta exatamente ao repouso.
+        viewport.set_pose_override(None);
+        viewport.render_frame(&project, &[], &camera, state);
+        assert_eq!(viewport.color_buffer, rest);
+    }
+
+    #[test]
     fn software_viewport_resizes_correctly() {
         let mut viewport = Software3dViewport::new(100, 100);
         viewport.resize(200, 150);
@@ -645,6 +694,42 @@ mod tests {
         style.selection_thickness = 5.0;
         viewport.render_frame(&project, &[], &camera, style);
         assert_ne!(viewport.color_buffer, blue);
+    }
+
+    #[test]
+    fn software_studio_light_follows_the_camera() {
+        let mut project = Project::default();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let luminance_from = |preset, follows| {
+            let mut viewport = Software3dViewport::new(160, 120);
+            let mut camera = Camera::default();
+            camera.set_preset(preset);
+            camera.target = Vec3::ZERO;
+            let state = ViewportRenderState {
+                show_grid: false,
+                show_wireframe_overlay: false,
+                studio_light_follows_camera: follows,
+                ..ViewportRenderState::default()
+            };
+            viewport.render_frame(&project, &[], &camera, state);
+            let offset = ((60 * 160 + 80) * 4) as usize;
+            let pixel = &viewport.color_buffer[offset..offset + 3];
+            0.2126 * f32::from(pixel[0])
+                + 0.7152 * f32::from(pixel[1])
+                + 0.0722 * f32::from(pixel[2])
+        };
+        let front = luminance_from(petunia_core::ViewPreset::Front, true);
+        let back = luminance_from(petunia_core::ViewPreset::Back, true);
+        assert!(
+            (front - back).abs() < 6.0,
+            "frente {front:.1} × trás {back:.1}"
+        );
+        let fixed_front = luminance_from(petunia_core::ViewPreset::Front, false);
+        let fixed_back = luminance_from(petunia_core::ViewPreset::Back, false);
+        assert!(
+            fixed_front - fixed_back > 30.0,
+            "{fixed_front:.1} × {fixed_back:.1}"
+        );
     }
 
     #[test]

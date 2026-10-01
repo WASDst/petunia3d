@@ -35,6 +35,8 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Shift+Z</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -66,13 +68,22 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.select_edge` | <kbd>2</kbd> |
 | `model.select_face` | <kbd>3</kbd> |
 | `model.select_linked` | <kbd>L</kbd> |
-| `model.select_object` | <kbd>0</kbd> |
+| `model.select_object` | <kbd>4</kbd> |
 | `model.select_vertex` | <kbd>1</kbd> |
 | `model.slice` | <kbd>Shift+K</kbd> |
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -82,17 +93,24 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (50 atalhos)
+### Perfil: `3ds-max` (66 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Y</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -130,7 +148,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>W</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -140,14 +167,21 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender` (49 atalhos)
+### Perfil: `blender` (65 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Shift+Z</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -184,7 +218,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -194,14 +237,21 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender-notebook` (50 atalhos)
+### Perfil: `blender-notebook` (66 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Shift+Z</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -239,7 +289,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -249,14 +308,21 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `cinema-4d` (50 atalhos)
+### Perfil: `cinema-4d` (66 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Y</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -294,7 +360,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>E</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -304,14 +379,21 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `maya` (50 atalhos)
+### Perfil: `maya` (66 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Y</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -349,7 +431,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>W</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -359,14 +450,21 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-notebook` (50 atalhos)
+### Perfil: `petunia-notebook` (66 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>H</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Shift+Z</kbd> |
 | `global.rename` | <kbd>Ctrl+F2</kbd> |
 | `global.reset_camera` | <kbd>Home</kbd> |
@@ -404,7 +502,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>G</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -414,14 +521,21 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-simple` (50 atalhos)
+### Perfil: `petunia-simple` (66 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
 | `global.command_palette` | <kbd>Ctrl+P</kbd> |
 | `global.cycle_mode` | <kbd>Tab</kbd> |
 | `global.help` | <kbd>F1</kbd> |
+| `global.micro_inspector` | <kbd>Shift+Space</kbd> |
+| `global.previous_tool` | <kbd>Space</kbd> |
 | `global.redo` | <kbd>Ctrl+Y</kbd> |
 | `global.rename` | <kbd>F2</kbd> |
 | `global.reset_camera` | <kbd>Space</kbd> |
@@ -459,7 +573,16 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `model.subdivide` | <kbd>Alt+W</kbd> |
 | `model.tool_select` | <kbd>W</kbd> |
 | `model.transform` | <kbd>T</kbd> |
+| `paint.airbrush` | <kbd>Shift+B</kbd> |
+| `paint.color_picker` | <kbd>I</kbd> |
+| `paint.eraser` | <kbd>E</kbd> |
+| `paint.fill` | <kbd>G</kbd> |
+| `paint.gradient` | <kbd>Shift+G</kbd> |
+| `paint.isolate` | <kbd>/</kbd> |
+| `paint.line` | <kbd>L</kbd> |
 | `paint.paint` | <kbd>B</kbd> |
+| `paint.rectangle` | <kbd>R</kbd> |
+| `paint.select` | <kbd>V</kbd> |
 | `uv.toggle_seam` | <kbd>U</kbd> |
 | `view.frame_all` | <kbd>Home</kbd> |
 | `view.frame_selection` | <kbd>F</kbd> |
@@ -469,4 +592,9 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `view.toggle_xray` | <kbd>Alt+Z</kbd> |
 | `window.command_palette` | <kbd>Ctrl+P</kbd> |
 | `window.reference_manager` | <kbd>Shift+R</kbd> |
+| `window.workspace_animate` | <kbd>Ctrl+5</kbd> |
+| `window.workspace_draw` | <kbd>Ctrl+1</kbd> |
+| `window.workspace_paint` | <kbd>Ctrl+3</kbd> |
+| `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
+| `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 

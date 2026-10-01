@@ -38,7 +38,19 @@ pub(crate) fn effect_params(
             param("intensity", "Intensity", *intensity, 0.0, 1.0),
             param("seed", "Seed", *seed as f32, 0.0, 9_999.0),
         ],
-        PaintEffect::Levels { .. } => Vec::new(),
+        PaintEffect::Levels {
+            in_min,
+            in_max,
+            gamma,
+            out_min,
+            out_max,
+        } => vec![
+            param("in_min", "Input black", *in_min, 0.0, 1.0),
+            param("in_max", "Input white", *in_max, 0.0, 1.0),
+            param("gamma", "Gamma", *gamma, 0.1, 4.0),
+            param("out_min", "Output black", *out_min, 0.0, 1.0),
+            param("out_max", "Output white", *out_max, 0.0, 1.0),
+        ],
         PaintEffect::BrightnessContrast {
             brightness,
             contrast,
@@ -167,10 +179,12 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
     window.set_dimension_x(dimension.label_x);
     window.set_dimension_y(dimension.label_y);
 
-    let snap_marker = compute_snap_marker(&bridge.state, width, height);
+    let snap_marker = bridge.snap_marker_model(width, height);
     window.set_snap_marker_visible(snap_marker.visible);
     window.set_snap_marker_x(snap_marker.x);
     window.set_snap_marker_y(snap_marker.y);
+    window.set_snap_marker_label(snap_marker.label.as_str().into());
+    window.set_snap_marker_round(snap_marker.round);
 
     let measure = compute_quick_measure(&bridge.state, width, height);
     window.set_measure_visible(measure.visible);
@@ -266,6 +280,8 @@ impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
             view_pivot: s.view_pivot.as_str().into(),
             view_snap: s.view_snap.as_str().into(),
             view_prop: s.view_prop.as_str().into(),
+            paint_select: s.paint_select.as_str().into(),
+            paint_isolate: s.paint_isolate.as_str().into(),
             paint_brush: s.paint_brush.as_str().into(),
             paint_airbrush: s.paint_airbrush.as_str().into(),
             paint_eraser: s.paint_eraser.as_str().into(),
@@ -273,6 +289,8 @@ impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
             paint_fill: s.paint_fill.as_str().into(),
             paint_line: s.paint_line.as_str().into(),
             paint_rectangle: s.paint_rectangle.as_str().into(),
+            paint_ellipse: s.paint_ellipse.as_str().into(),
+            paint_gradient_radial: s.paint_gradient_radial.as_str().into(),
             paint_gradient: s.paint_gradient.as_str().into(),
             uv_select: s.uv_select.as_str().into(),
             uv_unwrap: s.uv_unwrap.as_str().into(),
@@ -335,6 +353,7 @@ fn to_prefab_item(item: &crate::view_model::PrefabItemModel) -> PrefabItem {
 
 pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewModel) {
     window.set_active_workspace(vm.workspace_label().into());
+    crate::animate::sync_animate_properties(window, &vm.animate);
     window.set_saved(vm.saved);
     window.set_can_undo(vm.can_undo);
     window.set_can_redo(vm.can_redo);
@@ -389,13 +408,12 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_brush_size(vm.brush_size);
     window.set_brush_opacity(vm.brush_opacity);
     window.set_brush_hardness(vm.brush_hardness);
-    window.set_brush_flow(vm.brush_flow);
-    window.set_brush_spacing(vm.brush_spacing);
     window.set_paint_symmetry_x(vm.paint_symmetry_x);
     window.set_paint_symmetry_y(vm.paint_symmetry_y);
     window.set_paint_symmetry_z(vm.paint_symmetry_z);
     window.set_paint_target_vertex(vm.paint_target_vertex);
     window.set_paint_mask_selection(vm.paint_mask_selection);
+    window.set_isolate_active(vm.isolate_active);
 
     window.set_pos_x(vm.position[0]);
     window.set_pos_y(vm.position[1]);
@@ -612,6 +630,15 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_profile_depth(vm.label_profile_depth.as_str().into());
     window.set_label_profile_points(vm.label_profile_points.as_str().into());
     window.set_label_profile_close(vm.label_profile_close.as_str().into());
+    window.set_label_view_gizmo(vm.label_view_gizmo.as_str().into());
+    window.set_label_view_gizmo_hint(vm.label_view_gizmo_hint.as_str().into());
+    window.set_label_profile_plane(vm.label_profile_plane.as_str().into());
+    window.set_label_profile_plane_auto(vm.label_profile_plane_auto.as_str().into());
+    window.set_label_profile_plane_ground(vm.label_profile_plane_ground.as_str().into());
+    window.set_label_profile_plane_face(vm.label_profile_plane_face.as_str().into());
+    window.set_label_profile_plane_view(vm.label_profile_plane_view.as_str().into());
+    window.set_label_profile_look_at_plane(vm.label_profile_look_at_plane.as_str().into());
+    window.set_profile_workplane_locked(vm.profile_workplane_locked);
     window.set_label_profile_generate(vm.label_profile_generate.as_str().into());
     window.set_label_profile_revolve(vm.label_profile_revolve.as_str().into());
     window.set_label_profile_sweep(vm.label_profile_sweep.as_str().into());
@@ -794,6 +821,70 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_point_count(vm.profile_point_count);
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
+    window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
+    window.set_region_shapes_commands(vm.region_shapes_commands.as_str().into());
+    window.set_keymap_capture_action(vm.keymap_capture_action.as_str().into());
+    {
+        let b = &vm.brush_panel;
+        window.set_brush_flow(b.flow);
+        window.set_brush_spacing(b.spacing);
+        window.set_brush_smoothing(b.smoothing);
+        window.set_brush_size_jitter(b.size_jitter);
+        window.set_brush_opacity_jitter(b.opacity_jitter);
+        window.set_brush_scatter(b.scatter);
+        window.set_brush_spray_density(b.spray_density);
+        window.set_brush_angle(b.angle);
+        window.set_brush_roundness(b.roundness);
+        window.set_brush_tip(b.tip.as_str().into());
+        window.set_brush_blend(b.blend.as_str().into());
+        window.set_brush_preset_index(b.active_preset);
+        window.set_clone_source_set(b.clone_source_set);
+        let names: Vec<slint::SharedString> = b.presets.iter().map(|n| n.as_str().into()).collect();
+        let current: Vec<slint::SharedString> =
+            slint::Model::iter(&window.get_brush_presets()).collect();
+        if current != names {
+            window.set_brush_presets(std::rc::Rc::new(slint::VecModel::from(names)).into());
+        }
+    }
+    if vm.keymap_revision >= 0 && i64::from(window.get_keymap_revision()) != vm.keymap_revision {
+        window.set_keymap_revision(vm.keymap_revision as i32);
+        let profiles: Vec<KeymapProfileEntry> = vm
+            .keymap_snapshot
+            .profiles
+            .iter()
+            .map(|p| KeymapProfileEntry {
+                id: p.id.as_str().into(),
+                name: p.name.as_str().into(),
+                custom: p.custom,
+                active: p.active,
+            })
+            .collect();
+        window.set_keymap_profiles(std::rc::Rc::new(slint::VecModel::from(profiles)).into());
+        let rows: Vec<KeymapActionEntry> = vm
+            .keymap_snapshot
+            .rows
+            .iter()
+            .map(|r| KeymapActionEntry {
+                action: r.action.as_str().into(),
+                label: r.label.as_str().into(),
+                shortcut: r.shortcut.as_str().into(),
+                conflict: r.conflict,
+                capturing: r.capturing,
+            })
+            .collect();
+        window.set_keymap_rows(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+    }
+    window.set_profile_outline_commands(vm.profile_outline_commands.as_str().into());
+    window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
+    window.set_label_poly_pen(vm.label_poly_pen.as_str().into());
+    window.set_label_poly_pen_hint(vm.label_poly_pen_hint.as_str().into());
+    window.set_modeling_mode(vm.modeling_mode.as_str().into());
+    window.set_label_workspace_draw_title(vm.label_workspace_draw_title.as_str().into());
+    window
+        .set_label_workspace_draw_description(vm.label_workspace_draw_description.as_str().into());
+    window.set_label_workspace_poly_title(vm.label_workspace_poly_title.as_str().into());
+    window
+        .set_label_workspace_poly_description(vm.label_workspace_poly_description.as_str().into());
     window.set_profile_depth(vm.profile_depth);
     window.set_profile_wall_thickness(vm.profile_wall_thickness);
     window.set_profile_smoothness(vm.profile_smoothness);
@@ -813,6 +904,34 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         .global::<crate::Motion>()
         .set_reduced(vm.reduced_motion);
     window.set_double_tap_interval_ms(vm.double_tap_interval_ms);
+    window.set_tool_grammar_active(vm.tool_grammar_active);
+    window.set_tool_gesture_latched(vm.tool_gesture_latched);
+    window.set_last_operation_active(vm.last_operation_active);
+    window.set_last_operation_title(vm.last_operation_title.as_str().into());
+    window.set_last_operation_value(vm.last_operation_value);
+    window.set_last_operation_step(vm.last_operation_step);
+    window.set_last_operation_unit(vm.last_operation_unit.as_str().into());
+    window.set_label_last_operation(vm.label_last_operation.as_str().into());
+    window.set_label_last_operation_hint(vm.label_last_operation_hint.as_str().into());
+    window.set_drag_threshold_px(vm.drag_threshold_px);
+    window.set_snap_radius_px(vm.snap_radius_px);
+    window.set_label_snap_radius(vm.label_snap_radius.as_str().into());
+    window.set_click_move_click(vm.click_move_click);
+    window.set_workplane_prefer_ground(vm.workplane_prefer_ground);
+    window.set_studio_light_follows_camera(vm.studio_light_follows_camera);
+    window.set_label_studio_light_follows_camera(
+        vm.label_studio_light_follows_camera.as_str().into(),
+    );
+    window.set_label_studio_light_follows_camera_hint(
+        vm.label_studio_light_follows_camera_hint.as_str().into(),
+    );
+    window.set_label_workplane_prefer_ground(vm.label_workplane_prefer_ground.as_str().into());
+    window.set_label_workplane_prefer_ground_hint(
+        vm.label_workplane_prefer_ground_hint.as_str().into(),
+    );
+    window.set_label_drag_threshold(vm.label_drag_threshold.as_str().into());
+    window.set_label_click_move_click(vm.label_click_move_click.as_str().into());
+    window.set_label_click_move_click_hint(vm.label_click_move_click_hint.as_str().into());
     window.set_multiselection_measure_tag(vm.multiselection_measure_tag);
     window.set_label_colorblind_axes(vm.label_colorblind_axes.as_str().into());
     window.set_label_reduced_motion(vm.label_reduced_motion.as_str().into());
@@ -863,6 +982,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_snap_marker_visible(vm.snap_marker_visible);
     window.set_snap_marker_x(vm.snap_marker_x);
     window.set_snap_marker_y(vm.snap_marker_y);
+    window.set_snap_marker_label(vm.snap_marker_label.as_str().into());
+    window.set_snap_marker_round(vm.snap_marker_round);
 
     window.set_measure_visible(vm.measure_visible);
     window.set_measure_commands(vm.measure_commands.as_str().into());
@@ -1094,6 +1215,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window: &PetuniaSlintShell,
     bridge: Arc<Mutex<SlintUiBridge<V>>>,
 ) {
+    crate::animate::connect_animate_callbacks(window, Arc::clone(&bridge));
     let shortcut_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_shortcut_requested(move |text, ctrl, shift, alt| {
@@ -1112,10 +1234,31 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let workspace_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_workspace_changed(move |workspace| {
+        let mode = match workspace.as_str() {
+            "DRAW" => Some(crate::ModelingMode::Draw),
+            "POLY" => Some(crate::ModelingMode::Poly),
+            _ => None,
+        };
+        if let Some(mode) = mode
+            && let Ok(mut bridge) = workspace_bridge.lock()
+        {
+            bridge.apply(UiIntent::SetModelingMode(mode));
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+            return;
+        }
         let workspace = match workspace.as_str() {
             "MODEL" => Workspace::Model,
             "PAINT" => Workspace::Paint,
             "UV" => Workspace::Uv,
+            #[cfg(feature = "animation-workspace")]
+            "ANIMATE" => Workspace::Animate,
             _ => return,
         };
         if let Ok(mut bridge) = workspace_bridge.lock() {
@@ -1217,6 +1360,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 "file.export_glb" => service.export_glb().await,
                 "palette.import" => service.import_palette().await,
                 "palette.export" => service.export_palette().await,
+                "paint.import_decal" => service.open_decal_image().await,
                 _ => None,
             };
             let Some(path) = path else {
@@ -1230,6 +1374,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     "file.export_glb" => UiIntent::ExportSceneGlbTo(path),
                     "palette.import" => UiIntent::ImportPalette(path),
                     "palette.export" => UiIntent::ExportPalette(path),
+                    "paint.import_decal" => UiIntent::ImportDecalFrom(path),
                     _ => UiIntent::SaveProjectTo(path),
                 };
                 let needs_render = matches!(id.as_str(), "file.open" | "file.import_obj");
@@ -1317,6 +1462,55 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             }
         }
     });
+
+    // Editor de atalhos: criar/apagar perfil, capturar, restaurar e limpar.
+    macro_rules! keymap_callback {
+        ($register:ident, $persist:expr, |$bridge:ident $(, $arg:ident)*| $body:expr) => {{
+            let handle = Arc::clone(&bridge);
+            let window_weak = window.as_weak();
+            window.$register(move |$($arg),*| {
+                if let Ok(mut $bridge) = handle.lock() {
+                    let changed: bool = $body;
+                    if changed && $persist {
+                        persist_user_preferences(&mut $bridge);
+                    }
+                    let vm = $bridge.view_model();
+                    if let Some(window) = window_weak.upgrade() {
+                        sync_window_properties(&window, &vm);
+                    }
+                }
+            });
+        }};
+    }
+    keymap_callback!(on_brush_param_changed, false, |b, name, value| {
+        b.set_brush_param(name.as_str(), value)
+    });
+    keymap_callback!(on_brush_tip_changed, false, |b, tip| b
+        .set_brush_tip(tip.as_str()));
+    keymap_callback!(on_brush_blend_changed, false, |b, blend| b
+        .set_brush_blend(blend.as_str()));
+    keymap_callback!(on_brush_preset_applied, false, |b, index| b
+        .apply_brush_preset(index.max(0) as usize));
+    keymap_callback!(on_brush_preset_saved, false, |b| {
+        let count = b.all_brush_presets().len();
+        b.save_brush_preset(&format!("Custom {}", count + 1))
+    });
+    keymap_callback!(on_brush_preset_deleted, false, |b, index| b
+        .delete_brush_preset(index.max(0) as usize));
+    keymap_callback!(on_keymap_profile_create, true, |b| b
+        .create_keymap_profile(""));
+    keymap_callback!(on_keymap_profile_delete, true, |b, id| b
+        .delete_keymap_profile(id.as_str()));
+    keymap_callback!(on_keymap_capture_requested, true, |b, action| b
+        .begin_keymap_capture(action.as_str()));
+    keymap_callback!(on_keymap_capture_cancelled, true, |b| b
+        .cancel_keymap_capture());
+    keymap_callback!(on_keymap_capture_key, true, |b, key, ctrl, shift, alt| b
+        .capture_keymap_key(key.as_str(), ctrl, shift, alt));
+    keymap_callback!(on_keymap_binding_reset, true, |b, action| b
+        .reset_keymap_binding(action.as_str()));
+    keymap_callback!(on_keymap_binding_clear, true, |b, action| b
+        .clear_keymap_binding(action.as_str()));
 
     let scene_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
@@ -1700,9 +1894,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_viewport_orbit(move |dx, dy| {
         if let Ok(mut bridge) = orbit_bridge.lock() {
-            if bridge.mouse_navigation_suspended() {
-                return;
-            }
             bridge.orbit_viewport(dx, dy);
             let new_frame = bridge.render_viewport();
             if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
@@ -1716,9 +1907,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_viewport_pan(move |dx, dy| {
         if let Ok(mut bridge) = pan_bridge.lock() {
-            if bridge.mouse_navigation_suspended() {
-                return;
-            }
             bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Pan { dx, dy }));
             let new_frame = bridge.render_viewport();
             if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
@@ -1732,9 +1920,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_viewport_zoom(move |delta| {
         if let Ok(mut bridge) = zoom_bridge.lock() {
-            if bridge.mouse_navigation_suspended() {
-                return;
-            }
             bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Zoom { delta }));
             let new_frame = bridge.render_viewport();
             if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
@@ -1746,11 +1931,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let resize_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_viewport_resized(move |width, height| {
+    window.on_viewport_resized(move |width, height, physical_width, _physical_height| {
+        // A razão vem do próprio Slint (px físicos / px lógicos), então também
+        // acompanha troca de monitor e da preferência de UI scale.
+        let ratio = if width > 0.5 {
+            physical_width / width
+        } else {
+            1.0
+        };
         let width = width.round().max(1.0) as u32;
         let height = height.round().max(1.0) as u32;
         if let Ok(mut bridge) = resize_bridge.lock() {
-            bridge.resize_viewport(width, height);
+            bridge.resize_viewport_scaled(width, height, ratio);
             let new_frame = bridge.render_viewport();
             if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
                 sync_viewport_overlays(&window, &bridge);
@@ -1794,9 +1986,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let profile_down_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_viewport_profile_pointer_down(move |x, y, alt| {
+    window.on_viewport_profile_pointer_down(move |x, y, alt, ctrl| {
         if let Ok(mut bridge) = profile_down_bridge.lock() {
-            let hit = bridge.profile_pointer_down(x, y, alt);
+            let hit = bridge.profile_pointer_down_ex(x, y, alt, ctrl);
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -2540,15 +2732,146 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    // Gramática única (constituição 11): o botão principal das ferramentas
+    // persistentes chega aqui como pressionar (0), mover (1), soltar (2) ou
+    // cancelar (3). Movimentos sem efeito não redesenham nada.
+    let tool_pointer_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_tool_pointer(move |phase, x, y, shift, ctrl| {
+        if let Ok(mut bridge) = tool_pointer_bridge.lock() {
+            if !bridge.tool_pointer(phase, x, y, shift, ctrl) {
+                return;
+            }
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let last_operation_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_last_operation_committed(move |text| {
+        let Ok(mut bridge) = last_operation_bridge.lock() else {
+            return false;
+        };
+        let accepted = bridge.commit_last_operation_text(text.as_str());
+        let vm = bridge.view_model();
+        let new_frame = bridge.render_viewport();
+        if let Some(window) = window_weak.upgrade() {
+            sync_window_properties(&window, &vm);
+            if let Some(frame) = new_frame {
+                window.set_viewport_image(frame);
+            }
+        }
+        accepted
+    });
+
+    let ctrl_scroll_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_ctrl_scroll(move |delta| {
+        if let Ok(mut bridge) = ctrl_scroll_bridge.lock()
+            && bridge.viewport_ctrl_scroll(delta)
+        {
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let drag_threshold_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_drag_threshold_set(move |pixels| {
+        if let Ok(mut bridge) = drag_threshold_bridge.lock()
+            && bridge.set_drag_threshold_px(pixels)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let snap_radius_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_snap_radius_set(move |pixels| {
+        if let Ok(mut bridge) = snap_radius_bridge.lock()
+            && bridge.set_snap_radius_px(pixels)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let click_move_click_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_click_move_click_set(move |enabled| {
+        if let Ok(mut bridge) = click_move_click_bridge.lock()
+            && bridge.set_click_move_click(enabled)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let studio_light_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_studio_light_follows_camera_set(move |follows| {
+        if let Ok(mut bridge) = studio_light_bridge.lock()
+            && bridge.set_studio_light_follows_camera(follows)
+        {
+            persist_user_preferences(&mut bridge);
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let workplane_ground_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_workplane_prefer_ground_set(move |enabled| {
+        if let Ok(mut bridge) = workplane_ground_bridge.lock()
+            && bridge.set_workplane_prefer_ground(enabled)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
     let component_hover_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_viewport_hover(move |x, y| {
         if let Ok(mut bridge) = component_hover_bridge.lock() {
-            if bridge.state.session.tools.active_tool == "loop_cut" {
+            let changed = if bridge.state.session.tools.active_tool == "loop_cut" {
                 let viewport_size = bridge.viewport_size;
-                let _ = bridge.update_loop_cut_hover(x * viewport_size[0], y * viewport_size[1]);
+                bridge.update_loop_cut_hover(x * viewport_size[0], y * viewport_size[1])
             } else {
-                let _ = bridge.hover_component(x, y);
+                bridge.hover_component(x, y)
+            };
+            // Mouse parado sobre o mesmo alvo: nada a redesenhar. Evita o
+            // view model completo, a sincronização da janela e o frame GPU.
+            if !changed {
+                return;
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3592,6 +3915,28 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let wp_auto_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_set_workplane_auto(move || {
+        if let Ok(mut bridge) = wp_auto_bridge.lock() {
+            bridge.apply(UiIntent::ProfileSetWorkplaneAuto);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let wp_look_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_profile_look_at_plane(move || {
+        if let Ok(mut bridge) = wp_look_bridge.lock() {
+            bridge.apply(UiIntent::ProfileLookAtPlane);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
     let wp_view_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_profile_set_workplane_view(move || {
@@ -4273,30 +4618,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_brush_hardness_changed(move |hardness| {
         if let Ok(mut bridge) = hardness_bridge.lock() {
             bridge.apply(UiIntent::SetBrushHardness(hardness));
-            let vm = bridge.view_model();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-            }
-        }
-    });
-
-    let flow_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_brush_flow_changed(move |value| {
-        if let Ok(mut bridge) = flow_bridge.lock() {
-            bridge.apply(UiIntent::SetBrushFlow(value));
-            let vm = bridge.view_model();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-            }
-        }
-    });
-
-    let spacing_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_brush_spacing_changed(move |value| {
-        if let Ok(mut bridge) = spacing_bridge.lock() {
-            bridge.apply(UiIntent::SetBrushSpacing(value));
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

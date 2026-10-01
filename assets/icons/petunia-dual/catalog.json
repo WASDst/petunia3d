@@ -48,22 +48,10 @@
     "status": "current"
   },
   {
-    "id": "bolt",
-    "group": "Interface",
-    "label": "Quick Action",
-    "status": "current"
-  },
-  {
     "id": "bone",
     "group": "Future roadmap",
     "label": "Bone",
     "status": "planned"
-  },
-  {
-    "id": "bookmark_add",
-    "group": "Interface",
-    "label": "Save as Prefab",
-    "status": "current"
   },
   {
     "id": "boolean_cut",
@@ -108,12 +96,6 @@
     "status": "current"
   },
   {
-    "id": "check",
-    "group": "Interface",
-    "label": "Check",
-    "status": "current"
-  },
-  {
     "id": "chevron_down",
     "group": "Interface",
     "label": "Down",
@@ -144,12 +126,6 @@
     "status": "current"
   },
   {
-    "id": "circle_dot",
-    "group": "Interface",
-    "label": "Circle Dot",
-    "status": "current"
-  },
-  {
     "id": "close",
     "group": "Interface",
     "label": "Close",
@@ -160,12 +136,6 @@
     "group": "Future roadmap",
     "label": "Cloth",
     "status": "planned"
-  },
-  {
-    "id": "collapse",
-    "group": "Interface",
-    "label": "Collapse",
-    "status": "current"
   },
   {
     "id": "collection",
@@ -189,12 +159,6 @@
     "id": "connect",
     "group": "Mesh modeling",
     "label": "Connect",
-    "status": "current"
-  },
-  {
-    "id": "cpu",
-    "group": "Interface",
-    "label": "Processor",
     "status": "current"
   },
   {
@@ -291,13 +255,13 @@
     "id": "data_tab_13",
     "group": "Properties",
     "label": "Particles",
-    "status": "current"
+    "status": "planned"
   },
   {
     "id": "data_tab_14",
     "group": "Properties",
     "label": "Rig",
-    "status": "current"
+    "status": "planned"
   },
   {
     "id": "data_tab_15",
@@ -324,12 +288,6 @@
     "status": "current"
   },
   {
-    "id": "display",
-    "group": "Interface",
-    "label": "Display",
-    "status": "current"
-  },
-  {
     "id": "dissolve",
     "group": "Mesh modeling",
     "label": "Dissolve",
@@ -345,12 +303,6 @@
     "id": "duplicate",
     "group": "Interface",
     "label": "Duplicate",
-    "status": "current"
-  },
-  {
-    "id": "expand",
-    "group": "Interface",
-    "label": "Expand",
     "status": "current"
   },
   {
@@ -393,12 +345,6 @@
     "id": "eye_hidden",
     "group": "Interface",
     "label": "Hidden",
-    "status": "current"
-  },
-  {
-    "id": "favorite",
-    "group": "Interface",
-    "label": "Favorite",
     "status": "current"
   },
   {
@@ -528,12 +474,6 @@
     "status": "current"
   },
   {
-    "id": "keyboard",
-    "group": "Interface",
-    "label": "Keyboard",
-    "status": "current"
-  },
-  {
     "id": "keyframe",
     "group": "Future roadmap",
     "label": "Keyframe",
@@ -543,24 +483,6 @@
     "id": "knife",
     "group": "Mesh modeling",
     "label": "Knife",
-    "status": "current"
-  },
-  {
-    "id": "language",
-    "group": "Interface",
-    "label": "Language",
-    "status": "current"
-  },
-  {
-    "id": "library",
-    "group": "Viewport & scene",
-    "label": "Library",
-    "status": "current"
-  },
-  {
-    "id": "link",
-    "group": "Interface",
-    "label": "Link",
     "status": "current"
   },
   {
@@ -651,12 +573,6 @@
     "id": "modifier",
     "group": "Mesh modeling",
     "label": "Modifier",
-    "status": "current"
-  },
-  {
-    "id": "more_horiz",
-    "group": "Interface",
-    "label": "More",
     "status": "current"
   },
   {
@@ -846,12 +762,6 @@
     "status": "current"
   },
   {
-    "id": "panel_left",
-    "group": "Interface",
-    "label": "Side Panel",
-    "status": "current"
-  },
-  {
     "id": "particles",
     "group": "Future roadmap",
     "label": "Particles",
@@ -867,12 +777,6 @@
     "id": "pause",
     "group": "Interface",
     "label": "Pause",
-    "status": "current"
-  },
-  {
-    "id": "picture_in_picture",
-    "group": "Interface",
-    "label": "Picture in Picture",
     "status": "current"
   },
   {
@@ -909,12 +813,6 @@
     "id": "plus",
     "group": "Interface",
     "label": "Add",
-    "status": "current"
-  },
-  {
-    "id": "pointer",
-    "group": "Interface",
-    "label": "Pointer",
     "status": "current"
   },
   {
@@ -987,12 +885,6 @@
     "id": "render",
     "group": "Production & extension",
     "label": "Render",
-    "status": "current"
-  },
-  {
-    "id": "reset_view",
-    "group": "Interface",
-    "label": "Reset View",
     "status": "current"
   },
   {
@@ -1170,27 +1062,9 @@
     "status": "current"
   },
   {
-    "id": "shape_circle",
-    "group": "Interface",
-    "label": "Circle Shape",
-    "status": "current"
-  },
-  {
     "id": "shape_layer",
     "group": "Shape-first",
     "label": "Shape Layer",
-    "status": "current"
-  },
-  {
-    "id": "shape_square",
-    "group": "Interface",
-    "label": "Square",
-    "status": "current"
-  },
-  {
-    "id": "shape_square_dashed",
-    "group": "Interface",
-    "label": "Dashed Square",
     "status": "current"
   },
   {
@@ -1212,18 +1086,6 @@
     "status": "current"
   },
   {
-    "id": "sort_az",
-    "group": "Interface",
-    "label": "Sort by Name",
-    "status": "current"
-  },
-  {
-    "id": "sort_updown",
-    "group": "Interface",
-    "label": "Sort",
-    "status": "current"
-  },
-  {
     "id": "sphere",
     "group": "Primitives",
     "label": "Sphere",
@@ -1233,18 +1095,6 @@
     "id": "spin",
     "group": "Mesh modeling",
     "label": "Spin",
-    "status": "current"
-  },
-  {
-    "id": "spline_curve",
-    "group": "Shape-first",
-    "label": "Spline",
-    "status": "current"
-  },
-  {
-    "id": "split_view",
-    "group": "Interface",
-    "label": "Split View",
     "status": "current"
   },
   {
@@ -1287,12 +1137,6 @@
     "id": "symmetry_axis",
     "group": "Shape-first",
     "label": "Symmetry Axis",
-    "status": "current"
-  },
-  {
-    "id": "terminal",
-    "group": "Interface",
-    "label": "Terminal",
     "status": "current"
   },
   {
@@ -1443,12 +1287,6 @@
     "id": "trash",
     "group": "Interface",
     "label": "Trash",
-    "status": "current"
-  },
-  {
-    "id": "tune",
-    "group": "Interface",
-    "label": "Adjust",
     "status": "current"
   },
   {

@@ -61,6 +61,15 @@ fn parse_key(name: &str) -> Option<KeyCode> {
                 'Y' => KeyCode::KeyY,
                 _ => KeyCode::KeyZ,
             }),
+            '/' => Some(KeyCode::Slash),
+            '.' => Some(KeyCode::Period),
+            ',' => Some(KeyCode::Comma),
+            '-' => Some(KeyCode::Minus),
+            '=' => Some(KeyCode::Equal),
+            '`' => Some(KeyCode::Backquote),
+            ';' => Some(KeyCode::Semicolon),
+            '\'' => Some(KeyCode::Quote),
+            '\\' => Some(KeyCode::Backslash),
             '0'..='9' => Some(match c {
                 '0' => KeyCode::Digit0,
                 '1' => KeyCode::Digit1,
@@ -77,6 +86,22 @@ fn parse_key(name: &str) -> Option<KeyCode> {
         };
     }
     Some(match n {
+        "Up" | "ArrowUp" => KeyCode::Up,
+        "Down" | "ArrowDown" => KeyCode::Down,
+        "Left" | "ArrowLeft" => KeyCode::Left,
+        "Right" | "ArrowRight" => KeyCode::Right,
+        "PageUp" => KeyCode::PageUp,
+        "PageDown" => KeyCode::PageDown,
+        "Insert" => KeyCode::Insert,
+        "Slash" => KeyCode::Slash,
+        "Period" => KeyCode::Period,
+        "Comma" => KeyCode::Comma,
+        "Minus" => KeyCode::Minus,
+        "Equal" => KeyCode::Equal,
+        "Backquote" => KeyCode::Backquote,
+        "Semicolon" => KeyCode::Semicolon,
+        "Quote" => KeyCode::Quote,
+        "Backslash" => KeyCode::Backslash,
         "F1" => KeyCode::F1,
         "F2" => KeyCode::F2,
         "F3" => KeyCode::F3,
@@ -146,100 +171,302 @@ pub struct KeymapProfileInfo {
     pub id: String,
     pub name: String,
     pub description: String,
+    /// `true` para perfis criados pelo usuário (editáveis, salvos em disco).
+    #[serde(default)]
+    pub custom: bool,
+}
+
+/// Perfis canônicos embutidos no binário (`assets/keymaps`, P3D-090): o app não
+/// depende do diretório de trabalho para achar seus atalhos.
+const EMBEDDED_PROFILES: [(&str, &str); 8] = [
+    (
+        "petunia-default",
+        include_str!("../../../assets/keymaps/petunia-default.toml"),
+    ),
+    (
+        "petunia-simple",
+        include_str!("../../../assets/keymaps/petunia-simple.toml"),
+    ),
+    (
+        "petunia-notebook",
+        include_str!("../../../assets/keymaps/petunia-notebook.toml"),
+    ),
+    (
+        "blender",
+        include_str!("../../../assets/keymaps/blender.toml"),
+    ),
+    (
+        "blender-notebook",
+        include_str!("../../../assets/keymaps/blender-notebook.toml"),
+    ),
+    ("maya", include_str!("../../../assets/keymaps/maya.toml")),
+    (
+        "3ds-max",
+        include_str!("../../../assets/keymaps/3ds-max.toml"),
+    ),
+    (
+        "cinema-4d",
+        include_str!("../../../assets/keymaps/cinema-4d.toml"),
+    ),
+];
+
+/// Prefixo dos ids de perfis do usuário (evita colidir com os canônicos).
+pub const USER_PROFILE_PREFIX: &str = "user-";
+
+/// Id de perfil seguro para nome de arquivo: minúsculas, dígitos e `-`.
+pub fn sanitize_profile_id(name: &str) -> String {
+    let mut id = String::new();
+    let mut last_dash = true;
+    for c in name.trim().chars() {
+        if c.is_ascii_alphanumeric() {
+            id.push(c.to_ascii_lowercase());
+            last_dash = false;
+        } else if !last_dash {
+            id.push('-');
+            last_dash = true;
+        }
+    }
+    let id = id.trim_matches('-').to_string();
+    let id = if id.is_empty() {
+        "keymap".to_string()
+    } else {
+        id
+    };
+    if id.starts_with(USER_PROFILE_PREFIX) {
+        id
+    } else {
+        format!("{USER_PROFILE_PREFIX}{id}")
+    }
 }
 
 impl Keybinds {
     /// Retorna a lista de todos os 8 perfis canônicos disponíveis.
     pub fn available_profiles() -> Vec<KeymapProfileInfo> {
+        let canonical = |id: &str, name: &str, description: &str| KeymapProfileInfo {
+            id: id.into(),
+            name: name.into(),
+            description: description.into(),
+            custom: false,
+        };
         vec![
-            KeymapProfileInfo {
-                id: "petunia-default".into(),
-                name: "Petunia Padrão".into(),
-                description: "Atalhos canônicos com acesso direto a ferramentas e navegação ágil"
-                    .into(),
-            },
-            KeymapProfileInfo {
-                id: "petunia-simple".into(),
-                name: "Petunia Simples".into(),
-                description:
-                    "Atalhos minimalistas focados em modelagem rápida sem combinações complexas"
-                        .into(),
-            },
-            KeymapProfileInfo {
-                id: "petunia-notebook".into(),
-                name: "Petunia Notebook".into(),
-                description: "Otimizado para laptops sem teclado numérico dedicado".into(),
-            },
-            KeymapProfileInfo {
-                id: "blender".into(),
-                name: "Blender (Oficial)".into(),
-                description:
-                    "Mapeamento 100% fiel ao padrão do Blender (G/R/S, E, I, Ctrl+B, Shift+A, Tab)"
-                        .into(),
-            },
-            KeymapProfileInfo {
-                id: "blender-notebook".into(),
-                name: "Blender Notebook".into(),
-                description: "Padrão Blender adaptado para laptops sem teclado numérico".into(),
-            },
-            KeymapProfileInfo {
-                id: "maya".into(),
-                name: "Autodesk Maya".into(),
-                description:
-                    "Padrão Maya (Q/W/E/R para Seleção, Mover, Rotacionar e Escalar, F para Frame)"
-                        .into(),
-            },
-            KeymapProfileInfo {
-                id: "3ds-max".into(),
-                name: "Autodesk 3ds Max".into(),
-                description:
-                    "Padrão 3ds Max (Q/W/E/R, Z para Zoom Extents, 1/2/4 para sub-objetos)".into(),
-            },
-            KeymapProfileInfo {
-                id: "cinema-4d".into(),
-                name: "Maxon Cinema 4D".into(),
-                description: "Padrão Cinema 4D (E para Mover, R para Rotacionar, T para Escalar)"
-                    .into(),
-            },
+            canonical(
+                "petunia-default",
+                "Petunia Padrão",
+                "Atalhos canônicos com acesso direto a ferramentas e navegação ágil",
+            ),
+            canonical(
+                "petunia-simple",
+                "Petunia Simples",
+                "Atalhos minimalistas focados em modelagem rápida sem combinações complexas",
+            ),
+            canonical(
+                "petunia-notebook",
+                "Petunia Notebook",
+                "Otimizado para laptops sem teclado numérico dedicado",
+            ),
+            canonical(
+                "blender",
+                "Blender (Oficial)",
+                "Mapeamento 100% fiel ao padrão do Blender (G/R/S, E, I, Ctrl+B, Shift+A, Tab)",
+            ),
+            canonical(
+                "blender-notebook",
+                "Blender Notebook",
+                "Padrão Blender adaptado para laptops sem teclado numérico",
+            ),
+            canonical(
+                "maya",
+                "Autodesk Maya",
+                "Padrão Maya (Q/W/E/R para Seleção, Mover, Rotacionar e Escalar, F para Frame)",
+            ),
+            canonical(
+                "3ds-max",
+                "Autodesk 3ds Max",
+                "Padrão 3ds Max (Q/W/E/R, Z para Zoom Extents, 1/2/4 para sub-objetos)",
+            ),
+            canonical(
+                "cinema-4d",
+                "Maxon Cinema 4D",
+                "Padrão Cinema 4D (E para Mover, R para Rotacionar, T para Escalar)",
+            ),
         ]
     }
 
-    /// Carrega um perfil específico pelo ID.
-    ///
-    /// Fonte canônica única: `assets/keymaps/{id}.toml` (P3D-090). O diretório
-    /// legado `assets/keybinds/` foi removido para não manter duas verdades de
-    /// keymap; perfis do usuário vivem no diretório de configuração do sistema.
-    pub fn load_profile(profile_id: &str) -> Self {
-        let mut kb = Self::defaults();
-        let candidate_paths = [
-            format!("assets/keymaps/{profile_id}.toml"),
-            format!("keymaps/{profile_id}.toml"),
-        ];
+    /// Diretório dos perfis do usuário (`<config>/petunia3d/keymaps`).
+    pub fn user_profiles_dir() -> std::path::PathBuf {
+        crate::preferences::UserPreferences::config_dir().join("keymaps")
+    }
 
-        for path in candidate_paths {
-            if let Ok(text) = fs::read_to_string(&path) {
-                if let Ok(v) = toml::from_str::<toml::Value>(&text)
-                    && let Some(t) = v.as_table()
-                {
-                    for (section, inner) in t {
-                        if section == "profile" {
-                            continue;
-                        }
-                        if let Some(m) = inner.as_table() {
-                            for (action, val) in m {
-                                if let Some(s) = val.as_str()
-                                    && let Some(b) = parse_binding(s)
-                                {
-                                    kb.map.insert(format!("{section}.{action}"), b);
-                                }
-                            }
-                        }
-                    }
+    /// Canônicos + perfis do usuário em `dir`, nessa ordem (usuário por nome).
+    pub fn all_profiles_in(dir: &std::path::Path) -> Vec<KeymapProfileInfo> {
+        let mut all = Self::available_profiles();
+        let mut custom = Vec::new();
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                    continue;
                 }
-                break;
+                let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_owned) else {
+                    continue;
+                };
+                if all.iter().any(|p| p.id == id) {
+                    continue;
+                }
+                let (name, description) = fs::read_to_string(&path)
+                    .ok()
+                    .and_then(|text| toml::from_str::<toml::Value>(&text).ok())
+                    .and_then(|v| {
+                        let profile = v.get("profile")?.as_table()?.clone();
+                        Some((
+                            profile.get("name")?.as_str()?.to_string(),
+                            profile
+                                .get("description")
+                                .and_then(|d| d.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        ))
+                    })
+                    .unwrap_or_else(|| (id.clone(), String::new()));
+                custom.push(KeymapProfileInfo {
+                    id,
+                    name,
+                    description,
+                    custom: true,
+                });
             }
         }
+        custom.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        all.extend(custom);
+        all
+    }
+
+    /// Todos os perfis do usuário atual.
+    pub fn all_profiles() -> Vec<KeymapProfileInfo> {
+        Self::all_profiles_in(&Self::user_profiles_dir())
+    }
+
+    /// `true` se `profile_id` é um perfil do usuário (editável).
+    pub fn is_custom_profile(profile_id: &str) -> bool {
+        !EMBEDDED_PROFILES.iter().any(|(id, _)| *id == profile_id)
+    }
+
+    fn profile_source(profile_id: &str, user_dir: &std::path::Path) -> Option<String> {
+        if Self::is_custom_profile(profile_id)
+            && let Ok(text) = fs::read_to_string(user_dir.join(format!("{profile_id}.toml")))
+        {
+            return Some(text);
+        }
+        if let Some((_, text)) = EMBEDDED_PROFILES.iter().find(|(id, _)| *id == profile_id) {
+            return Some((*text).to_string());
+        }
+        None
+    }
+
+    fn apply_profile_toml(&mut self, text: &str) {
+        let Ok(v) = toml::from_str::<toml::Value>(text) else {
+            return;
+        };
+        let Some(table) = v.as_table() else {
+            return;
+        };
+        for (section, inner) in table {
+            if section == "profile" {
+                continue;
+            }
+            if let Some(m) = inner.as_table() {
+                for (action, val) in m {
+                    if let Some(s) = val.as_str()
+                        && let Some(b) = parse_binding(s)
+                    {
+                        self.map.insert(format!("{section}.{action}"), b);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Carrega um perfil pelo ID: embutido (canônico) ou do usuário em `user_dir`.
+    ///
+    /// Sempre parte dos defaults Petunia, então ações novas ganham atalho mesmo
+    /// em perfis antigos. Perfil desconhecido = só os defaults.
+    pub fn load_profile_in(profile_id: &str, user_dir: &std::path::Path) -> Self {
+        let mut kb = Self::defaults();
+        if let Some(text) = Self::profile_source(profile_id, user_dir) {
+            kb.apply_profile_toml(&text);
+        }
         kb
+    }
+
+    /// Carrega um perfil específico pelo ID (canônico ou do usuário).
+    pub fn load_profile(profile_id: &str) -> Self {
+        Self::load_profile_in(profile_id, &Self::user_profiles_dir())
+    }
+
+    /// Salva `self` como perfil do usuário. O id é derivado do nome; devolve-o.
+    pub fn save_user_profile_in(
+        &self,
+        user_dir: &std::path::Path,
+        name: &str,
+        description: &str,
+    ) -> std::io::Result<String> {
+        let id = sanitize_profile_id(name);
+        fs::create_dir_all(user_dir)?;
+        let escape = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+        let mut out = format!(
+            "[profile]\nid = \"{id}\"\nname = \"{}\"\ndescription = \"{}\"\n\n",
+            escape(name.trim()),
+            escape(description.trim())
+        );
+        out.push_str(&self.export_to_toml());
+        let tmp = user_dir.join(format!("{id}.toml.tmp"));
+        fs::write(&tmp, out)?;
+        fs::rename(&tmp, user_dir.join(format!("{id}.toml")))?;
+        Ok(id)
+    }
+
+    /// Salva no diretório do usuário atual.
+    pub fn save_user_profile(&self, name: &str, description: &str) -> std::io::Result<String> {
+        self.save_user_profile_in(&Self::user_profiles_dir(), name, description)
+    }
+
+    /// Apaga um perfil do usuário (os canônicos não podem ser apagados).
+    pub fn delete_user_profile_in(user_dir: &std::path::Path, profile_id: &str) -> bool {
+        Self::is_custom_profile(profile_id)
+            && fs::remove_file(user_dir.join(format!("{profile_id}.toml"))).is_ok()
+    }
+
+    /// Ações (além de `action`) que já usam `binding` num contexto que colide
+    /// com o dela: mesmo contexto, ou global/view/window contra qualquer um.
+    pub fn conflicts_for(&self, action: &str, binding: &Binding) -> Vec<String> {
+        let context = |a: &str| a.split('.').next().unwrap_or("global").to_string();
+        let shared = |c: &str| matches!(c, "global" | "view" | "window");
+        let mine = context(action);
+        let mut out: Vec<String> = self
+            .map
+            .iter()
+            .filter(|(other, b)| {
+                other.as_str() != action && *b == binding && {
+                    let theirs = context(other);
+                    theirs == mine || shared(&theirs) || shared(&mine)
+                }
+            })
+            .map(|(other, _)| other.clone())
+            .collect();
+        out.sort();
+        out
+    }
+
+    /// Ações com atalho, ordenadas (base da tela de edição).
+    pub fn bound_actions(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.map.keys().cloned().collect();
+        v.sort();
+        v
+    }
+
+    /// Binding de uma ação, se houver.
+    pub fn binding_for(&self, action: &str) -> Option<&Binding> {
+        self.map.get(action)
     }
 
     pub fn load() -> Self {
@@ -432,7 +659,23 @@ impl Keybinds {
             ("model.select_linked", "L"),
             ("model.delete", "Delete"),
             ("model.duplicate", "Shift+D"),
+            ("global.previous_tool", "Space"),
+            ("global.micro_inspector", "Shift+Space"),
+            ("window.workspace_draw", "Ctrl+1"),
+            ("window.workspace_poly", "Ctrl+2"),
+            ("window.workspace_paint", "Ctrl+3"),
+            ("window.workspace_uv", "Ctrl+4"),
+            ("window.workspace_animate", "Ctrl+5"),
+            ("paint.select", "V"),
+            ("paint.isolate", "/"),
             ("paint.paint", "B"),
+            ("paint.airbrush", "Shift+B"),
+            ("paint.eraser", "E"),
+            ("paint.color_picker", "I"),
+            ("paint.fill", "G"),
+            ("paint.gradient", "Shift+G"),
+            ("paint.line", "L"),
+            ("paint.rectangle", "R"),
             ("paint.size_decrease", "["),
             ("paint.size_increase", "]"),
             ("paint.hardness_decrease", "Shift+["),
@@ -542,6 +785,22 @@ pub mod winit_keys {
         Enter,
         BracketLeft,
         BracketRight,
+        Up,
+        Down,
+        Left,
+        Right,
+        PageUp,
+        PageDown,
+        Insert,
+        Slash,
+        Period,
+        Comma,
+        Minus,
+        Equal,
+        Backquote,
+        Semicolon,
+        Quote,
+        Backslash,
     }
 
     impl KeyCode {
@@ -605,6 +864,22 @@ pub mod winit_keys {
                 KeyCode::Enter => "Enter",
                 KeyCode::BracketLeft => "[",
                 KeyCode::BracketRight => "]",
+                KeyCode::Up => "Up",
+                KeyCode::Down => "Down",
+                KeyCode::Left => "Left",
+                KeyCode::Right => "Right",
+                KeyCode::PageUp => "PageUp",
+                KeyCode::PageDown => "PageDown",
+                KeyCode::Insert => "Insert",
+                KeyCode::Slash => "/",
+                KeyCode::Period => ".",
+                KeyCode::Comma => ",",
+                KeyCode::Minus => "-",
+                KeyCode::Equal => "=",
+                KeyCode::Backquote => "`",
+                KeyCode::Semicolon => ";",
+                KeyCode::Quote => "'",
+                KeyCode::Backslash => "\\",
             }
         }
     }
