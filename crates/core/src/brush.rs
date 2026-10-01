@@ -46,6 +46,8 @@ pub enum BrushType {
     Spray,
     /// Carimbo de clonagem: copia a textura de um ponto de origem (Ctrl+clique).
     Clone,
+    /// Elipse preenchida inscrita entre dois cantos (cap. 44: círculo/forma).
+    Ellipse,
 }
 
 /// How a 3D brush sample maps onto the surface.
@@ -176,7 +178,7 @@ impl BrushType {
 
     /// Formas com ancoragem press→release.
     pub const fn is_shape(self) -> bool {
-        matches!(self, Self::Line | Self::Rectangle)
+        matches!(self, Self::Line | Self::Rectangle | Self::Ellipse)
     }
 
     /// Forma canônica do cursor de preview (iniciativa Paint).
@@ -187,7 +189,7 @@ impl BrushType {
             }
             Self::Eraser | Self::Smudge | Self::Blur | Self::Clone => BrushPreviewKind::HollowRing,
             Self::Eyedropper => BrushPreviewKind::Crosshair,
-            Self::Fill | Self::Line | Self::Rectangle => BrushPreviewKind::None,
+            Self::Fill | Self::Line | Self::Rectangle | Self::Ellipse => BrushPreviewKind::None,
         }
     }
 }
@@ -253,6 +255,7 @@ pub const fn brush_type_from_kind(kind: usize) -> BrushType {
         11 => BrushType::Burn,
         12 => BrushType::Spray,
         13 => BrushType::Clone,
+        14 => BrushType::Ellipse,
         _ => BrushType::Pixel,
     }
 }
@@ -274,6 +277,7 @@ pub const fn kind_from_brush_type(kind: BrushType) -> usize {
         BrushType::Burn => 11,
         BrushType::Spray => 12,
         BrushType::Clone => 13,
+        BrushType::Ellipse => 14,
     }
 }
 

@@ -96,3 +96,9 @@ manipulação direta, snapping, esboço e acessibilidade motora.
 - A pill DRAW ou POLY só aparece quando o workspace estiver funcional.
 - Gates de CI, capturas nativas em escala 100% e 150% e registro na matriz de
   lacunas; nenhum item vira COMPLIANT sem evidência.
+
+## Nota de implementação (2026-09-30)
+
+- `Space` ocioso = **ferramenta anterior** (ação `global.previous_tool`); durante uma sessão continua confirmando; o micro-inspector passou para `Shift+Space`.
+- Teclas diretas de workspace: `Ctrl+1` DRAW, `Ctrl+2` POLY, `Ctrl+3` PAINT, `Ctrl+4` UV, `Ctrl+5` Animate (com a feature), todas rebindáveis em perfis do usuário.
+- Evidência: [`keymap-shell-gap-matrix`](../../development/keymap-shell-gap-matrix.md).

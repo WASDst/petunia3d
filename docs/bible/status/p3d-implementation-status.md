@@ -6,6 +6,8 @@
 > reconciliado com evidência executável antes de qualquer promoção para `DONE`
 > (Livro Vivo, readiness e taxonomia de estados).
 
+> **Revalidação parcial (2026-09-30):** as linhas abaixo continuam sendo as anotações de 11/09 e **não** foram revalidadas. Onde a auditoria posterior encontrou defeitos, a evidência está nas matrizes de lacunas — P3D-062/064/132 (Paint/UV) em [`paint-uv-gap-matrix`](../../development/paint-uv-gap-matrix.md); P3D-090/091 (atalhos) em [`keymap-shell-gap-matrix`](../../development/keymap-shell-gap-matrix.md). Nenhuma linha foi promovida ou rebaixada aqui sem evidência executável.
+
 | P3D | Wave | Status anotado (2026-09-11, não revalidado) | Contrato anotado | Página canônica |
 | :--- | :--- | :--- | :--- | :--- |
 | `001` | Wave 2 | `COMPLIANT (Sistema de Projetos .petunia Postcard)` | Verificado contra a suíte de testes automatizados e o código-fonte canônico. | [spec](../specs/p3d-001-sistema-de-projetos.md) |

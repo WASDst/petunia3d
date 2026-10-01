@@ -591,6 +591,25 @@ impl PaintModule {
         }
     }
 
+    /// Elipse preenchida inscrita no retângulo entre dois cantos (ordem qualquer).
+    pub fn stroke_ellipse(canvas: &mut Canvas, stroke: &ShapeStroke) {
+        let (xa, xb) = (stroke.x0.min(stroke.x1), stroke.x0.max(stroke.x1));
+        let (ya, yb) = (stroke.y0.min(stroke.y1), stroke.y0.max(stroke.y1));
+        let (cx, cy) = ((xa + xb) as f32 * 0.5, (ya + yb) as f32 * 0.5);
+        // Meia-largura/altura em texels (pelo menos meio texel: um clique é um ponto).
+        let rx = ((xb - xa) as f32 * 0.5).max(0.5);
+        let ry = ((yb - ya) as f32 * 0.5).max(0.5);
+        for y in ya..=yb {
+            for x in xa..=xb {
+                let nx = (x as f32 - cx) / rx;
+                let ny = (y as f32 - cy) / ry;
+                if nx * nx + ny * ny <= 1.0 {
+                    canvas.set(x, y, stroke.color);
+                }
+            }
+        }
+    }
+
     /// Retângulo preenchido entre dois cantos (ordem qualquer).
     pub fn stroke_rect(canvas: &mut Canvas, stroke: &ShapeStroke) {
         let (xa, xb) = (stroke.x0.min(stroke.x1), stroke.x0.max(stroke.x1));
@@ -840,6 +859,7 @@ impl PaintModule {
         let first_face = Self::face_at_texel_of_active(state, stroke.x0, stroke.y0);
         Self::restricted_edit(state, first_face, |cv| match stroke.brush {
             BrushType::Rectangle => Self::stroke_rect(cv, &stroke),
+            BrushType::Ellipse => Self::stroke_ellipse(cv, &stroke),
             _ => Self::stroke_line(cv, &stroke),
         });
         Self::composite_active(state);
@@ -862,7 +882,33 @@ impl PaintModule {
         Self::composite_active(state);
     }
 
-    /// Aplica um gradiente linear na camada ativa de (x0, y0) até (x1, y1) entre duas cores RGBA.
+    /// Composição "over" (alfa reto) de `src` sobre `dst`.
+    fn over(dst: [u8; 4], src: [f32; 4]) -> [u8; 4] {
+        let sa = (src[3] / 255.0).clamp(0.0, 1.0);
+        let da = dst[3] as f32 / 255.0;
+        let out_a = sa + da * (1.0 - sa);
+        if out_a <= 0.0 {
+            return [0, 0, 0, 0];
+        }
+        let mut out = [0u8; 4];
+        for c in 0..3 {
+            let v = (src[c] * sa + dst[c] as f32 * da * (1.0 - sa)) / out_a;
+            out[c] = v.round().clamp(0.0, 255.0) as u8;
+        }
+        out[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
+        out
+    }
+
+    fn lerp_color(a: [u8; 4], b: [u8; 4], t: f32) -> [f32; 4] {
+        let mut out = [0.0; 4];
+        for c in 0..4 {
+            out[c] = a[c] as f32 * (1.0 - t) + b[c] as f32 * t;
+        }
+        out
+    }
+
+    /// Aplica um gradiente linear na camada ativa de (x0, y0) até (x1, y1) entre duas cores RGBA,
+    /// **por cima** do que já existe (a transparência da cor final preserva a pintura abaixo).
     pub fn canvas_gradient_linear(
         state: &mut AppState,
         x0: u32,
@@ -885,11 +931,37 @@ impl PaintModule {
                         let proj = (x as f32 - x0 as f32) * dx + (y as f32 - y0 as f32) * dy;
                         (proj / len_sq).clamp(0.0, 1.0)
                     };
-                    let r = (color_start[0] as f32 * (1.0 - t) + color_end[0] as f32 * t) as u8;
-                    let g = (color_start[1] as f32 * (1.0 - t) + color_end[1] as f32 * t) as u8;
-                    let b = (color_start[2] as f32 * (1.0 - t) + color_end[2] as f32 * t) as u8;
-                    let a = (color_start[3] as f32 * (1.0 - t) + color_end[3] as f32 * t) as u8;
-                    cv.set(x, y, [r, g, b, a]);
+                    let src = Self::lerp_color(color_start, color_end, t);
+                    if let Some(dst) = cv.get(x, y) {
+                        cv.set(x, y, Self::over(dst, src));
+                    }
+                }
+            }
+        });
+        Self::composite_active(state);
+    }
+
+    /// Gradiente radial: `color_start` no centro `(cx, cy)` até `color_end` a `radius` texels.
+    pub fn canvas_gradient_radial(
+        state: &mut AppState,
+        cx: u32,
+        cy: u32,
+        radius: f32,
+        color_start: [u8; 4],
+        color_end: [u8; 4],
+    ) {
+        let first_face = Self::face_at_texel_of_active(state, cx, cy);
+        let radius = radius.max(1.0);
+        Self::restricted_edit(state, first_face, |cv| {
+            for y in 0..cv.h {
+                for x in 0..cv.w {
+                    let d =
+                        ((x as f32 - cx as f32).powi(2) + (y as f32 - cy as f32).powi(2)).sqrt();
+                    let t = (d / radius).clamp(0.0, 1.0);
+                    let src = Self::lerp_color(color_start, color_end, t);
+                    if let Some(dst) = cv.get(x, y) {
+                        cv.set(x, y, Self::over(dst, src));
+                    }
                 }
             }
         });
@@ -2589,5 +2661,59 @@ mod tests {
         };
         assert_eq!(run(7), run(7));
         assert_ne!(run(7), run(8));
+    }
+
+    #[test]
+    fn ellipse_fills_the_inscribed_oval_and_leaves_the_corners() {
+        let mut cv = Canvas::new(32, 32, [0, 0, 0, 255]);
+        PaintModule::stroke_ellipse(
+            &mut cv,
+            &ShapeStroke {
+                x0: 4,
+                y0: 4,
+                x1: 27,
+                y1: 27,
+                brush: BrushType::Ellipse,
+                color: [255, 255, 255, 255],
+                strength: 1.0,
+            },
+        );
+        assert_eq!(cv.get(16, 16), Some([255, 255, 255, 255]));
+        assert_eq!(
+            cv.get(4, 4),
+            Some([0, 0, 0, 255]),
+            "o canto do retângulo fica de fora"
+        );
+        assert_eq!(
+            cv.get(16, 5),
+            Some([255, 255, 255, 255]),
+            "perto do topo da elipse"
+        );
+    }
+
+    #[test]
+    fn gradients_composite_over_existing_paint() {
+        let mut state = fresh_state_with_canvas(32, [0, 0, 255, 255]);
+        // radial: vermelho opaco no centro -> transparente na borda; o azul de baixo aparece
+        PaintModule::canvas_gradient_radial(
+            &mut state,
+            16,
+            16,
+            10.0,
+            [255, 0, 0, 255],
+            [255, 0, 0, 0],
+        );
+        let tex = texture(&state);
+        assert_eq!(tex.get(16, 16), Some([255, 0, 0, 255]));
+        assert_eq!(
+            tex.get(0, 0),
+            Some([0, 0, 255, 255]),
+            "fora do raio nada muda"
+        );
+        let mid = tex.get(21, 16).unwrap();
+        assert!(
+            mid[0] > 0 && mid[2] > 0,
+            "meio-termo mistura as duas cores: {mid:?}"
+        );
     }
 }

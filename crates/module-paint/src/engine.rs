@@ -570,6 +570,24 @@ impl PaintModule {
         }
         let plain_round = style.tip == BrushTip::Round && style.roundness >= 0.999;
         let result = Self::with_stroke_target(state, |target, mesh| {
+            // Normal, centro e raio de cada face, uma vez por chamada (e não por
+            // dab): descarta de graça as faces longe do pincel.
+            let infos: Vec<(Vec3, Vec3, f32)> = (0..mesh.faces.len())
+                .map(|fi| {
+                    let face = &mesh.faces[fi];
+                    let points: Vec<Vec3> = face
+                        .verts
+                        .iter()
+                        .filter_map(|&v| mesh.verts.get(v as usize).map(|v| v.vec()))
+                        .collect();
+                    let center = points.iter().copied().sum::<Vec3>() / points.len().max(1) as f32;
+                    let radius = points
+                        .iter()
+                        .map(|p| p.distance(center))
+                        .fold(0.0f32, f32::max);
+                    (mesh.face_normal(fi).normalize_or_zero(), center, radius)
+                })
+                .collect();
             for dab_in in &dabs {
                 let n = target.buf.dabs;
                 target.buf.dabs = n.wrapping_add(1);
@@ -617,14 +635,17 @@ impl PaintModule {
                     }
                     dab.clone = target.buf.clone_offset;
                 }
-                for fi in 0..mesh.faces.len() {
+                for (fi, &(face_normal, face_center, face_radius)) in infos.iter().enumerate() {
                     if restriction.as_ref().is_some_and(|r| !r.allows_face(fi)) {
                         continue;
                     }
-                    // Não pinta a superfície voltada para o lado oposto.
-                    if dab_in.normal != Vec3::ZERO
-                        && mesh.face_normal(fi).normalize_or_zero().dot(dab_in.normal) < -0.5
+                    if face_center.distance(hit)
+                        > face_radius + r_world + 0.02 * face_radius.max(0.01)
                     {
+                        continue;
+                    }
+                    // Não pinta a superfície voltada para o lado oposto.
+                    if dab_in.normal != Vec3::ZERO && face_normal.dot(dab_in.normal) < -0.5 {
                         continue;
                     }
                     mesh.rasterize_face_near(

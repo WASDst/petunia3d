@@ -24,6 +24,7 @@ pub mod split_view;
 pub mod theme;
 pub mod thumbnail;
 pub mod tr;
+pub mod view_layout;
 pub mod viewport_gpu;
 pub mod viewport_soft;
 
@@ -1419,12 +1420,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     }
                     // Formas e pincéis do workspace PAINT compartilham o mesmo
                     // índice de tipo de pincel que o resto do domínio.
-                    "line" | "rectangle" => {
+                    "line" | "rectangle" | "ellipse" => {
                         self.state.session.tools.paint_brush_kind =
-                            petunia_core::kind_from_brush_type(if tool == "line" {
-                                petunia_core::BrushType::Line
-                            } else {
-                                petunia_core::BrushType::Rectangle
+                            petunia_core::kind_from_brush_type(match tool.as_str() {
+                                "line" => petunia_core::BrushType::Line,
+                                "ellipse" => petunia_core::BrushType::Ellipse,
+                                _ => petunia_core::BrushType::Rectangle,
                             });
                         self.state
                             .set_status("Shape: press on the surface to anchor, release to commit");
@@ -1825,6 +1826,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 intensity: 0.15,
                 seed: 1,
             },
+            "Levels" => PaintEffect::Levels {
+                in_min: 0.0,
+                in_max: 1.0,
+                gamma: 1.0,
+                out_min: 0.0,
+                out_max: 1.0,
+            },
             "BrightnessContrast" => PaintEffect::BrightnessContrast {
                 brightness: 0.0,
                 contrast: 0.0,
@@ -1866,6 +1874,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 (PaintEffect::Grain { seed, .. }, "seed") => {
                     *seed = value.max(0.0).round() as u32;
+                }
+                (PaintEffect::Levels { in_min, in_max, .. }, "in_min") => {
+                    *in_min = value.clamp(0.0, (*in_max - 0.01).max(0.0));
+                }
+                (PaintEffect::Levels { in_min, in_max, .. }, "in_max") => {
+                    *in_max = value.clamp((*in_min + 0.01).min(1.0), 1.0);
+                }
+                (PaintEffect::Levels { gamma, .. }, "gamma") => {
+                    *gamma = value.clamp(0.1, 4.0);
+                }
+                (PaintEffect::Levels { out_min, .. }, "out_min") => {
+                    *out_min = value.clamp(0.0, 1.0);
+                }
+                (PaintEffect::Levels { out_max, .. }, "out_max") => {
+                    *out_max = value.clamp(0.0, 1.0);
                 }
                 (PaintEffect::BrightnessContrast { brightness, .. }, "brightness") => {
                     *brightness = value.clamp(-1.0, 1.0);
@@ -5461,12 +5484,58 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    fn is_gradient_tool(&self) -> bool {
+        matches!(
+            self.state.session.tools.active_tool.as_str(),
+            "gradient" | "gradient_radial"
+        )
+    }
+
+    /// Aplica o gradiente da âncora ao ponto de soltar, por cima do que existe.
+    /// A cor inicial usa a opacidade do pincel; a final é a mesma cor transparente.
+    fn commit_gradient(&mut self, radial: bool, from: (u32, u32), to: (u32, u32)) {
+        let opacity = self.state.session.tools.paint_strength.clamp(0.0, 1.0);
+        let rgb = self
+            .state
+            .paint_color
+            .map(|channel| (channel * 255.0).clamp(0.0, 255.0) as u8);
+        let color_start = [rgb[0], rgb[1], rgb[2], (opacity * 255.0).round() as u8];
+        let color_end = [rgb[0], rgb[1], rgb[2], 0];
+        self.state.checkpoint("paint gradient");
+        if radial {
+            let radius = (to.0 as f32 - from.0 as f32).hypot(to.1 as f32 - from.1 as f32);
+            petunia_module_paint::PaintModule::canvas_gradient_radial(
+                &mut self.state,
+                from.0,
+                from.1,
+                radius,
+                color_start,
+                color_end,
+            );
+        } else {
+            petunia_module_paint::PaintModule::canvas_gradient_linear(
+                &mut self.state,
+                from.0,
+                from.1,
+                to.0,
+                to.1,
+                color_start,
+                color_end,
+            );
+        }
+        self.state.emit_texture_changed();
+        self.state.mark_dirty();
+        self.state.set_status("Gradient committed");
+    }
+
     /// Ferramentas de forma ancoram no press e confirmam no release.
     pub fn is_shape_tool(&self) -> bool {
         matches!(
             petunia_core::brush_type_from_kind(self.state.session.tools.paint_brush_kind),
-            petunia_core::BrushType::Line | petunia_core::BrushType::Rectangle
-        ) || self.state.session.tools.active_tool == "gradient"
+            petunia_core::BrushType::Line
+                | petunia_core::BrushType::Rectangle
+                | petunia_core::BrushType::Ellipse
+        ) || self.is_gradient_tool()
     }
 
     /// Inicia uma forma (Line/Rectangle/Gradient) no pixel do canvas sob o cursor.
@@ -5497,27 +5566,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .set_status("Shape: release point is off the surface, discarded");
             return false;
         };
-        if self.state.session.tools.active_tool == "gradient" {
-            let color_start = [
-                (self.state.paint_color[0] * 255.0).clamp(0.0, 255.0) as u8,
-                (self.state.paint_color[1] * 255.0).clamp(0.0, 255.0) as u8,
-                (self.state.paint_color[2] * 255.0).clamp(0.0, 255.0) as u8,
-                255,
-            ];
-            let color_end = [255, 255, 255, 0];
-            self.state.checkpoint("paint gradient");
-            petunia_module_paint::PaintModule::canvas_gradient_linear(
-                &mut self.state,
-                x0,
-                y0,
-                x1,
-                y1,
-                color_start,
-                color_end,
-            );
-            self.state.emit_texture_changed();
-            self.state.mark_dirty();
-            self.state.set_status("Gradient committed");
+        if self.is_gradient_tool() {
+            let radial = self.state.session.tools.active_tool == "gradient_radial";
+            self.commit_gradient(radial, (x0, y0), (x1, y1));
             return true;
         }
         let brush = petunia_core::brush_type_from_kind(self.state.session.tools.paint_brush_kind);
@@ -5740,7 +5791,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let py = ((norm_y * height as f32).floor() as i32).clamp(0, height as i32 - 1) as u32;
 
         let tool = self.state.session.tools.active_tool.clone();
-        if tool == "gradient" {
+        if tool == "gradient" || tool == "gradient_radial" {
             match phase {
                 0 => {
                     self.shape_anchor = Some((px, py));
@@ -5753,26 +5804,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 2 => {
                     if let Some((x0, y0)) = self.shape_anchor.take() {
-                        let color_start = [
-                            (self.state.paint_color[0] * 255.0).clamp(0.0, 255.0) as u8,
-                            (self.state.paint_color[1] * 255.0).clamp(0.0, 255.0) as u8,
-                            (self.state.paint_color[2] * 255.0).clamp(0.0, 255.0) as u8,
-                            255,
-                        ];
-                        let color_end = [255, 255, 255, 0];
-                        self.state.checkpoint("paint gradient");
-                        petunia_module_paint::PaintModule::canvas_gradient_linear(
-                            &mut self.state,
-                            x0,
-                            y0,
-                            px,
-                            py,
-                            color_start,
-                            color_end,
-                        );
-                        self.state.emit_texture_changed();
-                        self.state.mark_dirty();
-                        self.state.set_status("Gradient applied");
+                        self.commit_gradient(tool == "gradient_radial", (x0, y0), (px, py));
                         return true;
                     }
                     return false;
@@ -11720,6 +11752,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "paint.color_picker" => self.apply(UiIntent::SetActiveTool("picker".into())),
             "paint.fill" => self.apply(UiIntent::SetActiveTool("fill".into())),
             "paint.gradient" => self.apply(UiIntent::SetActiveTool("gradient".into())),
+            "paint.gradient_radial" => {
+                self.apply(UiIntent::SetActiveTool("gradient_radial".into()))
+            }
+            "paint.ellipse" => self.apply(UiIntent::SetActiveTool("ellipse".into())),
             "paint.line" => self.apply(UiIntent::SetActiveTool("line".into())),
             "paint.rectangle" => self.apply(UiIntent::SetActiveTool("rectangle".into())),
             "paint.paint" => self.apply(UiIntent::SetActiveTool("brush".into())),
@@ -11795,7 +11831,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 | "fill"
                 | "line"
                 | "rectangle"
+                | "ellipse"
                 | "gradient"
+                | "gradient_radial"
                 | "pixel"
                 | "smudge"
                 | "blur"

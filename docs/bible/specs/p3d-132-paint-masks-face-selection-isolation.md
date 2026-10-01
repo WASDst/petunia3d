@@ -31,3 +31,7 @@ P3D-055, P3D-061, P3D-019.
 ## Testes / DoD
 
 Uma face, múltiplas faces, borders/seams, undo, trocar seleção e nenhuma pintura fora da área permitida.
+
+## Estado de implementação (2026-09-30)
+
+O "stroke engine consulta mask/allowed texels antes de aplicar pixels" passou a ser verdade: `PaintRestriction` (faces elegíveis por traço, de seleção e trava de pincel) vale no pincel 3D, no canvas 2D, no balde, no gradiente e nas formas; seleção vazia com a máscara ligada não pinta. Cobertura: uma face, múltiplas faces e 2D por teste; seams/ilhas por layout de UV sem sobreposição. Pendente: captura nativa e teste com usuários. Evidência em [`paint-uv-gap-matrix`](../../development/paint-uv-gap-matrix.md).

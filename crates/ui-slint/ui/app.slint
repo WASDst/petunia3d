@@ -211,6 +211,8 @@ export struct ShortcutsEntry {
     paint-fill: string,
     paint-line: string,
     paint-rectangle: string,
+    paint-ellipse: string,
+    paint-gradient-radial: string,
     paint-gradient: string,
     uv-select: string,
     uv-unwrap: string,
@@ -7892,12 +7894,28 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("rectangle"); }
                             }
                             if active-workspace == "PAINT": ToolButton {
+                                icon: IconSet.Circle;
+                                semantic-label: Tr.t("sl.ellipse");
+                                shortcut: root.shortcuts.paint-ellipse;
+                                description: Tr.t("sl.ellipse_description");
+                                active: active-tool == "ellipse";
+                                clicked => { root.active-tool-changed("ellipse"); }
+                            }
+                            if active-workspace == "PAINT": ToolButton {
                                 icon: IconSet.Sliders;
                                 semantic-label: Tr.t("sl.gradient");
                                 shortcut: root.shortcuts.paint-gradient;
                                 description: Tr.t("sl.draw_linear_color_gradients_between_endpoint");
                                 active: active-tool == "gradient";
                                 clicked => { root.active-tool-changed("gradient"); }
+                            }
+                            if active-workspace == "PAINT": ToolButton {
+                                icon: IconSet.Sun;
+                                semantic-label: Tr.t("sl.gradient_radial");
+                                shortcut: root.shortcuts.paint-gradient-radial;
+                                description: Tr.t("sl.gradient_radial_description");
+                                active: active-tool == "gradient_radial";
+                                clicked => { root.active-tool-changed("gradient_radial"); }
                             }
 
                             if active-workspace == "UV": ToolButton {
@@ -8673,7 +8691,7 @@ export component PetuniaSlintShell inherits Window {
                                         spacing: 4px;
                                         height: 26px;
 
-                                        for effect in ["Grain", "BrightnessContrast", "HueSaturation"]: Rectangle {
+                                        for effect in ["Grain", "Levels", "BrightnessContrast", "HueSaturation"]: Rectangle {
                                             horizontal-stretch: 1;
                                             border-radius: 4px;
                                             background: DesignTokens.surface-raised;

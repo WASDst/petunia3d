@@ -36,26 +36,31 @@ faltam ferramentas previstas no caderno.
 | 9 | Ferramenta de seleção no PAINT | Tool `select`: clique em outro objeto o torna ativo; clique no ativo seleciona a face (Shift soma; duplo clique seleciona a ilha UV); vazio limpa. Atalho `V`. | COMPLIANT (sem captura nativa) |
 | 10 | Isolar objeto (hide/unhide) no PAINT | Botão no trilho + `Numpad /`/`/`; o isolamento acompanha a troca de objeto (`refresh_isolation`). | COMPLIANT (sem captura nativa) |
 
-## 3. Ferramentas previstas e ainda ausentes (honesto)
+## 3. Ferramentas previstas — estado real
 
 Fonte: P3D-055 (adendo), P3D-133, P3D-134, capítulo 44 e capítulo 42.
 
 | Item | Situação |
 | --- | --- |
-| Decal (P3D-133) | Camada de decal existe e é transformável; **faltam** importar PNG/JPEG/SVG pela UI com validação, máscara/clip, fonte ausente e bake/export. |
-| Line / Rectangle | Existem. **Falta Círculo/Elipse** (cap. 44). |
-| Gradient | Linear existe (sem opacidade). **Faltam radial, opacidade e cores editáveis.** |
-| Face / UV Island Fill | Existe (`FillScope`), agora restrito pela máscara. |
+| Brush / Pixel / Airbrush / Eraser / Fill / Picker | Existem; restrição por máscara e trava agora valem em todos. |
+| Line / Rectangle | Existem (cor sólida). |
+| **Círculo/Elipse** (cap. 44) | **Novo** (2026-09-30): elipse preenchida inscrita entre dois pontos. |
+| **Gradient** | Linear existia **substituindo** os pixels; agora compõe por cima, com a opacidade do pincel e a cor final transparente. **Novo: radial.** Cores editáveis e dithering continuam fora. |
+| Face / UV Island Fill | Existe (`FillScope`), restrito pela máscara. |
+| **Smudge, Blur, Dodge, Burn, Spray, Clone** | **Novos** (2E). Clone: origem por Ctrl+clique. Sem pressão de tablet. |
+| Ponta, ângulo, achatamento, mistura, estabilizador, jitter, espalhamento, presets | **Novos** (2E): `BrushStyle`/`BrushPreset`. |
+| Decal (P3D-133) | Camada de decal existe e é transformável. **Faltam** importar PNG/JPEG/SVG pela UI com validação, máscara/clip, fonte ausente e bake/export. |
 | Projection / Stencil | `MISSING`. |
-| Clone / Patch | `MISSING`. |
-| Path Paint | `MISSING` (depende de Spline Core; existe, falta a ferramenta). |
-| Effect Stack (P3D-134) | Existem Pixelate, Posterize e Invert. **Faltam** Grain/Noise, Levels/Threshold, Brightness/Contrast, Hue/Saturation. |
+| Clone / Patch (cópia de região com máscara) | O pincel Clone cobre o uso básico; Patch (remendo com costura) segue `MISSING`. |
+| Path Paint | `MISSING` (o Spline Core existe; falta a ferramenta). |
+| Effect Stack (P3D-134) | Pixelate, Posterize, Invert, **Grain, Levels (agora na UI), Brightness/Contrast e Hue/Saturation** — todos existiam no domínio; Levels não era oferecido na UI. |
 | Surface Recipe (P3D-113) | Grafo headless existe; sem editor visual (por decisão). |
 
 ## 4. Pendências registradas
 
 - Captura nativa e teste com usuários do fluxo de seleção/máscara.
 - O caminho GPU da textura pintada nunca foi exercitado com GPU real neste ambiente.
-- Sem tablet: a pressão não entra no motor (gancho previsto em `StrokeSampler`).
+- Sem tablet: a pressão não entra no motor (gancho previsto em `StrokeSampler`/`PointStabilizer`).
+- Smudge no 3D acompanha só o dab original (a simetria repete o carimbo, não o borrão) e ignora saltos entre charts.
 - Custo do pincel 3D: percorre todas as faces por dab; para malhas > 20 mil faces
   falta um índice espacial (grade uniforme por revisão).

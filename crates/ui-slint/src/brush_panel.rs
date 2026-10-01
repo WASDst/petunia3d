@@ -44,6 +44,7 @@ pub fn tool_id_for_brush(kind: BrushType) -> &'static str {
         BrushType::Eyedropper => "picker",
         BrushType::Line => "line",
         BrushType::Rectangle => "rectangle",
+        BrushType::Ellipse => "ellipse",
     }
 }
 

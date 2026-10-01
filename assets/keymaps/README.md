@@ -2,8 +2,10 @@
 
 Este diretório é a **fonte única** dos perfis de keymap do Petunia3D (P3D-090).
 Não existe um segundo diretório de keybinds: cada perfil é um único `.toml` aqui.
-Perfis editados pelo usuário vivem no diretório de configuração do sistema e têm
-precedência sobre os perfis embarcados.
+Os perfis canônicos são **embutidos no binário** (não dependem do diretório de
+trabalho). Perfis do usuário vivem em `<config>/petunia3d/keymaps/user-*.toml`
+(`~/.config/petunia3d/keymaps` no Linux) e são criados em **Configurações → Teclado**:
+editar um perfil canônico cria uma cópia sua; os canônicos nunca são alterados.
 
 ## Perfis nativos
 
@@ -39,7 +41,7 @@ cycle_mode = "Tab"
 select_vertex = "1"
 select_edge = "2"
 select_face = "3"
-select_object = "0"
+select_object = "4"
 move = "G"
 rotate = "R"
 scale = "S"
@@ -54,8 +56,9 @@ mantém um perfil parcial válido.
 
 ## Resolução e conflitos
 
-`petunia_config::keybinds` resolve a precedência na ordem: diretório do usuário →
-`assets/keymaps/` → `keymaps/` → defaults internos. A detecção de conflitos
+`petunia_config::keybinds` parte dos defaults Petunia e aplica por cima o perfil
+escolhido: do usuário (`user-*`) ou canônico embutido. Ações novas portanto têm
+atalho mesmo em perfis antigos. A detecção de conflitos
 (P3D-091) distingue:
 
 - **Exato** — mesmo namespace usando o mesmo atalho;
@@ -64,3 +67,13 @@ mantém um perfil parcial válido.
 
 Os resultados aparecem no editor de atalhos de **Configurações → Teclado**, que
 também exporta o mapa atual de volta para TOML.
+
+## Namespaces com ação própria
+
+- `global.*` — desfazer, salvar, `previous_tool` (`Space`), `micro_inspector` (`Shift+Space`);
+- `window.*` — paleta de comandos, `workspace_draw/poly/paint/uv/animate` (`Ctrl+1..5`);
+- `view.*`, `model.*`, `uv.*`;
+- `paint.*` — `select`, `isolate`, `paint`, `airbrush`, `eraser`, `color_picker`, `fill`,
+  `gradient`, `gradient_radial`, `line`, `rectangle`, `ellipse`, tamanho e dureza.
+
+`global.*`, `view.*` e `window.*` valem em qualquer workspace; os demais só no seu contexto.

@@ -76,7 +76,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Regiões e contornos em cache; recalcula só quando o documento muda.
     pub(crate) fn shape_cache(&self) -> std::cell::Ref<'_, ShapeCache> {
-        let revision = self.state.project.project.revision_clock();
+        // Só perfis e splines importam: pintar (cor/textura) não recalcula o arranjo.
+        let clock = self.state.project.project.revision_clock();
+        let mut revision = [0u64; 11];
+        revision[0] = self.state.project.project.profiles.len() as u64;
+        revision[9] = clock[9];
+        revision[10] = clock[10];
         {
             let mut slot = self.region_planes_cache.borrow_mut();
             if slot.as_ref().is_none_or(|cache| cache.revision != revision) {

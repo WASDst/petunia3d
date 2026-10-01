@@ -59,3 +59,24 @@ começa é decisão a validar com usuários (Onda 6).
 - Oclusão da região só considera a malha ativa; outros objetos não escondem.
 - Custo: o arranjo é O(n²) por plano, recalculado só quando o documento muda
   (cache por `revision_clock`).
+
+---
+
+# Parte 3 — formas persistentes e edição de nós (2026-09-30)
+
+Motivação (responsável do produto): uma forma sem preenchimento sumia da viewport
+ao clicar fora dela; faltava inserir pontos depois de fechar e alternar pontos
+entre reto e curva, inclusive no retângulo e no círculo.
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 11 | Formas sempre visíveis no DRAW | `draw_shapes.rs`: `region_shapes_commands` (tinta leve de **todas** as regiões fechadas, com furos) e `profile_outline_commands` (contorno dos perfis fora de edição, abertos ou fechados), por cache de revisão. Só no DRAW. | PARTIALLY_COMPLIANT — sem captura nativa |
+| 12 | Reativar uma forma | Clicar no contorno de um perfil inativo o torna o perfil em edição (plano de trabalho incluído); não vale enquanto há um perfil aberto sendo desenhado nem com um volume em edição. Ctrl+clique força um ponto novo. | PARTIALLY_COMPLIANT |
+| 13 | Inserir nó depois de fechar | Clicar na aresta do perfil **fechado** divide o segmento (`SplineResource::split_segment`: interpolação na polilinha, De Casteljau na Bézier — a forma não muda) e deixa o novo ponto pronto para arrastar. Testes `splitting_a_polyline_segment_keeps_the_shape`, `splitting_a_bezier_segment_preserves_the_curve`. | COMPLIANT (domínio); interação sem captura |
+| 14 | Ponto reto ↔ curva | `SplineResource::set_point_curved` (alças alinhadas pela direção dos vizinhos) + duplo clique no nó + botão de curvas (age no ponto selecionado; sem seleção, em todos). Vale em qualquer perfil (polígono, retângulo, círculo). Teste `a_point_toggles_between_straight_and_curved`. | COMPLIANT (domínio); interação sem captura |
+
+## Pendências da parte 3
+
+- Inserir nó em perfil **aberto** só por Ctrl+clique/forma fechada (clicar na aresta de um perfil aberto adiciona ponto novo, para não atrapalhar o desenho de formas que se cruzam).
+- Clicar **dentro** da região para reativar a forma ainda não existe (só o contorno).
+- Círculo continua sendo um polígono de N pontos; curvar todos os pontos o arredonda, mas não há "círculo paramétrico" editável por raio (depende das formas paramétricas do cap. 02).
