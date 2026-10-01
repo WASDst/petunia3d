@@ -101,7 +101,10 @@ pub use ik::{
     IkChain, IkError, IkOutcome, IkSolver, chain_end_position, solve_chain, solve_fabrik,
     solve_two_bone,
 };
-pub use import_gltf::{GlbMeshes, GltfImportError, GltfSummary, import_glb_bytes, parse_gltf_json};
+pub use import_gltf::{
+    GlbMeshes, GltfImport, GltfImportError, GltfSummary, import_glb_bytes, import_gltf_file,
+    import_scene_bytes, parse_gltf_json,
+};
 pub use import_obj::{ObjImportError, import_obj_bytes};
 pub use io_atomic::{AtomicIoError, TempScope, atomic_write};
 pub use material::{AlphaMode, Material, ShaderProfile, TextureChannel};

@@ -274,12 +274,56 @@ impl ProjectService {
         if !payload.meshes.is_empty() {
             state.checkpoint("import via pipeline");
             let first_new_asset = state.project.assets.len();
-            for (name, mesh) in payload.meshes {
-                state.project.add(&name, mesh);
-                imported_names.push(name);
-            }
+            // Materiais primeiro: preserva IDs e permite vincular assets.
+            let base_mat = state.project.project.materials.len();
+            let mut mat_ids: Vec<uuid::Uuid> = Vec::with_capacity(payload.materials.len());
             for mat in payload.materials {
+                let id = mat.id;
                 state.project.add_material(mat);
+                mat_ids.push(id);
+            }
+            for (mi, (name, mut mesh)) in payload.meshes.into_iter().enumerate() {
+                // Remapeia slots locais (índice em payload.materials) para
+                // índices do projeto (base + local).
+                for face in &mut mesh.faces {
+                    if let Some(slot) = face.material_slot
+                        && slot < mat_ids.len()
+                    {
+                        face.material_slot = Some(base_mat + slot);
+                    } else if face.material_slot.is_some() {
+                        face.material_slot = None;
+                    }
+                }
+                let dominant = payload
+                    .mesh_materials
+                    .get(mi)
+                    .copied()
+                    .flatten()
+                    .filter(|&i| i < mat_ids.len());
+                // Dados do material antes do borrow mutável do asset.
+                let linked: Option<(uuid::Uuid, Option<petunia_project::Canvas>, [f32; 3])> =
+                    dominant.map(|local| {
+                        let id = mat_ids[local];
+                        let found = state.project.project.get_material(id);
+                        let canvas = found.and_then(|m| m.albedo_texture.clone());
+                        let base = found.map_or([0.75, 0.75, 0.78], |m| {
+                            [m.base_color[0], m.base_color[1], m.base_color[2]]
+                        });
+                        (id, canvas, base)
+                    });
+                state.project.add(&name, mesh);
+                if let Some((id, canvas, base)) = linked
+                    && let Some(asset) = state.project.assets.last_mut()
+                {
+                    asset.material_id = Some(id);
+                    // Espelha albedo no asset para viewports legados que
+                    // leem `Asset.texture` (export também aceita ambos).
+                    if let Some(canvas) = canvas {
+                        asset.texture = Some(canvas);
+                    }
+                    asset.base_color = base;
+                }
+                imported_names.push(name);
             }
             let mut warnings = payload.warnings;
             if let Some(rig) = payload.rig {

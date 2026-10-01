@@ -86,10 +86,10 @@ COMANDOS:
         Cria um novo projeto com uma primitiva (Cube, Plane, Sphere, Cylinder8, Capsule, Cone).
 
     info <arquivo>
-        Inspeciona metadados, malhas, vértices e faces de arquivos .petunia ou .obj.
+        Inspeciona metadados, malhas, vértices e faces de arquivos .petunia, .obj, .glb ou .gltf.
 
     convert <entrada> <saida>
-        Converte entre formatos suportados (.petunia, .obj, .glb).
+        Converte entre formatos suportados (.petunia, .obj, .glb, .gltf).
 
     transform <entrada.petunia> <saida> [--select-all] [--extrude <dist>] [--subdivide]
         Carrega projeto, executa mutações geométricas e exporta o resultado.
@@ -171,6 +171,27 @@ fn cmd_info(file_path: &str) -> Result<()> {
         println!("  • Formato: Wavefront OBJ");
         println!("  • Vértices: {}", mesh.vert_count());
         println!("  • Faces: {}", mesh.faces.len());
+    } else if file_path.ends_with(".glb") || file_path.ends_with(".gltf") {
+        let pipeline = petunia_project::pipeline::DeliveryPipeline::new();
+        let payload = pipeline
+            .import_file(path, &petunia_project::pipeline::ImportOptions::default())
+            .with_context(|| format!("Falha ao ler {}", path.display()))?;
+        println!(
+            "  • Formato: glTF 2.0 ({})",
+            path.extension().and_then(|e| e.to_str()).unwrap_or("?")
+        );
+        println!("  • Malhas: {}", payload.meshes.len());
+        println!("  • Materiais: {}", payload.materials.len());
+        for (name, mesh) in &payload.meshes {
+            println!(
+                "    - \"{name}\": {} vértices, {} faces",
+                mesh.vert_count(),
+                mesh.faces.len()
+            );
+        }
+        if !payload.warnings.is_empty() {
+            println!("  • Avisos: {}", payload.warnings.join("; "));
+        }
     } else {
         bail!("Extensão não suportada para info: {}", path.display());
     }
@@ -193,6 +214,15 @@ fn cmd_convert(input_path: &str, output_path: &str) -> Result<()> {
         ProjectService::load_project(&mut state, in_p)?;
     } else if input_path.ends_with(".obj") {
         ProjectService::import_obj(&mut state, in_p)?;
+    } else if input_path.ends_with(".glb") || input_path.ends_with(".gltf") {
+        let names = ProjectService::import_file_pipeline(
+            &mut state,
+            in_p,
+            &petunia_project::pipeline::ImportOptions::default(),
+        )?;
+        if names.is_empty() {
+            bail!("Nenhuma malha importada de: {input_path}");
+        }
     } else {
         bail!("Formato de entrada não suportado: {input_path}");
     }

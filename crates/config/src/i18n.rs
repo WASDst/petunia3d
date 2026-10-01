@@ -453,6 +453,7 @@ pub mod text_id {
     pub const FILE_SAVE: TextId = TextId::new("file.save");
     pub const FILE_SAVE_AS: TextId = TextId::new("file.save_as");
     pub const FILE_IMPORT_OBJ: TextId = TextId::new("file.import_obj");
+    pub const FILE_IMPORT_GLTF: TextId = TextId::new("file.import_gltf");
     pub const EDIT_UNDO: TextId = TextId::new("edit.undo");
     pub const EDIT_REDO: TextId = TextId::new("edit.redo");
     pub const VIEW_FRAME: TextId = TextId::new("view.frame");

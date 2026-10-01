@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Importação glTF/GLB com texturas (01/10/2026)
+- **Geometria completa**: `import_scene_bytes` lê posições, índices, `TEXCOORD_0` (UV por canto), `COLOR_0` (cor por vértice) e transformações de nós (baked em espaço de mundo); `TriangleStrip`/`Fan` convertidos, pontos/linhas ignorados com aviso. Limites anti-hostis (1M verts/faces, 256 MiB buffer, 64 MiB imagem).
+- **Materiais PBR + texturas**: baseColor/metallic/roughness/emissive, `AlphaMode`/`alpha_cutoff`/`normal_scale`; `baseColor`→albedo, `metallicRoughness`→roughness+metallic, `normal` e `emissive` decodificadas via `image` (PNG/JPEG, ≤1024, `data:` URIs e arquivos externos relativos ao `.gltf`). Falhas viram avisos, nunca panic nem drop silencioso.
+- **Pipeline + projeto**: `GltfImporter`/`GlbImporter` retornam `materials` + `mesh_materials` (slots por face preservados); `import_file` resolve `.bin`/imagens externos via diretório base; `ProjectService::import_file_pipeline` vincula `material_id`, espelha albedo em `Asset.texture` e remapa slots. `.gltf` agora importa malhas de verdade (antes só validava).
+- **Superfícies**: Slint já filtra `obj/gltf/glb` e usa o pipeline (ganha texturas sem mudar código); egui legado ganha menu "Import glTF / GLB…", comando `file.import_gltf`, `TextId` + locales en/pt-BR, FFI `petunia_import_gltf`; CLI `convert`/`info` aceita `.glb`/`.gltf`.
+- **Testes**: round-trip com textura (albedo 8×8 preservado, slot 0), `.gltf` com buffer `data:` embutido, modo hostil ignorado, CLI `.petunia`→`.glb`→info e `.gltf` externo (`.bin`+`.png`)→`.petunia`→`.glb`.
+
 ### Paint/UV, DRAW, atalhos e brush — correções de fundação (30/09/2026)
 - **Pintar uma face pintava as outras (causa raiz)**: o UV padrão das primitivas (`project_planar`) sobrepunha faces opostas na mesma área da textura. Todas as primitivas e o OBJ sem UV passam a usar `Mesh::layout_uv_charts` (charts por normal, densidade uniforme, sem sobreposição, determinístico, preserva quads). O Auto Unwrap (xatlas) gravava UV em texels e fazia média por vértice (colapsava as costuras); agora é por canto e normalizado.
 - **Pincel 3D esférico no espaço de mundo**: mesmo raio do anel de preview, por face candidata (`Mesh::rasterize_face_near`); nunca alcança a face oposta nem faces sem relação geométrica; ignora superfícies encobertas por outros objetos.

@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1495**.
+Total de chaves de localização cadastradas: **1508**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -238,6 +238,7 @@ Total de chaves de localização cadastradas: **1495**.
 | `export.go` | Export… | Exportar… |
 | `export.report` | Report | Relatório |
 | `export.title` | Export | Exportar |
+| `file.import_gltf` | Import glTF / GLB… | Importar glTF / GLB… |
 | `file.import_obj` | Import OBJ… | Importar OBJ… |
 | `file.new` | New project | Novo projeto |
 | `file.open_project` | Open project… | Abrir projeto… |
@@ -706,6 +707,9 @@ Total de chaves de localização cadastradas: **1495**.
 | `sl.clamp_overlap_active` | ✓ Clamp Overlap (Active) | ✓ Limitar sobreposição (ativo) |
 | `sl.clamp_overlap_off` | Clamp Overlap (Off) | Limitar sobreposição (desligado) |
 | `sl.clamp_overlap_prevents_geometry_self_interse` | Clamp Overlap (prevents geometry self-intersection) | Clamp Overlap (evita auto-interseção de geometria) |
+| `sl.clean_quads` | Clean quads | Quads limpos |
+| `sl.clean_quads_off` | Clean quads: off | Quads limpos: desligado |
+| `sl.clean_quads_on` | Clean quads: on | Quads limpos: ligado |
 | `sl.clear` | Clear | Limpar |
 | `sl.clear_all` | Clear All | Limpar tudo |
 | `sl.clear_all_seams` | Clear all seams | Limpa todas as costuras |
@@ -780,6 +784,8 @@ Total de chaves de localização cadastradas: **1495**.
 | `sl.dual_balanced_on` | Dual Balanced: ON | Dual balanceado: ON |
 | `sl.duplicate` | Duplicate | Duplicar |
 | `sl.edge` | Edge | Aresta |
+| `sl.edge_loop` | Edge Loop | Loop de arestas |
+| `sl.edge_ring` | Edge Ring | Anel de arestas |
 | `sl.effects` | Effects | Efeitos |
 | `sl.ellipse` | Ellipse | Elipse |
 | `sl.ellipse_description` | Fill an ellipse inscribed between two points on the surface | Preenche uma elipse inscrita entre dois pontos da superfície |
@@ -801,6 +807,7 @@ Total de chaves de localização cadastradas: **1495**.
 | `sl.extrude_region_e` | Extrude Region (E) | Extrude Região (E) |
 | `sl.f1_f2_f3_workspaces_model_paint_uv` | F1 / F2 / F3: Workspaces (Model/Paint/UV) | F1 / F2 / F3: Workspaces (Model/Paint/UV) |
 | `sl.face` | Face | Face |
+| `sl.face_loop` | Face Loop | Loop de faces |
 | `sl.face_orientation` | Face Orientation | Orientação das faces |
 | `sl.face_orientation_front_back_normals` | Face Orientation (Front/Back normals) | Orientação de Faces (Normais frontais/traseiras) |
 | `sl.face_orientation_front_blue_back_red` | Face Orientation: Front (Blue) / Back (Red) | Orientação das faces: frente (azul) / verso (vermelho) |
@@ -1068,6 +1075,12 @@ Total de chaves de localização cadastradas: **1495**.
 | `sl.shade_smooth` | Shade Smooth | Sombreamento suave |
 | `sl.shading` | Shading | Sombreamento |
 | `sl.shading_options` | Shading options | Opções de sombreamento |
+| `sl.shape_builder` | Shape Builder | Shape Builder |
+| `sl.shape_builder_description` | Drag across regions to merge them, Ctrl+drag to delete them, click to extract one | Arraste sobre regiões para fundi-las, Ctrl+arrastar para apagá-las, clique para extrair uma |
+| `sl.shape_exclude` | Exclude overlap | Excluir sobreposição |
+| `sl.shape_intersect` | Intersect shapes | Interseção de formas |
+| `sl.shape_subtract` | Subtract shapes | Subtrair formas |
+| `sl.shape_unite` | Unite shapes | Unir formas |
 | `sl.shift_a_add_primitive` | Shift+A: Add Primitive | Shift+A: Adicionar Primitiva |
 | `sl.shift_precision_0_1` | Shift: Precision 0.1× | Shift: precisão 0,1× |
 | `sl.show` | Show | Mostrar |

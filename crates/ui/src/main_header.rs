@@ -238,6 +238,14 @@ fn draw_menus(ui: &mut Ui, state: &mut AppState, action: &mut UiAction) {
             ui.close();
         }
 
+        if PetuniaMenuItem::new("Import glTF / GLB (.gltf, .glb)...")
+            .show(ui)
+            .clicked()
+        {
+            crate::import_gltf_dialog(state);
+            ui.close();
+        }
+
         if PetuniaMenuItem::new("Export OBJ (.obj)...")
             .show(ui)
             .clicked()
