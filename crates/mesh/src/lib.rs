@@ -223,6 +223,7 @@ impl Mesh {
 pub mod arrangement;
 mod bevel;
 pub mod boolean;
+pub mod boolean_cleanup;
 mod connect;
 pub mod curve;
 pub mod half_edge;

@@ -53,10 +53,7 @@ pub(crate) fn write_clipped_path(
 ) -> bool {
     use std::fmt::Write as _;
     let matrix = camera.view_proj();
-    let clip: Vec<glam::Vec4> = points
-        .into_iter()
-        .map(|p| matrix * p.extend(1.0))
-        .collect();
+    let clip: Vec<glam::Vec4> = points.into_iter().map(|p| matrix * p.extend(1.0)).collect();
     if clip.len() < 2 || clip.iter().any(|c| !c.is_finite()) {
         return false;
     }
@@ -1931,7 +1928,13 @@ mod clipped_path_tests {
             Vec3::new(-0.5, 0.0, 0.5),
         ];
         let mut out = String::new();
-        assert!(write_clipped_path(&camera, [800.0, 600.0], ring, true, &mut out));
+        assert!(write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            ring,
+            true,
+            &mut out
+        ));
         assert_eq!(out.matches('M').count(), 1);
         assert_eq!(out.matches('L').count(), 3);
         assert!(out.trim_end().ends_with('Z'));
@@ -1952,7 +1955,13 @@ mod clipped_path_tests {
             center + right * -3.0 + forward * 6.0,
         ];
         let mut out = String::new();
-        assert!(write_clipped_path(&camera, [800.0, 600.0], ring, true, &mut out));
+        assert!(write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            ring,
+            true,
+            &mut out
+        ));
         let values = numbers(&out);
         assert!(values.len() >= 6, "restou polígono visível: {out}");
         assert!(
@@ -1972,7 +1981,13 @@ mod clipped_path_tests {
             eye - forward * 3.0 - camera.right(),
         ];
         let mut out = String::new();
-        assert!(!write_clipped_path(&camera, [800.0, 600.0], ring, true, &mut out));
+        assert!(!write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            ring,
+            true,
+            &mut out
+        ));
         assert!(out.is_empty());
     }
 
@@ -1985,7 +2000,13 @@ mod clipped_path_tests {
         let behind = eye - forward * 3.0;
         let b = eye + forward * 3.0 + camera.right();
         let mut out = String::new();
-        assert!(write_clipped_path(&camera, [800.0, 600.0], [a, behind, b], false, &mut out));
+        assert!(write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            [a, behind, b],
+            false,
+            &mut out
+        ));
         assert!(out.matches('M').count() >= 2, "traço interrompido: {out}");
     }
 }

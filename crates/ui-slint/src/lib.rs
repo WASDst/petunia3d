@@ -9222,6 +9222,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Liga/desliga o cleanup do resultado booleano (quads em vez de triângulos do kernel).
+    pub fn set_boolean_cleanup(&mut self, cleanup: bool) -> bool {
+        if self.state.session.tools.boolean_cleanup == cleanup {
+            return false;
+        }
+        self.state.session.tools.boolean_cleanup = cleanup;
+        self.state.set_status(if cleanup {
+            "Clean quads on: coplanar regions are merged after Fuse/Cut/Intersect"
+        } else {
+            "Clean quads off: the kernel triangulation is kept"
+        });
+        true
+    }
+
     /// Liga/desliga o modificador **Keep Parts**.
     pub fn set_boolean_keep_parts(&mut self, keep: bool) -> bool {
         if self.state.session.tools.boolean_keep_parts == keep {
@@ -12638,6 +12652,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         vm.boolean_keep_parts = self.state.session.tools.boolean_keep_parts;
+        vm.boolean_cleanup = self.state.session.tools.boolean_cleanup;
         vm.boolean_ready = self.state.session.tools.boolean_operand.is_some()
             && self.state.project.active_mesh().is_some();
         if let Some(kind) = self.menu_open {

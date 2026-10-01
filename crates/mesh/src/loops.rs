@@ -321,8 +321,7 @@ mod tests {
         let mut mesh = Mesh::default();
         for z in 0..=n {
             for x in 0..=n {
-                mesh.verts
-                    .push(crate::Vertex::new(x as f32, 0.0, z as f32));
+                mesh.verts.push(crate::Vertex::new(x as f32, 0.0, z as f32));
             }
         }
         let stride = n + 1;
@@ -356,7 +355,11 @@ mod tests {
     fn edge_ring_crosses_quads_in_a_strip() {
         let mesh = prism(8);
         let ring = mesh.edge_ring((0, 8));
-        assert_eq!(ring.len(), 8, "arestas verticais paralelas em volta do prisma");
+        assert_eq!(
+            ring.len(),
+            8,
+            "arestas verticais paralelas em volta do prisma"
+        );
     }
 
     #[test]

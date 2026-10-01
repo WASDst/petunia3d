@@ -52,6 +52,23 @@ pub fn boolean_meshes(a: &Mesh, b: &Mesh, op: BooleanOp) -> Result<Mesh, Boolean
     from_provider(&result).ok_or(BooleanError::InvalidOutput("mesh"))
 }
 
+/// Booleano com cleanup seguro (cap. 04): triangula as cópias para o kernel e
+/// devolve o resultado com as regiões coplanares fundidas de volta em quads,
+/// n-gons e faixas (anéis), mais o relatório do que foi feito.
+///
+/// `a` e `b` são os operandos originais (não triangulados).
+pub fn boolean_meshes_clean(
+    a: &Mesh,
+    b: &Mesh,
+    op: BooleanOp,
+) -> Result<(Mesh, crate::boolean_cleanup::CleanupReport), BooleanError> {
+    let (mut ta, mut tb) = (a.clone(), b.clone());
+    ta.triangulate();
+    tb.triangulate();
+    let raw = boolean_meshes(&ta, &tb, op)?;
+    Ok(crate::boolean_cleanup::cleanup_boolean_result(&raw, a, b))
+}
+
 /// Union of two axis-aligned cubes; the canonical smoke fixture.
 pub fn boolean_cubes(size_a: f64, size_b: f64, op: BooleanOp) -> Result<Mesh, BooleanError> {
     use manifold_rust::linalg::Vec3;

@@ -577,6 +577,11 @@ pub struct ToolState {
     /// Modificador **Keep Parts**: mantém o operando na cena depois da operação,
     /// em vez de consumi-lo.
     pub boolean_keep_parts: bool,
+    /// Cleanup seguro do resultado (cap. 04): regiões coplanares viram quads,
+    /// n-gons e faixas. Desligado, mantém a triangulação crua do kernel.
+    pub boolean_cleanup: bool,
+    /// Relatório da última operação booleana (para status e testes).
+    pub boolean_report: Option<petunia_mesh::boolean_cleanup::CleanupReport>,
     pub mesh_preview: Option<crate::mesh_preview::MeshPreview>,
     pub paint_color: [f32; 3],
     pub paint_radius: f32,
@@ -667,6 +672,8 @@ impl ToolState {
             cut_session: None,
             boolean_operand: None,
             boolean_keep_parts: false,
+            boolean_cleanup: true,
+            boolean_report: None,
             mesh_preview: None,
             paint_color: [1.0, 0.2, 0.2],
             paint_radius: 0.8,
@@ -3317,15 +3324,21 @@ impl AppState {
         if operand_index == active_index {
             return Err(BooleanError::InvalidInput("operand is the active asset"));
         }
-        // O provedor booleano exige triângulos fechados; a topologia de quads
-        // do Petunia é preservada em tudo o mais, então triangulamos só as cópias
-        // que entram no kernel.
-        let mut a = self.project.assets[active_index].mesh.clone();
-        let mut b = self.project.assets[operand_index].mesh.clone();
-        a.triangulate();
-        b.triangulate();
-        let result = boolean_meshes(&a, &b, op)?;
+        // O kernel só aceita triângulos: `boolean_meshes_clean` triangula cópias dos
+        // operandos e, depois, funde de volta as regiões coplanares (cap. 04).
+        let a = self.project.assets[active_index].mesh.clone();
+        let b = self.project.assets[operand_index].mesh.clone();
+        let (result, report) = if self.session.tools.boolean_cleanup {
+            let (mesh, report) = petunia_mesh::boolean::boolean_meshes_clean(&a, &b, op)?;
+            (mesh, Some(report))
+        } else {
+            let (mut ta, mut tb) = (a, b);
+            ta.triangulate();
+            tb.triangulate();
+            (boolean_meshes(&ta, &tb, op)?, None)
+        };
         let verts = result.verts.len();
+        self.session.tools.boolean_report = report;
 
         self.checkpoint(match op {
             petunia_mesh::boolean::BooleanOp::Union => "fuse",

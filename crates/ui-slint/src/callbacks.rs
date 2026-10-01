@@ -518,6 +518,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_boolean_operand_name(vm.boolean_operand_name.as_str().into());
     window.set_boolean_ready(vm.boolean_ready);
     window.set_boolean_keep_parts(vm.boolean_keep_parts);
+    window.set_boolean_cleanup(vm.boolean_cleanup);
     window.set_menu_open(vm.menu_open.as_str().into());
     window.set_pivot_menu_open(vm.pivot_menu_open);
     window.set_menu_file_label(vm.menu_file_label.as_str().into());
@@ -2690,6 +2691,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_boolean_keep_parts_set(move |keep| {
         if let Ok(mut bridge) = keep_parts_bridge.lock() {
             bridge.set_boolean_keep_parts(keep);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let cleanup_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_boolean_cleanup_set(move |cleanup| {
+        if let Ok(mut bridge) = cleanup_bridge.lock() {
+            bridge.set_boolean_cleanup(cleanup);
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
