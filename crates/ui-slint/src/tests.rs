@@ -1712,6 +1712,34 @@ fn menu_items_dispatch_to_the_domain() {
 }
 
 #[test]
+fn view_menu_wireframe_check_reflects_shading_not_overlay() {
+    // Regressão: o check do item mostrava o flag do overlay, então parecia
+    // travado ao alternar o modo de shading.
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let checked = |bridge: &SlintUiBridge<PlaceholderViewport>| {
+        bridge
+            .view_model()
+            .menu_view_items
+            .iter()
+            .find(|i| i.id == "view.toggle_wireframe")
+            .expect("item existe")
+            .checked
+    };
+    assert!(!checked(&bridge), "Solid não marca Wireframe");
+    assert!(bridge.menu_item_invoked("view.toggle_wireframe"));
+    assert!(checked(&bridge), "shading Wireframe marca o item");
+    // Desligar o overlay não pode apagar o check do modo ativo.
+    bridge.execute_command(CommandId::ToggleWireOverlay);
+    assert!(!bridge.state.session.show_wireframe_overlay);
+    assert!(
+        checked(&bridge),
+        "overlay OFF com shading Wireframe mantém o check"
+    );
+    assert!(bridge.menu_item_invoked("view.toggle_wireframe"));
+    assert!(!checked(&bridge), "de volta ao Solid desmarca");
+}
+
+#[test]
 fn shell_chrome_labels_are_translated_and_the_theme_list_comes_from_the_registry() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let vm = bridge.view_model();

@@ -633,6 +633,32 @@ mod tests {
     }
 
     #[test]
+    fn software_wireframe_overlay_toggle_changes_pixels() {
+        // Caracterização: o toggle do overlay precisa ter efeito visível.
+        let mut viewport = Software3dViewport::new(320, 240);
+        let mut project = Project::default();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let camera = Camera::default();
+        let base = ViewportRenderState {
+            show_grid: false,
+            ..ViewportRenderState::default()
+        };
+        viewport.render_frame(&project, &[], &camera, base);
+        let with_overlay = viewport.color_buffer.clone();
+        assert!(base.show_wireframe_overlay, "default tem overlay");
+
+        let off = ViewportRenderState {
+            show_wireframe_overlay: false,
+            ..base
+        };
+        viewport.render_frame(&project, &[], &camera, off);
+        assert_ne!(
+            viewport.color_buffer, with_overlay,
+            "desligar o overlay muda os pixels"
+        );
+    }
+
+    #[test]
     fn software_viewport_resizes_correctly() {
         let mut viewport = Software3dViewport::new(100, 100);
         viewport.resize(200, 150);

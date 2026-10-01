@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Correção: toggle do wireframe overlay (01/10/2026)
+- **Causa-raiz**: no renderer WGPU, `edge_mode == Topology` (modo POLY, o padrão) forçava todas as arestas finas sempre visíveis — o toggle virava no-op justamente no workspace padrão. Apurado por eliminação (comando, sync de propriedades, `TouchArea`, cache de fingerprint e viewport software, todos conformes) + leitura do código.
+- **Fix** (`petunia_render_wgpu::edge_overlay_visible`, cap. 05 "Overlays, não novos modos" + Princípio de UX): o toggle é o mestre das arestas finas em qualquer modo; DRAW/POLY contribuem com as arestas de feição como leitura de forma/topologia. Default (overlay ON) pixel-idêntico ao anterior; OFF agora limpa as finas em todos os modos.
+- **Checkmark do menu View**: o item `view.toggle_wireframe` (modo de shading) exibia o estado do overlay — parecia travado. Agora reflete `shading == Wireframe`.
+- **Testes**: predicado puro com matriz overlay×modo×feição (headless), pixels do viewport software on/off, check do menu vs shading/overlay, e o teste GPU `draw_reads_shape_and_poly_reads_topology` atualizado para o novo contrato (POLY sem overlay esconde a aresta plana; com overlay mostra a topologia).
+
 ### Importação glTF/GLB com texturas (01/10/2026)
 - **Geometria completa**: `import_scene_bytes` lê posições, índices, `TEXCOORD_0` (UV por canto), `COLOR_0` (cor por vértice) e transformações de nós (baked em espaço de mundo); `TriangleStrip`/`Fan` convertidos, pontos/linhas ignorados com aviso. Limites anti-hostis (1M verts/faces, 256 MiB buffer, 64 MiB imagem).
 - **Materiais PBR + texturas**: baseColor/metallic/roughness/emissive, `AlphaMode`/`alpha_cutoff`/`normal_scale`; `baseColor`→albedo, `metallicRoughness`→roughness+metallic, `normal` e `emissive` decodificadas via `image` (PNG/JPEG, ≤1024, `data:` URIs e arquivos externos relativos ao `.gltf`). Falhas viram avisos, nunca panic nem drop silencioso.

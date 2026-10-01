@@ -12980,7 +12980,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         _ => false,
                     },
                     checked: match *id {
-                        "view.toggle_wireframe" => vm.is_wireframe,
+                        // O item alterna o MODO de shading Wireframe (não o
+                        // overlay): o check reflete o shading ativo.
+                        "view.toggle_wireframe" => vm.shading_mode == "wireframe",
                         "view.toggle_projection" => vm.is_orthographic,
                         "view.toggle_split" => self.split.enabled,
                         _ => false,

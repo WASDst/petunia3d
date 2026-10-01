@@ -54,6 +54,27 @@ pub enum EdgeMode {
     Topology,
 }
 
+/// Visibilidade de uma aresta no overlay (cap. 05, "Overlays, não novos
+/// modos" + Princípio de UX).
+///
+/// O toggle do overlay (`show_wireframe_overlay`) é o mestre das arestas
+/// finas **em qualquer modo**: com ele desligado, o modo contribui só com a
+/// leitura de forma/topologia (arestas de feição em DRAW/POLY, nada em
+/// `Overlay`). Forçar todas as arestas no modo POLY tornava o toggle um
+/// no-op justamente no workspace padrão — o modo continua legível (feições
+/// reforçadas) e o usuário recupera o controle.
+pub fn edge_overlay_visible(
+    show_wireframe_overlay: bool,
+    mode: EdgeMode,
+    is_feature: bool,
+) -> bool {
+    if is_feature {
+        show_wireframe_overlay || mode != EdgeMode::Overlay
+    } else {
+        show_wireframe_overlay
+    }
+}
+
 /// Plano de trabalho do DRAW em destaque (capítulo 05): origem e eixos do
 /// frame do perfil, em coordenadas de mundo.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2159,17 +2180,19 @@ impl Renderer {
                     line_widths.push(1.0);
                 }
             } else {
-                // Aparência por modo (capítulo 05): DRAW lê forma (só arestas
-                // de feição), POLY lê topologia (todas, feição reforçada); o
-                // overlay de wireframe acrescenta as arestas finas em qualquer
-                // modo. Sem modo nem overlay, faces limpas.
+                // Aparência por modo (capítulo 05, "Overlays, não novos
+                // modos"): o toggle do overlay é o mestre das arestas finas
+                // em qualquer modo — sem ele, o modo contribui só com a
+                // leitura de forma/topologia (arestas de feição). Ver
+                // [`edge_overlay_visible`]: forçar todas as arestas no modo
+                // POLY tornava o toggle um no-op no workspace padrão.
                 for (a, b, _sel, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
-                    let show_thin = show_wireframe_overlay || self.edge_mode == EdgeMode::Topology;
-                    let show_feature = show_thin || self.edge_mode == EdgeMode::Features;
-                    let (visible, color, width) = if feature {
-                        (show_feature, FEATURE_EDGE_COLOR, 1.0)
+                    let visible =
+                        edge_overlay_visible(show_wireframe_overlay, self.edge_mode, feature);
+                    let (color, width) = if feature {
+                        (FEATURE_EDGE_COLOR, 1.0)
                     } else {
-                        (show_thin, THIN_EDGE_COLOR, THIN_EDGE_SCALE)
+                        (THIN_EDGE_COLOR, THIN_EDGE_SCALE)
                     };
                     if visible {
                         lv.push(LineVertex { pos: a, color });
@@ -2909,6 +2932,39 @@ impl Renderer {
 
     pub fn depth_view(&self) -> Option<&wgpu::TextureView> {
         self.depth_view.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod edge_overlay_tests {
+    use super::*;
+
+    #[test]
+    fn overlay_toggle_is_master_for_thin_edges_in_every_mode() {
+        // Regressão: `edge_mode == Topology` forçava todas as arestas e
+        // tornava o toggle um no-op no workspace padrão (POLY).
+        for mode in [EdgeMode::Overlay, EdgeMode::Features, EdgeMode::Topology] {
+            assert!(
+                edge_overlay_visible(true, mode, false),
+                "overlay ON mostra finas em {mode:?}"
+            );
+            assert!(
+                !edge_overlay_visible(false, mode, false),
+                "overlay OFF esconde finas em {mode:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn draw_and_poly_keep_feature_edges_as_mode_reading() {
+        // Cap. 05: DRAW lê forma, POLY lê topologia — feições sobrevivem ao
+        // overlay desligado; no modo Overlay puro, OFF limpa tudo.
+        assert!(edge_overlay_visible(false, EdgeMode::Features, true));
+        assert!(edge_overlay_visible(false, EdgeMode::Topology, true));
+        assert!(!edge_overlay_visible(false, EdgeMode::Overlay, true));
+        for mode in [EdgeMode::Overlay, EdgeMode::Features, EdgeMode::Topology] {
+            assert!(edge_overlay_visible(true, mode, true));
+        }
     }
 }
 
