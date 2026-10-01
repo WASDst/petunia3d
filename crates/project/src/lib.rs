@@ -90,6 +90,7 @@ pub mod rig_roles;
 pub mod spline;
 pub mod surface_attachment;
 pub mod surface_recipe;
+pub mod svg;
 
 pub use animation::{
     AnimationAsset, AnimationClip, AnimationLibrary, BoneTrack, Interpolation, Keyframe,
@@ -156,6 +157,10 @@ pub use surface_attachment::{
 pub use surface_recipe::{
     NodeSpec, RECIPE_SCHEMA_VERSION, RecipeEdge, RecipeError, RecipeNode, RecipeOutputChannel,
     RecipeResult, SocketType, SocketValue, SurfaceRecipe,
+};
+pub use svg::{
+    MAX_RASTER_PX, MAX_SVG_BYTES, MAX_SVG_NODES, SvgError, SvgInfo, SvgNode, SvgSubpath,
+    rasterize_svg, svg_info, svg_subpaths, svg_to_splines,
 };
 
 /// Canvas de textura simples (albedo) por asset — workspace PAINT.

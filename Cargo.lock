@@ -5737,6 +5737,7 @@ dependencies = [
  "insta",
  "petunia_mesh",
  "postcard",
+ "resvg 0.48.1",
  "serde",
  "serde_json",
  "tempfile",
