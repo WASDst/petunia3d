@@ -36,8 +36,8 @@ Cinema 4D como modelo) e [constituição 11](../bible/constitution/11-contrato-d
 - Ícone dedicado de caneta no pacote Petunia (hoje reaproveita o do Sketch).
 - Modificador "ação alternativa" resolvido pelo keymap (hoje Ctrl no bridge,
   como os demais modificadores de ponteiro).
-- Clique numa aresta para subdividi-la (o C4D usa o botão do meio, que no
-  Petunia é navegação); pintar faces arrastando; modos Points/Edges/Polygons.
+- ~~Clique numa aresta para subdividi-la~~ → implementado (2026-09-30): sem polígono em coleta, clicar numa aresta insere um ponto nela (`Mesh::split_edge`, todas as faces da aresta, UV interpolada, costura dividida; `AppState::poly_pen_split_edge`, 1 Undo, o ponto novo fica selecionado). Com pontos já coletados o clique continua adicionando ponto ao polígono.
+- Pintar faces arrastando; modos Points/Edges/Polygons.
 - Novo ponto no vazio usa o plano de frente para a câmera pelo último ponto;
   integrar ao plano de trabalho da Onda 3.
 - Captura nativa e teste com usuários.

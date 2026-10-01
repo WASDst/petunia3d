@@ -5796,7 +5796,7 @@ export component PetuniaSlintShell inherits Window {
 
                         clicked => {
                             if !consume-click && !moved-since-down && !is-transform && !is-painting
-                                && root.active-workspace != "PAINT" {
+                                && (root.active-workspace != "PAINT" || root.active-tool == "select") {
                                 if root.active-tool == "slice" {
                                     root.slice-confirm();
                                 } else {
@@ -9093,6 +9093,18 @@ export component PetuniaSlintShell inherits Window {
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.add_decal_layer");
                                             TouchArea { clicked => { root.paint-decal-layer-added(); } }
+                                        }
+                                        Rectangle {
+                                            width: 24px;
+                                            height: 24px;
+                                            border-radius: 3px;
+                                            background: DesignTokens.surface-raised;
+                                            border-width: 1px;
+                                            border-color: DesignTokens.border;
+                                            IconDisplay { icon: IconSet.Image; size: 12px; stroke: DesignTokens.text-secondary; }
+                                            accessible-role: button;
+                                            accessible-label: Tr.t("sl.import_decal_image");
+                                            TouchArea { clicked => { root.command-file-action("paint.import_decal"); } }
                                         }
                                     }
 

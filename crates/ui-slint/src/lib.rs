@@ -359,6 +359,8 @@ pub enum UiIntent {
     ExportActiveObjTo(PathBuf),
     ExportSceneGlbTo(PathBuf),
     ImportPalette(PathBuf),
+    /// Importa uma imagem (PNG/JPEG/WebP/BMP) como camada de decalque.
+    ImportDecalFrom(PathBuf),
     ExportPalette(PathBuf),
     SelectSceneAsset(String),
     ToggleSceneAssetVisibility(String),
@@ -1223,6 +1225,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         .set_status(format!("exported {}", path.display())),
                     Err(error) => self.state.set_status(format!("export failed: {error}")),
                 }
+            }
+            UiIntent::ImportDecalFrom(path) => {
+                self.import_decal_image(&path);
             }
             UiIntent::ImportPalette(path) => {
                 match petunia_module_paint::PaintModule::import_palette_file(&mut self.state, &path)
@@ -7210,6 +7215,74 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
+    /// Importa uma imagem do disco como camada de decalque projetada (P3D-133).
+    ///
+    /// Valida a decodificação (erro vira status, o documento não muda), limita o
+    /// lado maior a 512 texels (a imagem é persistida no projeto) e preserva a
+    /// proporção na escala UV.
+    pub fn import_decal_image(&mut self, path: &std::path::Path) -> bool {
+        let (w, h, rgba) = match files::load_image_rgba(path) {
+            Ok(decoded) => decoded,
+            Err(error) => {
+                self.state
+                    .set_status(format!("Decal: could not read the image ({error})"));
+                return false;
+            }
+        };
+        const MAX_DECAL: u32 = 512;
+        let (w, h, rgba) = if w.max(h) > MAX_DECAL {
+            let scale = MAX_DECAL as f32 / w.max(h) as f32;
+            let (nw, nh) = (
+                ((w as f32 * scale).round() as u32).max(1),
+                ((h as f32 * scale).round() as u32).max(1),
+            );
+            match image::RgbaImage::from_raw(w, h, rgba) {
+                Some(image) => (
+                    nw,
+                    nh,
+                    image::imageops::resize(&image, nw, nh, image::imageops::FilterType::Lanczos3)
+                        .into_raw(),
+                ),
+                None => {
+                    self.state.set_status("Decal: invalid image data");
+                    return false;
+                }
+            }
+        } else {
+            (w, h, rgba)
+        };
+        if rgba.len() != (w * h * 4) as usize || w == 0 || h == 0 {
+            self.state.set_status("Decal: invalid image data");
+            return false;
+        }
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Decal")
+            .to_string();
+        let aspect = h as f32 / w as f32;
+        let scale_uv = if aspect <= 1.0 {
+            [0.3, (0.3 * aspect).max(0.01)]
+        } else {
+            [(0.3 / aspect).max(0.01), 0.3]
+        };
+        let ok = self.mutate_paint_stack("import decal", |stack| {
+            let image = petunia_project::Canvas { w, h, pixels: rgba };
+            let decal =
+                petunia_project::paint_layers::DecalLayer::new(image, [0.5, 0.5], scale_uv, 0.0);
+            stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
+                name.clone(),
+                decal,
+            ));
+            true
+        });
+        if ok {
+            self.state
+                .set_status(format!("Decal imported: {name} ({w}×{h})"));
+        }
+        ok
+    }
+
     pub fn add_decal_layer(&mut self) -> bool {
         self.mutate_paint_stack("add decal layer", |stack| {
             let decal_img = petunia_project::Canvas::new(64, 64, [255, 200, 50, 255]);
@@ -9817,6 +9890,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             return false;
         }
+        // Sem polígono em coleta, clicar numa aresta a divide (ponto novo na aresta).
+        if self.poly_pen_points.is_empty()
+            && let petunia_core::HoverTarget::Edge(a, b) = target
+        {
+            return self.poly_pen_split_edge_at(a, b, at);
+        }
         let point = match target {
             petunia_core::HoverTarget::Vertex(index) => petunia_core::PenPoint::Existing(index),
             _ => match self.poly_pen_world_point(at) {
@@ -9833,6 +9912,35 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.poly_pen_points.push(point);
         self.state.mark_dirty();
         true
+    }
+
+    /// Divide a aresta `a–b` no ponto mais próximo do clique (px da viewport).
+    fn poly_pen_split_edge_at(&mut self, a: u32, b: u32, at: [f32; 2]) -> bool {
+        let (pa, pb) = match self.state.project.active_mesh() {
+            Some(mesh) => match (mesh.verts.get(a as usize), mesh.verts.get(b as usize)) {
+                (Some(va), Some(vb)) => (va.vec(), vb.vec()),
+                _ => return false,
+            },
+            None => return false,
+        };
+        let camera = &self.state.session.camera;
+        let t = match (
+            project_world_point(camera, self.viewport_size, pa),
+            project_world_point(camera, self.viewport_size, pb),
+        ) {
+            (Some(sa), Some(sb)) => draw_shapes::point_segment_distance(at, sa, sb).1,
+            _ => 0.5,
+        };
+        match self.state.poly_pen_split_edge(a, b, t) {
+            Ok(_) => {
+                self.sync_viewport_context();
+                true
+            }
+            Err(error) => {
+                self.state.set_status(error.to_string());
+                false
+            }
+        }
     }
 
     /// Fecha o polígono coletado (Enter ou clique no primeiro ponto).

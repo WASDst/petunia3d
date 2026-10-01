@@ -103,6 +103,34 @@ impl AppState {
         Ok(())
     }
 
+    /// Divide a aresta `a–b` com um ponto novo em `t` e o seleciona (1 Undo).
+    pub fn poly_pen_split_edge(
+        &mut self,
+        a: u32,
+        b: u32,
+        t: f32,
+    ) -> Result<u32, PolyPenCommandError> {
+        self.poly_pen_ready()?;
+        let mut mesh = self
+            .project
+            .active_mesh()
+            .ok_or(PolyPenCommandError::NoActiveMesh)?
+            .clone();
+        let point = mesh.split_edge(a, b, t)?;
+        mesh.deselect_all();
+        mesh.verts[point as usize].selected = true;
+        self.freeze_active_primitive_for_command();
+        self.project.checkpoint("Poly Pen: Add point");
+        if let Some(active) = self.project.project.active_mesh_mut() {
+            *active = mesh;
+        }
+        self.set_selection_domain(SelectionDomain::Vertex);
+        self.sync_selection();
+        self.emit_project_changed(ProjectChanges::GEOMETRY | ProjectChanges::SELECTION);
+        self.mark_dirty();
+        Ok(point)
+    }
+
     /// Extruda a aresta de borda `a–b` e abre um Move da aresta nova.
     pub fn begin_poly_pen_edge_extrude(
         &mut self,
@@ -226,5 +254,27 @@ mod tests {
         ));
         assert_eq!(state.project.undo.depth(), depth);
         assert!(state.modal.is_none());
+    }
+
+    #[test]
+    fn splitting_an_edge_is_one_undo_and_selects_the_new_point() {
+        let mut state = front_state();
+        let (a, b) = {
+            let face = &state.project.active_mesh().unwrap().faces[0].verts;
+            (face[0], face[1])
+        };
+        let verts = state.project.active_mesh().unwrap().verts.len();
+        let depth = state.project.undo.depth().0;
+        let point = state.poly_pen_split_edge(a, b, 0.5).unwrap();
+        let mesh = state.project.active_mesh().unwrap();
+        assert_eq!(mesh.verts.len(), verts + 1);
+        assert!(mesh.verts[point as usize].selected);
+        assert_eq!(state.project.undo.depth().0, depth + 1);
+        state.undo();
+        assert_eq!(state.project.active_mesh().unwrap().verts.len(), verts);
+        assert!(matches!(
+            state.poly_pen_split_edge(a, 9999, 0.5),
+            Err(PolyPenCommandError::Geometry(PolyPenError::MissingPoint))
+        ));
     }
 }

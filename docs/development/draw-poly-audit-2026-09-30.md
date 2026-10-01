@@ -34,7 +34,7 @@ o que é estimativa está dito.
 | U8 | Alças de Extrude/Inset/Round Edge abaixo de 24 px (WCAG 2.5.8, ADR 007) | — | **Aberto** (visual, com o agente de UI) |
 | U9 | Um único buffer numérico: o bridge usa `modal_text`; `ToolSession::text` está pronto e sem uso | — | **Aberto** (migração do bridge; baixo risco, alto toque) |
 | U10 | Loop Cut, Slice, Knife e Profile ainda têm ciclo próprio (não passam por `ToolSession`) | — | **Aberto** (Ondas 4/5 do ADR 007; escopo grande) |
-| U11 | Poly Pen: sem "clique na aresta para subdividir" | — | **Aberto** (pendência da Onda 5) |
+| U11 | Poly Pen: sem "clique na aresta para subdividir" | `Mesh::split_edge` + `poly_pen_split_edge` (1 Undo) + clique na aresta sem polígono em coleta | **Corrigido** |
 | U12 | Snap só considera a malha ativa; sem snap por normal | — | **Aberto** |
 | U13 | Contorno de seleção sem teste de profundidade; ausente em Wireframe e no viewport por software | — | **Aberto** (renderer) |
 | U14 | Entrada do DRAW: conjunto de seleção Shape/Curve/Point/Region, plano por 3 pontos e "Converter em polígonos" | — | **Aberto** (dependem das formas paramétricas, cap. 02) |

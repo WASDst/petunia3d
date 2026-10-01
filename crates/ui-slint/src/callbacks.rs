@@ -1360,6 +1360,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 "file.export_glb" => service.export_glb().await,
                 "palette.import" => service.import_palette().await,
                 "palette.export" => service.export_palette().await,
+                "paint.import_decal" => service.open_decal_image().await,
                 _ => None,
             };
             let Some(path) = path else {
@@ -1373,6 +1374,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     "file.export_glb" => UiIntent::ExportSceneGlbTo(path),
                     "palette.import" => UiIntent::ImportPalette(path),
                     "palette.export" => UiIntent::ExportPalette(path),
+                    "paint.import_decal" => UiIntent::ImportDecalFrom(path),
                     _ => UiIntent::SaveProjectTo(path),
                 };
                 let needs_render = matches!(id.as_str(), "file.open" | "file.import_obj");
