@@ -12,10 +12,12 @@ use std::sync::{Arc, Mutex};
 
 pub mod animate;
 pub mod commands;
+mod draw_shapes;
 pub mod files;
 mod input;
 pub mod numeric;
 pub mod overlay;
+mod scene_cache;
 pub mod split_view;
 pub mod theme;
 pub mod thumbnail;
@@ -715,7 +717,13 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// trilho de ferramentas (ADR 007).
     pub modeling_mode: ModelingMode,
     /// Regiões por plano, recalculadas só quando o documento muda.
-    region_planes_cache: Option<([u64; 11], petunia_core::RegionPlanes)>,
+    region_planes_cache: std::cell::RefCell<Option<draw_shapes::ShapeCache>>,
+    /// Último clique num nó do perfil (duplo clique alterna reto ↔ curva).
+    profile_last_anchor_click: Option<(uuid::Uuid, std::time::Instant)>,
+    /// Ferramenta usada antes da atual; `Space` alterna entre as duas.
+    previous_tool: String,
+    /// Cena de consultas da viewport (picking/oclusão), por geometria.
+    scene_query_cache: scene_cache::SceneCache,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_volume_original: Option<Project>,
@@ -1021,7 +1029,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_hover_snap: None,
             region_hover: None,
             modeling_mode: ModelingMode::default(),
-            region_planes_cache: None,
+            region_planes_cache: std::cell::RefCell::new(None),
+            profile_last_anchor_click: None,
+            previous_tool: "select".to_string(),
+            scene_query_cache: std::cell::RefCell::new(None),
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
             profile_volume_original: None,
@@ -1062,10 +1073,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         match intent {
             UiIntent::SetWorkspace(workspace) => {
+                let changed = self.state.workspace != workspace;
                 self.state.switch_workspace(workspace);
                 // Preselection morta de outro workspace não pode vazar para
                 // cá: o hover pertence ao domínio e ao modo onde nasceu.
                 self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                if changed {
+                    self.normalize_tool_for_workspace();
+                }
             }
             UiIntent::Animate(intent) => self.apply_animate(intent),
             UiIntent::SaveProject => {
@@ -1314,6 +1329,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection = val;
             }
             UiIntent::SetActiveTool(tool) => {
+                if self.state.session.tools.active_tool != tool {
+                    self.previous_tool = self.state.session.tools.active_tool.clone();
+                }
                 if tool != "poly_pen" {
                     self.poly_pen_points.clear();
                 }
@@ -1372,7 +1390,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.state
                             .set_status("Slice: drag in the viewport to define the cut plane");
                     }
-                    "fill" => {
+                    // No PAINT, Fill é o balde (age no clique, respeitando máscara e
+                    // escopo). Só fora do PAINT ele pinta os vértices selecionados.
+                    "fill" if self.state.workspace != Workspace::Paint => {
                         let count =
                             petunia_module_paint::PaintModule::fill_selection(&mut self.state);
                         self.state.set_status(format!("Filled {count} points"));
@@ -1697,6 +1717,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.state.workspace != Workspace::Model {
                     self.state.switch_workspace(Workspace::Model);
                     self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                    self.normalize_tool_for_workspace();
                 }
                 if self.modeling_mode != mode {
                     self.modeling_mode = mode;
@@ -3417,6 +3438,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn active_profile_has_curves(&self) -> bool {
+        if let Some(id) = self.profile_selected_point {
+            return self
+                .active_profile_resources()
+                .is_some_and(|(_, spline)| spline.point_is_curved(id));
+        }
         self.active_profile_resources().is_some_and(|(_, spline)| {
             spline.interpolation == petunia_core::SplineInterpolation::CubicBezier
                 && spline
@@ -3986,6 +4012,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
+        // Com um ponto selecionado, curvar só ele (Shape → ponto).
+        if let Some(id) = self.profile_selected_point {
+            return self.profile_set_point_curved(Some(id), true);
+        }
         let Some((_, spline)) = self.active_profile_resources() else {
             return false;
         };
@@ -4023,6 +4053,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn profile_clear_curves(&mut self) -> bool {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
+        }
+        if let Some(id) = self.profile_selected_point {
+            return self.profile_set_point_curved(Some(id), false);
         }
         let Some((_, spline)) = self.active_profile_resources() else {
             return false;
@@ -4143,6 +4176,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Processa clique inicial do ponteiro para selecionar e iniciar arraste de nós/alças do perfil.
     pub fn profile_pointer_down(&mut self, screen_x: f32, screen_y: f32, alt: bool) -> bool {
+        self.profile_pointer_down_ex(screen_x, screen_y, alt, false)
+    }
+
+    /// Como [`Self::profile_pointer_down`]; `ctrl` força um ponto novo mesmo
+    /// sobre a aresta ou o contorno de uma forma existente.
+    pub fn profile_pointer_down_ex(
+        &mut self,
+        screen_x: f32,
+        screen_y: f32,
+        alt: bool,
+        ctrl: bool,
+    ) -> bool {
         if self.state.session.tools.active_tool != "draw_profile" {
             return false;
         }
@@ -4178,6 +4223,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.profile_drag_target = None;
                         return self.close_profile();
                     }
+                    // Duplo clique num nó alterna reto ↔ curva.
+                    // (o clique é registrado no pointer-up, só se não houve arraste)
+                    let double = self
+                        .profile_last_anchor_click
+                        .is_some_and(|(last, at)| last == id && at.elapsed().as_millis() < 400);
+                    if double {
+                        self.profile_last_anchor_click = None;
+                        self.profile_selected_point = Some(id);
+                        let curved = self
+                            .active_profile_resources()
+                            .is_some_and(|(_, spline)| spline.point_is_curved(id));
+                        self.profile_drag_target = None;
+                        self.profile_edit_gesture = None;
+                        self.profile_set_point_curved(Some(id), !curved);
+                        return true;
+                    }
                     self.profile_selected_point = Some(id);
                     if alt {
                         self.profile_drag_target = Some(ProfileHitTarget::HandleOut(id));
@@ -4206,6 +4267,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.profile_drag_target = None;
         self.profile_selected_point = None;
         self.profile_edit_gesture = None;
+        if !ctrl {
+            let pixel = [screen_x, screen_y];
+            // Aresta do perfil fechado: insere um nó sem mudar a forma.
+            if self.active_profile_closed()
+                && let Some(hit) = self.profile_segment_hit(pixel)
+                && self.insert_profile_node(hit).is_some()
+            {
+                self.state.mark_dirty();
+                return true;
+            }
+            // Contorno de outra forma: ela passa a ser a forma em edição
+            // (só enquanto não há um perfil aberto sendo desenhado).
+            let drawing = self
+                .active_profile_resources()
+                .is_some_and(|(_, spline)| !spline.closed);
+            if !drawing
+                && let Some(id) = self.profile_hit_inactive(pixel)
+                && self.activate_profile(id)
+            {
+                self.state.set_status("Shape selected");
+                return true;
+            }
+        }
         self.state.mark_dirty();
         false
     }
@@ -4282,6 +4366,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         else {
             return;
         };
+        if matches!(target, Some(ProfileHitTarget::Anchor(_)))
+            && point_after.position == point_before.position
+        {
+            self.profile_last_anchor_click = Some((gesture.point_id, std::time::Instant::now()));
+        }
         let Some(spline) = self.state.project.project.get_spline_mut(gesture.spline_id) else {
             return;
         };
@@ -4600,8 +4689,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return Target::None;
         }
         let camera = &self.state.session.camera;
-        let scene =
-            petunia_core::viewport_query::ViewportSceneQuery::new(&self.state.project.project);
+        let scene = self.scene_query();
         let ndc = [x * 2.0 - 1.0, 1.0 - y * 2.0];
         if domain == SelectionDomain::Object {
             return scene
@@ -4663,8 +4751,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.show_xray {
             return false;
         }
-        let scene =
-            petunia_core::viewport_query::ViewportSceneQuery::new(&self.state.project.project);
+        let scene = self.scene_query();
         !scene.point_visible(&self.state.session.camera, position)
     }
 
@@ -5325,6 +5412,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.workspace != Workspace::Paint {
             return false;
         }
+        if self.state.session.tools.active_tool == "select" {
+            // A ferramenta de seleção não pinta: o clique troca objeto/face.
+            return false;
+        }
         if self.state.project.active_mesh().is_none() {
             self.state.set_status("No active mesh to paint");
             return false;
@@ -5456,7 +5547,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let ndc_x = x / width * 2.0 - 1.0;
         let ndc_y = 1.0 - y / height * 2.0;
         let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
-        let (face, hit) = pick_face_hit(&self.state, origin, direction)?;
+        let (face, hit) = self.paint_pick(origin, direction)?;
         let isolate = self.state.session.tools.paint_isolate_selection;
         let uv = petunia_module_paint::PaintModule::face_hit_uv(&self.state, face, hit, isolate)?;
         petunia_module_paint::PaintModule::uv_to_px(&self.state, uv)
@@ -9794,23 +9885,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if width <= 1.0 || height <= 1.0 || !pixel[0].is_finite() || !pixel[1].is_finite() {
             return None;
         }
-        let revision = self.state.project.project.revision_clock();
-        if self
-            .region_planes_cache
-            .as_ref()
-            .is_none_or(|(cached, _)| *cached != revision)
-        {
-            self.region_planes_cache = Some((revision, self.state.profile_region_planes()));
-        }
-        let planes = &self.region_planes_cache.as_ref()?.1;
-        if planes.is_empty() {
+        if self.shape_cache().planes.is_empty() {
             return None;
         }
         let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
         let camera = &self.state.session.camera;
         let (origin, direction) = camera.ray(ndc.x, ndc.y);
         let hit = petunia_core::region_at_ray(
-            planes,
+            &self.shape_cache().planes,
             origin,
             direction,
             camera.proj == petunia_core::Projection::Perspective,
@@ -9845,7 +9927,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.region_hover = None;
-        self.region_planes_cache = None;
+        *self.region_planes_cache.borrow_mut() = None;
         self.tool_modal = Some(ToolModalKind::Extrude);
         self.keyboard_tool_modal_active = false;
         self.tool_modal_value = 0.0;
@@ -10255,7 +10337,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let ndc_x = x / width * 2.0 - 1.0;
             let ndc_y = 1.0 - y / height * 2.0;
             let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
-            if let Some(hit) = pick_face_hit(&self.state, origin, direction) {
+            if let Some(hit) = self.paint_pick(origin, direction) {
                 hits.push(hit);
             }
         }
@@ -10301,6 +10383,89 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 isolate,
             );
         }
+    }
+
+    /// Face do objeto ativo sob o raio, ignorando pontos cobertos por outros
+    /// objetos (pintar nunca atravessa a cena).
+    fn paint_pick(&self, origin: glam::Vec3, direction: glam::Vec3) -> Option<(usize, glam::Vec3)> {
+        let (face, hit) = pick_face_hit(&self.state, origin, direction)?;
+        let scene = self.scene_query();
+        scene
+            .point_visible(&self.state.session.camera, hit)
+            .then_some((face, hit))
+    }
+
+    /// Seleção no workspace PAINT: trocar de objeto ou escolher a parte a pintar.
+    ///
+    /// - clique em outro objeto: ele vira o ativo (e o isolamento o acompanha);
+    /// - clique no objeto ativo: seleciona a face (Shift soma, duplo clique
+    ///   seleciona a ilha UV inteira), base da máscara "Mask to selection";
+    /// - clique no vazio: limpa as faces selecionadas (Shift preserva).
+    fn paint_select_at(&mut self, nx: f32, ny: f32, extend: bool, whole_island: bool) {
+        use petunia_core::HoverTarget as Target;
+        let ndc_x = nx.clamp(0.0, 1.0) * 2.0 - 1.0;
+        let ndc_y = 1.0 - ny.clamp(0.0, 1.0) * 2.0;
+        let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
+        let target = self.pick_target_for_domain(SelectionDomain::Object, nx, ny);
+        let active = self.state.project.active;
+        match target {
+            Target::Object(index) if index != active => {
+                if let Some(mesh) = self.state.project.active_mesh_mut() {
+                    mesh.deselect_all();
+                }
+                self.state.select_object(Some(index), false);
+                self.state.refresh_isolation();
+                let name = self
+                    .state
+                    .project
+                    .active()
+                    .map(|a| a.name.clone())
+                    .unwrap_or_default();
+                self.state.set_status(format!("Painting '{name}'"));
+            }
+            Target::Object(_) => {
+                let face = self.paint_pick(origin, direction).map(|(face, _)| face);
+                if let Some(mesh) = self.state.project.active_mesh_mut() {
+                    match face {
+                        Some(face) => {
+                            let faces: Vec<usize> = if whole_island {
+                                mesh.uv_islands()
+                                    .into_iter()
+                                    .find(|island| island.faces.contains(&face))
+                                    .map(|island| island.faces)
+                                    .unwrap_or_else(|| vec![face])
+                            } else {
+                                vec![face]
+                            };
+                            let was_selected = mesh.faces.get(face).is_some_and(|f| f.selected);
+                            if !extend {
+                                mesh.deselect_all();
+                            }
+                            for fi in &faces {
+                                if let Some(f) = mesh.faces.get_mut(*fi) {
+                                    f.selected = !(extend && was_selected);
+                                }
+                            }
+                            mesh.sync_vert_selection_from_faces();
+                        }
+                        None if !extend => mesh.deselect_all(),
+                        None => {}
+                    }
+                }
+                self.state
+                    .set_status(face.map_or("No face under the cursor".to_string(), |f| {
+                        format!("Face {f} selected")
+                    }));
+            }
+            _ => {
+                if !extend && let Some(mesh) = self.state.project.active_mesh_mut() {
+                    mesh.deselect_all();
+                }
+                self.state.set_status("Nothing under the cursor");
+            }
+        }
+        self.state.sync_selection();
+        self.state.mark_dirty();
     }
 
     pub fn select_viewport(&mut self, normalized_x: f32, normalized_y: f32, extend: bool) {
@@ -10370,7 +10535,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
 
         if self.state.workspace == Workspace::Paint {
-            if let Some((face, hit)) = pick_face_hit(&self.state, origin, direction) {
+            if self.state.session.tools.active_tool == "select" {
+                self.paint_select_at(normalized_x, normalized_y, extend, loop_select);
+                return;
+            }
+            if let Some((face, hit)) = self.paint_pick(origin, direction) {
                 let tool = self.state.session.tools.active_tool.as_str();
                 let brush = match tool {
                     "eraser" => petunia_core::BrushType::Eraser,
@@ -10842,6 +11011,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 Ok(())
             }
             "model.frame_selection" => self.state.dispatch_command("view.frame_selection"),
+            "view.isolate" => {
+                self.state.toggle_isolate();
+                Ok(())
+            }
             other => self.state.dispatch_command(other),
         }
     }
@@ -11078,7 +11251,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if self.tool_modal.is_some() || self.loop_cut.is_some() || self.drag.is_some() {
                 return self.confirm_active_operation();
             }
-            return self.toggle_micro_inspector();
+            // Ocioso: o keymap decide (`Space` = ferramenta anterior).
         }
         if alt && !ctrl && !shift {
             match text.to_ascii_lowercase().as_str() {
@@ -11459,6 +11632,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.primitives" => {
                 self.add_menu_open = true;
             }
+            "global.previous_tool" => return self.swap_to_previous_tool(),
+            "global.micro_inspector" => return self.toggle_micro_inspector(),
+            "window.workspace_draw" => {
+                self.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+            }
+            "window.workspace_poly" => {
+                self.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+            }
+            "window.workspace_paint" => self.apply(UiIntent::SetWorkspace(Workspace::Paint)),
+            "window.workspace_uv" => self.apply(UiIntent::SetWorkspace(Workspace::Uv)),
+            #[cfg(feature = "animation-workspace")]
+            "window.workspace_animate" => self.apply(UiIntent::SetWorkspace(Workspace::Animate)),
+            "paint.select" => self.apply(UiIntent::SetActiveTool("select".into())),
+            "paint.isolate" => {
+                self.state.toggle_isolate();
+            }
+            "paint.airbrush" => self.apply(UiIntent::SetActiveTool("airbrush".into())),
+            "paint.eraser" => self.apply(UiIntent::SetActiveTool("eraser".into())),
+            "paint.color_picker" => self.apply(UiIntent::SetActiveTool("picker".into())),
+            "paint.fill" => self.apply(UiIntent::SetActiveTool("fill".into())),
+            "paint.gradient" => self.apply(UiIntent::SetActiveTool("gradient".into())),
+            "paint.line" => self.apply(UiIntent::SetActiveTool("line".into())),
+            "paint.rectangle" => self.apply(UiIntent::SetActiveTool("rectangle".into())),
             "paint.paint" => self.apply(UiIntent::SetActiveTool("brush".into())),
             "paint.size_decrease" => self.adjust_brush_size(-1.0),
             "paint.size_increase" => self.adjust_brush_size(1.0),
@@ -11495,6 +11691,74 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         }
         true
+    }
+
+    /// `Space`: volta para a ferramenta anterior (e vice-versa). Não faz nada
+    /// durante uma sessão, um arrasto ou uma renomeação.
+    fn swap_to_previous_tool(&mut self) -> bool {
+        if self.state.session.tools.modal.is_some()
+            || self.tool_modal.is_some()
+            || self.loop_cut.is_some()
+            || self.drag.is_some()
+            || self.rename_draft.is_some()
+            || self.tool_session.is_gesture_active()
+        {
+            return false;
+        }
+        let current = self.state.session.tools.active_tool.clone();
+        let mut target = self.previous_tool.clone();
+        if !self.tool_belongs_to_workspace(&target) {
+            target = "select".to_string();
+        }
+        if target == current {
+            return false;
+        }
+        self.apply(UiIntent::SetActiveTool(target));
+        true
+    }
+
+    /// Ferramentas que só existem no workspace PAINT (pincéis, balde e formas).
+    fn is_paint_only_tool(tool: &str) -> bool {
+        matches!(
+            tool,
+            "brush"
+                | "airbrush"
+                | "eraser"
+                | "picker"
+                | "fill"
+                | "line"
+                | "rectangle"
+                | "gradient"
+                | "pixel"
+        )
+    }
+
+    /// Ao trocar de workspace a ferramenta ativa precisa existir no novo: no
+    /// PAINT vira o pincel (o clique pinta); fora dele, uma ferramenta de
+    /// pintura volta para Select.
+    fn normalize_tool_for_workspace(&mut self) {
+        let tool = self.state.session.tools.active_tool.clone();
+        if self.state.workspace == Workspace::Paint {
+            if !self.tool_belongs_to_workspace(&tool) || tool == "select" {
+                self.apply(UiIntent::SetActiveTool("brush".to_string()));
+            }
+        } else if Self::is_paint_only_tool(&tool) || !self.tool_belongs_to_workspace(&tool) {
+            self.apply(UiIntent::SetActiveTool("select".to_string()));
+        }
+        self.previous_tool = "select".to_string();
+    }
+
+    /// A ferramenta existe no workspace atual (evita levar um pincel para o DRAW).
+    fn tool_belongs_to_workspace(&self, tool: &str) -> bool {
+        match self.state.workspace {
+            Workspace::Model => {
+                !Self::is_paint_only_tool(tool) && self.modeling_mode.offers_tool(tool)
+            }
+            Workspace::Paint => tool == "select" || Self::is_paint_only_tool(tool),
+            Workspace::Uv => tool == "select" || tool == "uv_select",
+            #[cfg(feature = "animation-workspace")]
+            Workspace::Animate => tool == "select",
+        }
     }
 
     fn begin_keyboard_transform(&mut self, kind: TransformKind) {
@@ -12534,6 +12798,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             petunia_module_model::profile_workplane_label(&self.state).to_string();
         vm.profile_workplane_locked = self.state.profile.workplane_locked;
         vm.region_hover_commands = self.region_hover_commands();
+        vm.region_shapes_commands = self.region_shapes_commands();
+        vm.profile_outline_commands = self.profile_outline_commands();
         vm.modeling_mode = self.modeling_mode.id().to_string();
         vm.label_workspace_draw_title = self
             .state

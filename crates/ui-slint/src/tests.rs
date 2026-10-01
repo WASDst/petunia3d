@@ -3500,20 +3500,31 @@ fn canvas_image_is_absent_before_a_layer_exists_and_appears_after() {
     assert!(bridge.view_model().paint_canvas_size.contains('×'));
 }
 
+/// Centro (UV) da face `face` do objeto ativo.
+fn face_uv_center(bridge: &SlintUiBridge<PlaceholderViewport>, face: usize) -> (f32, f32) {
+    let uv = &bridge.state.project.active_mesh().unwrap().faces[face].uv;
+    let n = uv.len() as f32;
+    (
+        uv.iter().map(|u| u[0]).sum::<f32>() / n,
+        uv.iter().map(|u| u[1]).sum::<f32>() / n,
+    )
+}
+
 #[test]
 fn clicking_the_uv_editor_selects_the_face_under_the_cursor() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
-    // O cubo usa projeção planar: o centro do espaço UV cai na face 0.
-    assert!(bridge.uv_editor_click(0.5, 0.5, false));
+    // O cubo usa um layout de charts sem sobreposição: o centro da face 0 só cai nela.
+    let (cu, cv) = face_uv_center(&bridge, 0);
+    assert!(bridge.uv_editor_click(cu, cv, false));
     assert_eq!(bridge.view_model().uv_editor.selected_face, 0);
     assert_eq!(bridge.view_model().uv_editor.uv_selected_count, 1);
     assert_eq!(bridge.state.ui.status, "UV: face 0 selected (1 total)");
 
     // Clicar de novo sem Shift substitui a seleção, não acumula.
-    assert!(bridge.uv_editor_click(0.5, 0.5, false));
+    assert!(bridge.uv_editor_click(cu, cv, false));
     assert_eq!(bridge.view_model().uv_editor.uv_selected_count, 1);
     // Com Shift a seleção alterna.
-    assert!(bridge.uv_editor_click(0.5, 0.5, true));
+    assert!(bridge.uv_editor_click(cu, cv, true));
     assert_eq!(bridge.view_model().uv_editor.uv_selected_count, 0);
     assert!(!bridge.state.project.active_mesh().unwrap().faces[0].selected);
     assert!(bridge.state.session.selection.faces.is_empty());
@@ -3580,7 +3591,8 @@ fn uv_editor_click_off_the_layout_clears_the_selection_and_says_so() {
 #[test]
 fn uv_transforms_move_scale_and_rotate_the_selected_faces() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
-    bridge.uv_editor_click(0.5, 0.5, false);
+    let (cu, cv) = face_uv_center(&bridge, 0);
+    bridge.uv_editor_click(cu, cv, false);
     let before = bridge.state.project.active_mesh().unwrap().faces[0]
         .uv
         .clone();
@@ -6733,13 +6745,13 @@ fn test_micro_inspector_toggle_and_shortcut() {
     assert!(!bridge.view_model().micro_inspector_open);
     assert!(!bridge.overlays.contains(OverlayId::MicroInspector));
 
-    // Abrir via atalho de teclado Space
-    assert!(bridge.route_shortcut("Space", false, false, false));
+    // Abrir via atalho de teclado Shift+Space (Space puro = ferramenta anterior)
+    assert!(bridge.route_shortcut("Space", false, true, false));
     assert!(bridge.micro_inspector_open);
     assert!(bridge.view_model().micro_inspector_open);
 
-    // Pressionar Space novamente fecha
-    assert!(bridge.route_shortcut("Space", false, false, false));
+    // Pressionar Shift+Space novamente fecha
+    assert!(bridge.route_shortcut("Space", false, true, false));
     assert!(!bridge.micro_inspector_open);
     assert!(!bridge.view_model().micro_inspector_open);
 }

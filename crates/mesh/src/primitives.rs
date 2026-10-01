@@ -4,6 +4,9 @@ use super::{Face, Mesh, Vertex, triangulate};
 use glam::Vec3;
 use std::collections::{HashMap, HashSet};
 
+/// Margem (em UV) entre charts do layout padrão das primitivas.
+pub const DEFAULT_UV_PADDING: f32 = 0.01;
+
 /// Ponto médio soldado de uma aresta (cache por par ordenado).
 fn midpoint_vertex(
     a: usize,
@@ -351,7 +354,7 @@ impl Mesh {
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
         };
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -372,7 +375,7 @@ impl Mesh {
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
         };
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -446,7 +449,7 @@ impl Mesh {
                 m.push_face(Face::new(vec![ct, upper[j], upper[i]]));
             }
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -488,7 +491,7 @@ impl Mesh {
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
         };
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -520,7 +523,7 @@ impl Mesh {
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
         };
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -550,7 +553,7 @@ impl Mesh {
             }
             m.push_face(Face::new((base..base + n as u32).collect()));
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -589,7 +592,7 @@ impl Mesh {
                 ]));
             }
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -663,7 +666,7 @@ impl Mesh {
         for [a, b, c] in faces {
             m.push_face(Face::new(vec![a as u32, b as u32, c as u32]));
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -717,7 +720,7 @@ impl Mesh {
                 (ring(1) + j) as u32,
             ]));
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -810,7 +813,7 @@ impl Mesh {
                 }
             }
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
     }
 
@@ -896,7 +899,7 @@ impl Mesh {
             m.push_face(Face::new(start_verts));
             m.push_face(Face::new(end_verts));
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         Ok(m)
     }
 
@@ -953,7 +956,7 @@ impl Mesh {
                 off + k as u32,
             ]));
         }
-        m.project_planar();
+        m.layout_uv_charts(DEFAULT_UV_PADDING);
         Ok(m)
     }
 }

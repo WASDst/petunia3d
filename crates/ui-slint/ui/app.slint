@@ -185,6 +185,8 @@ export struct ShortcutsEntry {
     view-pivot: string,
     view-snap: string,
     view-prop: string,
+    paint-select: string,
+    paint-isolate: string,
     paint-brush: string,
     paint-airbrush: string,
     paint-eraser: string,
@@ -486,11 +488,18 @@ component PetuniaSlider inherits Rectangle {
     in property <float> maximum: 100.0;
     in property <float> step: 0.0;
     in property <bool> enabled: true;
+    /// `true` quando `value` vem de um binding de uma via (`value: expr`): escrever
+    /// em `value` desfaria o binding e o slider deixaria de seguir o modelo
+    /// (Undo, recarregar preferências, troca de linha). Nesse modo o slider só
+    /// emite `changed` e mostra o valor arrastado enquanto o ponteiro está preso.
+    in property <bool> controlled: false;
     callback changed(float);
     callback released(float);
 
     property <float> span: max(root.maximum - root.minimum, 0.0001);
-    property <float> ratio: clamp((root.value - root.minimum) / root.span, 0.0, 1.0);
+    property <float> drag-value: root.value;
+    property <float> shown: (root.controlled && slider-touch.pressed) ? root.drag-value : root.value;
+    property <float> ratio: clamp((root.shown - root.minimum) / root.span, 0.0, 1.0);
 
     accessible-role: slider;
     accessible-value: root.value;
@@ -505,8 +514,12 @@ component PetuniaSlider inherits Rectangle {
     function apply(v: float) {
         let snapped = root.step > 0.0 ? root.minimum + round((v - root.minimum) / root.step) * root.step : v;
         let next = clamp(snapped, root.minimum, root.maximum);
-        if next != root.value {
-            root.value = next;
+        if next != root.shown {
+            if root.controlled {
+                root.drag-value = next;
+            } else {
+                root.value = next;
+            }
             root.changed(next);
         }
     }
@@ -558,8 +571,8 @@ component PetuniaSlider inherits Rectangle {
                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                     root.apply(root.minimum + root.span * clamp((self.mouse-x - 7px) / max(root.width - 14px, 1px), 0.0, 1.0));
                 }
-                if event.kind == PointerEventKind.up && event.button == PointerEventButton.left {
-                    root.released(root.value);
+                if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left) || event.kind == PointerEventKind.cancel {
+                    root.released(root.controlled ? root.drag-value : root.value);
                 }
             }
             moved => {
@@ -669,21 +682,48 @@ component PanelDragHandle inherits TouchArea {
     in property <length> max-x;
     in property <length> max-y;
     callback moved-to(length, length);
-    property <length> start-x;
-    property <length> start-y;
     mouse-cursor: MouseCursor.move;
-    pointer-event(event) => {
-        if event.kind == PointerEventKind.down {
-            root.start-x = root.panel-x;
-            root.start-y = root.panel-y;
-        }
-    }
+    // `mouse-x`/`pressed-x` são relativos a este próprio elemento, que anda junto
+    // com o painel. Somar o deslocamento à posição ATUAL (e não à posição do
+    // clique) mantém o ponto pressionado sob o cursor; partir da posição do
+    // clique oscilava a cada quadro e o painel "travava".
     moved => {
         root.moved-to(
-            clamp(root.start-x + (self.mouse-x - self.pressed-x), 0px, max(root.max-x, 0px)),
-            clamp(root.start-y + (self.mouse-y - self.pressed-y), 0px, max(root.max-y, 0px)));
+            clamp(root.panel-x + (self.mouse-x - self.pressed-x), 0px, max(root.max-x, 0px)),
+            clamp(root.panel-y + (self.mouse-y - self.pressed-y), 0px, max(root.max-y, 0px)));
     }
     double-clicked => { root.moved-to(-1px, -1px); }
+}
+
+/// Alça de redimensionamento no canto inferior direito de um painel flutuante.
+/// Duplo clique volta ao tamanho padrão (largura e altura 0).
+component PanelResizeGrip inherits TouchArea {
+    in property <length> panel-w;
+    in property <length> panel-h;
+    in property <length> min-w: 340px;
+    in property <length> min-h: 260px;
+    in property <length> max-w: 4000px;
+    in property <length> max-h: 4000px;
+    callback resized-to(length, length);
+    width: 20px;
+    height: 20px;
+    mouse-cursor: MouseCursor.nwse-resize;
+    accessible-role: none;
+    moved => {
+        root.resized-to(
+            clamp(root.panel-w + (self.mouse-x - self.pressed-x), root.min-w, max(root.max-w, root.min-w)),
+            clamp(root.panel-h + (self.mouse-y - self.pressed-y), root.min-h, max(root.max-h, root.min-h)));
+    }
+    double-clicked => { root.resized-to(0px, 0px); }
+    Path {
+        width: 12px;
+        height: 12px;
+        x: parent.width - self.width - 3px;
+        y: parent.height - self.height - 3px;
+        commands: "M 11 1 L 1 11 M 11 5 L 5 11 M 11 9 L 9 11";
+        stroke: DesignTokens.text-muted;
+        stroke-width: 1.2px;
+    }
 }
 
 /// Item de menu: rótulo, atalho, check opcional, estado desativado e realce de teclado.
@@ -3322,6 +3362,12 @@ export component PetuniaSlintShell inherits Window {
     in-out property <length> canvas-panel-x: -1px;
     in-out property <length> canvas-panel-y: -1px;
     in-out property <length> settings-panel-x: -1px;
+    in-out property <length> settings-panel-w: 0px;
+    in-out property <length> settings-panel-h: 0px;
+    in-out property <length> ref-panel-w: 0px;
+    in-out property <length> ref-panel-h: 0px;
+    in-out property <length> canvas-panel-w: 0px;
+    in-out property <length> canvas-panel-h: 0px;
     in-out property <length> settings-panel-y: -1px;
     in-out property <[ReferenceSlotData]> reference-slots: [];
     in-out property <int> reference-total-count: 0;
@@ -3450,6 +3496,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> paint-symmetry-z: false;
     in-out property <bool> paint-target-vertex: false;
     in-out property <bool> paint-mask-selection: false;
+    in-out property <bool> isolate-active: false;
     in-out property <bool> asset-library-visible: false;
     in-out property <bool> is-orthographic: false;
     in-out property <bool> is-wireframe: true;
@@ -3885,6 +3932,8 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> profile-closed: false;
     in-out property <string> profile-preview-commands: "";
     in-out property <string> region-hover-commands: "";
+    in-out property <string> region-shapes-commands: "";
+    in-out property <string> profile-outline-commands: "";
     in-out property <string> poly-pen-preview-commands: "";
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
@@ -4168,7 +4217,7 @@ export component PetuniaSlintShell inherits Window {
     callback profile-volume-confirm();
     callback profile-volume-cancel();
     callback profile-revolve-angle-set(string) -> bool;
-    callback viewport-profile-pointer-down(float, float, bool) -> bool;
+    callback viewport-profile-pointer-down(float, float, bool, bool) -> bool;
     callback viewport-profile-pointer-move(float, float, bool);
     callback viewport-profile-pointer-up();
     callback viewport-profile-drag-handle(float, float, bool);
@@ -5026,6 +5075,23 @@ export component PetuniaSlintShell inherits Window {
                         stroke-width: 2px;
                     }
 
+                    // Formas do Draw sempre visíveis: tinta leve das regiões e contorno
+                    // dos perfis que não estão em edição.
+                    if root.region-shapes-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.region-shapes-commands;
+                        fill-rule: evenodd;
+                        fill: DesignTokens.selection.transparentize(0.9);
+                        stroke: DesignTokens.selection.transparentize(0.6);
+                        stroke-width: 1px;
+                    }
+                    if root.profile-outline-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.profile-outline-commands;
+                        fill: transparent;
+                        stroke: DesignTokens.selection.transparentize(0.35);
+                        stroke-width: 1.5px;
+                    }
                     // Região fechada sob o cursor (Draw/Push-Pull): tinta translúcida.
                     if root.region-hover-commands != "": Path {
                         fit: ImageFit.preserve;
@@ -5301,7 +5367,7 @@ export component PetuniaSlintShell inherits Window {
                                 pending-box-select = false;
                                 pending-lasso-select = false;
                                 if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
-                                    if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt) {
+                                    if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
                                         is-profile-point-drag = true;
                                         consume-click = true;
                                     } else if root.profile-volume-mode != "none" {
@@ -5358,7 +5424,7 @@ export component PetuniaSlintShell inherits Window {
                                         // não exigir um primeiro clique descartável.
                                         is-keyboard-transform-drag = true;
                                         consume-click = true;
-                                    } else if root.active-workspace == "PAINT" {
+                                    } else if root.active-workspace == "PAINT" && root.active-tool != "select" {
                                         is-painting = true;
                                         root.viewport-paint-begin(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
                                     } else if root.active-tool == "slice" {
@@ -7631,6 +7697,22 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "PAINT": ToolButton {
+                                icon: IconSet.MousePointer2;
+                                semantic-label: Tr.t("sl.select");
+                                shortcut: root.shortcuts.paint-select;
+                                description: Tr.t("sl.paint_select_description");
+                                active: active-tool == "select";
+                                clicked => { root.active-tool-changed("select"); }
+                            }
+                            if active-workspace == "PAINT": ToolButton {
+                                icon: root.isolate-active ? IconSet.EyeOff : IconSet.Eye;
+                                semantic-label: root.isolate-active ? Tr.t("sl.un_isolate") : Tr.t("sl.isolate");
+                                shortcut: root.shortcuts.paint-isolate;
+                                description: Tr.t("sl.paint_isolate_description");
+                                active: root.isolate-active;
+                                clicked => { root.command-executed("view.isolate"); }
+                            }
+                            if active-workspace == "PAINT": ToolButton {
                                 icon: IconSet.Paintbrush;
                                 semantic-label: Tr.t("sl.brush");
                                 shortcut: root.shortcuts.paint-brush;
@@ -8509,6 +8591,7 @@ export component PetuniaSlintShell inherits Window {
                                             minimum: param.minimum;
                                             maximum: param.maximum;
                                             value: param.value;
+                                            controlled: true;
                                             changed(value) => { root.paint-effect-param-set(param.key, value); }
                                         }
                                     }
@@ -8997,6 +9080,7 @@ export component PetuniaSlintShell inherits Window {
                                                 minimum: 0.0;
                                                 maximum: 1.0;
                                                 value: layer.opacity;
+                                                controlled: true;
                                                 changed(value) => { root.paint-layer-opacity-set(layer.id, value); }
                                             }
                                         }
@@ -11418,8 +11502,8 @@ export component PetuniaSlintShell inherits Window {
             width: parent.width;
             height: parent.height;
             canvas-panel := Rectangle {
-                width: min(520px, parent.width - 40px);
-                height: min(576px, parent.height - 80px);
+                width: min(root.canvas-panel-w > 0px ? root.canvas-panel-w : 520px, parent.width - 40px);
+                height: min(root.canvas-panel-h > 0px ? root.canvas-panel-h : 576px, parent.height - 80px);
                 x: root.canvas-panel-x < 0px ? min(60px, max(parent.width - self.width, 0px)) : clamp(root.canvas-panel-x, 0px, max(parent.width - self.width, 0px));
                 y: root.canvas-panel-y < 0px ? min(56px, max(parent.height - self.height, 0px)) : clamp(root.canvas-panel-y, 0px, max(parent.height - self.height, 0px));
                 border-radius: DesignTokens.radius-panel;
@@ -11430,6 +11514,19 @@ export component PetuniaSlintShell inherits Window {
                 drop-shadow-color: DesignTokens.shadow;
                 drop-shadow-offset-y: 6px;
                 TouchArea { }
+
+                PanelResizeGrip {
+                    z: 10;
+                    x: parent.width - self.width;
+                    y: parent.height - self.height;
+                    panel-w: canvas-panel.width;
+                    panel-h: canvas-panel.height;
+                    min-w: 300px;
+                    min-h: 260px;
+                    max-w: root.width - 40px;
+                    max-h: root.height - 80px;
+                    resized-to(w, h) => { root.canvas-panel-w = w; root.canvas-panel-h = h; }
+                }
 
                 VerticalLayout {
                     Rectangle {
@@ -11502,8 +11599,8 @@ export component PetuniaSlintShell inherits Window {
             // Painel flutuante não modal: sem scrim, a viewport continua visível e utilizável.
             ref-panel := Rectangle {
                 // Compacto e ancorado à esquerda por padrão: a viewport segue visível.
-                width: min(440px, parent.width - 40px);
-                height: min(640px, parent.height - 80px);
+                width: min(root.ref-panel-w > 0px ? root.ref-panel-w : 440px, parent.width - 40px);
+                height: min(root.ref-panel-h > 0px ? root.ref-panel-h : 640px, parent.height - 80px);
                 x: root.ref-panel-x < 0px ? min(60px, max(parent.width - self.width, 0px)) : clamp(root.ref-panel-x, 0px, max(parent.width - self.width, 0px));
                 y: root.ref-panel-y < 0px ? min(56px, max(parent.height - self.height, 0px)) : clamp(root.ref-panel-y, 0px, max(parent.height - self.height, 0px));
                 border-radius: 8px;
@@ -11515,6 +11612,17 @@ export component PetuniaSlintShell inherits Window {
                 drop-shadow-offset-y: 6px;
 
                 TouchArea { clicked => {} }
+
+                PanelResizeGrip {
+                    z: 10;
+                    x: parent.width - self.width;
+                    y: parent.height - self.height;
+                    panel-w: ref-panel.width;
+                    panel-h: ref-panel.height;
+                    max-w: root.width - 40px;
+                    max-h: root.height - 80px;
+                    resized-to(w, h) => { root.ref-panel-w = w; root.ref-panel-h = h; }
+                }
 
                 VerticalLayout {
                     padding: 0px;
@@ -11629,8 +11737,8 @@ export component PetuniaSlintShell inherits Window {
             width: parent.width;
             height: parent.height;
             settings-panel := Rectangle {
-                width: min(660px, parent.width - 40px);
-                height: min(520px, parent.height - 40px);
+                width: min(root.settings-panel-w > 0px ? root.settings-panel-w : 660px, parent.width - 40px);
+                height: min(root.settings-panel-h > 0px ? root.settings-panel-h : 520px, parent.height - 40px);
                 x: root.settings-panel-x < 0px ? (parent.width - self.width) / 2 : clamp(root.settings-panel-x, 0px, max(parent.width - self.width, 0px));
                 y: root.settings-panel-y < 0px ? (parent.height - self.height) / 2 : clamp(root.settings-panel-y, 0px, max(parent.height - self.height, 0px));
                 border-radius: 8px;
@@ -11643,6 +11751,17 @@ export component PetuniaSlintShell inherits Window {
 
                 // Captura cliques no card para que não atravessem para o scrim de fundo
                 TouchArea { clicked => {} }
+
+                PanelResizeGrip {
+                    z: 10;
+                    x: parent.width - self.width;
+                    y: parent.height - self.height;
+                    panel-w: settings-panel.width;
+                    panel-h: settings-panel.height;
+                    max-w: root.width - 40px;
+                    max-h: root.height - 40px;
+                    resized-to(w, h) => { root.settings-panel-w = w; root.settings-panel-h = h; }
+                }
 
                 VerticalLayout {
                     padding: 0px;
@@ -12248,6 +12367,7 @@ export component PetuniaSlintShell inherits Window {
                                         PetuniaSlider {
                                             horizontal-stretch: 1; minimum: 0; maximum: 1000;
                                             value: root.double-tap-interval-ms;
+                                            controlled: true;
                                             accessible-label: root.label-double-tap-interval;
                                             changed(value) => { root.double-tap-interval-set(Math.round(value)); }
                                             released(value) => { root.double-tap-interval-released(Math.round(value)); }
@@ -12266,6 +12386,7 @@ export component PetuniaSlintShell inherits Window {
                                         PetuniaSlider {
                                             horizontal-stretch: 1; minimum: 2; maximum: 16;
                                             value: root.drag-threshold-px;
+                                            controlled: true;
                                             accessible-label: root.label-drag-threshold;
                                             changed(value) => { root.drag-threshold-set(Math.round(value)); }
                                         }
@@ -12281,6 +12402,7 @@ export component PetuniaSlintShell inherits Window {
                                         PetuniaSlider {
                                             horizontal-stretch: 1; minimum: 4; maximum: 48;
                                             value: root.snap-radius-px;
+                                            controlled: true;
                                             accessible-label: root.label-snap-radius;
                                             changed(value) => { root.snap-radius-set(Math.round(value)); }
                                         }

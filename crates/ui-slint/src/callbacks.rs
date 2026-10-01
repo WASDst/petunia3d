@@ -268,6 +268,8 @@ impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
             view_pivot: s.view_pivot.as_str().into(),
             view_snap: s.view_snap.as_str().into(),
             view_prop: s.view_prop.as_str().into(),
+            paint_select: s.paint_select.as_str().into(),
+            paint_isolate: s.paint_isolate.as_str().into(),
             paint_brush: s.paint_brush.as_str().into(),
             paint_airbrush: s.paint_airbrush.as_str().into(),
             paint_eraser: s.paint_eraser.as_str().into(),
@@ -397,6 +399,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_paint_symmetry_z(vm.paint_symmetry_z);
     window.set_paint_target_vertex(vm.paint_target_vertex);
     window.set_paint_mask_selection(vm.paint_mask_selection);
+    window.set_isolate_active(vm.isolate_active);
 
     window.set_pos_x(vm.position[0]);
     window.set_pos_y(vm.position[1]);
@@ -805,6 +808,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
     window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
+    window.set_region_shapes_commands(vm.region_shapes_commands.as_str().into());
+    window.set_profile_outline_commands(vm.profile_outline_commands.as_str().into());
     window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
     window.set_label_poly_pen(vm.label_poly_pen.as_str().into());
     window.set_label_poly_pen_hint(vm.label_poly_pen_hint.as_str().into());
@@ -1865,9 +1870,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let profile_down_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_viewport_profile_pointer_down(move |x, y, alt| {
+    window.on_viewport_profile_pointer_down(move |x, y, alt, ctrl| {
         if let Ok(mut bridge) = profile_down_bridge.lock() {
-            let hit = bridge.profile_pointer_down(x, y, alt);
+            let hit = bridge.profile_pointer_down_ex(x, y, alt, ctrl);
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {

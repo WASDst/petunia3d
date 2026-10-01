@@ -1,6 +1,9 @@
 use petunia_config::keybinds::winit_keys::KeyCode;
 
 pub(crate) fn key_code_from_slint(text: &str) -> Option<KeyCode> {
+    if text == " " {
+        return Some(KeyCode::Space);
+    }
     let normalized = text.trim();
     if normalized.len() == 1 {
         let character = normalized.chars().next()?.to_ascii_uppercase();
@@ -43,6 +46,15 @@ pub(crate) fn key_code_from_slint(text: &str) -> Option<KeyCode> {
             '9' => Some(KeyCode::Digit9),
             '[' => Some(KeyCode::BracketLeft),
             ']' => Some(KeyCode::BracketRight),
+            '/' => Some(KeyCode::Slash),
+            '.' => Some(KeyCode::Period),
+            ',' => Some(KeyCode::Comma),
+            '-' => Some(KeyCode::Minus),
+            '=' => Some(KeyCode::Equal),
+            '`' => Some(KeyCode::Backquote),
+            ';' => Some(KeyCode::Semicolon),
+            '\'' => Some(KeyCode::Quote),
+            '\\' => Some(KeyCode::Backslash),
             _ => None,
         };
     }
@@ -55,6 +67,13 @@ pub(crate) fn key_code_from_slint(text: &str) -> Option<KeyCode> {
         "Escape" => Some(KeyCode::Escape),
         "Tab" => Some(KeyCode::Tab),
         "Space" => Some(KeyCode::Space),
+        "Up" => Some(KeyCode::Up),
+        "Down" => Some(KeyCode::Down),
+        "Left" => Some(KeyCode::Left),
+        "Right" => Some(KeyCode::Right),
+        "PageUp" => Some(KeyCode::PageUp),
+        "PageDown" => Some(KeyCode::PageDown),
+        "Insert" => Some(KeyCode::Insert),
         "F1" => Some(KeyCode::F1),
         "F2" => Some(KeyCode::F2),
         "F3" => Some(KeyCode::F3),

@@ -595,6 +595,11 @@ pub struct ToolState {
     pub brush_lock: crate::brush::BrushLock,
     /// Face travada pelo `BrushLock` no primeiro toque do traço atual.
     pub paint_lock_face: Option<Option<usize>>,
+    /// Faces elegíveis no traço atual (P3D-132). Camada externa `None` = ainda
+    /// não resolvido; interna `None` = sem restrição. Vale por traço.
+    pub paint_restriction: Option<Option<std::sync::Arc<crate::brush::PaintRestriction>>>,
+    /// Cobertura acumulada do traço atual (opacidade × fluxo).
+    pub paint_buffer: Option<crate::brush::StrokeBuffer>,
     pub fill_scope: crate::brush::FillScope,
     /// Canal de textura alvo da pintura (P3D-062). V1: só Albedo opera;
     /// demais canais ficam desabilitados na UI até V1.x.
@@ -675,6 +680,8 @@ impl ToolState {
             brush_projection: crate::brush::BrushProjectionMode::Surface,
             brush_lock: crate::brush::BrushLock::None,
             paint_lock_face: None,
+            paint_restriction: None,
+            paint_buffer: None,
             tool_activation: ToolActivation::Drag,
             hover: HoverTarget::None,
             fill_scope: crate::brush::FillScope::ConnectedPixels,
@@ -2892,6 +2899,12 @@ impl AppState {
     /// e o carimbo real usam **o mesmo** valor. Deriva o tamanho em pixels de
     /// tela para mundo pela projeção da câmera na profundidade do ponto.
     pub fn brush_world_radius(&self, hit: Vec3) -> f32 {
+        self.world_radius_for_px(hit, self.brush_settings().size_px)
+    }
+
+    /// Raio de mundo (metade do diâmetro) de um pincel de `size_px` pixels de
+    /// tela na profundidade de `hit`.
+    pub fn world_radius_for_px(&self, hit: Vec3, size_px: f32) -> f32 {
         let view_dir = self.camera.forward();
         let depth = (hit - self.camera.eye()).dot(view_dir).max(0.05);
         let half_fov = (self.camera.fov_y * 0.5).to_radians();
@@ -2902,7 +2915,7 @@ impl AppState {
             .map(|r| (r.max[1] - r.min[1]) * self.ui.viewport_pixels_per_point)
             .unwrap_or(1080.0);
         let world_per_px = world_height / px_height.max(1.0);
-        self.brush_settings().size_px * world_per_px * 0.5
+        size_px * world_per_px * 0.5
     }
 
     /// Pinta vértices próximos do ponto 3D (vertex paint).
@@ -3046,6 +3059,8 @@ impl AppState {
             // A trava de pincel vale por traço: o próximo traço pode começar em
             // outra superfície.
             self.session.tools.paint_lock_face = None;
+            self.session.tools.paint_restriction = None;
+            self.session.tools.paint_buffer = None;
         }
     }
 
@@ -3053,6 +3068,9 @@ impl AppState {
         let Some(original) = self.session.tools.paint_stroke.take() else {
             return;
         };
+        self.session.tools.paint_restriction = None;
+        self.session.tools.paint_buffer = None;
+        self.session.tools.paint_lock_face = None;
         let colors_changed = original.assets.len() != self.project.assets.len()
             || original
                 .assets
@@ -3659,6 +3677,22 @@ impl AppState {
                 .map(|a| a.name.clone())
                 .unwrap_or_else(|| "Ativo".to_string());
             self.set_status(format!("Objeto '{name}' isolado na cena"));
+        }
+        self.mark_dirty();
+    }
+
+    /// Mantém o isolamento no objeto ativo depois de trocar de objeto.
+    ///
+    /// Sem isso, trocar o ativo com o isolamento ligado deixaria o novo objeto
+    /// escondido. As visibilidades originais continuam guardadas para o
+    /// desfazer do isolamento.
+    pub fn refresh_isolation(&mut self) {
+        if !self.session.isolate_active {
+            return;
+        }
+        let active = self.project.active;
+        for (i, asset) in self.project.assets.iter_mut().enumerate() {
+            asset.visible = i == active;
         }
         self.mark_dirty();
     }

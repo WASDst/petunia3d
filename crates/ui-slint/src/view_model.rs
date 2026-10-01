@@ -146,6 +146,8 @@ pub struct ShortcutsModel {
     pub view_pivot: String,
     pub view_snap: String,
     pub view_prop: String,
+    pub paint_select: String,
+    pub paint_isolate: String,
     pub paint_brush: String,
     pub paint_airbrush: String,
     pub paint_eraser: String,
@@ -216,6 +218,8 @@ impl ShortcutsModel {
             view_pivot: fmt("model.toggle_pivot", "."),
             view_snap: fmt("model.toggle_snap", "Shift+Tab"),
             view_prop: fmt("model.toggle_proportional", "O"),
+            paint_select: fmt("paint.select", "V"),
+            paint_isolate: fmt("paint.isolate", "Numpad /"),
             paint_brush: fmt("paint.paint", "B"),
             paint_airbrush: fmt("paint.airbrush", "Shift+B"),
             paint_eraser: fmt("paint.eraser", "E"),
@@ -255,6 +259,8 @@ pub struct ShellViewModel {
     pub paint_symmetry_z: bool,
     pub paint_target_vertex: bool,
     pub paint_mask_selection: bool,
+    /// Isolamento do objeto ativo ligado (esconde os demais).
+    pub isolate_active: bool,
     pub status_message: String,
     /// 0 info, 1 sucesso, 2 aviso, 3 erro (ver [`classify_status`]).
     pub status_severity: i32,
@@ -559,6 +565,10 @@ pub struct ShellViewModel {
     pub profile_workplane_locked: bool,
     /// Região de perfil em hover (caminho SVG em px da viewport).
     pub region_hover_commands: String,
+    /// Tinta leve de todas as regiões fechadas (DRAW).
+    pub region_shapes_commands: String,
+    /// Contorno dos perfis que não estão em edição (DRAW).
+    pub profile_outline_commands: String,
     /// Pontos coletados pelo Poly Pen até o cursor (caminho SVG).
     pub poly_pen_preview_commands: String,
     pub label_poly_pen: String,
@@ -1193,6 +1203,7 @@ impl ShellViewModel {
             paint_symmetry_z: state.session.tools.paint_symmetry_z,
             paint_target_vertex: false,
             paint_mask_selection: state.session.tools.paint_isolate_selection,
+            isolate_active: state.session.isolate_active,
             status_message,
             status_severity,
             selection_summary: format_selection_summary(state),
@@ -1491,6 +1502,8 @@ impl ShellViewModel {
             label_profile_look_at_plane: String::new(),
             profile_workplane_locked: false,
             region_hover_commands: String::new(),
+            region_shapes_commands: String::new(),
+            profile_outline_commands: String::new(),
             poly_pen_preview_commands: String::new(),
             label_poly_pen: String::new(),
             label_poly_pen_hint: String::new(),

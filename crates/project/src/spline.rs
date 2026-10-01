@@ -290,6 +290,122 @@ impl SplineResource {
         }
     }
 
+    /// Insere um ponto no segmento `segment`, no parâmetro `parameter` (0..1),
+    /// **sem mudar a forma**: na polilinha é uma interpolação; na Bézier cúbica
+    /// é a divisão de De Casteljau, que reajusta as alças dos vizinhos.
+    /// Devolve o id do novo ponto.
+    pub fn split_segment(&mut self, segment: usize, parameter: f64) -> Result<Uuid, SplineError> {
+        if segment >= self.segment_count() {
+            return Err(SplineError::InvalidPointIndex(segment));
+        }
+        let t = finite_parameter(parameter)?.clamp(1.0e-4, 1.0 - 1.0e-4);
+        let count = self.points.len();
+        let (i0, i1) = (segment, (segment + 1) % count);
+        let p0 = DVec3::from_array(self.points[i0].position);
+        let p3 = DVec3::from_array(self.points[i1].position);
+        let mut new_point;
+        match self.interpolation {
+            SplineInterpolation::Polyline => {
+                new_point = SplinePoint::new(p0.lerp(p3, t).to_array());
+            }
+            SplineInterpolation::CubicBezier => {
+                let p1 = p0 + DVec3::from_array(self.points[i0].handle_out);
+                let p2 = p3 + DVec3::from_array(self.points[i1].handle_in);
+                let a = p0.lerp(p1, t);
+                let b = p1.lerp(p2, t);
+                let c = p2.lerp(p3, t);
+                let d = a.lerp(b, t);
+                let e = b.lerp(c, t);
+                let m = d.lerp(e, t);
+                let curved =
+                    self.points[i0].handle_out != [0.0; 3] || self.points[i1].handle_in != [0.0; 3];
+                new_point = SplinePoint::new(m.to_array());
+                if curved {
+                    new_point.handle_in = (d - m).to_array();
+                    new_point.handle_out = (e - m).to_array();
+                    new_point.handle_mode = SplineHandleMode::Aligned;
+                    self.points[i0].handle_out = (a - p0).to_array();
+                    self.points[i1].handle_in = (c - p3).to_array();
+                    // A forma é preservada; as alças dos vizinhos deixam de
+                    // obedecer ao par espelhado/alinhado.
+                    self.points[i0].handle_mode = SplineHandleMode::Broken;
+                    self.points[i1].handle_mode = SplineHandleMode::Broken;
+                }
+            }
+        }
+        let id = new_point.id;
+        self.points.insert(i0 + 1, new_point);
+        self.bump_revision();
+        Ok(id)
+    }
+
+    /// Converte um ponto em reto (sem alças) ou em curva suave (alças
+    /// alinhadas com a direção entre os vizinhos, comprimento `factor` da
+    /// distância a cada um). A spline passa a Bézier cúbica ao curvar.
+    pub fn set_point_curved(
+        &mut self,
+        point_id: Uuid,
+        curved: bool,
+        factor: f64,
+    ) -> Result<(), SplineError> {
+        let index = self
+            .points
+            .iter()
+            .position(|p| p.id == point_id)
+            .ok_or(SplineError::PointNotFound(point_id))?;
+        let count = self.points.len();
+        if !curved {
+            let point = &mut self.points[index];
+            point.handle_in = [0.0; 3];
+            point.handle_out = [0.0; 3];
+            point.handle_mode = SplineHandleMode::Broken;
+            self.bump_revision();
+            return Ok(());
+        }
+        let factor = factor.clamp(0.05, 0.5);
+        let here = DVec3::from_array(self.points[index].position);
+        let prev = if index > 0 {
+            Some(DVec3::from_array(self.points[index - 1].position))
+        } else if self.closed && count > 2 {
+            Some(DVec3::from_array(self.points[count - 1].position))
+        } else {
+            None
+        };
+        let next = if index + 1 < count {
+            Some(DVec3::from_array(self.points[index + 1].position))
+        } else if self.closed && count > 2 {
+            Some(DVec3::from_array(self.points[0].position))
+        } else {
+            None
+        };
+        let direction = match (prev, next) {
+            (Some(p), Some(n)) => (n - p).normalize_or_zero(),
+            (None, Some(n)) => (n - here).normalize_or_zero(),
+            (Some(p), None) => (here - p).normalize_or_zero(),
+            (None, None) => DVec3::ZERO,
+        };
+        if direction == DVec3::ZERO {
+            return Ok(());
+        }
+        let handle_in = prev.map_or(DVec3::ZERO, |p| -direction * (here - p).length() * factor);
+        let handle_out = next.map_or(DVec3::ZERO, |n| direction * (n - here).length() * factor);
+        let point = &mut self.points[index];
+        point.handle_in = handle_in.to_array();
+        point.handle_out = handle_out.to_array();
+        point.handle_mode = SplineHandleMode::Aligned;
+        self.interpolation = SplineInterpolation::CubicBezier;
+        self.bump_revision();
+        Ok(())
+    }
+
+    /// `true` se o ponto tem alça (está "curvo").
+    pub fn point_is_curved(&self, point_id: Uuid) -> bool {
+        self.point(point_id).is_some_and(|p| {
+            self.interpolation == SplineInterpolation::CubicBezier
+                && (p.handle_in != [0.0; 3] || p.handle_out != [0.0; 3])
+        })
+    }
+
     pub fn segment_count(&self) -> usize {
         if self.points.len() < 2 {
             0
@@ -1153,5 +1269,59 @@ mod tests {
                 .iter()
                 .all(|point| point.attachment.is_none())
         );
+    }
+
+    #[test]
+    fn splitting_a_polyline_segment_keeps_the_shape() {
+        let mut spline = SplineResource::from_polyline(
+            "s",
+            &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 2.0, 0.0]],
+            true,
+        );
+        let id = spline.split_segment(0, 0.25).unwrap();
+        assert_eq!(spline.points.len(), 4);
+        assert_eq!(spline.points[1].id, id);
+        assert!((spline.points[1].position[0] - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn splitting_a_bezier_segment_preserves_the_curve() {
+        let mut spline = SplineResource::new("s", SplineInterpolation::CubicBezier);
+        let mut a = SplinePoint::new([0.0, 0.0, 0.0]);
+        a.handle_out = [0.0, 1.0, 0.0];
+        let mut b = SplinePoint::new([2.0, 0.0, 0.0]);
+        b.handle_in = [0.0, 1.0, 0.0];
+        spline.add_point(a).unwrap();
+        spline.add_point(b).unwrap();
+        let before = spline.evaluate_segment(0, 0.5).unwrap();
+        let other = spline.evaluate_segment(0, 0.75).unwrap();
+        spline.split_segment(0, 0.5).unwrap();
+        let after = spline.evaluate_segment(1, 0.0).unwrap();
+        assert!((before[0] - after[0]).abs() < 1e-9 && (before[1] - after[1]).abs() < 1e-9);
+        // o ponto da curva original em t = 0.75 é o ponto médio do 2º trecho
+        let second_half = spline.evaluate_segment(1, 0.5).unwrap();
+        assert!((other[0] - second_half[0]).abs() < 1e-9);
+        assert!((other[1] - second_half[1]).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_point_toggles_between_straight_and_curved() {
+        let mut spline = SplineResource::from_polyline(
+            "s",
+            &[
+                [0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [2.0, 2.0, 0.0],
+                [0.0, 2.0, 0.0],
+            ],
+            true,
+        );
+        let id = spline.points[1].id;
+        assert!(!spline.point_is_curved(id));
+        spline.set_point_curved(id, true, 0.25).unwrap();
+        assert!(spline.point_is_curved(id));
+        assert_eq!(spline.interpolation, SplineInterpolation::CubicBezier);
+        spline.set_point_curved(id, false, 0.25).unwrap();
+        assert!(!spline.point_is_curved(id));
     }
 }

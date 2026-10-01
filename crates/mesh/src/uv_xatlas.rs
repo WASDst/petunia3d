@@ -79,44 +79,46 @@ pub fn unwrap_fallback(mesh: &mut Mesh) -> Result<usize, UnwrapError> {
         .map_err(|_| UnwrapError::InvalidGeometry)?;
     atlas.generate(
         &xatlas_rs_v2::ChartOptions::default(),
-        &xatlas_rs_v2::PackOptions::default(),
+        &xatlas_rs_v2::PackOptions {
+            padding: 2,
+            bilinear: true,
+            resolution: 1024,
+            ..Default::default()
+        },
     );
+    let (atlas_w, atlas_h) = (atlas.width().max(1) as f32, atlas.height().max(1) as f32);
     let meshes = atlas.meshes();
     let output = meshes.first().ok_or(UnwrapError::NoOutput)?;
-
-    // Accumulate per-vertex UVs (xatlas may split verts; average the seams).
-    let mut acc = vec![[0.0f64; 2]; mesh.verts.len()];
-    let mut hits = vec![0u32; mesh.verts.len()];
-    for vert in output.vertex_array.iter() {
-        let xref = vert.xref as usize;
-        if xref >= mesh.verts.len() || !vert.uv.iter().all(|u| u.is_finite()) {
-            continue;
-        }
-        acc[xref][0] += f64::from(vert.uv[0]);
-        acc[xref][1] += f64::from(vert.uv[1]);
-        hits[xref] += 1;
-    }
-    if hits.iter().all(|h| *h == 0) {
+    if output.index_array.len() != mesh.faces.len() * 3 {
         return Err(UnwrapError::NoOutput);
     }
-    let fallback_uv = |vi: usize| {
-        if hits[vi] > 0 {
-            [
-                (acc[vi][0] / f64::from(hits[vi])) as f32,
-                (acc[vi][1] / f64::from(hits[vi])) as f32,
-            ]
-        } else {
-            [0.0, 0.0]
+
+    // UV por **canto** (não por vértice): o xatlas divide vértices nas costuras
+    // entre charts; calcular a média por vértice colapsaria as costuras e
+    // sobreporia charts. As UVs saem em texels do atlas, então normalizamos.
+    let mut new_uv: Vec<Vec<[f32; 2]>> = Vec::with_capacity(mesh.faces.len());
+    for tri in output.index_array.chunks_exact(3) {
+        let mut corners = Vec::with_capacity(3);
+        for &oi in tri {
+            let vert = output
+                .vertex_array
+                .get(oi as usize)
+                .ok_or(UnwrapError::NoOutput)?;
+            if !vert.uv.iter().all(|u| u.is_finite()) {
+                return Err(UnwrapError::NoOutput);
+            }
+            corners.push([
+                (vert.uv[0] / atlas_w).clamp(0.0, 1.0),
+                (vert.uv[1] / atlas_h).clamp(0.0, 1.0),
+            ]);
         }
-    };
-    for face in &mut mesh.faces {
-        let mut uv = Vec::with_capacity(face.verts.len());
-        for vi in &face.verts {
-            uv.push(fallback_uv(*vi as usize));
-        }
+        new_uv.push(corners);
+    }
+    let charts = output.chart_array.len();
+    for (face, uv) in mesh.faces.iter_mut().zip(new_uv) {
         face.uv = uv;
     }
-    Ok(output.chart_array.len())
+    Ok(charts)
 }
 
 #[cfg(test)]

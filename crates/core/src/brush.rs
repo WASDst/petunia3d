@@ -65,6 +65,76 @@ pub enum FillScope {
     Object,
 }
 
+/// Faces elegíveis para receber tinta no traço atual (P3D-132).
+///
+/// Resolvido uma vez por traço a partir da seleção, da trava de pincel e do
+/// isolamento. A máscara de texels (2D) é rasterizada sob demanda, porque o
+/// caminho 3D só precisa da lista de faces.
+#[derive(Debug)]
+pub struct PaintRestriction {
+    pub faces: Vec<bool>,
+    mask: std::sync::OnceLock<petunia_mesh::CoverageMask>,
+}
+
+impl PaintRestriction {
+    pub fn new(faces: Vec<bool>) -> Self {
+        Self {
+            faces,
+            mask: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub fn allows_face(&self, face: usize) -> bool {
+        self.faces.get(face).copied().unwrap_or(false)
+    }
+
+    pub fn allowed_count(&self) -> usize {
+        self.faces.iter().filter(|f| **f).count()
+    }
+
+    /// Máscara de texels `w × h` das faces elegíveis (com 1 px de sangria).
+    pub fn mask(&self, mesh: &petunia_mesh::Mesh, w: u32, h: u32) -> &petunia_mesh::CoverageMask {
+        self.mask.get_or_init(|| {
+            mesh.uv_coverage_mask(
+                self.faces
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, ok)| ok.then_some(i)),
+                w,
+                h,
+                1.0,
+            )
+        })
+    }
+}
+
+/// Buffer do traço atual: fotografia da camada antes do traço e cobertura
+/// acumulada por texel. O resultado é sempre `mistura(base, cor, cobertura)`,
+/// então dabs sobrepostos não escurecem além do teto de opacidade (Photoshop:
+/// *flow* acumula, *opacity* limita).
+#[derive(Clone, Debug)]
+pub struct StrokeBuffer {
+    pub layer: uuid::Uuid,
+    pub w: u32,
+    pub h: u32,
+    /// RGBA8 da camada antes do traço.
+    pub base: Vec<u8>,
+    /// Cobertura acumulada (`0..=1`) por texel.
+    pub coverage: Vec<f32>,
+}
+
+impl StrokeBuffer {
+    pub fn new(layer: uuid::Uuid, w: u32, h: u32, base: Vec<u8>) -> Self {
+        Self {
+            layer,
+            w,
+            h,
+            base,
+            coverage: vec![0.0; (w as usize) * (h as usize)],
+        }
+    }
+}
+
 impl BrushType {
     /// Pincéis de traço livre (carimbam dabs).
     pub const fn is_free_brush(self) -> bool {
