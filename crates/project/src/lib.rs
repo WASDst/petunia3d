@@ -376,6 +376,10 @@ pub struct Asset {
     /// Especificação paramétrica viva da primitiva (None = malha estática B-Rep).
     #[serde(default)]
     pub parametric: Option<petunia_mesh::PrimitiveDescriptor>,
+    /// Cor customizada de overlay de seleção para esta parte (None = usa a cor global).
+    /// Ao criar a parte, começa como None (cor padrão global).
+    #[serde(default)]
+    pub selection_overlay_color: Option<[u8; 3]>,
     #[serde(skip)]
     eval_cache: Option<(u64, u64, Mesh)>,
 }
@@ -400,6 +404,7 @@ impl Asset {
             origin: None,
             parametric: None,
             paint_stack: None,
+            selection_overlay_color: None,
             eval_cache: None,
         }
     }
@@ -422,6 +427,13 @@ impl Asset {
     /// Obtém o material atribuído ao asset a partir do projeto.
     pub fn material<'a>(&self, project: &'a Project) -> Option<&'a Material> {
         self.material_id.and_then(|id| project.get_material(id))
+    }
+
+    /// Obtém a cor efetiva de overlay de seleção para este asset.
+    /// Retorna `Some(cor_custom)` se o asset tem cor customizada,
+    /// ou `None` para usar a cor global do projeto.
+    pub fn effective_selection_overlay_color(&self) -> Option<[u8; 3]> {
+        self.selection_overlay_color
     }
 
     /// Hash estável do estado completo da pilha de modificadores para invalidação de cache.
@@ -1790,6 +1802,17 @@ impl Project {
     pub fn remove_by_id(&mut self, id: Uuid) -> bool {
         if let Some(pos) = self.find(id) {
             self.remove(pos);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Define a cor customizada de overlay de seleção do asset (`None` = usa padrão global).
+    pub fn set_asset_selection_overlay_color(&mut self, id: Uuid, color: Option<[u8; 3]>) -> bool {
+        if let Some(asset) = self.assets.iter_mut().find(|a| a.id == id) {
+            asset.selection_overlay_color = color;
+            self.bump_selection();
             true
         } else {
             false
