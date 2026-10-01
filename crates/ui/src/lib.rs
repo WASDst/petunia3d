@@ -259,6 +259,10 @@ pub fn import_obj_dialog(_state: &mut AppState) {
     file_dialog_service::import_obj_in_canvas();
 }
 
+pub fn import_gltf_dialog(_state: &mut AppState) {
+    file_dialog_service::import_gltf_in_canvas();
+}
+
 pub fn frame_selection(state: &mut AppState) {
     if let Some(o) = state.project.assets.get(state.project.active) {
         let mut c = glam::Vec3::ZERO;

@@ -407,6 +407,16 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "file.import_gltf",
+                "Import glTF / GLB",
+                "Import 3D mesh with materials and textures from glTF or GLB file",
+                CommandCategory::File,
+            )
+            .with_docs(DocsTopic::ImportExport),
+            ImportGltfCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "file.export_obj",
                 "Export OBJ",
                 "Export active mesh to Wavefront OBJ format",
@@ -2690,6 +2700,25 @@ impl Command for ImportObjCmd {
 
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         state.set_status("Import OBJ requested");
+        Ok(())
+    }
+}
+
+/// Comando para importar malha glTF/GLB (com materiais e texturas).
+#[derive(Debug, Clone, Default)]
+pub struct ImportGltfCmd;
+
+impl Command for ImportGltfCmd {
+    fn label(&self) -> &'static str {
+        "import gltf/glb"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        state.set_status("Import glTF/GLB requested");
         Ok(())
     }
 }

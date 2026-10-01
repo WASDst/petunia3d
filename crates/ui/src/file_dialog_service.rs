@@ -18,6 +18,7 @@ pub enum FileDialogAction {
     SaveProject,
     SaveProjectAs,
     ImportObj,
+    ImportGltf,
     ExportObj,
     ExportGlb,
     ImportPalette,
@@ -64,6 +65,11 @@ pub fn save_project_as_in_canvas() {
 /// Abre diálogo in-canvas para importar malha Wavefront OBJ.
 pub fn import_obj_in_canvas() {
     SERVICE.with(|s| s.borrow_mut().import_obj());
+}
+
+/// Abre diálogo in-canvas para importar malha glTF/GLB (com texturas).
+pub fn import_gltf_in_canvas() {
+    SERVICE.with(|s| s.borrow_mut().import_gltf());
 }
 
 /// Abre diálogo in-canvas para exportar malha Wavefront OBJ.
@@ -159,6 +165,17 @@ impl PetuniaFileDialogService {
         self.dialog = dialog;
     }
 
+    /// Abre o diálogo para importar malha glTF/GLB (geometria + materiais + texturas).
+    pub fn import_gltf(&mut self) {
+        self.pending_action = Some(FileDialogAction::ImportGltf);
+        let mut dialog = FileDialog::new()
+            .as_modal(true)
+            .title("Import glTF / GLB Mesh")
+            .add_file_filter_extensions("glTF (*.gltf, *.glb)", vec!["gltf", "glb"]);
+        dialog.pick_file();
+        self.dialog = dialog;
+    }
+
     /// Abre o diálogo para exportar malha Wavefront OBJ.
     pub fn export_obj(&mut self, default_name: &str) {
         self.pending_action = Some(FileDialogAction::ExportObj);
@@ -237,6 +254,20 @@ impl PetuniaFileDialogService {
                     state.set_status(format!("import err: {e}"));
                 }
             }
+            FileDialogAction::ImportGltf => {
+                match ProjectService::import_file_pipeline(
+                    state,
+                    &path,
+                    &petunia_project::pipeline::ImportOptions::default(),
+                ) {
+                    Ok(names) => state.set_status(format!(
+                        "imported {} asset(s) from {}",
+                        names.len(),
+                        path.display()
+                    )),
+                    Err(e) => state.set_status(format!("import err: {e}")),
+                }
+            }
             FileDialogAction::ExportObj => {
                 let active = state.project.active;
                 match ProjectService::export_obj(state, active, &path) {
@@ -312,6 +343,13 @@ pub mod native {
             .pick_file()
     }
 
+    /// Abre diálogo nativo para selecionar malha glTF/GLB.
+    pub fn pick_gltf_file() -> Option<PathBuf> {
+        rfd::FileDialog::new()
+            .add_filter("glTF (*.gltf, *.glb)", &["gltf", "glb"])
+            .pick_file()
+    }
+
     /// Abre diálogo nativo para salvar malha Wavefront OBJ.
     pub fn pick_export_obj_file(default_name: &str) -> Option<PathBuf> {
         rfd::FileDialog::new()
@@ -379,6 +417,9 @@ mod tests {
 
         service.import_obj();
         assert_eq!(service.pending_action, Some(FileDialogAction::ImportObj));
+
+        service.import_gltf();
+        assert_eq!(service.pending_action, Some(FileDialogAction::ImportGltf));
 
         service.save_project_as();
         assert_eq!(

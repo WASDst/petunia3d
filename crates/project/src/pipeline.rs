@@ -161,6 +161,9 @@ impl BatchExportReport {
 pub struct ImportPayload {
     pub meshes: Vec<(String, Mesh)>,
     pub materials: Vec<Material>,
+    /// Índice em `materials` para cada malha (dominante), paralelo a `meshes`.
+    /// `Face.material_slot` dentro de cada malha usa o mesmo espaço de índice.
+    pub mesh_materials: Vec<Option<usize>>,
     pub warnings: Vec<String>,
     /// Esqueletos, pesos de skin e clipes do arquivo (glTF/GLB).
     pub rig: Option<crate::gltf_rig::ImportedRig>,
@@ -345,6 +348,7 @@ impl FormatImporter for ObjImporter {
         Ok(ImportPayload {
             meshes: vec![(name_hint.to_string(), mesh)],
             materials: Vec::new(),
+            mesh_materials: vec![None],
             warnings: Vec::new(),
             rig: None,
         })
@@ -424,15 +428,25 @@ impl FormatImporter for GlbImporter {
         name_hint: &str,
         options: &ImportOptions,
     ) -> Result<ImportPayload, PipelineError> {
-        let meshes =
-            import_gltf::import_glb_bytes(data, name_hint, options.triangulate, options.scale)
-                .map_err(|e| PipelineError::Import(e.to_string()))?;
+        let scene = import_gltf::import_scene_bytes(
+            data,
+            None,
+            name_hint,
+            options.triangulate,
+            options.scale,
+            options.import_materials,
+        )
+        .map_err(|e| PipelineError::Import(e.to_string()))?;
         let rig = import_gltf::import_rig(data, name_hint, options.scale)
             .map_err(|e| PipelineError::Import(e.to_string()))?;
-        let warnings = rig.as_ref().map_or_else(Vec::new, |r| r.warnings.clone());
+        let mut warnings = scene.warnings.clone();
+        if let Some(r) = rig.as_ref() {
+            warnings.extend(r.warnings.iter().cloned());
+        }
         Ok(ImportPayload {
-            meshes,
-            materials: Vec::new(),
+            meshes: scene.meshes,
+            materials: scene.materials,
+            mesh_materials: scene.mesh_materials,
             warnings,
             rig,
         })
@@ -462,18 +476,25 @@ impl FormatImporter for GltfImporter {
         &self,
         data: &[u8],
         name_hint: &str,
-        _options: &ImportOptions,
+        options: &ImportOptions,
     ) -> Result<ImportPayload, PipelineError> {
-        let summary = import_gltf::parse_gltf_json(data)
-            .map_err(|e| PipelineError::Import(format!("glTF JSON validation: {e}")))?;
-
+        // `.gltf` com buffers/imagens embutidos (`data:` URIs). Arquivos com
+        // referências externas usam `DeliveryPipeline::import_file`, que passa
+        // o diretório base.
+        let scene = import_gltf::import_scene_bytes(
+            data,
+            None,
+            name_hint,
+            options.triangulate,
+            options.scale,
+            options.import_materials,
+        )
+        .map_err(|e| PipelineError::Import(e.to_string()))?;
         Ok(ImportPayload {
-            meshes: Vec::new(),
-            materials: Vec::new(),
-            warnings: vec![format!(
-                "glTF 2.0 validado ({name_hint}): {} cenas, {} nós, {} malhas",
-                summary.scenes, summary.nodes, summary.meshes
-            )],
+            meshes: scene.meshes,
+            materials: scene.materials,
+            mesh_materials: scene.mesh_materials,
+            warnings: scene.warnings,
             rig: None,
         })
     }
@@ -552,10 +573,19 @@ impl FormatImporter for PkgImporter {
         let (proj, _, _) =
             package::open_package_bytes(data).map_err(|e| PipelineError::Import(e.to_string()))?;
 
-        let meshes = proj.assets.into_iter().map(|a| (a.name, a.mesh)).collect();
+        let mut meshes = Vec::with_capacity(proj.assets.len());
+        let mut mesh_materials = Vec::with_capacity(proj.assets.len());
+        for asset in &proj.assets {
+            let idx = asset
+                .material_id
+                .and_then(|id| proj.materials.iter().position(|m| m.id == id));
+            meshes.push((asset.name.clone(), asset.mesh.clone()));
+            mesh_materials.push(idx);
+        }
         Ok(ImportPayload {
             meshes,
             materials: proj.materials,
+            mesh_materials,
             warnings: Vec::new(),
             rig: None,
         })
@@ -753,15 +783,49 @@ impl DeliveryPipeline {
             )
         })?;
 
-        let importer = self
-            .importer(format)
-            .ok_or_else(|| PipelineError::UnsupportedFormat(format.label().to_string()))?;
-
         let data = std::fs::read(path)?;
         let name_hint = path
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("imported");
+
+        // glTF/GLB resolve buffers e imagens externos relativos ao arquivo.
+        if matches!(format, FileFormat::Gltf | FileFormat::Glb) {
+            let base = path.parent();
+            let scene = import_gltf::import_scene_bytes(
+                &data,
+                base,
+                name_hint,
+                options.triangulate,
+                options.scale,
+                options.import_materials,
+            )
+            .map_err(|e| match e {
+                import_gltf::GltfImportError::TooLarge => {
+                    PipelineError::Validation("glTF excede limites máximos de segurança".into())
+                }
+                other => PipelineError::Import(other.to_string()),
+            })?;
+            // Rig só existe em GLB autocontido (ou glTF embutido); externo
+            // segue sem skin para não exigir rede/disco extra além do base.
+            let rig = import_gltf::import_rig(&data, name_hint, options.scale)
+                .map_err(|e| PipelineError::Import(e.to_string()))?;
+            let mut warnings = scene.warnings;
+            if let Some(r) = rig.as_ref() {
+                warnings.extend(r.warnings.iter().cloned());
+            }
+            return Ok(ImportPayload {
+                meshes: scene.meshes,
+                materials: scene.materials,
+                mesh_materials: scene.mesh_materials,
+                warnings,
+                rig,
+            });
+        }
+
+        let importer = self
+            .importer(format)
+            .ok_or_else(|| PipelineError::UnsupportedFormat(format.label().to_string()))?;
 
         importer.import_bytes(&data, name_hint, options)
     }

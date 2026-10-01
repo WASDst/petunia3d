@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **100**.
+Total de comandos registrados no motor: **105**.
 
 ## Tabela Geral de Comandos
 
@@ -30,6 +30,7 @@ Total de comandos registrados no motor: **100**.
 | `model.duplicate` | **Duplicate** | `Edit` | Sim | — | Duplicate selected elements or active object |
 | `file.export_glb` | **Export GLB** | `File` | Não | ImportExport | Export scene to binary glTF format |
 | `file.export_obj` | **Export OBJ** | `File` | Não | ImportExport | Export active mesh to Wavefront OBJ format |
+| `file.import_gltf` | **Import glTF / GLB** | `File` | Não | ImportExport | Import 3D mesh with materials and textures from glTF or GLB file |
 | `file.import_obj` | **Import OBJ** | `File` | Não | ImportExport | Import 3D mesh from Wavefront OBJ file |
 | `file.new` | **New Project** | `File` | Não | GettingStarted | Create a blank 3D project |
 | `file.open` | **Open Project** | `File` | Não | GettingStarted | Open a Petunia3D project from disk |
@@ -37,6 +38,10 @@ Total de comandos registrados no motor: **100**.
 | `file.save_as` | **Save Project As** | `File` | Não | — | Save active project to a new file |
 | `file.save_asset` | **Save Active Model as Asset** | `File` | Não | Assets | Save active mesh to project asset library |
 | `help.documentation` | **Documentation** | `Help` | Não | GettingStarted | Open official documentation online |
+| `draw.exclude` | **Exclude** | `Model` | Sim | Modeling | Remove the areas where shapes overlap |
+| `draw.intersect` | **Intersect Shapes** | `Model` | Sim | Modeling | Keep only the area all closed shapes share |
+| `draw.subtract` | **Subtract** | `Model` | Sim | Modeling | Cut the shapes in front out of the shape at the back |
+| `draw.unite` | **Unite** | `Model` | Sim | Modeling | Merge the closed shapes of the sketch plane into one |
 | `model.add_capsule` | **Add Capsule** | `Model` | Não | Modeling | Add a capsule primitive |
 | `model.add_circle` | **Add Circle** | `Model` | Não | Modeling | Add a circle/disc primitive |
 | `model.add_cone` | **Add Cone** | `Model` | Não | Modeling | Add a cone primitive |

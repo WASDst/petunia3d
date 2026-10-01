@@ -78,6 +78,11 @@ int32_t petunia_save_project(PetuniaContext* ctx, const char* path);
 int32_t petunia_import_obj(PetuniaContext* ctx, const char* path);
 
 /**
+ * @brief Import a glTF/GLB file with materials and textures as assets.
+ */
+int32_t petunia_import_gltf(PetuniaContext* ctx, const char* path);
+
+/**
  * @brief Export the active asset to Wavefront OBJ format.
  */
 int32_t petunia_export_obj(PetuniaContext* ctx, const char* path);

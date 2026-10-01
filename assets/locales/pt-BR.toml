@@ -364,6 +364,7 @@ open_project = "Abrir projeto…"
 save = "Salvar"
 save_as = "Salvar como…"
 import_obj = "Importar OBJ…"
+import_gltf = "Importar glTF / GLB…"
 quit = "Sair"
 
 [edit]

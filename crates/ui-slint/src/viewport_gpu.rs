@@ -504,12 +504,18 @@ mod tests {
         let paint = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Overlay, false);
         let overlay = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Features, true);
         assert_eq!(draw, 0, "DRAW esconde a aresta plana");
-        assert!(poly >= 1, "POLY mostra a topologia");
+        assert_eq!(
+            poly, 0,
+            "POLY sem overlay esconde a aresta plana (toggle funciona)"
+        );
         assert_eq!(paint, 0, "PAINT/UV: faces limpas sem overlay");
         assert!(overlay >= 1, "o overlay acrescenta as arestas finas");
+        // Com overlay, POLY mostra a topologia completa.
+        let poly_on = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Topology, true);
+        assert!(poly_on >= 1, "POLY com overlay mostra a topologia");
         // Aresta comum é mais fina que a de feição na mesma largura base.
         let feature_like = center_edge_width_in(&mut viewport, 3.0, 2.0, EdgeMode::Overlay, true);
-        assert!(poly <= feature_like, "{poly} ≤ {feature_like}");
+        assert!(poly_on <= feature_like, "{poly_on} ≤ {feature_like}");
     }
 
     #[test]

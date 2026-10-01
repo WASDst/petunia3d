@@ -14,7 +14,7 @@ postcard = { version = "1", features = ["alloc"] }
 thiserror = { workspace = true }
 bytemuck = "1"
 glam = { workspace = true }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 tempfile = { workspace = true }
 tobj = { workspace = true }
 gltf-json = { workspace = true }

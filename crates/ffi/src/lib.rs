@@ -209,6 +209,32 @@ pub unsafe extern "C" fn petunia_import_obj(ctx: *mut PetuniaContext, path: *con
     }
 }
 
+/// Importa malha glTF/GLB (com materiais e texturas) como novos assets.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn petunia_import_gltf(ctx: *mut PetuniaContext, path: *const c_char) -> i32 {
+    if ctx.is_null() {
+        set_last_error("Contexto nulo");
+        return PETUNIA_ERR_NULL_PTR;
+    }
+    let path_str = match c_str_to_str(path) {
+        Ok(s) => s,
+        Err(err) => return err,
+    };
+
+    let ctx = &mut *ctx;
+    match ProjectService::import_file_pipeline(
+        &mut ctx.state,
+        Path::new(path_str),
+        &petunia_project::pipeline::ImportOptions::default(),
+    ) {
+        Ok(_) => PETUNIA_OK,
+        Err(e) => {
+            set_last_error(format!("Erro ao importar glTF/GLB: {e}"));
+            PETUNIA_ERR_OPERATION_FAILED
+        }
+    }
+}
+
 /// Exporta o asset ativo para Wavefront OBJ.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn petunia_export_obj(ctx: *mut PetuniaContext, path: *const c_char) -> i32 {
