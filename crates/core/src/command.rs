@@ -2943,10 +2943,18 @@ impl Command for BooleanOpCmd {
     fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
         match state.apply_boolean(self.op) {
             Ok(verts) => {
-                state.set_status(format!(
-                    "{}: result with {verts} vertices",
-                    self.label_for()
-                ));
+                let detail = match &state.session.tools.boolean_report {
+                    Some(r) if r.fell_back => format!(
+                        "{} triangles (cleanup refused: kernel result kept)",
+                        r.faces
+                    ),
+                    Some(r) => format!(
+                        "{} faces: {} quads, {} n-gons, {} triangles (was {} triangles)",
+                        r.faces, r.quads, r.ngons, r.triangles, r.kernel_triangles
+                    ),
+                    None => format!("{verts} vertices"),
+                };
+                state.set_status(format!("{}: {detail}", self.label_for()));
                 Ok(())
             }
             Err(error) => Err(CommandError::Execution(error.to_string())),

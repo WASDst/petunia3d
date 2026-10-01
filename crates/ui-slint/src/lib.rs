@@ -822,6 +822,10 @@ pub struct ContextMenuState {
     /// Verdadeiro no modo viewport (sem alvo de asset): só verbetes de
     /// seleção, nunca rename/visibility/lock.
     pub viewport: bool,
+    /// Aresta sob o cursor no momento do clique direito (semente dos loops).
+    pub edge: Option<(u32, u32)>,
+    /// Face sob o cursor no momento do clique direito (semente do Face Loop).
+    pub face: Option<usize>,
 }
 
 /// Id reservado que representa um divisor entre grupos de itens de menu.
@@ -9218,6 +9222,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Liga/desliga o cleanup do resultado booleano (quads em vez de triângulos do kernel).
+    pub fn set_boolean_cleanup(&mut self, cleanup: bool) -> bool {
+        if self.state.session.tools.boolean_cleanup == cleanup {
+            return false;
+        }
+        self.state.session.tools.boolean_cleanup = cleanup;
+        self.state.set_status(if cleanup {
+            "Clean quads on: coplanar regions are merged after Fuse/Cut/Intersect"
+        } else {
+            "Clean quads off: the kernel triangulation is kept"
+        });
+        true
+    }
+
     /// Liga/desliga o modificador **Keep Parts**.
     pub fn set_boolean_keep_parts(&mut self, keep: bool) -> bool {
         if self.state.session.tools.boolean_keep_parts == keep {
@@ -9294,6 +9312,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             y,
             asset,
             viewport: false,
+            edge: None,
+            face: None,
         });
         self.overlays.push(OverlayEntry {
             id: OverlayId::OutlinerContextMenu,
@@ -9310,11 +9330,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// alvo de asset. Id de overlay próprio para o Escape LIFO fechar o menu
     /// certo quando Outliner e viewport competem.
     pub fn open_viewport_context_menu(&mut self, x: f32, y: f32) -> bool {
+        // Os loops partem do que o cursor aponta: a aresta (ou a face) é capturada
+        // agora, porque o menu é um overlay e o hover some quando ele abre.
+        let (edge, face) = self.context_loop_seeds(x, y);
         self.context_menu = Some(ContextMenuState {
             x,
             y,
             asset: uuid::Uuid::nil(),
             viewport: true,
+            edge,
+            face,
         });
         self.overlays.push(OverlayEntry {
             id: OverlayId::ContextMenu,
@@ -9323,6 +9348,93 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             dismiss_on_escape: true,
             dismiss_on_click_away: true,
         });
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Aresta e face sob o cursor (px da viewport) para os loops do menu de contexto.
+    fn context_loop_seeds(&self, x: f32, y: f32) -> (Option<(u32, u32)>, Option<usize>) {
+        let [width, height] = self.viewport_size;
+        if self.state.workspace == Workspace::Paint
+            || !self.state.selection_domain().is_component()
+            || width <= 1.0
+            || height <= 1.0
+        {
+            return (None, None);
+        }
+        let (nx, ny) = (x / width, y / height);
+        let edge = match self.pick_target_for_domain(SelectionDomain::Edge, nx, ny) {
+            petunia_core::HoverTarget::Edge(a, b) => Some((a, b)),
+            _ => None,
+        };
+        let face = match self.pick_target_for_domain(SelectionDomain::Face, nx, ny) {
+            petunia_core::HoverTarget::Face(face) => Some(face),
+            _ => None,
+        };
+        (edge, face)
+    }
+
+    /// Edge Loop / Edge Ring do menu de contexto. Parte da aresta apontada no
+    /// clique direito; sem aresta sob o cursor, expande as arestas já
+    /// selecionadas. `ring` escolhe Edge Ring em vez de Edge Loop.
+    pub fn select_loop_from_context(&mut self, seed: Option<(u32, u32)>, ring: bool) -> bool {
+        // O domínio muda antes de selecionar: a conversão entre domínios reescreve
+        // a seleção e apagaria o loop recém-escolhido.
+        if self.state.selection_domain() != SelectionDomain::Edge {
+            self.state.set_selection_domain(SelectionDomain::Edge);
+            self.sync_viewport_context();
+        }
+        let Some(mesh) = self.state.project.active_mesh_mut() else {
+            return false;
+        };
+        let count = if let Some(edge) = seed {
+            if ring {
+                mesh.select_edge_ring(edge, false)
+            } else {
+                mesh.select_edge_loop(edge, false)
+            }
+        } else if mesh.selected_edges.is_empty() {
+            0
+        } else {
+            mesh.expand_selection_to_edge_loops(ring);
+            mesh.selected_edges.len()
+        };
+        if count == 0 {
+            self.state
+                .set_status("Right-click on an edge to select its loop");
+            return false;
+        }
+        self.state.set_status(format!(
+            "Selected edge {} ({count} edges)",
+            if ring { "ring" } else { "loop" }
+        ));
+        self.state.sync_selection();
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Face Loop do menu de contexto, pela face (e aresta mais próxima) apontada.
+    pub fn select_face_loop_from_context(
+        &mut self,
+        face: Option<usize>,
+        edge: Option<(u32, u32)>,
+    ) -> bool {
+        let Some(face) = face else {
+            self.state
+                .set_status("Right-click on a face to select its loop");
+            return false;
+        };
+        if self.state.selection_domain() != SelectionDomain::Face {
+            self.state.set_selection_domain(SelectionDomain::Face);
+            self.sync_viewport_context();
+        }
+        let Some(mesh) = self.state.project.active_mesh_mut() else {
+            return false;
+        };
+        let count = mesh.select_face_loop(face, edge, false);
+        self.state
+            .set_status(format!("Selected face loop ({count} faces)"));
+        self.state.sync_selection();
         self.state.mark_dirty();
         true
     }
@@ -9444,6 +9556,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let _ = self.execute_core_command("model.flip_normals");
                     true
                 }
+                "edge_loop" => self.select_loop_from_context(menu.edge, false),
+                "edge_ring" => self.select_loop_from_context(menu.edge, true),
+                "face_loop" => self.select_face_loop_from_context(menu.face, menu.edge),
                 "mark_seam" => self.toggle_selected_uv_seams(),
                 "shade_smooth" => self.execute_core_command("model.shade_smooth").is_ok(),
                 "shade_flat" => self.execute_core_command("model.shade_flat").is_ok(),
@@ -10141,26 +10256,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Contorno (e furos) da região em hover, em px da viewport.
     fn region_hover_commands(&self) -> String {
-        use std::fmt::Write as _;
         let Some(hit) = &self.region_hover else {
             return String::new();
         };
-        let [width, height] = self.viewport_size;
-        let matrix = self.state.session.camera.view_proj();
         let mut commands = String::new();
         for ring in std::iter::once(&hit.region.outer).chain(hit.region.holes.iter()) {
-            let mut first = true;
-            for point in ring {
-                let clip = matrix * hit.plane.to_world(*point).extend(1.0);
-                if !clip.is_finite() || clip.w <= 0.05 {
-                    return String::new();
-                }
-                let x = (clip.x / clip.w * 0.5 + 0.5) * width;
-                let y = (0.5 - clip.y / clip.w * 0.5) * height;
-                let action = if std::mem::take(&mut first) { 'M' } else { 'L' };
-                let _ = write!(commands, "{action} {x:.2} {y:.2} ");
-            }
-            commands.push_str("Z ");
+            crate::projection::write_clipped_path(
+                &self.state.session.camera,
+                self.viewport_size,
+                ring.iter().map(|p| hit.plane.to_world(*p)),
+                true,
+                &mut commands,
+            );
         }
         commands
     }
@@ -12545,6 +12652,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         vm.boolean_keep_parts = self.state.session.tools.boolean_keep_parts;
+        vm.boolean_cleanup = self.state.session.tools.boolean_cleanup;
         vm.boolean_ready = self.state.session.tools.boolean_operand.is_some()
             && self.state.project.active_mesh().is_some();
         if let Some(kind) = self.menu_open {

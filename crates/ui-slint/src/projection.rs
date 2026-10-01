@@ -21,6 +21,91 @@ pub(crate) fn project_world_point(
     ])
 }
 
+/// Menor `w` aceito no clip-space (plano de recorte próximo).
+const NEAR_W: f32 = 0.05;
+
+/// Interseção da aresta `a-b` (clip-space) com o plano `w = NEAR_W`.
+fn clip_near_edge(a: glam::Vec4, b: glam::Vec4) -> glam::Vec4 {
+    let t = (NEAR_W - a.w) / (b.w - a.w);
+    a + (b - a) * t.clamp(0.0, 1.0)
+}
+
+fn clip_to_screen(clip: glam::Vec4, viewport: [f32; 2]) -> [f32; 2] {
+    [
+        (clip.x / clip.w * 0.5 + 0.5) * viewport[0],
+        (0.5 - clip.y / clip.w * 0.5) * viewport[1],
+    ]
+}
+
+/// Projeta um anel (ou polilinha) de mundo recortando no plano próximo.
+///
+/// Diferente de `project_world_point` por ponto, que descarta o desenho inteiro
+/// (ou liga pontos que não são vizinhos), o recorte mantém a parte visível:
+/// orbitar com a forma parcialmente atrás da câmera não a faz piscar nem
+/// espirrar por cima da cena. `closed` aplica Sutherland–Hodgman; aberto devolve
+/// trechos (`M` novo a cada descontinuidade). Retorna `false` se nada é visível.
+pub(crate) fn write_clipped_path(
+    camera: &Camera,
+    viewport: [f32; 2],
+    points: impl IntoIterator<Item = glam::Vec3>,
+    closed: bool,
+    out: &mut String,
+) -> bool {
+    use std::fmt::Write as _;
+    let matrix = camera.view_proj();
+    let clip: Vec<glam::Vec4> = points.into_iter().map(|p| matrix * p.extend(1.0)).collect();
+    if clip.len() < 2 || clip.iter().any(|c| !c.is_finite()) {
+        return false;
+    }
+    if closed && clip.len() >= 3 {
+        let mut polygon: Vec<glam::Vec4> = Vec::with_capacity(clip.len() + 2);
+        for i in 0..clip.len() {
+            let (current, next) = (clip[i], clip[(i + 1) % clip.len()]);
+            let (current_in, next_in) = (current.w > NEAR_W, next.w > NEAR_W);
+            if current_in {
+                polygon.push(current);
+            }
+            if current_in != next_in {
+                polygon.push(clip_near_edge(current, next));
+            }
+        }
+        if polygon.len() < 3 {
+            return false;
+        }
+        for (i, c) in polygon.iter().enumerate() {
+            let [x, y] = clip_to_screen(*c, viewport);
+            let action = if i == 0 { 'M' } else { 'L' };
+            let _ = write!(out, "{action} {x:.2} {y:.2} ");
+        }
+        out.push_str("Z ");
+        return true;
+    }
+    let mut wrote = false;
+    let mut pen_down = false;
+    let mut segments: Vec<[glam::Vec4; 2]> = clip.windows(2).map(|w| [w[0], w[1]]).collect();
+    if closed {
+        segments.push([clip[clip.len() - 1], clip[0]]);
+    }
+    for [a, b] in segments {
+        let (a_in, b_in) = (a.w > NEAR_W, b.w > NEAR_W);
+        if !a_in && !b_in {
+            pen_down = false;
+            continue;
+        }
+        let start = if a_in { a } else { clip_near_edge(a, b) };
+        let end = if b_in { b } else { clip_near_edge(a, b) };
+        let [sx, sy] = clip_to_screen(start, viewport);
+        let [ex, ey] = clip_to_screen(end, viewport);
+        if !pen_down || !a_in {
+            let _ = write!(out, "M {sx:.2} {sy:.2} ");
+        }
+        let _ = write!(out, "L {ex:.2} {ey:.2} ");
+        pen_down = b_in;
+        wrote = true;
+    }
+    wrote
+}
+
 pub(crate) fn project_preview_segment(
     camera: &Camera,
     viewport: [f32; 2],
@@ -1813,5 +1898,115 @@ pub(crate) fn compute_protractor(
         center_x: cx,
         center_y: cy,
         angle_degrees: angle_deg,
+    }
+}
+
+#[cfg(test)]
+mod clipped_path_tests {
+    use super::*;
+    use glam::Vec3;
+    use petunia_core::Camera;
+
+    fn camera() -> Camera {
+        Camera::default()
+    }
+
+    fn numbers(commands: &str) -> Vec<f32> {
+        commands
+            .split_whitespace()
+            .filter_map(|t| t.parse::<f32>().ok())
+            .collect()
+    }
+
+    #[test]
+    fn closed_ring_in_front_of_the_camera_is_written_whole() {
+        let camera = camera();
+        let ring = [
+            Vec3::new(-0.5, 0.0, -0.5),
+            Vec3::new(0.5, 0.0, -0.5),
+            Vec3::new(0.5, 0.0, 0.5),
+            Vec3::new(-0.5, 0.0, 0.5),
+        ];
+        let mut out = String::new();
+        assert!(write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            ring,
+            true,
+            &mut out
+        ));
+        assert_eq!(out.matches('M').count(), 1);
+        assert_eq!(out.matches('L').count(), 3);
+        assert!(out.trim_end().ends_with('Z'));
+    }
+
+    #[test]
+    fn ring_crossing_the_near_plane_is_clipped_not_dropped() {
+        let camera = camera();
+        let eye = camera.eye();
+        let forward = camera.forward();
+        let right = camera.right();
+        // Grande quadrado que atravessa o plano da câmera: metade na frente, metade atrás.
+        let center = eye;
+        let ring = [
+            center + right * -3.0 + forward * -4.0,
+            center + right * 3.0 + forward * -4.0,
+            center + right * 3.0 + forward * 6.0,
+            center + right * -3.0 + forward * 6.0,
+        ];
+        let mut out = String::new();
+        assert!(write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            ring,
+            true,
+            &mut out
+        ));
+        let values = numbers(&out);
+        assert!(values.len() >= 6, "restou polígono visível: {out}");
+        assert!(
+            values.iter().all(|v| v.is_finite() && v.abs() < 1.0e6),
+            "sem coordenadas explodidas por w<0: {out}"
+        );
+    }
+
+    #[test]
+    fn ring_entirely_behind_the_camera_writes_nothing() {
+        let camera = camera();
+        let eye = camera.eye();
+        let forward = camera.forward();
+        let ring = [
+            eye - forward * 2.0,
+            eye - forward * 3.0 + camera.right(),
+            eye - forward * 3.0 - camera.right(),
+        ];
+        let mut out = String::new();
+        assert!(!write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            ring,
+            true,
+            &mut out
+        ));
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn open_polyline_restarts_after_a_hidden_stretch() {
+        let camera = camera();
+        let eye = camera.eye();
+        let forward = camera.forward();
+        let a = eye + forward * 3.0;
+        let behind = eye - forward * 3.0;
+        let b = eye + forward * 3.0 + camera.right();
+        let mut out = String::new();
+        assert!(write_clipped_path(
+            &camera,
+            [800.0, 600.0],
+            [a, behind, b],
+            false,
+            &mut out
+        ));
+        assert!(out.matches('M').count() >= 2, "traço interrompido: {out}");
     }
 }

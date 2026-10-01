@@ -229,6 +229,25 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
     window.set_protractor_visible(protractor.visible);
     window.set_protractor_wedge_commands(protractor.wedge_commands.as_str().into());
     window.set_protractor_ticks_commands(protractor.ticks_commands.as_str().into());
+    sync_draw_camera_overlays(window, bridge);
+}
+
+/// Overlays do DRAW/POLY que projetam pontos de mundo com a câmera corrente.
+///
+/// Orbitar, mover e dar zoom só passam por `sync_viewport_overlays`; sem refazer
+/// estes traçados a região, o contorno e a prévia do perfil ficavam parados na
+/// posição da câmera antiga (a "mancha" laranja desalinhada da malha).
+pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
+    window: &PetuniaSlintShell,
+    bridge: &SlintUiBridge<V>,
+) {
+    window.set_region_hover_commands(bridge.region_hover_commands().as_str().into());
+    window.set_region_shapes_commands(bridge.region_shapes_commands().as_str().into());
+    window.set_profile_outline_commands(bridge.profile_outline_commands().as_str().into());
+    window.set_poly_pen_preview_commands(bridge.poly_pen_preview_commands().as_str().into());
+    if bridge.state.session.tools.active_tool == "draw_profile" {
+        window.set_profile_preview_commands(bridge.profile_preview_commands().as_str().into());
+    }
 }
 
 impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
@@ -499,6 +518,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_boolean_operand_name(vm.boolean_operand_name.as_str().into());
     window.set_boolean_ready(vm.boolean_ready);
     window.set_boolean_keep_parts(vm.boolean_keep_parts);
+    window.set_boolean_cleanup(vm.boolean_cleanup);
     window.set_menu_open(vm.menu_open.as_str().into());
     window.set_pivot_menu_open(vm.pivot_menu_open);
     window.set_menu_file_label(vm.menu_file_label.as_str().into());
@@ -2671,6 +2691,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_boolean_keep_parts_set(move |keep| {
         if let Ok(mut bridge) = keep_parts_bridge.lock() {
             bridge.set_boolean_keep_parts(keep);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let cleanup_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_boolean_cleanup_set(move |cleanup| {
+        if let Ok(mut bridge) = cleanup_bridge.lock() {
+            bridge.set_boolean_cleanup(cleanup);
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

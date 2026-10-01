@@ -122,146 +122,6 @@ impl Mesh {
             || !self.selected_edges.is_empty()
     }
 
-    /// Retorna todas as arestas pertencentes ao Edge Loop contínuo a partir de uma aresta semente.
-    /// Segue a topologia através de vértices de valência 4 em malhas quadriláteras ou bordas de contorno.
-    pub fn edge_loop(&self, seed: (u32, u32)) -> Vec<(u32, u32)> {
-        let seed_key = edge_key(seed.0, seed.1);
-        if !self.edges_unique().contains(&seed_key) {
-            return Vec::new();
-        }
-        let mut loop_set = std::collections::HashSet::new();
-        loop_set.insert(seed_key);
-
-        let walk_half = |start_u: u32, start_v: u32| -> Vec<(u32, u32)> {
-            let mut half = Vec::new();
-            let mut prev = start_u;
-            let mut curr = start_v;
-            let mut visited = std::collections::HashSet::new();
-            visited.insert(edge_key(start_u, start_v));
-
-            loop {
-                let edge_faces = self.edge_faces(prev, curr);
-                let incident_faces: Vec<usize> = self
-                    .faces
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, f)| f.verts.contains(&curr))
-                    .map(|(i, _)| i)
-                    .collect();
-
-                let next_candidate: Option<u32> = if edge_faces.len() == 1 {
-                    // Aresta de contorno: seguir pela próxima aresta de contorno conectada a curr
-                    let mut b_edges = Vec::new();
-                    for &fi in &incident_faces {
-                        let f = &self.faces[fi];
-                        let m = f.verts.len();
-                        for k in 0..m {
-                            let a = f.verts[k];
-                            let b = f.verts[(k + 1) % m];
-                            if (a == curr || b == curr)
-                                && edge_key(a, b) != edge_key(prev, curr)
-                                && self.edge_faces(a, b).len() == 1
-                            {
-                                let other = if a == curr { b } else { a };
-                                b_edges.push(other);
-                            }
-                        }
-                    }
-                    b_edges.dedup();
-                    if b_edges.len() == 1 {
-                        Some(b_edges[0])
-                    } else {
-                        None
-                    }
-                } else if edge_faces.len() == 2 && incident_faces.len() == 4 {
-                    // Vértice interior de malha regular: valência 4 e todas as 4 faces são quads
-                    if incident_faces
-                        .iter()
-                        .all(|&fi| self.faces[fi].verts.len() == 4)
-                    {
-                        let mut all_neighbors: Vec<u32> = Vec::new();
-                        for &fi in &incident_faces {
-                            let f = &self.faces[fi];
-                            if let Some(pos) = f.verts.iter().position(|&x| x == curr) {
-                                let v1 = f.verts[(pos + 3) % 4];
-                                let v2 = f.verts[(pos + 1) % 4];
-                                if !all_neighbors.contains(&v1) {
-                                    all_neighbors.push(v1);
-                                }
-                                if !all_neighbors.contains(&v2) {
-                                    all_neighbors.push(v2);
-                                }
-                            }
-                        }
-                        let mut shared_face_neighbors = std::collections::HashSet::new();
-                        shared_face_neighbors.insert(prev);
-                        for &fi in &edge_faces {
-                            let f = &self.faces[fi];
-                            if let Some(pos) = f.verts.iter().position(|&x| x == curr) {
-                                shared_face_neighbors.insert(f.verts[(pos + 3) % 4]);
-                                shared_face_neighbors.insert(f.verts[(pos + 1) % 4]);
-                            }
-                        }
-                        all_neighbors
-                            .into_iter()
-                            .find(|neighbor| !shared_face_neighbors.contains(neighbor))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                match next_candidate {
-                    Some(next_v) => {
-                        let key = edge_key(curr, next_v);
-                        if !visited.insert(key) {
-                            break;
-                        }
-                        half.push(key);
-                        prev = curr;
-                        curr = next_v;
-                    }
-                    None => break,
-                }
-            }
-            half
-        };
-
-        for e in walk_half(seed.0, seed.1) {
-            loop_set.insert(e);
-        }
-        for e in walk_half(seed.1, seed.0) {
-            loop_set.insert(e);
-        }
-
-        loop_set.into_iter().collect()
-    }
-
-    /// Seleciona o Edge Loop completo a partir de uma aresta semente. Retorna a contagem de arestas no loop.
-    pub fn select_edge_loop(&mut self, seed: (u32, u32), extend: bool) -> usize {
-        let loop_edges = self.edge_loop(seed);
-        let count = loop_edges.len();
-        if !extend {
-            self.selected_edges.clear();
-        }
-        for e in loop_edges {
-            self.selected_edges.insert(e);
-        }
-        for v in &mut self.verts {
-            v.selected = false;
-        }
-        for &(a, b) in &self.selected_edges {
-            if let Some(v) = self.verts.get_mut(a as usize) {
-                v.selected = true;
-            }
-            if let Some(v) = self.verts.get_mut(b as usize) {
-                v.selected = true;
-            }
-        }
-        count
-    }
-
     /// Seleciona o Vertex Loop a partir de um vértice semente (caminhando pelas arestas de loop).
     pub fn select_vertex_loop(&mut self, seed_vertex: u32, extend: bool) -> usize {
         let mut incident_edges = Vec::new();
@@ -288,7 +148,13 @@ impl Mesh {
             }
             return 0;
         }
-        let loop_edges = self.edge_loop(incident_edges[0]);
+        // O vértice pertence a até 4+ loops; escolhe o mais longo (o que o usuário
+        // quase sempre quer) em vez da primeira aresta encontrada.
+        let loop_edges = incident_edges
+            .iter()
+            .map(|&edge| self.edge_loop(edge))
+            .max_by_key(Vec::len)
+            .unwrap_or_default();
         if !extend {
             self.deselect_all();
         }

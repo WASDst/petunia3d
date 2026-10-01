@@ -1823,6 +1823,83 @@ fn test_keep_parts_keeps_the_operand_in_the_scene() {
 }
 
 #[test]
+fn test_boolean_cut_returns_quads_not_kernel_triangles_and_undoes_in_one_step() {
+    use petunia_core::BooleanOpCmd;
+    use petunia_mesh::boolean::BooleanOp;
+
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    state.project.assets[0].mesh = petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0);
+    let before_faces = state.project.assets[0].mesh.faces.len();
+    state
+        .project
+        .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
+    let hole = state.project.assets[1].id;
+    state.project.active = 0;
+    state.session.tools.boolean_operand = Some(hole);
+
+    let undo_before = state.project.undo.depth().0;
+    assert!(
+        state
+            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
+            .is_ok()
+    );
+    assert_eq!(state.project.undo.depth().0, undo_before + 1);
+    let report = state
+        .session
+        .tools
+        .boolean_report
+        .clone()
+        .expect("relatório do cleanup");
+    let mesh = state.project.active_mesh().unwrap();
+    let quads = mesh.faces.iter().filter(|f| f.verts.len() == 4).count();
+    assert!(!report.fell_back, "{report:?}");
+    assert!(
+        quads >= 28,
+        "paredes do furo e laterais voltam a ser quads: {quads}"
+    );
+    assert!(
+        mesh.faces.len() < report.kernel_triangles,
+        "menos faces que os triângulos do kernel"
+    );
+    assert!(
+        state.ui.status.contains("quads"),
+        "status: {}",
+        state.ui.status
+    );
+
+    state.undo();
+    assert_eq!(state.project.assets.len(), 2, "o operando volta");
+    assert_eq!(state.project.assets[0].mesh.faces.len(), before_faces);
+}
+
+#[test]
+fn test_boolean_cleanup_can_be_turned_off_to_keep_the_kernel_triangles() {
+    use petunia_core::BooleanOpCmd;
+    use petunia_mesh::boolean::BooleanOp;
+
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    state.project.assets[0].mesh = petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0);
+    state
+        .project
+        .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
+    let hole = state.project.assets[1].id;
+    state.project.active = 0;
+    state.session.tools.boolean_operand = Some(hole);
+    state.session.tools.boolean_cleanup = false;
+
+    assert!(
+        state
+            .dispatch(&BooleanOpCmd::new(BooleanOp::Difference))
+            .is_ok()
+    );
+    let mesh = state.project.active_mesh().unwrap();
+    assert!(mesh.faces.iter().all(|f| f.verts.len() == 3));
+    assert!(state.session.tools.boolean_report.is_none());
+}
+
+#[test]
 fn test_join_merges_both_topologies_without_a_boolean_kernel() {
     use petunia_core::JoinObjectsCmd;
 

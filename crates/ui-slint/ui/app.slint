@@ -3755,6 +3755,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> boolean-operand-name: "";
     in-out property <bool> boolean-ready: false;
     in-out property <bool> boolean-keep-parts: false;
+    in-out property <bool> boolean-cleanup: true;
     in-out property <bool> rename-active: false;
     in-out property <string> menu-open: "";
     in-out property <int> menu-highlight: -1;
@@ -4274,6 +4275,7 @@ export component PetuniaSlintShell inherits Window {
     callback boolean-operand-cleared;
     callback boolean-operand-set(string);
     callback boolean-keep-parts-set(bool);
+    callback boolean-cleanup-set(bool);
     callback join-requested;
     callback paint-fill-scope-set(string);
     callback paint-projection-set(string);
@@ -8586,6 +8588,16 @@ export component PetuniaSlintShell inherits Window {
                                                 TouchArea { clicked => { root.boolean-keep-parts-set(!root.boolean-keep-parts); } }
                                             }
                                             Rectangle {
+                                                horizontal-stretch: 1; height: 26px;
+                                                background: root.boolean-cleanup ? DesignTokens.accent : DesignTokens.surface-raised;
+                                                border-radius: 4px;
+                                                accessible-role: checkbox;
+                                                accessible-label: Tr.t("sl.clean_quads");
+                                                accessible-checked: root.boolean-cleanup;
+                                                Text { text: root.boolean-cleanup ? Tr.t("sl.clean_quads_on") : Tr.t("sl.clean_quads_off"); color: root.boolean-cleanup ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
+                                                TouchArea { clicked => { root.boolean-cleanup-set(!root.boolean-cleanup); } }
+                                            }
+                                            Rectangle {
                                                 width: 92px; height: 26px;
                                                 background: DesignTokens.surface-raised;
                                                 border-radius: 4px;
@@ -11144,6 +11156,21 @@ export component PetuniaSlintShell inherits Window {
                         label: Tr.t("sl.invert_selection");
                         shortcut: "Ctrl+I";
                         clicked => { root.context-menu-open = false; root.context-menu-action("invert_selection"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.edge_loop");
+                        shortcut: "Alt+Click";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("edge_loop"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.edge_ring");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("edge_ring"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
+                        label: Tr.t("sl.face_loop");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("face_loop"); }
                     }
                     if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
                         label: Tr.t("sl.extrude");

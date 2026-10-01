@@ -401,6 +401,7 @@ pub struct ShellViewModel {
     pub boolean_operand_name: String,
     pub boolean_ready: bool,
     pub boolean_keep_parts: bool,
+    pub boolean_cleanup: bool,
     // Reference Image Manager (P3D-013)
     pub reference_manager_open: bool,
     pub reference_slots: Vec<ReferenceSlotViewModel>,
@@ -1352,6 +1353,7 @@ impl ShellViewModel {
             boolean_operand_name: String::new(),
             boolean_ready: false,
             boolean_keep_parts: false,
+            boolean_cleanup: true,
             primitive_active,
             active_asset_is_parametric,
             primitive_kind,
