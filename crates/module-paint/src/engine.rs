@@ -15,7 +15,10 @@
 use std::sync::Arc;
 
 use glam::Vec3;
-use petunia_core::{AppState, BrushLock, BrushSettings, BrushType, PaintRestriction, StrokeBuffer};
+use petunia_core::{
+    AppState, BrushBlend, BrushLock, BrushSettings, BrushStyle, BrushTip, BrushType,
+    PaintRestriction, StrokeBuffer, hash01,
+};
 use petunia_mesh::Mesh;
 use petunia_project::Canvas;
 use petunia_project::paint_layers::TILE_SIZE;
@@ -57,10 +60,19 @@ struct DabParams {
     rate: f32,
     /// Teto de opacidade do traço.
     cap: f32,
+    blend: BrushBlend,
+    /// Densidade do Spray (`0` = não é spray).
+    spray: f32,
+    seed: u32,
+    /// Deslocamento do Smudge em texels (centro atual − centro anterior).
+    delta: [f32; 2],
+    /// Deslocamento origem→destino do Clone (`None` = sem origem definida).
+    clone: Option<[i32; 2]>,
+    blur_radius: i32,
 }
 
 impl DabParams {
-    fn new(settings: BrushSettings, color: [u8; 4]) -> Self {
+    fn new(settings: BrushSettings, style: &BrushStyle, color: [u8; 4]) -> Self {
         let s = settings.sanitized();
         let airbrush = s.kind == BrushType::Airbrush;
         Self {
@@ -73,6 +85,16 @@ impl DabParams {
                 s.flow
             },
             cap: if airbrush { 1.0 } else { s.strength },
+            blend: style.blend,
+            spray: if s.kind == BrushType::Spray {
+                style.spray_density
+            } else {
+                0.0
+            },
+            seed: style.seed,
+            delta: [0.0; 2],
+            clone: None,
+            blur_radius: 1,
         }
     }
 }
@@ -85,11 +107,109 @@ struct Target<'a> {
     tiles_x: u32,
 }
 
+fn lerp_px(a: [u8; 4], b: [f32; 4], m: f32) -> [u8; 4] {
+    let mut out = [0u8; 4];
+    for c in 0..4 {
+        out[c] = (a[c] as f32 * (1.0 - m) + b[c] * m)
+            .round()
+            .clamp(0.0, 255.0) as u8;
+    }
+    out
+}
+
 impl Target<'_> {
+    #[inline]
+    fn px(pixels: &[u8], w: u32, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * w + x) * 4) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+    }
+
+    fn mark(&mut self, x: u32, y: u32) {
+        let tile = (y / TILE_SIZE) * self.tiles_x + x / TILE_SIZE;
+        if let Some(flag) = self.dirty.get_mut(tile as usize) {
+            *flag = true;
+        }
+    }
+
+    /// Borrão: puxa a cor vizinha (no sentido oposto ao movimento) sobre o texel.
+    fn smudge(&mut self, x: u32, y: u32, weight: f32, p: &DabParams) {
+        let a = (weight * p.rate * p.cap).clamp(0.0, 1.0);
+        if a <= 0.0 || (p.delta[0].abs() < 0.01 && p.delta[1].abs() < 0.01) {
+            return;
+        }
+        let (w, h) = (self.buf.w, self.buf.h);
+        let sx = (x as f32 - p.delta[0]).round().clamp(0.0, (w - 1) as f32) as u32;
+        let sy = (y as f32 - p.delta[1]).round().clamp(0.0, (h - 1) as f32) as u32;
+        let cur = Self::px(&self.cv.pixels, w, x, y);
+        let src = Self::px(&self.cv.pixels, w, sx, sy);
+        let out = lerp_px(cur, src.map(f32::from), a);
+        let i = ((y * w + x) * 4) as usize;
+        self.cv.pixels[i..i + 4].copy_from_slice(&out);
+        self.mark(x, y);
+    }
+
+    /// Cor de destino do texel para os pincéis que derivam da própria camada.
+    fn derived_target(&self, x: u32, y: u32, base: [u8; 4], p: &DabParams) -> Option<[f32; 4]> {
+        let (w, h) = (self.buf.w as i32, self.buf.h as i32);
+        match p.kind {
+            BrushType::Dodge => Some([
+                base[0] as f32 + (255.0 - base[0] as f32) * 0.5,
+                base[1] as f32 + (255.0 - base[1] as f32) * 0.5,
+                base[2] as f32 + (255.0 - base[2] as f32) * 0.5,
+                base[3] as f32,
+            ]),
+            BrushType::Burn => Some([
+                base[0] as f32 * 0.5,
+                base[1] as f32 * 0.5,
+                base[2] as f32 * 0.5,
+                base[3] as f32,
+            ]),
+            BrushType::Blur => {
+                let r = p.blur_radius.max(1);
+                let mut acc = [0.0f32; 4];
+                let mut n = 0.0;
+                for dy in -r..=r {
+                    for dx in -r..=r {
+                        let (sx, sy) = (x as i32 + dx, y as i32 + dy);
+                        if sx < 0 || sy < 0 || sx >= w || sy >= h {
+                            continue;
+                        }
+                        let px = Self::px(&self.buf.base, self.buf.w, sx as u32, sy as u32);
+                        for c in 0..4 {
+                            acc[c] += px[c] as f32;
+                        }
+                        n += 1.0;
+                    }
+                }
+                (n > 0.0).then(|| acc.map(|v| v / n))
+            }
+            BrushType::Clone => {
+                let [ox, oy] = p.clone?;
+                let sx = (x as i32 + ox).clamp(0, w - 1) as u32;
+                let sy = (y as i32 + oy).clamp(0, h - 1) as u32;
+                Some(Self::px(&self.buf.base, self.buf.w, sx, sy).map(f32::from))
+            }
+            _ => None,
+        }
+    }
+
     #[inline]
     fn apply(&mut self, x: u32, y: u32, weight: f32, p: &DabParams) {
         if x >= self.buf.w || y >= self.buf.h || weight <= 0.0 {
             return;
+        }
+        if p.kind == BrushType::Smudge {
+            self.smudge(x, y, weight, p);
+            return;
+        }
+        let mut weight = weight;
+        if p.spray > 0.0 {
+            // Cada ponto do spray é cheio; a densidade cai em direção à borda.
+            let gate = hash01(p.seed, x, y, self.buf.dabs);
+            if gate >= p.spray * (0.35 + 0.65 * weight) {
+                return;
+            }
+            weight = 1.0;
         }
         let i = (y * self.buf.w + x) as usize;
         let cov0 = self.buf.coverage[i];
@@ -101,26 +221,32 @@ impl Target<'_> {
         if cov1 <= cov0 + 1e-6 {
             return;
         }
-        self.buf.coverage[i] = cov1;
-        let base = &self.buf.base[i * 4..i * 4 + 4];
-        let mut out = [base[0], base[1], base[2], base[3]];
-        if p.kind == BrushType::Eraser {
+        let base = Self::px(&self.buf.base, self.buf.w, x, y);
+        let out = if p.kind == BrushType::Eraser {
+            let mut out = base;
             out[3] = (base[3] as f32 * (1.0 - cov1 * p.cap).max(0.0)) as u8;
+            out
         } else {
+            let target = match self.derived_target(x, y, base, p) {
+                Some(t) => t,
+                None if matches!(p.kind, BrushType::Clone) => return,
+                None => [
+                    p.blend.channel(base[0] as f32, p.color[0] as f32),
+                    p.blend.channel(base[1] as f32, p.color[1] as f32),
+                    p.blend.channel(base[2] as f32, p.color[2] as f32),
+                    p.color[3] as f32,
+                ],
+            };
             let m = if p.kind == BrushType::Pixel {
                 1.0
             } else {
                 (cov1 * p.cap).clamp(0.0, 1.0)
             };
-            for c in 0..4 {
-                out[c] = (base[c] as f32 * (1.0 - m) + p.color[c] as f32 * m).round() as u8;
-            }
-        }
+            lerp_px(base, target, m)
+        };
+        self.buf.coverage[i] = cov1;
         self.cv.pixels[i * 4..i * 4 + 4].copy_from_slice(&out);
-        let tile = (y / TILE_SIZE) * self.tiles_x + x / TILE_SIZE;
-        if let Some(flag) = self.dirty.get_mut(tile as usize) {
-            *flag = true;
-        }
+        self.mark(x, y);
     }
 
     fn into_dirty(self) -> DirtyTiles {
@@ -132,6 +258,26 @@ impl Target<'_> {
                 .filter_map(|(i, d)| d.then_some(i as u32))
                 .collect(),
         }
+    }
+}
+
+/// Parâmetros do dab `n` do traço: tamanho, opacidade e deslocamento com jitter.
+struct DabJitter {
+    radius_scale: f32,
+    cap_scale: f32,
+    /// Deslocamento aleatório em unidades de raio (ângulo, distância).
+    scatter: (f32, f32),
+}
+
+fn dab_jitter(style: &BrushStyle, n: u32) -> DabJitter {
+    let signed = |salt: u32| hash01(style.seed, n, salt, 11) * 2.0 - 1.0;
+    DabJitter {
+        radius_scale: (1.0 + signed(0) * style.size_jitter).max(0.1),
+        cap_scale: 1.0 - style.opacity_jitter * hash01(style.seed, n, 3, 14),
+        scatter: (
+            hash01(style.seed, n, 1, 12) * std::f32::consts::TAU,
+            hash01(style.seed, n, 2, 13).sqrt() * style.scatter,
+        ),
     }
 }
 
@@ -272,26 +418,69 @@ impl PaintModule {
         if Self::restriction_blocks_everything(restriction.as_ref()) {
             return DirtyTiles::default();
         }
-        let params = DabParams::new(settings, Self::paint_color_rgba(state));
-        let radius = settings.sanitized().radius_px();
+        let style = state.session.tools.brush_style.sanitized();
+        let clone_source = state.session.tools.clone_source;
+        let params = DabParams::new(settings, &style, Self::paint_color_rgba(state));
+        let radius0 = settings.sanitized().size_px * 0.5;
         let result = Self::with_stroke_target(state, |target, mesh| {
             let mask = restriction.as_ref().map(|r| r.mask(mesh, w, h));
-            let r_f = radius as f32;
             for &(cx, cy) in points {
-                let (x0, x1) = (cx.saturating_sub(radius), (cx + radius).min(w - 1));
-                let (y0, y1) = (cy.saturating_sub(radius), (cy + radius).min(h - 1));
+                let n = target.buf.dabs;
+                target.buf.dabs = n.wrapping_add(1);
+                let jitter = dab_jitter(&style, n);
+                let radius = (radius0 * jitter.radius_scale).max(0.5);
+                let scatter = jitter.scatter.1 * radius;
+                let center = [
+                    cx as f32 + scatter * jitter.scatter.0.cos(),
+                    cy as f32 + scatter * jitter.scatter.0.sin(),
+                ];
+                let mut dab = params;
+                dab.cap *= jitter.cap_scale;
+                dab.blur_radius = ((radius / 6.0).round() as i32).clamp(1, 4);
+                if dab.kind == BrushType::Smudge {
+                    dab.delta = target
+                        .buf
+                        .last_texel
+                        .map_or([0.0; 2], |l| [center[0] - l[0], center[1] - l[1]]);
+                    target.buf.last_texel = Some(center);
+                }
+                if dab.kind == BrushType::Clone {
+                    if target.buf.clone_offset.is_none() {
+                        target.buf.clone_offset = clone_source.map(|s| {
+                            [
+                                (s[0] - center[0]).round() as i32,
+                                (s[1] - center[1]).round() as i32,
+                            ]
+                        });
+                    }
+                    dab.clone = target.buf.clone_offset;
+                }
+                let reach = (radius * 1.5).ceil() as i64 + 1;
+                let (x0, x1) = (
+                    (center[0] as i64 - reach).max(0),
+                    (center[0] as i64 + reach).min(w as i64 - 1),
+                );
+                let (y0, y1) = (
+                    (center[1] as i64 - reach).max(0),
+                    (center[1] as i64 + reach).min(h as i64 - 1),
+                );
                 for y in y0..=y1 {
                     for x in x0..=x1 {
-                        let dx = x as f32 - cx as f32;
-                        let dy = y as f32 - cy as f32;
-                        let t = (dx * dx + dy * dy).sqrt() / r_f.max(0.5);
+                        let a = (x as f32 - center[0]) / radius;
+                        let b = (y as f32 - center[1]) / radius;
+                        let t = style.tip_distance(a, b);
                         if t > 1.0 {
                             continue;
                         }
-                        if mask.is_some_and(|m| !m.allows(x, y)) {
+                        if mask.is_some_and(|m| !m.allows(x as u32, y as u32)) {
                             continue;
                         }
-                        target.apply(x, y, dab_falloff(params.kind, t, params.hardness), &params);
+                        target.apply(
+                            x as u32,
+                            y as u32,
+                            dab_falloff(dab.kind, t, dab.hardness),
+                            &dab,
+                        );
                     }
                 }
             }
@@ -332,22 +521,33 @@ impl PaintModule {
         if Self::restriction_blocks_everything(restriction.as_ref()) {
             return DirtyTiles::default();
         }
-        let params = DabParams::new(settings, Self::paint_color_rgba(state));
+        let style = state.session.tools.brush_style.sanitized();
+        let clone_source = state.session.tools.clone_source;
+        let params = DabParams::new(settings, &style, Self::paint_color_rgba(state));
         let size_px = settings.sanitized().size_px;
         let (sx, sy, sz) = (
             state.session.tools.paint_symmetry_x,
             state.session.tools.paint_symmetry_y,
             state.session.tools.paint_symmetry_z,
         );
-        // (ponto, normal da face de origem, raio de mundo)
-        let mut dabs: Vec<(Vec3, Vec3, f32)> = Vec::with_capacity(hits.len());
+        struct Dab {
+            hit: Vec3,
+            normal: Vec3,
+            radius: f32,
+            /// Texel do ponto de impacto (direção do Smudge); `None` se fora de UV.
+            texel: Option<[f32; 2]>,
+        }
+        let mut dabs: Vec<Dab> = Vec::with_capacity(hits.len());
         if let Some(mesh) = state.project.active_mesh() {
             for &(face, hit) in hits {
                 if face >= mesh.faces.len() {
                     continue;
                 }
                 let normal = mesh.face_normal(face).normalize_or_zero();
-                let r = state.world_radius_for_px(hit, size_px);
+                let radius = state.world_radius_for_px(hit, size_px);
+                let texel = Self::face_hit_uv(state, face, hit, false)
+                    .and_then(|uv| Self::uv_to_px(state, uv))
+                    .map(|(x, y)| [x as f32, y as f32]);
                 for flip in 0u8..8 {
                     let (fx, fy, fz) = (flip & 1 != 0, flip & 2 != 0, flip & 4 != 0);
                     if (fx && !sx) || (fy && !sy) || (fz && !sz) {
@@ -358,25 +558,92 @@ impl PaintModule {
                         if fy { -1.0 } else { 1.0 },
                         if fz { -1.0 } else { 1.0 },
                     );
-                    dabs.push((hit * m, normal * m, r));
+                    dabs.push(Dab {
+                        hit: hit * m,
+                        normal: normal * m,
+                        radius,
+                        // A simetria só repete o dab: o borrão segue o original.
+                        texel: if flip == 0 { texel } else { None },
+                    });
                 }
             }
         }
+        let plain_round = style.tip == BrushTip::Round && style.roundness >= 0.999;
         let result = Self::with_stroke_target(state, |target, mesh| {
-            for &(hit, normal, r_world) in &dabs {
+            for dab_in in &dabs {
+                let n = target.buf.dabs;
+                target.buf.dabs = n.wrapping_add(1);
+                let jitter = dab_jitter(&style, n);
+                let r_world = (dab_in.radius * jitter.radius_scale).max(1.0e-5);
+                // Base tangente ao ponto de impacto (ponta, ângulo e espalhamento).
+                let normal = if dab_in.normal == Vec3::ZERO {
+                    Vec3::Y
+                } else {
+                    dab_in.normal
+                };
+                let reference = if normal.y.abs() > 0.9 {
+                    Vec3::X
+                } else {
+                    Vec3::Y
+                };
+                let u = normal.cross(reference).normalize_or_zero();
+                let v = normal.cross(u);
+                let scatter = jitter.scatter.1 * r_world;
+                let hit = dab_in.hit
+                    + (u * jitter.scatter.0.cos() + v * jitter.scatter.0.sin()) * scatter;
+                let mut dab = params;
+                dab.cap *= jitter.cap_scale;
+                dab.blur_radius = 2;
+                if dab.kind == BrushType::Smudge
+                    && let Some(texel) = dab_in.texel
+                {
+                    let delta = target
+                        .buf
+                        .last_texel
+                        .map_or([0.0; 2], |l| [texel[0] - l[0], texel[1] - l[1]]);
+                    // Salto entre charts da textura não é movimento do pincel.
+                    let jump = delta[0].hypot(delta[1]) > 0.25 * w.max(h) as f32;
+                    dab.delta = if jump { [0.0; 2] } else { delta };
+                    target.buf.last_texel = Some(texel);
+                }
+                if dab.kind == BrushType::Clone {
+                    if target.buf.clone_offset.is_none()
+                        && let (Some(src), Some(texel)) = (clone_source, dab_in.texel)
+                    {
+                        target.buf.clone_offset = Some([
+                            (src[0] - texel[0]).round() as i32,
+                            (src[1] - texel[1]).round() as i32,
+                        ]);
+                    }
+                    dab.clone = target.buf.clone_offset;
+                }
                 for fi in 0..mesh.faces.len() {
                     if restriction.as_ref().is_some_and(|r| !r.allows_face(fi)) {
                         continue;
                     }
                     // Não pinta a superfície voltada para o lado oposto.
-                    if normal != Vec3::ZERO
-                        && mesh.face_normal(fi).normalize_or_zero().dot(normal) < -0.5
+                    if dab_in.normal != Vec3::ZERO
+                        && mesh.face_normal(fi).normalize_or_zero().dot(dab_in.normal) < -0.5
                     {
                         continue;
                     }
-                    mesh.rasterize_face_near(fi, hit, r_world, w, h, BLEED_PX, |x, y, t| {
-                        target.apply(x, y, dab_falloff(params.kind, t, params.hardness), &params);
-                    });
+                    mesh.rasterize_face_near(
+                        fi,
+                        hit,
+                        r_world,
+                        w,
+                        h,
+                        BLEED_PX,
+                        |x, y, t_dist, pos, r_eff| {
+                            let t = if plain_round {
+                                t_dist
+                            } else {
+                                let d = pos - hit;
+                                style.tip_distance(d.dot(u) / r_eff, d.dot(v) / r_eff)
+                            };
+                            target.apply(x, y, dab_falloff(dab.kind, t, dab.hardness), &dab);
+                        },
+                    );
                 }
             }
         });

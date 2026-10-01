@@ -101,9 +101,10 @@ pub use rig_commands::{
 };
 
 pub use brush::{
-    BRUSH_PX_PER_UNIT, BrushLock, BrushPreviewKind, BrushPreviewStyle, BrushProjectionMode,
-    BrushSettings, BrushType, FillScope, PaintRestriction, StrokeBuffer, StrokeSampler,
-    brush_size_px_from_slider, brush_type_from_kind, kind_from_brush_type,
+    BRUSH_PX_PER_UNIT, BrushBlend, BrushLock, BrushPreset, BrushPreviewKind, BrushPreviewStyle,
+    BrushProjectionMode, BrushSettings, BrushStyle, BrushTip, BrushType, FillScope,
+    PaintRestriction, PointStabilizer, StrokeBuffer, StrokeSampler, brush_size_px_from_slider,
+    brush_type_from_kind, hash01, kind_from_brush_type,
 };
 pub use camera::{Camera, Projection, ViewPreset};
 pub use events::{AppEvent, EventBus};

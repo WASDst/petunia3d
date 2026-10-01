@@ -2422,4 +2422,172 @@ mod tests {
         assert_eq!(left, [255, 0, 0, 255]);
         assert_eq!(right, [0, 0, 255, 255]);
     }
+
+    // ---- Brush system (2E) ----
+
+    fn fresh_state_with_canvas(size: u32, fill: [u8; 4]) -> AppState {
+        let mut state = AppState::new("en");
+        let active = state.project.active;
+        state.project.assets[active].texture = Some(Canvas::new(size, size, fill));
+        PaintModule::ensure_stack(&mut state);
+        state
+    }
+
+    fn texture(state: &AppState) -> &Canvas {
+        state.project.active().unwrap().texture.as_ref().unwrap()
+    }
+
+    fn brush(kind: BrushType, size: f32) -> BrushSettings {
+        BrushSettings {
+            kind,
+            size_px: size,
+            hardness: 1.0,
+            strength: 1.0,
+            flow: 1.0,
+            spacing: 0.15,
+        }
+    }
+
+    #[test]
+    fn square_tip_fills_the_corners_that_a_round_tip_leaves_empty() {
+        let corner = |tip: petunia_core::BrushTip| {
+            let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+            state.session.tools.brush_style.tip = tip;
+            state.paint_color = [1.0, 1.0, 1.0];
+            PaintModule::canvas_brush_with_settings(
+                &mut state,
+                32,
+                32,
+                brush(BrushType::Pixel, 20.0),
+            );
+            texture(&state).get(32 + 9, 32 + 9).unwrap()[0]
+        };
+        assert_eq!(corner(petunia_core::BrushTip::Round), 0);
+        assert_eq!(corner(petunia_core::BrushTip::Square), 255);
+    }
+
+    #[test]
+    fn spray_is_deterministic_and_sparser_than_a_solid_dab() {
+        let paint = |density: f32| {
+            let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+            state.session.tools.brush_style.spray_density = density;
+            state.paint_color = [1.0, 1.0, 1.0];
+            PaintModule::canvas_brush_with_settings(
+                &mut state,
+                32,
+                32,
+                brush(BrushType::Spray, 30.0),
+            );
+            texture(&state).pixels.clone()
+        };
+        let a = paint(0.3);
+        assert_eq!(a, paint(0.3), "mesma semente, mesmo resultado");
+        let lit = |px: &Vec<u8>| px.chunks(4).filter(|p| p[0] > 0).count();
+        assert!(lit(&a) > 0);
+        assert!(lit(&a) < lit(&paint(1.0)));
+    }
+
+    #[test]
+    fn dodge_lightens_and_burn_darkens_the_existing_color() {
+        let run = |kind: BrushType| {
+            let mut state = fresh_state_with_canvas(32, [100, 100, 100, 255]);
+            PaintModule::canvas_brush_with_settings(&mut state, 16, 16, brush(kind, 10.0));
+            texture(&state).get(16, 16).unwrap()[0]
+        };
+        assert!(run(BrushType::Dodge) > 100);
+        assert!(run(BrushType::Burn) < 100);
+    }
+
+    #[test]
+    fn blur_softens_a_hard_edge() {
+        let mut state = fresh_state_with_canvas(32, [0, 0, 0, 255]);
+        {
+            let active = state.project.active;
+            let stack = state.project.assets[active].paint_stack.as_mut().unwrap();
+            let cv = stack.active_mut().unwrap().canvas_mut().unwrap();
+            for y in 0..32 {
+                for x in 16..32 {
+                    cv.set(x, y, [255, 255, 255, 255]);
+                }
+            }
+        }
+        PaintModule::composite_active(&mut state);
+        PaintModule::canvas_brush_with_settings(&mut state, 16, 16, brush(BrushType::Blur, 14.0));
+        let edge = texture(&state).get(15, 16).unwrap()[0];
+        assert!(
+            edge > 0 && edge < 255,
+            "borda deve ficar intermediária: {edge}"
+        );
+    }
+
+    #[test]
+    fn clone_copies_from_the_source_offset_and_does_nothing_without_one() {
+        let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+        {
+            let active = state.project.active;
+            let stack = state.project.assets[active].paint_stack.as_mut().unwrap();
+            let cv = stack.active_mut().unwrap().canvas_mut().unwrap();
+            for y in 8..16 {
+                for x in 8..16 {
+                    cv.set(x, y, [200, 40, 40, 255]);
+                }
+            }
+        }
+        PaintModule::composite_active(&mut state);
+        // sem origem: nada muda
+        PaintModule::canvas_brush_with_settings(&mut state, 40, 40, brush(BrushType::Clone, 8.0));
+        assert_eq!(texture(&state).get(40, 40).unwrap(), [0, 0, 0, 255]);
+        // origem em (12, 12): o dab em (40, 40) copia o quadrado vermelho
+        state.session.tools.clone_source = Some([12.0, 12.0]);
+        PaintModule::canvas_brush_with_settings(&mut state, 40, 40, brush(BrushType::Clone, 8.0));
+        assert_eq!(texture(&state).get(40, 40).unwrap(), [200, 40, 40, 255]);
+    }
+
+    #[test]
+    fn smudge_drags_color_along_the_stroke() {
+        let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+        {
+            let active = state.project.active;
+            let stack = state.project.assets[active].paint_stack.as_mut().unwrap();
+            let cv = stack.active_mut().unwrap().canvas_mut().unwrap();
+            for y in 0..64 {
+                for x in 0..24 {
+                    cv.set(x, y, [255, 255, 255, 255]);
+                }
+            }
+        }
+        PaintModule::composite_active(&mut state);
+        state.begin_paint_stroke();
+        let s = brush(BrushType::Smudge, 12.0);
+        for x in [20u32, 24, 28, 32, 36] {
+            PaintModule::canvas_brush_with_settings(&mut state, x, 32, s);
+        }
+        state.finish_paint_stroke(false);
+        // a cor branca foi arrastada para a direita da borda original (x = 24)
+        assert!(texture(&state).get(30, 32).unwrap()[0] > 0);
+    }
+
+    #[test]
+    fn jitter_changes_the_stroke_but_the_same_seed_repeats_it() {
+        let run = |seed: u32| {
+            let mut state = fresh_state_with_canvas(64, [0, 0, 0, 255]);
+            state.session.tools.brush_style.size_jitter = 0.8;
+            state.session.tools.brush_style.scatter = 1.0;
+            state.session.tools.brush_style.seed = seed;
+            state.paint_color = [1.0, 1.0, 1.0];
+            state.begin_paint_stroke();
+            for x in [10u32, 20, 30, 40, 50] {
+                PaintModule::canvas_brush_with_settings(
+                    &mut state,
+                    x,
+                    32,
+                    brush(BrushType::Pixel, 8.0),
+                );
+            }
+            state.finish_paint_stroke(false);
+            texture(&state).pixels.clone()
+        };
+        assert_eq!(run(7), run(7));
+        assert_ne!(run(7), run(8));
+    }
 }

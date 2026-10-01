@@ -11,10 +11,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub mod animate;
+mod brush_panel;
 pub mod commands;
 mod draw_shapes;
 pub mod files;
 mod input;
+pub mod keymap_edit;
 pub mod numeric;
 pub mod overlay;
 mod scene_cache;
@@ -620,6 +622,15 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub paint_last: Option<[f32; 2]>,
     /// Amostragem incremental do stroke 3D em pixels lógicos da viewport.
     pub paint_sampler: petunia_core::StrokeSampler,
+    /// Estabilizador do cursor no traço 3D / 2D (suavização do pincel).
+    paint_stabilizer: petunia_core::PointStabilizer,
+    paint_2d_stabilizer: petunia_core::PointStabilizer,
+    /// Presets de pincel do usuário (carregados sob demanda).
+    pub brush_presets: Vec<petunia_core::BrushPreset>,
+    pub brush_presets_loaded: bool,
+    pub brush_presets_path_override: Option<std::path::PathBuf>,
+    /// Preset aplicado por último (índice em `all_brush_presets`).
+    pub active_brush_preset: Option<usize>,
     /// Menu de primitivas aberto (apresentação).
     pub add_menu_open: bool,
     /// Ferramenta paramétrica modal ativa (Extrude, Inset, Bevel, Push/Pull).
@@ -724,6 +735,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     previous_tool: String,
     /// Cena de consultas da viewport (picking/oclusão), por geometria.
     scene_query_cache: scene_cache::SceneCache,
+    /// Edição de atalhos (perfis do usuário, captura de tecla).
+    pub keymap_editor: keymap_edit::KeymapEditor,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_volume_original: Option<Project>,
@@ -974,6 +987,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             viewport_size: [1024.0, 768.0],
             paint_last: None,
             paint_sampler: petunia_core::StrokeSampler::default(),
+            paint_stabilizer: petunia_core::PointStabilizer::default(),
+            paint_2d_stabilizer: petunia_core::PointStabilizer::default(),
+            brush_presets: Vec::new(),
+            brush_presets_loaded: false,
+            brush_presets_path_override: None,
+            active_brush_preset: None,
             add_menu_open: false,
             tool_modal: None,
             pixel_ratio: 1.0,
@@ -1033,6 +1052,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_last_anchor_click: None,
             previous_tool: "select".to_string(),
             scene_query_cache: std::cell::RefCell::new(None),
+            keymap_editor: keymap_edit::KeymapEditor::default(),
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
             profile_volume_original: None,
@@ -1409,15 +1429,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.state
                             .set_status("Shape: press on the surface to anchor, release to commit");
                     }
-                    "brush" | "eraser" | "picker" | "airbrush" | "pixel" => {
+                    "brush" | "eraser" | "picker" | "airbrush" | "pixel" | "smudge" | "blur"
+                    | "dodge" | "burn" | "spray" | "clone" => {
                         self.state.session.tools.paint_brush_kind =
-                            petunia_core::kind_from_brush_type(match tool.as_str() {
-                                "eraser" => petunia_core::BrushType::Eraser,
-                                "picker" => petunia_core::BrushType::Eyedropper,
-                                "airbrush" => petunia_core::BrushType::Airbrush,
-                                "pixel" => petunia_core::BrushType::Pixel,
-                                _ => petunia_core::BrushType::Soft,
-                            });
+                            petunia_core::kind_from_brush_type(Self::brush_type_for_tool(&tool));
                     }
                     _ => {}
                 }
@@ -5426,11 +5441,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.active_tool == "picker" {
             return self.pick_paint_color_at(x, y);
         }
+        if self.state.session.tools.active_tool == "clone"
+            && (is_ctrl || self.state.session.tools.clone_source.is_none())
+        {
+            return self.set_clone_source_at(x, y);
+        }
         if self.is_shape_tool() {
             return self.begin_paint_shape_at(x, y);
         }
         self.state.begin_paint_stroke();
         let settings = self.viewport_brush_settings();
+        self.paint_stabilizer.reset();
+        let smoothing = self.state.session.tools.brush_style.smoothing;
+        let [x, y] = self.paint_stabilizer.filter([x, y], smoothing);
         let dabs = self.paint_sampler.begin([x, y], settings.dab_step_px());
         self.paint_dabs_at(&dabs, settings);
         self.paint_last = Some([x, y]);
@@ -5594,9 +5617,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         let settings = self.viewport_brush_settings();
+        let smoothing = self.state.session.tools.brush_style.smoothing;
+        let [x, y] = self.paint_stabilizer.filter([x, y], smoothing);
         let dabs = self.paint_sampler.extend([x, y]);
         self.paint_dabs_at(&dabs, settings);
         self.paint_last = Some([x, y]);
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Define a origem do Clone no texel sob o cursor (Ctrl+clique).
+    fn set_clone_source_at(&mut self, x: f32, y: f32) -> bool {
+        let Some((px, py)) = self.canvas_pixel_at(x, y) else {
+            self.state
+                .set_status("Clone: point at the surface to set the source");
+            return false;
+        };
+        self.state.session.tools.clone_source = Some([px as f32, py as f32]);
+        self.state
+            .set_status("Clone source set — paint to copy from it");
         self.state.mark_dirty();
         true
     }
@@ -5612,9 +5651,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.paint_last.is_none() {
             return false;
         }
+        // O último ponto passa sem suavização: o traço alcança o cursor.
+        self.paint_stabilizer.reset();
         self.paint_stroke_to(x, y);
         self.paint_last = None;
         self.paint_sampler.reset();
+        self.paint_stabilizer.reset();
         self.state.finish_paint_stroke(false);
         true
     }
@@ -5642,9 +5684,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Tique periódico para acúmulo contínuo de tinta da ferramenta Airbrush (P3D-056).
     pub fn airbrush_tick(&mut self) -> bool {
-        let is_airbrush = self.state.session.tools.active_tool == "airbrush"
-            || petunia_core::brush_type_from_kind(self.state.session.tools.paint_brush_kind)
-                == petunia_core::BrushType::Airbrush;
+        let is_airbrush = matches!(
+            self.state.session.tools.active_tool.as_str(),
+            "airbrush" | "spray"
+        ) || matches!(
+            petunia_core::brush_type_from_kind(self.state.session.tools.paint_brush_kind),
+            petunia_core::BrushType::Airbrush | petunia_core::BrushType::Spray
+        );
         if !is_airbrush {
             return false;
         }
@@ -5775,11 +5821,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.set_status(format!("Filled canvas ({scope:?})"));
                     return true;
                 }
+                if tool == "clone" && self.state.session.tools.clone_source.is_none() {
+                    self.state.session.tools.clone_source = Some([px as f32, py as f32]);
+                    self.state
+                        .set_status("Clone source set — paint to copy from it");
+                    return true;
+                }
                 self.state.begin_paint_stroke();
                 let settings = self.state.brush_settings();
+                self.paint_2d_stabilizer.reset();
+                let smoothing = self.state.session.tools.brush_style.smoothing;
+                let [fx, fy] = self
+                    .paint_2d_stabilizer
+                    .filter([px as f32, py as f32], smoothing);
                 let dabs = self
                     .paint_2d_sampler
-                    .begin([px as f32, py as f32], settings.dab_step_px());
+                    .begin([fx, fy], settings.dab_step_px());
                 let dabs = texture_points(&dabs, width, height);
                 petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
                     &mut self.state,
@@ -5795,7 +5852,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return false;
                 }
                 let settings = self.state.brush_settings();
-                let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
+                let smoothing = self.state.session.tools.brush_style.smoothing;
+                let [fx, fy] = self
+                    .paint_2d_stabilizer
+                    .filter([px as f32, py as f32], smoothing);
+                let dabs = self.paint_2d_sampler.extend([fx, fy]);
                 let dabs = texture_points(&dabs, width, height);
                 petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
                     &mut self.state,
@@ -5811,6 +5872,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return false;
                 }
                 let settings = self.state.brush_settings();
+                self.paint_2d_stabilizer.reset();
                 let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
                 let dabs = texture_points(&dabs, width, height);
                 petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
@@ -7246,16 +7308,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn set_keymap_profile(&mut self, profile_id: &str) -> bool {
-        if self.state.ui.active_keymap_id == profile_id {
-            return false;
-        }
-        self.state.ui.active_keymap_id = profile_id.to_string();
-        self.state.ui.keybinds = petunia_config::Keybinds::load_profile(profile_id);
-        self.preferences.active_keymap_id = profile_id.to_string();
-        self.state.mark_dirty();
-        self.state
-            .set_status(format!("Perfil de atalhos ativado: {profile_id}"));
-        true
+        self.activate_keymap_profile(profile_id)
     }
 
     /// Refresh the cached preferences from live UI state (section layouts are
@@ -10306,12 +10359,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Tipo de pincel que cada ferramenta de pintura usa.
+    fn brush_type_for_tool(tool: &str) -> petunia_core::BrushType {
+        use petunia_core::BrushType as B;
+        match tool {
+            "eraser" => B::Eraser,
+            "picker" => B::Eyedropper,
+            "airbrush" => B::Airbrush,
+            "pixel" => B::Pixel,
+            "smudge" => B::Smudge,
+            "blur" => B::Blur,
+            "dodge" => B::Dodge,
+            "burn" => B::Burn,
+            "spray" => B::Spray,
+            "clone" => B::Clone,
+            _ => B::Soft,
+        }
+    }
+
     fn viewport_brush_settings(&self) -> petunia_core::BrushSettings {
         let mut settings = self.state.brush_settings();
         settings.kind = match self.state.session.tools.active_tool.as_str() {
-            "eraser" => petunia_core::BrushType::Eraser,
-            "airbrush" => petunia_core::BrushType::Airbrush,
-            "pixel" => petunia_core::BrushType::Pixel,
+            "eraser" | "airbrush" | "pixel" | "smudge" | "blur" | "dodge" | "burn" | "spray"
+            | "clone" => Self::brush_type_for_tool(&self.state.session.tools.active_tool),
             _ => settings.kind,
         };
         settings.size_px =
@@ -10540,14 +10610,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return;
             }
             if let Some((face, hit)) = self.paint_pick(origin, direction) {
-                let tool = self.state.session.tools.active_tool.as_str();
-                let brush = match tool {
-                    "eraser" => petunia_core::BrushType::Eraser,
-                    "fill" => petunia_core::BrushType::Fill,
-                    "picker" => petunia_core::BrushType::Eyedropper,
-                    "airbrush" => petunia_core::BrushType::Airbrush,
-                    "pixel" => petunia_core::BrushType::Pixel,
-                    _ => petunia_core::BrushType::Soft,
+                let brush = if self.state.session.tools.active_tool == "fill" {
+                    petunia_core::BrushType::Fill
+                } else {
+                    self.viewport_brush_settings().kind
                 };
                 if brush == petunia_core::BrushType::Eyedropper {
                     self.pick_paint_color_at(
@@ -10566,19 +10632,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         color,
                     );
                 } else {
-                    let radius = (petunia_core::brush_size_px_from_slider(
-                        self.state.session.tools.paint_radius,
-                    ) * 0.5)
-                        .max(1.0) as u32;
-                    let strength = self.state.session.tools.paint_strength;
+                    let mut settings = self.viewport_brush_settings();
+                    settings.kind = brush;
                     let isolate = self.state.session.tools.paint_isolate_selection;
-                    petunia_module_paint::PaintModule::paint_mesh_3d(
+                    petunia_module_paint::PaintModule::paint_mesh_3d_with_settings(
                         &mut self.state,
                         face,
                         hit,
-                        brush,
-                        radius,
-                        strength,
+                        settings,
                         isolate,
                     );
                 }
@@ -11153,6 +11214,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn route_shortcut(&mut self, text: &str, ctrl: bool, shift: bool, alt: bool) -> bool {
+        if self.keymap_editor.capturing.is_some() {
+            if text == "Escape" || text == "Esc" {
+                return self.cancel_keymap_capture();
+            }
+            return self.capture_keymap_key(text, ctrl, shift, alt);
+        }
         if (text == "Escape" || text == "Esc") && !ctrl && !alt && !shift {
             return self.handle_escape();
         }
@@ -11730,6 +11797,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 | "rectangle"
                 | "gradient"
                 | "pixel"
+                | "smudge"
+                | "blur"
+                | "dodge"
+                | "burn"
+                | "spray"
+                | "clone"
         )
     }
 
@@ -12799,6 +12872,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.profile_workplane_locked = self.state.profile.workplane_locked;
         vm.region_hover_commands = self.region_hover_commands();
         vm.region_shapes_commands = self.region_shapes_commands();
+        vm.keymap_capture_action = self.keymap_editor.capturing.clone().unwrap_or_default();
+        vm.brush_panel = self.brush_panel_model();
+        if self.settings_visible {
+            let (revision, snapshot) = self.keymap_snapshot();
+            vm.keymap_revision = i64::from(revision);
+            vm.keymap_snapshot = snapshot;
+        }
         vm.profile_outline_commands = self.profile_outline_commands();
         vm.modeling_mode = self.modeling_mode.id().to_string();
         vm.label_workspace_draw_title = self

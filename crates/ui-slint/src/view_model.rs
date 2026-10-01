@@ -565,6 +565,13 @@ pub struct ShellViewModel {
     pub profile_workplane_locked: bool,
     /// Região de perfil em hover (caminho SVG em px da viewport).
     pub region_hover_commands: String,
+    /// Estilo do pincel (ponta, mistura, estabilizador, jitter, presets).
+    pub brush_panel: crate::brush_panel::BrushPanelModel,
+    /// Revisão das listas de atalhos (`-1` = Configurações fechadas, nada a enviar).
+    pub keymap_revision: i64,
+    pub keymap_snapshot: std::sync::Arc<crate::keymap_edit::KeymapSnapshot>,
+    /// Ação aguardando a próxima combinação de teclas.
+    pub keymap_capture_action: String,
     /// Tinta leve de todas as regiões fechadas (DRAW).
     pub region_shapes_commands: String,
     /// Contorno dos perfis que não estão em edição (DRAW).
@@ -1502,6 +1509,10 @@ impl ShellViewModel {
             label_profile_look_at_plane: String::new(),
             profile_workplane_locked: false,
             region_hover_commands: String::new(),
+            brush_panel: Default::default(),
+            keymap_revision: -1,
+            keymap_snapshot: std::sync::Arc::default(),
+            keymap_capture_action: String::new(),
             region_shapes_commands: String::new(),
             profile_outline_commands: String::new(),
             poly_pen_preview_commands: String::new(),

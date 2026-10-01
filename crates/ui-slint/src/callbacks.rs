@@ -809,6 +809,57 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
     window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
     window.set_region_shapes_commands(vm.region_shapes_commands.as_str().into());
+    window.set_keymap_capture_action(vm.keymap_capture_action.as_str().into());
+    {
+        let b = &vm.brush_panel;
+        window.set_brush_flow(b.flow);
+        window.set_brush_spacing(b.spacing);
+        window.set_brush_smoothing(b.smoothing);
+        window.set_brush_size_jitter(b.size_jitter);
+        window.set_brush_opacity_jitter(b.opacity_jitter);
+        window.set_brush_scatter(b.scatter);
+        window.set_brush_spray_density(b.spray_density);
+        window.set_brush_angle(b.angle);
+        window.set_brush_roundness(b.roundness);
+        window.set_brush_tip(b.tip.as_str().into());
+        window.set_brush_blend(b.blend.as_str().into());
+        window.set_brush_preset_index(b.active_preset);
+        window.set_clone_source_set(b.clone_source_set);
+        let names: Vec<slint::SharedString> = b.presets.iter().map(|n| n.as_str().into()).collect();
+        let current: Vec<slint::SharedString> =
+            slint::Model::iter(&window.get_brush_presets()).collect();
+        if current != names {
+            window.set_brush_presets(std::rc::Rc::new(slint::VecModel::from(names)).into());
+        }
+    }
+    if vm.keymap_revision >= 0 && i64::from(window.get_keymap_revision()) != vm.keymap_revision {
+        window.set_keymap_revision(vm.keymap_revision as i32);
+        let profiles: Vec<KeymapProfileEntry> = vm
+            .keymap_snapshot
+            .profiles
+            .iter()
+            .map(|p| KeymapProfileEntry {
+                id: p.id.as_str().into(),
+                name: p.name.as_str().into(),
+                custom: p.custom,
+                active: p.active,
+            })
+            .collect();
+        window.set_keymap_profiles(std::rc::Rc::new(slint::VecModel::from(profiles)).into());
+        let rows: Vec<KeymapActionEntry> = vm
+            .keymap_snapshot
+            .rows
+            .iter()
+            .map(|r| KeymapActionEntry {
+                action: r.action.as_str().into(),
+                label: r.label.as_str().into(),
+                shortcut: r.shortcut.as_str().into(),
+                conflict: r.conflict,
+                capturing: r.capturing,
+            })
+            .collect();
+        window.set_keymap_rows(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+    }
     window.set_profile_outline_commands(vm.profile_outline_commands.as_str().into());
     window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
     window.set_label_poly_pen(vm.label_poly_pen.as_str().into());
@@ -1395,6 +1446,55 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             }
         }
     });
+
+    // Editor de atalhos: criar/apagar perfil, capturar, restaurar e limpar.
+    macro_rules! keymap_callback {
+        ($register:ident, $persist:expr, |$bridge:ident $(, $arg:ident)*| $body:expr) => {{
+            let handle = Arc::clone(&bridge);
+            let window_weak = window.as_weak();
+            window.$register(move |$($arg),*| {
+                if let Ok(mut $bridge) = handle.lock() {
+                    let changed: bool = $body;
+                    if changed && $persist {
+                        persist_user_preferences(&mut $bridge);
+                    }
+                    let vm = $bridge.view_model();
+                    if let Some(window) = window_weak.upgrade() {
+                        sync_window_properties(&window, &vm);
+                    }
+                }
+            });
+        }};
+    }
+    keymap_callback!(on_brush_param_changed, false, |b, name, value| {
+        b.set_brush_param(name.as_str(), value)
+    });
+    keymap_callback!(on_brush_tip_changed, false, |b, tip| b
+        .set_brush_tip(tip.as_str()));
+    keymap_callback!(on_brush_blend_changed, false, |b, blend| b
+        .set_brush_blend(blend.as_str()));
+    keymap_callback!(on_brush_preset_applied, false, |b, index| b
+        .apply_brush_preset(index.max(0) as usize));
+    keymap_callback!(on_brush_preset_saved, false, |b| {
+        let count = b.all_brush_presets().len();
+        b.save_brush_preset(&format!("Custom {}", count + 1))
+    });
+    keymap_callback!(on_brush_preset_deleted, false, |b, index| b
+        .delete_brush_preset(index.max(0) as usize));
+    keymap_callback!(on_keymap_profile_create, true, |b| b
+        .create_keymap_profile(""));
+    keymap_callback!(on_keymap_profile_delete, true, |b, id| b
+        .delete_keymap_profile(id.as_str()));
+    keymap_callback!(on_keymap_capture_requested, true, |b, action| b
+        .begin_keymap_capture(action.as_str()));
+    keymap_callback!(on_keymap_capture_cancelled, true, |b| b
+        .cancel_keymap_capture());
+    keymap_callback!(on_keymap_capture_key, true, |b, key, ctrl, shift, alt| b
+        .capture_keymap_key(key.as_str(), ctrl, shift, alt));
+    keymap_callback!(on_keymap_binding_reset, true, |b, action| b
+        .reset_keymap_binding(action.as_str()));
+    keymap_callback!(on_keymap_binding_clear, true, |b, action| b
+        .clear_keymap_binding(action.as_str()));
 
     let scene_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();

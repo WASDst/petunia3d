@@ -34,6 +34,18 @@ pub enum BrushType {
     Rectangle,
     /// Airbrush: acúmulo contínuo modulado por `flow` (iniciativa Paint).
     Airbrush,
+    /// Borrão: arrasta a cor já pintada na direção do traço.
+    Smudge,
+    /// Desfoque local (média da vizinhança) sob o pincel.
+    Blur,
+    /// Clareia (*dodge*) o que já foi pintado.
+    Dodge,
+    /// Escurece (*burn*) o que já foi pintado.
+    Burn,
+    /// Spray: pontos espalhados dentro do raio, densidade por `spray_density`.
+    Spray,
+    /// Carimbo de clonagem: copia a textura de um ponto de origem (Ctrl+clique).
+    Clone,
 }
 
 /// How a 3D brush sample maps onto the surface.
@@ -121,6 +133,12 @@ pub struct StrokeBuffer {
     pub base: Vec<u8>,
     /// Cobertura acumulada (`0..=1`) por texel.
     pub coverage: Vec<f32>,
+    /// Dabs já aplicados neste traço (alimenta jitter e espalhamento determinísticos).
+    pub dabs: u32,
+    /// Centro do último dab em texels (direção do Smudge).
+    pub last_texel: Option<[f32; 2]>,
+    /// Deslocamento origem→destino do Clone, fixado no primeiro dab do traço.
+    pub clone_offset: Option<[i32; 2]>,
 }
 
 impl StrokeBuffer {
@@ -131,6 +149,9 @@ impl StrokeBuffer {
             h,
             base,
             coverage: vec![0.0; (w as usize) * (h as usize)],
+            dabs: 0,
+            last_texel: None,
+            clone_offset: None,
         }
     }
 }
@@ -140,7 +161,16 @@ impl BrushType {
     pub const fn is_free_brush(self) -> bool {
         matches!(
             self,
-            Self::Pixel | Self::Soft | Self::Eraser | Self::Airbrush
+            Self::Pixel
+                | Self::Soft
+                | Self::Eraser
+                | Self::Airbrush
+                | Self::Smudge
+                | Self::Blur
+                | Self::Dodge
+                | Self::Burn
+                | Self::Spray
+                | Self::Clone
         )
     }
 
@@ -152,8 +182,10 @@ impl BrushType {
     /// Forma canônica do cursor de preview (iniciativa Paint).
     pub const fn preview_kind(self) -> BrushPreviewKind {
         match self {
-            Self::Pixel | Self::Soft | Self::Airbrush => BrushPreviewKind::Ring,
-            Self::Eraser => BrushPreviewKind::HollowRing,
+            Self::Pixel | Self::Soft | Self::Airbrush | Self::Dodge | Self::Burn | Self::Spray => {
+                BrushPreviewKind::Ring
+            }
+            Self::Eraser | Self::Smudge | Self::Blur | Self::Clone => BrushPreviewKind::HollowRing,
             Self::Eyedropper => BrushPreviewKind::Crosshair,
             Self::Fill | Self::Line | Self::Rectangle => BrushPreviewKind::None,
         }
@@ -215,6 +247,12 @@ pub const fn brush_type_from_kind(kind: usize) -> BrushType {
         5 => BrushType::Line,
         6 => BrushType::Rectangle,
         7 => BrushType::Airbrush,
+        8 => BrushType::Smudge,
+        9 => BrushType::Blur,
+        10 => BrushType::Dodge,
+        11 => BrushType::Burn,
+        12 => BrushType::Spray,
+        13 => BrushType::Clone,
         _ => BrushType::Pixel,
     }
 }
@@ -230,6 +268,313 @@ pub const fn kind_from_brush_type(kind: BrushType) -> usize {
         BrushType::Line => 5,
         BrushType::Rectangle => 6,
         BrushType::Airbrush => 7,
+        BrushType::Smudge => 8,
+        BrushType::Blur => 9,
+        BrushType::Dodge => 10,
+        BrushType::Burn => 11,
+        BrushType::Spray => 12,
+        BrushType::Clone => 13,
+    }
+}
+
+/// Forma da ponta do pincel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BrushTip {
+    #[default]
+    Round,
+    Square,
+    Diamond,
+}
+
+/// Como a cor do pincel se combina com a que já está na camada.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BrushBlend {
+    #[default]
+    Normal,
+    Multiply,
+    Screen,
+    Add,
+    Darken,
+    Lighten,
+}
+
+impl BrushBlend {
+    /// Combina um canal (`base` sobre a camada, `src` do pincel), ambos `0..=255`.
+    pub fn channel(self, base: f32, src: f32) -> f32 {
+        match self {
+            Self::Normal => src,
+            Self::Multiply => base * src / 255.0,
+            Self::Screen => 255.0 - (255.0 - base) * (255.0 - src) / 255.0,
+            Self::Add => (base + src).min(255.0),
+            Self::Darken => base.min(src),
+            Self::Lighten => base.max(src),
+        }
+    }
+}
+
+/// Comportamento do traço além do descriptor básico (iniciativa Paint, 2E).
+///
+/// Mora no estado de ferramentas porque `BrushSettings` é literal em muitos
+/// pontos e porque estes parâmetros mudam *como* o traço é montado, não o que
+/// um dab individual faz.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrushStyle {
+    pub tip: BrushTip,
+    /// Rotação da ponta em graus (`-180..=180`); só altera pontas não redondas
+    /// ou achatadas.
+    pub angle_deg: f32,
+    /// Achatamento da ponta (`0.1..=1`; `1` = sem achatar).
+    pub roundness: f32,
+    pub blend: BrushBlend,
+    /// Estabilizador do traço (`0..=0.95`): média móvel do cursor.
+    pub smoothing: f32,
+    /// Variação aleatória do tamanho por dab (`0..=1`).
+    pub size_jitter: f32,
+    /// Variação aleatória da opacidade por dab (`0..=1`).
+    pub opacity_jitter: f32,
+    /// Deslocamento aleatório do dab, em raios (`0..=2`).
+    pub scatter: f32,
+    /// Densidade do Spray (`0.05..=1`).
+    pub spray_density: f32,
+    /// Semente do traço: o mesmo traço sempre produz o mesmo resultado.
+    pub seed: u32,
+}
+
+impl Default for BrushStyle {
+    fn default() -> Self {
+        Self {
+            tip: BrushTip::Round,
+            angle_deg: 0.0,
+            roundness: 1.0,
+            blend: BrushBlend::Normal,
+            smoothing: 0.0,
+            size_jitter: 0.0,
+            opacity_jitter: 0.0,
+            scatter: 0.0,
+            spray_density: 0.35,
+            seed: 1,
+        }
+    }
+}
+
+impl BrushStyle {
+    pub fn sanitized(self) -> Self {
+        let finite = |v: f32, lo: f32, hi: f32, default: f32| {
+            if v.is_finite() {
+                v.clamp(lo, hi)
+            } else {
+                default
+            }
+        };
+        Self {
+            tip: self.tip,
+            angle_deg: finite(self.angle_deg, -180.0, 180.0, 0.0),
+            roundness: finite(self.roundness, 0.1, 1.0, 1.0),
+            blend: self.blend,
+            smoothing: finite(self.smoothing, 0.0, 0.95, 0.0),
+            size_jitter: finite(self.size_jitter, 0.0, 1.0, 0.0),
+            opacity_jitter: finite(self.opacity_jitter, 0.0, 1.0, 0.0),
+            scatter: finite(self.scatter, 0.0, 2.0, 0.0),
+            spray_density: finite(self.spray_density, 0.05, 1.0, 0.35),
+            seed: self.seed,
+        }
+    }
+
+    /// Distância normalizada (`0` centro, `1` borda) de um ponto `(a, b)` (em
+    /// raios) ao centro, conforme a ponta, o ângulo e o achatamento.
+    pub fn tip_distance(&self, a: f32, b: f32) -> f32 {
+        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
+        let u = a * cos + b * sin;
+        let v = (-a * sin + b * cos) / self.roundness.max(0.1);
+        match self.tip {
+            BrushTip::Round => (u * u + v * v).sqrt(),
+            BrushTip::Square => u.abs().max(v.abs()),
+            BrushTip::Diamond => u.abs() + v.abs(),
+        }
+    }
+}
+
+/// Número pseudoaleatório determinístico em `[0, 1)` a partir de uma semente e
+/// três inteiros (hash de bits; sem estado global).
+pub fn hash01(seed: u32, a: u32, b: u32, c: u32) -> f32 {
+    let mut h = seed ^ 0x9e37_79b9;
+    for v in [a, b, c] {
+        h = (h ^ v).wrapping_mul(0x85eb_ca6b);
+        h ^= h >> 13;
+        h = h.wrapping_mul(0xc2b2_ae35);
+        h ^= h >> 16;
+    }
+    (h >> 8) as f32 / (1u32 << 24) as f32
+}
+
+/// Estabilizador de cursor: suaviza o caminho antes de virar dabs.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PointStabilizer {
+    smoothed: Option<[f32; 2]>,
+}
+
+impl PointStabilizer {
+    /// Aplica a média móvel exponencial (`strength` 0 = sem suavização).
+    pub fn filter(&mut self, point: [f32; 2], strength: f32) -> [f32; 2] {
+        let k = if strength.is_finite() {
+            strength.clamp(0.0, 0.95)
+        } else {
+            0.0
+        };
+        let next = match self.smoothed {
+            Some(prev) if k > 0.0 => [
+                prev[0] + (point[0] - prev[0]) * (1.0 - k),
+                prev[1] + (point[1] - prev[1]) * (1.0 - k),
+            ],
+            _ => point,
+        };
+        self.smoothed = Some(next);
+        next
+    }
+
+    pub fn reset(&mut self) {
+        self.smoothed = None;
+    }
+}
+
+/// Pincel nomeado: tipo, descriptor e estilo (P3D-153, presets de ferramenta).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BrushPreset {
+    pub name: String,
+    pub settings: BrushSettings,
+    pub style: BrushStyle,
+}
+
+impl BrushPreset {
+    /// Presets que vêm com o app (não editáveis, sempre disponíveis).
+    pub fn builtin() -> Vec<BrushPreset> {
+        let preset =
+            |name: &str, kind, size, hardness, strength, flow, spacing, style: BrushStyle| {
+                BrushPreset {
+                    name: name.to_string(),
+                    settings: BrushSettings {
+                        kind,
+                        size_px: size,
+                        hardness,
+                        strength,
+                        flow,
+                        spacing,
+                    },
+                    style,
+                }
+            };
+        let plain = BrushStyle::default();
+        vec![
+            preset("Pencil", BrushType::Pixel, 2.0, 1.0, 1.0, 1.0, 0.1, plain),
+            preset(
+                "Soft brush",
+                BrushType::Soft,
+                24.0,
+                0.2,
+                1.0,
+                1.0,
+                0.15,
+                plain,
+            ),
+            preset(
+                "Ink",
+                BrushType::Soft,
+                10.0,
+                0.9,
+                1.0,
+                1.0,
+                0.08,
+                BrushStyle {
+                    smoothing: 0.5,
+                    ..plain
+                },
+            ),
+            preset(
+                "Marker",
+                BrushType::Soft,
+                28.0,
+                0.8,
+                0.6,
+                1.0,
+                0.1,
+                BrushStyle {
+                    tip: BrushTip::Square,
+                    blend: BrushBlend::Multiply,
+                    ..plain
+                },
+            ),
+            preset(
+                "Airbrush",
+                BrushType::Airbrush,
+                40.0,
+                0.0,
+                1.0,
+                0.3,
+                0.1,
+                plain,
+            ),
+            preset(
+                "Spray can",
+                BrushType::Spray,
+                48.0,
+                0.5,
+                1.0,
+                1.0,
+                0.12,
+                BrushStyle {
+                    spray_density: 0.3,
+                    ..plain
+                },
+            ),
+            preset(
+                "Chalk",
+                BrushType::Soft,
+                26.0,
+                0.6,
+                0.85,
+                1.0,
+                0.12,
+                BrushStyle {
+                    size_jitter: 0.25,
+                    opacity_jitter: 0.35,
+                    scatter: 0.25,
+                    ..plain
+                },
+            ),
+            preset("Smudge", BrushType::Smudge, 28.0, 0.4, 0.8, 1.0, 0.1, plain),
+        ]
+    }
+
+    /// Arquivo dos presets do usuário.
+    pub fn user_path() -> std::path::PathBuf {
+        petunia_config::UserPreferences::config_dir().join("brush-presets.json")
+    }
+
+    /// Presets do usuário em `path` (vazio se não existir ou estiver corrompido).
+    pub fn load_user_from(path: &std::path::Path) -> Vec<BrushPreset> {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Vec<BrushPreset>>(&text).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|mut p| {
+                p.settings = p.settings.sanitized();
+                p.style = p.style.sanitized();
+                p
+            })
+            .collect()
+    }
+
+    /// Grava os presets do usuário de forma atômica.
+    pub fn save_user_to(path: &std::path::Path, presets: &[BrushPreset]) -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let json = serde_json::to_string_pretty(presets)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, json)?;
+        std::fs::rename(&tmp, path)
     }
 }
 

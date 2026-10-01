@@ -29,6 +29,23 @@ export struct ThemeEntry {
     active: bool,
 }
 
+/// Perfil de atalhos (canônico ou do usuário) na lista de Configurações → Teclado.
+export struct KeymapProfileEntry {
+    id: string,
+    name: string,
+    custom: bool,
+    active: bool,
+}
+
+/// Uma ação com seu atalho; `capturing` = aguardando a próxima combinação.
+export struct KeymapActionEntry {
+    action: string,
+    label: string,
+    shortcut: string,
+    conflict: bool,
+    capturing: bool,
+}
+
 export struct PaintEffectParamEntry {
     key: string,
     label: string,
@@ -672,6 +689,67 @@ component PaintCanvasSurface inherits Rectangle {
             reject
         }
     }
+}
+
+/// Linha "rótulo: valor  [-] [+]" do painel de pincel.
+component BrushStepper inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value-text;
+    callback minus();
+    callback plus();
+    alignment: center;
+    Text {
+        text: root.label + ": " + root.value-text;
+        color: DesignTokens.text-secondary;
+        font-size: 11px;
+        horizontal-stretch: 1;
+        overflow: elide;
+    }
+    Rectangle {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        background: minus-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+        accessible-role: button;
+        accessible-label: root.label + " −";
+        Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+        minus-touch := TouchArea { clicked => { root.minus(); } }
+    }
+    Rectangle { width: 4px; }
+    Rectangle {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        background: plus-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+        accessible-role: button;
+        accessible-label: root.label + " +";
+        Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+        plus-touch := TouchArea { clicked => { root.plus(); } }
+    }
+}
+
+/// Chip de escolha (tipo de pincel, ponta, mistura, preset).
+component BrushChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked();
+    height: 24px;
+    horizontal-stretch: 1;
+    border-radius: 4px;
+    background: root.active ? DesignTokens.accent : (chip-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+    Text {
+        text: root.label;
+        color: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: 10px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    chip-touch := TouchArea { clicked => { root.clicked(); } }
 }
 
 /// Alça de arraste de painéis flutuantes não modais (cap. 36, revisão 2026-09-30).
@@ -3372,6 +3450,24 @@ export component PetuniaSlintShell inherits Window {
     in-out property <[ReferenceSlotData]> reference-slots: [];
     in-out property <int> reference-total-count: 0;
     in-out property <string> active-keymap-id: "petunia-default";
+    in-out property <[KeymapProfileEntry]> keymap-profiles;
+    in-out property <[KeymapActionEntry]> keymap-rows;
+    in-out property <int> keymap-revision: -1;
+    in-out property <string> keymap-capture-action: "";
+    in-out property <float> brush-flow: 1.0;
+    in-out property <float> brush-spacing: 0.15;
+    in-out property <float> brush-smoothing: 0.0;
+    in-out property <float> brush-size-jitter: 0.0;
+    in-out property <float> brush-opacity-jitter: 0.0;
+    in-out property <float> brush-scatter: 0.0;
+    in-out property <float> brush-spray-density: 0.35;
+    in-out property <float> brush-angle: 0.0;
+    in-out property <float> brush-roundness: 1.0;
+    in-out property <string> brush-tip: "round";
+    in-out property <string> brush-blend: "normal";
+    in-out property <[string]> brush-presets;
+    in-out property <int> brush-preset-index: -1;
+    in-out property <bool> clone-source-set: false;
     in-out property <bool> saved: true;
     in-out property <image> viewport-image;
     in-out property <bool> split-enabled: false;
@@ -4306,6 +4402,49 @@ export component PetuniaSlintShell inherits Window {
     callback paint-decal-layer-added;
     callback settings-closed;
     callback keymap-changed(string);
+    callback brush-param-changed(string, float);
+    callback brush-tip-changed(string);
+    callback brush-blend-changed(string);
+    callback brush-preset-applied(int);
+    callback brush-preset-saved();
+    callback brush-preset-deleted(int);
+    callback keymap-profile-create();
+    callback keymap-profile-delete(string);
+    callback keymap-capture-requested(string);
+    callback keymap-capture-cancelled();
+    callback keymap-capture-key(string, bool, bool, bool);
+    callback keymap-binding-reset(string);
+    callback keymap-binding-clear(string);
+
+    /// Nome estável da tecla (mesmo vocabulário de `petunia_config::keybinds`).
+    pure function shortcut-key-name(text: string) -> string {
+        return text == Key.Tab ? "Tab" :
+            text == Key.Return ? "Enter" :
+            text == Key.Backspace ? "Backspace" :
+            text == Key.Delete ? "Delete" :
+            text == Key.Home ? "Home" :
+            text == Key.End ? "End" :
+            text == Key.PageUp ? "PageUp" :
+            text == Key.PageDown ? "PageDown" :
+            text == Key.Insert ? "Insert" :
+            text == Key.UpArrow ? "Up" :
+            text == Key.DownArrow ? "Down" :
+            text == Key.LeftArrow ? "Left" :
+            text == Key.RightArrow ? "Right" :
+            text == Key.F1 ? "F1" :
+            text == Key.F2 ? "F2" :
+            text == Key.F3 ? "F3" :
+            text == Key.F4 ? "F4" :
+            text == Key.F5 ? "F5" :
+            text == Key.F6 ? "F6" :
+            text == Key.F7 ? "F7" :
+            text == Key.F8 ? "F8" :
+            text == Key.F9 ? "F9" :
+            text == Key.F10 ? "F10" :
+            text == Key.F11 ? "F11" :
+            text == Key.F12 ? "F12" :
+            text;
+    }
 
     // Cor e espessura de um handle do gizmo conforme o estado da interação.
     function gizmo-handle-color(axis: int, base: color) -> color {
@@ -4382,6 +4521,16 @@ export component PetuniaSlintShell inherits Window {
                 }
                 return accept;
             }
+            // Captura de atalho (Configurações → Teclado): a próxima combinação vai
+            // para a ação pendente; Esc cancela sem fechar o painel.
+            if root.keymap-capture-action != "" {
+                if event.text == Key.Escape {
+                    root.keymap-capture-cancelled();
+                } else {
+                    root.keymap-capture-key(root.shortcut-key-name(event.text), event.modifiers.control, event.modifiers.shift, event.modifiers.alt);
+                }
+                return accept;
+            }
             if root.menu-open != "" {
                 if event.text == Key.DownArrow { root.menu-step(1); return accept; }
                 if event.text == Key.UpArrow { root.menu-step(-1); return accept; }
@@ -4429,34 +4578,8 @@ export component PetuniaSlintShell inherits Window {
                 return accept;
             }
             if !root.command-search-visible && !root.settings-visible {
-                let key-name = event.text == Key.Tab ? "Tab" :
-                    event.text == Key.Return ? "Enter" :
-                    event.text == Key.Backspace ? "Backspace" :
-                    event.text == Key.Delete ? "Delete" :
-                    event.text == Key.Home ? "Home" :
-                    event.text == Key.End ? "End" :
-                    event.text == Key.PageUp ? "PageUp" :
-                    event.text == Key.PageDown ? "PageDown" :
-                    event.text == Key.Insert ? "Insert" :
-                    event.text == Key.UpArrow ? "Up" :
-                    event.text == Key.DownArrow ? "Down" :
-                    event.text == Key.LeftArrow ? "Left" :
-                    event.text == Key.RightArrow ? "Right" :
-                    event.text == Key.F1 ? "F1" :
-                    event.text == Key.F2 ? "F2" :
-                    event.text == Key.F3 ? "F3" :
-                    event.text == Key.F4 ? "F4" :
-                    event.text == Key.F5 ? "F5" :
-                    event.text == Key.F6 ? "F6" :
-                    event.text == Key.F7 ? "F7" :
-                    event.text == Key.F8 ? "F8" :
-                    event.text == Key.F9 ? "F9" :
-                    event.text == Key.F10 ? "F10" :
-                    event.text == Key.F11 ? "F11" :
-                    event.text == Key.F12 ? "F12" :
-                    event.text;
                 root.shortcut-requested(
-                    key-name,
+                    root.shortcut-key-name(event.text),
                     event.modifiers.control, event.modifiers.shift, event.modifiers.alt);
                 return accept;
             }
@@ -9412,6 +9535,113 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
 
+                                    // --- Pincel: tipo, fluxo, estabilizador, variação, ponta, mistura ---
+                                    Text { text: Tr.t("sl.brush_type"); color: DesignTokens.text-secondary; font-size: 11px; }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush"); active: root.active-tool == "brush"; clicked => { root.active-tool-changed("brush"); } }
+                                        BrushChip { label: Tr.t("sl.brush_type_pixel"); active: root.active-tool == "pixel"; clicked => { root.active-tool-changed("pixel"); } }
+                                        BrushChip { label: Tr.t("sl.airbrush"); active: root.active-tool == "airbrush"; clicked => { root.active-tool-changed("airbrush"); } }
+                                    }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush_type_spray"); active: root.active-tool == "spray"; clicked => { root.active-tool-changed("spray"); } }
+                                        BrushChip { label: Tr.t("sl.brush_type_smudge"); active: root.active-tool == "smudge"; clicked => { root.active-tool-changed("smudge"); } }
+                                        BrushChip { label: Tr.t("sl.brush_type_blur"); active: root.active-tool == "blur"; clicked => { root.active-tool-changed("blur"); } }
+                                    }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush_type_dodge"); active: root.active-tool == "dodge"; clicked => { root.active-tool-changed("dodge"); } }
+                                        BrushChip { label: Tr.t("sl.brush_type_burn"); active: root.active-tool == "burn"; clicked => { root.active-tool-changed("burn"); } }
+                                        BrushChip { label: Tr.t("sl.brush_type_clone"); active: root.active-tool == "clone"; clicked => { root.active-tool-changed("clone"); } }
+                                    }
+                                    if root.active-tool == "clone": Text {
+                                        text: root.clone-source-set ? Tr.t("sl.brush_clone_ready") : Tr.t("sl.brush_clone_hint");
+                                        color: DesignTokens.text-muted;
+                                        font-size: 10px;
+                                        wrap: word-wrap;
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_flow");
+                                        value-text: "\{Math.round(root.brush-flow * 100)}%";
+                                        minus => { root.brush-param-changed("flow", Math.max(0.0, root.brush-flow - 0.1)); }
+                                        plus => { root.brush-param-changed("flow", Math.min(1.0, root.brush-flow + 0.1)); }
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_spacing");
+                                        value-text: "\{Math.round(root.brush-spacing * 100)}%";
+                                        minus => { root.brush-param-changed("spacing", Math.max(0.01, root.brush-spacing - 0.05)); }
+                                        plus => { root.brush-param-changed("spacing", Math.min(1.0, root.brush-spacing + 0.05)); }
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_smoothing");
+                                        value-text: "\{Math.round(root.brush-smoothing * 100)}%";
+                                        minus => { root.brush-param-changed("smoothing", Math.max(0.0, root.brush-smoothing - 0.1)); }
+                                        plus => { root.brush-param-changed("smoothing", Math.min(0.95, root.brush-smoothing + 0.1)); }
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_size_jitter");
+                                        value-text: "\{Math.round(root.brush-size-jitter * 100)}%";
+                                        minus => { root.brush-param-changed("size_jitter", Math.max(0.0, root.brush-size-jitter - 0.1)); }
+                                        plus => { root.brush-param-changed("size_jitter", Math.min(1.0, root.brush-size-jitter + 0.1)); }
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_opacity_jitter");
+                                        value-text: "\{Math.round(root.brush-opacity-jitter * 100)}%";
+                                        minus => { root.brush-param-changed("opacity_jitter", Math.max(0.0, root.brush-opacity-jitter - 0.1)); }
+                                        plus => { root.brush-param-changed("opacity_jitter", Math.min(1.0, root.brush-opacity-jitter + 0.1)); }
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_scatter");
+                                        value-text: "\{Math.round(root.brush-scatter * 100)}%";
+                                        minus => { root.brush-param-changed("scatter", Math.max(0.0, root.brush-scatter - 0.1)); }
+                                        plus => { root.brush-param-changed("scatter", Math.min(2.0, root.brush-scatter + 0.1)); }
+                                    }
+                                    if root.active-tool == "spray": BrushStepper {
+                                        label: Tr.t("sl.brush_spray_density");
+                                        value-text: "\{Math.round(root.brush-spray-density * 100)}%";
+                                        minus => { root.brush-param-changed("spray_density", Math.max(0.05, root.brush-spray-density - 0.05)); }
+                                        plus => { root.brush-param-changed("spray_density", Math.min(1.0, root.brush-spray-density + 0.05)); }
+                                    }
+                                    Text { text: Tr.t("sl.brush_tip"); color: DesignTokens.text-secondary; font-size: 11px; }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush_tip_round"); active: root.brush-tip == "round"; clicked => { root.brush-tip-changed("round"); } }
+                                        BrushChip { label: Tr.t("sl.brush_tip_square"); active: root.brush-tip == "square"; clicked => { root.brush-tip-changed("square"); } }
+                                        BrushChip { label: Tr.t("sl.brush_tip_diamond"); active: root.brush-tip == "diamond"; clicked => { root.brush-tip-changed("diamond"); } }
+                                    }
+                                    if root.brush-tip != "round": BrushStepper {
+                                        label: Tr.t("sl.brush_angle");
+                                        value-text: "\{Math.round(root.brush-angle)}°";
+                                        minus => { root.brush-param-changed("angle", Math.max(-180.0, root.brush-angle - 15.0)); }
+                                        plus => { root.brush-param-changed("angle", Math.min(180.0, root.brush-angle + 15.0)); }
+                                    }
+                                    BrushStepper {
+                                        label: Tr.t("sl.brush_roundness");
+                                        value-text: "\{Math.round(root.brush-roundness * 100)}%";
+                                        minus => { root.brush-param-changed("roundness", Math.max(0.1, root.brush-roundness - 0.1)); }
+                                        plus => { root.brush-param-changed("roundness", Math.min(1.0, root.brush-roundness + 0.1)); }
+                                    }
+                                    Text { text: Tr.t("sl.brush_blend"); color: DesignTokens.text-secondary; font-size: 11px; }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush_blend_normal"); active: root.brush-blend == "normal"; clicked => { root.brush-blend-changed("normal"); } }
+                                        BrushChip { label: Tr.t("sl.brush_blend_multiply"); active: root.brush-blend == "multiply"; clicked => { root.brush-blend-changed("multiply"); } }
+                                        BrushChip { label: Tr.t("sl.brush_blend_screen"); active: root.brush-blend == "screen"; clicked => { root.brush-blend-changed("screen"); } }
+                                    }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush_blend_add"); active: root.brush-blend == "add"; clicked => { root.brush-blend-changed("add"); } }
+                                        BrushChip { label: Tr.t("sl.brush_blend_darken"); active: root.brush-blend == "darken"; clicked => { root.brush-blend-changed("darken"); } }
+                                        BrushChip { label: Tr.t("sl.brush_blend_lighten"); active: root.brush-blend == "lighten"; clicked => { root.brush-blend-changed("lighten"); } }
+                                    }
+                                    Text { text: Tr.t("sl.brush_presets"); color: DesignTokens.text-secondary; font-size: 11px; }
+                                    VerticalLayout { spacing: 3px;
+                                        for preset-name[preset-index] in root.brush-presets: BrushChip {
+                                            label: preset-name;
+                                            active: root.brush-preset-index == preset-index;
+                                            clicked => { root.brush-preset-applied(preset-index); }
+                                        }
+                                    }
+                                    HorizontalLayout { spacing: 4px;
+                                        BrushChip { label: Tr.t("sl.brush_preset_save"); clicked => { root.brush-preset-saved(); } }
+                                        BrushChip { label: Tr.t("sl.brush_preset_delete"); clicked => { root.brush-preset-deleted(root.brush-preset-index); } }
+                                    }
+
                                     HorizontalLayout {
                                         alignment: center;
                                         Text {
@@ -12234,55 +12464,120 @@ export component PetuniaSlintShell inherits Window {
                                     spacing: 12px;
 
                                     Text { text: Tr.t("sl.keyboard_shortcut_profile"); color: DesignTokens.text-primary; font-size: 12px; font-weight: 700; }
+                                    // Lista vertical: nunca corta o nome do perfil, qualquer que seja a largura do painel.
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        for profile in root.keymap-profiles: Rectangle {
+                                            height: 30px;
+                                            border-radius: 4px;
+                                            background: profile.active ? DesignTokens.accent : (profile-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
+                                            border-width: 1px;
+                                            border-color: profile.active ? DesignTokens.focus-ring : DesignTokens.border;
+                                            accessible-role: button;
+                                            accessible-label: profile.name;
+                                            accessible-checked: profile.active;
+                                            HorizontalLayout {
+                                                padding-left: 10px;
+                                                padding-right: 10px;
+                                                spacing: 8px;
+                                                Text {
+                                                    text: profile.name;
+                                                    color: profile.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+                                                    font-size: 11px;
+                                                    font-weight: 600;
+                                                    vertical-alignment: center;
+                                                    horizontal-stretch: 1;
+                                                    overflow: elide;
+                                                }
+                                                if profile.custom: Text {
+                                                    text: Tr.t("sl.keymap_custom_badge");
+                                                    color: profile.active ? DesignTokens.on-accent : DesignTokens.text-muted;
+                                                    font-size: 9px;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            profile-touch := TouchArea { clicked => { root.keymap-changed(profile.id); } }
+                                        }
+                                    }
                                     HorizontalLayout {
                                         spacing: 8px;
                                         Rectangle {
-                                            width: 110px; height: 32px; border-radius: 4px;
-                                            background: root.active-keymap-id == "petunia-default" ? DesignTokens.accent : DesignTokens.surface;
-                                            border-width: 1px; border-color: root.active-keymap-id == "petunia-default" ? DesignTokens.focus-ring : DesignTokens.border;
-                                            Text {
-                                                text: Tr.t("sl.petunia_default");
-                                                color: root.active-keymap-id == "petunia-default" ? DesignTokens.on-accent : DesignTokens.text-primary;
-                                                font-size: 11px; font-weight: 600;
-                                                vertical-alignment: center; horizontal-alignment: center;
-                                            }
-                                            TouchArea { clicked => { root.keymap-changed("petunia-default"); } }
+                                            height: 28px;
+                                            horizontal-stretch: 1;
+                                            border-radius: 4px;
+                                            background: new-keymap-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
+                                            border-width: 1px;
+                                            border-color: DesignTokens.border;
+                                            accessible-role: button;
+                                            accessible-label: Tr.t("sl.keymap_new_profile");
+                                            Text { text: Tr.t("sl.keymap_new_profile"); color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                                            new-keymap-touch := TouchArea { clicked => { root.keymap-profile-create(); } }
                                         }
-                                        Rectangle {
-                                            width: 110px; height: 32px; border-radius: 4px;
-                                            background: root.active-keymap-id == "blender" ? DesignTokens.accent : DesignTokens.surface;
-                                            border-width: 1px; border-color: root.active-keymap-id == "blender" ? DesignTokens.focus-ring : DesignTokens.border;
-                                            Text {
-                                                text: Tr.t("sl.blender_official");
-                                                color: root.active-keymap-id == "blender" ? DesignTokens.on-accent : DesignTokens.text-primary;
-                                                font-size: 11px; font-weight: 600;
-                                                vertical-alignment: center; horizontal-alignment: center;
-                                            }
-                                            TouchArea { clicked => { root.keymap-changed("blender"); } }
+                                        if root.active-keymap-id.starts-with("user-"): Rectangle {
+                                            height: 28px;
+                                            horizontal-stretch: 1;
+                                            border-radius: 4px;
+                                            background: del-keymap-touch.has-hover ? DesignTokens.danger.transparentize(0.8) : DesignTokens.surface;
+                                            border-width: 1px;
+                                            border-color: DesignTokens.danger;
+                                            accessible-role: button;
+                                            accessible-label: Tr.t("sl.keymap_delete_profile");
+                                            Text { text: Tr.t("sl.keymap_delete_profile"); color: DesignTokens.danger; font-size: 11px; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                                            del-keymap-touch := TouchArea { clicked => { root.keymap-profile-delete(root.active-keymap-id); } }
                                         }
-                                        Rectangle {
-                                            width: 110px; height: 32px; border-radius: 4px;
-                                            background: root.active-keymap-id == "maya" ? DesignTokens.accent : DesignTokens.surface;
-                                            border-width: 1px; border-color: root.active-keymap-id == "maya" ? DesignTokens.focus-ring : DesignTokens.border;
-                                            Text {
-                                                text: Tr.t("sl.autodesk_maya");
-                                                color: root.active-keymap-id == "maya" ? DesignTokens.on-accent : DesignTokens.text-primary;
-                                                font-size: 11px; font-weight: 600;
-                                                vertical-alignment: center; horizontal-alignment: center;
+                                    }
+                                    Text { text: Tr.t("sl.keymap_editor_hint"); color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
+                                    VerticalLayout {
+                                        spacing: 2px;
+                                        for row in root.keymap-rows: Rectangle {
+                                            height: 26px;
+                                            border-radius: 4px;
+                                            background: row.capturing ? DesignTokens.accent.transparentize(0.8) : (row-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                            HorizontalLayout {
+                                                padding-left: 8px;
+                                                padding-right: 4px;
+                                                spacing: 6px;
+                                                Text {
+                                                    text: row.label;
+                                                    color: DesignTokens.text-primary;
+                                                    font-size: 10px;
+                                                    vertical-alignment: center;
+                                                    horizontal-stretch: 1;
+                                                    overflow: elide;
+                                                }
+                                                Rectangle {
+                                                    width: 118px;
+                                                    height: 22px;
+                                                    y: 2px;
+                                                    border-radius: 3px;
+                                                    background: DesignTokens.surface;
+                                                    border-width: 1px;
+                                                    border-color: row.capturing ? DesignTokens.focus-ring : (row.conflict ? DesignTokens.warning : DesignTokens.border);
+                                                    accessible-role: button;
+                                                    accessible-label: row.label + ": " + row.shortcut;
+                                                    Text {
+                                                        text: row.capturing ? Tr.t("sl.keymap_press_key") : (row.shortcut == "" ? "—" : row.shortcut);
+                                                        color: row.conflict ? DesignTokens.warning : DesignTokens.text-primary;
+                                                        font-size: 10px;
+                                                        font-weight: 600;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                        overflow: elide;
+                                                    }
+                                                    row-touch := TouchArea { clicked => { root.keymap-capture-requested(row.action); } }
+                                                }
+                                                Rectangle {
+                                                    width: 22px;
+                                                    height: 22px;
+                                                    y: 2px;
+                                                    border-radius: 3px;
+                                                    background: reset-row-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                                                    accessible-role: button;
+                                                    accessible-label: Tr.t("sl.keymap_reset_binding");
+                                                    IconDisplay { icon: IconSet.X; size: 11px; stroke: DesignTokens.text-muted; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+                                                    reset-row-touch := TouchArea { clicked => { root.keymap-binding-reset(row.action); } }
+                                                }
                                             }
-                                            TouchArea { clicked => { root.keymap-changed("maya"); } }
-                                        }
-                                        Rectangle {
-                                            width: 110px; height: 32px; border-radius: 4px;
-                                            background: root.active-keymap-id == "3ds-max" ? DesignTokens.accent : DesignTokens.surface;
-                                            border-width: 1px; border-color: root.active-keymap-id == "3ds-max" ? DesignTokens.focus-ring : DesignTokens.border;
-                                            Text {
-                                                text: Tr.t("sl.autodesk_3ds_max");
-                                                color: root.active-keymap-id == "3ds-max" ? DesignTokens.on-accent : DesignTokens.text-primary;
-                                                font-size: 11px; font-weight: 600;
-                                                vertical-alignment: center; horizontal-alignment: center;
-                                            }
-                                            TouchArea { clicked => { root.keymap-changed("3ds-max"); } }
                                         }
                                     }
 

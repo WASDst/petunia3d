@@ -591,6 +591,10 @@ pub struct ToolState {
     /// Espaçamento entre dabs como fração do diâmetro (0.01..=1.0).
     pub brush_spacing: f32,
     pub paint_isolate_selection: bool,
+    /// Estilo do traço: ponta, mistura, estabilizador, jitter, spray (2E).
+    pub brush_style: crate::brush::BrushStyle,
+    /// Origem do Clone em texels (Ctrl+clique define).
+    pub clone_source: Option<[f32; 2]>,
     pub brush_projection: crate::brush::BrushProjectionMode,
     pub brush_lock: crate::brush::BrushLock,
     /// Face travada pelo `BrushLock` no primeiro toque do traço atual.
@@ -677,6 +681,8 @@ impl ToolState {
             brush_flow: 1.0,
             brush_spacing: 0.15,
             paint_isolate_selection: false,
+            brush_style: crate::brush::BrushStyle::default(),
+            clone_source: None,
             brush_projection: crate::brush::BrushProjectionMode::Surface,
             brush_lock: crate::brush::BrushLock::None,
             paint_lock_face: None,

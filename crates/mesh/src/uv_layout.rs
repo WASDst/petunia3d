@@ -379,7 +379,8 @@ impl Mesh {
     /// Texels de uma face a até `r_world` de `hit` em 3D (pincel esférico).
     ///
     /// Para cada texel dentro da UV da face chama `f(x, y, t)` com a
-    /// distância normalizada (`0` = centro, `1` = borda) do texel ao `hit`. O raio em texels é derivado da
+    /// distância normalizada (`0` = centro, `1` = borda) do texel ao `hit`, a posição
+    /// de mundo do texel e o raio efetivo usado (`r_eff`). O raio em texels é derivado da
     /// densidade local de cada triângulo, então o custo é proporcional ao
     /// tamanho do pincel, não da face. `dilate_px` alarga a UV (sangria).
     #[allow(clippy::too_many_arguments)]
@@ -391,7 +392,7 @@ impl Mesh {
         w: u32,
         h: u32,
         dilate_px: f32,
-        mut f: impl FnMut(u32, u32, f32),
+        mut f: impl FnMut(u32, u32, f32, Vec3, f32),
     ) {
         let Some(face) = self.faces.get(fi) else {
             return;
@@ -463,7 +464,7 @@ impl Mesh {
                     let pos = (v0 * c0 + v1 * c1 + v2 * c2) / sum;
                     let dist = pos.distance(hit);
                     if dist <= r_eff {
-                        f(x as u32, y as u32, dist / r_eff);
+                        f(x as u32, y as u32, dist / r_eff, pos, r_eff);
                     }
                 }
             }
@@ -659,9 +660,9 @@ mod tests {
         // centro da face 1 (z = +1): pincel de raio 0.5 não alcança a face 0 (z = -1)
         let hit = Vec3::new(0.0, 0.0, 1.0);
         let mut on_face1 = 0;
-        cube.rasterize_face_near(1, hit, 0.5, 128, 128, 0.0, |_, _, _| on_face1 += 1);
+        cube.rasterize_face_near(1, hit, 0.5, 128, 128, 0.0, |_, _, _, _, _| on_face1 += 1);
         let mut on_face0 = 0;
-        cube.rasterize_face_near(0, hit, 0.5, 128, 128, 0.0, |_, _, _| on_face0 += 1);
+        cube.rasterize_face_near(0, hit, 0.5, 128, 128, 0.0, |_, _, _, _, _| on_face0 += 1);
         assert!(on_face1 > 0);
         assert_eq!(on_face0, 0);
     }
