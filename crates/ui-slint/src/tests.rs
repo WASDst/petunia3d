@@ -10191,24 +10191,44 @@ fn profiles_2d_appear_in_parts_and_can_be_selected_and_deleted() {
     // Adiciona um retângulo 2D
     assert!(bridge.add_profile_rectangle(2.0, 1.5));
     assert_eq!(bridge.state.project.project.profiles.len(), 1);
-    let profile_id = bridge.state.project.project.profiles[0].id;
+    let rect_id = bridge.state.project.project.profiles[0].id;
+
+    // Adiciona um círculo 2D (não sobrescreve o retângulo: cria novo perfil para composição!)
+    assert!(bridge.add_profile_circle(1.0, 16));
+    assert_eq!(bridge.state.project.project.profiles.len(), 2);
+    let circle_id = bridge.state.project.project.profiles[1].id;
 
     let vm = bridge.view_model();
-    // Deve aparecer em parts_items
-    let part_item = vm
+    // Ambos devem aparecer em parts_items
+    let rect_item = vm
         .parts_items
         .iter()
-        .find(|item| item.id == format!("profile:{profile_id}"));
+        .find(|item| item.id == format!("profile:{rect_id}"));
     assert!(
-        part_item.is_some(),
-        "perfil 2D deve constar na lista de parts"
+        rect_item.is_some(),
+        "retângulo 2D deve constar na lista de parts"
     );
-    let item = part_item.unwrap();
-    assert_eq!(item.tris, 0);
-    assert!(item.verts >= 4);
+    assert_eq!(rect_item.unwrap().tris, 0);
+    assert_eq!(rect_item.unwrap().verts, 4);
 
-    // Clicar fora desativa o perfil
+    let circle_item = vm
+        .parts_items
+        .iter()
+        .find(|item| item.id == format!("profile:{circle_id}"));
+    assert!(
+        circle_item.is_some(),
+        "círculo 2D deve constar na lista de parts"
+    );
+    assert_eq!(circle_item.unwrap().tris, 0);
+    assert_eq!(circle_item.unwrap().verts, 16);
+
+    // O círculo é o perfil ativo atualmente. Deletá-lo apaga o círculo e mantém o retângulo
     assert!(bridge.delete_or_dissolve_selection());
-    // O perfil deve ter sido deletado
+    assert_eq!(bridge.state.project.project.profiles.len(), 1);
+    assert_eq!(bridge.state.project.project.profiles[0].id, rect_id);
+
+    // Seleciona o retângulo e apaga
+    bridge.activate_profile(rect_id);
+    assert!(bridge.delete_or_dissolve_selection());
     assert_eq!(bridge.state.project.project.profiles.len(), 0);
 }

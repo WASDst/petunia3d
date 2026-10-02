@@ -7624,7 +7624,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if points.len() < 3 || points.iter().flatten().any(|value| !value.is_finite()) {
             return false;
         }
-        if let Some((_, spline)) = self.active_profile_resources() {
+        if let Some((_, spline)) = self.active_profile_resources()
+            && !spline.closed
+        {
             let mut spline = spline.clone();
             spline.points = points
                 .into_iter()
