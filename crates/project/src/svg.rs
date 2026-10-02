@@ -7,7 +7,12 @@
 //! - `<image>` é ignorado: nenhuma imagem embutida (data URL) ou externa
 //!   (arquivo/rede) é carregada — o resolvedor de href devolve sempre `None`;
 //! - SVGZ (gzip) não é aceito: não há descompressão, logo não há "zip bomb";
-//! - DTD com `<!ENTITY` é recusado antes do parse (expansão de entidades).
+//! - DTD com `<!ENTITY` é recusado antes do parse (expansão de entidades);
+//! - a expansão de `<use>` (que o `usvg` faz no parse, sem teto próprio) é
+//!   medida **antes**, com memoização por `id`: documentos cujo número de
+//!   elementos expandidos ou cuja profundidade de aninhamento (grupos e
+//!   cadeias de `<use>`, que geram uma camada de render por nível) passa dos
+//!   tetos devolvem [`SvgError::TooLarge`] sem chamar o `usvg`.
 //!
 //! Duas saídas:
 //!
@@ -19,6 +24,8 @@
 //!
 //! Tudo é determinístico: mesma entrada, mesma saída (exceto os `Uuid` novos
 //! das splines, que são identidade e não geometria).
+
+use std::collections::{HashMap, HashSet};
 
 use resvg::tiny_skia::{PathSegment, Pixmap, Point, Transform};
 use resvg::usvg::{self, ImageHrefResolver, Node, Options};
@@ -32,6 +39,14 @@ pub const MAX_SVG_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_RASTER_PX: u32 = 1024;
 /// Teto de nós Bézier extraídos por [`svg_subpaths`].
 pub const MAX_SVG_NODES: usize = 20_000;
+
+/// Teto de elementos **após** a expansão de `<use>` (anti "bomba de `<use>`").
+pub const MAX_SVG_ELEMENTS: u64 = 250_000;
+/// Teto de profundidade expandida (grupos + cadeias de `<use>`): cada nível
+/// com opacidade/máscara pode custar uma camada do tamanho do canvas.
+pub const MAX_SVG_DEPTH: u32 = 64;
+/// Teto de nós XML do documento de origem (checado pelo próprio parser).
+const MAX_XML_NODES: u32 = 1_000_000;
 
 /// Distância² abaixo da qual dois pontos (em unidades do SVG) são o mesmo nó.
 const SAME_POINT_EPS_SQ: f64 = 1.0e-12;
@@ -103,10 +118,121 @@ fn parse_tree(svg: &str) -> Result<usvg::Tree, SvgError> {
             "declarações <!ENTITY> não são suportadas".to_string(),
         ));
     }
+    check_expansion(svg)?;
     usvg::Tree::from_str(svg, &safe_options()).map_err(|error| match error {
         usvg::Error::InvalidSize => SvgError::ZeroSize,
         other => SvgError::Parse(other.to_string()),
     })
+}
+
+/// Medida de um elemento já expandido: (elementos, altura da subárvore).
+type Extent = (u64, u32);
+
+/// Mede, sem alocar a árvore expandida, quanto o `usvg` geraria ao resolver
+/// os `<use>`. Erro de XML vira [`SvgError::Parse`]; estouro de qualquer teto
+/// vira [`SvgError::TooLarge`].
+fn check_expansion(svg: &str) -> Result<(), SvgError> {
+    let options = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        nodes_limit: MAX_XML_NODES,
+    };
+    let doc =
+        roxmltree::Document::parse_with_options(svg, options).map_err(|error| match error {
+            roxmltree::Error::NodesLimitReached => SvgError::TooLarge,
+            other => SvgError::Parse(other.to_string()),
+        })?;
+    let mut ids: HashMap<&str, Vec<roxmltree::NodeId>> = HashMap::new();
+    for node in doc.descendants().filter(|n| n.is_element()) {
+        if let Some(id) = node.attribute("id") {
+            ids.entry(id).or_default().push(node.id());
+        }
+    }
+    let mut walker = Expansion {
+        doc: &doc,
+        ids,
+        memo: HashMap::new(),
+        visiting: HashSet::new(),
+    };
+    walker.measure(doc.root_element(), 0)?;
+    Ok(())
+}
+
+struct Expansion<'a, 'input> {
+    doc: &'a roxmltree::Document<'input>,
+    ids: HashMap<&'a str, Vec<roxmltree::NodeId>>,
+    memo: HashMap<roxmltree::NodeId, Extent>,
+    visiting: HashSet<roxmltree::NodeId>,
+}
+
+impl<'a, 'input> Expansion<'a, 'input> {
+    /// Medida de `node` (e do que ele expande) a profundidade expandida `depth`.
+    /// A recursão é limitada por `MAX_SVG_DEPTH`, então não estoura a pilha.
+    fn measure(
+        &mut self,
+        node: roxmltree::Node<'a, 'input>,
+        depth: u32,
+    ) -> Result<Extent, SvgError> {
+        if depth > MAX_SVG_DEPTH {
+            return Err(SvgError::TooLarge);
+        }
+        if let Some(&extent) = self.memo.get(&node.id()) {
+            return Self::fit(extent, depth);
+        }
+        if !self.visiting.insert(node.id()) {
+            // ciclo de `<use>`: o usvg descarta; aqui não soma nada
+            return Ok((0, 0));
+        }
+        let mut count = 1u64;
+        let mut height = 1u32;
+        let mut children = Vec::new();
+        for child in node.children().filter(|c| c.is_element()) {
+            children.push(child);
+        }
+        if node.tag_name().name() == "use" {
+            // alvos com `id` repetido: vale o pior caso
+            for target in self.use_targets(node) {
+                children.push(target);
+            }
+        }
+        for child in children {
+            let (c, h) = self.measure(child, depth + 1)?;
+            count = count.saturating_add(c);
+            height = height.max(h.saturating_add(1));
+            if count > MAX_SVG_ELEMENTS {
+                return Err(SvgError::TooLarge);
+            }
+        }
+        self.visiting.remove(&node.id());
+        let extent = (count, height);
+        self.memo.insert(node.id(), extent);
+        Self::fit(extent, depth)
+    }
+
+    fn fit(extent: Extent, depth: u32) -> Result<Extent, SvgError> {
+        if extent.0 > MAX_SVG_ELEMENTS || depth.saturating_add(extent.1) > MAX_SVG_DEPTH + 1 {
+            Err(SvgError::TooLarge)
+        } else {
+            Ok(extent)
+        }
+    }
+
+    /// Elementos referenciados por `href="#id"` / `xlink:href="#id"` de um `<use>`.
+    fn use_targets(&self, node: roxmltree::Node<'a, 'input>) -> Vec<roxmltree::Node<'a, 'input>> {
+        let Some(href) = node
+            .attributes()
+            .find(|a| a.name() == "href")
+            .map(|a| a.value())
+        else {
+            return Vec::new();
+        };
+        let Some(id) = href.trim().strip_prefix('#') else {
+            return Vec::new();
+        };
+        self.ids
+            .get(id)
+            .map(|nodes| nodes.iter().filter_map(|&n| self.doc.get_node(n)).collect())
+            .unwrap_or_default()
+    }
 }
 
 /// Lê só o tamanho intrínseco do SVG.
@@ -980,5 +1106,118 @@ mod tests {
             ids.dedup();
             assert_eq!(ids.len(), spline.points.len());
         }
+    }
+
+    /// `<use>` dobrando a cada nível: 2^levels elementos expandidos.
+    fn use_bomb(levels: usize) -> String {
+        let mut body = String::from("<g id='g0'><rect width='1' height='1'/></g>");
+        for level in 1..=levels {
+            let prev = level - 1;
+            body.push_str(&format!(
+                "<g id='g{level}'><use href='#g{prev}'/><use href='#g{prev}'/></g>"
+            ));
+        }
+        body.push_str(&format!("<use href='#g{levels}'/>"));
+        svg(&body)
+    }
+
+    #[test]
+    fn use_bomb_is_rejected_fast_everywhere() {
+        let start = std::time::Instant::now();
+        let bomb = use_bomb(40);
+        assert!(bomb.len() < 10_000);
+        assert_eq!(svg_info(&bomb), Err(SvgError::TooLarge));
+        assert_eq!(rasterize_svg(&bomb, 64).unwrap_err(), SvgError::TooLarge);
+        assert_eq!(svg_subpaths(&bomb, 1.0).unwrap_err(), SvgError::TooLarge);
+        assert_eq!(svg_to_splines(&bomb, 1.0).unwrap_err(), SvgError::TooLarge);
+        assert!(start.elapsed().as_secs() < 5);
+    }
+
+    #[test]
+    fn use_bomb_30_levels_with_xlink_href_is_rejected() {
+        let bomb = use_bomb(30)
+            .replace("href=", "xlink:href=")
+            .replace("<svg ", "<svg xmlns:xlink='http://www.w3.org/1999/xlink' ");
+        assert_eq!(svg_info(&bomb), Err(SvgError::TooLarge));
+    }
+
+    #[test]
+    fn use_bomb_with_wide_fanout_is_rejected() {
+        // 1 + 1000 usos de um grupo com 1000 usos de um grupo com 1000 retângulos
+        let rects = "<rect width='1' height='1'/>".repeat(1000);
+        let uses = |id: &str| format!("<use href='#{id}'/>").repeat(1000);
+        let body = format!(
+            "<g id='a'>{rects}</g><g id='b'>{}</g><g id='c'>{}</g>{}",
+            uses("a"),
+            uses("b"),
+            uses("c")
+        );
+        assert_eq!(svg_info(&svg(&body)), Err(SvgError::TooLarge));
+    }
+
+    #[test]
+    fn moderate_use_expansion_still_works() {
+        let body = "<defs><g id='dot'><rect width='4' height='4'/></g></defs>\
+            <use href='#dot' x='0'/><use href='#dot' x='10'/><use href='#dot' x='20'/>";
+        assert!(rasterize_svg(&svg(body), 32).is_ok());
+        assert!(!svg_subpaths(&svg(body), 10.0).unwrap().is_empty());
+        // 10 níveis dobrando (1024 retângulos) é legítimo
+        assert!(svg_info(&use_bomb(10)).is_ok());
+    }
+
+    #[test]
+    fn deep_group_nesting_is_rejected_but_moderate_is_fine() {
+        let nest = |n: usize| {
+            svg(&format!(
+                "{}<rect width='10' height='10'/>{}",
+                "<g opacity='0.9'>".repeat(n),
+                "</g>".repeat(n)
+            ))
+        };
+        assert!(rasterize_svg(&nest(20), 16).is_ok());
+        assert_eq!(svg_info(&nest(200)), Err(SvgError::TooLarge));
+        assert_eq!(
+            rasterize_svg(&nest(200), 16).unwrap_err(),
+            SvgError::TooLarge
+        );
+    }
+
+    #[test]
+    fn long_linear_use_chain_hits_depth_cap_without_overflowing_stack() {
+        let mut body = String::from("<rect id='u0' width='1' height='1'/>");
+        for level in 1..=5000 {
+            body.push_str(&format!("<use id='u{level}' href='#u{}'/>", level - 1));
+        }
+        body.push_str("<use href='#u5000'/>");
+        assert_eq!(svg_info(&svg(&body)), Err(SvgError::TooLarge));
+    }
+
+    #[test]
+    fn use_cycles_and_dangling_refs_do_not_hang_the_check() {
+        let cycle = "<g id='a'><use href='#b'/></g><g id='b'><use href='#a'/></g><use href='#a'/>";
+        // o veredito (ok ou erro de parse) é do usvg; o que importa é terminar
+        let _ = svg_info(&svg(cycle));
+        let dangling =
+            "<use href='#nope'/><use href='http://x/y.svg#z'/><use/><rect width='5' height='5'/>";
+        assert!(svg_info(&svg(dangling)).is_ok());
+    }
+
+    #[test]
+    fn duplicate_ids_use_worst_case() {
+        let rects = "<rect width='1' height='1'/>".repeat(1000);
+        let big = format!("<g id='x'/><g id='x'>{rects}</g>");
+        let uses = "<use href='#x'/>".repeat(300);
+        assert_eq!(
+            svg_info(&svg(&format!("{big}{uses}"))),
+            Err(SvgError::TooLarge)
+        );
+    }
+
+    #[test]
+    fn malformed_xml_is_parse_error_before_expansion() {
+        assert!(matches!(
+            svg_info("<svg xmlns='http://www.w3.org/2000/svg'><g></svg>"),
+            Err(SvgError::Parse(_))
+        ));
     }
 }
