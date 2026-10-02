@@ -626,6 +626,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub position: [NumericFieldState; 3],
     pub rotation: [NumericFieldState; 3],
     pub scale: [NumericFieldState; 3],
+    pub transform_initial: [f32; 3],
     pub drag: Option<ViewportDrag>,
     pub viewport_size: [f32; 2],
     /// Última posição de tela do traço de pintura ativo.
@@ -1095,7 +1096,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 NumericFieldState::new(1.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(1.0, None, None).with_steps(0.1, 0.01),
             ],
+            transform_initial: [0.0, 0.0, 0.0],
         };
+        bridge.reset_transform_fields();
         bridge.sync_viewport_context();
         bridge
     }
@@ -8716,6 +8719,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.delete_selected_profile_point();
         }
 
+        // Se houver um perfil ativo em DRAW sem ponto selecionado, apaga a forma 2D inteira!
+        if let Some(profile_id) = self.active_profile_id {
+            if self
+                .state
+                .dispatch(&petunia_core::DeleteProfileCmd { profile_id })
+                .is_ok()
+            {
+                self.active_profile_id = None;
+                self.profile_selected_point = None;
+                self.profile_drag_target = None;
+                self.state.set_status("Shape deleted");
+                self.state.mark_dirty();
+                return true;
+            }
+        }
+
         if self.state.selection_domain() != SelectionDomain::Object {
             let hover = self.state.hover;
             let Some(mesh) = self.state.project.active_mesh_mut() else {
@@ -9336,13 +9355,32 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// um clique-direito em linha não selecionada precisa agir no que o usuário
     /// apontou, não no que estava ativo.
     pub fn open_context_menu(&mut self, id: &str, x: f32, y: f32) -> bool {
-        let Ok(asset) = uuid::Uuid::parse_str(id) else {
+        let (is_profile, asset_id) = if let Some(p_str) = id.strip_prefix("profile:") {
+            (true, uuid::Uuid::parse_str(p_str).ok())
+        } else {
+            (false, uuid::Uuid::parse_str(id).ok())
+        };
+        let Some(asset) = asset_id else {
             return false;
         };
-        if !self.state.project.assets.iter().any(|a| a.id == asset) {
-            return false;
+        if is_profile {
+            if !self
+                .state
+                .project
+                .project
+                .profiles
+                .iter()
+                .any(|p| p.id == asset)
+            {
+                return false;
+            }
+            self.activate_profile(asset);
+        } else {
+            if !self.state.project.assets.iter().any(|a| a.id == asset) {
+                return false;
+            }
+            self.select_asset_by_id(asset);
         }
-        self.select_asset_by_id(asset);
         self.context_menu = Some(ContextMenuState {
             x,
             y,
@@ -9621,6 +9659,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "origin_to_selection" => self.set_origin_selection(),
                 "geometry_to_origin" => self.set_geometry_to_origin(),
                 "toggle_edit_pivot" => self.toggle_edit_pivot(),
+                "clear_location" => {
+                    let _ = self.execute_core_command("model.clear_location");
+                    self.reset_transform_fields();
+                    true
+                }
+                "clear_rotation" => {
+                    let _ = self.execute_core_command("model.clear_rotation");
+                    self.reset_transform_fields();
+                    true
+                }
+                "clear_scale" => {
+                    let _ = self.execute_core_command("model.clear_scale");
+                    self.reset_transform_fields();
+                    true
+                }
+                "clear_all_transforms" => {
+                    let _ = self.execute_core_command("model.clear_all_transforms");
+                    self.reset_transform_fields();
+                    true
+                }
                 _ => false,
             };
         }
@@ -9703,10 +9761,64 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.select_asset_by_id(menu.asset);
                 self.toggle_edit_pivot()
             }
-            "delete" => {
+            "clear_location" => {
                 self.select_asset_by_id(menu.asset);
-                self.apply(UiIntent::DeleteActiveAsset);
+                let _ = self.execute_core_command("model.clear_location");
+                self.reset_transform_fields();
                 true
+            }
+            "clear_rotation" => {
+                self.select_asset_by_id(menu.asset);
+                let _ = self.execute_core_command("model.clear_rotation");
+                self.reset_transform_fields();
+                true
+            }
+            "clear_scale" => {
+                self.select_asset_by_id(menu.asset);
+                let _ = self.execute_core_command("model.clear_scale");
+                self.reset_transform_fields();
+                true
+            }
+            "clear_all_transforms" => {
+                self.select_asset_by_id(menu.asset);
+                let _ = self.execute_core_command("model.clear_all_transforms");
+                self.reset_transform_fields();
+                true
+            }
+            "delete" => {
+                if let Some(profile_id) = self.active_profile_id {
+                    let _ = self
+                        .state
+                        .dispatch(&petunia_core::DeleteProfileCmd { profile_id });
+                    self.active_profile_id = None;
+                    self.profile_selected_point = None;
+                    self.profile_drag_target = None;
+                    self.state.set_status("Shape deleted");
+                    self.state.mark_dirty();
+                    true
+                } else if self
+                    .state
+                    .project
+                    .project
+                    .profiles
+                    .iter()
+                    .any(|p| p.id == menu.asset)
+                {
+                    let pid = menu.asset;
+                    let _ = self
+                        .state
+                        .dispatch(&petunia_core::DeleteProfileCmd { profile_id: pid });
+                    if self.active_profile_id == Some(pid) {
+                        self.active_profile_id = None;
+                    }
+                    self.state.set_status("Shape deleted");
+                    self.state.mark_dirty();
+                    true
+                } else {
+                    self.select_asset_by_id(menu.asset);
+                    self.apply(UiIntent::DeleteActiveAsset);
+                    true
+                }
             }
             _ => false,
         }
@@ -10965,6 +11077,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let hit = self.pick_viewport_target(normalized_x, normalized_y);
         match hit {
             Target::Object(index) => {
+                self.active_profile_id = None;
                 self.state.select_object(Some(index), extend);
                 let name = self.state.project.assets[index].name.clone();
                 self.state.set_status(format!("Selected '{name}'"));
@@ -11050,9 +11163,41 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             Target::None => {
+                let pixel = [
+                    normalized_x * self.viewport_size[0],
+                    normalized_y * self.viewport_size[1],
+                ];
+                let shape_hit = self.profile_hit_inactive(pixel).or_else(|| {
+                    self.shape_hit_at(pixel).and_then(|h| {
+                        let planes = self.shape_planes_cached();
+                        planes
+                            .iter()
+                            .find(|sp| sp.plane == h.plane)
+                            .and_then(|sp| sp.profiles.first().copied())
+                    })
+                });
+                if let Some(profile_id) = shape_hit {
+                    self.activate_profile(profile_id);
+                    self.state.select_object(None, false);
+                    let name = self
+                        .state
+                        .project
+                        .project
+                        .get_profile(profile_id)
+                        .map(|p| p.name.clone())
+                        .unwrap_or_else(|| "Profile".to_string());
+                    self.state.set_status(format!("Selected shape '{name}'"));
+                    self.state.session.tools.hover = Target::None;
+                    self.state.sync_selection();
+                    self.state.mark_dirty();
+                    self.reset_transform_fields();
+                    return;
+                }
+
                 if self.state.selection_domain() == SelectionDomain::Object {
                     self.state.select_object(None, extend);
                 }
+                self.active_profile_id = None;
                 if !extend
                     && self.state.selection_domain().is_component()
                     && let Some(mesh) = self.state.project.active_mesh_mut()
@@ -12384,14 +12529,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Scale => &mut self.scale[axis],
         };
         let new_val = field.scrub(delta, fine);
-        let components = match kind {
-            TransformKind::Position => self.position.map(|field| field.value()),
-            TransformKind::Rotation => self.rotation.map(|field| field.value()),
-            TransformKind::Scale => self.scale.map(|field| field.value()),
+        let current = match kind {
+            TransformKind::Position => self.position.map(|f| f.value()),
+            TransformKind::Rotation => self.rotation.map(|f| f.value()),
+            TransformKind::Scale => self.scale.map(|f| f.value()),
+        };
+        let delta_components = match kind {
+            TransformKind::Position | TransformKind::Rotation => [
+                current[0] - self.transform_initial[0],
+                current[1] - self.transform_initial[1],
+                current[2] - self.transform_initial[2],
+            ],
+            TransformKind::Scale => [
+                if self.transform_initial[0].abs() > 1e-5 {
+                    current[0] / self.transform_initial[0]
+                } else {
+                    current[0]
+                },
+                if self.transform_initial[1].abs() > 1e-5 {
+                    current[1] / self.transform_initial[1]
+                } else {
+                    current[1]
+                },
+                if self.transform_initial[2].abs() > 1e-5 {
+                    current[2] / self.transform_initial[2]
+                } else {
+                    current[2]
+                },
+            ],
         };
         if let Err(error) = self
             .state
-            .update_modal_components(glam::Vec3::from_array(components))
+            .update_modal_components(glam::Vec3::from_array(delta_components))
         {
             self.state.set_status(error.to_string());
         }
@@ -12405,13 +12574,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Scale => petunia_core::ModalKind::Scale,
         };
         self.state.begin_modal(modal_kind)?;
-        self.reset_transform_fields();
+        self.transform_initial = if let Some(asset) = self.state.project.active() {
+            match kind {
+                TransformKind::Position => asset.position,
+                TransformKind::Rotation => asset.rotation,
+                TransformKind::Scale => asset.scale,
+            }
+        } else {
+            match kind {
+                TransformKind::Scale => [1.0, 1.0, 1.0],
+                _ => [0.0, 0.0, 0.0],
+            }
+        };
         Ok(())
     }
 
     pub fn commit_transform(&mut self) -> bool {
         let had_operation = self.state.session.tools.modal.is_some();
         self.last_operation = self.state.commit_modal_gesture();
+        self.reset_transform_fields();
         had_operation
     }
 
@@ -12448,15 +12629,39 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(error.to_string());
             return Err(numeric::NumericInputError::Invalid);
         }
-        let mut components = match kind {
-            TransformKind::Position => self.position.map(|field| field.value()),
-            TransformKind::Rotation => self.rotation.map(|field| field.value()),
-            TransformKind::Scale => self.scale.map(|field| field.value()),
+        let mut current = match kind {
+            TransformKind::Position => self.position.map(|f| f.value()),
+            TransformKind::Rotation => self.rotation.map(|f| f.value()),
+            TransformKind::Scale => self.scale.map(|f| f.value()),
         };
-        components[axis.min(2)] = value;
+        current[axis.min(2)] = value;
+        let delta_components = match kind {
+            TransformKind::Position | TransformKind::Rotation => [
+                current[0] - self.transform_initial[0],
+                current[1] - self.transform_initial[1],
+                current[2] - self.transform_initial[2],
+            ],
+            TransformKind::Scale => [
+                if self.transform_initial[0].abs() > 1e-5 {
+                    current[0] / self.transform_initial[0]
+                } else {
+                    current[0]
+                },
+                if self.transform_initial[1].abs() > 1e-5 {
+                    current[1] / self.transform_initial[1]
+                } else {
+                    current[1]
+                },
+                if self.transform_initial[2].abs() > 1e-5 {
+                    current[2] / self.transform_initial[2]
+                } else {
+                    current[2]
+                },
+            ],
+        };
         if let Err(error) = self
             .state
-            .update_modal_components(glam::Vec3::from_array(components))
+            .update_modal_components(glam::Vec3::from_array(delta_components))
         {
             self.state.set_status(error.to_string());
             if started {
@@ -12469,18 +12674,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Rotation => &mut self.rotation,
             TransformKind::Scale => &mut self.scale,
         };
-        for (field, value) in fields.iter_mut().zip(components) {
-            field.set_value(value);
+        for (field, val) in fields.iter_mut().zip(current) {
+            field.set_value(val);
         }
         self.state.commit_modal();
+        self.reset_transform_fields();
         Ok(value)
     }
 
     pub fn cancel_transform(&mut self) -> bool {
         let cancelled = self.state.cancel_modal();
-        if cancelled {
-            self.reset_transform_fields();
-        }
+        self.reset_transform_fields();
         cancelled
     }
 
@@ -12511,6 +12715,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.parts_selected_only = self.parts_selected_only;
         vm.parts_sort_by_name = self.parts_sort_by_name;
         vm.parts_row_height = self.parts_row_height;
+
+        for profile in &self.state.project.project.profiles {
+            let pts = self
+                .state
+                .project
+                .project
+                .get_spline(profile.spline_id)
+                .map_or(0, |s| s.points.len());
+            let is_active = self.active_profile_id == Some(profile.id);
+            vm.scene_items.push(SceneItemModel {
+                id: format!("profile:{}", profile.id),
+                name: profile.name.clone(),
+                visible: true,
+                locked: false,
+                selected: is_active,
+                active: is_active,
+                verts: pts,
+                tris: 0,
+                has_custom_color: false,
+                custom_color_rgb: self.state.ui.selection_rgb,
+            });
+        }
+
         let parts_query = self.parts_query.trim().to_lowercase();
         vm.parts_items = vm
             .scene_items
@@ -13602,18 +13829,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .set_selection_domain(self.state.selection_domain());
     }
 
-    fn reset_transform_fields(&mut self) {
+    pub fn reset_transform_fields(&mut self) {
         self.modal_text.clear();
         self.instant_transform = false;
         self.gizmo_drag = None;
-        for field in &mut self.position {
-            field.set_value(0.0);
-        }
-        for field in &mut self.rotation {
-            field.set_value(0.0);
-        }
-        for field in &mut self.scale {
-            field.set_value(1.0);
+        if let Some(asset) = self.state.project.active() {
+            for (field, &val) in self.position.iter_mut().zip(&asset.position) {
+                field.set_value(val);
+            }
+            for (field, &val) in self.rotation.iter_mut().zip(&asset.rotation) {
+                field.set_value(val);
+            }
+            for (field, &val) in self.scale.iter_mut().zip(&asset.scale) {
+                field.set_value(val);
+            }
+        } else {
+            for field in &mut self.position {
+                field.set_value(0.0);
+            }
+            for field in &mut self.rotation {
+                field.set_value(0.0);
+            }
+            for field in &mut self.scale {
+                field.set_value(1.0);
+            }
         }
     }
 

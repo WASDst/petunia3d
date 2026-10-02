@@ -4424,7 +4424,14 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_scene_select(move |id, extend| {
         if let Ok(mut bridge) = select_bridge.lock() {
-            if let Some(index) = bridge
+            if let Some(profile_uuid_str) = id.as_str().strip_prefix("profile:") {
+                if let Ok(profile_id) = uuid::Uuid::parse_str(profile_uuid_str) {
+                    bridge.cancel_active_operation();
+                    bridge.activate_profile(profile_id);
+                    bridge.state.select_object(None, false);
+                    bridge.reset_transform_fields();
+                }
+            } else if let Some(index) = bridge
                 .state
                 .project
                 .assets
@@ -4432,6 +4439,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 .position(|a| a.id.to_string() == id.as_str())
             {
                 bridge.cancel_active_operation();
+                bridge.active_profile_id = None;
                 bridge.state.select_object(Some(index), extend);
                 bridge.reset_transform_fields();
             }

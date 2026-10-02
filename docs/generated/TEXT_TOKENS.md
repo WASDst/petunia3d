@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1511**.
+Total de chaves de localização cadastradas: **1515**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -713,9 +713,13 @@ Total de chaves de localização cadastradas: **1511**.
 | `sl.clear` | Clear | Limpar |
 | `sl.clear_all` | Clear All | Limpar tudo |
 | `sl.clear_all_seams` | Clear all seams | Limpa todas as costuras |
+| `sl.clear_all_transforms` | Clear All Transforms | Limpar todas as transformações |
 | `sl.clear_all_uv_pins` | Clear all UV pins | Limpa todas as fixações UV |
+| `sl.clear_location` | Clear Location | Limpar posição |
 | `sl.clear_operand` | Clear operand | Limpar operando |
 | `sl.clear_pins` | Clear Pins | Limpar fixações |
+| `sl.clear_rotation` | Clear Rotation | Limpar rotação |
+| `sl.clear_scale` | Clear Scale | Limpar escala |
 | `sl.clear_seams` | Clear Seams | Limpar costuras |
 | `sl.clear_selection` | Clear Selection | Limpar seleção |
 | `sl.click_and_drag_or_press_e_alt_e_to_extrude_s` | Click and drag or press E / Alt+E to extrude selected faces | Clique e arraste ou pressione E / Alt+E para extrudar as faces selecionadas |

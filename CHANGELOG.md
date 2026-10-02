@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Persistência de transform, isolamento de trilhos DRAW/POLY e formas 2D (01/10/2026)
+- **Persistência de Transforms**: `Asset` ganha os campos persistentes `position`, `rotation` e `scale`. O modal de transformação no espaço de objeto atualiza esses campos, e os inputs de Transform refletem os valores persistidos do objeto ativo ao trocar ou re-selecionar ativos. Adicionados comandos semânticos canônicos `model.clear_location` (`Alt+G`), `model.clear_rotation` (`Alt+R`), `model.clear_scale` (`Alt+S`) e `model.clear_all_transforms` (`Alt+Backspace`) no menu de contexto (RMB sobre o objeto e Outliner).
+- **Separação estrita de trilhos DRAW vs POLY**: a barra de ferramentas lateral esquerda separa totalmente as ferramentas exclusivas de DRAW (Sketch Profile, Shape Builder, 2D Rect, 2D Circle, Push-Pull) das ferramentas de POLY (Primitivas 3D, Extrude, Inset, Bevel, Poly Pen, Loop Cut, Slice). Nenhuma ferramenta de DRAW vaza para a barra de POLY e vice-versa.
+- **Formas 2D em Parts e seleção/exclusão direta**: os perfis 2D (`ProfileResource`) passam a ser listados em Parts com identificador `profile:{id}` (com contagem de pontos e tag 2D), permitindo selecionar qualquer forma sem volume pela lista ou clicando diretamente no seu contorno na viewport. A tecla `Del` ou a opção de exclusão agora apaga perfis 2D via `DeleteProfileCmd`, eliminando shapes "fantasmas" que ficavam órfãos.
+
 ### Cor de overlay de seleção por parte e separar parte da seleção (01/10/2026)
 - **Overlay customizado por parte**: cada `Asset` ganha o campo persistente opcional `selection_overlay_color: Option<[u8; 3]>`. Ao criar partes, herdam `None` (usam a cor global do projeto); na lista de partes (Inspector e Outliner flutuante), após o botão de bloqueio (lock), um quadrado colorido exibe a cor ativa da parte e abre popover com roda de cores circular HSV interativa (`crates/ui-slint/src/color_wheel.rs`), presets rápidos, input hex e botão de restaurar cor padrão (`None`).
 - **Renderização com cores de parte**: os renderers WGPU, software e a camada de overlay 2D do Slint usam a cor da parte ativa com fallback transparente para a cor global.

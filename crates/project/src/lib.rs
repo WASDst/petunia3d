@@ -380,6 +380,15 @@ pub struct Asset {
     /// Ao criar a parte, começa como None (cor padrão global).
     #[serde(default)]
     pub selection_overlay_color: Option<[u8; 3]>,
+    /// Posição persistente do asset no espaço do projeto.
+    #[serde(default)]
+    pub position: [f32; 3],
+    /// Rotação persistente do asset (graus Euler XYZ).
+    #[serde(default)]
+    pub rotation: [f32; 3],
+    /// Escala persistente do asset.
+    #[serde(default = "default_scale")]
+    pub scale: [f32; 3],
     #[serde(skip)]
     eval_cache: Option<(u64, u64, Mesh)>,
 }
@@ -405,6 +414,9 @@ impl Asset {
             parametric: None,
             paint_stack: None,
             selection_overlay_color: None,
+            position: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
             eval_cache: None,
         }
     }

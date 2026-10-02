@@ -10132,3 +10132,83 @@ fn decal_import_reads_an_image_and_rejects_garbage_without_touching_the_document
     assert_eq!(bridge.state.project.undo.depth(), depth);
     assert!(bridge.state.ui.status.starts_with("Decal:"));
 }
+
+#[test]
+fn transform_fields_persist_on_active_asset_and_reset_commands_clear_them() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Modifica a posição via commit_transform_text
+    assert!(
+        bridge
+            .commit_transform_text(TransformKind::Position, 0, "5.0")
+            .is_ok()
+    );
+    assert!(
+        bridge
+            .commit_transform_text(TransformKind::Rotation, 1, "45.0")
+            .is_ok()
+    );
+    assert!(
+        bridge
+            .commit_transform_text(TransformKind::Scale, 2, "2.0")
+            .is_ok()
+    );
+
+    let vm1 = bridge.view_model();
+    assert_eq!(vm1.position[0], 5.0);
+    assert_eq!(vm1.rotation[1], 45.0);
+    assert_eq!(vm1.scale[2], 2.0);
+
+    // O asset no projeto deve ter os valores persistidos
+    let active_asset = bridge.state.project.active().unwrap();
+    assert_eq!(active_asset.position[0], 5.0);
+    assert_eq!(active_asset.rotation[1], 45.0);
+    assert_eq!(active_asset.scale[2], 2.0);
+
+    // reset_transform_fields restaura aos valores persistidos do objeto ativo
+    bridge.reset_transform_fields();
+    let vm2 = bridge.view_model();
+    assert_eq!(vm2.position[0], 5.0);
+    assert_eq!(vm2.rotation[1], 45.0);
+    assert_eq!(vm2.scale[2], 2.0);
+
+    // Context menu actions para resetar transforms
+    assert!(bridge.context_menu_action("clear_location"));
+    assert_eq!(bridge.view_model().position[0], 0.0);
+    assert_eq!(bridge.state.project.active().unwrap().position[0], 0.0);
+
+    assert!(bridge.context_menu_action("clear_rotation"));
+    assert_eq!(bridge.view_model().rotation[1], 0.0);
+    assert_eq!(bridge.state.project.active().unwrap().rotation[1], 0.0);
+
+    assert!(bridge.context_menu_action("clear_scale"));
+    assert_eq!(bridge.view_model().scale[2], 1.0);
+    assert_eq!(bridge.state.project.active().unwrap().scale[2], 1.0);
+}
+
+#[test]
+fn profiles_2d_appear_in_parts_and_can_be_selected_and_deleted() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Adiciona um retângulo 2D
+    assert!(bridge.add_profile_rectangle(2.0, 1.5));
+    assert_eq!(bridge.state.project.project.profiles.len(), 1);
+    let profile_id = bridge.state.project.project.profiles[0].id;
+
+    let vm = bridge.view_model();
+    // Deve aparecer em parts_items
+    let part_item = vm
+        .parts_items
+        .iter()
+        .find(|item| item.id == format!("profile:{profile_id}"));
+    assert!(
+        part_item.is_some(),
+        "perfil 2D deve constar na lista de parts"
+    );
+    let item = part_item.unwrap();
+    assert_eq!(item.tris, 0);
+    assert!(item.verts >= 4);
+
+    // Clicar fora desativa o perfil
+    assert!(bridge.delete_or_dissolve_selection());
+    // O perfil deve ter sido deletado
+    assert_eq!(bridge.state.project.project.profiles.len(), 0);
+}
