@@ -1,4 +1,4 @@
-# PAINT / UV — Implementation-vs-Spec Gap Matrix (2026-09-30)
+# PAINT / UV — Implementation-vs-Spec Gap Matrix (atualização 2026-10-02)
 
 Escopo: auditoria aprofundada do workspace PAINT (com "Preparar superfície"/UV)
 contra P3D-055 a P3D-065, P3D-132 a P3D-134 e os capítulos 12, 15, 42 e 44, motivada
@@ -52,7 +52,7 @@ Fonte: P3D-055 (adendo), P3D-133, P3D-134, capítulo 44 e capítulo 42.
 | Decal (P3D-133) | Camada de decal transformável (existia só com um quadrado amarelo de teste). **Novo:** importar PNG/JPEG pelo botão de imagem da pilha de camadas (decodificação validada, lado maior limitado a 512 texels, proporção preservada, 1 Undo; arquivo inválido não muda o documento). **Faltam** SVG (exigiria `resvg` como dependência direta), máscara/clip, fonte ausente e bake/export. |
 | Projection / Stencil | `MISSING`. |
 | Clone / Patch (cópia de região com máscara) | O pincel Clone cobre o uso básico; Patch (remendo com costura) segue `MISSING`. |
-| Path Paint | `MISSING` (o Spline Core existe; falta a ferramenta). |
+| Path Paint | `MISSING` no checkout `4a41951`: o commit `8645a8f` contém um núcleo em outro caminho do histórico, mas `path_paint.rs` e referências no shell Slint estão ausentes nesta árvore. Recuperação e integração ainda precisam de reconciliação. |
 | Effect Stack (P3D-134) | Pixelate, Posterize, Invert, **Grain, Levels (agora na UI), Brightness/Contrast e Hue/Saturation** — todos existiam no domínio; Levels não era oferecido na UI. |
 | Surface Recipe (P3D-113) | Grafo headless existe; sem editor visual (por decisão). |
 
@@ -64,3 +64,13 @@ Fonte: P3D-055 (adendo), P3D-133, P3D-134, capítulo 44 e capítulo 42.
 - Smudge no 3D acompanha só o dab original (a simetria repete o carimbo, não o borrão) e ignora saltos entre charts.
 - Custo do pincel 3D: percorre todas as faces por dab; para malhas > 20 mil faces
   falta um índice espacial (grade uniforme por revisão).
+
+## 5. Evidência do checkpoint de 02/10/2026
+
+O PR #19 foi integrado à `main` em 01/10/2026. O bridge atual mantém
+fluxo e espaçamento em `crates/ui-slint/src/brush_panel.rs` e sincronização
+em `callbacks.rs`. Essa inspeção não executou testes nem validação visual.
+As classificações de 30/09 acima preservam a evidência daquela rodada; não
+representam uma nova certificação. SVG não foi localizado no código Slint ou
+no módulo Paint desta árvore; o commit histórico `0e1c83e` não basta para
+considerar o delta disponível. Ver o checkpoint em `PROJECT_STATE.md`.

@@ -9,8 +9,43 @@
 - Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Nesta rodada, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
 - **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, 169 testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
 - Context methodology: **Lean Progressive Context (LPC)**
-- Last updated: `2026-09-30`
+- Last updated: `2026-10-02`
 - Current planning focus: [Context/workspaces/viewport](docs/development/workspace-inspector-implementation-plan.md), com próxima discussão restrita a MODEL e viewport. O plano é proposta, não implementação nem reabertura silenciosa das decisões de Paint/UV.
+
+### Checkpoint verificado em 02/10/2026
+
+Auditoria de código e histórico no branch `feat/svg-stencil-pathpaint`, commit
+`4a41951`. Este registro prevalece sobre as listas históricas de pendências
+abaixo; não certifica aceite funcional ou visual.
+
+- **PR #19** (`fix/hardening-domain-viewport-ui-co3s59`): integrado à `main`
+  em 01/10/2026, merge `2604710`. O conflito foi resolvido em `3672aa0`.
+  A rodada anterior registrou `cargo check --workspace --all-targets` aprovado
+  nesse checkpoint; essa evidência não cobre os commits posteriores.
+- **Pincel/PiP e ícones**: o PR #19 entregou ajustes de layout do PiP,
+  fluxo/espaçamento na UI e arte Petunia para as abas de dados.
+  `crates/ui-slint/src/brush_panel.rs` lê e altera `brush_flow`/`brush_spacing`;
+  `callbacks.rs` sincroniza esses valores com o shell.
+- **DRAW — delta implementado**: `4a41951` adiciona domínios
+  Shape/Curve/Point/Region, Depth Handle visual e interação por arrasto,
+  plano por três pontos/seleção e recorte booleano de imprint na face.
+  Há testes no código; a auditoria de 02/10 não os executou nem confirmou
+  os gates completos ou a reprodução visual. Estado: `PARTIALLY_COMPLIANT`
+  até validar o comportamento e as limitações das regiões.
+- **SVG e Path Paint**: os commits `0e1c83e` e `8645a8f` aparecem no histórico
+  de outros caminhos de merge. No checkout `4a41951`, não estão presentes
+  `crates/module-paint/src/path_paint.rs` nem
+  `docs/development/feature-pathpaint.md`, e não foram encontradas referências
+  a `PathPaint`/`path_paint` no Slint. Não tratar esses commits como entrega
+  disponível neste checkpoint. Path Paint permanece `MISSING` aqui;
+  a recuperação desses deltas exige comparar as árvores antes de implementar.
+- **Validação documental desta atualização**: `git diff --check` aprovado.
+  `docs-check` e `bible-check` foram iniciados, mas ficaram aguardando o lock
+  do cache Cargo; resultado pendente, sem aceite desses gates.
+- **Próxima retomada**: validar o DRAW recente e reconciliar SVG/Path Paint
+  com a árvore atual; em seguida atualizar as matrizes com evidências de
+  testes e captura nativa. Projection/Stencil continua pendente na matriz
+  de Paint. Wave 11 segue planejada.
 
 ### Rodada de fundação de 30/09/2026 (Paint/UV, DRAW, atalhos, brush)
 
