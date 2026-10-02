@@ -146,6 +146,9 @@ pub struct ProfileResource {
     pub wall_thickness: f64,
     #[serde(default)]
     pub revision: u64,
+    /// Contornos internos poligonais no mesmo plano; não são formas preenchidas.
+    #[serde(default)]
+    pub holes: Vec<Vec<[f64; 2]>>,
 }
 
 impl ProfileResource {
@@ -157,6 +160,7 @@ impl ProfileResource {
             workplane,
             wall_thickness: 0.0,
             revision: 0,
+            holes: Vec::new(),
         }
     }
 
@@ -177,6 +181,9 @@ impl ProfileResource {
         if !self.wall_thickness.is_finite() || self.wall_thickness < 0.0 {
             return Err(ProfileError::InvalidWallThickness);
         }
+        if self.holes.iter().any(|hole| hole.len() < 3 || hole.iter().flatten().any(|v| !v.is_finite())) {
+            return Err(ProfileError::InvalidSpline);
+        }
         for point in &spline.points {
             if point.attachment.is_some() {
                 return Err(ProfileError::SurfaceAttachmentUnsupported(point.id));
@@ -195,6 +202,7 @@ impl ProfileResource {
         if self.name.trim().is_empty() {
             self.name = "Profile".to_string();
         }
+        self.holes.retain(|hole| hole.len() >= 3 && hole.iter().flatten().all(|v| v.is_finite()));
         self.workplane = self.workplane.try_normalized().unwrap_or_default();
         if !self.wall_thickness.is_finite() || self.wall_thickness < 0.0 {
             self.wall_thickness = 0.0;
@@ -225,6 +233,11 @@ impl ProfileResource {
             mix(component.to_bits());
         }
         mix(self.wall_thickness.to_bits());
+        mix(self.holes.len() as u64);
+        for hole in &self.holes {
+            mix(hole.len() as u64);
+            for value in hole.iter().flatten() { mix(value.to_bits()); }
+        }
         fingerprint
     }
 }
@@ -332,5 +345,22 @@ mod tests {
         assert_eq!(wp2.normal, [0.0, 1.0, 0.0]);
         assert_eq!(wp2.right, [1.0, 0.0, 0.0]);
         assert_eq!(wp2.up, [0.0, 0.0, -1.0]);
+    }
+}
+
+#[cfg(test)]
+mod compound_tests {
+    use super::*;
+    #[test]
+    fn holes_survive_json_and_old_profiles_default_to_no_holes() {
+        let mut profile = ProfileResource::new("Ring", Uuid::new_v4(), ProfileWorkplane::default());
+        profile.holes = vec![vec![[0.0,0.0],[1.0,0.0],[0.0,1.0]]];
+        let value = serde_json::to_value(&profile).unwrap();
+        let loaded: ProfileResource = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(loaded.holes, profile.holes);
+        let mut old = value;
+        old.as_object_mut().unwrap().remove("holes");
+        let loaded: ProfileResource = serde_json::from_value(old).unwrap();
+        assert!(loaded.holes.is_empty());
     }
 }

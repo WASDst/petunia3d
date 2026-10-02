@@ -49,6 +49,19 @@ pub(crate) struct ProfileGroup {
     pub plane: RegionPlane,
     pub profiles: Vec<uuid::Uuid>,
     pub lines: Vec<Polyline2>,
+    pub shapes: Vec<Option<Region2>>,
+}
+
+impl ProfileGroup {
+    pub(crate) fn regions(&self) -> Vec<Region2> {
+        let mut boundaries = self.lines.clone();
+        for shape in self.shapes.iter().flatten() {
+            for hole in &shape.holes { boundaries.push(Polyline2 { points: hole.clone(), closed: true }); }
+        }
+        let cells = planar_regions(&boundaries);
+        let shapes: Vec<_> = self.shapes.iter().flatten().cloned().collect();
+        petunia_mesh::shape_ops::occupied_regions(&cells, &shapes)
+    }
 }
 
 /// Região sob o cursor.
@@ -125,7 +138,7 @@ impl AppState {
     pub fn profile_region_planes(&self) -> RegionPlanes {
         self.profile_groups(false)
             .into_iter()
-            .map(|group| (group.plane, planar_regions(&group.lines)))
+            .map(|group| (group.plane, group.regions()))
             .filter(|(_, regions)| !regions.is_empty())
             .collect()
     }
@@ -179,10 +192,17 @@ impl AppState {
                     },
                     profiles: Vec::new(),
                     lines: Vec::new(),
+                    shapes: Vec::new(),
                 });
                 groups.len() - 1
             });
             let plane = groups[index].plane;
+            let outer: Vec<_> = world.iter().map(|p| plane.to_plane(*p)).collect();
+            let mut holes: Vec<Vec<[f64; 2]>> = profile.holes.iter().map(|hole| hole.iter().map(|p| plane.to_plane(origin + right * p[0] as f32 + up * p[1] as f32)).collect()).collect();
+            for hole in &mut holes { if petunia_mesh::arrangement::signed_area(hole) > 0.0 { hole.reverse(); } }
+            let mut shape_outer = outer;
+            if petunia_mesh::arrangement::signed_area(&shape_outer) < 0.0 { shape_outer.reverse(); }
+            groups[index].shapes.push(spline.closed.then_some(Region2 { outer: shape_outer, holes }));
             groups[index].profiles.push(profile.id);
             groups[index].lines.push(Polyline2 {
                 points: world.iter().map(|p| plane.to_plane(*p)).collect(),

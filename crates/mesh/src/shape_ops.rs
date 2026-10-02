@@ -105,6 +105,24 @@ pub fn regions_union(regions: &[Region2]) -> Vec<Region2> {
     regions_of(&acc)
 }
 
+/// Recorta as células do arranjo ao preenchimento real das formas compostas.
+pub fn occupied_regions(cells: &[Region2], shapes: &[Region2]) -> Vec<Region2> {
+    let mut cover = MultiPolygon::new(vec![]);
+    for shape in shapes { cover = cover.union(&MultiPolygon::new(vec![polygon_of(shape)])); }
+    cells.iter().flat_map(|cell| regions_of(&MultiPolygon::new(vec![polygon_of(cell)]).intersection(&cover))).collect()
+}
+
+/// Pathfinder preservando os furos de cada forma.
+pub fn pathfinder_regions(shapes: &[Region2], op: PathfinderOp) -> Vec<Region2> {
+    let Some((first, rest)) = shapes.split_first() else { return vec![]; };
+    let mut acc = MultiPolygon::new(vec![polygon_of(first)]);
+    for shape in rest {
+        let other = MultiPolygon::new(vec![polygon_of(shape)]);
+        acc = match op { PathfinderOp::Unite => acc.union(&other), PathfinderOp::Subtract => acc.difference(&other), PathfinderOp::Intersect => acc.intersection(&other), PathfinderOp::Exclude => acc.xor(&other) };
+    }
+    regions_of(&acc)
+}
+
 /// Aplica uma operação do Pathfinder à pilha de formas (cada uma um anel simples).
 pub fn pathfinder(shapes: &[Vec<[f64; 2]>], op: PathfinderOp) -> Vec<Region2> {
     let polygons: Vec<MultiPolygon<f64>> = shapes

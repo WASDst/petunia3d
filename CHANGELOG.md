@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Shape Builder: preenchimento e furos persistentes (02/10/2026)
+- Delete de área cercada, Cut com furo e XOR preservam vazios após recalcular regiões; furos pertencem à forma composta no documento.
+- Formas que sobrevivem inteiras mantêm identidade, nome e curvas. Testes de XOR exigem a área correta e perfis JSON antigos abrem sem furos.
+- Checkpoint por inspeção; gates aguardam liberação do responsável.
+
+
 ### DRAW: domínios específicos, Depth Handle, Workplane por 3 pontos e Imprint com corte booleano (01/10/2026)
 - **Domínios de seleção específicos do DRAW (`Shape / Curve / Point / Region`)**: na barra de domínios, quando em modo DRAW, a seleção expõe os termos e ícones canônicos do Cap. 11/23 (Shape = 1, Curve = 2, Point = 3, Region = 4), preservando os domínios de POLY (Object, Point, Edge, Face).
 - **Depth Handle visual e interativa**: ao fechar uma forma no DRAW, projeta no centroide da região uma alça 3D (haste, diamante no topo e cota métrica) com detecção direta de clique/arraste, permitindo puxar a extrusão diretamente com o cursor no modo Select ou Draw.
