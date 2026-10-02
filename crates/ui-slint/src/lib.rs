@@ -465,6 +465,7 @@ pub enum UiIntent {
     ProfileSetWorkplaneGround,
     ProfileSetWorkplaneFace,
     ProfileSetWorkplaneView,
+    ProfileSetWorkplaneSelection,
     /// Plano automático: face sob o cursor ou plano mais paralelo à vista.
     ProfileSetWorkplaneAuto,
     /// DRAW (forma) ou POLY (componente) dentro do workspace de modelagem.
@@ -1744,6 +1745,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.profile.workplane_locked = true;
                 petunia_module_model::profile_capture_view(&mut self.state);
                 self.announce_locked_workplane();
+            }
+            UiIntent::ProfileSetWorkplaneSelection => {
+                self.reset_profile_for_workplane();
+                if petunia_module_model::profile_capture_from_selection(&mut self.state) {
+                    self.state.profile.workplane_locked = true;
+                    self.announce_locked_workplane();
+                } else {
+                    self.state
+                        .set_status("Select 3 points or a face to define workplane");
+                }
             }
             UiIntent::ProfileSetWorkplaneAuto => {
                 self.reset_profile_for_workplane();
@@ -9630,6 +9641,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 "separate_selection" => {
                     let _ = self.execute_core_command("model.separate_selection");
+                    true
+                }
+                "workplane_from_selection" => {
+                    self.apply(UiIntent::ProfileSetWorkplaneSelection);
                     true
                 }
                 "flip_normals" => {

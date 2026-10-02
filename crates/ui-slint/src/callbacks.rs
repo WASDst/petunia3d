@@ -248,6 +248,14 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
     if bridge.state.session.tools.active_tool == "draw_profile" {
         window.set_profile_preview_commands(bridge.profile_preview_commands().as_str().into());
     }
+    let (depth_commands, depth_pos, depth_label) = bridge.depth_handle_commands();
+    window.set_depth_handle_commands(depth_commands.as_str().into());
+    window.set_depth_handle_visible(depth_pos.is_some());
+    if let Some([dx, dy]) = depth_pos {
+        window.set_depth_handle_x(dx * 1.0);
+        window.set_depth_handle_y(dy * 1.0);
+    }
+    window.set_depth_handle_label(depth_label.as_str().into());
 }
 
 impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {

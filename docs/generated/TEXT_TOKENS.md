@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1515**.
+Total de chaves de localização cadastradas: **1521**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -450,6 +450,7 @@ Total de chaves de localização cadastradas: **1515**.
 | `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
 | `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
 | `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
+| `preferences.workplane_from_selection` | Set Workplane from Selection (3 Points / Face) | Plano de Trabalho pela Seleção (3 Pontos / Face) |
 | `preferences.workplane_prefer_ground` | Automatic work plane favors the ground | Plano automático favorece o chão |
 | `preferences.workplane_prefer_ground_hint` | With no face under the cursor, drawing goes on the ground unless the camera is almost level. Off: the world plane that most faces the view (Modo/Cinema 4D style). | Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D). |
 | `prims.body_length` | Body Length | Comprimento do Corpo |
@@ -760,6 +761,7 @@ Total de chaves de localização cadastradas: **1515**.
 | `sl.ctrl_z_ctrl_y_undo_redo` | Ctrl+Z / Ctrl+Y: Undo / Redo | Ctrl+Z / Ctrl+Y: Desfazer / Refazer |
 | `sl.cube` | Cube | Cubo |
 | `sl.cursor` | Cursor | Cursor |
+| `sl.curve` | Curve | Curva |
 | `sl.cut` | Cut | Cut |
 | `sl.cut_mesh_along_an_infinite_cutting_plane_thr` | Cut mesh along an infinite cutting plane through selection | Corta a malha por um plano de corte infinito através da seleção |
 | `sl.cuts` | Cuts | Cortes |
@@ -1066,11 +1068,14 @@ Total de chaves de localização cadastradas: **1515**.
 | `sl.search_commands` | Search commands | Buscar comandos |
 | `sl.segments` | Segments | Segmentos |
 | `sl.select` | Select | Selecionar |
-| `sl.select_all` | Select All | Selecionar tudo |
+| `sl.select_all` | Select All | Selecionar Tudo |
 | `sl.select_and_manipulate_entire_objects_as_disc` | Select and manipulate entire objects as discrete units | Seleciona e manipula objetos inteiros como unidades |
 | `sl.select_and_transform_individual_vertices_poi` | Select and transform individual vertices (points) | Seleciona e transforma vértices (Points) individuais |
 | `sl.select_and_transform_polygonal_boundary_edge` | Select and transform polygonal boundary edges | Seleciona e transforma arestas de contorno do polígono |
 | `sl.select_and_transform_polygonal_planar_faces` | Select and transform polygonal planar faces | Seleciona e transforma faces planas do polígono |
+| `sl.select_curve_segment` | Select and manipulate profile curves or segments | Seleciona e manipula curvas e segmentos de perfil |
+| `sl.select_entire_shape` | Select and transform the entire 2D shape or volume | Seleciona e transforma a forma 2D inteira ou volume |
+| `sl.select_region_face` | Select and extrude planar 2D regions | Seleciona e extruda regiões planares 2D |
 | `sl.select_second_part_to_combine` | Select second part to Combine: | Selecione a segunda parte para combinar: |
 | `sl.select_uv_vertices_edges_and_polygon_islands` | Select UV vertices, edges and polygon islands | Seleciona vértices, arestas e ilhas de polígonos UV |
 | `sl.semi_transparent_surfaces_allowing_selection` | Semi-transparent surfaces allowing selection of occluded geometry | Superfícies semitransparentes que permitem selecionar geometria oculta |
@@ -1082,6 +1087,7 @@ Total de chaves de localização cadastradas: **1515**.
 | `sl.shade_smooth` | Shade Smooth | Sombreamento suave |
 | `sl.shading` | Shading | Sombreamento |
 | `sl.shading_options` | Shading options | Opções de sombreamento |
+| `sl.shape` | Shape | Forma |
 | `sl.shape_builder` | Shape Builder | Shape Builder |
 | `sl.shape_builder_description` | Drag across regions to merge them, Ctrl+drag to delete them, click to extract one | Arraste sobre regiões para fundi-las, Ctrl+arrastar para apagá-las, clique para extrair uma |
 | `sl.shape_exclude` | Exclude overlap | Excluir sobreposição |

@@ -183,6 +183,56 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         out
     }
 
+    /// Comandos e posição de tela da Depth Handle sobre a forma fechada ativa em DRAW.
+    pub(crate) fn depth_handle_commands(&self) -> (String, Option<[f32; 2]>, String) {
+        if !self.draw_shapes_visible() || self.viewport_size[0] <= 1.0 {
+            return (String::new(), None, String::new());
+        }
+        let Some((profile, spline)) = self.active_profile_resources() else {
+            return (String::new(), None, String::new());
+        };
+        if !spline.closed || spline.points.len() < 3 {
+            return (String::new(), None, String::new());
+        }
+        let wp = profile.workplane;
+        let [origin, right, up, normal] =
+            [wp.origin, wp.right, wp.up, wp.normal].map(|v| glam::DVec3::from_array(v).as_vec3());
+        let count = spline.points.len() as f32;
+        let sum: (f64, f64) = spline.points.iter().fold((0.0, 0.0), |acc, p| {
+            (acc.0 + p.position[0], acc.1 + p.position[1])
+        });
+        let (cx, cy) = (sum.0 as f32 / count, sum.1 as f32 / count);
+        let center_world = origin + right * cx + up * cy;
+        let depth = (self.state.profile.depth as f32).max(0.1);
+        let top_world = center_world + normal * depth;
+
+        let camera = &self.state.session.camera;
+        let Some(base_screen) = project_world_point(camera, self.viewport_size, center_world)
+        else {
+            return (String::new(), None, String::new());
+        };
+        let Some(top_screen) = project_world_point(camera, self.viewport_size, top_world) else {
+            return (String::new(), None, String::new());
+        };
+
+        let (bx, by) = (base_screen[0], base_screen[1]);
+        let (tx, ty) = (top_screen[0], top_screen[1]);
+        let mut out = format!("M {bx:.1} {by:.1} L {tx:.1} {ty:.1} ");
+        out.push_str(&format!(
+            "M {bx:.1} {by:.1} m -4 0 a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0 "
+        ));
+        out.push_str(&format!(
+            "M {tx:.1} {:.1} L {:.1} {ty:.1} L {tx:.1} {:.1} L {:.1} {ty:.1} Z",
+            ty - 6.0,
+            tx + 6.0,
+            ty + 6.0,
+            tx - 6.0
+        ));
+
+        let label = format!("{:.2} m", depth);
+        (out, Some(top_screen), label)
+    }
+
     /// Perfil inativo cujo contorno passa perto do cursor (px da viewport).
     pub(crate) fn profile_hit_inactive(&self, screen: [f32; 2]) -> Option<uuid::Uuid> {
         let cache = self.shape_cache();

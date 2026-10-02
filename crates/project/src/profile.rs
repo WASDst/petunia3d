@@ -76,6 +76,64 @@ impl ProfileWorkplane {
         let up = DVec3::from_array(normalized.up);
         Ok((origin + right * point[0] + up * point[1]).to_array())
     }
+
+    /// Cria um plano de trabalho passando por 3 pontos no espaço 3D (origem = p0, eixo X em direção a p1, p2 define o semiplano positivo de Y).
+    pub fn from_three_points(
+        p0: [f64; 3],
+        p1: [f64; 3],
+        p2: [f64; 3],
+    ) -> Result<Self, ProfileError> {
+        let v0 = finite_vec(p0)?;
+        let v1 = finite_vec(p1)?;
+        let v2 = finite_vec(p2)?;
+        let v01 = v1 - v0;
+        let v02 = v2 - v0;
+        let normal = v01.cross(v02);
+        if normal.length_squared() <= AXIS_EPSILON_SQUARED
+            || v01.length_squared() <= AXIS_EPSILON_SQUARED
+        {
+            return Err(ProfileError::InvalidWorkplane);
+        }
+        let normal = normal.normalize();
+        let right = v01.normalize();
+        let up = normal.cross(right).normalize();
+        Ok(Self {
+            origin: v0.to_array(),
+            right: right.to_array(),
+            up: up.to_array(),
+            normal: normal.to_array(),
+        })
+    }
+
+    /// Cria um plano a partir de uma face (centro e normal) alinhado com uma aresta de referência (direção X).
+    pub fn from_face_and_edge(
+        center: [f64; 3],
+        normal: [f64; 3],
+        edge_dir: [f64; 3],
+    ) -> Result<Self, ProfileError> {
+        let origin = finite_vec(center)?;
+        let norm = finite_vec(normal)?;
+        let edge = finite_vec(edge_dir)?;
+        if norm.length_squared() <= AXIS_EPSILON_SQUARED
+            || edge.length_squared() <= AXIS_EPSILON_SQUARED
+        {
+            return Err(ProfileError::InvalidWorkplane);
+        }
+        let norm = norm.normalize();
+        // Projeta edge no plano da normal
+        let right = edge - norm * edge.dot(norm);
+        if right.length_squared() <= AXIS_EPSILON_SQUARED {
+            return Err(ProfileError::InvalidWorkplane);
+        }
+        let right = right.normalize();
+        let up = norm.cross(right).normalize();
+        Ok(Self {
+            origin: origin.to_array(),
+            right: right.to_array(),
+            up: up.to_array(),
+            normal: norm.to_array(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -254,5 +312,25 @@ mod tests {
             profile.validate_authoring(&spline),
             Err(ProfileError::NonPlanarPoint(_))
         ));
+    }
+
+    #[test]
+    fn workplane_from_three_points_and_face_edge() {
+        let p0 = [0.0, 0.0, 0.0];
+        let p1 = [2.0, 0.0, 0.0];
+        let p2 = [0.0, 3.0, 0.0];
+        let wp = ProfileWorkplane::from_three_points(p0, p1, p2).unwrap();
+        assert_eq!(wp.origin, [0.0, 0.0, 0.0]);
+        assert_eq!(wp.right, [1.0, 0.0, 0.0]);
+        assert_eq!(wp.up, [0.0, 1.0, 0.0]);
+        assert_eq!(wp.normal, [0.0, 0.0, 1.0]);
+
+        let wp2 =
+            ProfileWorkplane::from_face_and_edge([1.0, 1.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0])
+                .unwrap();
+        assert_eq!(wp2.origin, [1.0, 1.0, 1.0]);
+        assert_eq!(wp2.normal, [0.0, 1.0, 0.0]);
+        assert_eq!(wp2.right, [1.0, 0.0, 0.0]);
+        assert_eq!(wp2.up, [0.0, 0.0, -1.0]);
     }
 }

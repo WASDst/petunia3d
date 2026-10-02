@@ -10232,3 +10232,19 @@ fn profiles_2d_appear_in_parts_and_can_be_selected_and_deleted() {
     assert!(bridge.delete_or_dissolve_selection());
     assert_eq!(bridge.state.project.project.profiles.len(), 0);
 }
+
+#[test]
+fn draw_depth_handle_projects_and_updates_with_profile() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert!(bridge.add_profile_rectangle(2.0, 2.0));
+    bridge.set_profile_depth(3.0);
+
+    let (commands, pos, label) = bridge.depth_handle_commands();
+    assert!(!commands.is_empty(), "depth handle deve gerar comandos SVG");
+    assert!(pos.is_some(), "depth handle deve ter posição na tela");
+    assert!(
+        label.contains("3.0"),
+        "label deve conter a profundidade: {label}"
+    );
+}

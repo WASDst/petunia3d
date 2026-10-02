@@ -8,6 +8,7 @@
 //! Região solta (sem face hospedeira): uma folha fechada com o fundo invertido
 //! e o topo selecionado; extrudar o topo produz um sólido fechado.
 
+use geo::{BooleanOps, Coord, LineString, Polygon};
 use glam::Vec3;
 
 use crate::{Face, Mesh, Vertex};
@@ -119,50 +120,191 @@ pub fn imprint_region(
         return Ok((result, face));
     }
 
-    if !hole.iter().all(|p| point_in_polygon(&outer, *p)) || rings_touch(&outer, &hole, tol) {
+    let strictly_inside =
+        hole.iter().all(|p| point_in_polygon(&outer, *p)) && !rings_touch(&outer, &hole, tol);
+    if strictly_inside && let Some((half_a, half_b)) = split_ring(&outer, &hole, tol) {
+        let mut result = mesh.clone();
+        result.deselect_all();
+        let base = result.verts.len();
+        for point in &hole {
+            let mut vertex = Vertex::new(0.0, 0.0, 0.0);
+            vertex.pos = frame.lift(*point).to_array();
+            vertex.color = mesh.verts[host.verts[0] as usize].color;
+            result.verts.push(vertex);
+        }
+        let to_vertex = |index: RingIndex| -> u32 {
+            match index {
+                RingIndex::Outer(i) => host.verts[i],
+                RingIndex::Hole(j) => (base + j) as u32,
+            }
+        };
+        let to_uv = |index: RingIndex| -> [f32; 2] {
+            let p = match index {
+                RingIndex::Outer(i) => outer[i],
+                RingIndex::Hole(j) => hole[j],
+            };
+            [p[0] as f32, p[1] as f32]
+        };
+        let make_face = |ring: &[RingIndex]| -> Face {
+            let mut face = Face::with_uv(
+                ring.iter().map(|&i| to_vertex(i)).collect(),
+                ring.iter().map(|&i| to_uv(i)).collect(),
+            );
+            face.material_slot = host.material_slot;
+            face
+        };
+        result.faces[face] = make_face(&half_a);
+        result.push_face(make_face(&half_b));
+        let inner: Vec<RingIndex> = (0..hole.len()).map(RingIndex::Hole).collect();
+        let mut inner_face = make_face(&inner);
+        inner_face.selected = true;
+        let inner_index = result.faces.len();
+        result.push_face(inner_face);
+        result.sync_vert_selection_from_faces();
+        return Ok((result, inner_index));
+    }
+
+    // Região que cruza arestas da face hospedeira ou toca bordas: recorte booleano
+    imprint_boolean_cut(mesh, face, &outer, &hole, frame, tol)
+}
+
+fn geo_ring(points: &[[f64; 2]]) -> LineString<f64> {
+    let mut coords: Vec<Coord<f64>> = points.iter().map(|p| Coord { x: p[0], y: p[1] }).collect();
+    if coords.first() != coords.last()
+        && let Some(first) = coords.first().copied()
+    {
+        coords.push(first);
+    }
+    LineString::new(coords)
+}
+
+fn open_ring_points(line: &LineString<f64>) -> Vec<[f64; 2]> {
+    let mut points: Vec<[f64; 2]> = line.coords().map(|c| [c.x, c.y]).collect();
+    if points.len() > 1 && points.first() == points.last() {
+        points.pop();
+    }
+    points.dedup_by(|a, b| (a[0] - b[0]).hypot(a[1] - b[1]) < 1.0e-12);
+    if points.len() > 1 {
+        let (first, last) = (points[0], points[points.len() - 1]);
+        if (first[0] - last[0]).hypot(first[1] - last[1]) < 1.0e-12 {
+            points.pop();
+        }
+    }
+    points
+}
+
+fn imprint_boolean_cut(
+    mesh: &Mesh,
+    face: usize,
+    outer: &[[f64; 2]],
+    hole: &[[f64; 2]],
+    frame: Frame,
+    tol: f64,
+) -> Result<(Mesh, usize), ImprintError> {
+    let host = &mesh.faces[face];
+    let outer_poly = Polygon::new(geo_ring(outer), vec![]);
+    let hole_poly = Polygon::new(geo_ring(hole), vec![]);
+    let intersection = outer_poly.intersection(&hole_poly);
+    let difference = outer_poly.difference(&hole_poly);
+
+    let min_area = tol * tol;
+    let mut inter_rings = Vec::new();
+    for poly in &intersection.0 {
+        let mut pts = open_ring_points(poly.exterior());
+        if pts.len() >= 3 && signed_area(&pts).abs() >= min_area {
+            if signed_area(&pts) < 0.0 {
+                pts.reverse();
+            }
+            inter_rings.push(pts);
+        }
+    }
+    if inter_rings.is_empty() {
         return Err(ImprintError::OutsideFace);
     }
-    let (half_a, half_b) = split_ring(&outer, &hole, tol).ok_or(ImprintError::NoBridge)?;
+
+    let mut diff_rings = Vec::new();
+    for poly in &difference.0 {
+        let mut pts = open_ring_points(poly.exterior());
+        if pts.len() >= 3 && signed_area(&pts).abs() >= min_area {
+            if signed_area(&pts) < 0.0 {
+                pts.reverse();
+            }
+            diff_rings.push(pts);
+        }
+    }
 
     let mut result = mesh.clone();
     result.deselect_all();
-    let base = result.verts.len();
-    for point in &hole {
-        let mut vertex = Vertex::new(0.0, 0.0, 0.0);
-        vertex.pos = frame.lift(*point).to_array();
-        vertex.color = mesh.verts[host.verts[0] as usize].color;
-        result.verts.push(vertex);
-    }
-    let to_vertex = |index: RingIndex| -> u32 {
-        match index {
-            RingIndex::Outer(i) => host.verts[i],
-            RingIndex::Hole(j) => (base + j) as u32,
+    let host_color = mesh.verts[host.verts[0] as usize].color;
+
+    let mut resolve_point = |p: [f64; 2]| -> u32 {
+        for (i, &v_idx) in host.verts.iter().enumerate() {
+            let op = outer[i];
+            if (op[0] - p[0]).hypot(op[1] - p[1]) <= tol {
+                return v_idx;
+            }
         }
+        for (idx, v) in result.verts.iter().enumerate() {
+            let wp = frame.lift(p).to_array();
+            if (v.pos[0] - wp[0])
+                .hypot(v.pos[1] - wp[1])
+                .hypot(v.pos[2] - wp[2]) as f64
+                <= tol
+            {
+                return idx as u32;
+            }
+        }
+        let new_idx = result.verts.len() as u32;
+        let mut nv = Vertex::new(0.0, 0.0, 0.0);
+        nv.pos = frame.lift(p).to_array();
+        nv.color = host_color;
+        result.verts.push(nv);
+        new_idx
     };
-    let to_uv = |index: RingIndex| -> [f32; 2] {
-        let p = match index {
-            RingIndex::Outer(i) => outer[i],
-            RingIndex::Hole(j) => hole[j],
-        };
-        [p[0] as f32, p[1] as f32]
-    };
-    let make_face = |ring: &[RingIndex]| -> Face {
-        let mut face = Face::with_uv(
-            ring.iter().map(|&i| to_vertex(i)).collect(),
-            ring.iter().map(|&i| to_uv(i)).collect(),
-        );
-        face.material_slot = host.material_slot;
-        face
-    };
-    result.faces[face] = make_face(&half_a);
-    result.push_face(make_face(&half_b));
-    let inner: Vec<RingIndex> = (0..hole.len()).map(RingIndex::Hole).collect();
-    let mut inner_face = make_face(&inner);
-    inner_face.selected = true;
-    let inner_index = result.faces.len();
-    result.push_face(inner_face);
-    result.sync_vert_selection_from_faces();
-    Ok((result, inner_index))
+
+    let mut new_faces: Vec<Face> = Vec::new();
+    // Faces externas da diferença
+    for ring in diff_rings {
+        let indices: Vec<u32> = ring.iter().map(|&p| resolve_point(p)).collect();
+        let uvs: Vec<[f32; 2]> = ring.iter().map(|&p| [p[0] as f32, p[1] as f32]).collect();
+        let mut f = Face::with_uv(indices, uvs);
+        f.material_slot = host.material_slot;
+        new_faces.push(f);
+    }
+
+    let mut inner_indices = Vec::new();
+    for ring in inter_rings {
+        let indices: Vec<u32> = ring.iter().map(|&p| resolve_point(p)).collect();
+        let uvs: Vec<[f32; 2]> = ring.iter().map(|&p| [p[0] as f32, p[1] as f32]).collect();
+        let mut f = Face::with_uv(indices, uvs);
+        f.selected = true;
+        f.material_slot = host.material_slot;
+        inner_indices.push(f);
+    }
+
+    if !new_faces.is_empty() {
+        let first_diff = new_faces.remove(0);
+        result.faces[face] = first_diff;
+        for f in new_faces {
+            result.push_face(f);
+        }
+        let ret_inner = result.faces.len();
+        for f in inner_indices {
+            result.push_face(f);
+        }
+        result.sync_vert_selection_from_faces();
+        Ok((result, ret_inner))
+    } else if !inner_indices.is_empty() {
+        let first_inter = inner_indices.remove(0);
+        result.faces[face] = first_inter;
+        for f in inner_indices {
+            result.push_face(f);
+        }
+        result.sync_vert_selection_from_faces();
+        Ok((result, face))
+    } else {
+        Err(ImprintError::Degenerate)
+    }
 }
 
 /// Folha fechada de uma região solta num plano: fundo com a normal invertida
@@ -507,8 +649,9 @@ mod tests {
         let mut reversed = square(1.0, 1.0, 1.0);
         reversed.reverse();
         assert!(imprint_region(&quad(), 0, &reversed).is_ok());
+        // Região totalmente fora da face [0..4]:
         assert_eq!(
-            imprint_region(&quad(), 0, &square(3.0, 3.0, 2.0)).unwrap_err(),
+            imprint_region(&quad(), 0, &square(5.0, 5.0, 2.0)).unwrap_err(),
             ImprintError::OutsideFace
         );
         let tilted: Vec<Vec3> = square(1.0, 1.0, 1.0)
@@ -561,5 +704,17 @@ mod tests {
         assert_eq!(ring.faces.len(), 4, "duas metades em cima e embaixo");
         ring.extrude_selected(1.0);
         assert_eq!(ring.faces.len(), 4 + 8, "paredes externas e internas");
+    }
+
+    #[test]
+    fn imprint_region_crossing_edges_cuts_the_face() {
+        // Quad de [0,0] a [4,4] (área 16)
+        // Região de [2,2] a [5,5] (cruza a borda em x=4 e y=4)
+        // A interseção deve ser de [2,2] a [4,4] (área 4)
+        let crossing_region = square(2.0, 2.0, 3.0);
+        let (mesh, inner) = imprint_region(&quad(), 0, &crossing_region).unwrap();
+        assert!(mesh.faces.len() >= 2);
+        assert!(mesh.faces[inner].selected);
+        assert!((area_of(&mesh, inner) - 4.0).abs() < 1e-3);
     }
 }

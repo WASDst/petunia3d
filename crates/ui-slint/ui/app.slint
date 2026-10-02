@@ -4092,6 +4092,11 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> region-shapes-commands: "";
     in-out property <string> profile-outline-commands: "";
     in-out property <string> poly-pen-preview-commands: "";
+    in-out property <string> depth-handle-commands: "";
+    in-out property <bool> depth-handle-visible: false;
+    in-out property <length> depth-handle-x: 0px;
+    in-out property <length> depth-handle-y: 0px;
+    in-out property <string> depth-handle-label: "";
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
     in-out property <float> profile-depth: 1.0;
@@ -5447,6 +5452,33 @@ export component PetuniaSlintShell inherits Window {
                         stroke: DesignTokens.selection;
                         stroke-width: 1.5px;
                     }
+                    // Depth Handle da forma ativa em DRAW: haste com diamante + cota
+                    if root.depth-handle-visible && root.depth-handle-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.depth-handle-commands;
+                        fill: DesignTokens.accent;
+                        stroke: DesignTokens.accent;
+                        stroke-width: 2px;
+                    }
+                    if root.depth-handle-visible: Rectangle {
+                        x: root.depth-handle-x + 10px;
+                        y: root.depth-handle-y - 12px;
+                        width: depth-text.preferred-width + 8px;
+                        height: 18px;
+                        border-radius: 4px;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.accent;
+                        depth-text := Text {
+                            text: root.depth-handle-label;
+                            color: DesignTokens.text-primary;
+                            font-size: 10px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
                     Path {
                         fit: ImageFit.preserve;
                         commands: root.profile-preview-commands;
@@ -5712,22 +5744,30 @@ export component PetuniaSlintShell inherits Window {
                                 pending-transform = false;
                                 pending-box-select = false;
                                 pending-lasso-select = false;
-                                if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
-                                    if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
-                                        is-profile-point-drag = true;
-                                        consume-click = true;
-                                    } else if root.profile-volume-mode != "none" {
-                                        is-profile-volume-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
-                                    } else if root.profile-closed {
-                                        is-profile-depth-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
-                                    } else {
-                                        consume-click = true;
-                                        is-profile-draw-drag = true;
-                                        root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
-                                    }
-                                } else if event.button == PointerEventButton.middle {
+                                 if event.button == PointerEventButton.left && (root.active-tool == "draw_profile" || (root.active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.depth-handle-visible)) {
+                                     let d-handle-dx = abs(self.mouse-x - root.depth-handle-x);
+                                     let d-handle-dy = abs(self.mouse-y - root.depth-handle-y);
+                                     if root.depth-handle-visible && d-handle-dx <= 20px && d-handle-dy <= 20px {
+                                         is-profile-depth-drag = true;
+                                         tool-drag-fine = event.modifiers.shift;
+                                         consume-click = true;
+                                     } else if root.active-tool == "draw_profile" {
+                                         if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
+                                             is-profile-point-drag = true;
+                                             consume-click = true;
+                                         } else if root.profile-volume-mode != "none" {
+                                             is-profile-volume-drag = true;
+                                             tool-drag-fine = event.modifiers.shift;
+                                         } else if root.profile-closed {
+                                             is-profile-depth-drag = true;
+                                             tool-drag-fine = event.modifiers.shift;
+                                         } else {
+                                             consume-click = true;
+                                             is-profile-draw-drag = true;
+                                             root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
+                                         }
+                                     }
+                                 } else if event.button == PointerEventButton.middle {
                                     if event.modifiers.shift {
                                         is-pan = true;
                                         is-orbit = false;
@@ -6673,7 +6713,12 @@ export component PetuniaSlintShell inherits Window {
                             y: 5px;
                             spacing: 3px;
                             alignment: center;
-                            for domain in [
+                            for domain in (active-workspace == "MODEL" && root.modeling-mode == "DRAW") ? [
+                                { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.shape"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_entire_shape") },
+                                { id: "EDGE", icon: IconSet.Spline, icon-svg: PetuniaIcons.tool-profile, label: Tr.t("sl.curve"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_curve_segment") },
+                                { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
+                                { id: "FACE", icon: IconSet.Square, icon-svg: PetuniaIcons.select-face, label: Tr.t("sl.region"), shortcut: root.shortcuts.select-face, description: Tr.t("sl.select_region_face") },
+                            ] : [
                                 { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.object"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_and_manipulate_entire_objects_as_disc") },
                                 { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
                                 { id: "EDGE", icon: IconSet.SquareDashed, icon-svg: PetuniaIcons.select-edge, label: Tr.t("sl.edge"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_and_transform_polygonal_boundary_edge") },
@@ -11583,6 +11628,11 @@ export component PetuniaSlintShell inherits Window {
                         label: Tr.t("sl.shape_exclude");
                         shortcut: "";
                         clicked => { root.context-menu-open = false; root.context-menu-action("draw_exclude"); }
+                    }
+                    if root.context-menu-mode == "viewport" && root.modeling-mode == "DRAW": ContextMenuItem {
+                        label: Tr.t("sl.workplane_from_selection");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("workplane_from_selection"); }
                     }
                     if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
                         label: Tr.t("sl.edge_loop");

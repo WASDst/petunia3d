@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### DRAW: domínios específicos, Depth Handle, Workplane por 3 pontos e Imprint com corte booleano (01/10/2026)
+- **Domínios de seleção específicos do DRAW (`Shape / Curve / Point / Region`)**: na barra de domínios, quando em modo DRAW, a seleção expõe os termos e ícones canônicos do Cap. 11/23 (Shape = 1, Curve = 2, Point = 3, Region = 4), preservando os domínios de POLY (Object, Point, Edge, Face).
+- **Depth Handle visual e interativa**: ao fechar uma forma no DRAW, projeta no centroide da região uma alça 3D (haste, diamante no topo e cota métrica) com detecção direta de clique/arraste, permitindo puxar a extrusão diretamente com o cursor no modo Select ou Draw.
+- **Workplane customizado por 3 pontos e seleção**: `ProfileWorkplane::from_three_points` e `from_face_and_edge`, permitindo criar planos de trabalho alinhados passando por 3 vértices selecionados ou por uma face com aresta guia, com item correspondente no menu de contexto do viewport.
+- **Imprint flexível com recorte booleano**: `imprint_boolean_cut` via `geo::BooleanOps` permite que regiões que cruzam bordas da face hospedeira fatiem a geometria com precisão, eliminando o erro de face externa quando o perfil transborda.
+- **Composição de múltiplos shapes**: formas 2D fechadas sucessivas criam novos perfis para composição via Shape Builder sem sobrescrita indesejada.
+
 ### Persistência de transform, isolamento de trilhos DRAW/POLY e formas 2D (01/10/2026)
 - **Persistência de Transforms**: `Asset` ganha os campos persistentes `position`, `rotation` e `scale`. O modal de transformação no espaço de objeto atualiza esses campos, e os inputs de Transform refletem os valores persistidos do objeto ativo ao trocar ou re-selecionar ativos. Adicionados comandos semânticos canônicos `model.clear_location` (`Alt+G`), `model.clear_rotation` (`Alt+R`), `model.clear_scale` (`Alt+S`) e `model.clear_all_transforms` (`Alt+Backspace`) no menu de contexto (RMB sobre o objeto e Outliner).
 - **Separação estrita de trilhos DRAW vs POLY**: a barra de ferramentas lateral esquerda separa totalmente as ferramentas exclusivas de DRAW (Sketch Profile, Shape Builder, 2D Rect, 2D Circle, Push-Pull) das ferramentas de POLY (Primitivas 3D, Extrude, Inset, Bevel, Poly Pen, Loop Cut, Slice). Nenhuma ferramenta de DRAW vaza para a barra de POLY e vice-versa.
