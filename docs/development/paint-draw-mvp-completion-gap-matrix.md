@@ -27,6 +27,7 @@ As ações novas estão na paleta de comandos e podem receber atalhos no perfil 
 - Projection é temporária em espaço de tela e commita raster; Stencil modula o brush pelo alpha ou luminância. Decal live mantém transformação UV existente. Attachments de Path invalidam se a topologia mudar; não há reprojeção silenciosa.
 - Path é poligonal no shell. Ribbon usa ponta quadrada contínua, stamps seguem a tangente local. Não há editor live de repintura automática do caminho após commit. Alpha lock bloqueia áreas transparentes da layer alvo; projeções e stamps em layer nova exigem alpha lock desligado.
 - Booleano preserva a geometria e pode manter triângulos onde quads não são seguros. Transferência raster limitada a 1024 px; a pilha é consolidada somente quando muda o atlas. Canais são amostrados das superfícies de origem; parâmetros de shader permanecem os de A. Não se cria retopologia ou sistema novo de materiais por face.
+- Rampas seguem a ordem da paleta definida pelo usuário, sem ordenar cores silenciosamente por luminância.
 - Trace é silhouette bounded (alpha ou luminância), sem tracing de cor/curvas. Mirror é de criação, não constraint live. Simplify/Resample são explícitos e podem mudar a curva.
 
 ## Evidência de validação
@@ -34,3 +35,5 @@ As ações novas estão na paleta de comandos e podem receber atalhos no perfil 
 Compilação focalizada de `petunia_ui_slint --lib` realizada para integração; novas regressões escritas para Undo/rollback, furos, textura booleana, densidade e persistência. Execução de testes, gates completos, captura nativa e aceite manual **aguardam instrução do responsável**. Compilação não substitui esses critérios. Ver [roteiro manual](paint-draw-mvp-manual-2026-10-02.md).
 
 Path também coleta anchors por clique/arrasto no canvas UV, com preview UV sem ligar segmentos entre charts diferentes; o commit usa o mesmo caminho/restrições/Undo do modelo 3D. A interação Projection continua na viewport; clicks do canvas nesse modo não pintam um brush por engano.
+
+Export bleed restringe a dilatação aos gutters fora das faces UV, preservando pixels/alpha da arte dentro das ilhas. Materiais compartilhados usam a máscara combinada dos consumidores exportados; todos os canais existentes recebem padding em cópia. Verificar também transparências internas de decals SVG.

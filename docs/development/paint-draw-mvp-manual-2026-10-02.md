@@ -50,3 +50,5 @@ Abrir projeto de teste em cópia, criar cubo e plano com UV charts distintos, 25
 ## Gates reservados
 
 Após autorização: fmt/check, testes relevantes (SVG, profile_tools, format, boolean_texture, shape_builder, draw_batch, projection, surface_commands, path_paint, uv_tools), clippy, architecture/docs/bible/UI guards. Registrar comando, SHA, resultado e diferenças manuais encontradas. Não usar logs de worktrees antigos como prova deste checkout.
+
+Export bleed restringe a dilatação aos gutters fora das faces UV, preservando pixels/alpha da arte dentro das ilhas. Materiais compartilhados usam a máscara combinada dos consumidores exportados; todos os canais existentes recebem padding em cópia. Verificar também transparências internas de decals SVG.
