@@ -1729,6 +1729,106 @@ mod tests {
     use super::*;
 
     #[test]
+    fn alpha_lock_keeps_transparency_for_brush_eraser_and_gradient() {
+        let mut state = AppState::default();
+        let mut canvas = Canvas::new(8, 8, [0; 4]);
+        canvas.set(3, 3, [10, 20, 30, 128]);
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(PaintLayer::new_raster("Alpha", canvas.clone()));
+        let asset = state.project.active_mut().unwrap();
+        asset.texture = Some(canvas);
+        asset.paint_stack = Some(stack);
+        state.session.tools.brush_style.alpha_lock = true;
+        state.paint_color = [1.0, 0.0, 0.0];
+        for kind in [BrushType::Pixel, BrushType::Eraser] {
+            let settings = BrushSettings {
+                kind,
+                size_px: 1.0,
+                hardness: 1.0,
+                strength: 1.0,
+                ..Default::default()
+            };
+            PaintModule::canvas_brush_with_settings(&mut state, 3, 3, settings);
+            PaintModule::canvas_brush_with_settings(&mut state, 0, 0, settings);
+            let layer = state
+                .project
+                .active()
+                .unwrap()
+                .paint_stack
+                .as_ref()
+                .unwrap()
+                .active()
+                .unwrap()
+                .canvas()
+                .unwrap();
+            assert_eq!(layer.get(3, 3).unwrap()[3], 128);
+            assert_eq!(layer.get(0, 0).unwrap(), [0; 4]);
+        }
+        PaintModule::canvas_gradient_linear(
+            &mut state,
+            0,
+            0,
+            7,
+            0,
+            [255, 0, 0, 255],
+            [0, 0, 255, 255],
+        );
+        let layer = state
+            .project
+            .active()
+            .unwrap()
+            .paint_stack
+            .as_ref()
+            .unwrap()
+            .active()
+            .unwrap()
+            .canvas()
+            .unwrap();
+        assert_eq!(layer.get(3, 3).unwrap()[3], 128);
+        assert_eq!(layer.get(0, 0).unwrap(), [0; 4]);
+    }
+
+    #[test]
+    fn dithered_gradient_uses_only_the_two_endpoint_colors() {
+        let mut state = AppState::default();
+        let canvas = Canvas::new(16, 8, [0; 4]);
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(PaintLayer::new_raster("Gradient", canvas.clone()));
+        let asset = state.project.active_mut().unwrap();
+        asset.texture = Some(canvas);
+        asset.paint_stack = Some(stack);
+        state.session.tools.brush_style.dithering = true;
+        PaintModule::canvas_gradient_linear(
+            &mut state,
+            0,
+            0,
+            15,
+            0,
+            [0, 0, 0, 255],
+            [255, 255, 255, 255],
+        );
+        let layer = state
+            .project
+            .active()
+            .unwrap()
+            .paint_stack
+            .as_ref()
+            .unwrap()
+            .active()
+            .unwrap()
+            .canvas()
+            .unwrap();
+        assert!(
+            layer
+                .pixels
+                .chunks_exact(4)
+                .all(|p| p == [0, 0, 0, 255] || p == [255; 4])
+        );
+        assert!(layer.pixels.chunks_exact(4).any(|p| p == [0, 0, 0, 255]));
+        assert!(layer.pixels.chunks_exact(4).any(|p| p == [255; 4]));
+    }
+
+    #[test]
     fn vertex_fill_advances_only_color_revision_and_is_undoable() {
         let mut state = AppState::new("en");
         state.paint_color = [0.1, 0.7, 0.3];

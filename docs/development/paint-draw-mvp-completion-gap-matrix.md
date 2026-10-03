@@ -4,7 +4,7 @@ Escopo autorizado: corrigir booleanos; Shape Builder poligonal (curvas fiéis em
 
 | Requisito | Estado observado antes da retomada | Delta implementado (inspeção; aceite pendente) |
 | --- | --- | --- |
-| Boolean cleanup | PARTIALLY_COMPLIANT | Transferir cor de pontos novos; preservar albedo e canais PBR no atlas novo, reorientando normais; material independente; manter paint stack quando UV herdado |
+| Boolean cleanup | PARTIALLY_COMPLIANT | UVs e cores seguem a triangulação real, inclusive quads não afins; preservar albedo e canais PBR no atlas novo, reorientando normais; material independente; manter paint stack quando UV herdado |
 | Shape Builder / Pathfinder | BROKEN | Furos persistentes, Delete/XOR sem recriar vazios, Merge recorta divisórias abertas; formas não afetadas mantêm identidade; extrusão composta |
 | SVG decal/perfil | PARTIALLY_COMPLIANT (worktree isolado) | Recuperado parser limitado e persistência compatível; importação DRAW/decal Slint; rasterização 512/1024 na paleta |
 | Projection/Stencil | RUDIMENTARY (rascunho isolado) | Preview temporário, mover/rotacionar/escalar/espelhar; depth da cena; alpha/luma stencil; commit restrito em layer própria e 1 Undo |
