@@ -32,7 +32,17 @@ As ações novas estão na paleta de comandos e podem receber atalhos no perfil 
 
 ## Evidência de validação
 
-Compilação focalizada de `petunia_ui_slint --lib` realizada para integração; novas regressões escritas para Undo/rollback, furos, textura booleana, densidade e persistência. Execução de testes, gates completos, captura nativa e aceite manual **aguardam instrução do responsável**. Compilação não substitui esses critérios. Ver [roteiro manual](paint-draw-mvp-manual-2026-10-02.md).
+Compilação dos executáveis unitários das seis crates abaixo concluída com **exit 0** em checkout isolado. Código publicado no commit `e5e1452dfa734fbaa1c21a7d464e64e738134fdf`; checkout de conferência no commit `4a0af068f984e7dd6359ec7e75bbc6bda383b0bc`, com árvore idêntica `60cc841eecc963ba5e3af4729ddc85b04044be11`. A repetição após corrigir a dependência JSON do teste Slint e coletar os triângulos na regressão de Projection terminou em 3m41s.
+
+```sh
+cargo test --no-run --lib -j 1 \
+  -p petunia_mesh -p petunia_project -p petunia_core \
+  -p petunia_module_model -p petunia_module_paint -p petunia_ui_slint
+```
+
+Usado cache Cargo separado via `CARGO_TARGET_DIR`. Resultado: seis executáveis unitários gerados, **zero casos de teste executados nesta conferência**. Novas regressões cobrem Undo/rollback, furos, máscaras/alpha, anchors, textura booleana, densidade e persistência. Execução dos testes, gates completos, captura nativa e aceite manual **aguardam instrução do responsável**; compilação não substitui esses critérios. Ver [roteiro manual](paint-draw-mvp-manual-2026-10-02.md).
+
+Catálogos e changelog gerados com `cargo run -p xtask -- docs-generate` (exit 0), sem compilar o site público congelado. Entrega no [PR #26](https://github.com/wasd-lat/petunia3d/pull/26), em draft enquanto o aceite estiver pendente. Os commits seguintes a esse registro alteram somente documentação.
 
 Path também coleta anchors por clique/arrasto no canvas UV, com preview UV sem ligar segmentos entre charts diferentes; o commit usa o mesmo caminho/restrições/Undo do modelo 3D. A interação Projection continua na viewport; clicks do canvas nesse modo não pintam um brush por engano.
 
