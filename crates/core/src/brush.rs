@@ -50,6 +50,19 @@ pub enum BrushType {
     Ellipse,
 }
 
+/// Transient, toolkit-independent projector used as a brush opacity mask.
+#[derive(Clone, Debug)]
+pub struct SurfaceStencil {
+    pub target: uuid::Uuid,
+    pub image: std::sync::Arc<petunia_project::Canvas>,
+    pub world_to_clip: glam::Mat4,
+    pub center: [f32; 2],
+    pub size: [f32; 2],
+    pub rotation: f32,
+    pub mirror: bool,
+    pub luminance: bool,
+}
+
 /// How a 3D brush sample maps onto the surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BrushProjectionMode {
@@ -342,6 +355,15 @@ pub struct BrushStyle {
     pub spray_density: f32,
     /// Semente do traço: o mesmo traço sempre produz o mesmo resultado.
     pub seed: u32,
+    #[serde(default)]
+    pub alpha_lock: bool,
+    #[serde(default)]
+    pub dithering: bool,
+    /// Passo na rampa ordenada da paleta: -1 sombra, +1 luz, 0 pintura normal.
+    #[serde(default)]
+    pub palette_step: i8,
+    #[serde(default)]
+    pub pixel_perfect: bool,
 }
 
 impl Default for BrushStyle {
@@ -357,6 +379,10 @@ impl Default for BrushStyle {
             scatter: 0.0,
             spray_density: 0.35,
             seed: 1,
+            alpha_lock: false,
+            dithering: false,
+            palette_step: 0,
+            pixel_perfect: false,
         }
     }
 }
@@ -381,6 +407,10 @@ impl BrushStyle {
             scatter: finite(self.scatter, 0.0, 2.0, 0.0),
             spray_density: finite(self.spray_density, 0.05, 1.0, 0.35),
             seed: self.seed,
+            alpha_lock: self.alpha_lock,
+            dithering: self.dithering,
+            palette_step: self.palette_step.clamp(-1, 1),
+            pixel_perfect: self.pixel_perfect,
         }
     }
 

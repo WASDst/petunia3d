@@ -135,6 +135,7 @@ fn check_expansion(svg: &str) -> Result<(), SvgError> {
     let options = roxmltree::ParsingOptions {
         allow_dtd: true,
         nodes_limit: MAX_XML_NODES,
+        ..Default::default()
     };
     let doc =
         roxmltree::Document::parse_with_options(svg, options).map_err(|error| match error {

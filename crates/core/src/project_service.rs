@@ -223,6 +223,21 @@ impl ProjectService {
         Ok(())
     }
 
+    pub fn export_glb_with_padding(
+        state: &AppState,
+        asset_indices: &[usize],
+        path: &Path,
+        padding: u32,
+    ) -> Result<(), ProjectServiceError> {
+        let bytes = export::export_gltf_with_padding(&state.project, asset_indices, padding)
+            .map_err(|e| ProjectServiceError::Export(e.to_string()))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, bytes)?;
+        Ok(())
+    }
+
     /// Exporta um asset individual usando o pipeline unificado com validação e opções parametrizadas (P3D-068).
     pub fn export_asset_pipeline(
         state: &AppState,

@@ -99,12 +99,40 @@ impl DabParams {
     }
 }
 
+fn stencil_weight(stencil: &petunia_core::brush::SurfaceStencil, position: Vec3) -> f32 {
+    let clip = stencil.world_to_clip * position.extend(1.0);
+    if !clip.is_finite() || clip.w <= 1e-6 {
+        return 0.0;
+    }
+    let screen = [clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5];
+    let placement = crate::projection::StencilPlacement {
+        center_px: stencil.center,
+        size_px: stencil.size,
+        rotation_rad: stencil.rotation,
+        mirror_x: stencil.mirror,
+    };
+    crate::projection::stencil_alpha(
+        &stencil.image,
+        &placement,
+        screen,
+        if stencil.luminance {
+            crate::projection::StencilChannel::Luma
+        } else {
+            crate::projection::StencilChannel::Alpha
+        },
+    )
+}
+
 /// Canvas + buffer + tiles sujos de um traço em andamento.
 struct Target<'a> {
     cv: &'a mut Canvas,
     buf: &'a mut StrokeBuffer,
     dirty: Vec<bool>,
     tiles_x: u32,
+    alpha_lock: bool,
+    dithering: bool,
+    palette_step: i8,
+    palette: Vec<[u8; 3]>,
 }
 
 fn lerp_px(a: [u8; 4], b: [f32; 4], m: f32) -> [u8; 4] {
@@ -142,7 +170,10 @@ impl Target<'_> {
         let sy = (y as f32 - p.delta[1]).round().clamp(0.0, (h - 1) as f32) as u32;
         let cur = Self::px(&self.cv.pixels, w, x, y);
         let src = Self::px(&self.cv.pixels, w, sx, sy);
-        let out = lerp_px(cur, src.map(f32::from), a);
+        let mut out = lerp_px(cur, src.map(f32::from), a);
+        if self.alpha_lock {
+            out[3] = Self::px(&self.buf.base, w, x, y)[3];
+        }
         let i = ((y * w + x) * 4) as usize;
         self.cv.pixels[i..i + 4].copy_from_slice(&out);
         self.mark(x, y);
@@ -198,6 +229,10 @@ impl Target<'_> {
         if x >= self.buf.w || y >= self.buf.h || weight <= 0.0 {
             return;
         }
+        let original = Self::px(&self.buf.base, self.buf.w, x, y);
+        if self.alpha_lock && original[3] == 0 {
+            return;
+        }
         if p.kind == BrushType::Smudge {
             self.smudge(x, y, weight, p);
             return;
@@ -222,12 +257,12 @@ impl Target<'_> {
             return;
         }
         let base = Self::px(&self.buf.base, self.buf.w, x, y);
-        let out = if p.kind == BrushType::Eraser {
+        let mut out = if p.kind == BrushType::Eraser {
             let mut out = base;
             out[3] = (base[3] as f32 * (1.0 - cov1 * p.cap).max(0.0)) as u8;
             out
         } else {
-            let target = match self.derived_target(x, y, base, p) {
+            let mut target = match self.derived_target(x, y, base, p) {
                 Some(t) => t,
                 None if matches!(p.kind, BrushType::Clone) => return,
                 None => [
@@ -237,13 +272,44 @@ impl Target<'_> {
                     p.color[3] as f32,
                 ],
             };
-            let m = if p.kind == BrushType::Pixel {
-                1.0
+            if self.palette_step != 0 && !self.palette.is_empty() && p.kind != BrushType::Eraser {
+                let nearest = self
+                    .palette
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, rgb)| {
+                        (0..3)
+                            .map(|c| (rgb[c] as i32 - base[c] as i32).pow(2))
+                            .sum::<i32>()
+                    })
+                    .map_or(0, |(i, _)| i);
+                let index = (nearest as isize + self.palette_step as isize)
+                    .clamp(0, self.palette.len() as isize - 1) as usize;
+                for (channel, value) in target.iter_mut().take(3).zip(self.palette[index]) {
+                    *channel = value as f32;
+                }
+            }
+            let coverage = if p.kind == BrushType::Pixel {
+                weight.clamp(0.0, 1.0)
             } else {
                 (cov1 * p.cap).clamp(0.0, 1.0)
             };
+            let m = if self.dithering {
+                const BAYER: [[u8; 4]; 4] =
+                    [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+                if coverage >= (BAYER[(y % 4) as usize][(x % 4) as usize] as f32 + 0.5) / 16.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            } else {
+                coverage
+            };
             lerp_px(base, target, m)
         };
+        if self.alpha_lock {
+            out[3] = base[3];
+        }
         self.buf.coverage[i] = cov1;
         self.cv.pixels[i * 4..i * 4 + 4].copy_from_slice(&out);
         self.mark(x, y);
@@ -353,8 +419,18 @@ impl PaintModule {
         state: &mut AppState,
         f: impl FnOnce(&mut Target, &Mesh) -> R,
     ) -> Option<(R, DirtyTiles)> {
+        let style = state.session.tools.brush_style;
+        let palette: Vec<[u8; 3]> = state
+            .project
+            .palette
+            .iter()
+            .map(|rgb| rgb.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8))
+            .collect();
         let active = state.project.active;
         let asset = state.project.assets.get_mut(active)?;
+        if asset.locked {
+            return None;
+        }
         let (mesh, stack) = (&asset.mesh, asset.paint_stack.as_mut()?);
         let layer = stack.active_mut()?;
         if layer.locked || !layer.is_paintable() {
@@ -377,6 +453,10 @@ impl PaintModule {
             buf,
             dirty: vec![false; (tiles_x * tiles_y) as usize],
             tiles_x,
+            alpha_lock: style.alpha_lock,
+            dithering: style.dithering,
+            palette_step: style.palette_step,
+            palette,
         };
         let out = f(&mut target, mesh);
         Some((out, target.into_dirty()))
@@ -422,6 +502,18 @@ impl PaintModule {
         let clone_source = state.session.tools.clone_source;
         let params = DabParams::new(settings, &style, Self::paint_color_rgba(state));
         let radius0 = settings.sanitized().size_px * 0.5;
+        let stencil = state
+            .session
+            .tools
+            .paint_stencil
+            .as_ref()
+            .filter(|stencil| {
+                state
+                    .project
+                    .active()
+                    .is_some_and(|a| a.id == stencil.target)
+            })
+            .cloned();
         let result = Self::with_stroke_target(state, |target, mesh| {
             let mask = restriction.as_ref().map(|r| r.mask(mesh, w, h));
             for &(cx, cy) in points {
@@ -478,7 +570,14 @@ impl PaintModule {
                         target.apply(
                             x as u32,
                             y as u32,
-                            dab_falloff(dab.kind, t, dab.hardness),
+                            dab_falloff(dab.kind, t, dab.hardness)
+                                * stencil.as_ref().map_or(1.0, |stencil| {
+                                    mesh.uv_to_world([
+                                        x as f32 / w as f32,
+                                        1.0 - y as f32 / h as f32,
+                                    ])
+                                    .map_or(0.0, |(position, _)| stencil_weight(stencil, position))
+                                }),
                             &dab,
                         );
                     }
@@ -569,6 +668,18 @@ impl PaintModule {
             }
         }
         let plain_round = style.tip == BrushTip::Round && style.roundness >= 0.999;
+        let stencil = state
+            .session
+            .tools
+            .paint_stencil
+            .as_ref()
+            .filter(|stencil| {
+                state
+                    .project
+                    .active()
+                    .is_some_and(|a| a.id == stencil.target)
+            })
+            .cloned();
         let result = Self::with_stroke_target(state, |target, mesh| {
             // Normal, centro e raio de cada face, uma vez por chamada (e não por
             // dab): descarta de graça as faces longe do pincel.
@@ -662,7 +773,15 @@ impl PaintModule {
                                 let d = pos - hit;
                                 style.tip_distance(d.dot(u) / r_eff, d.dot(v) / r_eff)
                             };
-                            target.apply(x, y, dab_falloff(dab.kind, t, dab.hardness), &dab);
+                            target.apply(
+                                x,
+                                y,
+                                dab_falloff(dab.kind, t, dab.hardness)
+                                    * stencil
+                                        .as_ref()
+                                        .map_or(1.0, |stencil| stencil_weight(stencil, pos)),
+                                &dab,
+                            );
                         },
                     );
                 }

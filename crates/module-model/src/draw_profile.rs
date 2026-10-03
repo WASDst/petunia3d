@@ -381,6 +381,20 @@ pub fn build_extrude_mesh(p: &ProfileState) -> Result<Mesh, String> {
     if effective.len() < 3 || !p.closed {
         return Err("profile requires at least 3 points and must be closed".to_string());
     }
+    if !p.holes.is_empty() {
+        let outer: Vec<_> = effective.iter().map(|p| p.map(f64::from)).collect();
+        let mut mesh = petunia_mesh::imprint::region_sheet(
+            &outer,
+            &p.holes,
+            glam::Vec3::from(p.origin),
+            glam::Vec3::from(p.right),
+            glam::Vec3::from(p.up),
+        )
+        .map_err(|e| e.to_string())?;
+        mesh.extrude_selected(p.depth.max(0.05));
+        mesh.layout_uv_charts(petunia_mesh::primitives::DEFAULT_UV_PADDING);
+        return Ok(mesh);
+    }
     let mut m = Mesh::from_polygon(&effective, p.depth.max(0.05)).map_err(|e| e.to_string())?;
     let r = glam::Vec3::from(p.right);
     let u = glam::Vec3::from(p.up);
@@ -410,6 +424,9 @@ pub fn generate_extrude(state: &mut AppState) {
 
 /// Constrói a malha 3D de revolução a partir do ProfileState sem alterar o projeto ou descartar pontos.
 pub fn build_revolve_mesh(p: &ProfileState) -> Result<Mesh, String> {
+    if !p.holes.is_empty() {
+        return Err("Compound profiles require Extrude or region Push/Pull".into());
+    }
     let effective = p.effective_points();
     if effective.len() < 2 {
         return Err("profile requires at least 2 points for revolve".to_string());
@@ -515,6 +532,9 @@ pub fn extract_sweep_path_from_mesh(mesh: &Mesh) -> Option<(Vec<glam::Vec3>, boo
 
 /// Constrói a malha 3D de sweep a partir do ProfileState sem alterar o projeto ou descartar pontos.
 pub fn build_sweep_mesh(p: &ProfileState, mesh_guide: Option<&Mesh>) -> Result<Mesh, String> {
+    if !p.holes.is_empty() {
+        return Err("Compound profiles require Extrude or region Push/Pull".into());
+    }
     let effective = p.effective_points();
     if effective.len() < 2 {
         return Err("profile requires at least 2 points for sweep".to_string());
@@ -899,5 +919,40 @@ mod tests {
         }
         assert!(profile_capture_from_selection(&mut state));
         assert!(state.profile.workplane_locked);
+    }
+}
+
+#[cfg(test)]
+mod compound_volume_tests {
+    use super::*;
+    #[test]
+    fn extrusion_keeps_multiple_holes_open_and_solid_closed() {
+        let p = ProfileState {
+            points: vec![[-2.0, -2.0], [2.0, -2.0], [2.0, 2.0], [-2.0, 2.0]],
+            holes: vec![
+                vec![[-1.5, -0.5], [-0.5, -0.5], [-0.5, 0.5], [-1.5, 0.5]],
+                vec![[0.5, -0.5], [1.5, -0.5], [1.5, 0.5], [0.5, 0.5]],
+            ],
+            closed: true,
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            depth: 1.0,
+            ..Default::default()
+        };
+        let mesh = build_extrude_mesh(&p).unwrap();
+        assert!(
+            mesh.ray_hit(glam::Vec3::new(-1.0, 0.0, 2.0), -glam::Vec3::Z)
+                .is_none()
+        );
+        assert!(
+            mesh.ray_hit(glam::Vec3::new(1.0, 0.0, 2.0), -glam::Vec3::Z)
+                .is_none()
+        );
+        assert!(
+            mesh.ray_hit(glam::Vec3::new(0.0, 0.0, 2.0), -glam::Vec3::Z)
+                .is_some()
+        );
+        assert!(build_revolve_mesh(&p).is_err());
     }
 }

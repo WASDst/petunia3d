@@ -85,6 +85,7 @@ pub mod pipeline;
 pub mod posing;
 pub mod prefab;
 pub mod profile;
+pub mod profile_tools;
 pub mod rig;
 pub mod rig_roles;
 pub mod spline;
@@ -151,8 +152,9 @@ pub use spline::{
 pub use surface_attachment::{
     SurfaceAttachment, SurfaceAttachmentError, SurfaceAttachmentStatus, SurfaceFrame, SurfaceHit,
     SurfaceTriangleHandle, detach_surface_attachment_keep_world, evaluate_surface_attachment,
-    project_ray_to_surface, project_ray_to_surface_target, reproject_surface_attachment,
-    reproject_surface_attachment_to_target, slide_surface_attachment, surface_attachment_status,
+    evaluate_surface_attachments, project_ray_to_surface, project_ray_to_surface_target,
+    reproject_surface_attachment, reproject_surface_attachment_to_target, slide_surface_attachment,
+    surface_attachment_status,
 };
 pub use surface_recipe::{
     NodeSpec, RECIPE_SCHEMA_VERSION, RecipeEdge, RecipeError, RecipeNode, RecipeOutputChannel,
@@ -232,6 +234,54 @@ mod pixel_bytes {
 }
 
 impl Canvas {
+    /// Expands edge RGBA into transparent texels, on a copy, at most 64 pixels.
+    pub fn with_bleed(&self, padding: u32) -> Self {
+        use std::collections::VecDeque;
+        let mut out = self.clone();
+        let n = self.w as usize * self.h as usize;
+        if n > 1024 * 1024 || self.pixels.len() != n * 4 || self.w == 0 || self.h == 0 {
+            return out;
+        }
+        let padding = padding.min(64);
+        if padding == 0 {
+            return out;
+        }
+        let mut distance = vec![u8::MAX; n];
+        let mut queue = VecDeque::new();
+        for (i, p) in self.pixels.chunks_exact(4).enumerate() {
+            if p[3] != 0 {
+                distance[i] = 0;
+                queue.push_back(i);
+            }
+        }
+        while let Some(i) = queue.pop_front() {
+            if distance[i] as u32 >= padding {
+                continue;
+            }
+            let (x, y) = (i % self.w as usize, i / self.w as usize);
+            for neighbor in [
+                x.checked_sub(1).map(|x| y * self.w as usize + x),
+                (x + 1 < self.w as usize).then_some(i + 1),
+                y.checked_sub(1).map(|y| y * self.w as usize + x),
+                (y + 1 < self.h as usize).then_some(i + self.w as usize),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if distance[neighbor] != u8::MAX {
+                    continue;
+                }
+                distance[neighbor] = distance[i] + 1;
+                let color: [u8; 4] = out.pixels[i * 4..i * 4 + 4]
+                    .try_into()
+                    .expect("validated RGBA");
+                out.pixels[neighbor * 4..neighbor * 4 + 4].copy_from_slice(&color);
+                queue.push_back(neighbor);
+            }
+        }
+        out
+    }
+
     pub fn new(w: u32, h: u32, fill: [u8; 4]) -> Self {
         let w = w.clamp(1, 1024);
         let h = h.clamp(1, 1024);
@@ -2287,5 +2337,22 @@ mod tests {
             .unwrap();
 
         assert!(project.estimated_bytes() > before);
+    }
+}
+
+#[cfg(test)]
+mod bleed_tests {
+    use super::Canvas;
+    #[test]
+    fn bleed_only_changes_a_copy_within_requested_radius() {
+        let mut canvas = Canvas::new(7, 1, [0; 4]);
+        canvas.set(3, 0, [20, 40, 80, 255]);
+        let out = canvas.with_bleed(2);
+        assert_eq!(out.get(1, 0), Some([20, 40, 80, 255]));
+        assert_eq!(out.get(5, 0), Some([20, 40, 80, 255]));
+        assert_eq!(out.get(0, 0), Some([0; 4]));
+        assert_eq!(out.get(6, 0), Some([0; 4]));
+        assert_eq!(canvas.get(1, 0), Some([0; 4]));
+        assert_eq!(canvas.with_bleed(0), canvas);
     }
 }

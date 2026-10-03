@@ -165,3 +165,8 @@ pub use petunia_mesh::loop_cut::{LoopCutError, LoopRing};
 
 #[cfg(test)]
 mod preview_tests;
+
+mod draw_batch;
+pub use draw_batch::DrawBatchCmd;
+
+mod boolean_texture;

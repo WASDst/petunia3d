@@ -526,6 +526,68 @@ mod tests {
     }
 
     #[test]
+    fn compound_profiles_svg_sources_and_surface_paths_survive_zip() {
+        let mut project = Project::new();
+        let curve = crate::SplineResource::from_polyline(
+            "Outline",
+            &[
+                [-1.0, -1.0, 0.0],
+                [1.0, -1.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [-1.0, 1.0, 0.0],
+            ],
+            true,
+        );
+        let mut profile =
+            crate::ProfileResource::new("Hole", curve.id, crate::ProfileWorkplane::default());
+        profile
+            .holes
+            .push(vec![[-0.2, -0.2], [-0.2, 0.2], [0.2, 0.2], [0.2, -0.2]]);
+        project.add_spline(curve).unwrap();
+        project.add_profile(profile.clone()).unwrap();
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>"#;
+        let decal = crate::DecalLayer::from_svg(svg, 16, [0.5, 0.5], 0.2).unwrap();
+        let mut stack = crate::PaintLayerStack::new();
+        stack.add_layer(crate::PaintLayer::new_decal("SVG", decal));
+        project.assets[0].paint_stack = Some(stack);
+        let target = project.assets[0].id;
+        let hit = crate::project_ray_to_surface_target(
+            &project,
+            target,
+            [0.0, 0.0, 5.0],
+            [0.0, 0.0, -1.0],
+            10.0,
+        )
+        .unwrap()
+        .unwrap();
+        let mut path = crate::SplineResource::from_polyline(
+            "Paint path",
+            &[[0.0, 0.0, 0.5], [0.1, 0.0, 0.5]],
+            false,
+        );
+        path.points[0].attachment = Some(hit.attachment);
+        let path_id = path.id;
+        project.add_spline(path).unwrap();
+        let loaded = load_bytes(&encode_zip(&project).unwrap()).unwrap();
+        assert_eq!(loaded.get_profile(profile.id).unwrap().holes, profile.holes);
+        assert_eq!(
+            loaded.get_spline(path_id).unwrap().points[0].attachment,
+            Some(hit.attachment)
+        );
+        let layer = loaded.assets[0]
+            .paint_stack
+            .as_ref()
+            .unwrap()
+            .active()
+            .unwrap();
+        let crate::paint_layers::LayerKind::Decal(decal) = &layer.kind else {
+            panic!("lost SVG decal");
+        };
+        assert_eq!(decal.source_svg.as_deref(), Some(svg));
+        assert!(crate::evaluate_surface_attachment(&loaded, &hit.attachment).is_ok());
+    }
+
+    #[test]
     fn profile_and_path_generator_roundtrip() {
         let mut project = Project::new();
         let profile_spline = crate::SplineResource::from_polyline(

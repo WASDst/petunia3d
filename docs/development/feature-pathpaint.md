@@ -1,11 +1,11 @@
-# Path Paint (núcleo de domínio)
+# Path Paint (domínio e bridge Slint)
 
 Núcleo do Path Paint do workspace PAINT (P3D-158, P3D-160/161, P3D-062; fundações 43/44):
 o usuário clica pontos sobre a superfície e o pincel é pintado ao longo do caminho
 projetado na malha. Inclui linha reta (Shift+clique) e o filtro *pixel perfect*.
-Só domínio: a integração de UI (cliques, preview, atalhos) fica para o bridge Slint.
+Integração Slint em `paint_surface_tools.rs`: ToolSession compartilhada, cliques/arrasto, preview, Enter aplica e Esc cancela. A paleta oferece Stroke, Ribbon e Repeated Stamp. As ações podem receber atalhos no perfil do usuário.
 
-Código: `crates/module-paint/src/path_paint.rs`.
+Código: `crates/module-paint/src/path_paint.rs` e `surface_commands.rs`.
 
 ## API pública (re-exportada por `petunia_module_paint`)
 
@@ -49,11 +49,22 @@ Código: `crates/module-paint/src/path_paint.rs`.
 - O retorno de dabs não inclui as cópias da simetria.
 - Cada dab ainda percorre todas as faces (custo do motor 3D existente); não foi otimizado aqui.
 
+## Persistência e transação
+
+`PaintPathCmd` avalia todos os anchors antes de pintar. Salva uma spline com `SurfaceAttachment` nos pontos, preservando alvo/triângulo/barycentric/fingerprint. Mudança de topologia retorna erro e rollback; o draft nunca migra silenciosamente para outro objeto. A avaliação em lote calcula o fingerprint uma vez por alvo.
+
+Stroke usa o brush ativo; Ribbon usa ponta quadrada e espaçamento contínuo sem alterar a preferência do brush. Repeated Stamp usa a imagem do decal selecionado, orientada pela tangente, em layer raster própria (até 256 stamps). Nenhum modo altera o decal fonte. Restrições de face/seleção e layer/asset lock são comuns ao motor. Caminho sem pixels elegíveis não cria layer/spline/Undo.
+
+O shell usa caminho poligonal. A spline salva registra os anchors do commit; editar a spline não repinta automaticamente o raster. Alpha lock em layer nova transparente impede Projection/Stamps. Linhas Shift 2D e 3D são traços únicos; pixel perfect incremental remove cantos também na composição/simetria.
+
 ## Testes
 
-`cargo test -p petunia_module_paint --lib path_paint` (31 testes): espaçamento
+Regressões existentes e novas (não executadas nesta rodada; gates adiados):
+`cargo test -p petunia_module_paint --lib path_paint`, `surface_commands`, `projection`. Cobrem: espaçamento
 igual (poligonal e círculo fechado, erro < 2%), inclusão de pontas, snap e
 `face_allowed`, caminho sobre aresta de cubo (pinta as duas faces, nunca a oposta),
 uma entrada de Undo por caminho, restrição por seleção e trava, pixel perfect em
 escada, entradas degeneradas/NaN/enormes, determinismo e tempo (2000 amostras em
 5k faces).
+
+Path também coleta anchors por clique/arrasto no canvas UV, com preview UV sem ligar segmentos entre charts diferentes; o commit usa o mesmo caminho/restrições/Undo do modelo 3D. A interação Projection continua na viewport; clicks do canvas nesse modo não pintam um brush por engano.

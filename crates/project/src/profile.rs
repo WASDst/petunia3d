@@ -136,19 +136,91 @@ impl ProfileWorkplane {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProfileResource {
     pub id: Uuid,
     pub name: String,
     pub spline_id: Uuid,
     pub workplane: ProfileWorkplane,
-    #[serde(default)]
     pub wall_thickness: f64,
-    #[serde(default)]
     pub revision: u64,
     /// Contornos internos poligonais no mesmo plano; não são formas preenchidas.
-    #[serde(default)]
     pub holes: Vec<Vec<[f64; 2]>>,
+}
+
+// Preserve the pre-compound layout when reading legacy postcard. New compound
+// shapes must use the canonical ZIP/JSON format; never silently discard holes.
+impl Serialize for ProfileResource {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let human = serializer.is_human_readable();
+        if !human && !self.holes.is_empty() {
+            return Err(serde::ser::Error::custom(
+                "Compound profiles require ZIP/JSON",
+            ));
+        }
+        let mut value =
+            serializer.serialize_struct("ProfileResource", if human { 7 } else { 6 })?;
+        value.serialize_field("id", &self.id)?;
+        value.serialize_field("name", &self.name)?;
+        value.serialize_field("spline_id", &self.spline_id)?;
+        value.serialize_field("workplane", &self.workplane)?;
+        value.serialize_field("wall_thickness", &self.wall_thickness)?;
+        value.serialize_field("revision", &self.revision)?;
+        if human {
+            value.serialize_field("holes", &self.holes)?;
+        }
+        value.end()
+    }
+}
+impl<'de> Deserialize<'de> for ProfileResource {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Old {
+            id: Uuid,
+            name: String,
+            spline_id: Uuid,
+            workplane: ProfileWorkplane,
+            wall_thickness: f64,
+            revision: u64,
+        }
+        #[derive(Deserialize)]
+        struct Current {
+            id: Uuid,
+            name: String,
+            spline_id: Uuid,
+            workplane: ProfileWorkplane,
+            #[serde(default)]
+            wall_thickness: f64,
+            #[serde(default)]
+            revision: u64,
+            #[serde(default)]
+            holes: Vec<Vec<[f64; 2]>>,
+        }
+        if deserializer.is_human_readable() {
+            let c = Current::deserialize(deserializer)?;
+            Ok(Self {
+                id: c.id,
+                name: c.name,
+                spline_id: c.spline_id,
+                workplane: c.workplane,
+                wall_thickness: c.wall_thickness,
+                revision: c.revision,
+                holes: c.holes,
+            })
+        } else {
+            let c = Old::deserialize(deserializer)?;
+            Ok(Self {
+                id: c.id,
+                name: c.name,
+                spline_id: c.spline_id,
+                workplane: c.workplane,
+                wall_thickness: c.wall_thickness,
+                revision: c.revision,
+                holes: Vec::new(),
+            })
+        }
+    }
 }
 
 impl ProfileResource {
@@ -181,7 +253,11 @@ impl ProfileResource {
         if !self.wall_thickness.is_finite() || self.wall_thickness < 0.0 {
             return Err(ProfileError::InvalidWallThickness);
         }
-        if self.holes.iter().any(|hole| hole.len() < 3 || hole.iter().flatten().any(|v| !v.is_finite())) {
+        if self
+            .holes
+            .iter()
+            .any(|hole| hole.len() < 3 || hole.iter().flatten().any(|v| !v.is_finite()))
+        {
             return Err(ProfileError::InvalidSpline);
         }
         for point in &spline.points {
@@ -202,7 +278,8 @@ impl ProfileResource {
         if self.name.trim().is_empty() {
             self.name = "Profile".to_string();
         }
-        self.holes.retain(|hole| hole.len() >= 3 && hole.iter().flatten().all(|v| v.is_finite()));
+        self.holes
+            .retain(|hole| hole.len() >= 3 && hole.iter().flatten().all(|v| v.is_finite()));
         self.workplane = self.workplane.try_normalized().unwrap_or_default();
         if !self.wall_thickness.is_finite() || self.wall_thickness < 0.0 {
             self.wall_thickness = 0.0;
@@ -236,7 +313,9 @@ impl ProfileResource {
         mix(self.holes.len() as u64);
         for hole in &self.holes {
             mix(hole.len() as u64);
-            for value in hole.iter().flatten() { mix(value.to_bits()); }
+            for value in hole.iter().flatten() {
+                mix(value.to_bits());
+            }
         }
         fingerprint
     }
@@ -288,6 +367,21 @@ fn finite_vec(value: [f64; 3]) -> Result<DVec3, ProfileError> {
 mod tests {
     use super::*;
     use crate::SplineResource;
+
+    #[test]
+    fn legacy_profile_layout_does_not_consume_the_next_record() {
+        let profile = ProfileResource::new("Square", Uuid::new_v4(), ProfileWorkplane::default());
+        let record = (&profile, 1234u32);
+        let bytes = postcard::to_allocvec(&record).unwrap();
+        let (back, tail): (ProfileResource, u32) = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(back, profile);
+        assert_eq!(tail, 1234);
+        let mut compound = profile;
+        compound
+            .holes
+            .push(vec![[0.0, 0.0], [0.1, 0.0], [0.0, 0.1]]);
+        assert!(postcard::to_allocvec(&compound).is_err());
+    }
 
     #[test]
     fn workplane_normalizes_axes_and_preserves_handedness() {
@@ -354,7 +448,7 @@ mod compound_tests {
     #[test]
     fn holes_survive_json_and_old_profiles_default_to_no_holes() {
         let mut profile = ProfileResource::new("Ring", Uuid::new_v4(), ProfileWorkplane::default());
-        profile.holes = vec![vec![[0.0,0.0],[1.0,0.0],[0.0,1.0]]];
+        profile.holes = vec![vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]];
         let value = serde_json::to_value(&profile).unwrap();
         let loaded: ProfileResource = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(loaded.holes, profile.holes);

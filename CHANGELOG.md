@@ -5,6 +5,17 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### PAINT/DRAW — integração MVP (02/10/2026)
+
+- SVG como decal com fonte/cache, re-rasterização 512/1024, parser com limites de expansão e importação de contornos DRAW em um Undo. Compatibilidade dos layouts postcard antigos; novos dados persistem em ZIP/JSON.
+- Projection/Stencil: preview temporário, move/rotate/scale/mirror, alpha/luma, oclusão da cena, restrições de pintura, layer raster própria e Undo. Posicionar stencil reutiliza a mesma gramática; Enter retorna ao brush.
+- Path Paint integrado ao Slint: Stroke, Ribbon e Repeated Stamp com tangente local, anchors de superfície persistentes, validação em lote e rollback de anchors inválidos/áreas bloqueadas.
+- Alpha lock, linha Shift no canvas/modelo, pixel perfect incremental e simétrico, palette ramp e dithering; densidade de texel linear corrigida, diagnóstico de ilhas pequenas e export GLB com bleed configurável em cópia.
+- DRAW: round numérico de canto/perfil, mirror de criação, presets poligonais (polígono regular, rounded rectangle, ellipse, arc por três pontos, slot), comprimento/ângulo, simplify/resample e trace de silhouette com furos; comandos em lote mantêm um Undo.
+- Shape Builder: Merge não deixa divisórias reabrirem a região; Delete/XOR/Cut persistem furos; contornos dos furos ficam acessíveis na viewport; extrusão suporta múltiplos furos. Revolve/Sweep recusam esses perfis explicitamente. Curvas fiéis e handles de furos ficam para V1.
+- Booleanos: cores interpoladas em pontos novos, preservação de paint stack quando UV é herdado e transferência de albedo/PBR ao mudar atlas, incluindo reorientação de mapas de normais. O material resultante não altera ativos que compartilham o original. Sem remesh; triângulos permanecem onde não há cleanup seguro.
+- Novas regressões para persistência, Undo/rollback, furos, textura, normais e densidade. Compilação focalizada para integração; testes/gates finais e aceite manual pendentes por instrução do responsável. Sem redesign da UI; somente controles funcionais existentes.
+
 ### Shape Builder: preenchimento e furos persistentes (02/10/2026)
 - Delete de área cercada, Cut com furo e XOR preservam vazios após recalcular regiões; furos pertencem à forma composta no documento.
 - Formas que sobrevivem inteiras mantêm identidade, nome e curvas. Testes de XOR exigem a área correta e perfis JSON antigos abrem sem furos.

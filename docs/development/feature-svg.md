@@ -20,7 +20,7 @@ P3D-156/158 (spline core, anexo à superfície), fundações 42-44 (anti-bloat).
 - `rasterize_svg(&str, max_px) -> Result<Canvas, SvgError>`
 - `svg_subpaths(&str, fit_size) -> Result<Vec<SvgSubpath>, SvgError>`
 - `svg_to_splines(&str, fit_size) -> Result<Vec<SplineResource>, SvgError>`
-- `DecalLayer { source_svg: Option<String> }` (`#[serde(default)]`),
+- `DecalLayer { source_svg: Option<String> }` (JSON opcional; serializer postcard legado conserva quatro campos),
   `DecalLayer::from_svg(svg, max_px, center_uv, scale_uv_width)`,
   `DecalLayer::rerasterize(&mut self, max_px) -> Result<bool, SvgError>`
 
@@ -48,7 +48,15 @@ Tudo reexportado em `petunia_project`.
   volta ao mesmo ponto com alças é mantida. Subcaminhos com menos de 2 nós são
   descartados; `closed` na spline só vale com 3+ nós (`validate_authoring`).
 - As splines são planas (z = 0) e recebem `Uuid` novos a cada chamada.
-- Projetos antigos sem `source_svg` abrem com `None`.
+- Projetos antigos sem `source_svg` abrem com `None`. ZIP/JSON preserva a fonte; postcard legado preserva compatibilidade de leitura e escrita dos quatro campos antigos, sem a fonte SVG.
+
+## Integração Slint (02/10/2026)
+
+`draw.import_svg` abre seletor SVG e cria todos os perfis no workplane atual com um único Undo (`DrawBatchCmd`). Importar decal na pilha de PAINT aceita PNG/JPEG/SVG; o SVG entra com raster/cache de 512 px. A paleta oferece `paint.svg_resolution_512` e `paint.svg_resolution_1024`; source e transform permanecem. Arquivo inválido não altera o projeto.
+
+A extração DRAW importa contornos, sem agrupar subpaths pela fill-rule: formas compostas podem ser construídas pelo Shape Builder. Parser tem também orçamento de expansão de referências (250 mil nós / profundidade 64); não basta limitar o tamanho do XML original.
+
+Compilação de integração conferida; testes abaixo são roteiro para os gates finais, não resultados desta rodada.
 
 ## Como testar
 

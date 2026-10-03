@@ -45,14 +45,14 @@ Fonte: P3D-055 (adendo), P3D-133, P3D-134, capítulo 44 e capítulo 42.
 | Brush / Pixel / Airbrush / Eraser / Fill / Picker | Existem; restrição por máscara e trava agora valem em todos. |
 | Line / Rectangle | Existem (cor sólida). |
 | **Círculo/Elipse** (cap. 44) | **Novo** (2026-09-30): elipse preenchida inscrita entre dois pontos. |
-| **Gradient** | Linear existia **substituindo** os pixels; agora compõe por cima, com a opacidade do pincel e a cor final transparente. **Novo: radial.** Cores editáveis e dithering continuam fora. |
+| **Gradient** | Linear existia **substituindo** os pixels; agora compõe por cima, com a opacidade do pincel e a cor final transparente. **Novo: radial.** Dithering integrado em 02/10; cores usam o controle existente. |
 | Face / UV Island Fill | Existe (`FillScope`), restrito pela máscara. |
 | **Smudge, Blur, Dodge, Burn, Spray, Clone** | **Novos** (2E). Clone: origem por Ctrl+clique. Sem pressão de tablet. |
 | Ponta, ângulo, achatamento, mistura, estabilizador, jitter, espalhamento, presets | **Novos** (2E): `BrushStyle`/`BrushPreset`. |
-| Decal (P3D-133) | Camada de decal transformável (existia só com um quadrado amarelo de teste). **Novo:** importar PNG/JPEG pelo botão de imagem da pilha de camadas (decodificação validada, lado maior limitado a 512 texels, proporção preservada, 1 Undo; arquivo inválido não muda o documento). **Faltam** SVG (exigiria `resvg` como dependência direta), máscara/clip, fonte ausente e bake/export. |
-| Projection / Stencil | `MISSING`. |
+| Decal (P3D-133) | Camada de decal transformável (existia só com um quadrado amarelo de teste). **Novo:** importar PNG/JPEG pelo botão de imagem da pilha de camadas (decodificação validada, lado maior limitado a 512 texels, proporção preservada, 1 Undo; arquivo inválido não muda o documento). SVG fonte/cache integrado em 02/10; alpha/luma stencil e projection com restrições; export compõe o raster. Manipulação live por attachment permanece evolução futura. |
+| Projection / Stencil | Integrados ao domínio e Slint em 02/10: preview, transformação, depth/oclusão, restrições, alpha/luma; compilação conferida, aceite manual/gates pendentes. |
 | Clone / Patch (cópia de região com máscara) | O pincel Clone cobre o uso básico; Patch (remendo com costura) segue `MISSING`. |
-| Path Paint | `MISSING` no checkout `4a41951`: o commit `8645a8f` contém um núcleo em outro caminho do histórico, mas `path_paint.rs` e referências no shell Slint estão ausentes nesta árvore. Recuperação e integração ainda precisam de reconciliação. |
+| Path Paint | Recuperado e integrado em 02/10 com ToolSession, preview, attachments, Stroke/Ribbon/Repeated Stamp e transação única. Ver [feature](feature-pathpaint.md). Aceite/gates pendentes. |
 | Effect Stack (P3D-134) | Pixelate, Posterize, Invert, **Grain, Levels (agora na UI), Brightness/Contrast e Hue/Saturation** — todos existiam no domínio; Levels não era oferecido na UI. |
 | Surface Recipe (P3D-113) | Grafo headless existe; sem editor visual (por decisão). |
 
@@ -74,3 +74,7 @@ As classificações de 30/09 acima preservam a evidência daquela rodada; não
 representam uma nova certificação. SVG não foi localizado no código Slint ou
 no módulo Paint desta árvore; o commit histórico `0e1c83e` não basta para
 considerar o delta disponível. Ver o checkpoint em `PROJECT_STATE.md`.
+
+## Complemento MVP de 02/10/2026
+
+[Reconciliação atual](paint-draw-mvp-completion-gap-matrix.md): alpha lock, linhas Shift, pixel perfect, rampas/dither, densidade corrigida, pequenas ilhas e export bleed. As classificações COMPLIANT anteriores são evidência histórica, não resultado dos gates deste pacote.

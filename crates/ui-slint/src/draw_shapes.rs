@@ -36,6 +36,7 @@ pub(crate) struct ProfileLine {
     pub id: uuid::Uuid,
     pub world: Vec<Vec3>,
     pub closed: bool,
+    pub hole: bool,
 }
 
 /// Regiões e contornos derivados do documento, recalculados por revisão.
@@ -93,30 +94,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     fn build_shape_cache(&self, revision: [u64; 11]) -> ShapeCache {
         let project = &self.state.project.project;
-        let lines = project
-            .profiles
-            .iter()
-            .filter_map(|profile| {
-                let spline = project.get_spline(profile.spline_id)?;
-                let table = spline.arc_length_table(OUTLINE_TOLERANCE).ok()?;
-                let wp = profile.workplane;
-                let [origin, right, up] =
-                    [wp.origin, wp.right, wp.up].map(|v| glam::DVec3::from_array(v).as_vec3());
-                if !(origin.is_finite() && right.is_finite() && up.is_finite()) {
-                    return None;
-                }
-                let world = table
+        let mut lines = Vec::new();
+        for profile in &project.profiles {
+            let Some(spline) = project.get_spline(profile.spline_id) else {
+                continue;
+            };
+            let Ok(table) = spline.arc_length_table(OUTLINE_TOLERANCE) else {
+                continue;
+            };
+            let wp = profile.workplane;
+            let [origin, right, up] =
+                [wp.origin, wp.right, wp.up].map(|v| glam::DVec3::from_array(v).as_vec3());
+            if !(origin.is_finite() && right.is_finite() && up.is_finite()) {
+                continue;
+            }
+            let to_world = |p: [f64; 2]| origin + right * p[0] as f32 + up * p[1] as f32;
+            lines.push(ProfileLine {
+                id: profile.id,
+                world: table
                     .polyline()
                     .into_iter()
-                    .map(|p| origin + right * p[0] as f32 + up * p[1] as f32)
-                    .collect();
-                Some(ProfileLine {
+                    .map(|p| to_world([p[0], p[1]]))
+                    .collect(),
+                closed: spline.closed,
+                hole: false,
+            });
+            for hole in &profile.holes {
+                lines.push(ProfileLine {
                     id: profile.id,
-                    world,
-                    closed: spline.closed,
-                })
-            })
-            .collect();
+                    world: hole.iter().copied().map(to_world).collect(),
+                    closed: true,
+                    hole: true,
+                });
+            }
+        }
         ShapeCache {
             revision,
             planes: self.state.profile_region_planes(),
@@ -171,7 +182,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut out = String::new();
         let mut budget = MAX_OVERLAY_POINTS;
         for line in &cache.lines {
-            if Some(line.id) == self.active_profile_id {
+            if Some(line.id) == self.active_profile_id && !line.hole {
                 continue;
             }
             if line.world.len() > budget {

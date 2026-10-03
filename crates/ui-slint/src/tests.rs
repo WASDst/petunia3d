@@ -10248,3 +10248,37 @@ fn draw_depth_handle_projects_and_updates_with_profile() {
         "label deve conter a profundidade: {label}"
     );
 }
+
+#[test]
+fn uv_path_collects_anchors_without_a_freehand_stroke_and_preserves_mode() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert!(bridge.add_decal_layer());
+    assert!(bridge.execute_surface_action("paint.path_stamps"));
+    let uv = bridge.state.project.active_mesh().unwrap().faces[0]
+        .uv
+        .iter()
+        .fold([0.0; 2], |mut sum, p| {
+            sum[0] += p[0];
+            sum[1] += p[1];
+            sum
+        });
+    let count = bridge.state.project.active_mesh().unwrap().faces[0]
+        .uv
+        .len() as f32;
+    let before = serde_json::to_value(&bridge.state.project.project).unwrap();
+    assert!(bridge.paint_2d_stroke(uv[0] / count, 1.0 - uv[1] / count, 0));
+    assert_eq!(bridge.surface_paint.nodes.len(), 1);
+    assert!(matches!(
+        bridge.surface_paint.path_mode,
+        petunia_module_paint::PathPaintMode::RepeatedStamp(_)
+    ));
+    assert!(bridge.state.paint_stroke.is_none());
+    assert_eq!(
+        serde_json::to_value(&bridge.state.project.project).unwrap(),
+        before
+    );
+    assert!(!bridge.paint_2d_line(uv[0] / count, 1.0 - uv[1] / count, 0, true));
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Model));
+    assert!(bridge.surface_paint.nodes.is_empty());
+}

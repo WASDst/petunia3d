@@ -404,13 +404,24 @@ pub fn cleanup_boolean_result(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupR
     let colors = ColorLookup::new(a, b, eps);
     let mut remap: HashMap<u32, u32> = HashMap::new();
     let mut out = Mesh::default();
-    for (verts, _) in &faces {
+    for (verts, origin) in &faces {
         for &v in verts {
             remap.entry(v).or_insert_with(|| {
                 let p = raw.verts[v as usize].pos;
                 out.verts.push(Vertex {
                     pos: p,
-                    color: colors.color_at(p).unwrap_or(NEW_VERTEX_COLOR),
+                    color: colors
+                        .color_at(p)
+                        .or_else(|| {
+                            origin.and_then(|o| {
+                                let source = if o.side == 0 { a } else { b };
+                                source
+                                    .faces
+                                    .get(o.face as usize)
+                                    .map(|face| inherited_color(source, face, Vec3::from_array(p)))
+                            })
+                        })
+                        .unwrap_or(NEW_VERTEX_COLOR),
                     selected: false,
                 });
                 (out.verts.len() - 1) as u32
@@ -467,6 +478,44 @@ pub fn cleanup_boolean_result(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupR
     (out, report)
 }
 
+/// Classifies output faces for transferring textures across a changed UV atlas.
+/// Classification is independent of cleanup, including the safe fallback.
+pub fn surface_sources(result: &Mesh, a: &Mesh, b: &Mesh) -> Vec<Option<(u8, usize)>> {
+    let mut lo = DVec3::splat(f64::INFINITY);
+    let mut hi = DVec3::splat(f64::NEG_INFINITY);
+    for v in &result.verts {
+        lo = lo.min(dvec(v.vec()));
+        hi = hi.max(dvec(v.vec()));
+    }
+    let diag = (hi - lo).length().max(1e-6);
+    let index = SourceIndex::new(a, b, diag, diag * REL_TOLERANCE);
+    result
+        .faces
+        .iter()
+        .map(|face| {
+            face.verts.windows(3).find_map(|ids| {
+                let tri = [
+                    dvec(result.verts[ids[0] as usize].vec()),
+                    dvec(result.verts[ids[1] as usize].vec()),
+                    dvec(result.verts[ids[2] as usize].vec()),
+                ];
+                if (tri[1] - tri[0]).cross(tri[2] - tri[0]).length_squared() < 1e-20 {
+                    return None;
+                }
+                index.locate(tri).map(|o| (o.side, o.face as usize))
+            })
+        })
+        .collect()
+}
+
+/// Source face UV at a coplanar world position.
+pub fn source_uv(mesh: &Mesh, face: usize, position: Vec3) -> [f32; 2] {
+    mesh.faces
+        .get(face)
+        .filter(|f| f.verts.len() >= 3)
+        .map_or([0.0; 2], |f| inherited_uv(mesh, f, position))
+}
+
 /// Mapa vértice → representante, soldando posições a menos de `tolerance`.
 fn weld_map(positions: &[DVec3], tolerance: f64) -> Vec<u32> {
     let cell = tolerance.max(1.0e-12);
@@ -511,6 +560,36 @@ impl ColorLookup {
     fn color_at(&self, p: [f32; 3]) -> Option<[f32; 3]> {
         self.colors.get(&Self::key(self.cell, p)).copied()
     }
+}
+
+/// Interpola cores na face de origem para pontos criados pelo kernel.
+fn inherited_color(mesh: &Mesh, face: &Face, point: Vec3) -> [f32; 3] {
+    let Some(&first) = face.verts.first() else {
+        return NEW_VERTEX_COLOR;
+    };
+    if face.verts.len() < 3 {
+        return mesh.verts[first as usize].color;
+    }
+    for i in 1..face.verts.len() - 1 {
+        let indices = [first, face.verts[i], face.verts[i + 1]];
+        let [a, b, c] = indices.map(|v| mesh.verts[v as usize].vec());
+        let u = b - a;
+        let v = c - a;
+        let q = point - a;
+        let det = u.length_squared() * v.length_squared() - u.dot(v).powi(2);
+        if det.abs() < 1e-20 {
+            continue;
+        }
+        let s = (q.dot(u) * v.length_squared() - q.dot(v) * u.dot(v)) / det;
+        let t = (q.dot(v) * u.length_squared() - q.dot(u) * u.dot(v)) / det;
+        if s >= -1e-4 && t >= -1e-4 && s + t <= 1.0001 {
+            let colors = indices.map(|v| mesh.verts[v as usize].color);
+            return std::array::from_fn(|k| {
+                colors[0][k] * (1.0 - s - t) + colors[1][k] * s + colors[2][k] * t
+            });
+        }
+    }
+    mesh.verts[first as usize].color
 }
 
 /// UV de `point` (no plano de `face`) por mapeamento afim dos 3 cantos mais bem

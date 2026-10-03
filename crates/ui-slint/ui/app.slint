@@ -616,7 +616,7 @@ component PaintCanvasSurface inherits Rectangle {
     in property <string> grid-commands: "";
     in-out property <length> pan-x: 0px;
     in-out property <length> pan-y: 0px;
-    callback stroke(float, float, int);
+    callback stroke(float, float, int, bool);
     callback zoom-step(int);
 
     background: DesignTokens.canvas;
@@ -656,6 +656,7 @@ component PaintCanvasSurface inherits Rectangle {
 
     surface-touch := TouchArea {
         property <bool> panning: false;
+        property <bool> shift-line: false;
         property <length> last-x;
         property <length> last-y;
         pointer-event(event) => {
@@ -665,13 +666,14 @@ component PaintCanvasSurface inherits Rectangle {
                     self.last-x = self.mouse-x;
                     self.last-y = self.mouse-y;
                 } else if event.button == PointerEventButton.left {
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0);
+                    self.shift-line = event.modifiers.shift;
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line);
                 }
             } else if event.kind == PointerEventKind.up {
                 if self.panning {
                     self.panning = false;
                 } else if event.button == PointerEventButton.left {
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2);
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line);
                 }
             }
         }
@@ -682,7 +684,7 @@ component PaintCanvasSurface inherits Rectangle {
                 self.last-x = self.mouse-x;
                 self.last-y = self.mouse-y;
             } else if self.pressed {
-                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1);
+                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line);
             }
         }
         scroll-event(event) => {
@@ -4009,6 +4011,16 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-decal-bake: "";
     in-out property <string> label-decal-hint: "";
     in-out property <string> decal-preview-commands: "";
+    in-out property <float> extension-radius: 0.1;
+    in-out property <float> extension-length: 1;
+    in-out property <float> extension-angle: 0;
+    in-out property <float> extension-sides: 6;
+    in-out property <float> extension-tolerance: 0.01;
+    in-out property <float> export-padding: 2;
+    in-out property <float> trace-threshold:128;
+    callback extension-parameter-set(string,string) -> bool;
+    in-out property <image> stencil-image;
+    in-out property <bool> stencil-visible: false;
     in-out property <string> hint-model-loop-cut: "";
     in-out property <string> hint-model-slice: "";
     in-out property <string> hint-model-push-pull: "";
@@ -4275,7 +4287,7 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-paint-begin(float, float, bool, bool);
     callback viewport-paint-update(float, float, bool, bool);
     callback viewport-paint-end(float, float);
-    callback paint-2d-stroke(float, float, int);
+    callback paint-2d-stroke(float, float, int, bool);
     callback toggle-paint-pixel-grid;
     callback set-paint-canvas-zoom(int);
     callback add-menu-changed(bool);
@@ -5581,6 +5593,10 @@ export component PetuniaSlintShell inherits Window {
                         stroke-width: 1.5px;
                     }
 
+                    if root.stencil-visible: Image {
+                        width: parent.width; height: parent.height;
+                        source: root.stencil-image; image-fit: fill;
+                    }
                     viewport-touch := TouchArea {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
@@ -7045,6 +7061,15 @@ export component PetuniaSlintShell inherits Window {
                             TouchArea { clicked => { root.profile-look-at-plane(); } }
                         }
 
+                        NumericField {label:Tr.t("extensions.threshold");value:root.trace-threshold;step:1;
+                            text-committed(text)=>{return root.extension-parameter-set("threshold",text);}
+                            scrubbed(delta,fine)=>{root.extension-parameter-set("threshold","\{root.trace-threshold+delta*(fine?0.1:1)}");}
+                        }
+                        NumericField { label: Tr.t("extensions.radius"); value: root.extension-radius; step: 0.01; scrubbed(delta,fine) => { root.extension-parameter-set("radius","\{root.extension-radius + delta * 0.01 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("radius",text); } }
+                        NumericField { label: Tr.t("extensions.length"); value: root.extension-length; step: 0.01; scrubbed(delta,fine) => { root.extension-parameter-set("length","\{root.extension-length + delta * 0.01 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("length",text); } }
+                        NumericField { label: Tr.t("extensions.angle"); value: root.extension-angle; step: 1; scrubbed(delta,fine) => { root.extension-parameter-set("angle","\{root.extension-angle + delta * 1 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("angle",text); } }
+                        NumericField { label: Tr.t("extensions.sides"); value: root.extension-sides; step: 1; scrubbed(delta,fine) => { root.extension-parameter-set("sides","\{root.extension-sides + delta * 1 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("sides",text); } }
+                        NumericField { label: Tr.t("extensions.tolerance"); value: root.extension-tolerance; step: 0.001; scrubbed(delta,fine) => { root.extension-parameter-set("tolerance","\{root.extension-tolerance + delta * 0.001 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("tolerance",text); } }
                         Text { text: "\{root.label-profile-points}: \{root.profile-point-count}"; color: DesignTokens.text-secondary; font-size: 10px; }
                         if !root.profile-closed: Rectangle {
                             height: 26px; border-radius: 4px; background: DesignTokens.surface;
@@ -9165,7 +9190,7 @@ export component PetuniaSlintShell inherits Window {
                                         uv-commands: root.uv-layout-commands;
                                         show-grid: root.paint-pixel-grid;
                                         grid-commands: root.paint-canvas-grid-commands;
-                                        stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
                                         zoom-step(direction) => {
                                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -10538,8 +10563,13 @@ export component PetuniaSlintShell inherits Window {
                                 open: true;
                                 toggled => { self.open = !self.open; }
 
+                                NumericField { label: Tr.t("surface.export_padding"); value: root.export-padding; step:1;
+                                    text-committed(text) => {return root.extension-parameter-set("padding",text);}
+                                    scrubbed(delta,fine) => {root.extension-parameter-set("padding","\{root.export-padding+delta*(fine?0.1:1)}");}
+                                }
                                 Text {
                                     text: root.uv-stats;
+                                    wrap: word-wrap;
                                     color: DesignTokens.text-secondary;
                                     font-size: 11px;
                                 }
@@ -10568,7 +10598,7 @@ export component PetuniaSlintShell inherits Window {
                             uv-commands: root.uv-layout-commands;
                             show-grid: root.paint-pixel-grid;
                             grid-commands: root.paint-canvas-grid-commands;
-                            stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                            stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
                             zoom-step(direction) => {
                                 if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                 if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -12182,7 +12212,7 @@ export component PetuniaSlintShell inherits Window {
                             accepted => {
                                 if root.command-results.length > 0 {
                                     if !root.command-results[root.command-selection].available {
-                                    } else if root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
+                                    } else if root.command-results[root.command-selection].id == "draw.import_svg" || root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
                                         root.command-file-action(root.command-results[root.command-selection].id);
                                     } else {
                                         root.command-executed(root.command-results[root.command-selection].id);
@@ -12232,7 +12262,7 @@ export component PetuniaSlintShell inherits Window {
                                     clicked => {
                                         root.command-selection = index;
                                         if !cmd.available {
-                                        } else if cmd.id == "file.save" || cmd.id == "file.save_as" || cmd.id == "file.open" {
+                                        } else if cmd.id == "draw.import_svg" || cmd.id == "file.save" || cmd.id == "file.save_as" || cmd.id == "file.open" {
                                             root.command-file-action(cmd.id);
                                         } else {
                                             root.command-executed(cmd.id);
@@ -12372,7 +12402,7 @@ export component PetuniaSlintShell inherits Window {
                         uv-commands: root.uv-layout-commands;
                         show-grid: root.paint-pixel-grid;
                         grid-commands: root.paint-canvas-grid-commands;
-                        stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
                         zoom-step(direction) => {
                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }

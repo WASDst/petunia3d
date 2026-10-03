@@ -147,6 +147,34 @@ pub fn evaluate_surface_attachment(
     evaluate_triangle_frame(triangle, attachment)
 }
 
+/// Evaluates a path while computing each target's topology fingerprint once.
+pub fn evaluate_surface_attachments(
+    project: &Project,
+    attachments: &[SurfaceAttachment],
+) -> Result<Vec<SurfaceFrame>, SurfaceAttachmentError> {
+    let mut fingerprints = std::collections::HashMap::new();
+    attachments
+        .iter()
+        .map(|a| {
+            if !a.is_well_formed() {
+                return Err(SurfaceAttachmentError::InvalidData);
+            }
+            let asset = project
+                .assets
+                .iter()
+                .find(|asset| asset.id == a.target)
+                .ok_or(SurfaceAttachmentError::MissingTarget)?;
+            let fingerprint = *fingerprints
+                .entry(asset.id)
+                .or_insert_with(|| asset.mesh.topology_fingerprint());
+            if fingerprint != a.source_topology_fingerprint {
+                return Err(SurfaceAttachmentError::NeedsReattach);
+            }
+            evaluate_triangle_frame(triangle_data(&asset.mesh, a.triangle)?, a)
+        })
+        .collect()
+}
+
 pub fn detach_surface_attachment_keep_world(
     project: &Project,
     attachment: &SurfaceAttachment,

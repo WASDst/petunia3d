@@ -56,7 +56,12 @@ impl ProfileGroup {
     pub(crate) fn regions(&self) -> Vec<Region2> {
         let mut boundaries = self.lines.clone();
         for shape in self.shapes.iter().flatten() {
-            for hole in &shape.holes { boundaries.push(Polyline2 { points: hole.clone(), closed: true }); }
+            for hole in &shape.holes {
+                boundaries.push(Polyline2 {
+                    points: hole.clone(),
+                    closed: true,
+                });
+            }
         }
         let cells = planar_regions(&boundaries);
         let shapes: Vec<_> = self.shapes.iter().flatten().cloned().collect();
@@ -198,11 +203,31 @@ impl AppState {
             });
             let plane = groups[index].plane;
             let outer: Vec<_> = world.iter().map(|p| plane.to_plane(*p)).collect();
-            let mut holes: Vec<Vec<[f64; 2]>> = profile.holes.iter().map(|hole| hole.iter().map(|p| plane.to_plane(origin + right * p[0] as f32 + up * p[1] as f32)).collect()).collect();
-            for hole in &mut holes { if petunia_mesh::arrangement::signed_area(hole) > 0.0 { hole.reverse(); } }
+            let mut holes: Vec<Vec<[f64; 2]>> = profile
+                .holes
+                .iter()
+                .map(|hole| {
+                    hole.iter()
+                        .map(|p| plane.to_plane(origin + right * p[0] as f32 + up * p[1] as f32))
+                        .collect()
+                })
+                .collect();
+            for hole in &mut holes {
+                if petunia_mesh::arrangement::signed_area(hole) > 0.0 {
+                    hole.reverse();
+                }
+            }
             let mut shape_outer = outer;
-            if petunia_mesh::arrangement::signed_area(&shape_outer) < 0.0 { shape_outer.reverse(); }
-            groups[index].shapes.push(spline.closed.then_some(Region2 { outer: shape_outer, holes }));
+            if shape_outer.len() > 1 && shape_outer.first() == shape_outer.last() {
+                shape_outer.pop();
+            }
+            if petunia_mesh::arrangement::signed_area(&shape_outer) < 0.0 {
+                shape_outer.reverse();
+            }
+            groups[index].shapes.push(spline.closed.then_some(Region2 {
+                outer: shape_outer,
+                holes,
+            }));
             groups[index].profiles.push(profile.id);
             groups[index].lines.push(Polyline2 {
                 points: world.iter().map(|p| plane.to_plane(*p)).collect(),

@@ -20,6 +20,32 @@ pub fn export_obj(asset: &Asset) -> String {
     asset.evaluated_mesh().to_obj()
 }
 
+/// Export-only dilation: the editable document and paint layers stay intact.
+pub fn export_gltf_with_padding(
+    project: &Project,
+    indices: &[usize],
+    padding: u32,
+) -> Result<Vec<u8>, ExportError> {
+    if padding == 0 {
+        return export_gltf(project, indices);
+    }
+    let mut snapshot = project.clone();
+    for &i in indices {
+        let Some(asset) = snapshot.assets.get_mut(i) else {
+            continue;
+        };
+        if let Some(texture) = &mut asset.texture {
+            *texture = texture.with_bleed(padding);
+        }
+    }
+    for material in &mut snapshot.materials {
+        if let Some(texture) = &mut material.albedo_texture {
+            *texture = texture.with_bleed(padding);
+        }
+    }
+    export_gltf(&snapshot, indices)
+}
+
 /// Exporta assets como um único GLB (uma mesh por asset).
 pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, ExportError> {
     let picked: Vec<&Asset> = indices

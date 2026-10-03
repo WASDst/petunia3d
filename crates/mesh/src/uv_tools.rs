@@ -320,29 +320,32 @@ impl Mesh {
 
     /// Average texels-per-unit for selected (or all) faces.
     pub fn texel_density(&self, texture_w: u32, selected_only: bool) -> f32 {
-        let mut acc = 0.0;
-        let mut n = 0.0;
-        for face in &self.faces {
+        let (mut world_area, mut uv_area) = (0.0f32, 0.0f32);
+        for (i, face) in self.faces.iter().enumerate() {
             if selected_only && !face.selected {
                 continue;
             }
-            if face.verts.len() < 3 || face.uv.len() < 3 {
+            if face.uv.len() != face.verts.len()
+                || face.verts.iter().any(|v| *v as usize >= self.verts.len())
+            {
                 continue;
             }
-            let a = self.verts[face.verts[0] as usize].vec();
-            let b = self.verts[face.verts[1] as usize].vec();
-            let c = self.verts[face.verts[2] as usize].vec();
-            let world = (b - a).cross(c - a).length() * 0.5;
-            let ua = glam::Vec2::from_array(face.uv[0]);
-            let ub = glam::Vec2::from_array(face.uv[1]);
-            let uc = glam::Vec2::from_array(face.uv[2]);
-            let uv_area = (ub - ua).perp_dot(uc - ua).abs() * 0.5;
-            if world > 1e-8 {
-                acc += (uv_area * texture_w as f32) / world;
-                n += 1.0;
+            for corners in self.face_triangle_corners(i) {
+                let [a, b, c] = corners.map(|j| self.verts[face.verts[j] as usize].vec());
+                let world = (b - a).cross(c - a).length() * 0.5;
+                let [ua, ub, uc] = corners.map(|j| glam::Vec2::from_array(face.uv[j]));
+                let uv = (ub - ua).perp_dot(uc - ua).abs() * 0.5;
+                if world > 1e-8 && world.is_finite() && uv.is_finite() {
+                    world_area += world;
+                    uv_area += uv;
+                }
             }
         }
-        if n <= 0.0 { 0.0 } else { acc / n }
+        if world_area <= 1e-8 {
+            0.0
+        } else {
+            (uv_area / world_area).sqrt() * texture_w as f32
+        }
     }
 
     pub fn normalize_texel_density(&mut self, texture_w: u32, target: f32) {
@@ -636,5 +639,25 @@ mod tests {
         let filter = HashSet::new();
         let relaxed = m.relax_uv(&filter, 5);
         assert_eq!(relaxed, m.faces.len() * 5);
+    }
+}
+
+#[cfg(test)]
+mod density_tests {
+    use crate::Mesh;
+    #[test]
+    fn density_scales_with_linear_resolution_and_inverse_world_scale() {
+        let mut mesh = Mesh::plane(2.0);
+        let density = mesh.texel_density(256, false);
+        assert!(density > 0.0);
+        assert!((mesh.texel_density(512, false) / density - 2.0).abs() < 1e-5);
+        for vertex in &mut mesh.verts {
+            for v in &mut vertex.pos {
+                *v *= 2.0;
+            }
+        }
+        assert!((mesh.texel_density(256, false) / density - 0.5).abs() < 1e-5);
+        mesh.normalize_texel_density(256, 32.0);
+        assert!((mesh.texel_density(256, false) - 32.0).abs() < 1e-3);
     }
 }

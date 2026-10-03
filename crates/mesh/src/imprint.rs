@@ -8,7 +8,7 @@
 //! Região solta (sem face hospedeira): uma folha fechada com o fundo invertido
 //! e o topo selecionado; extrudar o topo produz um sólido fechado.
 
-use geo::{BooleanOps, Coord, LineString, Polygon};
+use geo::{BooleanOps, Coord, LineString, Polygon, TriangulateEarcut};
 use glam::Vec3;
 
 use crate::{Face, Mesh, Vertex};
@@ -357,7 +357,50 @@ pub fn region_sheet(
             points.extend(hole.iter().copied());
             (vec![a, b], points)
         }
-        _ => return Err(ImprintError::NoBridge),
+        _ => {
+            let ring = |points: &[[f64; 2]]| {
+                LineString::new(points.iter().map(|p| Coord { x: p[0], y: p[1] }).collect())
+            };
+            if holes
+                .iter()
+                .any(|h| h.len() < 3 || h.iter().flatten().any(|v| !v.is_finite()))
+            {
+                return Err(ImprintError::Degenerate);
+            }
+            let polygon = Polygon::new(ring(&outer), holes.iter().map(|h| ring(h)).collect());
+            let triangulation = polygon.earcut_triangles_raw();
+            let mut mesh = Mesh::default();
+            for p in &triangulation.vertices {
+                let mut vertex = Vertex::new(0.0, 0.0, 0.0);
+                vertex.pos = frame.lift(*p).to_array();
+                mesh.verts.push(vertex);
+            }
+            for indices in triangulation.triangle_indices.chunks_exact(3) {
+                let mut verts: Vec<_> = indices.iter().map(|i| *i as u32).collect();
+                let points: Vec<_> = indices.iter().map(|i| triangulation.vertices[*i]).collect();
+                if signed_area(&points) < 0.0 {
+                    verts.reverse();
+                }
+                let uv: Vec<_> = verts
+                    .iter()
+                    .map(|i| triangulation.vertices[*i as usize].map(|v| v as f32))
+                    .collect();
+                let mut bottom = Face::with_uv(
+                    verts.iter().rev().copied().collect(),
+                    uv.iter().rev().copied().collect(),
+                );
+                bottom.selected = false;
+                mesh.push_face(bottom);
+                let mut top = Face::with_uv(verts, uv);
+                top.selected = true;
+                mesh.push_face(top);
+            }
+            if mesh.faces.is_empty() {
+                return Err(ImprintError::Degenerate);
+            }
+            mesh.sync_vert_selection_from_faces();
+            return Ok(mesh);
+        }
     };
     let outer_len = outer.len();
     let index_of = |i: RingIndex| -> u32 {

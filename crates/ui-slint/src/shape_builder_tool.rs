@@ -41,7 +41,11 @@ pub(crate) struct ShapeHit {
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Só o DRAW oferece o Shape Builder.
     fn shape_builder_available(&self) -> bool {
-        self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw
+        self.state.workspace == Workspace::Model
+            && self.modeling_mode == ModelingMode::Draw
+            && self.profile_volume_mode.is_none()
+            && self.state.modal.is_none()
+            && self.state.mesh_preview.is_none()
     }
 
     /// Planos editáveis em cache; recalcula quando perfis, splines ou geradores mudam.
@@ -253,6 +257,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Pathfinder (Unite/Subtract/Intersect/Exclude) sobre os perfis fechados do plano.
     pub fn run_pathfinder(&mut self, op: PathfinderOp) -> bool {
+        if !self.shape_builder_available() {
+            return false;
+        }
         let plane = self.active_profile_id.and_then(|id| {
             self.shape_planes_cached()
                 .iter()

@@ -472,6 +472,109 @@ impl Mesh {
     }
 }
 
+impl Mesh {
+    /// Visita todos os texels das UVs de uma face (textura `w × h`).
+    ///
+    /// Para cada texel cujo centro cai dentro de um triângulo UV da face chama
+    /// `f(x, y, posição_de_mundo_do_centro_do_texel, normal_da_face)`. Usa a
+    /// mesma triangulação, o mesmo teste de borda (independente do winding) e a
+    /// mesma conversão UV→texel (V invertido) de [`Mesh::rasterize_face_near`].
+    ///
+    /// `dilate_px > 0` alarga a UV (sangria): texels fora do triângulo recebem
+    /// a posição do ponto mais próximo dentro dele (baricêntricas presas em
+    /// `0..1`), então o resultado continua sobre a superfície. Um texel pode
+    /// ser visitado mais de uma vez (diagonal de quad, dilatação); quem chama
+    /// deve deduplicar se a operação não for idempotente. Face inexistente,
+    /// textura vazia, UV/vértice inválido ou triângulo degenerado: não visita
+    /// nada.
+    pub fn rasterize_face_texels(
+        &self,
+        face: usize,
+        w: u32,
+        h: u32,
+        dilate_px: f32,
+        mut f: impl FnMut(u32, u32, Vec3, Vec3),
+    ) {
+        let Some(fc) = self.faces.get(face) else {
+            return;
+        };
+        if w == 0 || h == 0 {
+            return;
+        }
+        let dilate = if dilate_px.is_finite() {
+            dilate_px.max(0.0)
+        } else {
+            0.0
+        };
+        // Já devolve vazio para vértice fora de faixa ou não finito.
+        let corners = self.face_triangle_corners(face);
+        if corners.is_empty() {
+            return;
+        }
+        let normal = self.face_normal(face);
+        let pad = dilate.ceil() as i64 + 1;
+        for [a, b, c] in corners {
+            let (Some(&ua), Some(&ub), Some(&uc)) = (fc.uv.get(a), fc.uv.get(b), fc.uv.get(c))
+            else {
+                continue;
+            };
+            let (Some(&ia), Some(&ib), Some(&ic)) =
+                (fc.verts.get(a), fc.verts.get(b), fc.verts.get(c))
+            else {
+                continue;
+            };
+            let (Some(va), Some(vb), Some(vc)) = (
+                self.verts.get(ia as usize),
+                self.verts.get(ib as usize),
+                self.verts.get(ic as usize),
+            ) else {
+                continue;
+            };
+            let (v0, v1, v2) = (va.vec(), vb.vec(), vc.vec());
+            if (v1 - v0).cross(v2 - v0).length() < 1e-12 {
+                continue;
+            }
+            let (t0, t1, t2) = (to_texel(ua, w, h), to_texel(ub, w, h), to_texel(uc, w, h));
+            if !(t0.is_finite() && t1.is_finite() && t2.is_finite()) {
+                continue;
+            }
+            let area2 = (t1 - t0).perp_dot(t2 - t0);
+            if area2.abs() < 1e-9 || !area2.is_finite() {
+                continue;
+            }
+            let lim_x = w as f32;
+            let lim_y = h as f32;
+            let x0 = (t0.x.min(t1.x).min(t2.x).floor().clamp(-1.0, lim_x) as i64 - pad).max(0);
+            let x1 =
+                (t0.x.max(t1.x).max(t2.x).ceil().clamp(-1.0, lim_x) as i64 + pad).min(w as i64 - 1);
+            let y0 = (t0.y.min(t1.y).min(t2.y).floor().clamp(-1.0, lim_y) as i64 - pad).max(0);
+            let y1 =
+                (t0.y.max(t1.y).max(t2.y).ceil().clamp(-1.0, lim_y) as i64 + pad).min(h as i64 - 1);
+            let sign = area2.signum();
+            let edges = [(t0, t1), (t1, t2), (t2, t0)];
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    let p = Vec2::new(x as f32 + 0.5, y as f32 + 0.5);
+                    let inside = edges.iter().all(|(s, e)| {
+                        let edge = *e - *s;
+                        sign * edge.perp_dot(p - *s) / edge.length().max(1e-9) >= -dilate
+                    });
+                    if !inside {
+                        continue;
+                    }
+                    let l0 = (t1 - p).perp_dot(t2 - p) / area2;
+                    let l1 = (t2 - p).perp_dot(t0 - p) / area2;
+                    let l2 = 1.0 - l0 - l1;
+                    let (c0, c1, c2) = (l0.max(0.0), l1.max(0.0), l2.max(0.0));
+                    let sum = (c0 + c1 + c2).max(1e-9);
+                    let pos = (v0 * c0 + v1 * c1 + v2 * c2) / sum;
+                    f(x as u32, y as u32, pos, normal);
+                }
+            }
+        }
+    }
+}
+
 /// Coordenadas baricêntricas de `p` (já no plano) em relação a `a, b, c`.
 fn barycentric3(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     let v0 = b - a;
@@ -690,5 +793,112 @@ mod tests {
             a.faces.iter().map(|f| f.uv.clone()).collect::<Vec<_>>(),
             b.faces.iter().map(|f| f.uv.clone()).collect::<Vec<_>>()
         );
+    }
+
+    /// Quad no plano z=0 de (0,0) a (2,2), UV cobrindo `0..1`.
+    fn unit_uv_quad() -> Mesh {
+        let mut m = Mesh {
+            verts: vec![
+                crate::Vertex::new(0.0, 0.0, 0.0),
+                crate::Vertex::new(2.0, 0.0, 0.0),
+                crate::Vertex::new(2.0, 2.0, 0.0),
+                crate::Vertex::new(0.0, 2.0, 0.0),
+            ],
+            faces: Vec::new(),
+            selected_edges: Default::default(),
+            uv_seams: Default::default(),
+            uv_pinned: Default::default(),
+        };
+        m.faces.push(crate::Face::with_uv(
+            vec![0, 1, 2, 3],
+            vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        ));
+        m
+    }
+
+    #[test]
+    fn face_texels_cover_the_whole_uv_square_with_world_positions() {
+        let m = unit_uv_quad();
+        let mut seen = HashSet::new();
+        m.rasterize_face_texels(0, 8, 8, 0.0, |x, y, pos, n| {
+            seen.insert((x, y));
+            // texel (x, y): u = (x+.5)/8, v = 1-(y+.5)/8; mundo = uv * 2
+            let ex = (x as f32 + 0.5) / 8.0 * 2.0;
+            let ey = (1.0 - (y as f32 + 0.5) / 8.0) * 2.0;
+            assert!(
+                (pos.x - ex).abs() < 1e-4 && (pos.y - ey).abs() < 1e-4,
+                "{pos:?}"
+            );
+            assert!(pos.z.abs() < 1e-6);
+            assert!(n.distance(Vec3::Z) < 1e-5 || n.distance(-Vec3::Z) < 1e-5);
+        });
+        assert_eq!(seen.len(), 64);
+    }
+
+    #[test]
+    fn face_texels_dilation_adds_a_border_clamped_to_the_surface() {
+        let m = unit_uv_quad();
+        let mut plain = HashSet::new();
+        m.rasterize_face_texels(0, 8, 8, 0.0, |x, y, _, _| {
+            plain.insert((x, y));
+        });
+        let mut dilated = HashSet::new();
+        m.rasterize_face_texels(0, 8, 8, 1.0, |x, y, pos, _| {
+            dilated.insert((x, y));
+            assert!(pos.x >= -1e-4 && pos.x <= 2.0001 && pos.y >= -1e-4 && pos.y <= 2.0001);
+        });
+        // a UV preenche a textura inteira: não há onde dilatar
+        assert_eq!(plain, dilated);
+
+        // metade da textura: dilatar acrescenta uma coluna
+        let mut half = unit_uv_quad();
+        half.faces[0].uv = vec![[0.0, 0.0], [0.5, 0.0], [0.5, 1.0], [0.0, 1.0]];
+        let mut a = 0;
+        half.rasterize_face_texels(0, 8, 8, 0.0, |_, _, _, _| a += 1);
+        let mut b = 0;
+        half.rasterize_face_texels(0, 8, 8, 1.0, |_, _, _, _| b += 1);
+        assert!(b > a, "{a} vs {b}");
+    }
+
+    #[test]
+    fn face_texels_ignore_invalid_input() {
+        let mut m = unit_uv_quad();
+        let mut hits = 0;
+        m.rasterize_face_texels(9, 8, 8, 0.0, |_, _, _, _| hits += 1);
+        m.rasterize_face_texels(0, 0, 8, 0.0, |_, _, _, _| hits += 1);
+        m.rasterize_face_texels(0, 8, 0, 0.0, |_, _, _, _| hits += 1);
+        assert_eq!(hits, 0);
+        // dilatação NaN/negativa vira 0 e não entra em pânico
+        m.rasterize_face_texels(0, 8, 8, f32::NAN, |_, _, _, _| hits += 1);
+        m.rasterize_face_texels(0, 8, 8, -3.0, |_, _, _, _| hits += 1);
+        // 2 chamadas × 64 texels + os texels da diagonal visitados duas vezes
+        let valid_hits = hits;
+        assert!(valid_hits >= 128 && valid_hits <= 160, "{valid_hits}");
+        // UV NaN e vértice NaN: nada
+        let mut bad_uv = m.clone();
+        bad_uv.faces[0].uv = vec![[f32::NAN, 0.0]; 4];
+        let mut bad_vert = m.clone();
+        bad_vert.verts[0].pos[0] = f32::NAN;
+        let mut bad_idx = m.clone();
+        bad_idx.faces[0].verts[1] = 99;
+        for mesh in [bad_uv, bad_vert, bad_idx] {
+            mesh.rasterize_face_texels(0, 8, 8, 1.0, |_, _, _, _| hits += 1);
+        }
+        // UV degenerada
+        m.faces[0].uv = vec![[0.3, 0.3]; 4];
+        m.rasterize_face_texels(0, 8, 8, 0.0, |_, _, _, _| hits += 1);
+        assert_eq!(hits, valid_hits);
+    }
+
+    #[test]
+    fn face_texels_work_with_either_uv_winding() {
+        let mut m = unit_uv_quad();
+        m.faces[0].uv.reverse();
+        m.faces[0].verts.reverse();
+        let mut uniq = HashSet::new();
+        m.rasterize_face_texels(0, 8, 8, 0.0, |x, y, _, _| {
+            uniq.insert((x, y));
+        });
+        assert_eq!(uniq.len(), 64);
     }
 }

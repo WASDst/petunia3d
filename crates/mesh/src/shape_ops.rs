@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use geo::{BooleanOps, Coord, LineString, MultiPolygon, Polygon};
+use geo::{BooleanOps, Coord, LineString, MultiLineString, MultiPolygon, Polygon};
 
 use crate::arrangement::{Region2, signed_area};
 
@@ -108,17 +108,31 @@ pub fn regions_union(regions: &[Region2]) -> Vec<Region2> {
 /// Recorta as células do arranjo ao preenchimento real das formas compostas.
 pub fn occupied_regions(cells: &[Region2], shapes: &[Region2]) -> Vec<Region2> {
     let mut cover = MultiPolygon::new(vec![]);
-    for shape in shapes { cover = cover.union(&MultiPolygon::new(vec![polygon_of(shape)])); }
-    cells.iter().flat_map(|cell| regions_of(&MultiPolygon::new(vec![polygon_of(cell)]).intersection(&cover))).collect()
+    for shape in shapes {
+        cover = cover.union(&MultiPolygon::new(vec![polygon_of(shape)]));
+    }
+    cells
+        .iter()
+        .flat_map(|cell| {
+            regions_of(&MultiPolygon::new(vec![polygon_of(cell)]).intersection(&cover))
+        })
+        .collect()
 }
 
 /// Pathfinder preservando os furos de cada forma.
 pub fn pathfinder_regions(shapes: &[Region2], op: PathfinderOp) -> Vec<Region2> {
-    let Some((first, rest)) = shapes.split_first() else { return vec![]; };
+    let Some((first, rest)) = shapes.split_first() else {
+        return vec![];
+    };
     let mut acc = MultiPolygon::new(vec![polygon_of(first)]);
     for shape in rest {
         let other = MultiPolygon::new(vec![polygon_of(shape)]);
-        acc = match op { PathfinderOp::Unite => acc.union(&other), PathfinderOp::Subtract => acc.difference(&other), PathfinderOp::Intersect => acc.intersection(&other), PathfinderOp::Exclude => acc.xor(&other) };
+        acc = match op {
+            PathfinderOp::Unite => acc.union(&other),
+            PathfinderOp::Subtract => acc.difference(&other),
+            PathfinderOp::Intersect => acc.intersection(&other),
+            PathfinderOp::Exclude => acc.xor(&other),
+        };
     }
     regions_of(&acc)
 }
@@ -312,4 +326,20 @@ mod tests {
         assert!(pathfinder(&[], PathfinderOp::Unite).is_empty());
         assert!(face_loops(&[]).is_empty());
     }
+}
+
+/// Keeps the pieces of an open construction path outside consumed regions.
+pub fn clip_open_outside(points: &[[f64; 2]], regions: &[Region2]) -> Vec<Vec<[f64; 2]>> {
+    if points.len() < 2 {
+        return vec![];
+    }
+    let polygons = MultiPolygon(regions.iter().map(polygon_of).collect());
+    let line = LineString::new(points.iter().map(|p| Coord { x: p[0], y: p[1] }).collect());
+    polygons
+        .clip(&MultiLineString(vec![line]), true)
+        .0
+        .into_iter()
+        .map(|line| line.coords().map(|c| [c.x, c.y]).collect::<Vec<_>>())
+        .filter(|p| p.len() >= 2)
+        .collect()
 }
