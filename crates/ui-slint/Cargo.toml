@@ -38,6 +38,7 @@ slint-build = { version = "=1.18.0", default-features = false, features = ["comp
 lucide-slint = "=1.47.0"
 
 [dev-dependencies]
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 i-slint-backend-testing = "=1.18.0"
 
