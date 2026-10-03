@@ -248,7 +248,7 @@ impl Canvas {
         }
         let mut distance = vec![u8::MAX; n];
         let mut queue = VecDeque::new();
-        for (i, p) in self.pixels.chunks_exact(4).enumerate() {
+        for (i, p) in self.pixels.as_chunks::<4>().0.iter().enumerate() {
             if p[3] != 0 {
                 distance[i] = 0;
                 queue.push_back(i);

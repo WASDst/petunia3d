@@ -97,7 +97,7 @@ pub fn unwrap_fallback(mesh: &mut Mesh) -> Result<usize, UnwrapError> {
     // entre charts; calcular a média por vértice colapsaria as costuras e
     // sobreporia charts. As UVs saem em texels do atlas, então normalizamos.
     let mut new_uv: Vec<Vec<[f32; 2]>> = Vec::with_capacity(mesh.faces.len());
-    for tri in output.index_array.chunks_exact(3) {
+    for tri in output.index_array.as_chunks::<3>().0 {
         let mut corners = Vec::with_capacity(3);
         for &oi in tri {
             let vert = output

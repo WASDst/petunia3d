@@ -6,6 +6,9 @@
 //! Sem captura de tela: estes testes garantem comportamento e estrutura
 //! acessível, não estética. A aceitação visual do Animate continua manual.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+#[cfg(feature = "animation-workspace")]
 use std::sync::{Arc, Mutex};
 
 use i_slint_backend_testing::{AccessibleRole, ElementHandle};
@@ -20,7 +23,7 @@ type Bridge = SlintUiBridge<PlaceholderViewport>;
 
 struct Rig {
     shell: PetuniaSlintShell,
-    bridge: Arc<Mutex<Bridge>>,
+    bridge: Rc<RefCell<Bridge>>,
 }
 
 impl Rig {
@@ -33,14 +36,14 @@ impl Rig {
         let shell = PetuniaSlintShell::new().expect("Slint shell");
         shell.window().set_size(LogicalSize::new(1280.0, height));
         shell.show().expect("headless window");
-        let bridge = Arc::new(Mutex::new(SlintUiBridge::new(
+        let bridge = Rc::new(RefCell::new(SlintUiBridge::new(
             AppState::default(),
             PlaceholderViewport::default(),
         )));
         // Mesma ligação de `connect_animate_callbacks`, sem o sync do shell
         // inteiro (que reescreveria `active-workspace` sem a feature).
         let weak = shell.as_weak();
-        let handle = Arc::clone(&bridge);
+        let handle = Rc::clone(&bridge);
         shell.on_animate_action(move |action, arg, value| {
             let Some(intent) = AnimateIntent::parse(action.as_str(), arg.as_str(), value) else {
                 return;
@@ -49,7 +52,7 @@ impl Rig {
                 intent,
                 AnimateIntent::ParamPreview { .. } | AnimateIntent::Seek(_)
             );
-            let mut bridge = handle.lock().unwrap();
+            let mut bridge = handle.borrow_mut();
             bridge.apply(UiIntent::Animate(intent));
             let shell = weak.unwrap();
             let vm = bridge.animate_view_model();
@@ -67,30 +70,23 @@ impl Rig {
     }
 
     fn sync(&self) {
-        let vm = self.bridge.lock().unwrap().animate_view_model();
+        let vm = self.bridge.borrow_mut().animate_view_model();
         sync_animate_properties(&self.shell, &vm);
         // Deixa as transições do flyout terminarem antes de medir posições.
         i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(400));
     }
 
     fn intent(&self, intent: AnimateIntent) {
-        self.bridge.lock().unwrap().apply(UiIntent::Animate(intent));
+        self.bridge.borrow_mut().apply(UiIntent::Animate(intent));
         self.sync();
     }
 
     fn depth(&self) -> usize {
-        self.bridge.lock().unwrap().state.project.undo.depth().0
+        self.bridge.borrow_mut().state.project.undo.depth().0
     }
 
     fn motions(&self) -> usize {
-        self.bridge
-            .lock()
-            .unwrap()
-            .state
-            .project
-            .project
-            .motions
-            .len()
+        self.bridge.borrow_mut().state.project.project.motions.len()
     }
 
     fn button(&self, label: &str) -> ElementHandle {
@@ -232,7 +228,7 @@ fn dragging_a_slider_with_the_pointer_commits_exactly_one_undo_step() {
         "os sliders não são recriados a cada ajuste"
     );
 
-    assert!(rig.bridge.lock().unwrap().state.undo());
+    assert!(rig.bridge.borrow_mut().state.undo());
     rig.sync();
     assert!(
         (rig.param("energy") - 1.0).abs() < 1e-4,
@@ -288,8 +284,7 @@ fn transport_plays_pauses_scrubs_and_applies_now() {
     // Apply Now: converte em clipe editável e remove o Motion vivo.
     let clips = rig
         .bridge
-        .lock()
-        .unwrap()
+        .borrow_mut()
         .state
         .project
         .project
@@ -299,14 +294,13 @@ fn transport_plays_pauses_scrubs_and_applies_now() {
         .mock_single_click(PointerEventButton::Left);
     let after_copy = rig
         .bridge
-        .lock()
-        .unwrap()
+        .borrow_mut()
         .state
         .project
         .project
         .animations
         .len();
-    let status = rig.bridge.lock().unwrap().state.ui.status.clone();
+    let status = rig.bridge.borrow_mut().state.ui.status.clone();
     assert_eq!(after_copy, clips + 1, "status: {status}");
     assert_eq!(rig.motions(), 1, "a cópia mantém o Motion vivo");
     rig.button("Apply Now")
@@ -366,12 +360,11 @@ fn fit_to_model_button_links_the_model_and_explains_when_blocked() {
         "",
         "o modelo ficou ligado"
     );
-    assert!(rig.bridge.lock().unwrap().animate_has_posed_model());
+    assert!(rig.bridge.borrow_mut().animate_has_posed_model());
 
     // Travar o modelo: desabilitado, com o motivo na descrição e na dica.
     rig.bridge
-        .lock()
-        .unwrap()
+        .borrow_mut()
         .state
         .project
         .project

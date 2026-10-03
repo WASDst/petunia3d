@@ -933,6 +933,11 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_workspace_poly_title(vm.label_workspace_poly_title.as_str().into());
     window
         .set_label_workspace_poly_description(vm.label_workspace_poly_description.as_str().into());
+    window.set_profile_parametric(vm.profile_parametric);
+    window.set_profile_ellipse(vm.profile_ellipse);
+    window.set_profile_width(vm.profile_width);
+    window.set_profile_height(vm.profile_height);
+    window.set_profile_segments(vm.profile_segments);
     window.set_profile_depth(vm.profile_depth);
     window.set_profile_wall_thickness(vm.profile_wall_thickness);
     window.set_profile_smoothness(vm.profile_smoothness);
@@ -3758,6 +3763,53 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let dimension_gesture_bridge = Arc::clone(&bridge);
+    let dimension_gesture_window = window.as_weak();
+    window.on_profile_dimension_gesture(move |phase| {
+        if let Ok(mut bridge) = dimension_gesture_bridge.lock() {
+            bridge.profile_dimension_gesture(phase);
+            if let Some(window) = dimension_gesture_window.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+                if let Some(frame) = bridge.render_viewport() {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+    let dimensions_bridge = Arc::clone(&bridge);
+    let dimensions_window = window.as_weak();
+    window.on_profile_dimension_set(move |field, text| {
+        let Ok(mut bridge) = dimensions_bridge.lock() else {
+            return false;
+        };
+        let vm = bridge.view_model();
+        let base = match field.as_str() {
+            "width" => vm.profile_width,
+            "height" => vm.profile_height,
+            "segments" => vm.profile_segments as f32,
+            _ => return false,
+        };
+        let Ok(value) = numeric::parse_numeric_with_base(text.as_str(), base) else {
+            return false;
+        };
+        let (width, height, segments) = match field.as_str() {
+            "width" => (value, vm.profile_height, vm.profile_segments),
+            "height" => (vm.profile_width, value, vm.profile_segments),
+            "segments" if (6.0..=512.0).contains(&value) && value.fract() == 0.0 => {
+                (vm.profile_width, vm.profile_height, value as i32)
+            }
+            _ => return false,
+        };
+        let accepted = bridge.set_profile_dimensions(width, height, segments as usize);
+        if let Some(window) = dimensions_window.upgrade() {
+            sync_window_properties(&window, &bridge.view_model());
+            if let Some(frame) = bridge.render_viewport() {
+                window.set_viewport_image(frame);
+            }
+        }
+        accepted
+    });
+
     let profile_depth_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_profile_depth_set(move |text| {
@@ -4521,34 +4573,27 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_part_color_picker_open(move |id| {
         let id_str = id.to_string();
-        if let Ok(bridge) = part_color_open_bridge.lock() {
-            if let Some(window) = window_weak.upgrade() {
-                if let Ok(asset_id) = uuid::Uuid::parse_str(&id_str) {
-                    if let Some(asset) = bridge
-                        .state
-                        .project
-                        .project
-                        .assets
-                        .iter()
-                        .find(|a| a.id == asset_id)
-                    {
-                        let custom_color = asset.selection_overlay_color;
-                        let eff = custom_color.unwrap_or(bridge.state.ui.selection_rgb);
-                        let hex = format!("#{:02X}{:02X}{:02X}", eff[0], eff[1], eff[2]);
-                        window.set_part_color_popover_id(id_str.as_str().into());
-                        window.set_part_color_popover_name(asset.name.as_str().into());
-                        window.set_part_color_preview(slint::Color::from_rgb_u8(
-                            eff[0], eff[1], eff[2],
-                        ));
-                        window.set_part_color_hex(hex.into());
-                        window.set_part_color_has_custom(custom_color.is_some());
-                        window.set_color_wheel_image(
-                            crate::color_wheel::generate_color_wheel_image(130),
-                        );
-                        window.set_part_color_popover_open(true);
-                    }
-                }
-            }
+        if let Ok(bridge) = part_color_open_bridge.lock()
+            && let Some(window) = window_weak.upgrade()
+            && let Ok(asset_id) = uuid::Uuid::parse_str(&id_str)
+            && let Some(asset) = bridge
+                .state
+                .project
+                .project
+                .assets
+                .iter()
+                .find(|a| a.id == asset_id)
+        {
+            let custom_color = asset.selection_overlay_color;
+            let eff = custom_color.unwrap_or(bridge.state.ui.selection_rgb);
+            let hex = format!("#{:02X}{:02X}{:02X}", eff[0], eff[1], eff[2]);
+            window.set_part_color_popover_id(id_str.as_str().into());
+            window.set_part_color_popover_name(asset.name.as_str().into());
+            window.set_part_color_preview(slint::Color::from_rgb_u8(eff[0], eff[1], eff[2]));
+            window.set_part_color_hex(hex.into());
+            window.set_part_color_has_custom(custom_color.is_some());
+            window.set_color_wheel_image(crate::color_wheel::generate_color_wheel_image(130));
+            window.set_part_color_popover_open(true);
         }
     });
 

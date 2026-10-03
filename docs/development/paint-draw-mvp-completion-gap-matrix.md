@@ -1,6 +1,6 @@
 # PAINT/DRAW — reconciliação do MVP (02/10/2026)
 
-Escopo autorizado: corrigir booleanos; Shape Builder poligonal (curvas fiéis em V1); SVG decal/perfil, Projection/Stencil e Path Paint no MVP; completar adicionais aprovados. Preservar aparência da UI. Gates finais aguardam instrução do responsável.
+Escopo autorizado: corrigir booleanos; Shape Builder poligonal (curvas fiéis em V1); SVG decal/perfil, Projection/Stencil e Path Paint no MVP; completar adicionais aprovados. Preservar aparência da UI. Gates da integração original estavam pendentes; a retomada de 03/10 está autorizada a validar a conclusão.
 
 | Requisito | Estado observado antes da retomada | Delta implementado (inspeção; aceite pendente) |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ Escopo autorizado: corrigir booleanos; Shape Builder poligonal (curvas fiéis em
 | Round corners; mirror; presets; dimensões; simplify; trace | MISSING | Round no ponto ou perfil; mirror de criação; polygon/rounded rectangle/ellipse/arc/slot; comprimento/ângulo; simplify/resample; trace com furos; 1 Undo por lote |
 | Documentação MVP | OBSOLETE | P3D-133/158/165, cap. 44, matrizes, feature docs, changelog e estado reconciliados |
 
-Evidência da inspeção: HEAD inicial 4a41951; SVG 0e1c83e e Path Paint 8645a8f em worktrees separados; Projection sem commit. Nenhum gate executado nesta retomada.
+Evidência da inspeção: HEAD inicial 4a41951; SVG 0e1c83e e Path Paint 8645a8f em worktrees separados; Projection sem commit. Nenhum gate executado na retomada original de 02/10.
 
 ## Superfície de uso
 
@@ -40,10 +40,18 @@ cargo test --no-run --lib -j 1 \
   -p petunia_module_model -p petunia_module_paint -p petunia_ui_slint
 ```
 
-Usado cache Cargo separado via `CARGO_TARGET_DIR`. Resultado: seis executáveis unitários gerados, **zero casos de teste executados nesta conferência**. Novas regressões cobrem Undo/rollback, furos, máscaras/alpha, anchors, textura booleana, densidade e persistência. Execução dos testes, gates completos, captura nativa e aceite manual **aguardam instrução do responsável**; compilação não substitui esses critérios. Ver [roteiro manual](paint-draw-mvp-manual-2026-10-02.md).
+Usado cache Cargo separado via `CARGO_TARGET_DIR`. Resultado: seis executáveis unitários gerados, **zero casos de teste executados nesta conferência**. Novas regressões cobrem Undo/rollback, furos, máscaras/alpha, anchors, textura booleana, densidade e persistência. A execução de testes e gates foi autorizada na retomada de 03/10; os resultados atuais são registrados na matriz DRAW. Captura nativa e aceite manual permanecem pendentes; compilação não substitui esses critérios. Ver [roteiro manual](paint-draw-mvp-manual-2026-10-02.md).
 
-Catálogos e changelog gerados com `cargo run -p xtask -- docs-generate` (exit 0), sem compilar o site público congelado. Entrega no [PR #26](https://github.com/wasd-lat/petunia3d/pull/26), em draft enquanto o aceite estiver pendente. Os commits seguintes a esse registro alteram somente documentação.
+Catálogos e changelog gerados com `cargo run -p xtask -- docs-generate` (exit 0), sem compilar o site público congelado. Entrega no [PR #26](https://github.com/wasd-lat/petunia3d/pull/26), integrado à main; a integração não substitui o aceite. Os commits seguintes a esse registro alteram somente documentação.
 
 Path também coleta anchors por clique/arrasto no canvas UV, com preview UV sem ligar segmentos entre charts diferentes; o commit usa o mesmo caminho/restrições/Undo do modelo 3D. A interação Projection continua na viewport; clicks do canvas nesse modo não pintam um brush por engano.
 
 Export bleed restringe a dilatação aos gutters fora das faces UV, preservando pixels/alpha da arte dentro das ilhas. Materiais compartilhados usam a máscara combinada dos consumidores exportados; todos os canais existentes recebem padding em cópia. Verificar também transparências internas de decals SVG.
+
+## Retomada de 03/10/2026
+
+As correções de seleção DRAW/PAINT, seleção visível por caixa/laço, trilhos e
+reedição dimensional de retângulos/círculos estão na atualização da
+[matriz DRAW](draw-regions-gap-matrix.md). Essa rodada executa os gates do
+checkout atual; a compilação isolada histórica acima permanece identificada
+como evidência anterior. Captura e aceite manual seguem no roteiro.

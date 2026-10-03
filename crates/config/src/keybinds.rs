@@ -336,7 +336,7 @@ impl Keybinds {
                 });
             }
         }
-        custom.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        custom.sort_by_key(|profile| profile.name.to_lowercase());
         all.extend(custom);
         all
     }

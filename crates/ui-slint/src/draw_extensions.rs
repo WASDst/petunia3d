@@ -64,7 +64,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             "draw.regular_polygon" => {
                 let points = profile_tools::regular_polygon(params.length, params.sides);
-                self.create_extension_shape(&name, points, true);
+                self.create_extension_shape(&name, points, true, None);
             }
             "draw.rounded_rectangle" => {
                 let points = profile_tools::rounded_rectangle(
@@ -72,7 +72,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     params.length * 0.5,
                     params.radius,
                 );
-                self.create_extension_shape(&name, points, true);
+                self.create_extension_shape(&name, points, true, None);
             }
             "draw.ellipse" => {
                 let points = profile_tools::ellipse(
@@ -80,7 +80,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     params.length * 0.5,
                     params.sides.max(12),
                 );
-                self.create_extension_shape(&name, points, true);
+                self.create_extension_shape(
+                    &name,
+                    points,
+                    true,
+                    Some(petunia_project::profile::ProfilePrimitive::Ellipse),
+                );
             }
             "draw.slot" => {
                 let points = profile_tools::rounded_rectangle(
@@ -88,7 +93,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     params.length * 0.4,
                     params.length * 0.2,
                 );
-                self.create_extension_shape(&name, points, true);
+                self.create_extension_shape(&name, points, true, None);
             }
             "draw.trace_reference" => {
                 let Some(reference) = self.state.project.refs.iter().find(|r| r.visible).cloned()
@@ -96,8 +101,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return false;
                 };
                 let mut mask = reference.rgba.clone();
-                if mask.chunks_exact(4).all(|p| p[3] == 255) {
-                    for p in mask.chunks_exact_mut(4) {
+                if mask.as_chunks::<4>().0.iter().all(|p| p[3] == 255) {
+                    for p in mask.as_chunks_mut::<4>().0.iter_mut() {
                         let luma =
                             0.2126 * p[0] as f32 + 0.7152 * p[1] as f32 + 0.0722 * p[2] as f32;
                         p[3] = if luma <= params.trace_threshold as f32 {
@@ -111,7 +116,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     reference.width,
                     reference.height,
                     &mask,
-                    if reference.rgba.chunks_exact(4).all(|p| p[3] == 255) {
+                    if reference
+                        .rgba
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .all(|p| p[3] == 255)
+                    {
                         128
                     } else {
                         params.trace_threshold
@@ -257,14 +268,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
         true
     }
-    fn create_extension_shape(&mut self, name: &str, points: Vec<[f64; 2]>, closed: bool) -> bool {
+    fn create_extension_shape(
+        &mut self,
+        name: &str,
+        points: Vec<[f64; 2]>,
+        closed: bool,
+        primitive: Option<petunia_project::profile::ProfilePrimitive>,
+    ) -> bool {
         if points.len() < 3 {
             return false;
         }
         let points3: Vec<_> = points.iter().map(|p| [p[0], p[1], 0.0]).collect();
         let spline = petunia_project::SplineResource::from_polyline(name, &points3, closed);
-        let profile =
+        let mut profile =
             petunia_project::ProfileResource::new(name, spline.id, self.draft_profile_workplane());
+        profile.primitive = primitive;
         let id = profile.id;
         let mut profiles = vec![(spline, profile)];
         if self.draw_parameters.mirror {

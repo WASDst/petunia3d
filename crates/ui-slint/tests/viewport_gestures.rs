@@ -44,6 +44,7 @@ fn viewport_shortcut_drag_parametric_hover_and_navigation_gesture() {
         active: true,
         verts: 8,
         tris: 12,
+        ..Default::default()
     };
     let parts_model = std::rc::Rc::new(slint::VecModel::from(vec![test_part]));
     shell.set_scene_items(parts_model.clone().into());

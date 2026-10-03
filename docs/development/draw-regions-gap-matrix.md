@@ -99,3 +99,79 @@ dessas capacidades, mas não encerram automaticamente todas as pendências.
 A inspeção de 02/10 foi documental e estática; não confirma gates, captura
 nativa ou teste com usuários. A evidência de compilação do PR #19 antecede
 este checkpoint e não valida esses deltas.
+
+## Retomada da sessão OpenCode — 03/10/2026
+
+Escopo: seleção/transformação de perfis 2D, trilhos DRAW/POLY, seleção visível
+por caixa/laço e domínios Object/Face no PAINT. O patch preserva a edição
+transacional de perfis, com cancelamento e um Undo por gesto.
+
+Retângulos, círculos e o preset de elipse novos guardam `ProfilePrimitive` em ZIP/JSON. O painel
+DRAW permite reeditar largura/altura e, nos círculos/elipses, segmentos (6–512).
+A reedição preserva IDs do perfil e spline, centro e orientação; pontos mantêm
+IDs quando a contagem não muda. Mover, girar e escalar preservam a reedição.
+Se editar nós/alças ou compor furos descaracterizar a primitiva, os controles
+paramétricos deixam de aparecer; a edição livre continua disponível.
+Perfis antigos sem metadados não são classificados automaticamente pelo nome.
+O escritor postcard legado rejeita perfis paramétricos para evitar perda de
+metadados. Presets avançados e perfis livres continuam com edição de nós,
+sem regeneração por dimensões nesta entrega.
+
+Validação automatizada da retomada registrada abaixo; captura nativa e
+aceite com usuários permanecem pendentes.
+
+Falhas encontradas na validação da retomada: o teste de integração de viewport
+foi atualizado com os campos opcionais de cor por parte; o fixture Animate
+usa `Rc<RefCell<_>>` na thread da UI. O dispatcher restaurava um snapshot e
+recalculava sua seleção ao falhar, alterando `selection_revision`; o rollback
+agora preserva projeto/seleção sem recomputação. As regressões de pintura
+continuam exigindo documento exatamente igual e nenhuma entrada de Undo.
+
+A validação detectou também estouro de pilha em um SVG válido com 20 grupos.
+Parse, rasterização e destruição da árvore SVG agora ocorrem em worker scoped
+com 32 MiB de pilha; os limites existentes de bytes, expansão, nós e
+profundidade não foram relaxados. Os nove testes GPU mantêm suas assertions
+e serializam apenas seus ciclos nativos de dispositivo no fixture.
+
+### Evidência automatizada de 03/10/2026
+
+| Crate / alvo | Casos aprovados |
+| --- | ---: |
+| petunia_config | 22 |
+| petunia_mesh | 183 |
+| petunia_module_model | 6 |
+| petunia_core | 158 |
+| petunia_module_paint | 118 |
+| petunia_project | 208 |
+| petunia_ui_slint — lib | 473 |
+| animate_shell | 11 |
+| viewport_gestures | 7 |
+| Total de casos distintos | 1186 |
+
+Comandos: `cargo test -p petunia_mesh -p petunia_config -p petunia_module_model --lib`;
+`cargo test -p petunia_core -p petunia_module_paint -p petunia_project --lib -- --test-threads=1`
+(core/paint aprovados; Project repetido abaixo após corrigir o SVG);
+`cargo test -p petunia_project --lib -- --test-threads=1`;
+`cargo test -j 1 -p petunia_ui_slint --lib --test viewport_gestures --test animate_shell
+--config 'profile.test.package.petunia_ui_slint.debug=0'
+--config 'profile.test.package.petunia_ui_slint.incremental=false' -- --test-threads=1`.
+
+O mesmo executável unitário Slint (`petunia_ui_slint-e3637c4b6a2fb2fd`)
+passou também os 473 casos na execução paralela padrão. A execução paralela
+anterior caiu com SIGSEGV durante os testes GPU; o fixture agora serializa
+os ciclos de dispositivo, preservando todas as assertions. A primeira
+validação de Project caiu por stack overflow no SVG aninhado; a repetição
+com o worker explícito passou. Não se omitem essas falhas históricas.
+
+O build Slint foi repetido com um job após SIGTERM e esgotamento de disco;
+caches incrementais regeneráveis foram removidos. Símbolos de debug e
+cache incremental foram desativados apenas para a crate Slint no comando
+de testes; os critérios/assertions e os testes GPU foram mantidos.
+
+`cargo check --all-targets` aprovado para config, mesh, project, core,
+module-model, module-paint e ui-slint. `arch-check`, `ui-guard --strict`,
+`bible-check` e `docs-check` aprovados pelo executável `target/debug/xtask`
+previamente compilado (fontes xtask inalteradas). O mapa UI emite avisos de
+símbolos não mapeados do legado, sem falha. Site congelado preservado.
+`cargo fmt --all -- --check` e `cargo clippy -j 1 -p petunia_project -p petunia_core
+-p petunia_ui_slint --all-targets -- -D warnings` aprovados no checkpoint final.

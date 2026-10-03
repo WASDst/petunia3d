@@ -136,6 +136,12 @@ impl ProfileWorkplane {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ProfilePrimitive {
+    Rectangle,
+    Ellipse,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileResource {
     pub id: Uuid,
@@ -146,21 +152,22 @@ pub struct ProfileResource {
     pub revision: u64,
     /// Contornos internos poligonais no mesmo plano; não são formas preenchidas.
     pub holes: Vec<Vec<[f64; 2]>>,
+    pub primitive: Option<ProfilePrimitive>,
 }
 
 // Preserve the pre-compound layout when reading legacy postcard. New compound
-// shapes must use the canonical ZIP/JSON format; never silently discard holes.
+// and parametric shapes use canonical ZIP/JSON; never silently discard authoring data.
 impl Serialize for ProfileResource {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
         let human = serializer.is_human_readable();
-        if !human && !self.holes.is_empty() {
+        if !human && (!self.holes.is_empty() || self.primitive.is_some()) {
             return Err(serde::ser::Error::custom(
-                "Compound profiles require ZIP/JSON",
+                "Compound or parametric profiles require ZIP/JSON",
             ));
         }
         let mut value =
-            serializer.serialize_struct("ProfileResource", if human { 7 } else { 6 })?;
+            serializer.serialize_struct("ProfileResource", if human { 8 } else { 6 })?;
         value.serialize_field("id", &self.id)?;
         value.serialize_field("name", &self.name)?;
         value.serialize_field("spline_id", &self.spline_id)?;
@@ -169,6 +176,7 @@ impl Serialize for ProfileResource {
         value.serialize_field("revision", &self.revision)?;
         if human {
             value.serialize_field("holes", &self.holes)?;
+            value.serialize_field("primitive", &self.primitive)?;
         }
         value.end()
     }
@@ -196,6 +204,8 @@ impl<'de> Deserialize<'de> for ProfileResource {
             revision: u64,
             #[serde(default)]
             holes: Vec<Vec<[f64; 2]>>,
+            #[serde(default)]
+            primitive: Option<ProfilePrimitive>,
         }
         if deserializer.is_human_readable() {
             let c = Current::deserialize(deserializer)?;
@@ -207,6 +217,7 @@ impl<'de> Deserialize<'de> for ProfileResource {
                 wall_thickness: c.wall_thickness,
                 revision: c.revision,
                 holes: c.holes,
+                primitive: c.primitive,
             })
         } else {
             let c = Old::deserialize(deserializer)?;
@@ -218,6 +229,7 @@ impl<'de> Deserialize<'de> for ProfileResource {
                 wall_thickness: c.wall_thickness,
                 revision: c.revision,
                 holes: Vec::new(),
+                primitive: None,
             })
         }
     }
@@ -233,7 +245,104 @@ impl ProfileResource {
             wall_thickness: 0.0,
             revision: 0,
             holes: Vec::new(),
+            primitive: None,
         }
+    }
+
+    /// Recover the affine primitive frame only while its authored points still
+    /// match the generator. Node edits must never be overwritten by reediting.
+    pub fn primitive_frame(&self, spline: &SplineResource) -> Option<(DVec3, DVec3, DVec3)> {
+        if !spline.closed || !self.holes.is_empty() || spline.points.len() < 4 {
+            return None;
+        }
+        let points: Vec<_> = spline
+            .points
+            .iter()
+            .map(|p| DVec3::from_array(p.position))
+            .collect();
+        let center = points.iter().copied().sum::<DVec3>() / points.len() as f64;
+        let (x, y) = match self.primitive? {
+            ProfilePrimitive::Rectangle if points.len() == 4 => {
+                ((points[1] - points[0]) * 0.5, (points[3] - points[0]) * 0.5)
+            }
+            ProfilePrimitive::Rectangle => return None,
+            ProfilePrimitive::Ellipse => {
+                let mut x = DVec3::ZERO;
+                let mut y = DVec3::ZERO;
+                for (i, p) in points.iter().enumerate() {
+                    let angle = std::f64::consts::TAU * i as f64 / points.len() as f64;
+                    x += (*p - center) * angle.cos();
+                    y += (*p - center) * angle.sin();
+                }
+                (
+                    x * (2.0 / points.len() as f64),
+                    y * (2.0 / points.len() as f64),
+                )
+            }
+        };
+        if !x.is_finite() || !y.is_finite() || x.cross(y).length_squared() < 1e-18 {
+            return None;
+        }
+        let tolerance = 1e-8 * (1.0 + x.length() + y.length());
+        for (i, p) in points.iter().enumerate() {
+            let (a, b) = match self.primitive? {
+                ProfilePrimitive::Rectangle => {
+                    [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)][i]
+                }
+                ProfilePrimitive::Ellipse => {
+                    let angle = std::f64::consts::TAU * i as f64 / points.len() as f64;
+                    (angle.cos(), angle.sin())
+                }
+            };
+            if p.distance(center + x * a + y * b) > tolerance
+                || spline.points[i].handle_in != [0.0; 3]
+                || spline.points[i].handle_out != [0.0; 3]
+            {
+                return None;
+            }
+        }
+        Some((center, x, y))
+    }
+
+    pub fn resize_primitive(
+        &self,
+        spline: &SplineResource,
+        width: f64,
+        height: f64,
+        segments: usize,
+    ) -> Option<SplineResource> {
+        if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+            return None;
+        }
+        let (center, x, y) = self.primitive_frame(spline)?;
+        let x = x.normalize() * width * 0.5;
+        let y = y.normalize() * height * 0.5;
+        let count = match self.primitive? {
+            ProfilePrimitive::Rectangle => 4,
+            ProfilePrimitive::Ellipse => segments.clamp(6, 512),
+        };
+        let kind = self.primitive?;
+        let mut next = spline.clone();
+        next.points = (0..count)
+            .map(|i| {
+                let (a, b) = match kind {
+                    ProfilePrimitive::Rectangle => {
+                        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)][i]
+                    }
+                    ProfilePrimitive::Ellipse => {
+                        let angle = std::f64::consts::TAU * i as f64 / count as f64;
+                        (angle.cos(), angle.sin())
+                    }
+                };
+                let mut point =
+                    crate::spline::SplinePoint::new((center + x * a + y * b).to_array());
+                if count == spline.points.len() {
+                    point.id = spline.points[i].id;
+                }
+                point
+            })
+            .collect();
+        Some(next)
     }
 
     pub fn validate_authoring(&self, spline: &SplineResource) -> Result<(), ProfileError> {
@@ -456,5 +565,50 @@ mod compound_tests {
         old.as_object_mut().unwrap().remove("holes");
         let loaded: ProfileResource = serde_json::from_value(old).unwrap();
         assert!(loaded.holes.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod primitive_tests {
+    use super::*;
+    #[test]
+    fn dimensions_preserve_transformed_frame_and_legacy_data_is_explicit() {
+        let spline = SplineResource::from_polyline(
+            "rectangle",
+            &[
+                [3.0, 1.0, 0.0],
+                [3.0, 3.0, 0.0],
+                [2.0, 3.0, 0.0],
+                [2.0, 1.0, 0.0],
+            ],
+            true,
+        );
+        let mut profile = ProfileResource::new("rectangle", spline.id, ProfileWorkplane::default());
+        profile.primitive = Some(ProfilePrimitive::Rectangle);
+        let next = profile.resize_primitive(&spline, 4.0, 3.0, 16).unwrap();
+        let (center, x, y) = profile.primitive_frame(&next).unwrap();
+        assert!((center - DVec3::new(2.5, 2.0, 0.0)).length() < 1e-10);
+        assert!((x - DVec3::new(0.0, 2.0, 0.0)).length() < 1e-10);
+        assert!((y - DVec3::new(-1.5, 0.0, 0.0)).length() < 1e-10);
+        assert_eq!(next.points[0].id, spline.points[0].id);
+        assert!(postcard::to_allocvec(&profile).is_err());
+        let mut project = crate::Project::new();
+        project.add_spline(next.clone()).unwrap();
+        project.add_profile(profile.clone()).unwrap();
+        let bytes = crate::format::encode_zip(&project).unwrap();
+        let loaded = crate::format::load_bytes(&bytes).unwrap();
+        assert_eq!(
+            loaded.profiles[0].primitive,
+            Some(ProfilePrimitive::Rectangle)
+        );
+        assert!(
+            loaded.profiles[0]
+                .resize_primitive(&loaded.splines[0], 5.0, 2.0, 16)
+                .is_some()
+        );
+        let mut value = serde_json::to_value(&profile).unwrap();
+        value.as_object_mut().unwrap().remove("primitive");
+        let old: ProfileResource = serde_json::from_value(value).unwrap();
+        assert!(old.primitive.is_none());
     }
 }

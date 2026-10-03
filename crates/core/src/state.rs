@@ -3357,10 +3357,10 @@ impl AppState {
         }
         let verts = result.verts.len();
         let mut report = report;
-        if texture.is_some() {
-            if let Some(report) = &mut report {
-                report.uv = petunia_mesh::boolean_cleanup::UvOutcome::Relaid;
-            }
+        if texture.is_some()
+            && let Some(report) = &mut report
+        {
+            report.uv = petunia_mesh::boolean_cleanup::UvOutcome::Relaid;
         }
         self.session.tools.boolean_report = report;
 

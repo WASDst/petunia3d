@@ -4111,6 +4111,11 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> depth-handle-label: "";
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
+    in-out property <bool> profile-parametric: false;
+    in-out property <bool> profile-ellipse: false;
+    in-out property <float> profile-width: 0.0;
+    in-out property <float> profile-height: 0.0;
+    in-out property <int> profile-segments: 16;
     in-out property <float> profile-depth: 1.0;
     in-out property <float> profile-wall-thickness: 0.0;
     in-out property <float> profile-smoothness: 0.02;
@@ -4376,6 +4381,8 @@ export component PetuniaSlintShell inherits Window {
     callback profile-generate;
     callback profile-revolve;
     callback profile-sweep;
+    callback profile-dimension-set(string, string) -> bool;
+    callback profile-dimension-gesture(int);
     callback profile-depth-set(string) -> bool;
     callback profile-wall-thickness-set(string) -> bool;
     callback profile-smoothness-set(string) -> bool;
@@ -5150,50 +5157,6 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.add_parametric_cylinder_with_radial_subdivis");
                                 active: false;
                                 clicked => { root.add-primitive-requested("cylinder"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.tool-extrude;
-                                semantic-label: Tr.t("sl.extrude");
-                                shortcut: root.shortcuts.model-extrude;
-                                description: Tr.t("sl.pull_new_vertices_and_faces_outward_from_sel");
-                                clicked => { root.command-executed("model.extrude"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.tool-inset;
-                                semantic-label: Tr.t("sl.inset");
-                                shortcut: root.shortcuts.model-inset;
-                                description: Tr.t("sl.inset_new_polygonal_boundary_inside_selected");
-                                clicked => { root.command-executed("model.inset"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.tool-bevel;
-                                semantic-label: Tr.t("sl.bevel");
-                                shortcut: root.shortcuts.model-bevel;
-                                description: Tr.t("sl.round_edges_or_vertices_with_smooth_chamfer_");
-                                clicked => { root.command-executed("model.bevel"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.tool-profile;
-                                semantic-label: root.label-poly-pen;
-                                description: root.label-poly-pen-hint;
-                                active: active-tool == "poly_pen";
-                                clicked => { root.active-tool-changed("poly_pen"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.tool-loopcut;
-                                semantic-label: root.label-model-loop-cut;
-                                shortcut: root.shortcuts.model-loop-cut;
-                                description: root.hint-model-loop-cut;
-                                active: active-tool == "loop_cut";
-                                clicked => { root.active-tool-changed("loop_cut"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.tool-knife;
-                                semantic-label: root.label-model-slice;
-                                shortcut: root.shortcuts.model-slice;
-                                description: root.hint-model-slice;
-                                active: active-tool == "slice";
-                                clicked => { root.active-tool-changed("slice"); }
                             }
                         }
 
@@ -6710,7 +6673,7 @@ export component PetuniaSlintShell inherits Window {
                         action(a, b, v) => { root.animate-action(a, b, v); }
                     }
 
-                    if active-workspace == "MODEL": domain-bar := Rectangle {
+                    if active-workspace == "MODEL" || active-workspace == "PAINT": domain-bar := Rectangle {
                         x: (parent.width >= 720px) ? (parent.width - self.width - 118px - root.inspector-clearance) : (parent.width - self.width - 14px - root.inspector-clearance);
                         y: (parent.width >= 720px) ? 14px : 118px;
                         width: domain-row.preferred-width + 12px;
@@ -6734,6 +6697,9 @@ export component PetuniaSlintShell inherits Window {
                                 { id: "EDGE", icon: IconSet.Spline, icon-svg: PetuniaIcons.tool-profile, label: Tr.t("sl.curve"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_curve_segment") },
                                 { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
                                 { id: "FACE", icon: IconSet.Square, icon-svg: PetuniaIcons.select-face, label: Tr.t("sl.region"), shortcut: root.shortcuts.select-face, description: Tr.t("sl.select_region_face") },
+                            ] : active-workspace == "PAINT" ? [
+                                { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.object"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_and_manipulate_entire_objects_as_disc") },
+                                { id: "FACE", icon: IconSet.Square, icon-svg: PetuniaIcons.select-face, label: Tr.t("sl.face"), shortcut: root.shortcuts.select-face, description: Tr.t("sl.select_and_transform_polygonal_planar_faces") },
                             ] : [
                                 { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.object"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_and_manipulate_entire_objects_as_disc") },
                                 { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
@@ -7076,6 +7042,26 @@ export component PetuniaSlintShell inherits Window {
                             border-width: 1px; border-color: DesignTokens.border;
                             Text { text: root.label-profile-close; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
                             TouchArea { clicked => { root.profile-close(); } }
+                        }
+                        if root.profile-parametric: VerticalLayout {
+                            spacing: 5px;
+                            NumericField { label: Tr.t("sl.width"); value: root.profile-width; step: 0.1;
+                                scrub-started => { root.profile-dimension-gesture(0); }
+                                scrub-finished => { root.profile-dimension-gesture(1); }
+                                scrub-cancelled(value) => { root.profile-dimension-gesture(2); }
+                                text-committed(text) => { return root.profile-dimension-set("width",text); }
+                                scrubbed(delta,fine) => { root.profile-dimension-set("width","\{root.profile-width + delta * (fine ? 0.01 : 0.1)}"); }
+                            }
+                            NumericField { label: Tr.t("sl.height"); value: root.profile-height; step: 0.1;
+                                scrub-started => { root.profile-dimension-gesture(0); }
+                                scrub-finished => { root.profile-dimension-gesture(1); }
+                                scrub-cancelled(value) => { root.profile-dimension-gesture(2); }
+                                text-committed(text) => { return root.profile-dimension-set("height",text); }
+                                scrubbed(delta,fine) => { root.profile-dimension-set("height","\{root.profile-height + delta * (fine ? 0.01 : 0.1)}"); }
+                            }
+                            if root.profile-ellipse: NumericField { label: Tr.t("extensions.sides"); value: root.profile-segments; step: 1;
+                                text-committed(text) => { return root.profile-dimension-set("segments",text); }
+                            }
                         }
                         if root.profile-closed: HorizontalLayout {
                             spacing: 5px; height: 28px;

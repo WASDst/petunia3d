@@ -169,7 +169,7 @@ fn resample_equal_arc(dense: &[Vec3], closed: bool, spacing: f32, max_samples: u
         total += w[0].distance(w[1]) as f64;
         cum.push(total);
     }
-    if !(total > 0.0) || !total.is_finite() {
+    if !total.is_finite() || total <= 0.0 {
         return vec![first];
     }
     let last = dense[dense.len() - 1];

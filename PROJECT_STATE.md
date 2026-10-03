@@ -9,8 +9,30 @@
 - Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Em rodada histórica anterior, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
 - **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
 - Context methodology: **Lean Progressive Context (LPC)**
-- Last updated: `2026-10-02`
-- Current planning focus: revisar o [PR #26](https://github.com/wasd-lat/petunia3d/pull/26) com a integração PAINT/DRAW MVP publicada; gates e aceite manual aguardam instrução. [Plano anterior de viewport](docs/development/workspace-inspector-implementation-plan.md) permanece proposta, sem reabrir decisões de Paint/UV.
+- Last updated: `2026-10-03`
+- Historical planning focus (23/09/2026): revisar o [PR #26](https://github.com/wasd-lat/petunia3d/pull/26) com a integração PAINT/DRAW MVP publicada; gates e aceite manual aguardam instrução. [Plano anterior de viewport](docs/development/workspace-inspector-implementation-plan.md) permanece proposta, sem reabrir decisões de Paint/UV.
+
+### Retomada DRAW/POLY/PAINT — 03/10/2026
+
+Continuação da sessão OpenCode `ses_f07df6f9affe5TRABtfa6GdBNf` sobre
+`ba95ec4`, após a integração do PR #26 à main.
+
+- Seleção e transformação de perfis 2D: prioridade do perfil sobre a malha,
+  seleção pelo interior e gestos transacionais com cancelamento.
+- Retângulos, círculos e preset de elipse novos: dimensões reeditáveis após seleção,
+  segmentos do círculo, persistência ZIP/JSON e proteção de edição livre.
+  Arrastar campos numéricos produz um Undo por gesto. Presets avançados e
+  perfis antigos sem metadados permanecem editáveis por nós.
+- Seleção por caixa/laço: oclusão e área projetada sem seleção através;
+  PAINT expõe seleção de objeto/parte e de faces.
+- Ferramentas poligonais: removida duplicação no trilho esquerdo.
+- Validação automatizada: 1186 casos distintos aprovados (473 Slint, 18
+  integrações do shell e 695 de domínio/configuração/geometria). `cargo check`
+  dos sete crates alterados, `cargo fmt --all -- --check`, clippy de
+  project/core/Slint com `-D warnings` e guards de arquitetura/documentação aprovados.
+  Comandos e falhas corrigidas registrados na matriz DRAW.
+  Captura nativa e aceite com usuários continuam pendentes. Os 471 testes
+  registrados pela sessão OpenCode antecedem a conclusão deste patch.
 
 ### Checkpoint de implementação MVP — 02/10/2026
 
@@ -20,7 +42,7 @@ Branch `codex/complete-paint-draw-mvp`. [Matriz completa](docs/development/paint
 - Shape Builder poligonal preserva furos e formas não afetadas; perfis compostos podem ser extrudados. Curvas fiéis e handles dos furos ficam para V1.
 - Boolean cleanup existente complementado por transferência de cores, albedo/canais PBR e proteção da pilha quando UV é herdado.
 - Shortlist aprovada: alpha lock, Shift line/pixel perfect, rampas/dither, UV health/bleed, round/mirror/presets/dimensões/simplify/resample/trace.
-- Executáveis unitários de mesh/project/core/model/paint/Slint compilados com `cargo test --no-run --lib` (exit 0) sobre `e5e1452`, em checkout isolado com árvore idêntica. Zero casos de teste executados nesta conferência; gates e captura/aceite manual pendentes por instrução do responsável. Resultados históricos abaixo não cobrem este pacote. Entrega publicada no PR #26 (draft); comando e hashes completos na matriz.
+- Executáveis unitários de mesh/project/core/model/paint/Slint compilados com `cargo test --no-run --lib` (exit 0) sobre `e5e1452`, em checkout isolado com árvore idêntica. Zero casos de teste executados nesta conferência; gates e captura/aceite manual pendentes por instrução do responsável. Resultados históricos abaixo não cobrem este pacote. Entrega integrada à main pelo PR #26; comando e hashes completos na matriz.
 
 ### Checkpoint histórico auditado em 02/10/2026
 
@@ -331,9 +353,9 @@ unitários verdes. Gaps conhecidos em relação ao caderno (capítulos 23/36):
 
 Esses gaps estão registrados na [auditoria Slint](docs/ui/slint-modern-audit.md).
 
-### Animate procedural-first — decisão de 2026-09-30
+### Registro histórico Animate procedural-first — decisão de 2026-09-30
 
-Documentação apenas; **nenhum código foi alterado**. Registradas no caderno
+Naquela decisão, documentação apenas; **nenhum código foi alterado**. Registradas no caderno
 (cap. 45, ADR 006, P3D-169–174 em `SPEC DRAFT`): procedural primeiro, criaturas
 de primeira classe, referência de animação por **batch de imagens** (sem vídeo,
 sem ML) e Animate como primeiro workspace **pós-V1** (a UI Baseline V1

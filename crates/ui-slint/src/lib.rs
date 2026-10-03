@@ -762,6 +762,11 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub keymap_editor: keymap_edit::KeymapEditor,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
+    profile_transform_gesture: Option<ProfileTransformGesture>,
+    profile_dimension_gesture: Option<(
+        petunia_project::ProfileResource,
+        petunia_project::SplineResource,
+    )>,
     profile_volume_original: Option<Project>,
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
@@ -829,6 +834,19 @@ struct ProfileEditGesture {
     point_id: uuid::Uuid,
     point_before: Option<petunia_core::SplinePoint>,
     revision_before: u64,
+}
+
+#[derive(Debug, Clone)]
+struct ProfileTransformGesture {
+    project_before: Project,
+    profile_id: uuid::Uuid,
+    spline: petunia_core::SplineResource,
+    profile: petunia_core::ProfileResource,
+    kind: TransformKind,
+    anchor: [f32; 2],
+    center: [f64; 2],
+    constraint: petunia_core::ModalConstraint,
+    components: glam::Vec3,
 }
 
 /// Menu de contexto do Outliner aberto sobre uma linha do painel Parts,
@@ -1086,6 +1104,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             keymap_editor: keymap_edit::KeymapEditor::default(),
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
+            profile_transform_gesture: None,
+            profile_dimension_gesture: None,
             profile_volume_original: None,
             reference_manager_open: false,
             reference_thumbnails: std::collections::HashMap::new(),
@@ -1416,8 +1436,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.state.session.tools.active_tool == "draw_profile" && tool != "draw_profile"
                 {
                     self.profile_pointer_up();
-                    self.state.profile.clear();
-                    self.active_profile_id = None;
+                    if !self.draw_shapes_visible()
+                        || !matches!(tool.as_str(), "move" | "rotate" | "scale" | "transform")
+                    {
+                        self.state.profile.clear();
+                        self.active_profile_id = None;
+                    }
                     self.profile_selected_point = None;
                     self.profile_drag_target = None;
                     self.profile_edit_gesture = None;
@@ -4403,7 +4427,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .active_profile_resources()
                 .is_some_and(|(_, spline)| !spline.closed);
             if !drawing
-                && let Some(id) = self.profile_hit_inactive(pixel)
+                && let Some(id) = self.profile_hit_at(pixel)
                 && self.activate_profile(id)
             {
                 self.state.set_status("Shape selected");
@@ -7340,13 +7364,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         label: &str,
         mutate: impl FnOnce(&mut petunia_project::paint_layers::PaintLayerStack) -> bool,
     ) -> bool {
-        if self.state.project.active().is_none_or(|a| {
-            a.locked
-                || a.paint_stack
-                    .as_ref()
-                    .and_then(|s| s.active())
-                    .is_some_and(|l| l.locked)
-        }) {
+        if self.state.project.active().is_none_or(|a| a.locked) {
             return false;
         }
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
@@ -7785,13 +7803,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    fn replace_profile_shape(&mut self, name: &str, points: Vec<[f64; 3]>) -> bool {
+    fn replace_profile_shape(
+        &mut self,
+        name: &str,
+        points: Vec<[f64; 3]>,
+        primitive: petunia_project::profile::ProfilePrimitive,
+    ) -> bool {
         if points.len() < 3 || points.iter().flatten().any(|value| !value.is_finite()) {
             return false;
         }
-        if let Some((_, spline)) = self.active_profile_resources()
+        if let Some((profile, spline)) = self.active_profile_resources()
             && !spline.closed
         {
+            let mut profile = profile.clone();
+            profile.primitive = Some(primitive);
             let mut spline = spline.clone();
             spline.points = points
                 .into_iter()
@@ -7801,7 +7826,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             spline.interpolation = petunia_core::SplineInterpolation::Polyline;
             if let Err(error) = self
                 .state
-                .dispatch(&petunia_core::UpdateSplineCmd { spline })
+                .dispatch(&draw_shapes::TransformProfileCmd { spline, profile })
             {
                 self.state.set_status(error.to_string());
                 return false;
@@ -7811,6 +7836,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let mut profile =
                 petunia_core::ProfileResource::new(name, spline.id, self.draft_profile_workplane());
             profile.wall_thickness = f64::from(self.state.profile.wall_thickness.max(0.0));
+            profile.primitive = Some(primitive);
             let profile_id = profile.id;
             if let Err(error) = self
                 .state
@@ -7826,6 +7852,92 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.profile_edit_gesture = None;
         self.state.session.tools.active_tool = "draw_profile".to_string();
         true
+    }
+
+    pub fn profile_dimension_gesture(&mut self, phase: i32) {
+        if phase == 0 {
+            if self.profile_dimension_gesture.is_none()
+                && self.profile_transform_gesture.is_none()
+                && self.profile_volume_mode.is_none()
+                && let Some((profile, spline)) = self.active_profile_resources()
+                && profile.primitive_frame(spline).is_some()
+            {
+                self.profile_dimension_gesture = Some((profile.clone(), spline.clone()));
+            }
+            return;
+        }
+        let Some((before_profile, before_spline)) = self.profile_dimension_gesture.take() else {
+            return;
+        };
+        let current = self
+            .active_profile_resources()
+            .map(|(p, s)| (p.clone(), s.clone()));
+        if let Some(p) = self
+            .state
+            .project
+            .project
+            .get_profile_mut(before_profile.id)
+        {
+            *p = before_profile;
+        }
+        if let Some(s) = self.state.project.project.get_spline_mut(before_spline.id) {
+            *s = before_spline;
+        }
+        if phase == 1
+            && let Some((profile, spline)) = current
+        {
+            let _ = self
+                .state
+                .dispatch(&draw_shapes::TransformProfileCmd { profile, spline });
+        }
+        self.state
+            .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
+    }
+
+    pub fn set_profile_dimensions(&mut self, width: f32, height: f32, segments: usize) -> bool {
+        if self.profile_transform_gesture.is_some() || self.profile_volume_mode.is_some() {
+            return false;
+        }
+        let Some((profile, spline)) = self.active_profile_resources() else {
+            return false;
+        };
+        let Some(next) =
+            profile.resize_primitive(spline, f64::from(width), f64::from(height), segments)
+        else {
+            return false;
+        };
+        let profile = profile.clone();
+        if next.points.len() == spline.points.len()
+            && next.points.iter().zip(&spline.points).all(|(a, b)| {
+                let a = glam::DVec3::from_array(a.position);
+                let b = glam::DVec3::from_array(b.position);
+                a.distance(b) <= 1e-7 * (1.0 + b.length())
+            })
+        {
+            return false;
+        }
+        if self.profile_dimension_gesture.is_some() {
+            let mut next = next;
+            next.revision = spline.revision.wrapping_add(1);
+            if let Some(target) = self.state.project.project.get_spline_mut(next.id) {
+                *target = next;
+            }
+            self.state
+                .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
+            return true;
+        }
+        let accepted = self
+            .state
+            .dispatch(&draw_shapes::TransformProfileCmd {
+                profile,
+                spline: next,
+            })
+            .is_ok();
+        if accepted {
+            self.profile_selected_point = None;
+            self.state.render.mark_dirty();
+        }
+        accepted
     }
 
     pub fn add_profile_rectangle(&mut self, width: f32, height: f32) -> bool {
@@ -7850,6 +7962,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 [half_width, half_height, 0.0],
                 [-half_width, half_height, 0.0],
             ],
+            petunia_project::profile::ProfilePrimitive::Rectangle,
         ) {
             return false;
         }
@@ -7878,7 +7991,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 ]
             })
             .collect();
-        if !self.replace_profile_shape("Circle Profile", points) {
+        if !self.replace_profile_shape(
+            "Circle Profile",
+            points,
+            petunia_project::profile::ProfilePrimitive::Ellipse,
+        ) {
             return false;
         }
         self.state.render.mark_dirty();
@@ -8887,19 +9004,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
 
         // Se houver um perfil ativo em DRAW sem ponto selecionado, apaga a forma 2D inteira!
-        if let Some(profile_id) = self.active_profile_id {
-            if self
+        if let Some(profile_id) = self.active_profile_id
+            && self
                 .state
                 .dispatch(&petunia_core::DeleteProfileCmd { profile_id })
                 .is_ok()
-            {
-                self.active_profile_id = None;
-                self.profile_selected_point = None;
-                self.profile_drag_target = None;
-                self.state.set_status("Shape deleted");
-                self.state.mark_dirty();
-                return true;
-            }
+        {
+            self.active_profile_id = None;
+            self.profile_selected_point = None;
+            self.profile_drag_target = None;
+            self.state.set_status("Shape deleted");
+            self.state.mark_dirty();
+            return true;
         }
 
         if self.state.selection_domain() != SelectionDomain::Object {
@@ -10140,8 +10256,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.pointer_position = [x, y];
         let effect = match phase {
             0 => {
-                let target = if self.gizmo_target_at(x, y).is_some() {
+                let target = if self.profile_transform_target_at(x, y) {
                     petunia_core::PressTarget::Handle(0)
+                } else if self.gizmo_target_at(x, y).is_some() {
+                    petunia_core::PressTarget::Handle(1)
                 } else {
                     petunia_core::PressTarget::Surface
                 };
@@ -10213,6 +10331,295 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
+    fn profile_transform_target_at(&self, x: f32, y: f32) -> bool {
+        self.draw_shapes_visible()
+            && self.profile_volume_mode.is_none()
+            && self.state.modal.is_none()
+            && self.tool_modal.is_none()
+            && matches!(
+                self.state.session.tools.active_tool.as_str(),
+                "move" | "transform" | "rotate" | "scale"
+            )
+            && self.active_profile_id.is_some()
+            && self.profile_hit_at([x, y]) == self.active_profile_id
+    }
+
+    fn begin_profile_transform(&mut self, kind: TransformKind, anchor: [f32; 2]) -> bool {
+        if self.profile_volume_mode.is_some() {
+            return false;
+        }
+        let Some((profile, spline)) = self.active_profile_resources() else {
+            return false;
+        };
+        let count = spline.points.len();
+        if count == 0 {
+            return false;
+        }
+        let selected: std::collections::HashSet<_> = if let Some(id) = self.profile_selected_point {
+            [id].into_iter().collect()
+        } else {
+            std::collections::HashSet::new()
+        };
+        let mut cx = 0.0f64;
+        let mut cy = 0.0f64;
+        let mut used = 0usize;
+        for point in &spline.points {
+            if selected.is_empty() || selected.contains(&point.id) {
+                cx += point.position[0];
+                cy += point.position[1];
+                used += 1;
+            }
+        }
+        if used == 0 {
+            return false;
+        }
+        let gesture = ProfileTransformGesture {
+            project_before: self.state.project.project.clone(),
+            profile_id: profile.id,
+            spline: spline.clone(),
+            profile: profile.clone(),
+            kind,
+            anchor,
+            center: [cx / used as f64, cy / used as f64],
+            constraint: petunia_core::ModalConstraint::Free,
+            components: glam::Vec3::ZERO,
+        };
+        self.profile_transform_gesture = Some(gesture);
+        self.tool_gesture = Some(ToolGesture::Transform { gizmo: false });
+        self.modal_text.clear();
+        true
+    }
+
+    fn profile_transform_delta(
+        &self,
+        gesture: &ProfileTransformGesture,
+        current: [f32; 2],
+        snap: bool,
+    ) -> Option<(glam::Vec2, f32)> {
+        let [width, height] = self.viewport_size;
+        let to_plane = |pixel: [f32; 2]| {
+            self.profile_screen_to_plane(
+                pixel[0] / width * 2.0 - 1.0,
+                1.0 - pixel[1] / height * 2.0,
+            )
+        };
+        let start = to_plane(gesture.anchor)?;
+        let current = to_plane(current)?;
+        match gesture.kind {
+            TransformKind::Position => {
+                let mut delta = glam::Vec2::new(
+                    (current[0] - start[0]) as f32,
+                    (current[1] - start[1]) as f32,
+                );
+                if snap || self.state.session.snap_enabled {
+                    let step = self.state.session.snap_settings.grid_spacing.max(0.001);
+                    delta = (delta / step).round() * step;
+                }
+                Some((delta, delta.length()))
+            }
+            TransformKind::Rotation => {
+                let center = glam::Vec2::from_array(gesture.center.map(|value| value as f32));
+                let angle = |point: [f64; 2]| {
+                    let vector = glam::Vec2::new(point[0] as f32, point[1] as f32) - center;
+                    vector.y.atan2(vector.x).to_degrees()
+                };
+                let mut degrees = (angle(current) - angle(start) + 180.0).rem_euclid(360.0) - 180.0;
+                if snap || self.state.session.snap_enabled {
+                    degrees = (degrees / 15.0).round() * 15.0;
+                }
+                Some((glam::Vec2::splat(degrees.to_radians()), degrees))
+            }
+            TransformKind::Scale => {
+                let center = glam::Vec2::from_array(gesture.center.map(|value| value as f32));
+                let start = glam::Vec2::new(start[0] as f32, start[1] as f32) - center;
+                let current = glam::Vec2::new(current[0] as f32, current[1] as f32) - center;
+                let radius = gesture
+                    .spline
+                    .points
+                    .iter()
+                    .map(|point| {
+                        glam::Vec2::new(point.position[0] as f32, point.position[1] as f32)
+                            .distance(center)
+                    })
+                    .fold(0.001_f32, f32::max);
+                let factor = if start.length() < radius * 0.01 {
+                    1.0 + (current.x - start.x) / radius
+                } else {
+                    current.length() / start.length()
+                }
+                .clamp(0.01, 100.0);
+                Some((glam::Vec2::splat(factor), factor))
+            }
+        }
+    }
+
+    pub(crate) fn update_profile_transform(&mut self, current: [f32; 2], snap: bool) -> bool {
+        let Some(source) = self.profile_transform_gesture.as_ref() else {
+            return false;
+        };
+        let kind = source.kind;
+        let (profile_id, spline_id) = (source.profile_id, source.spline.id);
+        let Some((delta, scalar)) = self.profile_transform_delta(source, current, snap) else {
+            return false;
+        };
+        let Some(mut gesture) = self.profile_transform_gesture.clone() else {
+            return false;
+        };
+        gesture.components = match kind {
+            TransformKind::Position => glam::Vec3::new(delta.x, delta.y, 0.0),
+            TransformKind::Rotation => glam::Vec3::new(scalar, 0.0, 0.0),
+            TransformKind::Scale => glam::Vec3::new(delta.x, delta.y, 1.0),
+        };
+        let center = glam::DVec2::new(gesture.center[0], gesture.center[1]);
+        let radians = if kind == TransformKind::Rotation {
+            delta.x as f64
+        } else {
+            0.0
+        };
+        let (sin, cos) = radians.sin_cos();
+        let factor = if kind == TransformKind::Scale {
+            delta.x as f64
+        } else {
+            1.0
+        };
+        let mut spline = gesture.spline.clone();
+        let mut profile = gesture.profile.clone();
+        let apply_point =
+            |position: &mut [f64; 3], handle_in: &mut [f64; 3], handle_out: &mut [f64; 3]| {
+                let mut local = glam::DVec2::new(position[0], position[1]) - center;
+                match kind {
+                    TransformKind::Position => {
+                        let mut shift = glam::DVec2::new(delta.x as f64, delta.y as f64);
+                        if let Some(index) = match gesture.constraint {
+                            petunia_core::ModalConstraint::Axis(index) => Some(index),
+                            _ => None,
+                        } {
+                            if index == 0 {
+                                shift.y = 0.0;
+                            } else {
+                                shift.x = 0.0;
+                            }
+                        }
+                        local += shift;
+                    }
+                    TransformKind::Rotation => {
+                        local = glam::DVec2::new(
+                            local.x * cos - local.y * sin,
+                            local.x * sin + local.y * cos,
+                        );
+                        for handle in [&mut *handle_in, &mut *handle_out] {
+                            let x = handle[0] * cos - handle[1] * sin;
+                            let y = handle[0] * sin + handle[1] * cos;
+                            handle[0] = x;
+                            handle[1] = y;
+                        }
+                    }
+                    TransformKind::Scale => {
+                        local *= factor;
+                        handle_in[0] *= factor;
+                        handle_in[1] *= factor;
+                        handle_out[0] *= factor;
+                        handle_out[1] *= factor;
+                    }
+                }
+                position[0] = center.x + local.x;
+                position[1] = center.y + local.y;
+                position[2] = 0.0;
+            };
+        for point in &mut spline.points {
+            apply_point(
+                &mut point.position,
+                &mut point.handle_in,
+                &mut point.handle_out,
+            );
+        }
+        for hole in &mut profile.holes {
+            for point in hole {
+                let mut position = [point[0], point[1], 0.0];
+                let mut handle_in = [0.0; 3];
+                let mut handle_out = [0.0; 3];
+                apply_point(&mut position, &mut handle_in, &mut handle_out);
+                *point = [position[0], position[1]];
+            }
+        }
+        if profile.validate_authoring(&spline).is_err() {
+            return false;
+        }
+        let spline_revision = self
+            .state
+            .project
+            .project
+            .get_spline(spline_id)
+            .map_or(gesture.spline.revision, |current| current.revision);
+        let profile_revision = self
+            .state
+            .project
+            .project
+            .get_profile(profile_id)
+            .map_or(gesture.profile.revision, |current| current.revision);
+        spline.revision = spline_revision;
+        profile.revision = profile_revision;
+        self.state.project.project = gesture.project_before.clone();
+        if let Some(target) = self.state.project.project.get_spline_mut(spline_id) {
+            *target = spline;
+        }
+        if let Some(target) = self.state.project.project.get_profile_mut(profile_id) {
+            *target = profile;
+        }
+        gesture.components = match kind {
+            TransformKind::Position => glam::Vec3::new(delta.x, delta.y, 0.0),
+            TransformKind::Rotation => glam::Vec3::new(scalar, 0.0, 0.0),
+            TransformKind::Scale => glam::Vec3::new(delta.x, delta.y, 1.0),
+        };
+        self.profile_transform_gesture = Some(gesture);
+        self.state
+            .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
+        true
+    }
+
+    fn commit_profile_transform(&mut self) -> bool {
+        let Some(gesture) = self.profile_transform_gesture.take() else {
+            return false;
+        };
+        let current = self
+            .active_profile_resources()
+            .map(|(profile, spline)| (profile.clone(), spline.clone()));
+        let clock = self.state.project.project.revision_clock();
+        self.state.project.project = gesture.project_before;
+        self.state
+            .project
+            .project
+            .rebase_revisions_after_restore(clock);
+        self.modal_text.clear();
+        let Some((mut profile, mut spline)) = current else {
+            return false;
+        };
+        profile.revision = gesture.profile.revision;
+        spline.revision = gesture.spline.revision;
+        if profile == gesture.profile && spline == gesture.spline {
+            return true;
+        }
+        if let Err(error) = self
+            .state
+            .dispatch(&draw_shapes::TransformProfileCmd { profile, spline })
+        {
+            self.state.set_status(error.to_string());
+            return false;
+        }
+        true
+    }
+
+    fn cancel_profile_transform(&mut self) -> bool {
+        let Some(gesture) = self.profile_transform_gesture.take() else {
+            return false;
+        };
+        self.state.project.project = gesture.project_before;
+        self.modal_text.clear();
+        self.state.sync_selection();
+        self.state.mark_dirty();
+        true
+    }
+
     fn begin_tool_gesture(&mut self, anchor: [f32; 2], target: petunia_core::PressTarget) -> bool {
         let Some(tool) = self.grammar_tool() else {
             return false;
@@ -10220,7 +10627,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let on_handle = matches!(target, petunia_core::PressTarget::Handle(_));
         match tool {
             GrammarTool::Transform(kind) => {
-                let begun = if on_handle {
+                let profile_target = matches!(target, petunia_core::PressTarget::Handle(0));
+                let begun = if profile_target {
+                    self.begin_profile_transform(kind, anchor)
+                } else if on_handle {
                     self.begin_gizmo_drag(anchor[0], anchor[1])
                 } else {
                     self.begin_viewport_transform(kind, anchor[0], anchor[1])
@@ -10691,6 +11101,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn update_tool_gesture(&mut self, current: [f32; 2], fine: bool, snap: bool) -> bool {
+        if self.profile_transform_gesture.is_some() {
+            return self.update_profile_transform(current, snap);
+        }
         match self.tool_gesture {
             Some(ToolGesture::Transform { .. }) => {
                 self.update_viewport_transform_modified(current[0], current[1], fine, snap)
@@ -10724,6 +11137,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn commit_tool_gesture(&mut self) -> bool {
+        if self.profile_transform_gesture.is_some() {
+            self.tool_gesture = None;
+            return self.commit_profile_transform();
+        }
         match self.tool_gesture.take() {
             Some(ToolGesture::SurfacePaint) => {
                 self.surface_paint.anchor = None;
@@ -10739,6 +11156,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn cancel_tool_gesture(&mut self) -> bool {
+        if self.profile_transform_gesture.is_some() {
+            self.tool_gesture = None;
+            return self.cancel_profile_transform();
+        }
         match self.tool_gesture.take() {
             Some(ToolGesture::Transform { gizmo }) => {
                 if gizmo {
@@ -11088,9 +11509,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let ndc_x = nx.clamp(0.0, 1.0) * 2.0 - 1.0;
         let ndc_y = 1.0 - ny.clamp(0.0, 1.0) * 2.0;
         let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
-        let target = self.pick_target_for_domain(SelectionDomain::Object, nx, ny);
+        let object = self.pick_target_for_domain(SelectionDomain::Object, nx, ny);
         let active = self.state.project.active;
-        match target {
+        if self.state.selection_domain() == SelectionDomain::Object {
+            self.cancel_paint_stroke();
+            if let Target::Object(index) = object {
+                if !extend
+                    || !self
+                        .state
+                        .session
+                        .selection
+                        .assets
+                        .contains(&self.state.project.assets[index].id)
+                {
+                    self.state.select_object(Some(index), extend);
+                }
+                self.state.refresh_isolation();
+            } else if !extend {
+                self.state.select_object(None, false);
+            }
+            self.state.mark_dirty();
+            return;
+        }
+        match object {
             Target::Object(index) if index != active => {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
                     mesh.deselect_all();
@@ -11101,12 +11542,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .state
                     .project
                     .active()
-                    .map(|a| a.name.clone())
-                    .unwrap_or_default();
+                    .map_or_else(String::new, |asset| asset.name.clone());
                 self.state.set_status(format!("Painting '{name}'"));
             }
             Target::Object(_) => {
-                let face = self.paint_pick(origin, direction).map(|(face, _)| face);
+                let face = self.paint_pick(origin, direction).map(|(index, _)| index);
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
                     match face {
                         Some(face) => {
@@ -11119,29 +11559,35 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             } else {
                                 vec![face]
                             };
-                            let was_selected = mesh.faces.get(face).is_some_and(|f| f.selected);
+                            let was_selected =
+                                mesh.faces.get(face).is_some_and(|item| item.selected);
                             if !extend {
                                 mesh.deselect_all();
                             }
-                            for fi in &faces {
-                                if let Some(f) = mesh.faces.get_mut(*fi) {
-                                    f.selected = !(extend && was_selected);
+                            for index in faces {
+                                if let Some(item) = mesh.faces.get_mut(index) {
+                                    item.selected = !(extend && was_selected);
                                 }
                             }
                             mesh.sync_vert_selection_from_faces();
+                            self.state.set_status(format!("Face {face} selected"));
                         }
-                        None if !extend => mesh.deselect_all(),
-                        None => {}
+                        None if !extend => {
+                            mesh.deselect_all();
+                            self.state.set_status("No face under the cursor");
+                        }
+                        None => self.state.set_status("No face under the cursor"),
                     }
                 }
-                self.state
-                    .set_status(face.map_or("No face under the cursor".to_string(), |f| {
-                        format!("Face {f} selected")
-                    }));
             }
             _ => {
-                if !extend && let Some(mesh) = self.state.project.active_mesh_mut() {
-                    mesh.deselect_all();
+                if !extend {
+                    if let Some(mesh) = self.state.project.active_mesh_mut() {
+                        mesh.deselect_all();
+                    }
+                    if self.state.selection_domain() == SelectionDomain::Object {
+                        self.state.select_object(None, false);
+                    }
                 }
                 self.state.set_status("Nothing under the cursor");
             }
@@ -11176,6 +11622,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         self.last_viewport_click = Some(([normalized_x, normalized_y], now));
         let loop_select = loop_select || is_double_click;
+        let draw =
+            self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw;
+        if draw && self.profile_transform_gesture.is_none() {
+            let pixel = [
+                normalized_x * self.viewport_size[0],
+                normalized_y * self.viewport_size[1],
+            ];
+            if let Some(profile_id) = self.profile_hit_at(pixel) {
+                let drawing = self
+                    .active_profile_resources()
+                    .is_some_and(|(_, spline)| !spline.closed);
+                if (!drawing || self.state.session.tools.active_tool != "draw_profile")
+                    && (self.active_profile_id != Some(profile_id)
+                        || self.state.session.tools.active_tool != "draw_profile")
+                {
+                    self.activate_profile(profile_id);
+                    self.state.set_status("Shape selected");
+                    self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                    self.state.sync_selection();
+                    self.state.mark_dirty();
+                    self.reset_transform_fields();
+                    return;
+                }
+            }
+        }
 
         if self.state.session.tools.active_tool == "draw_profile" {
             let ndc_x = normalized_x.clamp(0.0, 1.0) * 2.0 - 1.0;
@@ -11357,7 +11828,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     normalized_x * self.viewport_size[0],
                     normalized_y * self.viewport_size[1],
                 ];
-                let shape_hit = self.profile_hit_inactive(pixel).or_else(|| {
+                let shape_hit = self.profile_hit_at(pixel).or_else(|| {
                     self.shape_hit_at(pixel).and_then(|h| {
                         let planes = self.shape_planes_cached();
                         planes
@@ -11404,7 +11875,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn cancel_active_operation(&mut self) -> bool {
-        let mut cancelled = self.cancel_paint_stroke();
+        let mut cancelled = self.cancel_profile_transform();
+        cancelled |= self.cancel_paint_stroke();
         cancelled |= self.cancel_tool_modal();
         cancelled |= self.cancel_loop_cut();
         if self.profile_volume_mode.is_some() {
@@ -11456,14 +11928,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.cancel_paint_stroke() {
             return true;
         }
-        if matches!(
+        if (matches!(
             self.state.session.tools.active_tool.as_str(),
             "path_paint" | "projection"
-        ) || self.surface_paint.stencil_mode
+        ) || self.surface_paint.stencil_mode)
+            && self.cancel_surface_paint()
         {
-            if self.cancel_surface_paint() {
-                return true;
-            }
+            return true;
         }
         // Escada do Esc: pontos coletados antes de sair da ferramenta.
         if !self.poly_pen_points.is_empty() {
@@ -13652,9 +14123,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.loop_cut_balanced = self.loop_cut_balanced;
             vm.loop_cut_preview_commands = self.loop_cut_hover_preview_commands();
         }
-        vm.profile_active = self.state.session.tools.active_tool == "draw_profile";
+        vm.profile_active = self.state.session.workspace == Workspace::Model
+            && self.modeling_mode == ModelingMode::Draw
+            && (self.state.session.tools.active_tool == "draw_profile"
+                || self.active_profile_id.is_some());
         vm.profile_point_count = self.active_profile_point_count() as i32;
         vm.profile_closed = self.active_profile_closed();
+        if let Some((profile, spline)) = self.active_profile_resources()
+            && let Some((_, x, y)) = profile.primitive_frame(spline)
+        {
+            vm.profile_parametric = true;
+            vm.profile_ellipse =
+                profile.primitive == Some(petunia_project::profile::ProfilePrimitive::Ellipse);
+            vm.profile_width = (x.length() * 2.0) as f32;
+            vm.profile_height = (y.length() * 2.0) as f32;
+            vm.profile_segments = spline.points.len() as i32;
+        }
         vm.profile_depth = self.state.profile.depth;
         vm.profile_wall_thickness = self
             .active_profile_resources()
@@ -14245,6 +14729,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     // Layouts de seção persistem por módulo: restaura no estado runtime e
     // semeia o cache para mutações futuras persistirem tudo.
     startup_bridge.restore_section_layouts(&preferences);
+    #[allow(clippy::arc_with_non_send_sync)]
     let bridge = Arc::new(Mutex::new(startup_bridge));
 
     // Ciclo de vida do autosave (P3D-002): marcador de sessão no arranque,

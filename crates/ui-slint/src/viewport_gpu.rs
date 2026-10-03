@@ -316,6 +316,15 @@ mod tests {
     use petunia_project::Canvas;
     use petunia_render::Shading;
 
+    // Native adapter/device lifetimes are serialized in the test fixture:
+    // concurrent GPU tests can crash the driver during creation/destruction.
+    fn gpu_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static DEVICE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        DEVICE_TESTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// Lê o pixel RGBA do centro da textura exibida (teste de aparência).
     fn center_pixel(viewport: &WgpuViewport) -> [u8; 4] {
         let pixels = read_pixels(viewport);
@@ -478,6 +487,7 @@ mod tests {
 
     #[test]
     fn wireframe_edges_have_constant_pixel_width() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
             return;
         };
@@ -494,6 +504,7 @@ mod tests {
 
     #[test]
     fn draw_reads_shape_and_poly_reads_topology() {
+        let _gpu = gpu_test_guard();
         use petunia_render_wgpu::EdgeMode;
         let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
             return;
@@ -520,6 +531,7 @@ mod tests {
 
     #[test]
     fn workplane_highlight_tints_the_plane_under_the_camera() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
             return;
         };
@@ -611,6 +623,7 @@ mod tests {
 
     #[test]
     fn selected_objects_get_a_constant_width_outline() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(200, 120) else {
             return;
         };
@@ -629,6 +642,7 @@ mod tests {
 
     #[test]
     fn studio_light_following_the_camera_reads_the_same_from_any_side() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
             // Sem adaptador (nem lavapipe): nada a medir.
             return;
@@ -647,6 +661,7 @@ mod tests {
 
     #[test]
     fn wgpu_viewport_initializes_or_skips_when_no_gpu() {
+        let _gpu = gpu_test_guard();
         match WgpuViewport::try_create_default(640, 480) {
             Ok(mut viewport) => {
                 assert_eq!(viewport.width, 640);
@@ -693,6 +708,7 @@ mod tests {
 
     #[test]
     fn hover_updates_selection_without_rebuilding_scene_geometry() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(320, 240) else {
             // Os testes de domínio ainda executam em hosts sem Vulkan/Metal/DX.
             return;
@@ -720,6 +736,7 @@ mod tests {
 
     #[test]
     fn pose_override_rebuilds_geometry_only_when_its_revision_changes() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(320, 240) else {
             // Sem adaptador físico: a lógica de revisão tem teste puro no renderer.
             return;
@@ -770,6 +787,7 @@ mod tests {
 
     #[test]
     fn regional_texture_update_avoids_mesh_rebuild_and_full_upload() {
+        let _gpu = gpu_test_guard();
         let Ok(mut viewport) = WgpuViewport::try_create_default(320, 240) else {
             return;
         };

@@ -254,12 +254,18 @@ impl crate::AppState {
             })
         };
         let edge_inside = |a: Vec3, b: Vec3| {
-            if inside(a) || inside(b) {
-                return true;
-            }
             let (Some(pa), Some(pb)) = (project(a), project(b)) else {
                 return false;
             };
+            if !through
+                && glam::Vec2::from_array(pa).distance_squared(glam::Vec2::from_array(pb))
+                    <= 1.0e-12
+            {
+                return false;
+            }
+            if inside(a) || inside(b) {
+                return true;
+            }
             segment_hit_t(pa, pb)
                 .is_some_and(|t| through || scene.point_visible(&self.session.camera, a.lerp(b, t)))
         };
@@ -332,25 +338,40 @@ impl crate::AppState {
                 mesh.faces
                     .iter()
                     .enumerate()
-                    .filter(|(_, face)| {
-                        !face.verts.is_empty()
-                            && (inside(
-                                face.verts
-                                    .iter()
-                                    .map(|&v| mesh.verts[v as usize].vec())
-                                    .sum::<Vec3>()
-                                    / face.verts.len() as f32,
-                            ) || face
-                                .verts
-                                .iter()
-                                .any(|&v| inside(mesh.verts[v as usize].vec()))
-                                || face.verts.iter().enumerate().any(|(i, &a)| {
-                                    let b = face.verts[(i + 1) % face.verts.len()];
-                                    edge_inside(
-                                        mesh.verts[a as usize].vec(),
-                                        mesh.verts[b as usize].vec(),
-                                    )
-                                }))
+                    .filter(|&(index, face)| {
+                        if face.verts.len() < 3 {
+                            return false;
+                        }
+                        let center = face
+                            .verts
+                            .iter()
+                            .map(|&v| mesh.verts[v as usize].vec())
+                            .sum::<Vec3>()
+                            / face.verts.len() as f32;
+                        let ndc = self.session.camera.project_ndc(center);
+                        let (_, direction) = self.session.camera.ray(ndc.x, ndc.y);
+                        if !through && mesh.face_normal(index).dot(direction).abs() <= 1.0e-6 {
+                            return false;
+                        }
+                        let visible = |point: Vec3| {
+                            through
+                                || scene
+                                    .point_visible(&self.session.camera, point.lerp(center, 0.001))
+                        };
+                        inside(center)
+                            || face.verts.iter().any(|&v| {
+                                let point = mesh.verts[v as usize].vec();
+                                project(point).is_some_and(|p| contains(p) && visible(point))
+                            })
+                            || face.verts.iter().enumerate().any(|(i, &a)| {
+                                let b = face.verts[(i + 1) % face.verts.len()];
+                                let a = mesh.verts[a as usize].vec();
+                                let b = mesh.verts[b as usize].vec();
+                                let (Some(pa), Some(pb)) = (project(a), project(b)) else {
+                                    return false;
+                                };
+                                segment_hit_t(pa, pb).is_some_and(|t| visible(a.lerp(b, t)))
+                            })
                     })
                     .map(|(i, _)| i)
                     .collect()
@@ -446,6 +467,124 @@ fn segment_intersection_t(from: [f32; 2], to: [f32; 2], a: [f32; 2], b: [f32; 2]
 #[cfg(test)]
 mod lasso_tests {
     use super::{point_in_polygon_ndc, segment_box_hit_t, segment_polygon_hit_t};
+
+    fn cube_state(domain: crate::SelectionDomain, xray: bool, wireframe: bool) -> crate::AppState {
+        let mut state = crate::AppState::default();
+        state.project.assets = vec![petunia_project::Asset::new(
+            "cube",
+            petunia_mesh::Mesh::cube(2.0),
+        )];
+        state.project.active = 0;
+        state.session.camera.set_preset(crate::ViewPreset::Front);
+        state.session.camera.aspect = 1.0;
+        state.session.camera.ortho_half_h = 2.0;
+        state.set_selection_domain(domain);
+        state.project.active_mesh_mut().unwrap().deselect_all();
+        state.session.show_xray = xray;
+        state.session.shading = if wireframe {
+            crate::Shading::Wireframe
+        } else {
+            crate::Shading::Solid
+        };
+        state
+    }
+
+    fn select_region(state: &mut crate::AppState, lasso: bool, a: [f32; 2], b: [f32; 2]) {
+        if lasso {
+            state.select_viewport_lasso(&[a, [b[0], a[1]], b, [a[0], b[1]]], false, false);
+        } else {
+            state.select_viewport_box(a, b, false, false);
+        }
+    }
+
+    #[test]
+    fn front_ortho_cube_box_lasso_select_only_visible_components_without_through_selection() {
+        use crate::SelectionDomain::{Edge, Face, Vertex};
+        for lasso in [false, true] {
+            for (xray, wireframe) in [(false, false), (true, false), (false, true)] {
+                let through = xray || wireframe;
+                for domain in [Face, Vertex, Edge] {
+                    let mut state = cube_state(domain, xray, wireframe);
+                    select_region(&mut state, lasso, [-0.6, -0.6], [0.6, 0.6]);
+                    let mesh = state.project.active_mesh().unwrap();
+                    let context =
+                        format!("{domain:?}, lasso={lasso}, xray={xray}, wireframe={wireframe}");
+                    match domain {
+                        Face => {
+                            for face in &mesh.faces {
+                                assert_eq!(
+                                    face.selected,
+                                    through
+                                        || face
+                                            .verts
+                                            .iter()
+                                            .all(|&v| mesh.verts[v as usize].pos[2] == 1.0),
+                                    "{context}"
+                                );
+                            }
+                        }
+                        Vertex => {
+                            for vertex in &mesh.verts {
+                                assert_eq!(
+                                    vertex.selected,
+                                    through || vertex.pos[2] == 1.0,
+                                    "{context}"
+                                );
+                            }
+                        }
+                        Edge => {
+                            for (a, b) in mesh.edges_unique() {
+                                assert_eq!(
+                                    mesh.selected_edges.contains(&(a, b)),
+                                    through
+                                        || (mesh.verts[a as usize].pos[2] == 1.0
+                                            && mesh.verts[b as usize].pos[2] == 1.0),
+                                    "{context}: {a}-{b}"
+                                );
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn front_ortho_cube_box_lasso_border_crossing_selects_front_face_and_edge_only() {
+        use crate::SelectionDomain::{Edge, Face, Vertex};
+        for lasso in [false, true] {
+            for domain in [Face, Vertex, Edge] {
+                let mut state = cube_state(domain, false, false);
+                select_region(&mut state, lasso, [-0.2, 0.49], [0.2, 0.51]);
+                let mesh = state.project.active_mesh().unwrap();
+                match domain {
+                    Face => {
+                        let selected: Vec<_> =
+                            mesh.faces.iter().filter(|face| face.selected).collect();
+                        assert_eq!(selected.len(), 1, "lasso={lasso}");
+                        assert!(
+                            selected[0]
+                                .verts
+                                .iter()
+                                .all(|&v| mesh.verts[v as usize].pos[2] == 1.0)
+                        );
+                    }
+                    Vertex => assert!(mesh.verts.iter().all(|vertex| !vertex.selected)),
+                    Edge => {
+                        assert_eq!(mesh.selected_edges.len(), 1, "lasso={lasso}");
+                        assert!(
+                            mesh.selected_edges
+                                .iter()
+                                .all(|&(a, b)| mesh.verts[a as usize].pos[2] == 1.0
+                                    && mesh.verts[b as usize].pos[2] == 1.0)
+                        );
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
 
     #[test]
     fn concave_lasso_does_not_select_its_bounding_box() {
