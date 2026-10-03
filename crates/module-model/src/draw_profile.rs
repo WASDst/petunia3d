@@ -381,6 +381,20 @@ pub fn build_extrude_mesh(p: &ProfileState) -> Result<Mesh, String> {
     if effective.len() < 3 || !p.closed {
         return Err("profile requires at least 3 points and must be closed".to_string());
     }
+    if !p.holes.is_empty() {
+        let outer: Vec<_> = effective.iter().map(|p| p.map(f64::from)).collect();
+        let mut mesh = petunia_mesh::imprint::region_sheet(
+            &outer,
+            &p.holes,
+            glam::Vec3::from(p.origin),
+            glam::Vec3::from(p.right),
+            glam::Vec3::from(p.up),
+        )
+        .map_err(|e| e.to_string())?;
+        mesh.extrude_selected(p.depth.max(0.05));
+        mesh.layout_uv_charts(petunia_mesh::primitives::DEFAULT_UV_PADDING);
+        return Ok(mesh);
+    }
     let mut m = Mesh::from_polygon(&effective, p.depth.max(0.05)).map_err(|e| e.to_string())?;
     let r = glam::Vec3::from(p.right);
     let u = glam::Vec3::from(p.up);
@@ -410,6 +424,9 @@ pub fn generate_extrude(state: &mut AppState) {
 
 /// Constrói a malha 3D de revolução a partir do ProfileState sem alterar o projeto ou descartar pontos.
 pub fn build_revolve_mesh(p: &ProfileState) -> Result<Mesh, String> {
+    if !p.holes.is_empty() {
+        return Err("Compound profiles require Extrude or region Push/Pull".into());
+    }
     let effective = p.effective_points();
     if effective.len() < 2 {
         return Err("profile requires at least 2 points for revolve".to_string());
@@ -515,6 +532,9 @@ pub fn extract_sweep_path_from_mesh(mesh: &Mesh) -> Option<(Vec<glam::Vec3>, boo
 
 /// Constrói a malha 3D de sweep a partir do ProfileState sem alterar o projeto ou descartar pontos.
 pub fn build_sweep_mesh(p: &ProfileState, mesh_guide: Option<&Mesh>) -> Result<Mesh, String> {
+    if !p.holes.is_empty() {
+        return Err("Compound profiles require Extrude or region Push/Pull".into());
+    }
     let effective = p.effective_points();
     if effective.len() < 2 {
         return Err("profile requires at least 2 points for sweep".to_string());
@@ -706,6 +726,89 @@ impl Tool for DrawProfileTool {
     }
 }
 
+/// Captura um plano de trabalho passando por 3 pontos no espaço 3D (origem = p0).
+pub fn profile_capture_three_points(
+    state: &mut AppState,
+    p0: [f32; 3],
+    p1: [f32; 3],
+    p2: [f32; 3],
+) -> bool {
+    let p0_d = [p0[0] as f64, p0[1] as f64, p0[2] as f64];
+    let p1_d = [p1[0] as f64, p1[1] as f64, p1[2] as f64];
+    let p2_d = [p2[0] as f64, p2[1] as f64, p2[2] as f64];
+    let Ok(wp) = petunia_core::ProfileWorkplane::from_three_points(p0_d, p1_d, p2_d) else {
+        return false;
+    };
+    state.profile.origin = wp.origin.map(|x| x as f32);
+    state.profile.right = wp.right.map(|x| x as f32);
+    state.profile.up = wp.up.map(|x| x as f32);
+    state.profile.normal = wp.normal.map(|x| x as f32);
+    state.profile.workplane_kind = WorkplaneKind::Face;
+    state.profile.workplane_locked = true;
+    state.profile.points.clear();
+    state.profile.nodes.clear();
+    state.profile.closed = false;
+    state.mark_dirty();
+    true
+}
+
+/// Captura o workplane a partir dos elementos atualmente selecionados na malha ativa:
+/// - Se houver 3 vértices selecionados: define o plano passando por esses 3 pontos.
+/// - Se houver 1 face selecionada: captura o plano da face (com alinhamento pela aresta selecionada, se houver).
+pub fn profile_capture_from_selection(state: &mut AppState) -> bool {
+    let Some(mesh) = state.project.active_mesh() else {
+        return false;
+    };
+    let sel_verts: Vec<[f32; 3]> = mesh
+        .verts
+        .iter()
+        .filter(|v| v.selected)
+        .map(|v| v.pos)
+        .collect();
+    if sel_verts.len() == 3 {
+        return profile_capture_three_points(state, sel_verts[0], sel_verts[1], sel_verts[2]);
+    }
+    // Caso de face selecionada com aresta guia opcional
+    let sel_face = mesh.faces.iter().position(|f| f.selected);
+    if let Some(fi) = sel_face {
+        let normal = mesh.face_normal(fi).normalize_or_zero();
+        let center = mesh.face_centroid(fi);
+        if normal == glam::Vec3::ZERO {
+            return false;
+        }
+        let edge_dir = if let Some(&(a, b)) = mesh.selected_edges.iter().next() {
+            (mesh.verts[b as usize].vec() - mesh.verts[a as usize].vec()).normalize_or_zero()
+        } else {
+            let face = &mesh.faces[fi];
+            if face.verts.len() >= 2 {
+                (mesh.verts[face.verts[1] as usize].vec()
+                    - mesh.verts[face.verts[0] as usize].vec())
+                .normalize_or_zero()
+            } else {
+                glam::Vec3::ZERO
+            }
+        };
+        let c_d = [center.x as f64, center.y as f64, center.z as f64];
+        let n_d = [normal.x as f64, normal.y as f64, normal.z as f64];
+        let e_d = [edge_dir.x as f64, edge_dir.y as f64, edge_dir.z as f64];
+        let Ok(wp) = petunia_core::ProfileWorkplane::from_face_and_edge(c_d, n_d, e_d) else {
+            return false;
+        };
+        state.profile.origin = wp.origin.map(|x| x as f32);
+        state.profile.right = wp.right.map(|x| x as f32);
+        state.profile.up = wp.up.map(|x| x as f32);
+        state.profile.normal = wp.normal.map(|x| x as f32);
+        state.profile.workplane_kind = WorkplaneKind::Face;
+        state.profile.workplane_locked = true;
+        state.profile.points.clear();
+        state.profile.nodes.clear();
+        state.profile.closed = false;
+        state.mark_dirty();
+        return true;
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -796,5 +899,60 @@ mod tests {
         state.profile.workplane_locked = false;
         profile_capture_current(&mut state);
         assert_eq!(state.profile.workplane_kind, WorkplaneKind::View);
+    }
+
+    #[test]
+    fn workplane_capture_three_points_and_selection() {
+        let mut state = AppState::default();
+        let p0 = [0.0, 0.0, 0.0];
+        let p1 = [2.0, 0.0, 0.0];
+        let p2 = [0.0, 3.0, 0.0];
+        assert!(profile_capture_three_points(&mut state, p0, p1, p2));
+        assert!(state.profile.workplane_locked);
+        assert_eq!(state.profile.normal, [0.0, 0.0, 1.0]);
+        assert_eq!(state.profile.right, [1.0, 0.0, 0.0]);
+
+        // Malha ativa com 3 vértices selecionados
+        state.project.add("Tri", Mesh::plane(2.0));
+        for i in 0..3 {
+            state.project.active_mesh_mut().unwrap().verts[i].selected = true;
+        }
+        assert!(profile_capture_from_selection(&mut state));
+        assert!(state.profile.workplane_locked);
+    }
+}
+
+#[cfg(test)]
+mod compound_volume_tests {
+    use super::*;
+    #[test]
+    fn extrusion_keeps_multiple_holes_open_and_solid_closed() {
+        let p = ProfileState {
+            points: vec![[-2.0, -2.0], [2.0, -2.0], [2.0, 2.0], [-2.0, 2.0]],
+            holes: vec![
+                vec![[-1.5, -0.5], [-0.5, -0.5], [-0.5, 0.5], [-1.5, 0.5]],
+                vec![[0.5, -0.5], [1.5, -0.5], [1.5, 0.5], [0.5, 0.5]],
+            ],
+            closed: true,
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            depth: 1.0,
+            ..Default::default()
+        };
+        let mesh = build_extrude_mesh(&p).unwrap();
+        assert!(
+            mesh.ray_hit(glam::Vec3::new(-1.0, 0.0, 2.0), -glam::Vec3::Z)
+                .is_none()
+        );
+        assert!(
+            mesh.ray_hit(glam::Vec3::new(1.0, 0.0, 2.0), -glam::Vec3::Z)
+                .is_none()
+        );
+        assert!(
+            mesh.ray_hit(glam::Vec3::new(0.0, 0.0, 2.0), -glam::Vec3::Z)
+                .is_some()
+        );
+        assert!(build_revolve_mesh(&p).is_err());
     }
 }

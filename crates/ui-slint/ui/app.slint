@@ -616,7 +616,7 @@ component PaintCanvasSurface inherits Rectangle {
     in property <string> grid-commands: "";
     in-out property <length> pan-x: 0px;
     in-out property <length> pan-y: 0px;
-    callback stroke(float, float, int);
+    callback stroke(float, float, int, bool);
     callback zoom-step(int);
 
     background: DesignTokens.canvas;
@@ -656,6 +656,7 @@ component PaintCanvasSurface inherits Rectangle {
 
     surface-touch := TouchArea {
         property <bool> panning: false;
+        property <bool> shift-line: false;
         property <length> last-x;
         property <length> last-y;
         pointer-event(event) => {
@@ -665,13 +666,14 @@ component PaintCanvasSurface inherits Rectangle {
                     self.last-x = self.mouse-x;
                     self.last-y = self.mouse-y;
                 } else if event.button == PointerEventButton.left {
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0);
+                    self.shift-line = event.modifiers.shift;
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line);
                 }
             } else if event.kind == PointerEventKind.up {
                 if self.panning {
                     self.panning = false;
                 } else if event.button == PointerEventButton.left {
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2);
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line);
                 }
             }
         }
@@ -682,7 +684,7 @@ component PaintCanvasSurface inherits Rectangle {
                 self.last-x = self.mouse-x;
                 self.last-y = self.mouse-y;
             } else if self.pressed {
-                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1);
+                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line);
             }
         }
         scroll-event(event) => {
@@ -2114,7 +2116,7 @@ component PartsBody inherits VerticalLayout {
                     HorizontalLayout {
                         spacing: 5px;
                         alignment: center;
-                        IconDisplay { icon: IconSet.Box; size: 12px; stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted; }
+                        IconDisplay { icon: item.tris == 0 ? IconSet.Spline : IconSet.Box; size: 12px; stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted; }
                         if root.rename-active && item.selected: TextInput {
                             text: root.rename-value;
                             horizontal-stretch: 1;
@@ -4009,6 +4011,16 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-decal-bake: "";
     in-out property <string> label-decal-hint: "";
     in-out property <string> decal-preview-commands: "";
+    in-out property <float> extension-radius: 0.1;
+    in-out property <float> extension-length: 1;
+    in-out property <float> extension-angle: 0;
+    in-out property <float> extension-sides: 6;
+    in-out property <float> extension-tolerance: 0.01;
+    in-out property <float> export-padding: 2;
+    in-out property <float> trace-threshold:128;
+    callback extension-parameter-set(string,string) -> bool;
+    in-out property <image> stencil-image;
+    in-out property <bool> stencil-visible: false;
     in-out property <string> hint-model-loop-cut: "";
     in-out property <string> hint-model-slice: "";
     in-out property <string> hint-model-push-pull: "";
@@ -4092,6 +4104,11 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> region-shapes-commands: "";
     in-out property <string> profile-outline-commands: "";
     in-out property <string> poly-pen-preview-commands: "";
+    in-out property <string> depth-handle-commands: "";
+    in-out property <bool> depth-handle-visible: false;
+    in-out property <length> depth-handle-x: 0px;
+    in-out property <length> depth-handle-y: 0px;
+    in-out property <string> depth-handle-label: "";
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
     in-out property <float> profile-depth: 1.0;
@@ -4270,7 +4287,7 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-paint-begin(float, float, bool, bool);
     callback viewport-paint-update(float, float, bool, bool);
     callback viewport-paint-end(float, float);
-    callback paint-2d-stroke(float, float, int);
+    callback paint-2d-stroke(float, float, int, bool);
     callback toggle-paint-pixel-grid;
     callback set-paint-canvas-zoom(int);
     callback add-menu-changed(bool);
@@ -4860,7 +4877,7 @@ export component PetuniaSlintShell inherits Window {
                         spacing: 5px;
                         alignment: start;
 
-                        if active-workspace == "MODEL": VerticalLayout {
+                        if active-workspace == "MODEL" && root.modeling-mode == "DRAW": VerticalLayout {
                             spacing: 5px;
 
                             // Grupo de Seleção (Box & Lasso)
@@ -4901,7 +4918,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("model.tool_cursor"); }
                             }
 
-                            // Quick Measure Tool (Fase 6: Fita Métrica 3D)
+                            // Quick Measure Tool
                             ToolButton {
                                 icon: IconSet.ArrowUpDown;
                                 semantic-label: Tr.t("sl.measure");
@@ -4959,6 +4976,7 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
 
+                            // Ferramentas exclusivas de DRAW:
                             ToolButton {
                                 icon-svg: PetuniaIcons.tool-profile;
                                 semantic-label: Tr.t("sl.sketch_profile");
@@ -4988,6 +5006,108 @@ export component PetuniaSlintShell inherits Window {
                                 active: false;
                                 clicked => { root.add-profile-circle(1.0, 16); }
                             }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-pushpull;
+                                active: active-tool == "push_pull";
+                                semantic-label: root.label-model-push-pull;
+                                shortcut: root.shortcuts.model-push-pull;
+                                description: Tr.t("sl.push_or_pull_faces_along_surface_normals_dir");
+                                clicked => { root.command-executed("model.push_pull"); }
+                            }
+                        }
+
+                        if active-workspace == "MODEL" && root.modeling-mode == "POLY": VerticalLayout {
+                            spacing: 5px;
+
+                            // Grupo de Seleção (Box & Lasso)
+                            Rectangle {
+                                border-radius: 6px;
+                                background: DesignTokens.canvas;
+                                border-width: 1px;
+                                border-color: DesignTokens.border;
+                                VerticalLayout {
+                                    padding: 2px;
+                                    spacing: 2px;
+                                    ToolButton {
+                                        icon: IconSet.MousePointer2;
+                                        semantic-label: root.label-model-select;
+                                        shortcut: root.shortcuts.model-select;
+                                        description: Tr.t("sl.box_click_selection_of_scene_points_edges_an");
+                                        active: active-tool == "select" || active-tool == "box_select";
+                                        clicked => { root.active-tool-changed("select"); }
+                                    }
+                                    ToolButton {
+                                        icon: IconSet.Spline;
+                                        semantic-label: root.label-model-lasso;
+                                        shortcut: root.shortcuts.model-lasso;
+                                        description: Tr.t("sl.freehand_polygon_loop_lasso_selection");
+                                        active: active-tool == "lasso_select";
+                                        clicked => { root.command-executed("model.tool_lasso"); }
+                                    }
+                                }
+                            }
+
+                            // 3D Cursor / Ponto Âncora 3D
+                            ToolButton {
+                                icon: IconSet.Crosshair;
+                                semantic-label: Tr.t("sl.3d_cursor");
+                                shortcut: root.shortcuts.model-cursor;
+                                description: Tr.t("sl.place_3d_cursor_as_origin_for_new_objects_an");
+                                active: active-tool == "cursor" || active-tool == "cursor_3d";
+                                clicked => { root.command-executed("model.tool_cursor"); }
+                            }
+
+                            // Quick Measure Tool
+                            ToolButton {
+                                icon: IconSet.ArrowUpDown;
+                                semantic-label: Tr.t("sl.measure");
+                                shortcut: root.shortcuts.model-measure;
+                                description: Tr.t("sl.measure_distances_and_angles_between_geometr");
+                                active: active-tool == "measure";
+                                clicked => { root.command-executed("model.measure"); }
+                            }
+
+                            Rectangle {
+                                width: 28px;
+                                height: 1px;
+                                background: DesignTokens.border;
+                            }
+                            ViewportSvgButton {
+                                glyph: PetuniaIcons.tool-position;
+                                label: root.label-model-position;
+                                shortcut: root.shortcuts.model-move;
+                                description: Tr.t("sl.translate_active_selection_along_axes_or_vie");
+                                active: active-tool == "move";
+                                live-mode: active-tool == "move" && root.transform-instant-active;
+                                clicked => { root.active-tool-changed("move"); }
+                            }
+                            ViewportSvgButton {
+                                glyph: PetuniaIcons.tool-rotate;
+                                label: root.label-model-rotate;
+                                shortcut: root.shortcuts.model-rotate;
+                                description: Tr.t("sl.rotate_active_selection_around_the_active_pi");
+                                active: active-tool == "rotate";
+                                live-mode: active-tool == "rotate" && root.transform-instant-active;
+                                clicked => { root.active-tool-changed("rotate"); }
+                            }
+                            ViewportSvgButton {
+                                glyph: PetuniaIcons.tool-scale;
+                                label: root.label-model-scale;
+                                shortcut: root.shortcuts.model-scale;
+                                description: Tr.t("sl.resize_active_selection_proportionally_or_al");
+                                active: active-tool == "scale";
+                                live-mode: active-tool == "scale" && root.transform-instant-active;
+                                clicked => { root.active-tool-changed("scale"); }
+                            }
+                            ViewportSvgButton {
+                                glyph: PetuniaIcons.tool-transform;
+                                label: root.label-model-transform;
+                                shortcut: root.shortcuts.model-transform;
+                                description: Tr.t("sl.universal_3_in_1_gizmo_for_translate_rotate_");
+                                active: active-tool == "transform";
+                                live-mode: active-tool == "transform" && root.transform-instant-active;
+                                clicked => { root.command-executed("model.tool_transform"); }
+                            }
 
                             Rectangle {
                                 width: 28px;
@@ -4995,6 +5115,7 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
 
+                            // Ferramentas exclusivas de POLY:
                             ToolButton {
                                 icon: IconSet.Plus;
                                 semantic-label: Tr.t("sl.add_primitive");
@@ -5029,6 +5150,50 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.add_parametric_cylinder_with_radial_subdivis");
                                 active: false;
                                 clicked => { root.add-primitive-requested("cylinder"); }
+                            }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-extrude;
+                                semantic-label: Tr.t("sl.extrude");
+                                shortcut: root.shortcuts.model-extrude;
+                                description: Tr.t("sl.pull_new_vertices_and_faces_outward_from_sel");
+                                clicked => { root.command-executed("model.extrude"); }
+                            }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-inset;
+                                semantic-label: Tr.t("sl.inset");
+                                shortcut: root.shortcuts.model-inset;
+                                description: Tr.t("sl.inset_new_polygonal_boundary_inside_selected");
+                                clicked => { root.command-executed("model.inset"); }
+                            }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-bevel;
+                                semantic-label: Tr.t("sl.bevel");
+                                shortcut: root.shortcuts.model-bevel;
+                                description: Tr.t("sl.round_edges_or_vertices_with_smooth_chamfer_");
+                                clicked => { root.command-executed("model.bevel"); }
+                            }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-profile;
+                                semantic-label: root.label-poly-pen;
+                                description: root.label-poly-pen-hint;
+                                active: active-tool == "poly_pen";
+                                clicked => { root.active-tool-changed("poly_pen"); }
+                            }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-loopcut;
+                                semantic-label: root.label-model-loop-cut;
+                                shortcut: root.shortcuts.model-loop-cut;
+                                description: root.hint-model-loop-cut;
+                                active: active-tool == "loop_cut";
+                                clicked => { root.active-tool-changed("loop_cut"); }
+                            }
+                            ToolButton {
+                                icon-svg: PetuniaIcons.tool-knife;
+                                semantic-label: root.label-model-slice;
+                                shortcut: root.shortcuts.model-slice;
+                                description: root.hint-model-slice;
+                                active: active-tool == "slice";
+                                clicked => { root.active-tool-changed("slice"); }
                             }
                         }
 
@@ -5299,6 +5464,33 @@ export component PetuniaSlintShell inherits Window {
                         stroke: DesignTokens.selection;
                         stroke-width: 1.5px;
                     }
+                    // Depth Handle da forma ativa em DRAW: haste com diamante + cota
+                    if root.depth-handle-visible && root.depth-handle-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.depth-handle-commands;
+                        fill: DesignTokens.accent;
+                        stroke: DesignTokens.accent;
+                        stroke-width: 2px;
+                    }
+                    if root.depth-handle-visible: Rectangle {
+                        x: root.depth-handle-x + 10px;
+                        y: root.depth-handle-y - 12px;
+                        width: depth-text.preferred-width + 8px;
+                        height: 18px;
+                        border-radius: 4px;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.accent;
+                        depth-text := Text {
+                            text: root.depth-handle-label;
+                            color: DesignTokens.text-primary;
+                            font-size: 10px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
                     Path {
                         fit: ImageFit.preserve;
                         commands: root.profile-preview-commands;
@@ -5401,6 +5593,10 @@ export component PetuniaSlintShell inherits Window {
                         stroke-width: 1.5px;
                     }
 
+                    if root.stencil-visible: Image {
+                        width: parent.width; height: parent.height;
+                        source: root.stencil-image; image-fit: fill;
+                    }
                     viewport-touch := TouchArea {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
@@ -5564,22 +5760,30 @@ export component PetuniaSlintShell inherits Window {
                                 pending-transform = false;
                                 pending-box-select = false;
                                 pending-lasso-select = false;
-                                if event.button == PointerEventButton.left && root.active-tool == "draw_profile" {
-                                    if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
-                                        is-profile-point-drag = true;
-                                        consume-click = true;
-                                    } else if root.profile-volume-mode != "none" {
-                                        is-profile-volume-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
-                                    } else if root.profile-closed {
-                                        is-profile-depth-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
-                                    } else {
-                                        consume-click = true;
-                                        is-profile-draw-drag = true;
-                                        root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
-                                    }
-                                } else if event.button == PointerEventButton.middle {
+                                 if event.button == PointerEventButton.left && (root.active-tool == "draw_profile" || (root.active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.depth-handle-visible)) {
+                                     let d-handle-dx = abs(self.mouse-x - root.depth-handle-x);
+                                     let d-handle-dy = abs(self.mouse-y - root.depth-handle-y);
+                                     if root.depth-handle-visible && d-handle-dx <= 20px && d-handle-dy <= 20px {
+                                         is-profile-depth-drag = true;
+                                         tool-drag-fine = event.modifiers.shift;
+                                         consume-click = true;
+                                     } else if root.active-tool == "draw_profile" {
+                                         if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
+                                             is-profile-point-drag = true;
+                                             consume-click = true;
+                                         } else if root.profile-volume-mode != "none" {
+                                             is-profile-volume-drag = true;
+                                             tool-drag-fine = event.modifiers.shift;
+                                         } else if root.profile-closed {
+                                             is-profile-depth-drag = true;
+                                             tool-drag-fine = event.modifiers.shift;
+                                         } else {
+                                             consume-click = true;
+                                             is-profile-draw-drag = true;
+                                             root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
+                                         }
+                                     }
+                                 } else if event.button == PointerEventButton.middle {
                                     if event.modifiers.shift {
                                         is-pan = true;
                                         is-orbit = false;
@@ -6525,7 +6729,12 @@ export component PetuniaSlintShell inherits Window {
                             y: 5px;
                             spacing: 3px;
                             alignment: center;
-                            for domain in [
+                            for domain in (active-workspace == "MODEL" && root.modeling-mode == "DRAW") ? [
+                                { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.shape"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_entire_shape") },
+                                { id: "EDGE", icon: IconSet.Spline, icon-svg: PetuniaIcons.tool-profile, label: Tr.t("sl.curve"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_curve_segment") },
+                                { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
+                                { id: "FACE", icon: IconSet.Square, icon-svg: PetuniaIcons.select-face, label: Tr.t("sl.region"), shortcut: root.shortcuts.select-face, description: Tr.t("sl.select_region_face") },
+                            ] : [
                                 { id: "OBJECT", icon: IconSet.Box, icon-svg: PetuniaIcons.object-mesh, label: Tr.t("sl.object"), shortcut: root.shortcuts.select-object, description: Tr.t("sl.select_and_manipulate_entire_objects_as_disc") },
                                 { id: "POINT", icon: IconSet.CircleDot, icon-svg: PetuniaIcons.select-vertex, label: Tr.t("sl.point"), shortcut: root.shortcuts.select-point, description: Tr.t("sl.select_and_transform_individual_vertices_poi") },
                                 { id: "EDGE", icon: IconSet.SquareDashed, icon-svg: PetuniaIcons.select-edge, label: Tr.t("sl.edge"), shortcut: root.shortcuts.select-edge, description: Tr.t("sl.select_and_transform_polygonal_boundary_edge") },
@@ -6852,6 +7061,15 @@ export component PetuniaSlintShell inherits Window {
                             TouchArea { clicked => { root.profile-look-at-plane(); } }
                         }
 
+                        NumericField {label:Tr.t("extensions.threshold");value:root.trace-threshold;step:1;
+                            text-committed(text)=>{return root.extension-parameter-set("threshold",text);}
+                            scrubbed(delta,fine)=>{root.extension-parameter-set("threshold","\{root.trace-threshold+delta*(fine?0.1:1)}");}
+                        }
+                        NumericField { label: Tr.t("extensions.radius"); value: root.extension-radius; step: 0.01; scrubbed(delta,fine) => { root.extension-parameter-set("radius","\{root.extension-radius + delta * 0.01 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("radius",text); } }
+                        NumericField { label: Tr.t("extensions.length"); value: root.extension-length; step: 0.01; scrubbed(delta,fine) => { root.extension-parameter-set("length","\{root.extension-length + delta * 0.01 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("length",text); } }
+                        NumericField { label: Tr.t("extensions.angle"); value: root.extension-angle; step: 1; scrubbed(delta,fine) => { root.extension-parameter-set("angle","\{root.extension-angle + delta * 1 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("angle",text); } }
+                        NumericField { label: Tr.t("extensions.sides"); value: root.extension-sides; step: 1; scrubbed(delta,fine) => { root.extension-parameter-set("sides","\{root.extension-sides + delta * 1 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("sides",text); } }
+                        NumericField { label: Tr.t("extensions.tolerance"); value: root.extension-tolerance; step: 0.001; scrubbed(delta,fine) => { root.extension-parameter-set("tolerance","\{root.extension-tolerance + delta * 0.001 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("tolerance",text); } }
                         Text { text: "\{root.label-profile-points}: \{root.profile-point-count}"; color: DesignTokens.text-secondary; font-size: 10px; }
                         if !root.profile-closed: Rectangle {
                             height: 26px; border-radius: 4px; background: DesignTokens.surface;
@@ -8972,7 +9190,7 @@ export component PetuniaSlintShell inherits Window {
                                         uv-commands: root.uv-layout-commands;
                                         show-grid: root.paint-pixel-grid;
                                         grid-commands: root.paint-canvas-grid-commands;
-                                        stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
                                         zoom-step(direction) => {
                                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -10345,8 +10563,13 @@ export component PetuniaSlintShell inherits Window {
                                 open: true;
                                 toggled => { self.open = !self.open; }
 
+                                NumericField { label: Tr.t("surface.export_padding"); value: root.export-padding; step:1;
+                                    text-committed(text) => {return root.extension-parameter-set("padding",text);}
+                                    scrubbed(delta,fine) => {root.extension-parameter-set("padding","\{root.export-padding+delta*(fine?0.1:1)}");}
+                                }
                                 Text {
                                     text: root.uv-stats;
+                                    wrap: word-wrap;
                                     color: DesignTokens.text-secondary;
                                     font-size: 11px;
                                 }
@@ -10375,7 +10598,7 @@ export component PetuniaSlintShell inherits Window {
                             uv-commands: root.uv-layout-commands;
                             show-grid: root.paint-pixel-grid;
                             grid-commands: root.paint-canvas-grid-commands;
-                            stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                            stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
                             zoom-step(direction) => {
                                 if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                 if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -10785,39 +11008,39 @@ export component PetuniaSlintShell inherits Window {
                                         spacing: 6px;
                                         alignment: center;
 
-                                        IconDisplay {
-                                            icon: IconSet.Box;
-                                            size: 12px;
-                                            stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted;
-                                        }
+                                         IconDisplay {
+                                             icon: item.tris == 0 ? IconSet.Spline : IconSet.Box;
+                                             size: 12px;
+                                             stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted;
+                                         }
 
-                                        if root.rename-active && item.selected: TextInput {
-                                            text: root.rename-value;
-                                            horizontal-stretch: 1;
-                                            font-size: 12px;
-                                            color: DesignTokens.text-primary;
-                                            single-line: true;
-                                            init => { self.focus(); }
-                                            edited => { root.rename-edited(self.text); }
-                                            accepted => { root.rename-committed(self.text); }
-                                        }
+                                         if root.rename-active && item.selected: TextInput {
+                                             text: root.rename-value;
+                                             horizontal-stretch: 1;
+                                             font-size: 12px;
+                                             color: DesignTokens.text-primary;
+                                             single-line: true;
+                                             init => { self.focus(); }
+                                             edited => { root.rename-edited(self.text); }
+                                             accepted => { root.rename-committed(self.text); }
+                                         }
 
-                                        if !(root.rename-active && item.selected): Text {
-                                            text: item.name;
-                                            color: item.selected ? DesignTokens.text-primary : DesignTokens.text-secondary;
-                                            font-size: 12px;
-                                            font-weight: item.selected ? 600 : 400;
-                                            vertical-alignment: center;
-                                            horizontal-stretch: 1;
-                                            overflow: elide;
-                                        }
+                                         if !(root.rename-active && item.selected): Text {
+                                             text: item.name;
+                                             color: item.selected ? DesignTokens.text-primary : DesignTokens.text-secondary;
+                                             font-size: 12px;
+                                             font-weight: item.selected ? 600 : 400;
+                                             vertical-alignment: center;
+                                             horizontal-stretch: 1;
+                                             overflow: elide;
+                                         }
 
-                                        Text {
-                                            text: "\{item.verts}v · \{item.tris}t";
-                                            color: DesignTokens.text-muted;
-                                            font-size: 10px;
-                                            vertical-alignment: center;
-                                        }
+                                         Text {
+                                             text: item.tris == 0 ? "\{item.verts} pts · 2D" : "\{item.verts}v · \{item.tris}t";
+                                             color: DesignTokens.text-muted;
+                                             font-size: 10px;
+                                             vertical-alignment: center;
+                                         }
                                     }
                                 }
 
@@ -11436,6 +11659,11 @@ export component PetuniaSlintShell inherits Window {
                         shortcut: "";
                         clicked => { root.context-menu-open = false; root.context-menu-action("draw_exclude"); }
                     }
+                    if root.context-menu-mode == "viewport" && root.modeling-mode == "DRAW": ContextMenuItem {
+                        label: Tr.t("sl.workplane_from_selection");
+                        shortcut: "";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("workplane_from_selection"); }
+                    }
                     if root.context-menu-mode == "viewport" && root.selection-domain != "OBJECT": ContextMenuItem {
                         label: Tr.t("sl.edge_loop");
                         shortcut: "Alt+Click";
@@ -11573,6 +11801,29 @@ export component PetuniaSlintShell inherits Window {
                         label: root.label-geometry-to-origin;
                         shortcut: "";
                         clicked => { root.context-menu-action("geometry_to_origin"); }
+                    }
+
+                    if root.selection-domain == "OBJECT" || root.context-menu-mode != "viewport": Rectangle { height: 1px; background: DesignTokens.border; }
+
+                    if root.selection-domain == "OBJECT" || root.context-menu-mode != "viewport": ContextMenuItem {
+                        label: Tr.t("sl.clear_all_transforms");
+                        shortcut: "Alt+Backspace";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("clear_all_transforms"); }
+                    }
+                    if root.selection-domain == "OBJECT" || root.context-menu-mode != "viewport": ContextMenuItem {
+                        label: Tr.t("sl.clear_location");
+                        shortcut: "Alt+G";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("clear_location"); }
+                    }
+                    if root.selection-domain == "OBJECT" || root.context-menu-mode != "viewport": ContextMenuItem {
+                        label: Tr.t("sl.clear_rotation");
+                        shortcut: "Alt+R";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("clear_rotation"); }
+                    }
+                    if root.selection-domain == "OBJECT" || root.context-menu-mode != "viewport": ContextMenuItem {
+                        label: Tr.t("sl.clear_scale");
+                        shortcut: "Alt+S";
+                        clicked => { root.context-menu-open = false; root.context-menu-action("clear_scale"); }
                     }
 
                     Rectangle { height: 1px; background: DesignTokens.border; }
@@ -11961,7 +12212,7 @@ export component PetuniaSlintShell inherits Window {
                             accepted => {
                                 if root.command-results.length > 0 {
                                     if !root.command-results[root.command-selection].available {
-                                    } else if root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
+                                    } else if root.command-results[root.command-selection].id == "draw.import_svg" || root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
                                         root.command-file-action(root.command-results[root.command-selection].id);
                                     } else {
                                         root.command-executed(root.command-results[root.command-selection].id);
@@ -12011,7 +12262,7 @@ export component PetuniaSlintShell inherits Window {
                                     clicked => {
                                         root.command-selection = index;
                                         if !cmd.available {
-                                        } else if cmd.id == "file.save" || cmd.id == "file.save_as" || cmd.id == "file.open" {
+                                        } else if cmd.id == "draw.import_svg" || cmd.id == "file.save" || cmd.id == "file.save_as" || cmd.id == "file.open" {
                                             root.command-file-action(cmd.id);
                                         } else {
                                             root.command-executed(cmd.id);
@@ -12151,7 +12402,7 @@ export component PetuniaSlintShell inherits Window {
                         uv-commands: root.uv-layout-commands;
                         show-grid: root.paint-pixel-grid;
                         grid-commands: root.paint-canvas-grid-commands;
-                        stroke(x, y, phase) => { root.paint-2d-stroke(x, y, phase); }
+                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
                         zoom-step(direction) => {
                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }

@@ -6,12 +6,13 @@
 //!
 //! Modelo V1: camadas Raster ordenadas com visibility/opacity/active,
 //! composição determinística alpha-normal sobre o canvas base. Decal e
-//! Effect existem como dados (pós-V1: P3D-133/134) e participam da
-//! composição, mas a UI V1 só cria/opera Raster.
+//! SVG decals, effects and raster layers participate in composition. Projection
+//! commits raster pixels; the source decal remains a live, reusable layer.
 
 use serde::{Deserialize, Serialize};
 
 use crate::Canvas;
+use crate::svg::{SvgError, rasterize_svg, svg_info};
 
 /// Tamanho de tile para composição parcial (P3D-061: composite cacheável).
 pub const TILE_SIZE: u32 = 32;
@@ -59,8 +60,8 @@ pub enum PaintEffect {
     HueSaturation { hue_shift_deg: f32, saturation: f32 },
 }
 
-/// Decalque / projeção 2D parametrizada e reposicionável (P3D-133, pós-V1).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Decalque / projeção 2D parametrizada e reposicionável (P3D-133, MVP).
+#[derive(Clone, Debug, PartialEq)]
 pub struct DecalLayer {
     pub image: Canvas,
     /// Centro da projeção no espaço UV [0.0..1.0]
@@ -69,6 +70,61 @@ pub struct DecalLayer {
     pub scale_uv: [f32; 2],
     /// Rotação do decalque em radianos
     pub rotation_rad: f32,
+    /// Texto SVG de origem, quando o decalque veio de um vetor. Permite
+    /// re-rasterizar em outra resolução sem perder nitidez (P3D-133).
+    /// Projetos antigos não têm o campo e abrem como `None`.
+    pub source_svg: Option<String>,
+}
+
+// Legacy postcard files predate SVG. Their fixed decal layout has four fields;
+// canonical ZIP/JSON stores the editable SVG source as the fifth optional field.
+impl Serialize for DecalLayer {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let human = serializer.is_human_readable();
+        let mut value = serializer.serialize_struct("DecalLayer", if human { 5 } else { 4 })?;
+        value.serialize_field("image", &self.image)?;
+        value.serialize_field("center_uv", &self.center_uv)?;
+        value.serialize_field("scale_uv", &self.scale_uv)?;
+        value.serialize_field("rotation_rad", &self.rotation_rad)?;
+        if human {
+            value.serialize_field("source_svg", &self.source_svg)?;
+        }
+        value.end()
+    }
+}
+impl<'de> Deserialize<'de> for DecalLayer {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Old {
+            image: Canvas,
+            center_uv: [f32; 2],
+            scale_uv: [f32; 2],
+            rotation_rad: f32,
+        }
+        #[derive(Deserialize)]
+        struct Current {
+            image: Canvas,
+            center_uv: [f32; 2],
+            scale_uv: [f32; 2],
+            rotation_rad: f32,
+            #[serde(default)]
+            source_svg: Option<String>,
+        }
+        if deserializer.is_human_readable() {
+            let c = Current::deserialize(deserializer)?;
+            Ok(Self {
+                image: c.image,
+                center_uv: c.center_uv,
+                scale_uv: c.scale_uv,
+                rotation_rad: c.rotation_rad,
+                source_svg: c.source_svg,
+            })
+        } else {
+            let c = Old::deserialize(deserializer)?;
+            Ok(Self::new(c.image, c.center_uv, c.scale_uv, c.rotation_rad))
+        }
+    }
 }
 
 impl DecalLayer {
@@ -78,7 +134,48 @@ impl DecalLayer {
             center_uv,
             scale_uv,
             rotation_rad,
+            source_svg: None,
         }
+    }
+
+    /// Cria um decalque a partir de SVG: rasteriza (maior lado = `max_px`,
+    /// limitado por [`crate::svg::MAX_RASTER_PX`]) e guarda o texto de origem.
+    ///
+    /// `scale_uv_width` é a largura em UV; a altura segue a proporção do SVG.
+    /// Largura não finita ou `<= 0` devolve [`SvgError::ZeroSize`].
+    pub fn from_svg(
+        svg: &str,
+        max_px: u32,
+        center_uv: [f32; 2],
+        scale_uv_width: f32,
+    ) -> Result<Self, SvgError> {
+        if !(scale_uv_width.is_finite() && scale_uv_width > 0.0) {
+            return Err(SvgError::ZeroSize);
+        }
+        let info = svg_info(svg)?;
+        let image = rasterize_svg(svg, max_px)?;
+        let aspect = info.height / info.width;
+        let mut decal = Self::new(
+            image,
+            center_uv,
+            [scale_uv_width, scale_uv_width * aspect],
+            0.0,
+        );
+        decal.source_svg = Some(svg.to_owned());
+        Ok(decal)
+    }
+
+    /// Re-rasteriza a partir de `source_svg` (maior lado = `max_px`).
+    ///
+    /// `Ok(false)` quando não há SVG de origem (decalque raster comum, nada
+    /// muda); `Ok(true)` quando a imagem foi refeita. Em erro o decalque fica
+    /// intacto. Posição, escala e rotação não mudam.
+    pub fn rerasterize(&mut self, max_px: u32) -> Result<bool, SvgError> {
+        let Some(source) = self.source_svg.as_deref() else {
+            return Ok(false);
+        };
+        self.image = rasterize_svg(source, max_px)?;
+        Ok(true)
     }
 }
 
@@ -1303,5 +1400,122 @@ mod tests {
         assert_eq!(merged_pixel, [255, 0, 0, 255]);
         let unmodified_pixel = stack.layers[0].canvas().unwrap().get(0, 0).unwrap();
         assert_eq!(unmodified_pixel, [0, 0, 0, 255]);
+    }
+
+    const RECT_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+        <rect width="200" height="100" fill="#ff0000"/></svg>"##;
+
+    #[test]
+    fn decal_from_svg_keeps_aspect_and_source() {
+        let decal = DecalLayer::from_svg(RECT_SVG, 128, [0.25, 0.75], 0.4).unwrap();
+        assert_eq!((decal.image.w, decal.image.h), (128, 64));
+        assert_eq!(decal.center_uv, [0.25, 0.75]);
+        assert_eq!(decal.scale_uv[0], 0.4);
+        assert!((decal.scale_uv[1] - 0.2).abs() < 1.0e-6);
+        assert_eq!(decal.rotation_rad, 0.0);
+        assert_eq!(decal.source_svg.as_deref(), Some(RECT_SVG));
+        assert_eq!(decal.image.get(10, 10), Some([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn decal_from_svg_rejects_bad_input() {
+        assert_eq!(
+            DecalLayer::from_svg("", 64, [0.5; 2], 0.5).unwrap_err(),
+            SvgError::Empty
+        );
+        assert!(matches!(
+            DecalLayer::from_svg("<svg", 64, [0.5; 2], 0.5),
+            Err(SvgError::Parse(_))
+        ));
+        for width in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(
+                DecalLayer::from_svg(RECT_SVG, 64, [0.5; 2], width).unwrap_err(),
+                SvgError::ZeroSize
+            );
+        }
+    }
+
+    #[test]
+    fn decal_rerasterize_changes_resolution_only() {
+        let mut decal = DecalLayer::from_svg(RECT_SVG, 32, [0.5; 2], 0.5).unwrap();
+        decal.rotation_rad = 0.7;
+        let scale = decal.scale_uv;
+        assert_eq!(decal.rerasterize(256), Ok(true));
+        assert_eq!((decal.image.w, decal.image.h), (256, 128));
+        assert_eq!(decal.scale_uv, scale);
+        assert_eq!(decal.rotation_rad, 0.7);
+    }
+
+    #[test]
+    fn decal_rerasterize_without_source_is_noop() {
+        let canvas = Canvas::new(4, 4, [1, 2, 3, 255]);
+        let mut decal = DecalLayer::new(canvas.clone(), [0.5; 2], [0.2; 2], 0.0);
+        assert_eq!(decal.source_svg, None);
+        assert_eq!(decal.rerasterize(512), Ok(false));
+        assert_eq!(decal.image, canvas);
+    }
+
+    #[test]
+    fn decal_rerasterize_error_leaves_decal_intact() {
+        let mut decal = DecalLayer::from_svg(RECT_SVG, 32, [0.5; 2], 0.5).unwrap();
+        decal.source_svg = Some("<svg".to_string());
+        let before = decal.image.clone();
+        assert!(matches!(decal.rerasterize(64), Err(SvgError::Parse(_))));
+        assert_eq!(decal.image, before);
+    }
+
+    #[test]
+    fn decal_json_without_source_svg_still_deserializes() {
+        let decal = DecalLayer::new(Canvas::new(2, 2, [9, 8, 7, 255]), [0.5; 2], [0.3; 2], 0.0);
+        let mut value = serde_json::to_value(&decal).unwrap();
+        value.as_object_mut().unwrap().remove("source_svg");
+        let json = value.to_string();
+        assert!(!json.contains("source_svg"));
+        let back: DecalLayer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, decal);
+        assert_eq!(back.source_svg, None);
+    }
+
+    #[test]
+    fn decal_with_source_svg_round_trips_json() {
+        let decal = DecalLayer::from_svg(RECT_SVG, 16, [0.5; 2], 0.5).unwrap();
+        let json = serde_json::to_string(&decal).unwrap();
+        let back: DecalLayer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, decal);
+    }
+}
+
+#[cfg(test)]
+mod svg_compatibility_tests {
+    use super::*;
+    #[test]
+    fn legacy_postcard_decal_keeps_its_four_field_layout() {
+        #[derive(Serialize)]
+        struct Old {
+            image: Canvas,
+            center_uv: [f32; 2],
+            scale_uv: [f32; 2],
+            rotation_rad: f32,
+        }
+        let old = Old {
+            image: Canvas::new(2, 2, [1, 2, 3, 255]),
+            center_uv: [0.5; 2],
+            scale_uv: [0.2; 2],
+            rotation_rad: 0.4,
+        };
+        let bytes = postcard::to_allocvec(&old).unwrap();
+        let decal: DecalLayer = postcard::from_bytes(&bytes).unwrap();
+        assert!(decal.source_svg.is_none());
+        assert_eq!(decal.image, old.image);
+        assert_eq!(postcard::to_allocvec(&decal).unwrap(), bytes);
+    }
+    #[test]
+    fn canonical_json_retains_svg_source() {
+        let mut decal = DecalLayer::new(Canvas::new(2, 2, [1, 2, 3, 255]), [0.5; 2], [0.2; 2], 0.0);
+        decal.source_svg = Some("<svg/>".into());
+        assert_eq!(
+            serde_json::from_str::<DecalLayer>(&serde_json::to_string(&decal).unwrap()).unwrap(),
+            decal
+        );
     }
 }

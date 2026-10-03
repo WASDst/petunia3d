@@ -404,13 +404,23 @@ pub fn cleanup_boolean_result(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupR
     let colors = ColorLookup::new(a, b, eps);
     let mut remap: HashMap<u32, u32> = HashMap::new();
     let mut out = Mesh::default();
-    for (verts, _) in &faces {
+    for (verts, origin) in &faces {
         for &v in verts {
             remap.entry(v).or_insert_with(|| {
                 let p = raw.verts[v as usize].pos;
                 out.verts.push(Vertex {
                     pos: p,
-                    color: colors.color_at(p).unwrap_or(NEW_VERTEX_COLOR),
+                    color: colors
+                        .color_at(p)
+                        .or_else(|| {
+                            origin.and_then(|o| {
+                                let source = if o.side == 0 { a } else { b };
+                                source.faces.get(o.face as usize).map(|_| {
+                                    inherited_color(source, o.face as usize, Vec3::from_array(p))
+                                })
+                            })
+                        })
+                        .unwrap_or(NEW_VERTEX_COLOR),
                     selected: false,
                 });
                 (out.verts.len() - 1) as u32
@@ -438,13 +448,13 @@ pub fn cleanup_boolean_result(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupR
     if all_from_a {
         for (face, (_, origin)) in out.faces.iter_mut().zip(&faces) {
             let Some(origin) = origin else { continue };
-            let Some(source_face) = a.faces.get(origin.face as usize) else {
+            let Some(_) = a.faces.get(origin.face as usize) else {
                 continue;
             };
             let uvs: Vec<[f32; 2]> = face
                 .verts
                 .iter()
-                .map(|&v| inherited_uv(a, source_face, out.verts[v as usize].vec()))
+                .map(|&v| inherited_uv(a, origin.face as usize, out.verts[v as usize].vec()))
                 .collect();
             face.uv = uvs;
         }
@@ -465,6 +475,44 @@ pub fn cleanup_boolean_result(raw: &Mesh, a: &Mesh, b: &Mesh) -> (Mesh, CleanupR
     }
     passthrough(&mut report, &out);
     (out, report)
+}
+
+/// Classifies output faces for transferring textures across a changed UV atlas.
+/// Classification is independent of cleanup, including the safe fallback.
+pub fn surface_sources(result: &Mesh, a: &Mesh, b: &Mesh) -> Vec<Option<(u8, usize)>> {
+    let mut lo = DVec3::splat(f64::INFINITY);
+    let mut hi = DVec3::splat(f64::NEG_INFINITY);
+    for v in &result.verts {
+        lo = lo.min(dvec(v.vec()));
+        hi = hi.max(dvec(v.vec()));
+    }
+    let diag = (hi - lo).length().max(1e-6);
+    let index = SourceIndex::new(a, b, diag, diag * REL_TOLERANCE);
+    result
+        .faces
+        .iter()
+        .map(|face| {
+            face.verts.windows(3).find_map(|ids| {
+                let tri = [
+                    dvec(result.verts[ids[0] as usize].vec()),
+                    dvec(result.verts[ids[1] as usize].vec()),
+                    dvec(result.verts[ids[2] as usize].vec()),
+                ];
+                if (tri[1] - tri[0]).cross(tri[2] - tri[0]).length_squared() < 1e-20 {
+                    return None;
+                }
+                index.locate(tri).map(|o| (o.side, o.face as usize))
+            })
+        })
+        .collect()
+}
+
+/// Source face UV at a coplanar world position.
+pub fn source_uv(mesh: &Mesh, face: usize, position: Vec3) -> [f32; 2] {
+    mesh.faces
+        .get(face)
+        .filter(|f| f.verts.len() >= 3)
+        .map_or([0.0; 2], |_| inherited_uv(mesh, face, position))
 }
 
 /// Mapa vértice → representante, soldando posições a menos de `tolerance`.
@@ -513,41 +561,65 @@ impl ColorLookup {
     }
 }
 
-/// UV de `point` (no plano de `face`) por mapeamento afim dos 3 cantos mais bem
-/// condicionados da face de origem.
-fn inherited_uv(mesh: &Mesh, face: &Face, point: Vec3) -> [f32; 2] {
-    let n = face.verts.len();
-    let pos = |i: usize| mesh.verts[face.verts[i] as usize].vec();
-    let uv = |i: usize| face.uv.get(i).copied().unwrap_or([0.0, 0.0]);
-    let mut best = (0, 1, 2);
-    let mut best_area = -1.0f32;
-    for i in 0..n {
-        for j in i + 1..n {
-            for k in j + 1..n {
-                let area = (pos(j) - pos(i)).cross(pos(k) - pos(i)).length_squared();
-                if area > best_area {
-                    best_area = area;
-                    best = (i, j, k);
-                }
-            }
+/// Interpola cores na face de origem para pontos criados pelo kernel.
+fn inherited_color(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 3] {
+    let face = &mesh.faces[face_index];
+    let Some(&first) = face.verts.first() else {
+        return NEW_VERTEX_COLOR;
+    };
+    if face.verts.len() < 3 {
+        return mesh.verts[first as usize].color;
+    }
+    for corners in mesh.face_triangle_corners(face_index) {
+        let indices = corners.map(|c| face.verts[c]);
+        let [a, b, c] = indices.map(|v| mesh.verts[v as usize].vec());
+        let u = b - a;
+        let v = c - a;
+        let q = point - a;
+        let det = u.length_squared() * v.length_squared() - u.dot(v).powi(2);
+        if det.abs() < 1e-20 {
+            continue;
+        }
+        let s = (q.dot(u) * v.length_squared() - q.dot(v) * u.dot(v)) / det;
+        let t = (q.dot(v) * u.length_squared() - q.dot(u) * u.dot(v)) / det;
+        if s >= -1e-4 && t >= -1e-4 && s + t <= 1.0001 {
+            let colors = indices.map(|v| mesh.verts[v as usize].color);
+            return std::array::from_fn(|k| {
+                colors[0][k] * (1.0 - s - t) + colors[1][k] * s + colors[2][k] * t
+            });
         }
     }
-    let (i, j, k) = best;
-    let (p0, e1, e2) = (pos(i), pos(j) - pos(i), pos(k) - pos(i));
-    let q = point - p0;
-    let (a11, a12, a22) = (e1.dot(e1), e1.dot(e2), e2.dot(e2));
-    let det = a11 * a22 - a12 * a12;
-    if det.abs() < 1.0e-20 {
-        return uv(i);
+    mesh.verts[first as usize].color
+}
+
+/// UV follows the source triangulation, including non-affine quad mappings.
+fn inherited_uv(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 2] {
+    let face = &mesh.faces[face_index];
+    let mut best = ([0.0; 2], f32::NEG_INFINITY);
+    for corners in mesh.face_triangle_corners(face_index) {
+        let [a, b, c] = corners.map(|i| mesh.verts[face.verts[i] as usize].vec());
+        let [u0, u1, u2] = corners.map(|i| face.uv.get(i).copied().unwrap_or([0.0; 2]));
+        let (u, v, q) = (b - a, c - a, point - a);
+        let (aa, ab, bb) = (u.dot(u), u.dot(v), v.dot(v));
+        let det = aa * bb - ab * ab;
+        if det.abs() < 1e-20 {
+            continue;
+        }
+        let s = (q.dot(u) * bb - q.dot(v) * ab) / det;
+        let t = (q.dot(v) * aa - q.dot(u) * ab) / det;
+        let weight = s.min(t).min(1.0 - s - t);
+        let uv = [
+            u0[0] * (1.0 - s - t) + u1[0] * s + u2[0] * t,
+            u0[1] * (1.0 - s - t) + u1[1] * s + u2[1] * t,
+        ];
+        if weight >= -1e-4 {
+            return uv;
+        }
+        if weight > best.1 {
+            best = (uv, weight);
+        }
     }
-    let (b1, b2) = (q.dot(e1), q.dot(e2));
-    let s = (b1 * a22 - b2 * a12) / det;
-    let t = (b2 * a11 - b1 * a12) / det;
-    let (u0, u1, u2) = (uv(i), uv(j), uv(k));
-    [
-        u0[0] + s * (u1[0] - u0[0]) + t * (u2[0] - u0[0]),
-        u0[1] + s * (u1[1] - u0[1]) + t * (u2[1] - u0[1]),
-    ]
+    best.0
 }
 
 /// Volume com sinal (teorema da divergência) da malha triangulada.
@@ -850,6 +922,17 @@ mod tests {
         let quads = mesh.faces.iter().filter(|f| f.verts.len() == 4).count();
         let ngons = mesh.faces.iter().filter(|f| f.verts.len() > 4).count();
         (tris, quads, ngons)
+    }
+
+    #[test]
+    fn inherited_uv_preserves_each_corner_of_a_non_affine_quad() {
+        let mut mesh = Mesh::plane(2.0);
+        mesh.faces[0].uv = vec![[0.0, 0.0], [1.0, 0.0], [0.6, 0.7], [0.0, 1.0]];
+        for (corner, &id) in mesh.faces[0].verts.iter().enumerate() {
+            let uv = source_uv(&mesh, 0, mesh.verts[id as usize].vec());
+            let expected = mesh.faces[0].uv[corner];
+            assert!((uv[0] - expected[0]).abs() < 1e-5 && (uv[1] - expected[1]).abs() < 1e-5);
+        }
     }
 
     #[test]

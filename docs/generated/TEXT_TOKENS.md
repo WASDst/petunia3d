@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1511**.
+Total de chaves de localização cadastradas: **1571**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -238,6 +238,23 @@ Total de chaves de localização cadastradas: **1511**.
 | `export.go` | Export… | Exportar… |
 | `export.report` | Report | Relatório |
 | `export.title` | Export | Exportar |
+| `extensions.angle` | Segment angle | Ângulo do segmento |
+| `extensions.arc` | Arc through first three points | Arco pelos três primeiros pontos |
+| `extensions.dimensions` | Toggle segment dimensions | Alternar dimensões por segmento |
+| `extensions.ellipse` | Ellipse profile | Perfil elíptico |
+| `extensions.length` | Size / segment length | Tamanho / comprimento do segmento |
+| `extensions.mirror` | Toggle mirrored creation | Alternar criação espelhada |
+| `extensions.polygon` | Regular polygon | Polígono regular |
+| `extensions.radius` | Corner radius | Raio dos cantos |
+| `extensions.rectangle` | Rounded rectangle | Retângulo arredondado |
+| `extensions.resample` | Convert curve to N segments | Converter curva em N segmentos |
+| `extensions.round` | Round shape corners | Arredondar cantos da forma |
+| `extensions.sides` | Sides / arc segments | Lados / segmentos do arco |
+| `extensions.simplify` | Simplify shape points | Simplificar pontos da forma |
+| `extensions.slot` | Slot profile | Perfil de rasgo |
+| `extensions.threshold` | Trace threshold (0–254) | Limiar de vetorização (0–254) |
+| `extensions.tolerance` | Simplification tolerance | Tolerância de simplificação |
+| `extensions.trace` | Trace visible reference silhouette | Vetorizar silhueta da referência visível |
 | `file.import_gltf` | Import glTF / GLB… | Importar glTF / GLB… |
 | `file.import_obj` | Import OBJ… | Importar OBJ… |
 | `file.new` | New project | Novo projeto |
@@ -450,6 +467,7 @@ Total de chaves de localização cadastradas: **1511**.
 | `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
 | `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
 | `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
+| `preferences.workplane_from_selection` | Set Workplane from Selection (3 Points / Face) | Plano de Trabalho pela Seleção (3 Pontos / Face) |
 | `preferences.workplane_prefer_ground` | Automatic work plane favors the ground | Plano automático favorece o chão |
 | `preferences.workplane_prefer_ground_hint` | With no face under the cursor, drawing goes on the ground unless the camera is almost level. Off: the world plane that most faces the view (Modo/Cinema 4D style). | Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D). |
 | `prims.body_length` | Body Length | Comprimento do Corpo |
@@ -713,9 +731,13 @@ Total de chaves de localização cadastradas: **1511**.
 | `sl.clear` | Clear | Limpar |
 | `sl.clear_all` | Clear All | Limpar tudo |
 | `sl.clear_all_seams` | Clear all seams | Limpa todas as costuras |
+| `sl.clear_all_transforms` | Clear All Transforms | Limpar todas as transformações |
 | `sl.clear_all_uv_pins` | Clear all UV pins | Limpa todas as fixações UV |
+| `sl.clear_location` | Clear Location | Limpar posição |
 | `sl.clear_operand` | Clear operand | Limpar operando |
 | `sl.clear_pins` | Clear Pins | Limpar fixações |
+| `sl.clear_rotation` | Clear Rotation | Limpar rotação |
+| `sl.clear_scale` | Clear Scale | Limpar escala |
 | `sl.clear_seams` | Clear Seams | Limpar costuras |
 | `sl.clear_selection` | Clear Selection | Limpar seleção |
 | `sl.click_and_drag_or_press_e_alt_e_to_extrude_s` | Click and drag or press E / Alt+E to extrude selected faces | Clique e arraste ou pressione E / Alt+E para extrudar as faces selecionadas |
@@ -756,6 +778,7 @@ Total de chaves de localização cadastradas: **1511**.
 | `sl.ctrl_z_ctrl_y_undo_redo` | Ctrl+Z / Ctrl+Y: Undo / Redo | Ctrl+Z / Ctrl+Y: Desfazer / Refazer |
 | `sl.cube` | Cube | Cubo |
 | `sl.cursor` | Cursor | Cursor |
+| `sl.curve` | Curve | Curva |
 | `sl.cut` | Cut | Cut |
 | `sl.cut_mesh_along_an_infinite_cutting_plane_thr` | Cut mesh along an infinite cutting plane through selection | Corta a malha por um plano de corte infinito através da seleção |
 | `sl.cuts` | Cuts | Cortes |
@@ -1062,11 +1085,14 @@ Total de chaves de localização cadastradas: **1511**.
 | `sl.search_commands` | Search commands | Buscar comandos |
 | `sl.segments` | Segments | Segmentos |
 | `sl.select` | Select | Selecionar |
-| `sl.select_all` | Select All | Selecionar tudo |
+| `sl.select_all` | Select All | Selecionar Tudo |
 | `sl.select_and_manipulate_entire_objects_as_disc` | Select and manipulate entire objects as discrete units | Seleciona e manipula objetos inteiros como unidades |
 | `sl.select_and_transform_individual_vertices_poi` | Select and transform individual vertices (points) | Seleciona e transforma vértices (Points) individuais |
 | `sl.select_and_transform_polygonal_boundary_edge` | Select and transform polygonal boundary edges | Seleciona e transforma arestas de contorno do polígono |
 | `sl.select_and_transform_polygonal_planar_faces` | Select and transform polygonal planar faces | Seleciona e transforma faces planas do polígono |
+| `sl.select_curve_segment` | Select and manipulate profile curves or segments | Seleciona e manipula curvas e segmentos de perfil |
+| `sl.select_entire_shape` | Select and transform the entire 2D shape or volume | Seleciona e transforma a forma 2D inteira ou volume |
+| `sl.select_region_face` | Select and extrude planar 2D regions | Seleciona e extruda regiões planares 2D |
 | `sl.select_second_part_to_combine` | Select second part to Combine: | Selecione a segunda parte para combinar: |
 | `sl.select_uv_vertices_edges_and_polygon_islands` | Select UV vertices, edges and polygon islands | Seleciona vértices, arestas e ilhas de polígonos UV |
 | `sl.semi_transparent_surfaces_allowing_selection` | Semi-transparent surfaces allowing selection of occluded geometry | Superfícies semitransparentes que permitem selecionar geometria oculta |
@@ -1078,6 +1104,7 @@ Total de chaves de localização cadastradas: **1511**.
 | `sl.shade_smooth` | Shade Smooth | Sombreamento suave |
 | `sl.shading` | Shading | Sombreamento |
 | `sl.shading_options` | Shading options | Opções de sombreamento |
+| `sl.shape` | Shape | Forma |
 | `sl.shape_builder` | Shape Builder | Shape Builder |
 | `sl.shape_builder_description` | Drag across regions to merge them, Ctrl+drag to delete them, click to extract one | Arraste sobre regiões para fundi-las, Ctrl+arrastar para apagá-las, clique para extrair uma |
 | `sl.shape_exclude` | Exclude overlap | Excluir sobreposição |
@@ -1200,6 +1227,39 @@ Total de chaves de localização cadastradas: **1511**.
 | `snap_kind.on_edge` | On edge | Na aresta |
 | `snap_kind.on_face` | On face | Na face |
 | `snap_kind.point` | Point | Ponto |
+| `surface.alpha_lock` | Toggle alpha lock | Alternar trava de alfa |
+| `surface.apply` | Apply surface paint | Aplicar pintura de superfície |
+| `surface.boolean_albedo` | Boolean albedo | Albedo do booleano |
+| `surface.cancel` | Cancel surface paint | Cancelar pintura de superfície |
+| `surface.choose_decal` | Select a decal layer to use as the source. | Selecione uma camada de decalque para usar como fonte. |
+| `surface.dithering` | Toggle ordered dithering | Alternar dithering ordenado |
+| `surface.export_padding` | Export bleed (px) | Bleed na exportação (px) |
+| `surface.finish_operation` | Confirm or cancel the active operation first. | Confirme ou cancele a operação ativa primeiro. |
+| `surface.grow` | Increase projection scale | Aumentar escala da projeção |
+| `surface.import_svg` | Import SVG profiles | Importar perfis SVG |
+| `surface.mirror` | Mirror projection | Espelhar projeção |
+| `surface.needs_reattach` | The surface changed. Reattach the path before applying. | A superfície mudou. Reanexe o caminho antes de aplicar. |
+| `surface.palette_darker` | Palette ramp: previous color | Rampa da paleta: cor anterior |
+| `surface.palette_lighter` | Palette ramp: next color | Rampa da paleta: próxima cor |
+| `surface.palette_normal` | Palette ramp: normal paint | Rampa da paleta: pintura normal |
+| `surface.path` | Path Paint | Pintar caminho |
+| `surface.path_name` | Paint path | Caminho de pintura |
+| `surface.pixel_perfect` | Toggle pixel perfect | Alternar pixel perfeito |
+| `surface.project` | Project selected decal | Projetar decalque selecionado |
+| `surface.projection_name` | Projection | Projeção |
+| `surface.ribbon` | Path Paint: ribbon | Path Paint: faixa |
+| `surface.rotate` | Rotate projection 45° | Girar projeção 45° |
+| `surface.shrink` | Decrease projection scale | Diminuir escala da projeção |
+| `surface.stamps` | Path Paint: repeated decal stamps | Path Paint: carimbos repetidos |
+| `surface.stencil` | Paint through selected decal stencil | Pintar através do stencil do decalque |
+| `surface.stencil_luma` | Toggle stencil alpha / luminance | Alternar alfa / luminância do stencil |
+| `surface.stencil_name` | Stencil paint | Pintura com stencil |
+| `surface.stencil_place` | Place stencil (Enter to paint) | Posicionar stencil (Enter para pintar) |
+| `surface.svg_resolution_1024` | SVG decal: render at 1024 px | Decalque SVG: rasterizar em 1024 px |
+| `surface.svg_resolution_512` | SVG decal: render at 512 px | Decalque SVG: rasterizar em 512 px |
+| `surface.uv_details` |  Density: {density} px/unit; tiny islands: {tiny} Export bleed: {padding} px. Leave room between islands for mipmaps. |  Densidade: {density} px/unidade; ilhas minúsculas: {tiny} Bleed de exportação: {padding} px. Reserve espaço entre ilhas para os mipmaps. |
+| `surface.uv_health` | Check UV health | Verificar saúde do UV |
+| `surface.uv_report` | UV: {islands} islands; {overlaps} overlaps; {zero} zero area faces; {outside} corners outside UV | UV: {islands} ilhas; {overlaps} sobreposições; {zero} faces sem área; {outside} cantos fora do UV |
 | `tool_grammar.adjust_hint` | Type a value and press Enter to adjust (same Undo) | Digite um valor e Enter para ajustar (mesmo Undo) |
 | `tool_grammar.adjusted` | Last operation adjusted | Última operação ajustada |
 | `tool_grammar.draw_ready` | Draw on {plane}: click to add points, drag for curves; with Auto, the face under the cursor becomes the plane | Desenhar em {plane}: clique para adicionar pontos, arraste para curvas; no Auto, a face sob o cursor vira o plano |

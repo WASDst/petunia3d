@@ -1,7 +1,7 @@
 //! Exportação com validação: OBJ (texto) e GLB (binário glTF 2.0).
 //! GLB escrito à mão (sem dependência pesada); validado em teste com `gltf`.
 
-use super::{Asset, Project};
+use super::{Asset, Canvas, Project};
 use crate::gltf_rig::{
     BinBuilder, COMPONENT_U16, RigDoc, SkinBinding, TARGET_ARRAY_BUFFER, bind_skin, build_rig_doc,
 };
@@ -18,6 +18,92 @@ pub enum ExportError {
 
 pub fn export_obj(asset: &Asset) -> String {
     asset.evaluated_mesh().to_obj()
+}
+
+/// Export-only dilation: the editable document and paint layers stay intact.
+pub fn export_gltf_with_padding(
+    project: &Project,
+    indices: &[usize],
+    padding: u32,
+) -> Result<Vec<u8>, ExportError> {
+    if padding == 0 {
+        return export_gltf(project, indices);
+    }
+    let mut snapshot = project.clone();
+    for &i in indices {
+        let Some(asset) = snapshot.assets.get_mut(i) else {
+            continue;
+        };
+        let mesh = asset.evaluated_mesh_ref();
+        let padded = asset
+            .texture
+            .as_ref()
+            .map(|texture| bleed_outside_uv(texture, padding, std::iter::once(mesh.as_ref())));
+        drop(mesh);
+        if let Some(padded) = padded {
+            asset.texture = Some(padded);
+        }
+    }
+    for material in &mut snapshot.materials {
+        let meshes: Vec<_> = indices
+            .iter()
+            .filter_map(|&i| project.assets.get(i))
+            .filter(|a| a.material_id == Some(material.id))
+            .map(|a| a.evaluated_mesh_ref())
+            .collect();
+        if meshes.is_empty() {
+            continue;
+        }
+        for texture in [
+            &mut material.albedo_texture,
+            &mut material.normal_texture,
+            &mut material.roughness_texture,
+            &mut material.metallic_texture,
+            &mut material.emission_texture,
+            &mut material.height_texture,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            *texture = bleed_outside_uv(texture, padding, meshes.iter().map(|m| m.as_ref()));
+        }
+    }
+    export_gltf(&snapshot, indices)
+}
+
+/// Dilation is confined to atlas gutters, preserving transparent artwork inside
+/// mapped faces (including SVG cutouts). Shared material masks use all consumers.
+fn bleed_outside_uv<'a>(
+    texture: &Canvas,
+    padding: u32,
+    meshes: impl Iterator<Item = &'a petunia_mesh::Mesh>,
+) -> Canvas {
+    let mut out = texture.with_bleed(padding);
+    for mesh in meshes {
+        for face in 0..mesh.faces.len() {
+            mesh.rasterize_face_texels(face, texture.w, texture.h, 0.0, |x, y, _, _| {
+                let index = ((y * texture.w + x) * 4) as usize;
+                out.pixels[index..index + 4].copy_from_slice(&texture.pixels[index..index + 4]);
+            });
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod bleed_tests {
+    use super::*;
+    #[test]
+    fn padding_preserves_transparent_artwork_inside_uv_faces() {
+        let mut mesh = petunia_mesh::Mesh::plane(2.0);
+        mesh.faces[0].uv = vec![[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]];
+        let mut texture = Canvas::new(16, 16, [0; 4]);
+        texture.set(4, 8, [255, 0, 0, 255]);
+        let out = bleed_outside_uv(&texture, 2, std::iter::once(&mesh));
+        assert_eq!(out.get(5, 8), Some([0; 4]));
+        assert_eq!(out.get(3, 8), Some([255, 0, 0, 255]));
+        assert_eq!(texture.get(3, 8), Some([0; 4]));
+    }
 }
 
 /// Exporta assets como um único GLB (uma mesh por asset).

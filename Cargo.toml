@@ -54,6 +54,7 @@ egui_extras = { version = "0.36.2", features = ["image", "svg"] }
 iconflow = { version = "1.0", features = ["pack-lucide", "pack-iconoir"] }
 proptest = "1"
 zip = "2"
+resvg = { version = "0.48.1", default-features = false }
 mlua = { version = "0.12", features = ["lua54", "vendored"] }
 rmcp = { version = "3.3", features = ["server", "macros", "schemars", "transport-io"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "io-util", "io-std"] }

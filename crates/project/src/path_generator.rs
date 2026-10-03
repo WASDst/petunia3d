@@ -300,6 +300,9 @@ fn validate_dependencies(
     }
     generator.sweep_parameters().validate()?;
     profile.validate_authoring(profile_spline)?;
+    if !profile.holes.is_empty() {
+        return Err(PathGeneratorError::CompoundProfileUnsupported);
+    }
     if !profile_spline.closed {
         return Err(PathGeneratorError::ProfileMustBeClosed);
     }
@@ -476,6 +479,8 @@ pub enum PathGeneratorError {
     ProfileNeedsThreePoints,
     #[error("profile must be closed")]
     ProfileMustBeClosed,
+    #[error("Compound profiles require Extrude or region Push/Pull")]
+    CompoundProfileUnsupported,
     #[error("path needs at least two points")]
     PathNeedsTwoPoints,
     #[error("hollow profiles are not supported by Sweep yet")]

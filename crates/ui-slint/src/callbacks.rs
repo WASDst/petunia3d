@@ -248,6 +248,14 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
     if bridge.state.session.tools.active_tool == "draw_profile" {
         window.set_profile_preview_commands(bridge.profile_preview_commands().as_str().into());
     }
+    let (depth_commands, depth_pos, depth_label) = bridge.depth_handle_commands();
+    window.set_depth_handle_commands(depth_commands.as_str().into());
+    window.set_depth_handle_visible(depth_pos.is_some());
+    if let Some([dx, dy]) = depth_pos {
+        window.set_depth_handle_x(dx * 1.0);
+        window.set_depth_handle_y(dy * 1.0);
+    }
+    window.set_depth_handle_label(depth_label.as_str().into());
 }
 
 impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
@@ -501,6 +509,15 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_asset_thumbnail_size(vm.asset_thumbnail_size);
     window.set_show_face_orientation(vm.show_face_orientation);
     window.set_show_uv_checker(vm.show_uv_checker);
+    window.set_extension_radius(vm.draw_extension_values[0]);
+    window.set_extension_length(vm.draw_extension_values[1]);
+    window.set_extension_angle(vm.draw_extension_values[2]);
+    window.set_extension_sides(vm.draw_extension_values[3]);
+    window.set_extension_tolerance(vm.draw_extension_values[4]);
+    window.set_export_padding(vm.export_padding);
+    window.set_trace_threshold(vm.trace_threshold);
+    window.set_stencil_visible(vm.stencil_image.is_some());
+    window.set_stencil_image(vm.stencil_image.clone().unwrap_or_default());
     window.set_proportional_editing(vm.proportional_editing);
     window.set_proportional_radius(vm.proportional_radius);
     window.set_proportional_falloff(vm.proportional_falloff.as_str().into());
@@ -1392,6 +1409,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 "palette.import" => service.import_palette().await,
                 "palette.export" => service.export_palette().await,
                 "paint.import_decal" => service.open_decal_image().await,
+                "draw.import_svg" => service.open_svg().await,
                 _ => None,
             };
             let Some(path) = path else {
@@ -1406,6 +1424,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     "palette.import" => UiIntent::ImportPalette(path),
                     "palette.export" => UiIntent::ExportPalette(path),
                     "paint.import_decal" => UiIntent::ImportDecalFrom(path),
+                    "draw.import_svg" => UiIntent::ImportSvgProfiles(path),
                     _ => UiIntent::SaveProjectTo(path),
                 };
                 let needs_render = matches!(id.as_str(), "file.open" | "file.import_obj");
@@ -3280,13 +3299,15 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let paint_stroke_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_paint_2d_stroke(move |norm_x, norm_y, phase| {
+    window.on_paint_2d_stroke(move |norm_x, norm_y, phase, shift| {
         if let Ok(mut bridge) = paint_stroke_bridge.lock() {
-            bridge.apply(UiIntent::Paint2dStroke {
-                norm_x,
-                norm_y,
-                phase,
-            });
+            if !bridge.paint_2d_line(norm_x, norm_y, phase, shift) {
+                bridge.apply(UiIntent::Paint2dStroke {
+                    norm_x,
+                    norm_y,
+                    phase,
+                });
+            }
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
@@ -3442,6 +3463,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let extension_bridge = Arc::clone(&bridge);
+    let extension_window = window.as_weak();
+    window.on_extension_parameter_set(move |key, text| {
+        let Ok(mut bridge) = extension_bridge.lock() else {
+            return false;
+        };
+        let changed = bridge.set_extension_parameter(key.as_str(), text.as_str());
+        if let Some(window) = extension_window.upgrade() {
+            sync_window_properties(&window, &bridge.view_model());
+        }
+        changed
+    });
     let uv_equalize_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_uv_equalize_texel_density(move || {
@@ -4424,7 +4457,14 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_scene_select(move |id, extend| {
         if let Ok(mut bridge) = select_bridge.lock() {
-            if let Some(index) = bridge
+            if let Some(profile_uuid_str) = id.as_str().strip_prefix("profile:") {
+                if let Ok(profile_id) = uuid::Uuid::parse_str(profile_uuid_str) {
+                    bridge.cancel_active_operation();
+                    bridge.activate_profile(profile_id);
+                    bridge.state.select_object(None, false);
+                    bridge.reset_transform_fields();
+                }
+            } else if let Some(index) = bridge
                 .state
                 .project
                 .assets
@@ -4432,6 +4472,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 .position(|a| a.id.to_string() == id.as_str())
             {
                 bridge.cancel_active_operation();
+                bridge.active_profile_id = None;
                 bridge.state.select_object(Some(index), extend);
                 bridge.reset_transform_fields();
             }

@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **105**.
+Total de comandos registrados no motor: **109**.
 
 ## Tabela Geral de Comandos
 
@@ -53,6 +53,10 @@ Total de comandos registrados no motor: **105**.
 | `model.add_torus` | **Add Torus** | `Model` | Não | Modeling | Add a torus primitive |
 | `model.add_wedge` | **Add Wedge** | `Model` | Não | Modeling | Add a wedge/ramp primitive |
 | `model.bevel` | **Bevel Edges** | `Model` | Sim | Bevel | Bevel selected mesh edges |
+| `model.clear_all_transforms` | **Clear All Transforms** | `Model` | Sim | Modeling | Reset object position, rotation and scale to default |
+| `model.clear_location` | **Clear Location** | `Model` | Sim | Modeling | Reset object location to [0, 0, 0] |
+| `model.clear_rotation` | **Clear Rotation** | `Model` | Sim | Modeling | Reset object rotation to [0, 0, 0] |
+| `model.clear_scale` | **Clear Scale** | `Model` | Sim | Modeling | Reset object scale to [1, 1, 1] |
 | `model.connect` | **Connect Loops** | `Model` | Sim | Modeling | Connect two faces or boundary loops with quads and triangles |
 | `model.cut` | **Cut** | `Model` | Não | Modeling | Subtract the boolean operand from the active object |
 | `model.dissolve` | **Dissolve** | `Model` | Sim | Modeling | Dissolve selected edges, faces, or vertices cleanly |

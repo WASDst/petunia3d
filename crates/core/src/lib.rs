@@ -72,7 +72,8 @@ pub use schema_contracts::{
 
 pub use command::{
     AddPrimitiveCmd, AddSplinePointCmd, AttachSplinePointCmd, BakeDecalCmd, BakePathGeneratorCmd,
-    BevelCmd, BooleanOpCmd, BoxSelectCmd, ClearSelectionCmd, Command, CommandCategory,
+    BevelCmd, BooleanOpCmd, BoxSelectCmd, ClearAllTransformsCmd, ClearLocationCmd,
+    ClearRotationCmd, ClearScaleCmd, ClearSelectionCmd, Command, CommandCategory,
     CommandDispatcher, CommandError, CommandMetadata, CommandPaletteItem, ConnectLoopsCmd,
     ConvertSplineToPolylineCmd, CreatePathGeneratorCmd, CreateProfileCmd, CreateSplineCmd,
     CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd, DeletePathGeneratorCmd,
@@ -164,3 +165,8 @@ pub use petunia_mesh::loop_cut::{LoopCutError, LoopRing};
 
 #[cfg(test)]
 mod preview_tests;
+
+mod draw_batch;
+pub use draw_batch::DrawBatchCmd;
+
+mod boolean_texture;

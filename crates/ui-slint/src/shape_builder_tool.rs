@@ -31,21 +31,25 @@ pub(crate) struct ShapeBuilderGesture {
 }
 
 /// Face sob o cursor no plano editável.
-struct ShapeHit {
-    plane: RegionPlane,
-    region: Region2,
-    point: Vec3,
-    depth: f32,
+pub(crate) struct ShapeHit {
+    pub(crate) plane: RegionPlane,
+    pub(crate) region: Region2,
+    pub(crate) point: Vec3,
+    pub(crate) depth: f32,
 }
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Só o DRAW oferece o Shape Builder.
     fn shape_builder_available(&self) -> bool {
-        self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw
+        self.state.workspace == Workspace::Model
+            && self.modeling_mode == ModelingMode::Draw
+            && self.profile_volume_mode.is_none()
+            && self.state.modal.is_none()
+            && self.state.mesh_preview.is_none()
     }
 
     /// Planos editáveis em cache; recalcula quando perfis, splines ou geradores mudam.
-    fn shape_planes_cached(&self) -> std::cell::Ref<'_, Vec<ShapePlane>> {
+    pub(crate) fn shape_planes_cached(&self) -> std::cell::Ref<'_, Vec<ShapePlane>> {
         let project = &self.state.project.project;
         let clock = project.revision_clock();
         let key = [
@@ -67,7 +71,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Face editável sob o ponto (px lógicos da viewport), se não estiver
     /// escondida atrás da malha ativa.
-    fn shape_hit_at(&self, pixel: [f32; 2]) -> Option<ShapeHit> {
+    pub(crate) fn shape_hit_at(&self, pixel: [f32; 2]) -> Option<ShapeHit> {
         let [width, height] = self.viewport_size;
         if width <= 1.0 || height <= 1.0 || !pixel[0].is_finite() || !pixel[1].is_finite() {
             return None;
@@ -253,6 +257,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Pathfinder (Unite/Subtract/Intersect/Exclude) sobre os perfis fechados do plano.
     pub fn run_pathfinder(&mut self, op: PathfinderOp) -> bool {
+        if !self.shape_builder_available() {
+            return false;
+        }
         let plane = self.active_profile_id.and_then(|id| {
             self.shape_planes_cached()
                 .iter()

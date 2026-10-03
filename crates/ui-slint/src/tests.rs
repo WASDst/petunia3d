@@ -10132,3 +10132,153 @@ fn decal_import_reads_an_image_and_rejects_garbage_without_touching_the_document
     assert_eq!(bridge.state.project.undo.depth(), depth);
     assert!(bridge.state.ui.status.starts_with("Decal:"));
 }
+
+#[test]
+fn transform_fields_persist_on_active_asset_and_reset_commands_clear_them() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Modifica a posição via commit_transform_text
+    assert!(
+        bridge
+            .commit_transform_text(TransformKind::Position, 0, "5.0")
+            .is_ok()
+    );
+    assert!(
+        bridge
+            .commit_transform_text(TransformKind::Rotation, 1, "45.0")
+            .is_ok()
+    );
+    assert!(
+        bridge
+            .commit_transform_text(TransformKind::Scale, 2, "2.0")
+            .is_ok()
+    );
+
+    let vm1 = bridge.view_model();
+    assert_eq!(vm1.position[0], 5.0);
+    assert_eq!(vm1.rotation[1], 45.0);
+    assert_eq!(vm1.scale[2], 2.0);
+
+    // O asset no projeto deve ter os valores persistidos
+    let active_asset = bridge.state.project.active().unwrap();
+    assert_eq!(active_asset.position[0], 5.0);
+    assert_eq!(active_asset.rotation[1], 45.0);
+    assert_eq!(active_asset.scale[2], 2.0);
+
+    // reset_transform_fields restaura aos valores persistidos do objeto ativo
+    bridge.reset_transform_fields();
+    let vm2 = bridge.view_model();
+    assert_eq!(vm2.position[0], 5.0);
+    assert_eq!(vm2.rotation[1], 45.0);
+    assert_eq!(vm2.scale[2], 2.0);
+
+    // Context menu actions para resetar transforms
+    assert!(bridge.context_menu_action("clear_location"));
+    assert_eq!(bridge.view_model().position[0], 0.0);
+    assert_eq!(bridge.state.project.active().unwrap().position[0], 0.0);
+
+    assert!(bridge.context_menu_action("clear_rotation"));
+    assert_eq!(bridge.view_model().rotation[1], 0.0);
+    assert_eq!(bridge.state.project.active().unwrap().rotation[1], 0.0);
+
+    assert!(bridge.context_menu_action("clear_scale"));
+    assert_eq!(bridge.view_model().scale[2], 1.0);
+    assert_eq!(bridge.state.project.active().unwrap().scale[2], 1.0);
+}
+
+#[test]
+fn profiles_2d_appear_in_parts_and_can_be_selected_and_deleted() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Adiciona um retângulo 2D
+    assert!(bridge.add_profile_rectangle(2.0, 1.5));
+    assert_eq!(bridge.state.project.project.profiles.len(), 1);
+    let rect_id = bridge.state.project.project.profiles[0].id;
+
+    // Adiciona um círculo 2D (não sobrescreve o retângulo: cria novo perfil para composição!)
+    assert!(bridge.add_profile_circle(1.0, 16));
+    assert_eq!(bridge.state.project.project.profiles.len(), 2);
+    let circle_id = bridge.state.project.project.profiles[1].id;
+
+    let vm = bridge.view_model();
+    // Ambos devem aparecer em parts_items
+    let rect_item = vm
+        .parts_items
+        .iter()
+        .find(|item| item.id == format!("profile:{rect_id}"));
+    assert!(
+        rect_item.is_some(),
+        "retângulo 2D deve constar na lista de parts"
+    );
+    assert_eq!(rect_item.unwrap().tris, 0);
+    assert_eq!(rect_item.unwrap().verts, 4);
+
+    let circle_item = vm
+        .parts_items
+        .iter()
+        .find(|item| item.id == format!("profile:{circle_id}"));
+    assert!(
+        circle_item.is_some(),
+        "círculo 2D deve constar na lista de parts"
+    );
+    assert_eq!(circle_item.unwrap().tris, 0);
+    assert_eq!(circle_item.unwrap().verts, 16);
+
+    // O círculo é o perfil ativo atualmente. Deletá-lo apaga o círculo e mantém o retângulo
+    assert!(bridge.delete_or_dissolve_selection());
+    assert_eq!(bridge.state.project.project.profiles.len(), 1);
+    assert_eq!(bridge.state.project.project.profiles[0].id, rect_id);
+
+    // Seleciona o retângulo e apaga
+    bridge.activate_profile(rect_id);
+    assert!(bridge.delete_or_dissolve_selection());
+    assert_eq!(bridge.state.project.project.profiles.len(), 0);
+}
+
+#[test]
+fn draw_depth_handle_projects_and_updates_with_profile() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert!(bridge.add_profile_rectangle(2.0, 2.0));
+    bridge.set_profile_depth(3.0);
+
+    let (commands, pos, label) = bridge.depth_handle_commands();
+    assert!(!commands.is_empty(), "depth handle deve gerar comandos SVG");
+    assert!(pos.is_some(), "depth handle deve ter posição na tela");
+    assert!(
+        label.contains("3.0"),
+        "label deve conter a profundidade: {label}"
+    );
+}
+
+#[test]
+fn uv_path_collects_anchors_without_a_freehand_stroke_and_preserves_mode() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert!(bridge.add_decal_layer());
+    assert!(bridge.execute_surface_action("paint.path_stamps"));
+    let uv = bridge.state.project.active_mesh().unwrap().faces[0]
+        .uv
+        .iter()
+        .fold([0.0; 2], |mut sum, p| {
+            sum[0] += p[0];
+            sum[1] += p[1];
+            sum
+        });
+    let count = bridge.state.project.active_mesh().unwrap().faces[0]
+        .uv
+        .len() as f32;
+    let before = serde_json::to_value(&bridge.state.project.project).unwrap();
+    assert!(bridge.paint_2d_stroke(uv[0] / count, 1.0 - uv[1] / count, 0));
+    assert_eq!(bridge.surface_paint.nodes.len(), 1);
+    assert!(matches!(
+        bridge.surface_paint.path_mode,
+        petunia_module_paint::PathPaintMode::RepeatedStamp(_)
+    ));
+    assert!(bridge.state.paint_stroke.is_none());
+    assert_eq!(
+        serde_json::to_value(&bridge.state.project.project).unwrap(),
+        before
+    );
+    assert!(!bridge.paint_2d_line(uv[0] / count, 1.0 - uv[1] / count, 0, true));
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Model));
+    assert!(bridge.surface_paint.nodes.is_empty());
+}

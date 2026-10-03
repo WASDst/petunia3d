@@ -11,7 +11,15 @@
 //! - Sincronização direta com o modelo canônico de Material (P3D-050).
 
 mod engine;
+mod path_paint;
+pub mod projection;
+mod surface_commands;
 pub use engine::dab_falloff;
+pub use path_paint::{
+    MAX_LINE_PIXELS, MAX_PATH_DABS, MAX_PATH_NODES, SurfaceHit, line_pixels, pixel_perfect,
+    project_path_onto_surface, sample_path, snap_to_surface,
+};
+pub use surface_commands::{PaintPathCmd, PathPaintMode, ProjectionPaintCmd};
 
 use std::collections::VecDeque;
 
@@ -919,6 +927,7 @@ impl PaintModule {
         color_end: [u8; 4],
     ) {
         let first_face = Self::face_at_texel_of_active(state, x0, y0);
+        let dither = state.session.tools.brush_style.dithering;
         Self::restricted_edit(state, first_face, |cv| {
             let dx = x1 as f32 - x0 as f32;
             let dy = y1 as f32 - y0 as f32;
@@ -931,7 +940,17 @@ impl PaintModule {
                         let proj = (x as f32 - x0 as f32) * dx + (y as f32 - y0 as f32) * dy;
                         (proj / len_sq).clamp(0.0, 1.0)
                     };
-                    let src = Self::lerp_color(color_start, color_end, t);
+                    let src = if dither {
+                        const BAYER: [[u8; 4]; 4] =
+                            [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+                        if t >= (BAYER[(y % 4) as usize][(x % 4) as usize] as f32 + 0.5) / 16.0 {
+                            color_end.map(f32::from)
+                        } else {
+                            color_start.map(f32::from)
+                        }
+                    } else {
+                        Self::lerp_color(color_start, color_end, t)
+                    };
                     if let Some(dst) = cv.get(x, y) {
                         cv.set(x, y, Self::over(dst, src));
                     }
@@ -952,13 +971,24 @@ impl PaintModule {
     ) {
         let first_face = Self::face_at_texel_of_active(state, cx, cy);
         let radius = radius.max(1.0);
+        let dither = state.session.tools.brush_style.dithering;
         Self::restricted_edit(state, first_face, |cv| {
             for y in 0..cv.h {
                 for x in 0..cv.w {
                     let d =
                         ((x as f32 - cx as f32).powi(2) + (y as f32 - cy as f32).powi(2)).sqrt();
                     let t = (d / radius).clamp(0.0, 1.0);
-                    let src = Self::lerp_color(color_start, color_end, t);
+                    let src = if dither {
+                        const BAYER: [[u8; 4]; 4] =
+                            [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+                        if t >= (BAYER[(y % 4) as usize][(x % 4) as usize] as f32 + 0.5) / 16.0 {
+                            color_end.map(f32::from)
+                        } else {
+                            color_start.map(f32::from)
+                        }
+                    } else {
+                        Self::lerp_color(color_start, color_end, t)
+                    };
                     if let Some(dst) = cv.get(x, y) {
                         cv.set(x, y, Self::over(dst, src));
                     }
@@ -1183,16 +1213,19 @@ impl PaintModule {
         }
         let restriction = Self::resolve_restriction(state, first_face);
         let blocked = Self::restriction_blocks_everything(restriction.as_ref());
+        let alpha_lock = state.session.tools.brush_style.alpha_lock;
         let mut done = false;
         if !blocked {
             let active = state.project.active;
             if let Some(asset) = state.project.assets.get_mut(active)
+                && !asset.locked
                 && let Some(stack) = asset.paint_stack.as_mut()
                 && let Some(layer) = stack.active_mut()
                 && !layer.locked
                 && layer.is_paintable()
                 && let Some(cv) = layer.canvas_mut()
             {
+                let alpha_before = alpha_lock.then(|| cv.pixels.clone());
                 let snapshot = restriction.as_ref().map(|_| cv.pixels.clone());
                 edit(cv);
                 if let (Some(r), Some(snapshot)) = (restriction.as_ref(), snapshot) {
@@ -1201,6 +1234,15 @@ impl PaintModule {
                         if *allowed == 0 {
                             cv.pixels[i * 4..i * 4 + 4]
                                 .copy_from_slice(&snapshot[i * 4..i * 4 + 4]);
+                        }
+                    }
+                }
+                if let Some(before) = alpha_before {
+                    for (pixel, old) in cv.pixels.chunks_exact_mut(4).zip(before.chunks_exact(4)) {
+                        if old[3] == 0 {
+                            pixel.copy_from_slice(old);
+                        } else {
+                            pixel[3] = old[3];
                         }
                     }
                 }
@@ -1685,6 +1727,106 @@ impl Module for PaintModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn alpha_lock_keeps_transparency_for_brush_eraser_and_gradient() {
+        let mut state = AppState::default();
+        let mut canvas = Canvas::new(8, 8, [0; 4]);
+        canvas.set(3, 3, [10, 20, 30, 128]);
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(PaintLayer::new_raster("Alpha", canvas.clone()));
+        let asset = state.project.active_mut().unwrap();
+        asset.texture = Some(canvas);
+        asset.paint_stack = Some(stack);
+        state.session.tools.brush_style.alpha_lock = true;
+        state.paint_color = [1.0, 0.0, 0.0];
+        for kind in [BrushType::Pixel, BrushType::Eraser] {
+            let settings = BrushSettings {
+                kind,
+                size_px: 1.0,
+                hardness: 1.0,
+                strength: 1.0,
+                ..Default::default()
+            };
+            PaintModule::canvas_brush_with_settings(&mut state, 3, 3, settings);
+            PaintModule::canvas_brush_with_settings(&mut state, 0, 0, settings);
+            let layer = state
+                .project
+                .active()
+                .unwrap()
+                .paint_stack
+                .as_ref()
+                .unwrap()
+                .active()
+                .unwrap()
+                .canvas()
+                .unwrap();
+            assert_eq!(layer.get(3, 3).unwrap()[3], 128);
+            assert_eq!(layer.get(0, 0).unwrap(), [0; 4]);
+        }
+        PaintModule::canvas_gradient_linear(
+            &mut state,
+            0,
+            0,
+            7,
+            0,
+            [255, 0, 0, 255],
+            [0, 0, 255, 255],
+        );
+        let layer = state
+            .project
+            .active()
+            .unwrap()
+            .paint_stack
+            .as_ref()
+            .unwrap()
+            .active()
+            .unwrap()
+            .canvas()
+            .unwrap();
+        assert_eq!(layer.get(3, 3).unwrap()[3], 128);
+        assert_eq!(layer.get(0, 0).unwrap(), [0; 4]);
+    }
+
+    #[test]
+    fn dithered_gradient_uses_only_the_two_endpoint_colors() {
+        let mut state = AppState::default();
+        let canvas = Canvas::new(16, 8, [0; 4]);
+        let mut stack = PaintLayerStack::new();
+        stack.add_layer(PaintLayer::new_raster("Gradient", canvas.clone()));
+        let asset = state.project.active_mut().unwrap();
+        asset.texture = Some(canvas);
+        asset.paint_stack = Some(stack);
+        state.session.tools.brush_style.dithering = true;
+        PaintModule::canvas_gradient_linear(
+            &mut state,
+            0,
+            0,
+            15,
+            0,
+            [0, 0, 0, 255],
+            [255, 255, 255, 255],
+        );
+        let layer = state
+            .project
+            .active()
+            .unwrap()
+            .paint_stack
+            .as_ref()
+            .unwrap()
+            .active()
+            .unwrap()
+            .canvas()
+            .unwrap();
+        assert!(
+            layer
+                .pixels
+                .chunks_exact(4)
+                .all(|p| p == [0, 0, 0, 255] || p == [255; 4])
+        );
+        assert!(layer.pixels.chunks_exact(4).any(|p| p == [0, 0, 0, 255]));
+        assert!(layer.pixels.chunks_exact(4).any(|p| p == [255; 4]));
+    }
 
     #[test]
     fn vertex_fill_advances_only_color_revision_and_is_undoable() {

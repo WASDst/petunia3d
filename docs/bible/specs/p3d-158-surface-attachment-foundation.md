@@ -3,7 +3,7 @@
 <aside>
 📌
 
-Estado: **fundação pós-V1 aprovada**. Uma única representação de attachment deve ser reutilizada por Decals, Hair roots, Path Paint, Surface Conform, accessories e detalhes aderidos.
+Estado: **fundação aprovada; uso por Path Paint antecipado para o MVP em 01/10/2026**. Uma única representação de attachment deve ser reutilizada por Decals, Hair roots, Path Paint, Surface Conform, accessories e detalhes aderidos.
 
 </aside>
 

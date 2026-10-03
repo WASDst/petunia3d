@@ -5,6 +5,35 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### PAINT/DRAW — integração MVP (02/10/2026)
+
+- SVG como decal com fonte/cache, re-rasterização 512/1024, parser com limites de expansão e importação de contornos DRAW em um Undo. Compatibilidade dos layouts postcard antigos; novos dados persistem em ZIP/JSON.
+- Projection/Stencil: preview temporário, move/rotate/scale/mirror, alpha/luma, oclusão da cena, restrições de pintura, layer raster própria e Undo. Posicionar stencil reutiliza a mesma gramática; Enter retorna ao brush.
+- Path Paint integrado ao Slint: Stroke, Ribbon e Repeated Stamp com tangente local, anchors de superfície persistentes, validação em lote e rollback de anchors inválidos/áreas bloqueadas.
+- Alpha lock, linha Shift no canvas/modelo, pixel perfect incremental e simétrico, palette ramp e dithering; densidade de texel linear corrigida, diagnóstico de ilhas pequenas e export GLB com bleed configurável em cópia.
+- DRAW: round numérico de canto/perfil, mirror de criação, presets poligonais (polígono regular, rounded rectangle, ellipse, arc por três pontos, slot), comprimento/ângulo, simplify/resample e trace de silhouette com furos; comandos em lote mantêm um Undo.
+- Shape Builder: Merge não deixa divisórias reabrirem a região; Delete/XOR/Cut persistem furos; contornos dos furos ficam acessíveis na viewport; extrusão suporta múltiplos furos. Revolve/Sweep recusam esses perfis explicitamente. Curvas fiéis e handles de furos ficam para V1.
+- Booleanos: cores interpoladas em pontos novos, preservação de paint stack quando UV é herdado e transferência de albedo/PBR ao mudar atlas, incluindo reorientação de mapas de normais. O material resultante não altera ativos que compartilham o original. Sem remesh; triângulos permanecem onde não há cleanup seguro.
+- Novas regressões para persistência, Undo/rollback, furos, textura, normais e densidade. Compilação focalizada para integração; testes/gates finais e aceite manual pendentes por instrução do responsável. Sem redesign da UI; somente controles funcionais existentes.
+
+### Shape Builder: preenchimento e furos persistentes (02/10/2026)
+- Delete de área cercada, Cut com furo e XOR preservam vazios após recalcular regiões; furos pertencem à forma composta no documento.
+- Formas que sobrevivem inteiras mantêm identidade, nome e curvas. Testes de XOR exigem a área correta e perfis JSON antigos abrem sem furos.
+- Checkpoint por inspeção; gates aguardam liberação do responsável.
+
+
+### DRAW: domínios específicos, Depth Handle, Workplane por 3 pontos e Imprint com corte booleano (01/10/2026)
+- **Domínios de seleção específicos do DRAW (`Shape / Curve / Point / Region`)**: na barra de domínios, quando em modo DRAW, a seleção expõe os termos e ícones canônicos do Cap. 11/23 (Shape = 1, Curve = 2, Point = 3, Region = 4), preservando os domínios de POLY (Object, Point, Edge, Face).
+- **Depth Handle visual e interativa**: ao fechar uma forma no DRAW, projeta no centroide da região uma alça 3D (haste, diamante no topo e cota métrica) com detecção direta de clique/arraste, permitindo puxar a extrusão diretamente com o cursor no modo Select ou Draw.
+- **Workplane customizado por 3 pontos e seleção**: `ProfileWorkplane::from_three_points` e `from_face_and_edge`, permitindo criar planos de trabalho alinhados passando por 3 vértices selecionados ou por uma face com aresta guia, com item correspondente no menu de contexto do viewport.
+- **Imprint flexível com recorte booleano**: `imprint_boolean_cut` via `geo::BooleanOps` permite que regiões que cruzam bordas da face hospedeira fatiem a geometria com precisão, eliminando o erro de face externa quando o perfil transborda.
+- **Composição de múltiplos shapes**: formas 2D fechadas sucessivas criam novos perfis para composição via Shape Builder sem sobrescrita indesejada.
+
+### Persistência de transform, isolamento de trilhos DRAW/POLY e formas 2D (01/10/2026)
+- **Persistência de Transforms**: `Asset` ganha os campos persistentes `position`, `rotation` e `scale`. O modal de transformação no espaço de objeto atualiza esses campos, e os inputs de Transform refletem os valores persistidos do objeto ativo ao trocar ou re-selecionar ativos. Adicionados comandos semânticos canônicos `model.clear_location` (`Alt+G`), `model.clear_rotation` (`Alt+R`), `model.clear_scale` (`Alt+S`) e `model.clear_all_transforms` (`Alt+Backspace`) no menu de contexto (RMB sobre o objeto e Outliner).
+- **Separação estrita de trilhos DRAW vs POLY**: a barra de ferramentas lateral esquerda separa totalmente as ferramentas exclusivas de DRAW (Sketch Profile, Shape Builder, 2D Rect, 2D Circle, Push-Pull) das ferramentas de POLY (Primitivas 3D, Extrude, Inset, Bevel, Poly Pen, Loop Cut, Slice). Nenhuma ferramenta de DRAW vaza para a barra de POLY e vice-versa.
+- **Formas 2D em Parts e seleção/exclusão direta**: os perfis 2D (`ProfileResource`) passam a ser listados em Parts com identificador `profile:{id}` (com contagem de pontos e tag 2D), permitindo selecionar qualquer forma sem volume pela lista ou clicando diretamente no seu contorno na viewport. A tecla `Del` ou a opção de exclusão agora apaga perfis 2D via `DeleteProfileCmd`, eliminando shapes "fantasmas" que ficavam órfãos.
+
 ### Cor de overlay de seleção por parte e separar parte da seleção (01/10/2026)
 - **Overlay customizado por parte**: cada `Asset` ganha o campo persistente opcional `selection_overlay_color: Option<[u8; 3]>`. Ao criar partes, herdam `None` (usam a cor global do projeto); na lista de partes (Inspector e Outliner flutuante), após o botão de bloqueio (lock), um quadrado colorido exibe a cor ativa da parte e abre popover com roda de cores circular HSV interativa (`crates/ui-slint/src/color_wheel.rs`), presets rápidos, input hex e botão de restaurar cor padrão (`None`).
 - **Renderização com cores de parte**: os renderers WGPU, software e a camada de overlay 2D do Slint usam a cor da parte ativa com fallback transparente para a cor global.

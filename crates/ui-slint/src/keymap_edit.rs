@@ -102,6 +102,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 all.push(action);
             }
         }
+        for (action, _) in crate::paint_surface_tools::SURFACE_ACTIONS
+            .iter()
+            .chain(crate::draw_extensions::DRAW_ACTIONS.iter())
+        {
+            if *action != "draw.import_svg" && !all.iter().any(|a| a == action) {
+                all.push((*action).into());
+            }
+        }
         all.sort();
         all
     }
@@ -113,7 +121,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .map(|action| {
                 let binding = keybinds.binding_for(&action);
                 KeymapActionRow {
-                    label: action_label(&action),
+                    label: crate::paint_surface_tools::SURFACE_ACTIONS
+                        .iter()
+                        .chain(crate::draw_extensions::DRAW_ACTIONS.iter())
+                        .find(|(id, _)| *id == action)
+                        .map_or_else(
+                            || action_label(&action),
+                            |(_, key)| self.state.t_id(petunia_config::TextId::new(key)),
+                        ),
                     shortcut: binding.map(Binding::to_shortcut_string).unwrap_or_default(),
                     conflict: binding
                         .is_some_and(|b| !keybinds.conflicts_for(&action, b).is_empty()),

@@ -663,6 +663,9 @@ impl AppState {
             is_edit_pivot,
             is_object_mode,
             active_orig,
+            active_orig_pos,
+            active_orig_rot,
+            active_orig_scale,
             others,
             mut changed,
         ) = {
@@ -674,6 +677,9 @@ impl AppState {
             let is_object_mode = self.edit_mode() == EditMode::Object;
             let active_id = modal.original.active().map(|asset| asset.id);
             let active_orig = modal.original.active().and_then(|a| a.origin);
+            let active_orig_pos = modal.original.active().map_or([0.0; 3], |a| a.position);
+            let active_orig_rot = modal.original.active().map_or([0.0; 3], |a| a.rotation);
+            let active_orig_scale = modal.original.active().map_or([1.0; 3], |a| a.scale);
             let selection_assets = &modal.selection.assets;
             let individual_origins = modal.individual_origins;
 
@@ -727,8 +733,40 @@ impl AppState {
                                 _ => orig,
                             }
                         });
+                        let other_pos = match modal_kind {
+                            ModalKind::Move => Some([
+                                asset.position[0] + components.x,
+                                asset.position[1] + components.y,
+                                asset.position[2] + components.z,
+                            ]),
+                            _ => Some(asset.position),
+                        };
+                        let other_rot = match modal_kind {
+                            ModalKind::Rotate => Some([
+                                asset.rotation[0] + components.x,
+                                asset.rotation[1] + components.y,
+                                asset.rotation[2] + components.z,
+                            ]),
+                            _ => Some(asset.rotation),
+                        };
+                        let other_scale = match modal_kind {
+                            ModalKind::Scale => Some([
+                                asset.scale[0] * components.x,
+                                asset.scale[1] * components.y,
+                                asset.scale[2] * components.z,
+                            ]),
+                            _ => Some(asset.scale),
+                        };
                         let is_changed = !same_geometry(&other, &asset.mesh);
-                        (asset.id, other, is_changed, other_orig)
+                        (
+                            asset.id,
+                            other,
+                            is_changed,
+                            other_orig,
+                            other_pos,
+                            other_rot,
+                            other_scale,
+                        )
                     })
                     .collect()
             } else {
@@ -759,15 +797,23 @@ impl AppState {
                 is_edit_pivot,
                 is_object_mode,
                 active_orig,
+                active_orig_pos,
+                active_orig_rot,
+                active_orig_scale,
                 others,
                 changed,
             )
         };
 
-        if others.iter().any(|(_, mesh, _, _)| !valid_mesh(mesh)) {
+        if others
+            .iter()
+            .any(|(_, mesh, _, _, _, _, _)| !valid_mesh(mesh))
+        {
             return Err(ModalError::InvalidMesh);
         }
-        changed |= others.iter().any(|(_, _, is_changed, _)| *is_changed);
+        changed |= others
+            .iter()
+            .any(|(_, _, is_changed, _, _, _, _)| *is_changed);
 
         let active = self.project.active_mut().ok_or(ModalError::NoActiveMesh)?;
         active.mesh = mesh;
@@ -793,11 +839,48 @@ impl AppState {
                 _ => orig,
             });
         }
-        for (id, other_mesh, _, other_orig) in others {
+        if is_object_mode && !is_edit_pivot {
+            match modal_kind {
+                ModalKind::Move => {
+                    active.position = [
+                        active_orig_pos[0] + components.x,
+                        active_orig_pos[1] + components.y,
+                        active_orig_pos[2] + components.z,
+                    ];
+                }
+                ModalKind::Rotate => {
+                    active.rotation = [
+                        active_orig_rot[0] + components.x,
+                        active_orig_rot[1] + components.y,
+                        active_orig_rot[2] + components.z,
+                    ];
+                }
+                ModalKind::Scale => {
+                    active.scale = [
+                        active_orig_scale[0] * components.x,
+                        active_orig_scale[1] * components.y,
+                        active_orig_scale[2] * components.z,
+                    ];
+                }
+                _ => {}
+            }
+        }
+        for (id, other_mesh, _, other_orig, other_pos, other_rot, other_scale) in others {
             if let Some(asset) = self.project.assets.iter_mut().find(|asset| asset.id == id) {
                 asset.mesh = other_mesh;
                 if is_object_mode && other_orig.is_some() {
                     asset.origin = other_orig;
+                }
+                if is_object_mode && !is_edit_pivot {
+                    if let Some(p) = other_pos {
+                        asset.position = p;
+                    }
+                    if let Some(r) = other_rot {
+                        asset.rotation = r;
+                    }
+                    if let Some(s) = other_scale {
+                        asset.scale = s;
+                    }
                 }
             }
         }

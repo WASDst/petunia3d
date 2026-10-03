@@ -5701,6 +5701,7 @@ dependencies = [
  "petunia_mesh",
  "petunia_project",
  "serde",
+ "serde_json",
  "uuid",
 ]
 
@@ -5737,6 +5738,8 @@ dependencies = [
  "insta",
  "petunia_mesh",
  "postcard",
+ "resvg 0.48.1",
+ "roxmltree 0.21.1",
  "serde",
  "serde_json",
  "tempfile",
@@ -5853,6 +5856,7 @@ dependencies = [
  "petunia_render_wgpu",
  "pollster 0.4.0",
  "rfd 0.17.2",
+ "serde_json",
  "slint",
  "slint-build",
  "tempfile",

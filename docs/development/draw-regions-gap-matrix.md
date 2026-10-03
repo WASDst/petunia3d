@@ -80,3 +80,22 @@ entre reto e curva, inclusive no retângulo e no círculo.
 - Inserir nó em perfil **aberto** só por Ctrl+clique/forma fechada (clicar na aresta de um perfil aberto adiciona ponto novo, para não atrapalhar o desenho de formas que se cruzam).
 - Clicar **dentro** da região para reativar a forma ainda não existe (só o contorno).
 - Círculo continua sendo um polígono de N pontos; curvar todos os pontos o arredonda, mas não há "círculo paramétrico" editável por raio (depende das formas paramétricas do cap. 02).
+
+## Checkpoint posterior — 02/10/2026 (`4a41951`)
+
+A tabela acima registra a rodada original. O código posterior acrescenta
+seleção Shape/Curve/Point/Region no shell, Depth Handle, plano por três
+pontos/seleção e imprint com `geo::BooleanOps` para recortar regiões que
+cruzam os limites da face. Esses deltas substituem a alegação de ausência
+dessas capacidades, mas não encerram automaticamente todas as pendências.
+
+| Requisito | Evidência atual | Classificação nesta auditoria |
+| --- | --- | --- |
+| Seleção específica DRAW | `app.slint`, `callbacks.rs` e `lib.rs` no commit `4a41951` | PARTIALLY_COMPLIANT — reprodução manual pendente |
+| Depth Handle visual/interativo | `draw_shapes.rs` e `app.slint`; teste de projeção adicionado | PARTIALLY_COMPLIANT — testes não executados nesta auditoria |
+| Plano por três pontos/seleção | `ProfileWorkplane::from_three_points`, `draw_profile.rs`; testes adicionados | PARTIALLY_COMPLIANT — validação de fluxo pendente |
+| Imprint cruzando o limite de uma face | `crates/mesh/src/imprint.rs`, recorte booleano e testes adicionados | PARTIALLY_COMPLIANT — sem confirmação de furos e múltiplas faces hospedeiras |
+
+A inspeção de 02/10 foi documental e estática; não confirma gates, captura
+nativa ou teste com usuários. A evidência de compilação do PR #19 antecede
+este checkpoint e não valida esses deltas.

@@ -11,9 +11,8 @@
 //! O **Pathfinder** age sobre a pilha de perfis fechados do plano: Unite,
 //! Subtract (a forma mais ao fundo menos as da frente), Intersect e Exclude.
 //!
-//! Em todos os casos o resultado substitui os perfis fechados do plano por laços
-//! poligonais que ladrilham as faces resultantes: o arranjo recalculado dá
-//! exatamente as faces esperadas. Tudo vira **uma** entrada de Undo (o comando é
+//! O resultado usa perfis compostos: contorno e furos pertencem à mesma forma.
+//! O arranjo é recortado ao preenchimento, portanto não recria áreas removidas. Tudo vira **uma** entrada de Undo (o comando é
 //! despachado normalmente). Perfis usados por um Path Generator ficam de fora, e
 //! os perfis abertos continuam onde estão.
 //!
@@ -21,7 +20,7 @@
 
 use glam::Vec3;
 use petunia_mesh::arrangement::{Region2, region_at};
-use petunia_mesh::shape_ops::{face_loops, pathfinder, regions_union};
+use petunia_mesh::shape_ops::{pathfinder_regions, regions_union};
 use petunia_project::{ProfileResource, ProfileWorkplane, SplineResource};
 
 pub use petunia_mesh::shape_ops::PathfinderOp;
@@ -85,7 +84,7 @@ impl AppState {
             .map(|group| ShapePlane {
                 plane: group.plane,
                 profiles: group.profiles.clone(),
-                regions: petunia_mesh::arrangement::planar_regions(&group.lines),
+                regions: group.regions(),
             })
             .filter(|plane| !plane.regions.is_empty())
             .collect()
@@ -120,7 +119,7 @@ impl AppState {
             }
         };
         let plane = group.plane;
-        let regions = petunia_mesh::arrangement::planar_regions(&group.lines);
+        let regions = group.regions();
         if regions.is_empty() {
             return Err(ShapeEditError::NoShapes);
         }
@@ -132,7 +131,7 @@ impl AppState {
             .filter(|(_, line)| line.closed)
             .collect();
 
-        let faces: Vec<Region2> = match edit {
+        let mut faces: Vec<Region2> = match edit {
             ShapeEdit::Merge { samples } | ShapeEdit::Delete { samples } => {
                 let mut touched: Vec<usize> = samples
                     .iter()
@@ -161,28 +160,109 @@ impl AppState {
                 if closed.len() < 2 {
                     return Err(ShapeEditError::NeedsTwoShapes);
                 }
-                let shapes: Vec<Vec<[f64; 2]>> =
-                    closed.iter().map(|(_, line)| line.points.clone()).collect();
-                let result = pathfinder(&shapes, *op);
+                let shapes: Vec<Region2> = group.shapes.iter().flatten().cloned().collect();
+                let result = pathfinder_regions(&shapes, *op);
                 if result.is_empty() {
                     return Err(ShapeEditError::Empty);
                 }
                 result
             }
         };
-        let loops = face_loops(&faces);
-        if loops.len() > MAX_LOOPS {
+        if faces.len() > MAX_LOOPS {
             return Err(ShapeEditError::TooManyPieces);
         }
         let report = ShapeEditReport {
             closed_before: closed.len(),
-            closed_after: loops.len(),
+            closed_after: faces.len(),
             faces_before: regions.len(),
             faces_after: faces.len(),
         };
 
+        // Construction edges inside a merged region have been consumed by that gesture.
+        // Keeping them would split the new shape again on the next arrangement rebuild.
+        if let ShapeEdit::Merge { samples } = edit {
+            let touched: Vec<_> = regions
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| {
+                    samples
+                        .iter()
+                        .any(|p| region_at(&regions, plane.to_plane(*p)) == Some(*i))
+                })
+                .map(|(_, r)| r.clone())
+                .collect();
+            let mask = regions_union(&touched);
+            for (id, line) in group
+                .profiles
+                .iter()
+                .zip(&group.lines)
+                .filter(|(_, line)| !line.closed)
+            {
+                let pieces = petunia_mesh::shape_ops::clip_open_outside(&line.points, &mask);
+                if pieces.len() == 1 && same_ring(&pieces[0], &line.points) {
+                    continue;
+                }
+                let Some(profile) = self.project.project.get_profile(*id).cloned() else {
+                    continue;
+                };
+                let _ = self.project.project.remove_profile(*id);
+                let _ = self.project.project.remove_spline(profile.spline_id);
+                for (index, piece) in pieces.into_iter().enumerate() {
+                    let local: Vec<_> = piece
+                        .into_iter()
+                        .map(|p| {
+                            let world = plane.to_world(p);
+                            let origin =
+                                Vec3::from_array(profile.workplane.origin.map(|v| v as f32));
+                            let d = world - origin;
+                            [
+                                f64::from(d.dot(Vec3::from_array(
+                                    profile.workplane.right.map(|v| v as f32),
+                                ))),
+                                f64::from(
+                                    d.dot(Vec3::from_array(profile.workplane.up.map(|v| v as f32))),
+                                ),
+                                0.0,
+                            ]
+                        })
+                        .collect();
+                    let mut spline = SplineResource::from_polyline(&profile.name, &local, false);
+                    let mut copy = profile.clone();
+                    if index == 0 {
+                        spline.id = profile.spline_id;
+                    } else {
+                        copy.id = uuid::Uuid::new_v4();
+                    }
+                    copy.spline_id = spline.id;
+                    self.project
+                        .project
+                        .add_spline(spline)
+                        .map_err(|_| ShapeEditError::Empty)?;
+                    self.project
+                        .project
+                        .add_profile(copy)
+                        .map_err(|_| ShapeEditError::Empty)?;
+                }
+            }
+        }
+
+        // Reutiliza formas que sobreviveram inteiras, incluindo ids, nomes e curvas.
+        let mut preserved = Vec::new();
+        for (id, shape) in group.profiles.iter().zip(&group.shapes) {
+            let Some(shape) = shape else {
+                continue;
+            };
+            if let Some(index) = faces.iter().position(|face| same_region(face, shape)) {
+                faces.remove(index);
+                preserved.push(*id);
+            }
+        }
         // Escrita: remove os perfis fechados do plano e grava os laços novos.
-        let removed: Vec<uuid::Uuid> = closed.iter().map(|(id, _)| *id).collect();
+        let removed: Vec<uuid::Uuid> = closed
+            .iter()
+            .map(|(id, _)| *id)
+            .filter(|id| !preserved.contains(id))
+            .collect();
         let wall_thickness = removed
             .first()
             .and_then(|id| self.project.project.get_profile(*id))
@@ -200,11 +280,13 @@ impl AppState {
             normal: plane.normal.to_array().map(f64::from),
         };
         let name = self.t_id(petunia_config::text_id::DRAW_SHAPE_NAME);
-        for points in loops {
+        for face in faces {
+            let points = face.outer;
             let points3: Vec<[f64; 3]> = points.iter().map(|p| [p[0], p[1], 0.0]).collect();
             let spline = SplineResource::from_polyline(&name, &points3, true);
             let mut profile = ProfileResource::new(&name, spline.id, workplane);
             profile.wall_thickness = wall_thickness;
+            profile.holes = face.holes;
             // Falhas aqui são de dados inválidos (não finitos): o dispatcher
             // desfaz o comando inteiro ao receber o erro.
             if self.project.project.add_spline(spline).is_err()
@@ -215,6 +297,27 @@ impl AppState {
         }
         Ok(report)
     }
+}
+
+fn same_ring(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    if a.is_empty() {
+        return true;
+    }
+    let near = |p: [f64; 2], q: [f64; 2]| (p[0] - q[0]).hypot(p[1] - q[1]) < 1.0e-6;
+    (0..b.len()).any(|offset| {
+        (0..a.len()).all(|i| near(a[i], b[(offset + i) % b.len()]))
+            || (0..a.len()).all(|i| near(a[i], b[(offset + b.len() - i) % b.len()]))
+    })
+}
+fn same_region(a: &Region2, b: &Region2) -> bool {
+    same_ring(&a.outer, &b.outer)
+        && a.holes.len() == b.holes.len()
+        && a.holes
+            .iter()
+            .all(|hole| b.holes.iter().any(|other| same_ring(hole, other)))
 }
 
 /// Comando de edição de formas (Shape Builder e Pathfinder).
@@ -387,9 +490,8 @@ mod tests {
     }
 
     #[test]
-    fn deleting_an_enclosed_face_leaves_its_outline_as_a_void_region() {
-        // Limite conhecido: o arranjo planar devolve como região todo espaço
-        // fechado por contornos; apagar uma face cercada deixa o vazio como região.
+    fn deleting_an_enclosed_face_removes_its_area() {
+        // O contorno removido deve continuar vazio após recalcular o arranjo.
         let mut state = two_squares();
         let cmd = ShapeEditCmd {
             plane: None,
@@ -399,7 +501,7 @@ mod tests {
         };
         state.dispatch(&cmd).unwrap();
         let areas = face_areas(&state);
-        assert_eq!(areas, vec![1.0, 3.0, 3.0], "{areas:?}");
+        assert_eq!(areas, vec![3.0, 3.0], "{areas:?}");
     }
 
     #[test]
@@ -418,13 +520,12 @@ mod tests {
 
     #[test]
     fn pathfinder_operations_match_set_algebra_in_one_undo_step() {
-        // Área total das faces do plano depois da operação. Exclude deixa o
-        // vazio da sobreposição como região (ver o teste do vazio): 3 + 3 + 1.
+        // Área do preenchimento real; XOR exclui a sobreposição.
         for (op, expected) in [
             (PathfinderOp::Unite, 7.0),
             (PathfinderOp::Subtract, 3.0),
             (PathfinderOp::Intersect, 1.0),
-            (PathfinderOp::Exclude, 7.0),
+            (PathfinderOp::Exclude, 6.0),
         ] {
             let mut state = two_squares();
             let depth = state.project.undo.depth().0;
@@ -480,5 +581,44 @@ mod tests {
             "só o primeiro perfil é editável"
         );
         assert_eq!(planes[0].regions.len(), 1);
+    }
+    #[test]
+    fn merge_consumes_open_dividers_and_preserves_their_external_pieces() {
+        let mut state = AppState::default();
+        add_square(&mut state, 0.0, 0.0, 2.0);
+        let spline =
+            SplineResource::from_polyline("Divider", &[[-1.0, 1.0, 0.0], [3.0, 1.0, 0.0]], false);
+        let profile = ProfileResource::new("Divider", spline.id, plane());
+        state.project.splines.push(spline);
+        state.project.profiles.push(profile);
+        assert_eq!(face_areas(&state).len(), 2);
+        state
+            .dispatch(&ShapeEditCmd {
+                plane: None,
+                edit: ShapeEdit::Merge {
+                    samples: vec![sample(0.5, 0.5), sample(0.5, 1.5)],
+                },
+            })
+            .unwrap();
+        assert_eq!(face_areas(&state), vec![4.0]);
+        assert_eq!(
+            state.project.splines.iter().filter(|s| !s.closed).count(),
+            2
+        );
+    }
+    #[test]
+    fn untouched_profile_keeps_identity_and_name() {
+        let mut state = two_squares();
+        add_square(&mut state, 10.0, 10.0, 1.0);
+        let original = state.project.profiles.last().unwrap().clone();
+        state
+            .dispatch(&ShapeEditCmd {
+                plane: None,
+                edit: ShapeEdit::Delete {
+                    samples: vec![sample(1.5, 1.5)],
+                },
+            })
+            .unwrap();
+        assert_eq!(state.project.get_profile(original.id), Some(&original));
     }
 }

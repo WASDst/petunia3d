@@ -1,6 +1,6 @@
 # Pesquisa — próximos passos de PAINT e DRAW (2026-10-01)
 
-Status: **pesquisa e análise, nada implementado a partir dela.** Pedido do responsável
+Status na publicação (01/10): **pesquisa e análise, antes da implementação**. A shortlist da seção 5 foi autorizada pelo responsável e implementada em 02/10; [estado atual e limites](paint-draw-mvp-completion-gap-matrix.md). As tabelas de pesquisa continuam referências, não promessa de entregar todas as propostas. Pedido do responsável
 do produto: (a) o que mais vale implementar em PAINT e DRAW fora das listas atuais;
 (b) por que os booleanos saem em triângulos; (c) esforço de um *Shape Builder* 2D;
 (d) SVG como decalque, Projection/Stencil e Path Paint. Método: leitura do caderno

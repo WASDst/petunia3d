@@ -14,12 +14,14 @@ pub mod animate;
 mod brush_panel;
 pub mod color_wheel;
 pub mod commands;
+mod draw_extensions;
 mod draw_shapes;
 pub mod files;
 mod input;
 pub mod keymap_edit;
 pub mod numeric;
 pub mod overlay;
+mod paint_surface_tools;
 mod scene_cache;
 mod shape_builder_tool;
 pub mod split_view;
@@ -277,6 +279,7 @@ pub enum GrammarTool {
     /// Shape Builder (DRAW): arrastar sobre faces as funde; Ctrl-arrastar as apaga;
     /// clique extrai a face.
     ShapeBuilder,
+    SurfacePaint,
 }
 
 /// Gesto da gramática única em andamento.
@@ -293,6 +296,7 @@ enum ToolGesture {
     },
     /// O estado vive em `SlintUiBridge::shape_builder`.
     ShapeBuilder,
+    SurfacePaint,
 }
 
 /// Id persistente da ferramenta paramétrica no trilho.
@@ -368,6 +372,7 @@ pub enum UiIntent {
     ImportPalette(PathBuf),
     /// Importa uma imagem (PNG/JPEG/WebP/BMP) como camada de decalque.
     ImportDecalFrom(PathBuf),
+    ImportSvgProfiles(PathBuf),
     ExportPalette(PathBuf),
     SelectSceneAsset(String),
     ToggleSceneAssetVisibility(String),
@@ -465,6 +470,7 @@ pub enum UiIntent {
     ProfileSetWorkplaneGround,
     ProfileSetWorkplaneFace,
     ProfileSetWorkplaneView,
+    ProfileSetWorkplaneSelection,
     /// Plano automático: face sob o cursor ou plano mais paralelo à vista.
     ProfileSetWorkplaneAuto,
     /// DRAW (forma) ou POLY (componente) dentro do workspace de modelagem.
@@ -626,6 +632,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub position: [NumericFieldState; 3],
     pub rotation: [NumericFieldState; 3],
     pub scale: [NumericFieldState; 3],
+    pub transform_initial: [f32; 3],
     pub drag: Option<ViewportDrag>,
     pub viewport_size: [f32; 2],
     /// Última posição de tela do traço de pintura ativo.
@@ -700,6 +707,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub paint_pixel_grid: bool,
     pub paint_canvas_zoom: i32,
     pub paint_2d_last: Option<(u32, u32)>,
+    surface_paint: paint_surface_tools::SurfacePaintDraft,
+    draw_parameters: draw_extensions::DrawParameters,
     /// Amostragem incremental do stroke no espaço de pixels da textura.
     pub paint_2d_sampler: petunia_core::StrokeSampler,
     pub paint_target_vertex: bool,
@@ -1047,6 +1056,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             paint_pixel_grid: true,
             paint_canvas_zoom: 1,
             paint_2d_last: None,
+            surface_paint: Default::default(),
+            draw_parameters: Default::default(),
             paint_2d_sampler: petunia_core::StrokeSampler::default(),
             paint_target_vertex: false,
             decal_drag_initial: None,
@@ -1095,12 +1106,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 NumericFieldState::new(1.0, None, None).with_steps(0.1, 0.01),
                 NumericFieldState::new(1.0, None, None).with_steps(0.1, 0.01),
             ],
+            transform_initial: [0.0, 0.0, 0.0],
         };
+        bridge.reset_transform_fields();
         bridge.sync_viewport_context();
         bridge
     }
 
     pub fn apply(&mut self, intent: UiIntent) {
+        if matches!(
+            &intent,
+            UiIntent::SetWorkspace(_)
+                | UiIntent::OpenProjectFrom(_)
+                | UiIntent::SelectSceneAsset(_)
+        ) {
+            self.cancel_surface_paint();
+        }
         if matches!(
             &intent,
             UiIntent::SetWorkspace(_)
@@ -1236,12 +1257,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ExportSceneGlbTo(path) => {
                 let indices = self.state.project.export_selected_indices();
-                match petunia_core::ProjectService::export_glb(&self.state, &indices, &path) {
+                match petunia_core::ProjectService::export_glb_with_padding(
+                    &self.state,
+                    &indices,
+                    &path,
+                    self.draw_parameters.export_padding,
+                ) {
                     Ok(()) => self
                         .state
                         .set_status(format!("exported {}", path.display())),
                     Err(error) => self.state.set_status(format!("export failed: {error}")),
                 }
+            }
+            UiIntent::ImportSvgProfiles(path) => {
+                self.import_svg_profiles(&path);
             }
             UiIntent::ImportDecalFrom(path) => {
                 self.import_decal_image(&path);
@@ -1272,6 +1301,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             UiIntent::Undo => {
+                if self.cancel_surface_paint() {
+                    return;
+                }
                 if self.cancel_active_operation() {
                     return;
                 }
@@ -1280,6 +1312,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             UiIntent::Redo => {
+                if self.cancel_surface_paint() {
+                    return;
+                }
                 if self.cancel_active_operation() {
                     return;
                 }
@@ -1741,6 +1776,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.profile.workplane_locked = true;
                 petunia_module_model::profile_capture_view(&mut self.state);
                 self.announce_locked_workplane();
+            }
+            UiIntent::ProfileSetWorkplaneSelection => {
+                self.reset_profile_for_workplane();
+                if petunia_module_model::profile_capture_from_selection(&mut self.state) {
+                    self.state.profile.workplane_locked = true;
+                    self.announce_locked_workplane();
+                } else {
+                    self.state
+                        .set_status("Select 3 points or a face to define workplane");
+                }
             }
             UiIntent::ProfileSetWorkplaneAuto => {
                 self.reset_profile_for_workplane();
@@ -3490,6 +3535,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         state.normal = profile.workplane.normal.map(|value| value as f32);
         state.closed = spline.closed;
         state.wall_thickness = profile.wall_thickness as f32;
+        state.holes = profile.holes.clone();
         Some(state)
     }
 
@@ -3748,6 +3794,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
 
+        let position = if self.draw_parameters.constrain {
+            self.active_profile_resources()
+                .and_then(|(_, s)| s.points.last())
+                .map_or(position, |last| {
+                    let angle = self.draw_parameters.angle.to_radians();
+                    [
+                        last.position[0] + self.draw_parameters.length * angle.cos(),
+                        last.position[1] + self.draw_parameters.length * angle.sin(),
+                    ]
+                })
+        } else {
+            position
+        };
         let point = petunia_core::SplinePoint::new([position[0], position[1], 0.0]);
         let point_id = point.id;
         let (spline_id, revision_before) =
@@ -3963,12 +4022,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .set_status("Profile requires at least three points");
             return false;
         }
-        let spline_id = spline.id;
-        if let Err(error) = self.state.dispatch(&petunia_core::SetSplineClosedCmd {
-            spline_id,
-            closed: true,
-        }) {
-            self.state.set_status(error.to_string());
+        if !self.close_profile_with_mirror() {
             return false;
         }
         self.state
@@ -5475,9 +5529,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         is_shift: bool,
         is_ctrl: bool,
     ) -> bool {
+        self.validate_surface_target();
         if self.state.workspace != Workspace::Paint {
             return false;
         }
+        let luma = self
+            .state
+            .session
+            .tools
+            .paint_stencil
+            .as_ref()
+            .is_some_and(|s| s.luminance);
+        self.sync_surface_stencil(luma);
         if self.state.session.tools.active_tool == "select" {
             // A ferramenta de seleção não pinta: o clique troca objeto/face.
             return false;
@@ -5499,6 +5562,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         if self.is_shape_tool() {
             return self.begin_paint_shape_at(x, y);
+        }
+        if is_shift {
+            let [w, h] = self.viewport_size;
+            let (origin, direction) = self.state.camera.ray(x / w * 2.0 - 1.0, 1.0 - y / h * 2.0);
+            if let Some((_, hit)) = self.paint_pick(origin, direction) {
+                if let Some(from) = self.surface_paint.straight_from {
+                    let settings = self.viewport_brush_settings();
+                    petunia_module_paint::PaintModule::paint_surface_line(
+                        &mut self.state,
+                        from,
+                        hit,
+                        settings,
+                        false,
+                    );
+                    self.surface_paint.straight_from = Some(hit);
+                    return true;
+                }
+                self.surface_paint.straight_from = Some(hit);
+            }
         }
         self.state.begin_paint_stroke();
         let settings = self.viewport_brush_settings();
@@ -5733,6 +5815,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         // O último ponto passa sem suavização: o traço alcança o cursor.
         self.paint_stabilizer.reset();
         self.paint_stroke_to(x, y);
+        let [w, h] = self.viewport_size;
+        let (origin, direction) = self.state.camera.ray(x / w * 2.0 - 1.0, 1.0 - y / h * 2.0);
+        self.surface_paint.straight_from = self.paint_pick(origin, direction).map(|(_, hit)| hit);
         self.paint_last = None;
         self.paint_sampler.reset();
         self.paint_stabilizer.reset();
@@ -5798,11 +5883,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Processa interação interativa de desenho no canvas 2D de textura (P3D-057).
     /// phase: 0 = Down, 1 = Move, 2 = Up, outros = Cancel
     pub fn paint_2d_stroke(&mut self, norm_x: f32, norm_y: f32, phase: i32) -> bool {
+        if self.state.workspace == Workspace::Paint
+            && self.state.modal.is_none()
+            && self.surface_paint_canvas_input(norm_x, norm_y, phase)
+        {
+            return true;
+        }
         if !norm_x.is_finite() || !norm_y.is_finite() {
             return false;
         }
         if self.paint_pip && phase == 0 {
             self.frame_camera_on_uv(norm_x, norm_y);
+        }
+        if self.state.workspace != Workspace::Paint
+            || self.state.modal.is_some()
+            || self.state.mesh_preview.is_some()
+        {
+            return false;
+        }
+        let luma = self
+            .state
+            .session
+            .tools
+            .paint_stencil
+            .as_ref()
+            .is_some_and(|s| s.luminance);
+        if phase == 0 {
+            self.sync_surface_stencil(luma);
         }
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
         let (width, height) = match self
@@ -5897,7 +6004,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let dabs = self
                     .paint_2d_sampler
                     .begin([fx, fy], settings.dab_step_px());
-                let dabs = texture_points(&dabs, width, height);
+                let mut dabs = texture_points(&dabs, width, height);
+                if self.state.session.tools.brush_style.pixel_perfect
+                    && settings.kind == petunia_core::BrushType::Pixel
+                {
+                    dabs = self.pixel_perfect_samples(&dabs, phase == 0);
+                }
                 petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
                     &mut self.state,
                     &dabs,
@@ -5917,7 +6029,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .paint_2d_stabilizer
                     .filter([px as f32, py as f32], smoothing);
                 let dabs = self.paint_2d_sampler.extend([fx, fy]);
-                let dabs = texture_points(&dabs, width, height);
+                let mut dabs = texture_points(&dabs, width, height);
+                if self.state.session.tools.brush_style.pixel_perfect
+                    && settings.kind == petunia_core::BrushType::Pixel
+                {
+                    dabs = self.pixel_perfect_samples(&dabs, phase == 0);
+                }
                 petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
                     &mut self.state,
                     &dabs,
@@ -5934,13 +6051,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let settings = self.state.brush_settings();
                 self.paint_2d_stabilizer.reset();
                 let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
-                let dabs = texture_points(&dabs, width, height);
+                let mut dabs = texture_points(&dabs, width, height);
+                if self.state.session.tools.brush_style.pixel_perfect
+                    && settings.kind == petunia_core::BrushType::Pixel
+                {
+                    dabs = self.pixel_perfect_samples(&dabs, phase == 0);
+                }
                 petunia_module_paint::PaintModule::canvas_brush_batch_with_symmetry(
                     &mut self.state,
                     &dabs,
                     settings,
                 );
                 self.paint_2d_sampler.reset();
+                self.surface_paint.straight_texel = Some((px, py));
                 self.state.finish_paint_stroke(false);
                 self.state.mark_dirty();
                 true
@@ -7217,6 +7340,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         label: &str,
         mutate: impl FnOnce(&mut petunia_project::paint_layers::PaintLayerStack) -> bool,
     ) -> bool {
+        if self.state.project.active().is_none_or(|a| {
+            a.locked
+                || a.paint_stack
+                    .as_ref()
+                    .and_then(|s| s.active())
+                    .is_some_and(|l| l.locked)
+        }) {
+            return false;
+        }
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
         let before = self.state.project.project.clone();
         let active = self.state.project.active;
@@ -7261,6 +7393,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// lado maior a 512 texels (a imagem é persistida no projeto) e preserva a
     /// proporção na escala UV.
     pub fn import_decal_image(&mut self, path: &std::path::Path) -> bool {
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("svg"))
+        {
+            let svg = match files::load_svg(path) {
+                Ok(svg) => svg,
+                Err(error) => {
+                    self.state.set_status(error);
+                    return false;
+                }
+            };
+            let decal = match petunia_project::paint_layers::DecalLayer::from_svg(
+                &svg,
+                512,
+                [0.5, 0.5],
+                0.3,
+            ) {
+                Ok(decal) => decal,
+                Err(error) => {
+                    self.state.set_status(error.to_string());
+                    return false;
+                }
+            };
+            let name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("SVG")
+                .to_owned();
+            return self.mutate_paint_stack("import SVG decal", |stack| {
+                stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
+                    name.clone(),
+                    decal.clone(),
+                ));
+                true
+            });
+        }
         let (w, h, rgba) = match files::load_image_rgba(path) {
             Ok(decoded) => decoded,
             Err(error) => {
@@ -7621,7 +7789,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if points.len() < 3 || points.iter().flatten().any(|value| !value.is_finite()) {
             return false;
         }
-        if let Some((_, spline)) = self.active_profile_resources() {
+        if let Some((_, spline)) = self.active_profile_resources()
+            && !spline.closed
+        {
             let mut spline = spline.clone();
             spline.points = points
                 .into_iter()
@@ -8716,6 +8886,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.delete_selected_profile_point();
         }
 
+        // Se houver um perfil ativo em DRAW sem ponto selecionado, apaga a forma 2D inteira!
+        if let Some(profile_id) = self.active_profile_id {
+            if self
+                .state
+                .dispatch(&petunia_core::DeleteProfileCmd { profile_id })
+                .is_ok()
+            {
+                self.active_profile_id = None;
+                self.profile_selected_point = None;
+                self.profile_drag_target = None;
+                self.state.set_status("Shape deleted");
+                self.state.mark_dirty();
+                return true;
+            }
+        }
+
         if self.state.selection_domain() != SelectionDomain::Object {
             let hover = self.state.hover;
             let Some(mesh) = self.state.project.active_mesh_mut() else {
@@ -9336,13 +9522,32 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// um clique-direito em linha não selecionada precisa agir no que o usuário
     /// apontou, não no que estava ativo.
     pub fn open_context_menu(&mut self, id: &str, x: f32, y: f32) -> bool {
-        let Ok(asset) = uuid::Uuid::parse_str(id) else {
+        let (is_profile, asset_id) = if let Some(p_str) = id.strip_prefix("profile:") {
+            (true, uuid::Uuid::parse_str(p_str).ok())
+        } else {
+            (false, uuid::Uuid::parse_str(id).ok())
+        };
+        let Some(asset) = asset_id else {
             return false;
         };
-        if !self.state.project.assets.iter().any(|a| a.id == asset) {
-            return false;
+        if is_profile {
+            if !self
+                .state
+                .project
+                .project
+                .profiles
+                .iter()
+                .any(|p| p.id == asset)
+            {
+                return false;
+            }
+            self.activate_profile(asset);
+        } else {
+            if !self.state.project.assets.iter().any(|a| a.id == asset) {
+                return false;
+            }
+            self.select_asset_by_id(asset);
         }
-        self.select_asset_by_id(asset);
         self.context_menu = Some(ContextMenuState {
             x,
             y,
@@ -9592,6 +9797,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let _ = self.execute_core_command("model.separate_selection");
                     true
                 }
+                "workplane_from_selection" => {
+                    self.apply(UiIntent::ProfileSetWorkplaneSelection);
+                    true
+                }
                 "flip_normals" => {
                     let _ = self.execute_core_command("model.flip_normals");
                     true
@@ -9621,6 +9830,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "origin_to_selection" => self.set_origin_selection(),
                 "geometry_to_origin" => self.set_geometry_to_origin(),
                 "toggle_edit_pivot" => self.toggle_edit_pivot(),
+                "clear_location" => {
+                    let _ = self.execute_core_command("model.clear_location");
+                    self.reset_transform_fields();
+                    true
+                }
+                "clear_rotation" => {
+                    let _ = self.execute_core_command("model.clear_rotation");
+                    self.reset_transform_fields();
+                    true
+                }
+                "clear_scale" => {
+                    let _ = self.execute_core_command("model.clear_scale");
+                    self.reset_transform_fields();
+                    true
+                }
+                "clear_all_transforms" => {
+                    let _ = self.execute_core_command("model.clear_all_transforms");
+                    self.reset_transform_fields();
+                    true
+                }
                 _ => false,
             };
         }
@@ -9703,10 +9932,64 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.select_asset_by_id(menu.asset);
                 self.toggle_edit_pivot()
             }
-            "delete" => {
+            "clear_location" => {
                 self.select_asset_by_id(menu.asset);
-                self.apply(UiIntent::DeleteActiveAsset);
+                let _ = self.execute_core_command("model.clear_location");
+                self.reset_transform_fields();
                 true
+            }
+            "clear_rotation" => {
+                self.select_asset_by_id(menu.asset);
+                let _ = self.execute_core_command("model.clear_rotation");
+                self.reset_transform_fields();
+                true
+            }
+            "clear_scale" => {
+                self.select_asset_by_id(menu.asset);
+                let _ = self.execute_core_command("model.clear_scale");
+                self.reset_transform_fields();
+                true
+            }
+            "clear_all_transforms" => {
+                self.select_asset_by_id(menu.asset);
+                let _ = self.execute_core_command("model.clear_all_transforms");
+                self.reset_transform_fields();
+                true
+            }
+            "delete" => {
+                if let Some(profile_id) = self.active_profile_id {
+                    let _ = self
+                        .state
+                        .dispatch(&petunia_core::DeleteProfileCmd { profile_id });
+                    self.active_profile_id = None;
+                    self.profile_selected_point = None;
+                    self.profile_drag_target = None;
+                    self.state.set_status("Shape deleted");
+                    self.state.mark_dirty();
+                    true
+                } else if self
+                    .state
+                    .project
+                    .project
+                    .profiles
+                    .iter()
+                    .any(|p| p.id == menu.asset)
+                {
+                    let pid = menu.asset;
+                    let _ = self
+                        .state
+                        .dispatch(&petunia_core::DeleteProfileCmd { profile_id: pid });
+                    if self.active_profile_id == Some(pid) {
+                        self.active_profile_id = None;
+                    }
+                    self.state.set_status("Shape deleted");
+                    self.state.mark_dirty();
+                    true
+                } else {
+                    self.select_asset_by_id(menu.asset);
+                    self.apply(UiIntent::DeleteActiveAsset);
+                    true
+                }
             }
             _ => false,
         }
@@ -9773,6 +10056,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Ferramenta ativa que segue a gramática única, se houver.
     pub fn grammar_tool(&self) -> Option<GrammarTool> {
+        if self.state.workspace == Workspace::Paint
+            && matches!(
+                self.state.session.tools.active_tool.as_str(),
+                "path_paint" | "projection"
+            )
+        {
+            return Some(GrammarTool::SurfacePaint);
+        }
         if self.state.workspace != Workspace::Model {
             return None;
         }
@@ -9881,6 +10172,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         use petunia_core::ToolEffect as Effect;
         match effect {
             Effect::Nothing | Effect::TypedValue(_) | Effect::TypedCleared => false,
+            Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::SurfacePaint) => {
+                self.surface_paint_click(at)
+            }
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::PolyPen) => {
                 self.poly_pen_click(at)
             }
@@ -9936,6 +10230,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 begun
             }
+            GrammarTool::SurfacePaint => self.begin_surface_paint(anchor),
             GrammarTool::PolyPen => self.begin_poly_pen_drag(anchor),
             GrammarTool::ShapeBuilder => self.begin_shape_builder(anchor),
             GrammarTool::Parametric(kind) => {
@@ -10422,6 +10717,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 self.set_tool_modal_value(value)
             }
+            Some(ToolGesture::SurfacePaint) => self.update_surface_paint(current),
             Some(ToolGesture::ShapeBuilder) => self.update_shape_builder(current),
             None => false,
         }
@@ -10429,6 +10725,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     fn commit_tool_gesture(&mut self) -> bool {
         match self.tool_gesture.take() {
+            Some(ToolGesture::SurfacePaint) => {
+                self.surface_paint.anchor = None;
+                self.state.mark_dirty();
+                true
+            }
             Some(ToolGesture::ShapeBuilder) => self.commit_shape_builder(),
             Some(ToolGesture::Transform { gizmo: true }) => self.end_gizmo_drag(),
             Some(ToolGesture::Transform { gizmo: false }) => self.end_viewport_transform(),
@@ -10446,6 +10747,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.cancel_viewport_transform()
             }
             Some(ToolGesture::Parametric { .. }) => self.cancel_tool_modal(),
+            Some(ToolGesture::SurfacePaint) => self.cancel_surface_paint(),
             Some(ToolGesture::ShapeBuilder) => self.cancel_shape_builder(),
             None => false,
         }
@@ -10965,6 +11267,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let hit = self.pick_viewport_target(normalized_x, normalized_y);
         match hit {
             Target::Object(index) => {
+                self.active_profile_id = None;
                 self.state.select_object(Some(index), extend);
                 let name = self.state.project.assets[index].name.clone();
                 self.state.set_status(format!("Selected '{name}'"));
@@ -11050,9 +11353,41 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
             Target::None => {
+                let pixel = [
+                    normalized_x * self.viewport_size[0],
+                    normalized_y * self.viewport_size[1],
+                ];
+                let shape_hit = self.profile_hit_inactive(pixel).or_else(|| {
+                    self.shape_hit_at(pixel).and_then(|h| {
+                        let planes = self.shape_planes_cached();
+                        planes
+                            .iter()
+                            .find(|sp| sp.plane == h.plane)
+                            .and_then(|sp| sp.profiles.first().copied())
+                    })
+                });
+                if let Some(profile_id) = shape_hit {
+                    self.activate_profile(profile_id);
+                    self.state.select_object(None, false);
+                    let name = self
+                        .state
+                        .project
+                        .project
+                        .get_profile(profile_id)
+                        .map(|p| p.name.clone())
+                        .unwrap_or_else(|| "Profile".to_string());
+                    self.state.set_status(format!("Selected shape '{name}'"));
+                    self.state.session.tools.hover = Target::None;
+                    self.state.sync_selection();
+                    self.state.mark_dirty();
+                    self.reset_transform_fields();
+                    return;
+                }
+
                 if self.state.selection_domain() == SelectionDomain::Object {
                     self.state.select_object(None, extend);
                 }
+                self.active_profile_id = None;
                 if !extend
                     && self.state.selection_domain().is_component()
                     && let Some(mesh) = self.state.project.active_mesh_mut()
@@ -11117,6 +11452,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let effect = self.tool_session.key(petunia_core::ToolKey::Cancel);
             self.apply_tool_effect(effect, false, false);
             return true;
+        }
+        if self.cancel_paint_stroke() {
+            return true;
+        }
+        if matches!(
+            self.state.session.tools.active_tool.as_str(),
+            "path_paint" | "projection"
+        ) || self.surface_paint.stencil_mode
+        {
+            if self.cancel_surface_paint() {
+                return true;
+            }
         }
         // Escada do Esc: pontos coletados antes de sair da ferramenta.
         if !self.poly_pen_points.is_empty() {
@@ -11313,12 +11660,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn search_commands(&self, query: &str) -> Vec<petunia_core::CommandPaletteItem> {
-        self.state.commands.query(query, &self.state)
+        let mut items = self.state.commands.query(query, &self.state);
+        items.extend(self.surface_action_items(query));
+        items
     }
 
     pub fn execute_core_command(&mut self, id: &str) -> Result<(), petunia_core::CommandError> {
         self.command_search_visible = false;
         self.overlays.remove(OverlayId::CommandPalette);
+        if self.execute_draw_extension(id) || self.execute_surface_action(id) {
+            return Ok(());
+        }
+        let pathfinder = match id {
+            "draw.unite" => Some(petunia_core::PathfinderOp::Unite),
+            "draw.subtract" => Some(petunia_core::PathfinderOp::Subtract),
+            "draw.intersect" => Some(petunia_core::PathfinderOp::Intersect),
+            "draw.exclude" => Some(petunia_core::PathfinderOp::Exclude),
+            _ => None,
+        };
+        if let Some(op) = pathfinder {
+            return if self.run_pathfinder(op) {
+                Ok(())
+            } else {
+                Err(petunia_core::CommandError::Execution(
+                    self.state.ui.status.clone(),
+                ))
+            };
+        }
         if self.state.primitive_session_valid()
             && id != "primitive.confirm"
             && id != "primitive.cancel"
@@ -12074,7 +12442,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             other
                 if other.starts_with("view.")
                     || other.starts_with("model.")
-                    || other.starts_with("uv.") =>
+                    || other.starts_with("uv.")
+                    || other.starts_with("draw.")
+                    || other.starts_with("paint.") =>
             {
                 if let Err(error) = self.execute_core_command(other) {
                     self.state.set_status(error.to_string());
@@ -12114,7 +12484,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     fn is_paint_only_tool(tool: &str) -> bool {
         matches!(
             tool,
-            "brush"
+            "path_paint"
+                | "projection"
+                | "brush"
                 | "airbrush"
                 | "eraser"
                 | "picker"
@@ -12244,6 +12616,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn confirm_active_operation(&mut self) -> bool {
+        if matches!(
+            self.state.session.tools.active_tool.as_str(),
+            "path_paint" | "projection"
+        ) {
+            return self.apply_surface_paint();
+        }
         if !self.poly_pen_points.is_empty() {
             return self.poly_pen_close();
         }
@@ -12384,14 +12762,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Scale => &mut self.scale[axis],
         };
         let new_val = field.scrub(delta, fine);
-        let components = match kind {
-            TransformKind::Position => self.position.map(|field| field.value()),
-            TransformKind::Rotation => self.rotation.map(|field| field.value()),
-            TransformKind::Scale => self.scale.map(|field| field.value()),
+        let current = match kind {
+            TransformKind::Position => self.position.map(|f| f.value()),
+            TransformKind::Rotation => self.rotation.map(|f| f.value()),
+            TransformKind::Scale => self.scale.map(|f| f.value()),
+        };
+        let delta_components = match kind {
+            TransformKind::Position | TransformKind::Rotation => [
+                current[0] - self.transform_initial[0],
+                current[1] - self.transform_initial[1],
+                current[2] - self.transform_initial[2],
+            ],
+            TransformKind::Scale => [
+                if self.transform_initial[0].abs() > 1e-5 {
+                    current[0] / self.transform_initial[0]
+                } else {
+                    current[0]
+                },
+                if self.transform_initial[1].abs() > 1e-5 {
+                    current[1] / self.transform_initial[1]
+                } else {
+                    current[1]
+                },
+                if self.transform_initial[2].abs() > 1e-5 {
+                    current[2] / self.transform_initial[2]
+                } else {
+                    current[2]
+                },
+            ],
         };
         if let Err(error) = self
             .state
-            .update_modal_components(glam::Vec3::from_array(components))
+            .update_modal_components(glam::Vec3::from_array(delta_components))
         {
             self.state.set_status(error.to_string());
         }
@@ -12405,13 +12807,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Scale => petunia_core::ModalKind::Scale,
         };
         self.state.begin_modal(modal_kind)?;
-        self.reset_transform_fields();
+        self.transform_initial = if let Some(asset) = self.state.project.active() {
+            match kind {
+                TransformKind::Position => asset.position,
+                TransformKind::Rotation => asset.rotation,
+                TransformKind::Scale => asset.scale,
+            }
+        } else {
+            match kind {
+                TransformKind::Scale => [1.0, 1.0, 1.0],
+                _ => [0.0, 0.0, 0.0],
+            }
+        };
         Ok(())
     }
 
     pub fn commit_transform(&mut self) -> bool {
         let had_operation = self.state.session.tools.modal.is_some();
         self.last_operation = self.state.commit_modal_gesture();
+        self.reset_transform_fields();
         had_operation
     }
 
@@ -12448,15 +12862,39 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(error.to_string());
             return Err(numeric::NumericInputError::Invalid);
         }
-        let mut components = match kind {
-            TransformKind::Position => self.position.map(|field| field.value()),
-            TransformKind::Rotation => self.rotation.map(|field| field.value()),
-            TransformKind::Scale => self.scale.map(|field| field.value()),
+        let mut current = match kind {
+            TransformKind::Position => self.position.map(|f| f.value()),
+            TransformKind::Rotation => self.rotation.map(|f| f.value()),
+            TransformKind::Scale => self.scale.map(|f| f.value()),
         };
-        components[axis.min(2)] = value;
+        current[axis.min(2)] = value;
+        let delta_components = match kind {
+            TransformKind::Position | TransformKind::Rotation => [
+                current[0] - self.transform_initial[0],
+                current[1] - self.transform_initial[1],
+                current[2] - self.transform_initial[2],
+            ],
+            TransformKind::Scale => [
+                if self.transform_initial[0].abs() > 1e-5 {
+                    current[0] / self.transform_initial[0]
+                } else {
+                    current[0]
+                },
+                if self.transform_initial[1].abs() > 1e-5 {
+                    current[1] / self.transform_initial[1]
+                } else {
+                    current[1]
+                },
+                if self.transform_initial[2].abs() > 1e-5 {
+                    current[2] / self.transform_initial[2]
+                } else {
+                    current[2]
+                },
+            ],
+        };
         if let Err(error) = self
             .state
-            .update_modal_components(glam::Vec3::from_array(components))
+            .update_modal_components(glam::Vec3::from_array(delta_components))
         {
             self.state.set_status(error.to_string());
             if started {
@@ -12469,18 +12907,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Rotation => &mut self.rotation,
             TransformKind::Scale => &mut self.scale,
         };
-        for (field, value) in fields.iter_mut().zip(components) {
-            field.set_value(value);
+        for (field, val) in fields.iter_mut().zip(current) {
+            field.set_value(val);
         }
         self.state.commit_modal();
+        self.reset_transform_fields();
         Ok(value)
     }
 
     pub fn cancel_transform(&mut self) -> bool {
         let cancelled = self.state.cancel_modal();
-        if cancelled {
-            self.reset_transform_fields();
-        }
+        self.reset_transform_fields();
         cancelled
     }
 
@@ -12511,6 +12948,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.parts_selected_only = self.parts_selected_only;
         vm.parts_sort_by_name = self.parts_sort_by_name;
         vm.parts_row_height = self.parts_row_height;
+
+        for profile in &self.state.project.project.profiles {
+            let pts = self
+                .state
+                .project
+                .project
+                .get_spline(profile.spline_id)
+                .map_or(0, |s| s.points.len());
+            let is_active = self.active_profile_id == Some(profile.id);
+            vm.scene_items.push(SceneItemModel {
+                id: format!("profile:{}", profile.id),
+                name: profile.name.clone(),
+                visible: true,
+                locked: false,
+                selected: is_active,
+                active: is_active,
+                verts: pts,
+                tris: 0,
+                has_custom_color: false,
+                custom_color_rgb: self.state.ui.selection_rgb,
+            });
+        }
+
         let parts_query = self.parts_query.trim().to_lowercase();
         vm.parts_items = vm
             .scene_items
@@ -13102,16 +13562,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.paint_pixel_grid = self.paint_pixel_grid;
         vm.paint_canvas_zoom = self.paint_canvas_zoom;
         vm.paint_canvas_grid_commands = self.paint_canvas_grid_commands();
-        vm.paint_show_uv_overlay = self.paint_show_uv_overlay;
+        let path_preview_active = self.state.workspace == Workspace::Paint
+            && self.state.session.tools.active_tool == "path_paint";
+        vm.paint_show_uv_overlay = self.paint_show_uv_overlay || path_preview_active;
         vm.uv_show_texture = self.uv_show_texture;
         vm.uv_editor = if cfg!(test)
             || self.state.workspace == Workspace::Uv
-            || (self.state.workspace == Workspace::Paint && self.paint_show_uv_overlay)
+            || (self.state.workspace == Workspace::Paint
+                && (self.paint_show_uv_overlay || path_preview_active))
         {
             self.build_uv_editor()
         } else {
             UvEditorModel::default()
         };
+        if path_preview_active {
+            vm.uv_editor
+                .layout_commands
+                .push_str(&self.surface_path_uv_preview());
+        }
         if let Some(stack) = self
             .state
             .project
@@ -13294,6 +13762,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.operation_preview_commands = cmd.clone();
             vm.slice_preview_visible = true;
             vm.slice_preview_commands = cmd;
+        }
+        let parameters = self.draw_parameters;
+        vm.draw_extension_values = [
+            parameters.radius as f32,
+            parameters.length as f32,
+            parameters.angle as f32,
+            parameters.sides as f32,
+            parameters.tolerance as f32,
+        ];
+        vm.export_padding = parameters.export_padding as f32;
+        vm.trace_threshold = parameters.trace_threshold as f32;
+        if self.state.workspace == Workspace::Paint
+            && let Some(mesh) = self.state.project.active_mesh()
+        {
+            let (w, h) = self.paint_canvas_dimensions().unwrap_or((256, 256));
+            let islands = mesh.uv_islands();
+            let tiny = islands
+                .iter()
+                .filter(|island| {
+                    (island.max[0] - island.min[0]) * (w as f32) < 2.0
+                        || (island.max[1] - island.min[1]) * (h as f32) < 2.0
+                })
+                .count();
+            vm.uv_stats.push_str(
+                &self
+                    .state
+                    .t_id(petunia_config::TextId::new("surface.uv_details"))
+                    .replace("{density}", &format!("{:.1}", mesh.texel_density(w, false)))
+                    .replace("{tiny}", &tiny.to_string())
+                    .replace("{padding}", &parameters.export_padding.to_string()),
+            );
+        }
+        vm.stencil_image = self.stencil_preview_image();
+        let surface_preview = self.surface_paint_preview();
+        if !surface_preview.is_empty() {
+            vm.operation_preview_commands = surface_preview;
         }
         vm.tool_activation = self.state.session.tools.tool_activation.id().to_string();
         vm.keyboard_tool_modal_active =
@@ -13602,18 +14106,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .set_selection_domain(self.state.selection_domain());
     }
 
-    fn reset_transform_fields(&mut self) {
+    pub fn reset_transform_fields(&mut self) {
         self.modal_text.clear();
         self.instant_transform = false;
         self.gizmo_drag = None;
-        for field in &mut self.position {
-            field.set_value(0.0);
-        }
-        for field in &mut self.rotation {
-            field.set_value(0.0);
-        }
-        for field in &mut self.scale {
-            field.set_value(1.0);
+        if let Some(asset) = self.state.project.active() {
+            for (field, &val) in self.position.iter_mut().zip(&asset.position) {
+                field.set_value(val);
+            }
+            for (field, &val) in self.rotation.iter_mut().zip(&asset.rotation) {
+                field.set_value(val);
+            }
+            for (field, &val) in self.scale.iter_mut().zip(&asset.scale) {
+                field.set_value(val);
+            }
+        } else {
+            for field in &mut self.position {
+                field.set_value(0.0);
+            }
+            for field in &mut self.rotation {
+                field.set_value(0.0);
+            }
+            for field in &mut self.scale {
+                field.set_value(1.0);
+            }
         }
     }
 

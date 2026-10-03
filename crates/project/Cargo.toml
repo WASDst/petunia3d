@@ -21,6 +21,8 @@ gltf-json = { workspace = true }
 gltf = { version = "1", features = ["extras"] }
 zip = { workspace = true }
 base64 = "0.22"
+resvg = { workspace = true }
+roxmltree = "0.21"
 
 [dev-dependencies]
 gltf = { version = "1", features = ["extras"] }

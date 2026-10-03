@@ -1082,6 +1082,46 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.clear_location",
+                "Clear Location",
+                "Reset object location to [0, 0, 0]",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ClearLocationCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.clear_rotation",
+                "Clear Rotation",
+                "Reset object rotation to [0, 0, 0]",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ClearRotationCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.clear_scale",
+                "Clear Scale",
+                "Reset object scale to [1, 1, 1]",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ClearScaleCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.clear_all_transforms",
+                "Clear All Transforms",
+                "Reset object position, rotation and scale to default",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ClearAllTransformsCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.instantiate_asset",
                 "Instantiate Asset",
                 "Instantiate a library asset into the active 3D scene",
@@ -2042,6 +2082,223 @@ impl Command for SeparateSelectionCmd {
         state.sync_selection();
         state.emit_mesh_changed();
         state.set_status(format!("Separated selection into {}", new_name));
+        Ok(())
+    }
+}
+
+/// Comando para resetar a posição (translação) do objeto ativo para [0.0, 0.0, 0.0] (Blender Alt+G).
+#[derive(Debug, Clone, Default)]
+pub struct ClearLocationCmd;
+
+impl Command for ClearLocationCmd {
+    fn label(&self) -> &'static str {
+        "clear location"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let Some(active) = state.project.active() else {
+            return Err("No active object");
+        };
+        if active.locked {
+            return Err("Active object is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let Some(active) = state.project.active_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let delta = [
+            -active.position[0],
+            -active.position[1],
+            -active.position[2],
+        ];
+        active.position = [0.0, 0.0, 0.0];
+        if delta[0].abs() > 1e-6 || delta[1].abs() > 1e-6 || delta[2].abs() > 1e-6 {
+            for v in &mut active.mesh.verts {
+                v.pos[0] += delta[0];
+                v.pos[1] += delta[1];
+                v.pos[2] += delta[2];
+            }
+            if let Some(orig) = active.origin.as_mut() {
+                orig[0] += delta[0];
+                orig[1] += delta[1];
+                orig[2] += delta[2];
+            }
+            active.mesh.validate();
+        }
+        state.set_status("Cleared location to [0, 0, 0]");
+        Ok(())
+    }
+}
+
+/// Comando para resetar a rotação do objeto ativo para [0.0, 0.0, 0.0] (Blender Alt+R).
+#[derive(Debug, Clone, Default)]
+pub struct ClearRotationCmd;
+
+impl Command for ClearRotationCmd {
+    fn label(&self) -> &'static str {
+        "clear rotation"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let Some(active) = state.project.active() else {
+            return Err("No active object");
+        };
+        if active.locked {
+            return Err("Active object is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let Some(active) = state.project.active_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let rot = active.rotation;
+        active.rotation = [0.0, 0.0, 0.0];
+        if rot[0].abs() > 1e-5 || rot[1].abs() > 1e-5 || rot[2].abs() > 1e-5 {
+            let inv_rot = glam::Quat::from_euler(
+                glam::EulerRot::XYZ,
+                rot[0].to_radians(),
+                rot[1].to_radians(),
+                rot[2].to_radians(),
+            )
+            .inverse();
+            let pivot = glam::Vec3::from(
+                active
+                    .origin
+                    .unwrap_or_else(|| active.mesh.center().to_array()),
+            );
+            for v in &mut active.mesh.verts {
+                let p = glam::Vec3::from(v.pos);
+                v.pos = (pivot + inv_rot * (p - pivot)).to_array();
+            }
+            active.mesh.validate();
+        }
+        state.set_status("Cleared rotation to [0, 0, 0]");
+        Ok(())
+    }
+}
+
+/// Comando para resetar a escala do objeto ativo para [1.0, 1.0, 1.0] (Blender Alt+S).
+#[derive(Debug, Clone, Default)]
+pub struct ClearScaleCmd;
+
+impl Command for ClearScaleCmd {
+    fn label(&self) -> &'static str {
+        "clear scale"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let Some(active) = state.project.active() else {
+            return Err("No active object");
+        };
+        if active.locked {
+            return Err("Active object is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        let Some(active) = state.project.active_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let scale = active.scale;
+        active.scale = [1.0, 1.0, 1.0];
+        let sx = if scale[0].abs() > 1e-5 {
+            1.0 / scale[0]
+        } else {
+            1.0
+        };
+        let sy = if scale[1].abs() > 1e-5 {
+            1.0 / scale[1]
+        } else {
+            1.0
+        };
+        let sz = if scale[2].abs() > 1e-5 {
+            1.0 / scale[2]
+        } else {
+            1.0
+        };
+        if (scale[0] - 1.0).abs() > 1e-5
+            || (scale[1] - 1.0).abs() > 1e-5
+            || (scale[2] - 1.0).abs() > 1e-5
+        {
+            let inv_scale = glam::Vec3::new(sx, sy, sz);
+            let pivot = glam::Vec3::from(
+                active
+                    .origin
+                    .unwrap_or_else(|| active.mesh.center().to_array()),
+            );
+            for v in &mut active.mesh.verts {
+                let p = glam::Vec3::from(v.pos);
+                v.pos = (pivot + inv_scale * (p - pivot)).to_array();
+            }
+            active.mesh.validate();
+        }
+        state.set_status("Cleared scale to [1, 1, 1]");
+        Ok(())
+    }
+}
+
+/// Comando para resetar todas as transformações (posição, rotação e escala) do objeto ativo.
+#[derive(Debug, Clone, Default)]
+pub struct ClearAllTransformsCmd;
+
+impl Command for ClearAllTransformsCmd {
+    fn label(&self) -> &'static str {
+        "clear all transforms"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+    }
+
+    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+        let Some(active) = state.project.active() else {
+            return Err("No active object");
+        };
+        if active.locked {
+            return Err("Active object is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+        ClearScaleCmd.execute(state)?;
+        ClearRotationCmd.execute(state)?;
+        ClearLocationCmd.execute(state)?;
+        state.set_status("Cleared all transforms to default");
         Ok(())
     }
 }

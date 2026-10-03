@@ -36,6 +36,7 @@ pub(crate) struct ProfileLine {
     pub id: uuid::Uuid,
     pub world: Vec<Vec3>,
     pub closed: bool,
+    pub hole: bool,
 }
 
 /// Regiões e contornos derivados do documento, recalculados por revisão.
@@ -93,30 +94,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     fn build_shape_cache(&self, revision: [u64; 11]) -> ShapeCache {
         let project = &self.state.project.project;
-        let lines = project
-            .profiles
-            .iter()
-            .filter_map(|profile| {
-                let spline = project.get_spline(profile.spline_id)?;
-                let table = spline.arc_length_table(OUTLINE_TOLERANCE).ok()?;
-                let wp = profile.workplane;
-                let [origin, right, up] =
-                    [wp.origin, wp.right, wp.up].map(|v| glam::DVec3::from_array(v).as_vec3());
-                if !(origin.is_finite() && right.is_finite() && up.is_finite()) {
-                    return None;
-                }
-                let world = table
+        let mut lines = Vec::new();
+        for profile in &project.profiles {
+            let Some(spline) = project.get_spline(profile.spline_id) else {
+                continue;
+            };
+            let Ok(table) = spline.arc_length_table(OUTLINE_TOLERANCE) else {
+                continue;
+            };
+            let wp = profile.workplane;
+            let [origin, right, up] =
+                [wp.origin, wp.right, wp.up].map(|v| glam::DVec3::from_array(v).as_vec3());
+            if !(origin.is_finite() && right.is_finite() && up.is_finite()) {
+                continue;
+            }
+            let to_world = |p: [f64; 2]| origin + right * p[0] as f32 + up * p[1] as f32;
+            lines.push(ProfileLine {
+                id: profile.id,
+                world: table
                     .polyline()
                     .into_iter()
-                    .map(|p| origin + right * p[0] as f32 + up * p[1] as f32)
-                    .collect();
-                Some(ProfileLine {
+                    .map(|p| to_world([p[0], p[1]]))
+                    .collect(),
+                closed: spline.closed,
+                hole: false,
+            });
+            for hole in &profile.holes {
+                lines.push(ProfileLine {
                     id: profile.id,
-                    world,
-                    closed: spline.closed,
-                })
-            })
-            .collect();
+                    world: hole.iter().copied().map(to_world).collect(),
+                    closed: true,
+                    hole: true,
+                });
+            }
+        }
         ShapeCache {
             revision,
             planes: self.state.profile_region_planes(),
@@ -171,7 +182,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut out = String::new();
         let mut budget = MAX_OVERLAY_POINTS;
         for line in &cache.lines {
-            if Some(line.id) == self.active_profile_id {
+            if Some(line.id) == self.active_profile_id && !line.hole {
                 continue;
             }
             if line.world.len() > budget {
@@ -181,6 +192,56 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.write_ring(line.world.iter().copied(), line.closed, &mut out);
         }
         out
+    }
+
+    /// Comandos e posição de tela da Depth Handle sobre a forma fechada ativa em DRAW.
+    pub(crate) fn depth_handle_commands(&self) -> (String, Option<[f32; 2]>, String) {
+        if !self.draw_shapes_visible() || self.viewport_size[0] <= 1.0 {
+            return (String::new(), None, String::new());
+        }
+        let Some((profile, spline)) = self.active_profile_resources() else {
+            return (String::new(), None, String::new());
+        };
+        if !spline.closed || spline.points.len() < 3 {
+            return (String::new(), None, String::new());
+        }
+        let wp = profile.workplane;
+        let [origin, right, up, normal] =
+            [wp.origin, wp.right, wp.up, wp.normal].map(|v| glam::DVec3::from_array(v).as_vec3());
+        let count = spline.points.len() as f32;
+        let sum: (f64, f64) = spline.points.iter().fold((0.0, 0.0), |acc, p| {
+            (acc.0 + p.position[0], acc.1 + p.position[1])
+        });
+        let (cx, cy) = (sum.0 as f32 / count, sum.1 as f32 / count);
+        let center_world = origin + right * cx + up * cy;
+        let depth = (self.state.profile.depth as f32).max(0.1);
+        let top_world = center_world + normal * depth;
+
+        let camera = &self.state.session.camera;
+        let Some(base_screen) = project_world_point(camera, self.viewport_size, center_world)
+        else {
+            return (String::new(), None, String::new());
+        };
+        let Some(top_screen) = project_world_point(camera, self.viewport_size, top_world) else {
+            return (String::new(), None, String::new());
+        };
+
+        let (bx, by) = (base_screen[0], base_screen[1]);
+        let (tx, ty) = (top_screen[0], top_screen[1]);
+        let mut out = format!("M {bx:.1} {by:.1} L {tx:.1} {ty:.1} ");
+        out.push_str(&format!(
+            "M {bx:.1} {by:.1} m -4 0 a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0 "
+        ));
+        out.push_str(&format!(
+            "M {tx:.1} {:.1} L {:.1} {ty:.1} L {tx:.1} {:.1} L {:.1} {ty:.1} Z",
+            ty - 6.0,
+            tx + 6.0,
+            ty + 6.0,
+            tx - 6.0
+        ));
+
+        let label = format!("{:.2} m", depth);
+        (out, Some(top_screen), label)
     }
 
     /// Perfil inativo cujo contorno passa perto do cursor (px da viewport).

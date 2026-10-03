@@ -6,11 +6,56 @@
 - Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (174 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 46 capítulos de fundação)
 - Referência de UI e interação (ADR 007, 2026-09-29): o próprio sistema Petunia ([cap. 23](docs/bible/foundations/23-macroarquitetura-interface.md), [24](docs/bible/foundations/24-design-system-tokens-estados.md), [36](docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md)) e a pesquisa de interação do [cap. 46](docs/bible/foundations/46-pesquisa-interacao-modelagem-referencias.md). `docs/image-references/Blender.svg` deixou de ser referência canônica e permanece apenas como material histórico.
 - Decisão de produto 2026-09-29 ([ADR 007](docs/architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)): workspaces **DRAW + POLY** no lugar de MODEL e gramática única de ferramenta (persistente, arrastar, valor digitado, clicar-mover-clicar, RMB = menu). Implementação em ondas no branch `design/draw-poly-interaction`: Onda 1 (viewport em pixels físicos + MSAA 4× e bugs comprovados) e Onda 2 (`ToolSession` no core; ferramentas persistentes; "Última operação"; RMB = menu; navegação nunca suspensa) com testes, clippy e gates verdes em 2026-09-30; Onda 3 (snapping em pixels de tela com uma passada por gesto, tipos nomeados com rótulo e guias de eixo; pré-seleção no Draw; plano de trabalho automático/travado sem mover a câmera) e Onda 4 parte 1 (regiões por arranjo planar com hover, Push/Pull de região com imprint na face ou sólido novo, 1 Undo) Onda 4 parte 2 (seletor DRAW · POLY · PAINT · UV com trilho por modo) Onda 5 parte 1 (Poly Pen: mover sem selecionar, extrudar aresta, desenhar polígono, derreter ponto) e Onda 6 parte 1 (luz de estúdio presa à câmera, raio do snap ajustável, testes de aparência por pixels, roteiro de teste com usuários) e Onda 6 parte 2 (arestas de largura constante com AA, aparência DRAW = forma / POLY = topologia) e Onda 6 parte 3 (plano de trabalho em destaque no DRAW) e Onda 6 parte 4 (contorno de seleção de objetos em largura constante) em 2026-09-30; seleção Shape/Curve/Point/Region e aparência por modo, captura nativa e teste com usuários pendentes ([matriz Onda 1](docs/development/viewport-crispness-gap-matrix.md), [matriz Onda 2](docs/development/tool-session-gap-matrix.md), [matriz Onda 3](docs/development/snap-inference-gap-matrix.md), [matriz Onda 4](docs/development/draw-regions-gap-matrix.md), [matriz Onda 5](docs/development/poly-pen-gap-matrix.md), [matriz Onda 6](docs/development/wave6-visual-accessibility-gap-matrix.md)).
-- Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Nesta rodada, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
-- **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, 169 testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
+- Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Em rodada histórica anterior, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
+- **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
 - Context methodology: **Lean Progressive Context (LPC)**
-- Last updated: `2026-09-30`
-- Current planning focus: [Context/workspaces/viewport](docs/development/workspace-inspector-implementation-plan.md), com próxima discussão restrita a MODEL e viewport. O plano é proposta, não implementação nem reabertura silenciosa das decisões de Paint/UV.
+- Last updated: `2026-10-02`
+- Current planning focus: revisar o [PR #26](https://github.com/wasd-lat/petunia3d/pull/26) com a integração PAINT/DRAW MVP publicada; gates e aceite manual aguardam instrução. [Plano anterior de viewport](docs/development/workspace-inspector-implementation-plan.md) permanece proposta, sem reabrir decisões de Paint/UV.
+
+### Checkpoint de implementação MVP — 02/10/2026
+
+Branch `codex/complete-paint-draw-mvp`. [Matriz completa](docs/development/paint-draw-mvp-completion-gap-matrix.md) e [roteiro manual](docs/development/paint-draw-mvp-manual-2026-10-02.md).
+
+- Recuperados SVG e Path Paint dos worktrees anteriores e integrados ao Slint, com Projection/Stencil e modos Stroke/Ribbon/Repeated Stamp.
+- Shape Builder poligonal preserva furos e formas não afetadas; perfis compostos podem ser extrudados. Curvas fiéis e handles dos furos ficam para V1.
+- Boolean cleanup existente complementado por transferência de cores, albedo/canais PBR e proteção da pilha quando UV é herdado.
+- Shortlist aprovada: alpha lock, Shift line/pixel perfect, rampas/dither, UV health/bleed, round/mirror/presets/dimensões/simplify/resample/trace.
+- Executáveis unitários de mesh/project/core/model/paint/Slint compilados com `cargo test --no-run --lib` (exit 0) sobre `e5e1452`, em checkout isolado com árvore idêntica. Zero casos de teste executados nesta conferência; gates e captura/aceite manual pendentes por instrução do responsável. Resultados históricos abaixo não cobrem este pacote. Entrega publicada no PR #26 (draft); comando e hashes completos na matriz.
+
+### Checkpoint histórico auditado em 02/10/2026
+
+
+Auditoria de código e histórico no branch `feat/svg-stencil-pathpaint`, commit
+`4a41951`. Registro histórico anterior à integração MVP acima; não certifica aceite funcional ou visual.
+
+- **PR #19** (`fix/hardening-domain-viewport-ui-co3s59`): integrado à `main`
+  em 01/10/2026, merge `2604710`. O conflito foi resolvido em `3672aa0`.
+  A rodada anterior registrou `cargo check --workspace --all-targets` aprovado
+  nesse checkpoint; essa evidência não cobre os commits posteriores.
+- **Pincel/PiP e ícones**: o PR #19 entregou ajustes de layout do PiP,
+  fluxo/espaçamento na UI e arte Petunia para as abas de dados.
+  `crates/ui-slint/src/brush_panel.rs` lê e altera `brush_flow`/`brush_spacing`;
+  `callbacks.rs` sincroniza esses valores com o shell.
+- **DRAW — delta implementado**: `4a41951` adiciona domínios
+  Shape/Curve/Point/Region, Depth Handle visual e interação por arrasto,
+  plano por três pontos/seleção e recorte booleano de imprint na face.
+  Há testes no código; a auditoria de 02/10 não os executou nem confirmou
+  os gates completos ou a reprodução visual. Estado: `PARTIALLY_COMPLIANT`
+  até validar o comportamento e as limitações das regiões.
+- **SVG e Path Paint**: os commits `0e1c83e` e `8645a8f` aparecem no histórico
+  de outros caminhos de merge. No checkout `4a41951`, não estão presentes
+  `crates/module-paint/src/path_paint.rs` nem
+  `docs/development/feature-pathpaint.md`, e não foram encontradas referências
+  a `PathPaint`/`path_paint` no Slint. Não tratar esses commits como entrega
+  disponível neste checkpoint. Path Paint permanece `MISSING` aqui;
+  a recuperação desses deltas exige comparar as árvores antes de implementar.
+- **Validação documental desta atualização**: `git diff --check` aprovado.
+  `docs-check` e `bible-check` foram iniciados, mas ficaram aguardando o lock
+  do cache Cargo; resultado pendente, sem aceite desses gates.
+- **Próxima retomada**: validar o DRAW recente e reconciliar SVG/Path Paint
+  com a árvore atual; em seguida atualizar as matrizes com evidências de
+  testes e captura nativa. Projection/Stencil continua pendente na matriz
+  de Paint. Wave 11 segue planejada.
 
 ### Rodada de fundação de 30/09/2026 (Paint/UV, DRAW, atalhos, brush)
 

@@ -46,6 +46,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Delete</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -103,7 +107,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 
 ## Perfis Especializados em Disco
 
-### Perfil: `3ds-max` (67 atalhos)
+### Perfil: `3ds-max` (71 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -121,6 +125,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Delete</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -175,7 +183,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender` (66 atalhos)
+### Perfil: `blender` (70 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -193,6 +201,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>X</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -246,7 +258,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `blender-notebook` (67 atalhos)
+### Perfil: `blender-notebook` (71 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -264,6 +276,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Delete</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -318,7 +334,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `cinema-4d` (67 atalhos)
+### Perfil: `cinema-4d` (71 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -336,6 +352,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Backspace</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -390,7 +410,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `maya` (67 atalhos)
+### Perfil: `maya` (71 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -408,6 +428,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Delete</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -462,7 +486,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-notebook` (67 atalhos)
+### Perfil: `petunia-notebook` (71 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -480,6 +504,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Backspace</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |
@@ -534,7 +562,7 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `window.workspace_poly` | <kbd>Ctrl+2</kbd> |
 | `window.workspace_uv` | <kbd>Ctrl+4</kbd> |
 
-### Perfil: `petunia-simple` (67 atalhos)
+### Perfil: `petunia-simple` (71 atalhos)
 
 | Ação | Atalho |
 | :--- | :---: |
@@ -552,6 +580,10 @@ description: Referência canônica dos perfis de teclado e atalhos configurávei
 | `global.undo` | <kbd>Ctrl+Z</kbd> |
 | `model.bevel` | <kbd>Ctrl+B</kbd> |
 | `model.box_select` | <kbd>B</kbd> |
+| `model.clear_all_transforms` | <kbd>Alt+Backspace</kbd> |
+| `model.clear_location` | <kbd>Alt+G</kbd> |
+| `model.clear_rotation` | <kbd>Alt+R</kbd> |
+| `model.clear_scale` | <kbd>Alt+S</kbd> |
 | `model.connect` | <kbd>Ctrl+J</kbd> |
 | `model.delete` | <kbd>Delete</kbd> |
 | `model.dissolve` | <kbd>X</kbd> |

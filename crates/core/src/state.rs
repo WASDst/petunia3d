@@ -167,6 +167,7 @@ pub enum WorkplaneKind {
 #[derive(Debug, Clone, Default)]
 pub struct ProfileState {
     pub points: Vec<[f32; 2]>,
+    pub holes: Vec<Vec<[f64; 2]>>,
     pub nodes: Vec<petunia_mesh::curve::BezierNode>,
     pub right: [f32; 3],
     pub up: [f32; 3],
@@ -600,6 +601,7 @@ pub struct ToolState {
     pub brush_style: crate::brush::BrushStyle,
     /// Origem do Clone em texels (Ctrl+clique define).
     pub clone_source: Option<[f32; 2]>,
+    pub paint_stencil: Option<crate::brush::SurfaceStencil>,
     pub brush_projection: crate::brush::BrushProjectionMode,
     pub brush_lock: crate::brush::BrushLock,
     /// Face travada pelo `BrushLock` no primeiro toque do traço atual.
@@ -690,6 +692,7 @@ impl ToolState {
             paint_isolate_selection: false,
             brush_style: crate::brush::BrushStyle::default(),
             clone_source: None,
+            paint_stencil: None,
             brush_projection: crate::brush::BrushProjectionMode::Surface,
             brush_lock: crate::brush::BrushLock::None,
             paint_lock_face: None,
@@ -3328,7 +3331,7 @@ impl AppState {
         // operandos e, depois, funde de volta as regiões coplanares (cap. 04).
         let a = self.project.assets[active_index].mesh.clone();
         let b = self.project.assets[operand_index].mesh.clone();
-        let (result, report) = if self.session.tools.boolean_cleanup {
+        let (mut result, report) = if self.session.tools.boolean_cleanup {
             let (mesh, report) = petunia_mesh::boolean::boolean_meshes_clean(&a, &b, op)?;
             (mesh, Some(report))
         } else {
@@ -3337,7 +3340,28 @@ impl AppState {
             tb.triangulate();
             (boolean_meshes(&ta, &tb, op)?, None)
         };
+        let texture = if report.as_ref().is_some_and(|r| {
+            r.uv == petunia_mesh::boolean_cleanup::UvOutcome::Inherited && !r.fell_back
+        }) {
+            None
+        } else {
+            crate::boolean_texture::transfer(
+                &self.project.project,
+                &mut result,
+                &self.project.assets[active_index],
+                &self.project.assets[operand_index],
+            )
+        };
+        if texture.is_none() && report.as_ref().is_none_or(|r| r.fell_back) {
+            result.layout_uv_charts(petunia_mesh::primitives::DEFAULT_UV_PADDING);
+        }
         let verts = result.verts.len();
+        let mut report = report;
+        if texture.is_some() {
+            if let Some(report) = &mut report {
+                report.uv = petunia_mesh::boolean_cleanup::UvOutcome::Relaid;
+            }
+        }
         self.session.tools.boolean_report = report;
 
         self.checkpoint(match op {
@@ -3345,8 +3369,28 @@ impl AppState {
             petunia_mesh::boolean::BooleanOp::Difference => "cut",
             petunia_mesh::boolean::BooleanOp::Intersection => "intersect",
         });
+        let albedo_name = self.t_id(petunia_config::TextId::new("surface.boolean_albedo"));
+        let material_id = texture
+            .as_ref()
+            .and_then(|transfer| transfer.material.clone())
+            .map(|m| self.project.project.add_material(m));
         if let Some(asset) = self.project.assets.get_mut(active_index) {
             asset.mesh = result;
+            asset.parametric = None;
+            if let Some(material_id) = material_id {
+                asset.material_id = Some(material_id);
+            }
+            if let Some(transfer) = texture {
+                let texture = transfer.albedo;
+                let name = albedo_name;
+                let mut stack = petunia_project::paint_layers::PaintLayerStack::new();
+                stack.add_layer(petunia_project::paint_layers::PaintLayer::new_raster(
+                    name,
+                    texture.clone(),
+                ));
+                asset.texture = Some(texture);
+                asset.paint_stack = Some(stack);
+            }
         }
         // Keep Parts mantém B na cena; sem o modificador ele é consumido, e
         // remover antes do ativo desloca o índice.

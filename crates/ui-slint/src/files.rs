@@ -124,9 +124,17 @@ impl FileDialogService {
     }
 
     /// Seleciona uma imagem para virar camada de decalque.
+    pub async fn open_svg(&self) -> Option<PathBuf> {
+        rfd::AsyncFileDialog::new()
+            .add_filter("SVG", &["svg"])
+            .pick_file()
+            .await
+            .map(|file| file.path().to_path_buf())
+    }
+
     pub async fn open_decal_image(&self) -> Option<PathBuf> {
         rfd::AsyncFileDialog::new()
-            .add_filter("Image", &["png", "jpg", "jpeg"])
+            .add_filter("Image / SVG", &["png", "jpg", "jpeg", "svg"])
             .pick_file()
             .await
             .map(|file| file.path().to_path_buf())
@@ -207,4 +215,18 @@ mod tests {
         );
         assert_eq!(FileDialogKind::ExportMesh.title_key(), "files.export_mesh");
     }
+}
+
+/// Leitura limitada antes do parser; recursos externos nunca são carregados.
+pub fn load_svg(path: &std::path::Path) -> Result<String, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.take((petunia_project::MAX_SVG_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() > petunia_project::MAX_SVG_BYTES {
+        return Err(petunia_project::SvgError::TooLarge.to_string());
+    }
+    String::from_utf8(bytes).map_err(|e| e.to_string())
 }

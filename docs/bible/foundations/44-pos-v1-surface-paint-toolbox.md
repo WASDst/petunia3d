@@ -3,7 +3,7 @@
 <aside>
 🖌️
 
-O Paint Workspace V1 permanece pequeno. Esta página define uma evolução **pós-V1** de ferramentas de pintura e projeção voltadas a assets low-poly, sem transformar o Petunia em Substance Painter, Photoshop ou editor de mapas.
+O Paint Workspace V1 permanece pequeno. A decisão do responsável em 01/10/2026 antecipou SVG decal/perfil, Projection/Stencil e Path Paint para o **MVP** (P3D-133/158/165). As demais propostas desta página permanecem uma evolução **pós-V1** de ferramentas de pintura e projeção voltadas a assets low-poly, sem transformar o Petunia em Substance Painter, Photoshop ou editor de mapas.
 
 </aside>
 
