@@ -584,10 +584,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.surface_paint.placement.mirror_x as u32,
             self.state.session.tools.paint_strength.to_bits(),
         ];
-        if let Some((previous, image)) = self.surface_paint.preview_cache.borrow().as_ref() {
-            if *previous == key {
-                return Some(image.clone());
-            }
+        if let Some((previous, image)) = self.surface_paint.preview_cache.borrow().as_ref()
+            && *previous == key
+        {
+            return Some(image.clone());
         }
         let scale = (512.0 / width.max(height)).min(1.0);
         let (w, h) = (
@@ -654,35 +654,34 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut dirty_tiles = Vec::new();
         let sx = self.state.session.tools.paint_symmetry_x;
         let sy = self.state.session.tools.paint_symmetry_y;
-        if let Some(buffer) = self.state.session.tools.paint_buffer.as_mut() {
-            if let Some(canvas) = self
+        if let Some(buffer) = self.state.session.tools.paint_buffer.as_mut()
+            && let Some(canvas) = self
                 .state
                 .project
                 .active_mut()
                 .and_then(|a| a.paint_stack.as_mut())
                 .and_then(|s| s.active_mut())
                 .and_then(|l| l.canvas_mut())
-            {
-                for (x, y) in removed {
-                    if x < 0 || y < 0 || x >= canvas.w as i32 || y >= canvas.h as i32 {
+        {
+            for (x, y) in removed {
+                if x < 0 || y < 0 || x >= canvas.w as i32 || y >= canvas.h as i32 {
+                    continue;
+                }
+                let (x, y) = (x as u32, y as u32);
+                let mx = canvas.w - 1 - x;
+                let my = canvas.h - 1 - y;
+                for (px, py, enabled) in
+                    [(x, y, true), (mx, y, sx), (x, my, sy), (mx, my, sx && sy)]
+                {
+                    if !enabled {
                         continue;
                     }
-                    let (x, y) = (x as u32, y as u32);
-                    let mx = canvas.w - 1 - x;
-                    let my = canvas.h - 1 - y;
-                    for (px, py, enabled) in
-                        [(x, y, true), (mx, y, sx), (x, my, sy), (mx, my, sx && sy)]
-                    {
-                        if !enabled {
-                            continue;
-                        }
-                        let index = (py * canvas.w + px) as usize;
-                        canvas.pixels[index * 4..index * 4 + 4]
-                            .copy_from_slice(&buffer.base[index * 4..index * 4 + 4]);
-                        buffer.coverage[index] = 0.0;
-                        let tile = petunia_project::paint_layers::TILE_SIZE;
-                        dirty_tiles.push((py / tile) * canvas.w.div_ceil(tile) + (px / tile));
-                    }
+                    let index = (py * canvas.w + px) as usize;
+                    canvas.pixels[index * 4..index * 4 + 4]
+                        .copy_from_slice(&buffer.base[index * 4..index * 4 + 4]);
+                    buffer.coverage[index] = 0.0;
+                    let tile = petunia_project::paint_layers::TILE_SIZE;
+                    dirty_tiles.push((py / tile) * canvas.w.div_ceil(tile) + (px / tile));
                 }
             }
         }

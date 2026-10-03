@@ -17,6 +17,7 @@
 //!   todos, em qualquer forma (polígono, retângulo, círculo).
 
 use glam::Vec3;
+use petunia_core::{Command, CommandError};
 
 use crate::projection::project_world_point;
 use crate::{ModelingMode, PetuniaViewport, ProfileEditGesture, ProfileHitTarget, SlintUiBridge};
@@ -67,9 +68,66 @@ pub(crate) fn point_segment_distance(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> (
     ((p[0] - foot[0]).hypot(p[1] - foot[1]), t)
 }
 
+pub(crate) struct TransformProfileCmd {
+    pub(crate) profile: petunia_project::ProfileResource,
+    pub(crate) spline: petunia_project::SplineResource,
+}
+
+impl Command for TransformProfileCmd {
+    fn label(&self) -> &'static str {
+        "transform profile"
+    }
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::SPLINES | petunia_project::ProjectChanges::PROCEDURAL
+    }
+    fn can_execute(&self, state: &petunia_core::AppState) -> Result<(), &'static str> {
+        let project = &state.project.project;
+        let current = project
+            .get_profile(self.profile.id)
+            .ok_or("Profile not found")?;
+        if current.spline_id != self.spline.id {
+            return Err("Profile spline cannot be replaced");
+        }
+        let spline = project
+            .get_spline(self.spline.id)
+            .ok_or("Spline not found")?;
+        if current == &self.profile && spline == &self.spline {
+            return Err("Profile data is unchanged");
+        }
+        self.spline
+            .validate_authoring()
+            .map_err(|_| "Spline data is invalid")?;
+        self.profile
+            .validate_authoring(&self.spline)
+            .map_err(|_| "Profile spline data is invalid")?;
+        Ok(())
+    }
+    fn execute(&self, state: &mut petunia_core::AppState) -> Result<(), CommandError> {
+        let spline = state
+            .project
+            .project
+            .get_spline_mut(self.spline.id)
+            .ok_or(petunia_project::SplineError::SplineNotFound(self.spline.id))?;
+        let mut next_spline = self.spline.clone();
+        next_spline.revision = spline.revision.wrapping_add(1);
+        *spline = next_spline;
+        let profile = state
+            .project
+            .project
+            .get_profile_mut(self.profile.id)
+            .ok_or(petunia_project::ProfileError::ProfileNotFound(
+                self.profile.id,
+            ))?;
+        let mut next_profile = self.profile.clone();
+        next_profile.revision = profile.revision.wrapping_add(1);
+        *profile = next_profile;
+        Ok(())
+    }
+}
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Sólo o DRAW mostra as formas persistentes (POLY trabalha em componentes).
-    fn draw_shapes_visible(&self) -> bool {
+    pub(crate) fn draw_shapes_visible(&self) -> bool {
         self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw
     }
 
@@ -214,7 +272,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         });
         let (cx, cy) = (sum.0 as f32 / count, sum.1 as f32 / count);
         let center_world = origin + right * cx + up * cy;
-        let depth = (self.state.profile.depth as f32).max(0.1);
+        let depth = self.state.profile.depth.max(0.1);
         let top_world = center_world + normal * depth;
 
         let camera = &self.state.session.camera;
@@ -244,19 +302,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         (out, Some(top_screen), label)
     }
 
-    /// Perfil inativo cujo contorno passa perto do cursor (px da viewport).
-    pub(crate) fn profile_hit_inactive(&self, screen: [f32; 2]) -> Option<uuid::Uuid> {
+    /// Perfil sob o cursor (px da viewport), com contorno acima do interior.
+    pub(crate) fn profile_hit_at(&self, screen: [f32; 2]) -> Option<uuid::Uuid> {
+        if !self.draw_shapes_visible() || !screen.iter().all(|value| value.is_finite()) {
+            return None;
+        }
         let cache = self.shape_cache();
         let camera = &self.state.session.camera;
         let mut best: Option<(uuid::Uuid, f32)> = None;
         for line in &cache.lines {
-            if Some(line.id) == self.active_profile_id {
+            if line.hole {
                 continue;
             }
             let projected: Vec<Option<[f32; 2]>> = line
                 .world
                 .iter()
-                .map(|p| project_world_point(camera, self.viewport_size, *p))
+                .map(|point| project_world_point(camera, self.viewport_size, *point))
                 .collect();
             let mut pairs: Vec<(usize, usize)> = (1..projected.len()).map(|i| (i - 1, i)).collect();
             if line.closed && projected.len() > 2 {
@@ -273,7 +334,55 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
         }
-        best.map(|(id, _)| id)
+        if let Some((id, _)) = best {
+            return Some(id);
+        }
+        if self.viewport_size[0] <= 1.0 || self.viewport_size[1] <= 1.0 {
+            return None;
+        }
+        let ndc = glam::Vec2::new(
+            screen[0] / self.viewport_size[0] * 2.0 - 1.0,
+            1.0 - screen[1] / self.viewport_size[1] * 2.0,
+        );
+        let (origin, direction) = camera.ray(ndc.x, ndc.y);
+        self.state
+            .project
+            .project
+            .profiles
+            .iter()
+            .find_map(|profile| {
+                let spline = self.state.project.project.get_spline(profile.spline_id)?;
+                if !spline.closed || spline.points.len() < 3 {
+                    return None;
+                }
+                let wp = profile.workplane;
+                let [o, r, u, n] = [wp.origin, wp.right, wp.up, wp.normal]
+                    .map(|value| glam::DVec3::from_array(value).as_vec3());
+                let denominator = direction.dot(n);
+                if denominator.abs() < 1.0e-6 {
+                    return None;
+                }
+                let depth = (o - origin).dot(n) / denominator;
+                if depth < 0.0 && camera.proj == petunia_core::Projection::Perspective {
+                    return None;
+                }
+                let point = origin + direction * depth - o;
+                let p = [f64::from(point.dot(r)), f64::from(point.dot(u))];
+                let Ok(table) = spline.arc_length_table(OUTLINE_TOLERANCE) else {
+                    return None;
+                };
+                let outer: Vec<_> = table
+                    .polyline()
+                    .into_iter()
+                    .map(|point| [point[0], point[1]])
+                    .collect();
+                (petunia_mesh::arrangement::point_in_polygon(&outer, p)
+                    && !profile
+                        .holes
+                        .iter()
+                        .any(|hole| petunia_mesh::arrangement::point_in_polygon(hole, p)))
+                .then_some(profile.id)
+            })
     }
 
     /// Torna `profile_id` o perfil em edição (plano de trabalho incluído).

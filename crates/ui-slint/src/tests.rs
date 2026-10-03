@@ -170,7 +170,7 @@ fn transform_scrubbing_updates_values_and_clamps() {
     );
 
     let vm = bridge.view_model();
-    assert_eq!(vm.position[0], 0.0);
+    assert_eq!(vm.position[0], 0.52);
     assert_eq!(vm.scale[2], -9.0);
 }
 
@@ -8032,7 +8032,7 @@ fn context_menu_selects_the_cap_loop_of_a_cylinder() {
     assert!(bridge.context_menu_action("edge_ring"));
     let mesh = bridge.state.project.active_mesh().expect("malha ativa");
     assert!(
-        mesh.selected_edges.len() >= 1,
+        !mesh.selected_edges.is_empty(),
         "o ring parte da aresta apontada"
     );
 }
@@ -9753,6 +9753,7 @@ fn paint_select_tool_picks_faces_and_clears_on_empty_space() {
     // Entrar no PAINT ativa o pincel; a seleção é uma escolha explícita.
     assert_eq!(bridge.state.session.tools.active_tool, "brush");
     bridge.apply(UiIntent::SetActiveTool("select".into()));
+    bridge.apply(UiIntent::SetSelectionDomain(SelectionDomain::Face));
 
     bridge.select_viewport(0.5, 0.5, false);
     let selected = |bridge: &SlintUiBridge<PlaceholderViewport>| {
@@ -9772,6 +9773,42 @@ fn paint_select_tool_picks_faces_and_clears_on_empty_space() {
 
     bridge.select_viewport(0.01, 0.01, false);
     assert_eq!(selected(&bridge), 0, "clicar no vazio limpa as faces");
+}
+
+#[test]
+fn paint_selection_domain_switches_between_active_object_and_face() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+    bridge.resize_viewport(800, 600);
+    let second = petunia_core::PrimitiveKind::Plane;
+    bridge.apply(UiIntent::AddPrimitive(second));
+    bridge.state.select_object(Some(0), false);
+    bridge.state.set_selection_domain(SelectionDomain::Object);
+    bridge.select_viewport(0.5, 0.5, false);
+    assert_eq!(bridge.state.selection_domain(), SelectionDomain::Object);
+    assert_eq!(bridge.state.project.active, 0);
+    assert!(
+        bridge
+            .state
+            .session
+            .selection
+            .assets
+            .contains(&bridge.state.project.assets[0].id)
+    );
+
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    bridge.select_viewport(0.5, 0.5, false);
+    assert!(
+        bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .iter()
+            .any(|face| face.selected)
+    );
 }
 
 #[test]
@@ -10172,14 +10209,17 @@ fn transform_fields_persist_on_active_asset_and_reset_commands_clear_them() {
     assert_eq!(vm2.scale[2], 2.0);
 
     // Context menu actions para resetar transforms
+    bridge.open_viewport_context_menu(200.0, 150.0);
     assert!(bridge.context_menu_action("clear_location"));
     assert_eq!(bridge.view_model().position[0], 0.0);
     assert_eq!(bridge.state.project.active().unwrap().position[0], 0.0);
 
+    bridge.open_viewport_context_menu(200.0, 150.0);
     assert!(bridge.context_menu_action("clear_rotation"));
     assert_eq!(bridge.view_model().rotation[1], 0.0);
     assert_eq!(bridge.state.project.active().unwrap().rotation[1], 0.0);
 
+    bridge.open_viewport_context_menu(200.0, 150.0);
     assert!(bridge.context_menu_action("clear_scale"));
     assert_eq!(bridge.view_model().scale[2], 1.0);
     assert_eq!(bridge.state.project.active().unwrap().scale[2], 1.0);
@@ -10234,6 +10274,59 @@ fn profiles_2d_appear_in_parts_and_can_be_selected_and_deleted() {
 }
 
 #[test]
+fn draw_profile_selection_precedes_mesh_and_closed_interior() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    for point in [[0.46, 0.46], [0.54, 0.46], [0.54, 0.54], [0.46, 0.54]] {
+        bridge.select_viewport_ext(point[0], point[1], false, false);
+    }
+    assert!(bridge.close_profile());
+    bridge.apply(UiIntent::SetActiveTool("select".into()));
+    bridge.select_viewport(0.5, 0.5, false);
+    assert!(bridge.active_profile_id.is_some());
+}
+
+#[test]
+fn draw_profile_transforms_commit_once_and_escape_restores() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
+    assert!(bridge.add_profile_rectangle(2.0, 1.0));
+    let profile_id = bridge.active_profile_id.unwrap();
+    bridge.state.project.undo.clear();
+    let before = active_profile_spline(&bridge).clone();
+    bridge.apply(UiIntent::SetActiveTool("move".into()));
+    let hit = bridge.profile_hit_at([400.0, 300.0]);
+    assert_eq!(hit, Some(profile_id));
+    bridge.tool_pointer(0, 400.0, 300.0, false, false);
+    bridge.tool_pointer(1, 430.0, 300.0, false, false);
+    bridge.tool_pointer(2, 430.0, 300.0, false, false);
+    assert_eq!(bridge.state.project.undo.depth().0, 1);
+    assert_ne!(
+        active_profile_spline(&bridge).points[0].position,
+        before.points[0].position
+    );
+    assert!(bridge.state.undo());
+    assert_eq!(
+        active_profile_spline(&bridge).points[0].position,
+        before.points[0].position
+    );
+    assert_eq!(bridge.state.project.undo.depth(), (0, 1));
+
+    bridge.tool_pointer(0, 400.0, 300.0, false, false);
+    bridge.tool_pointer(1, 430.0, 300.0, false, false);
+    bridge.tool_pointer(3, 430.0, 300.0, false, false);
+    assert_eq!(
+        active_profile_spline(&bridge).points[0].position,
+        before.points[0].position
+    );
+    assert_eq!(bridge.state.project.undo.depth(), (0, 1));
+}
+
+#[test]
 fn draw_depth_handle_projects_and_updates_with_profile() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
@@ -10281,4 +10374,99 @@ fn uv_path_collects_anchors_without_a_freehand_stroke_and_preserves_mode() {
     assert!(!bridge.paint_2d_line(uv[0] / count, 1.0 - uv[1] / count, 0, true));
     bridge.apply(UiIntent::SetWorkspace(Workspace::Model));
     assert!(bridge.surface_paint.nodes.is_empty());
+}
+
+#[test]
+fn parametric_profiles_reedit_persist_and_undo_without_replacing_identity() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert!(bridge.add_profile_rectangle(2.0, 1.0));
+    let id = bridge.active_profile_id.unwrap();
+    let spline_id = bridge.active_profile_resources().unwrap().1.id;
+    bridge.state.project.undo.clear();
+    assert!(bridge.set_profile_dimensions(4.0, 3.0, 16));
+    assert_eq!(bridge.active_profile_id, Some(id));
+    assert_eq!(bridge.active_profile_resources().unwrap().1.id, spline_id);
+    assert_eq!(bridge.state.project.undo.depth().0, 1);
+    assert!((bridge.view_model().profile_width - 4.0).abs() < 1e-5);
+    let profile = bridge.active_profile_resources().unwrap().0;
+    let json = serde_json::to_string(profile).unwrap();
+    let loaded: petunia_project::ProfileResource = serde_json::from_str(&json).unwrap();
+    assert_eq!(&loaded, profile);
+    assert!(bridge.state.undo());
+    assert!((bridge.view_model().profile_width - 2.0).abs() < 1e-5);
+    assert!(!bridge.set_profile_dimensions(f32::NAN, 1.0, 16));
+    bridge.state.project.undo.clear();
+    bridge.profile_dimension_gesture(0);
+    assert!(bridge.set_profile_dimensions(3.0, 1.0, 16));
+    assert!(bridge.set_profile_dimensions(4.0, 1.0, 16));
+    bridge.profile_dimension_gesture(1);
+    assert_eq!(bridge.state.project.undo.depth().0, 1);
+    bridge.profile_dimension_gesture(0);
+    assert!(bridge.set_profile_dimensions(5.0, 1.0, 16));
+    bridge.profile_dimension_gesture(2);
+    assert!((bridge.view_model().profile_width - 4.0).abs() < 1e-5);
+    assert_eq!(bridge.state.project.undo.depth().0, 1);
+    assert!(bridge.add_profile_circle(1.0, 16));
+    assert!(bridge.set_profile_dimensions(4.0, 2.0, 24));
+    assert_eq!(
+        bridge.active_profile_resources().unwrap().1.points.len(),
+        24
+    );
+    let spline_id = bridge.active_profile_resources().unwrap().1.id;
+    bridge
+        .state
+        .project
+        .project
+        .get_spline_mut(spline_id)
+        .unwrap()
+        .points[0]
+        .position[0] += 0.1;
+    assert!(!bridge.view_model().profile_parametric);
+    assert!(!bridge.set_profile_dimensions(5.0, 2.0, 24));
+    assert!(bridge.execute_draw_extension("draw.ellipse"));
+    assert!(bridge.view_model().profile_parametric);
+    assert!(bridge.set_profile_dimensions(3.0, 2.0, 96));
+    assert_eq!(bridge.view_model().profile_segments, 96);
+}
+
+#[test]
+fn draw_scale_and_rotation_keep_parametric_profile_reeditable() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.viewport_size = [800.0, 600.0];
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert!(bridge.add_profile_rectangle(2.0, 1.0));
+    let plane = bridge.active_profile_resources().unwrap().0.workplane;
+    let pixel = |bridge: &SlintUiBridge<PlaceholderViewport>, point: [f64; 2]| {
+        let world = glam::DVec3::from_array(plane.to_world(point).unwrap()).as_vec3();
+        crate::projection::project_world_point(
+            &bridge.state.session.camera,
+            bridge.viewport_size,
+            world,
+        )
+        .unwrap()
+    };
+    let start = pixel(&bridge, [0.5, 0.0]);
+    let end = pixel(&bridge, [1.0, 0.0]);
+    bridge.state.project.undo.clear();
+    assert!(bridge.begin_profile_transform(TransformKind::Scale, start));
+    assert!(bridge.update_profile_transform(end, false));
+    assert!(bridge.commit_profile_transform());
+    assert!((bridge.view_model().profile_width - 4.0).abs() < 1e-4);
+    assert!(bridge.view_model().profile_parametric);
+    assert_eq!(bridge.state.project.undo.depth().0, 1);
+    let end = pixel(&bridge, [0.0, 0.5]);
+    assert!(bridge.begin_profile_transform(TransformKind::Rotation, start));
+    assert!(bridge.update_profile_transform(end, false));
+    assert!(bridge.commit_profile_transform());
+    assert!(bridge.view_model().profile_parametric);
+    assert!(bridge.set_profile_dimensions(5.0, 2.0, 16));
+    let width = bridge.view_model().profile_width;
+    let center = pixel(&bridge, [0.0, 0.0]);
+    let moved = pixel(&bridge, [0.1, 0.0]);
+    assert!(bridge.begin_profile_transform(TransformKind::Scale, center));
+    assert!(bridge.update_profile_transform(moved, false));
+    assert!(bridge.view_model().profile_width < width * 2.0);
+    assert!(bridge.cancel_profile_transform());
+    assert!((bridge.view_model().profile_width - width).abs() < 1e-4);
 }

@@ -290,7 +290,9 @@ impl CommandDispatcher {
                     state.session.primitive_session,
                     state.session.last_primitive,
                 ) = original_primitive_session;
-                state.sync_selection();
+                // The project and selection are the same snapshot. Recomputing
+                // selection here would mutate the restored document on failure.
+                state.mark_dirty();
             }
             return Err(error);
         }
@@ -2040,18 +2042,17 @@ impl Command for SeparateSelectionCmd {
             } else {
                 f.verts.iter().all(|vi| vert_map.contains_key(vi))
             };
-            if include_face {
-                if let Some(new_verts) = f
+            if include_face
+                && let Some(new_verts) = f
                     .verts
                     .iter()
                     .map(|vi| vert_map.get(vi).copied())
                     .collect::<Option<Vec<u32>>>()
-                {
-                    let mut nf = petunia_mesh::Face::with_uv(new_verts, f.uv.clone());
-                    nf.selected = false;
-                    nf.material_slot = f.material_slot;
-                    sep_mesh.push_face(nf);
-                }
+            {
+                let mut nf = petunia_mesh::Face::with_uv(new_verts, f.uv.clone());
+                nf.selected = false;
+                nf.material_slot = f.material_slot;
+                sep_mesh.push_face(nf);
             }
         }
 

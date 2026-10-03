@@ -1238,7 +1238,13 @@ impl PaintModule {
                     }
                 }
                 if let Some(before) = alpha_before {
-                    for (pixel, old) in cv.pixels.chunks_exact_mut(4).zip(before.chunks_exact(4)) {
+                    for (pixel, old) in cv
+                        .pixels
+                        .as_chunks_mut::<4>()
+                        .0
+                        .iter_mut()
+                        .zip(before.as_chunks::<4>().0)
+                    {
                         if old[3] == 0 {
                             pixel.copy_from_slice(old);
                         } else {

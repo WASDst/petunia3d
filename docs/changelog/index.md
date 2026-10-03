@@ -5,6 +5,15 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### DRAW/POLY/PAINT — seleção e perfis reeditáveis (03/10/2026)
+
+- Perfis 2D selecionáveis pelo contorno/interior; mover, girar e escalar com cancelamento e um Undo por gesto.
+- Retângulos e círculos novos conservam identificação paramétrica em ZIP/JSON e permitem reeditar dimensões/segmentos após selecionar a forma. Edição livre que descaracteriza a primitiva desativa a regeneração dimensional; formatos legados recusam perda de metadados.
+- Seleção por caixa/laço considera oclusão e área projetada sem seleção através; PAINT oferece seleção de objeto/parte inteira e faces.
+- Ferramentas de edição poligonal removidas do trilho esquerdo duplicado; teste de integração atualizado para cores por parte.
+- Falhas de comandos restauram projeto e seleção sem recalcular a seleção nem incrementar sua revisão; regressões de Projection/Path mantêm rollback exato e histórico vazio.
+- SVG: parse, rasterização e destruição da árvore usam worker com pilha definida, preservando o limite de profundidade e evitando estouro em SVG válido aninhado. Fixtures GPU serializam ciclos nativos de dispositivo para permitir execução paralela do restante da suíte.
+
 ### PAINT/DRAW — integração MVP (02/10/2026)
 
 - SVG como decal com fonte/cache, re-rasterização 512/1024, parser com limites de expansão e importação de contornos DRAW em um Undo. Compatibilidade dos layouts postcard antigos; novos dados persistem em ZIP/JSON.

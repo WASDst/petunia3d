@@ -375,7 +375,7 @@ pub fn region_sheet(
                 vertex.pos = frame.lift(*p).to_array();
                 mesh.verts.push(vertex);
             }
-            for indices in triangulation.triangle_indices.chunks_exact(3) {
+            for indices in triangulation.triangle_indices.as_chunks::<3>().0 {
                 let mut verts: Vec<_> = indices.iter().map(|i| *i as u32).collect();
                 let points: Vec<_> = indices.iter().map(|i| triangulation.vertices[*i]).collect();
                 if signed_area(&points) < 0.0 {

@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1571**.
+Total de chaves de localização cadastradas: **1572**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -1214,6 +1214,7 @@ Total de chaves de localização cadastradas: **1571**.
 | `sl.wedge` | Wedge | Cunha |
 | `sl.weld_coincident_3d_edges_that_have_split_uv_` | Weld coincident 3D edges that have split UV seams | Solda arestas 3D coincidentes que têm seams UV divididas |
 | `sl.width` | Width | Largura |
+| `sl.workplane_from_selection` | Set Workplane from Selection (3 Points / Face) | Plano de Trabalho pela Seleção (3 Pontos / Face) |
 | `sl.workspaces` | Workspaces | Espaços de trabalho |
 | `sl.x_ray` | X-Ray | X-Ray |
 | `sl.x_ray_enabled` | X-Ray enabled | X-Ray ativado |

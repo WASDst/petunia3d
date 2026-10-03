@@ -203,20 +203,6 @@ pub fn create_thumbnail_image(width: u32, height: u32, rgba: &[u8]) -> Option<sl
     Some(slint::Image::from_rgba8(buf))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn dialog_kinds_have_stable_translation_keys() {
-        assert_eq!(
-            FileDialogKind::OpenProject.title_key(),
-            "files.open_project"
-        );
-        assert_eq!(FileDialogKind::ExportMesh.title_key(), "files.export_mesh");
-    }
-}
-
 /// Leitura limitada antes do parser; recursos externos nunca são carregados.
 pub fn load_svg(path: &std::path::Path) -> Result<String, String> {
     use std::io::Read;
@@ -229,4 +215,18 @@ pub fn load_svg(path: &std::path::Path) -> Result<String, String> {
         return Err(petunia_project::SvgError::TooLarge.to_string());
     }
     String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dialog_kinds_have_stable_translation_keys() {
+        assert_eq!(
+            FileDialogKind::OpenProject.title_key(),
+            "files.open_project"
+        );
+        assert_eq!(FileDialogKind::ExportMesh.title_key(), "files.export_mesh");
+    }
 }

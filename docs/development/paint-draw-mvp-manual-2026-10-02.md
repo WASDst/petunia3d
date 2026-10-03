@@ -47,8 +47,22 @@ Abrir projeto de teste em cópia, criar cubo e plano com UV charts distintos, 25
 3. UV health: densidade dobra ao dobrar resolução e cai pela metade ao dobrar escala da malha; equalizar usa medida linear. Conferir ilhas pequenas, overlap e bleed. Exportar GLB com padding 0 e 2; original e histórico não mudam.
 4. DRAW: presets, parâmetros radius/length/angle/sides/tolerance; mirror cria cópia em um Undo; constraints afetam o próximo segmento. Round de um ponto e de perfil inteiro; Simplify/Resample explícitos. Trace usa referência visível (alpha ou luminância) e preserva furos.
 
-## Gates reservados
+## Gates
 
-Após autorização: fmt/check, testes relevantes (SVG, profile_tools, format, boolean_texture, shape_builder, draw_batch, projection, surface_commands, path_paint, uv_tools), clippy, architecture/docs/bible/UI guards. Registrar comando, SHA, resultado e diferenças manuais encontradas. Não usar logs de worktrees antigos como prova deste checkout.
+A retomada de 03/10/2026 autoriza a execução: fmt/check, testes relevantes (SVG, profile_tools, format, boolean_texture, shape_builder, draw_batch, projection, surface_commands, path_paint, uv_tools), clippy, architecture/docs/bible/UI guards. Registrar comando, SHA, resultado e diferenças manuais encontradas. Não usar logs de worktrees antigos como prova deste checkout.
 
 Export bleed restringe a dilatação aos gutters fora das faces UV, preservando pixels/alpha da arte dentro das ilhas. Materiais compartilhados usam a máscara combinada dos consumidores exportados; todos os canais existentes recebem padding em cópia. Verificar também transparências internas de decals SVG.
+
+## Regressões da retomada de 03/10
+
+1. Em DRAW, criar retângulo; selecionar pelo interior mesmo sobre uma malha;
+   mover, girar e escalar, cancelar um gesto e conferir Undo/Redo.
+2. Alterar largura/altura; criar círculo e alterar dimensões/segmentos;
+   salvar em ZIP/JSON, reabrir e reeditar. Editar um nó fora da primitiva:
+   controles dimensionais devem desaparecer sem apagar o desenho.
+3. Em vista frontal, selecionar por caixa e laço: sem X-Ray não selecionar
+   faces ocultas ou laterais sem área projetada; com seleção através,
+   confirmar o comportamento correspondente.
+4. Em PAINT, alternar Object/Face e selecionar partes diferentes; confirmar
+   que pintura/máscara respeitam o alvo e a seleção.
+5. Confirmar trilho DRAW/POLY e ferramentas poligonais na barra flutuante.

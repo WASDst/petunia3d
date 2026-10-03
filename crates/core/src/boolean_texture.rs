@@ -298,8 +298,22 @@ mod tests {
         let atlas = transfer(&state.project.project, &mut result, &a, &b)
             .unwrap()
             .albedo;
-        assert!(atlas.pixels.chunks_exact(4).any(|p| p == [255, 0, 0, 255]));
-        assert!(atlas.pixels.chunks_exact(4).any(|p| p == [0, 0, 255, 255]));
+        assert!(
+            atlas
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p == &[255, 0, 0, 255])
+        );
+        assert!(
+            atlas
+                .pixels
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| p == &[0, 0, 255, 255])
+        );
         assert!(result.faces.iter().all(|f| f.uv.len() == f.verts.len()));
         assert_eq!(
             a.texture.as_ref().unwrap().get(0, 0),

@@ -71,6 +71,23 @@ pub enum SvgError {
     Render,
 }
 
+// The bounded native SVG recursion needs more than Rust's default worker
+// stack in debug builds. Keep parse, render and tree destruction on this
+// scoped worker, including when callers already run on a small-stack thread.
+fn with_svg_stack<T: Send>(
+    work: impl FnOnce() -> Result<T, SvgError> + Send,
+) -> Result<T, SvgError> {
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("petunia-svg".into())
+            .stack_size(32 * 1024 * 1024)
+            .spawn_scoped(scope, work)
+            .map_err(|_| SvgError::Render)?
+            .join()
+            .map_err(|_| SvgError::Render)?
+    })
+}
+
 /// Tamanho intrínseco do documento (unidades de usuário, após `viewBox`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SvgInfo {
@@ -238,6 +255,10 @@ impl<'a, 'input> Expansion<'a, 'input> {
 
 /// Lê só o tamanho intrínseco do SVG.
 pub fn svg_info(svg: &str) -> Result<SvgInfo, SvgError> {
+    with_svg_stack(|| svg_info_inner(svg))
+}
+
+fn svg_info_inner(svg: &str) -> Result<SvgInfo, SvgError> {
     let tree = parse_tree(svg)?;
     let size = tree.size();
     Ok(SvgInfo {
@@ -251,6 +272,10 @@ pub fn svg_info(svg: &str) -> Result<SvgInfo, SvgError> {
 /// A proporção é preservada: o maior lado vira `min(max_px, MAX_RASTER_PX)`
 /// (mínimo 1 px) e o outro é arredondado (mínimo 1 px).
 pub fn rasterize_svg(svg: &str, max_px: u32) -> Result<Canvas, SvgError> {
+    with_svg_stack(|| rasterize_svg_inner(svg, max_px))
+}
+
+fn rasterize_svg_inner(svg: &str, max_px: u32) -> Result<Canvas, SvgError> {
     let tree = parse_tree(svg)?;
     if !tree.root().has_children() {
         return Err(SvgError::Empty);
@@ -298,6 +323,10 @@ fn scaled_side(long: u32, ratio: f64) -> u32 {
 /// `fit_size` não positivo/não finito ou geometria sem extensão devolve
 /// [`SvgError::ZeroSize`]; nenhuma geometria devolve [`SvgError::Empty`].
 pub fn svg_subpaths(svg: &str, fit_size: f64) -> Result<Vec<SvgSubpath>, SvgError> {
+    with_svg_stack(|| svg_subpaths_inner(svg, fit_size))
+}
+
+fn svg_subpaths_inner(svg: &str, fit_size: f64) -> Result<Vec<SvgSubpath>, SvgError> {
     if !(fit_size.is_finite() && fit_size > 0.0) {
         return Err(SvgError::ZeroSize);
     }
@@ -936,7 +965,7 @@ mod tests {
         assert_eq!(a.handle_in, [0.0; 2]);
         assert_eq!(b.handle_out, [0.0; 2]);
         // A caixa usa o extremo da curva (y máx. real 37.5), não os controles (50).
-        let (min, max) = bounds(&[sp.clone()]);
+        let (min, max) = bounds(std::slice::from_ref(sp));
         assert!((max[0] - min[0] - 100.0).abs() < EPS);
         assert!((max[1] - min[1] - 37.5).abs() < 0.01);
     }

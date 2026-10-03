@@ -158,7 +158,7 @@ impl Command for ProjectionPaintCmd {
             .and_then(|a| a.paint_stack.as_ref())
             .and_then(|s| s.active())
             .and_then(|l| l.canvas())
-            .is_some_and(|canvas| canvas.pixels.chunks_exact(4).any(|p| p[3] != 0));
+            .is_some_and(|canvas| canvas.pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0));
         clear_stroke(state);
         if !changed {
             return Err(CommandError::Execution("No eligible paint pixels".into()));
@@ -287,7 +287,7 @@ fn paint_stamps(
         .and_then(|a| a.paint_stack.as_ref())
         .and_then(|s| s.active())
         .and_then(|l| l.canvas())
-        .is_none_or(|c| !c.pixels.chunks_exact(4).any(|p| p[3] != 0))
+        .is_none_or(|c| !c.pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0))
     {
         touched = 0;
     }
