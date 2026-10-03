@@ -379,7 +379,7 @@ mod tests {
         }
         state.session.tools.brush_lock = petunia_core::BrushLock::SelectedFaces;
         let triangles =
-            crate::projection::mesh_world_triangles(state.project.active_mesh().unwrap());
+            crate::projection::mesh_world_triangles(state.project.active_mesh().unwrap()).collect();
         let before = state.project.project.clone();
         let depth = state.project.undo.depth();
         let command = ProjectionPaintCmd {
