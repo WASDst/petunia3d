@@ -911,7 +911,8 @@ impl EditorSession {
             locked_axes: [false; 3],
             isolate_active: false,
             isolate_prev_visibilities: None,
-            snap_enabled: false,
+            // Snapping contextual por padrão (capítulo 01, "Smart Snap").
+            snap_enabled: true,
             snap_settings: crate::snap::SnapSettings::default(),
             proportional_editing: false,
             proportional_settings: crate::proportional::ProportionalSettings::default(),
@@ -2860,7 +2861,7 @@ impl AppState {
                 format!("Extrude Individual {:.2} m", modal.value)
             }
             crate::modal::ModalKind::Inset => {
-                format!("Inset {:.2}", modal.value)
+                format!("Inset {:.2} m", modal.value)
             }
             crate::modal::ModalKind::Bevel => {
                 format!("Bevel {:.2} m", modal.value)

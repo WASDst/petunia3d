@@ -776,6 +776,55 @@ pub fn profile_capture_from_selection(state: &mut AppState) -> bool {
     if sel_verts.len() == 3 {
         return profile_capture_three_points(state, sel_verts[0], sel_verts[1], sel_verts[2]);
     }
+    // Duas faces paralelas (e não coplanares): plano médio entre elas, como
+    // o "mid-plane" do Plasticity — útil para simetria e nervuras centrais.
+    let selected_faces: Vec<usize> = mesh
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.selected)
+        .map(|(i, _)| i)
+        .take(3)
+        .collect();
+    if let [a, b] = selected_faces[..] {
+        let (na, nb) = (
+            mesh.face_normal(a).normalize_or_zero(),
+            mesh.face_normal(b).normalize_or_zero(),
+        );
+        let (ca, cb) = (mesh.face_centroid(a), mesh.face_centroid(b));
+        let gap = (cb - ca).dot(na);
+        if na != glam::Vec3::ZERO && na.dot(nb).abs() > 0.999 && gap.abs() > 1.0e-5 {
+            let face = &mesh.faces[a];
+            let edge_dir = if face.verts.len() >= 2 {
+                (mesh.verts[face.verts[1] as usize].vec()
+                    - mesh.verts[face.verts[0] as usize].vec())
+                .normalize_or_zero()
+            } else {
+                glam::Vec3::ZERO
+            };
+            // Centro: centróide da face A levado até o meio do vão.
+            let center = ca + na * (gap * 0.5);
+            let to_f64 = |v: glam::Vec3| [v.x as f64, v.y as f64, v.z as f64];
+            let Ok(wp) = petunia_core::ProfileWorkplane::from_face_and_edge(
+                to_f64(center),
+                to_f64(na),
+                to_f64(edge_dir),
+            ) else {
+                return false;
+            };
+            state.profile.origin = wp.origin.map(|x| x as f32);
+            state.profile.right = wp.right.map(|x| x as f32);
+            state.profile.up = wp.up.map(|x| x as f32);
+            state.profile.normal = wp.normal.map(|x| x as f32);
+            state.profile.workplane_kind = WorkplaneKind::Face;
+            state.profile.workplane_locked = true;
+            state.profile.points.clear();
+            state.profile.nodes.clear();
+            state.profile.closed = false;
+            state.mark_dirty();
+            return true;
+        }
+    }
     // Caso de face selecionada com aresta guia opcional
     let sel_face = mesh.faces.iter().position(|f| f.selected);
     if let Some(fi) = sel_face {

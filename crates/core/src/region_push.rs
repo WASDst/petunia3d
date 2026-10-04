@@ -13,7 +13,7 @@
 
 use glam::{DVec3, Vec3};
 use petunia_mesh::arrangement::{Polyline2, Region2, planar_regions, region_at};
-use petunia_mesh::imprint::{ImprintError, imprint_region, region_sheet};
+use petunia_mesh::imprint::{ImprintError, imprint_region, imprint_region_general, region_sheet};
 
 use crate::AppState;
 use crate::modal::{ModalError, ModalKind};
@@ -295,26 +295,42 @@ impl AppState {
         // Antes do prelúdio: trocar o domínio converte a seleção por vértices,
         // e o fundo da folha compartilha os vértices do topo.
         self.set_selection_domain(crate::SelectionDomain::Face);
-        if host.is_some() {
-            if self.is_active_locked() {
-                return Err(RegionPushError::Locked);
+        let outer = hit.outer_world();
+        let holes: Vec<Vec<Vec3>> = hit
+            .region
+            .holes
+            .iter()
+            .map(|hole| hole.iter().map(|p| hit.plane.to_world(*p)).collect())
+            .collect();
+        // Região inteira dentro de uma face e sem furos: o imprint com pontes
+        // (topologia mais limpa). Cruzando arestas, ocupando várias faces
+        // coplanares ou com furos: o imprint geral. Nenhuma face coplanar
+        // tocada: folha solta num asset novo.
+        let imprinted = self.project.active_mesh().map(|mesh| {
+            if let Some(face) = host
+                && holes.is_empty()
+                && let Ok((mesh, _)) = imprint_region(mesh, face, &outer)
+            {
+                return Ok(mesh);
             }
-            if !hit.region.holes.is_empty() {
-                return Err(RegionPushError::HoleOnFace);
+            imprint_region_general(mesh, &outer, &holes, hit.plane.origin, hit.plane.normal)
+                .map(|(mesh, _)| mesh)
+        });
+        let on_mesh = matches!(imprinted, Some(Ok(_)));
+        let prelude = match imprinted {
+            Some(Ok(mesh)) => {
+                if self.is_active_locked() {
+                    return Err(RegionPushError::Locked);
+                }
+                // Congelar antes: a primitiva paramétrica seria regenerada.
+                self.freeze_active_primitive_for_command();
+                if let Some(active) = self.project.project.active_mesh_mut() {
+                    *active = mesh;
+                }
+                Ok(())
             }
-            // Congelar antes: a primitiva paramétrica seria regenerada.
-            self.freeze_active_primitive_for_command();
-        }
-        let prelude = match host {
-            Some(face) => {
-                let mesh = self.project.active_mesh().ok_or(ModalError::NoActiveMesh)?;
-                imprint_region(mesh, face, &hit.outer_world()).map(|(mesh, _)| {
-                    if let Some(active) = self.project.project.active_mesh_mut() {
-                        *active = mesh;
-                    }
-                })
-            }
-            None => region_sheet(
+            Some(Err(error)) if error != ImprintError::OutsideFace => Err(error),
+            _ => region_sheet(
                 &hit.region.outer,
                 &hit.region.holes,
                 hit.plane.origin,
@@ -333,7 +349,7 @@ impl AppState {
         }
         self.emit_project_changed(petunia_project::ProjectChanges::ALL);
         self.begin_modal_after_prelude(ModalKind::Extrude, before, before_selection)?;
-        if host.is_none() {
+        if !on_mesh {
             self.set_modal_flip_when_negative();
         }
         Ok(())

@@ -81,7 +81,8 @@ fn default_radius_pixels() -> f32 {
 impl Default for SnapSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
+            // Snapping contextual por padrão (capítulo 01, "Smart Snap").
+            enabled: true,
             target: SnapTarget::Grid,
             element: SnapElement::Closest,
             grid_spacing: 1.0,

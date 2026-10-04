@@ -565,6 +565,129 @@ impl Mesh {
         self.translate_selected(d);
     }
 
+    /// Inset métrico: cada face selecionada ganha uma face interna a
+    /// `distance` unidades de mundo das bordas (offset em mitra no plano da
+    /// face). A distância é limitada para que nenhuma aresta interna colapse
+    /// ou cruze outra (auto-interseção) e a face interna mantenha a
+    /// orientação; UVs seguem um mapa afim ajustado no plano da face.
+    /// Devolve a menor distância aplicada (após o limite de segurança).
+    pub fn inset_selected_distance(&mut self, distance: f32) -> f32 {
+        if !distance.is_finite() || distance <= 0.0 {
+            return 0.0;
+        }
+        let sel: Vec<usize> = self
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| x.selected)
+            .map(|(i, _)| i)
+            .collect();
+        let mut applied = distance;
+        for &fi in &sel {
+            let src = self.faces[fi].clone();
+            let m = src.verts.len();
+            if m < 3 || src.uv.len() != m {
+                continue;
+            }
+            let normal = self.face_normal(fi);
+            if normal.length_squared() < 1.0e-12 {
+                continue;
+            }
+            let points: Vec<Vec3> = src
+                .verts
+                .iter()
+                .map(|&v| self.verts[v as usize].vec())
+                .collect();
+            // Normal interna de cada aresta k (p_k → p_k+1), no plano da face.
+            let inward: Vec<Vec3> = (0..m)
+                .map(|k| {
+                    let edge = (points[(k + 1) % m] - points[k]).normalize_or_zero();
+                    normal.cross(edge).normalize_or_zero()
+                })
+                .collect();
+            // Vetor de mitra por canto: interseção das duas bordas deslocadas.
+            let miter: Vec<Vec3> = (0..m)
+                .map(|k| {
+                    let (a, b) = (inward[(k + m - 1) % m], inward[k]);
+                    let denominator = 1.0 + a.dot(b);
+                    if denominator < 1.0e-3 {
+                        // Canto de ~360° (agulha): não avança.
+                        Vec3::ZERO
+                    } else {
+                        (a + b) / denominator
+                    }
+                })
+                .collect();
+            // Limite: o comprimento de cada aresta interna é L + d·taxa; com
+            // taxa negativa ela colapsa em d = L / -taxa.
+            let mut limit = f32::INFINITY;
+            for k in 0..m {
+                let next = (k + 1) % m;
+                let edge = points[next] - points[k];
+                let length = edge.length();
+                if length < 1.0e-9 {
+                    continue;
+                }
+                let rate = (miter[next] - miter[k]).dot(edge / length);
+                if rate < -1.0e-6 {
+                    limit = limit.min(length / -rate);
+                }
+            }
+            let mut d = distance.min(limit * 0.98);
+            // Orientação preservada (cantos côncavos podem cruzar): reduz até ok.
+            let inner_normal = |d: f32| {
+                let inner: Vec<Vec3> = (0..m).map(|k| points[k] + miter[k] * d).collect();
+                let mut n = Vec3::ZERO;
+                for k in 0..m {
+                    n += inner[k].cross(inner[(k + 1) % m]);
+                }
+                n
+            };
+            for _ in 0..8 {
+                if inner_normal(d).dot(normal) > 1.0e-8 {
+                    break;
+                }
+                d *= 0.5;
+            }
+            if d <= 1.0e-6 {
+                continue;
+            }
+            applied = applied.min(d);
+            let uv_at = planar_uv_map(&points, &src.uv, normal);
+            let mut inner = Vec::with_capacity(m);
+            let mut inner_uv = Vec::with_capacity(m);
+            for (k, &vi) in src.verts.iter().enumerate() {
+                let p = points[k] + miter[k] * d;
+                self.verts.push(Vertex {
+                    pos: p.to_array(),
+                    color: self.verts[vi as usize].color,
+                    selected: true,
+                });
+                inner.push((self.verts.len() - 1) as u32);
+                inner_uv.push(uv_at(p));
+            }
+            self.faces[fi].verts = inner.clone();
+            self.faces[fi].uv = inner_uv;
+            for k in 0..m {
+                let k2 = (k + 1) % m;
+                let quad_uv = vec![
+                    src.uv[k],
+                    src.uv[k2],
+                    self.faces[fi].uv[k2],
+                    self.faces[fi].uv[k],
+                ];
+                self.push_face(Face::with_uv(
+                    vec![src.verts[k], src.verts[k2], inner[k2], inner[k]],
+                    quad_uv,
+                ));
+            }
+            for &vi in &src.verts {
+                self.verts[vi as usize].selected = false;
+            }
+        }
+        applied
+    }
+
     /// Inset métrico com proteção de auto-interseção e preservação de orientação topológica.
     pub fn inset_selected(&mut self, factor: f32) {
         if !factor.is_finite() || factor <= 0.0 {
@@ -2784,5 +2907,69 @@ mod region_tests {
         assert!(mesh.make_face_from_selection().is_ok());
         assert_eq!(mesh.selected_edges.len(), 1);
         assert!(mesh.selected_edges.contains(&edge_key(0, 1)));
+    }
+}
+
+/// Mapa afim plano → UV ajustado por mínimos quadrados nos cantos da face.
+/// Faces sem UV consistente caem na média dos cantos.
+pub(crate) fn planar_uv_map(
+    points: &[Vec3],
+    uvs: &[[f32; 2]],
+    normal: Vec3,
+) -> impl Fn(Vec3) -> [f32; 2] {
+    let origin = points[0];
+    let u_axis = (points[1] - points[0]).normalize_or_zero();
+    let v_axis = normal.cross(u_axis).normalize_or_zero();
+    let local = move |p: Vec3| [(p - origin).dot(u_axis), (p - origin).dot(v_axis)];
+    // Equações normais de uv = a·x + b·y + c para cada canal.
+    let mut ata = [[0.0f64; 3]; 3];
+    let mut atb = [[0.0f64; 2]; 3];
+    for (p, uv) in points.iter().zip(uvs) {
+        let [x, y] = local(*p);
+        let row = [x as f64, y as f64, 1.0];
+        for i in 0..3 {
+            for j in 0..3 {
+                ata[i][j] += row[i] * row[j];
+            }
+            atb[i][0] += row[i] * uv[0] as f64;
+            atb[i][1] += row[i] * uv[1] as f64;
+        }
+    }
+    let det = |m: &[[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let d = det(&ata);
+    let mean = {
+        let n = uvs.len().max(1) as f32;
+        let sum = uvs
+            .iter()
+            .fold([0.0f32; 2], |acc, uv| [acc[0] + uv[0], acc[1] + uv[1]]);
+        [sum[0] / n, sum[1] / n]
+    };
+    let coefficients = (d.abs() > 1.0e-12).then(|| {
+        let mut out = [[0.0f64; 3]; 2];
+        for channel in 0..2 {
+            for column in 0..3 {
+                let mut m = ata;
+                for row in 0..3 {
+                    m[row][column] = atb[row][channel];
+                }
+                out[channel][column] = det(&m) / d;
+            }
+        }
+        out
+    });
+    move |p: Vec3| match coefficients {
+        Some(c) => {
+            let [x, y] = local(p);
+            let (x, y) = (x as f64, y as f64);
+            [
+                (c[0][0] * x + c[0][1] * y + c[0][2]) as f32,
+                (c[1][0] * x + c[1][1] * y + c[1][2]) as f32,
+            ]
+        }
+        None => mean,
     }
 }

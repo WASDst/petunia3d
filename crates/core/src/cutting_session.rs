@@ -65,6 +65,18 @@ impl CutSession {
         cut_face(current_mesh, start, end)
     }
 
+    /// Como [`Self::cut_knife_segment`], mas atravessa as faces entre os dois
+    /// pontos seguindo o plano de visão (sem cliques intermediários).
+    pub fn cut_knife_path(
+        &mut self,
+        start: EdgePoint,
+        end: EdgePoint,
+        current_mesh: &Mesh,
+        view_direction: Vec3,
+    ) -> Result<Mesh, String> {
+        petunia_mesh::knife::cut_path(current_mesh, start, end, view_direction)
+    }
+
     /// Calcula a malha fatiada por um plano gerado pelo arrasto em tela.
     pub fn compute_slice(
         &self,

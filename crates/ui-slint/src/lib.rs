@@ -251,7 +251,7 @@ impl ToolModalKind {
 
     pub const fn bounds(self) -> (f32, f32) {
         match self {
-            Self::Inset => (0.0, 0.95),
+            Self::Inset => (0.0, 100.0),
             Self::Bevel => (0.0, 100.0),
             Self::ScaleSelection => (0.01, 100.0),
             Self::Extrude | Self::ExtrudeIndividual | Self::PushPull => (-100.0, 100.0),
@@ -5776,7 +5776,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let change = (angle - drag.last_angle + 180.0).rem_euclid(360.0) - 180.0;
                 drag.rotation_angle += change;
                 drag.last_angle = angle;
-                let angle = if snap || self.state.session.snap_enabled {
+                // Passos de 15° só com Ctrl: o snap contextual (ligado por padrão,
+                // cap. 01) encaixa em alvos, não arredonda todo gesto.
+                let angle = if snap {
                     (drag.rotation_angle / 15.0).round() * 15.0
                 } else {
                     drag.rotation_angle
@@ -5792,7 +5794,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 } else {
                     1.0 + delta.x * 0.005
                 };
-                if snap || self.state.session.snap_enabled {
+                if snap {
                     factor = (factor * 10.0).round() / 10.0;
                 }
                 if factor.abs() < 0.001 {
@@ -10153,7 +10155,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let Some(mesh) = self.state.project.active_mesh().cloned() else {
                 return false;
             };
-            session.cut_knife_segment(start, point, &mesh)
+            // O corte atravessa as faces entre os dois cliques seguindo o que o
+            // usuário vê como reta (plano que contém a direção de visão).
+            let camera = &self.state.session.camera;
+            let middle = (start.position + point.position) * 0.5;
+            let view_direction = if camera.proj == petunia_core::Projection::Perspective {
+                (middle - camera.eye()).normalize_or_zero()
+            } else {
+                camera.forward()
+            };
+            session.cut_knife_path(start, point, &mesh, view_direction)
         };
 
         match cut_result {
@@ -11188,7 +11199,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     (current[0] - start[0]) as f32,
                     (current[1] - start[1]) as f32,
                 );
-                if snap || self.state.session.snap_enabled {
+                if snap {
                     let step = self.state.session.snap_settings.grid_spacing.max(0.001);
                     delta = (delta / step).round() * step;
                 }
@@ -11201,7 +11212,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     vector.y.atan2(vector.x).to_degrees()
                 };
                 let mut degrees = (angle(current) - angle(start) + 180.0).rem_euclid(360.0) - 180.0;
-                if snap || self.state.session.snap_enabled {
+                if snap {
                     degrees = (degrees / 15.0).round() * 15.0;
                 }
                 Some((glam::Vec2::splat(degrees.to_radians()), degrees))
@@ -11758,21 +11769,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             direction,
             camera.proj == petunia_core::Projection::Perspective,
         )?;
-        // Uma face da malha ativa claramente à frente esconde a região.
-        let occluder = self.state.project.active_mesh().and_then(|mesh| {
-            petunia_core::picking::pick_mesh(
-                mesh,
-                camera,
-                glam::Vec2::new(width, height),
-                ndc,
-                petunia_core::SelectMode::Face,
-                false,
-            )
-        });
-        let hidden = occluder.is_some_and(|occluder| {
-            let depth = (occluder.position - origin).dot(direction);
-            depth < hit.depth - 1.0e-3 * hit.depth.abs().max(1.0)
-        });
+        // Qualquer objeto visível claramente à frente esconde a região (a
+        // cena em cache tem BVH; não triangula a malha por evento). Fora do
+        // Raio-X/Wireframe, como a oclusão do picking.
+        let through = self.state.session.show_xray
+            || self.state.session.shading == petunia_core::Shading::Wireframe;
+        let hidden = !through
+            && self
+                .scene_query()
+                .nearest_depth(camera, ndc.to_array())
+                .is_some_and(|depth| depth < hit.depth - 1.0e-3 * hit.depth.abs().max(1.0));
         (!hidden).then_some(hit)
     }
 

@@ -404,9 +404,10 @@ pub fn drag_value(
             }
         }
         ModalKind::Inset => {
-            // Fração 0–0,95: aproximar o cursor do pivô aumenta o inset.
-            let (away, reach) = away_from_pivot(frame.pivot_px, anchor, delta);
-            (start_value - away / reach.max(24.0)).clamp(0.0, 0.95)
+            // Distância de mundo: aproximar o cursor do pivô aumenta o inset
+            // (o limite anti-interseção é aplicado pela geometria).
+            let (away, _) = away_from_pivot(frame.pivot_px, anchor, delta);
+            (start_value - away * world_per_pixel).max(0.0)
         }
         ModalKind::Bevel => {
             // Distância de mundo: afastar o cursor do pivô aumenta.

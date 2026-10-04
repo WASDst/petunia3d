@@ -141,6 +141,31 @@ impl ViewportSceneQuery {
             .map(|(index, _, _)| index)
     }
 
+    /// Profundidade (ao longo do raio de `ndc`) da superfície visível mais
+    /// próxima, de qualquer objeto — inclusive bloqueados, que ocultam.
+    pub fn nearest_depth(&self, camera: &crate::Camera, ndc: [f32; 2]) -> Option<f32> {
+        let (origin, direction) = camera.ray(ndc[0], ndc[1]);
+        let matrix = camera.view_proj();
+        let in_depth_range = |depth: f32| {
+            let clip = matrix * (origin + direction * depth).extend(1.0);
+            clip.w > 0.0 && clip.z >= 0.0 && clip.z <= clip.w
+        };
+        let mut nearest: Option<f32> = None;
+        for surface in &self.surfaces {
+            let limit = nearest.unwrap_or(f32::INFINITY);
+            if !Self::ray_hits_bounds(surface, origin, direction, limit) {
+                continue;
+            }
+            if let Some((depth, _)) = surface
+                .bvh
+                .nearest(origin, direction, limit, in_depth_range)
+            {
+                nearest = Some(depth);
+            }
+        }
+        nearest
+    }
+
     /// Face mais próxima do objeto `asset_index` sob o raio de `ndc`, com a
     /// posição do acerto. A oclusão por outros objetos é responsabilidade do
     /// chamador (`point_visible`).

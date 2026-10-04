@@ -88,7 +88,7 @@ pub struct ModalOp {
     pub constraint: ModalConstraint,
     pub pivot: Vec3,
     pub normal: Vec3,
-    /// Distance, degrees, scale factor, or inset fraction (not meters).
+    /// Distance (Extrude/Push/Inset/Bevel, meters), degrees, or scale factor.
     pub value: f32,
     /// Absolute XYZ delta, Euler XYZ degrees, or per-axis scale factors.
     pub components: Vec3,
@@ -652,7 +652,7 @@ impl AppState {
                     || linear.since_check >= LINEAR_RECHECK_EVERY
                     || value < linear.range.0 - span * 0.5
                     || value > linear.range.1 + span * 0.5
-                    || (modal.kind == ModalKind::Inset && !(0.0..=0.95).contains(&value))
+                    || (modal.kind == ModalKind::Inset && value < 0.0)
                     || (modal.kind == ModalKind::Bevel && value < 0.0)
                     || linear
                         .samples
@@ -803,7 +803,7 @@ impl AppState {
         if modal.kind == ModalKind::Scale && value.abs() < 1.0e-6 {
             return Err(ModalError::InvalidInput);
         }
-        if modal.kind == ModalKind::Inset && !(0.0..=0.95).contains(&value) {
+        if modal.kind == ModalKind::Inset && value < 0.0 {
             return Err(ModalError::InvalidInput);
         }
         if modal.kind == ModalKind::Bevel && value < 0.0 {
@@ -930,7 +930,10 @@ impl AppState {
                 }
             }
             ModalKind::ExtrudeIndividual if value != 0.0 => mesh.extrude_individual(value),
-            ModalKind::Inset if value != 0.0 => mesh.inset_selected(value),
+            // Inset métrico (unidades de mundo) com limite anti-interseção.
+            ModalKind::Inset if value != 0.0 => {
+                mesh.inset_selected_distance(value);
+            }
             ModalKind::Bevel if value != 0.0 => {
                 let segs = self.tools.bevel_segments.clamp(1, 4);
                 let clamp = self.tools.bevel_clamp_overlap;
