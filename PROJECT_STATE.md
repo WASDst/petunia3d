@@ -291,6 +291,12 @@ Evidence is preserved in `docs/audits/premium-evidence/`, [`docs/GAUNTLET.md`](d
 
 ## Next action
 
+**Rodada de 04/10/2026 (branch `claude/draw-poly-perf-tools`):** itens 1–9 da
+análise de DRAW/POLY implementados — desempenho por evento, cache por objeto na
+GPU, BVH, prévia incremental, gramática única, domínios do DRAW, mensagens com
+`TextId`, Knife/imprint/snap/Inset e ADR 008. Detalhe e validação em
+[`draw-poly-perf-tools-2026-10-04.md`](docs/development/draw-poly-perf-tools-2026-10-04.md).
+
 **Atualização de 04/10/2026.** O pedido de 23/09 (MODEL/viewport) foi superado
 pelo ADR 007 (DRAW/POLY) e pelas rodadas de 30/09–03/10. Pendências atuais,
 sem nova decisão de produto:

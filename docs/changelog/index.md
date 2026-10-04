@@ -5,6 +5,14 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### DRAW/POLY — desempenho e ferramentas (04/10/2026)
+
+- Arrasto e hover redesenham só a viewport e os overlays; a janela completa sincroniza no máximo a cada 50 ms. Seleção não retriangula a cena; o WGPU guarda a geometria por objeto.
+- BVH de triângulos no picking, na seleção por caixa/laço, na oclusão de regiões e no snap; prévia incremental de Move/Rotate/Scale/Push, Extrude, Inset e Bevel; matriz rígida por objeto no modo objeto; Undo com malhas e texturas compartilhadas (ADR 008).
+- Gramática única para Knife, Loop Cut, Slice, Draw Profile e os modais por teclado; buffer numérico único.
+- DRAW: domínios Curve/Point/Region reais; Knife atravessa várias faces; imprint em várias faces, cruzando arestas e com furos; Inset métrico; plano médio entre faces paralelas; snap ligado por padrão entre todos os objetos, com centro de face, interseção, paralelo, perpendicular e 15°.
+- 176 mensagens de status passam a usar `TextId` (en/pt-BR). Medição opcional por `PETUNIA_PROFILE`/`PETUNIA_FRAME_TIMING` e benchmarks de consultas da viewport. Matriz: `docs/development/draw-poly-perf-tools-2026-10-04.md`.
+
 ### CI, gates e tokens de cor (04/10/2026)
 
 - `ui-guard.yml` voltou a ser YAML válido (o comando `gallery::` era lido como chave e o workflow nunca rodava).

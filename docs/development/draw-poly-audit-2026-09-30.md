@@ -48,3 +48,7 @@ o que é estimativa está dito.
 3. **U9 → U10**: um buffer numérico e depois a migração de Loop Cut/Slice/Knife/Profile para `ToolSession`;
    é o que de fato cumpre o critério "nenhuma ferramenta tem ciclo próprio" do ADR 007.
 4. **U8** com o agente de UI (alças ≥ 24 px) e **U13** com o renderer.
+
+## Execução de 04/10/2026
+
+Os itens 1–4 desta ordem (índice espacial, render coalescido e dirty flags, buffer numérico único e migração para `ToolSession`, alças) foram tratados na rodada registrada em [`draw-poly-perf-tools-2026-10-04.md`](draw-poly-perf-tools-2026-10-04.md); alças ≥ 24 px e gizmo em passo GPU continuam pendentes.

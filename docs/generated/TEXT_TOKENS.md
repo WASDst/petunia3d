@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1572**.
+Total de chaves de localização cadastradas: **1756**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -1220,14 +1220,198 @@ Total de chaves de localização cadastradas: **1572**.
 | `sl.x_ray_enabled` | X-Ray enabled | X-Ray ativado |
 | `sl.x_ray_off` | X-Ray off | X-Ray desligado |
 | `sl.x_ray_on` | X-Ray on | X-Ray ligado |
+| `snap_kind.angle` | Angle | Ângulo |
 | `snap_kind.axis_x` | Along X axis | Paralelo ao eixo X |
 | `snap_kind.axis_y` | Along Y axis | Paralelo ao eixo Y |
 | `snap_kind.axis_z` | Along Z axis | Paralelo ao eixo Z |
+| `snap_kind.face_center` | Face center | Centro da face |
 | `snap_kind.grid` | Grid | Grade |
+| `snap_kind.intersection` | Intersection | Interseção |
 | `snap_kind.midpoint` | Midpoint | Ponto médio |
 | `snap_kind.on_edge` | On edge | Na aresta |
 | `snap_kind.on_face` | On face | Na face |
+| `snap_kind.parallel` | Parallel | Paralelo |
+| `snap_kind.perpendicular` | Perpendicular | Perpendicular |
 | `snap_kind.point` | Point | Ponto |
+| `status.3d_cursor` | 3D Cursor: [{0}, {1}, {2}] | Cursor 3D: [{0}, {1}, {2}] |
+| `status.3d_cursor_reset_to_the_origin_0` | 3D Cursor reset to the origin (0, 0, 0). | Cursor 3D redefinido para a origem (0, 0, 0). |
+| `status.active_tool` | Active tool: {tool} | Ferramenta ativa: {tool} |
+| `status.added` | Added {0} | {0} adicionado |
+| `status.asset_not_found_in_project_library` | Asset not found in project library | Ativo não encontrado na biblioteca do projeto |
+| `status.boolean_operand_cleared` | Boolean operand cleared | Operando booleano removido |
+| `status.boolean_operand_set_fuse_cut_or_intersect` | Boolean operand set: Fuse, Cut or Intersect now applies | Operando booleano definido: Fuse, Cut ou Intersect agora se aplica |
+| `status.brush` | Brush: {name} | Pincel: {name} |
+| `status.brush_hardness` | Brush hardness: {0}% | Dureza do pincel: {0}% |
+| `status.brush_lock` | Brush lock: {lock} | Trava do pincel: {lock} |
+| `status.brush_presets` | Brush presets: {error} | Predefinições de pincel: {error} |
+| `status.brush_saved` | Brush saved: {name} | Pincel salvo: {name} |
+| `status.brush_size` | Brush size: {next} | Tamanho do pincel: {next} |
+| `status.camera_centered_on_the_3d_cursor` | Camera centered on the 3D Cursor. | Câmera centralizada no Cursor 3D. |
+| `status.camera_reset` | Camera reset. | Câmera redefinida. |
+| `status.cannot_merge_down_this_layer` | Cannot merge down this layer | Não é possível mesclar esta camada para baixo |
+| `status.choose_a_transform_pivot` | Choose a transform pivot | Escolha um pivô de transformação |
+| `status.circle_profile_radius_seg_created` | Circle profile (radius {radius}, {segments} seg) created | Perfil circular (raio {radius}, {segments} seg) criado |
+| `status.clone_point_at_the_surface_to_set` | Clone: point at the surface to set the source | Clonar: aponte para a superfície para definir a origem |
+| `status.clone_source_set_paint_to_copy_from` | Clone source set — paint to copy from it | Origem do clone definida — pinte para copiar dela |
+| `status.color_sampled_from_canvas` | Color sampled from canvas | Cor capturada do canvas |
+| `status.color_sampled_from_texture` | Color sampled from texture | Cor capturada da textura |
+| `status.copied_hovered_edge_to_clipboard` | Copied hovered edge to clipboard | Aresta sob o cursor copiada |
+| `status.copied_hovered_face_to_clipboard` | Copied hovered face to clipboard | Face sob o cursor copiada |
+| `status.copied_hovered_vertex_to_clipboard` | Copied hovered vertex to clipboard | Ponto sob o cursor copiado |
+| `status.copied_selected_edges_to_clipboard` | Copied selected edges to clipboard | Arestas selecionadas copiadas |
+| `status.copied_selected_faces_to_clipboard` | Copied selected faces to clipboard | Faces selecionadas copiadas |
+| `status.copied_selected_vertices_to_clipboard` | Copied selected vertices to clipboard | Pontos selecionados copiados |
+| `status.copied_to_clipboard` | Copied '{0}' to clipboard | '{0}' copiado |
+| `status.created_material` | Created Material {0} | Material {0} criado |
+| `status.curve_selected` | Curve selected | Curva selecionada |
+| `status.cut` | Cut: {error} | Cortar: {error} |
+| `status.cut_applied` | Cut applied | Corte aplicado |
+| `status.cut_cancelled` | Cut cancelled | Corte cancelado |
+| `status.cut_choose_two_edge_points_in_the` | Cut: choose two edge points in the viewport | Cortar: escolha dois pontos em arestas na viewport |
+| `status.cut_point_at_a_visible_edge` | Cut: point at a visible edge | Cortar: aponte para uma aresta visível |
+| `status.cut_preview_choose_another_segment_enter_applies` | Cut preview: choose another segment, Enter applies, Esc restores | Prévia do corte: escolha outro segmento, Enter aplica, Esc restaura |
+| `status.decal_could_not_read_the_image` | Decal: could not read the image ({error}) | Decalque: não foi possível ler a imagem ({error}) |
+| `status.decal_imported_x` | Decal imported: {name} ({w}×{h}) | Decalque importado: {name} ({w}×{h}) |
+| `status.decal_invalid_image_data` | Decal: invalid image data | Decalque: dados de imagem inválidos |
+| `status.decal_transform_cancelled` | Decal transform cancelled | Transformação do decalque cancelada |
+| `status.decal_transform_committed` | Decal transform committed | Transformação do decalque confirmada |
+| `status.draw_a_profile_before_generating_volume` | Draw a profile before generating volume | Desenhe um perfil antes de gerar o volume |
+| `status.duplicated_material_to_slot` | Duplicated material to slot {new_idx} | Material duplicado no slot {new_idx} |
+| `status.edge_selected` | Edge {a}-{b} selected | Aresta {a}-{b} selecionada |
+| `status.edit_pivot_exited` | Edit Pivot exited | Edição do pivô encerrada |
+| `status.everything_selected` | Everything selected. | Tudo selecionado. |
+| `status.export_failed` | export failed: {error} | falha na exportação: {error} |
+| `status.exported` | exported {0} | exportado: {0} |
+| `status.extrude_requires_a_closed_profile_at_least` | Extrude requires a closed profile (at least 3 points) | Extrude exige um perfil fechado (pelo menos 3 pontos) |
+| `status.face_selected` | Face {face} selected | Face {face} selecionada |
+| `status.failed_to_discard_snapshots` | Failed to discard snapshots: {error} | Falha ao descartar os estados: {error} |
+| `status.failed_to_open` | failed to open: {err} | falha ao abrir: {err} |
+| `status.failed_to_save` | failed to save: {err} | falha ao salvar: {err} |
+| `status.fill_scope` | Fill scope: {scope} | Escopo do preenchimento: {scope} |
+| `status.filled` | Filled ({scope}) | Preenchido ({scope}) |
+| `status.filled_canvas` | Filled canvas ({scope}) | Canvas preenchido ({scope}) |
+| `status.filled_points` | Filled {count} points | {count} pontos preenchidos |
+| `status.free_mode_move_the_mouse_click_or` | {0} (Free mode) · Move the mouse; click or Enter confirms, Esc cancels | {0} (Modo livre) · Mova o mouse; clique ou Enter confirma, Esc cancela |
+| `status.gradient_committed` | Gradient committed | Degradê aplicado |
+| `status.gradient_drag_to_set_direction_and_length` | Gradient: drag to set direction and length | Degradê: arraste para definir direção e comprimento |
+| `status.import_failed` | import failed: {error} | falha na importação: {error} |
+| `status.imported_asset_s` | imported {0} asset(s) | {0} ativo(s) importado(s) |
+| `status.imported_palette_colors` | imported palette ({count} colors) | paleta importada ({count} cores) |
+| `status.invalid_numeric_value` | Invalid numeric value: {error} | Valor numérico inválido: {error} |
+| `status.invalid_value` | Invalid value: {error} | Valor inválido: {error} |
+| `status.keymap` | Keymap: {error} | Atalhos: {error} |
+| `status.keymap_profile_activated` | Keymap profile activated: {id} | Perfil de atalhos ativado: {id} |
+| `status.keymap_profile_created` | Keymap profile created: {candidate} | Perfil de atalhos criado: {candidate} |
+| `status.keymap_profile_deleted` | Keymap profile deleted | Perfil de atalhos apagado |
+| `status.knife_pick_the_second_edge_point` | Knife: pick the second edge point | Knife: escolha o segundo ponto de aresta |
+| `status.lasso_selection_updated` | Lasso selection updated | Seleção por laço atualizada |
+| `status.loop_cut` | Loop Cut: {error} | Loop Cut: {error} |
+| `status.loop_cut_2` | Loop cut ({0}{1}) | Loop cut ({0}{1}) |
+| `status.loop_cut_cancelled` | Loop Cut cancelled | Loop Cut cancelado |
+| `status.loop_cut_click_to_place_scroll_to` | Loop Cut: click to place, scroll to change cuts, Enter to confirm, Esc to cancel | Loop Cut: clique para posicionar, Ctrl+roda muda os cortes, Enter confirma, Esc cancela |
+| `status.loop_cut_cut_s_click_to_place` | Loop Cut: {next} cut(s) · click to place | Loop Cut: {next} corte(s) · clique para posicionar |
+| `status.loop_cut_cuts_must_be_a_whole` | Loop Cut: cuts must be a whole number from 1 to 32 | Loop Cut: os cortes devem ser um número inteiro de 1 a 32 |
+| `status.loop_cut_drag_to_slide_enter_confirms` | Loop Cut: drag to slide, Enter confirms, Esc cancels | Loop Cut: arraste para deslizar, Enter confirma, Esc cancela |
+| `status.loop_cut_hover_a_quad_edge_ring` | Loop Cut: hover a quad edge ring, click to place, scroll to change cuts | Loop Cut: passe sobre um anel de quads, clique para posicionar, Ctrl+roda muda os cortes |
+| `status.loop_cut_move_the_pointer_over_a` | Loop Cut: move the pointer over a quad edge ring | Loop Cut: passe o ponteiro sobre um anel de quads |
+| `status.loop_cut_no_active_mesh` | Loop Cut: no active mesh | Loop Cut: nenhuma malha ativa |
+| `status.loop_cut_select_an_edge_on_a` | Loop Cut: select an edge on a quad ring first | Loop Cut: selecione primeiro uma aresta num anel de quads |
+| `status.loop_cut_slide_must_be_between_1` | Loop Cut: slide must be between -1 and 1 | Loop Cut: o deslize deve ficar entre -1 e 1 |
+| `status.loop_cut_the_selected_edge_is_not` | Loop Cut: the selected edge is not on a quad ring | Loop Cut: a aresta selecionada não está num anel de quads |
+| `status.loop_cut_topology_refused_at_commit` | Loop Cut: topology refused at commit | Loop Cut: topologia recusada na confirmação |
+| `status.no_active_mesh_to_paint` | No active mesh to paint | Nenhuma malha ativa para pintar |
+| `status.no_face_under_the_cursor` | No face under the cursor | Nenhuma face sob o cursor |
+| `status.nothing_under_the_cursor` | Nothing under the cursor | Nada sob o cursor |
+| `status.nudge` | Nudge [{dx}, {dy}, {dz}] | Deslocar [{dx}, {dy}, {dz}] |
+| `status.object_duplicated` | Object duplicated. | Objeto duplicado. |
+| `status.open_requested` | Open requested | Abrir solicitado |
+| `status.painting` | Painting '{name}' | Pintando '{name}' |
+| `status.palette_export_failed` | palette export failed: {error} | falha ao exportar a paleta: {error} |
+| `status.palette_exported_successfully` | palette exported successfully | paleta exportada |
+| `status.palette_import_failed` | palette import failed: {error} | falha ao importar a paleta: {error} |
+| `status.pasted_object` | Pasted object '{copy_name}' | Objeto '{copy_name}' colado |
+| `status.pasted_separate_object` | Pasted separate object '{new_name}' | Objeto separado '{new_name}' colado |
+| `status.pivot` | Pivot: {0} | Pivô: {0} |
+| `status.point_added` | Point added | Ponto adicionado |
+| `status.point_selected` | Point {index} selected | Ponto {index} selecionado |
+| `status.press_the_new_shortcut_esc_cancels` | Press the new shortcut (Esc cancels) | Pressione o novo atalho (Esc cancela) |
+| `status.primitive_frozen_to_editable_mesh` | Primitive frozen to editable mesh | Primitiva convertida em malha editável |
+| `status.profile_closed_choose_generate_volume_or_revolve` | Profile closed: choose Generate Volume or Revolve | Perfil fechado: escolha Gerar volume ou Revolve |
+| `status.profile_corners_sharpened` | Profile corners sharpened | Cantos do perfil retos |
+| `status.profile_curves_smoothed_cubic_bezier` | Profile curves smoothed (Cubic Bézier) | Curvas do perfil suavizadas (Bézier cúbica) |
+| `status.profile_editing_finished` | Profile editing finished | Edição do perfil concluída |
+| `status.profile_limit_reached_4096_points` | Profile limit reached (4096 points) | Limite do perfil atingido (4096 pontos) |
+| `status.profile_point_selected` | Point selected | Ponto selecionado |
+| `status.profile_requires_at_least_three_points` | Profile requires at least three points | O perfil precisa de pelo menos três pontos |
+| `status.profile_volume_transaction_has_no_initial_snapshot` | Profile volume transaction has no initial snapshot | A transação de volume do perfil não tem estado inicial |
+| `status.project_opened` | project opened: {0} | projeto aberto: {0} |
+| `status.project_saved` | project saved: {0} | projeto salvo: {0} |
+| `status.projection` | Projection: {projection} | Projeção: {projection} |
+| `status.proportional_radius` | Proportional radius: {0} | Raio proporcional: {0} |
+| `status.recovered_snapshot_of` | Recovered snapshot of '{0}' | Estado recuperado de '{0}' |
+| `status.recovery_snapshots_discarded` | Recovery snapshots discarded | Estados de recuperação descartados |
+| `status.rectangle_profile_x_created` | Rectangle profile ({width} x {height}) created | Perfil retangular ({width} x {height}) criado |
+| `status.redo_done` | Redo done. | Refazer executado. |
+| `status.region_selected` | Region selected | Região selecionada |
+| `status.revolve_requires_at_least_2_points` | Revolve requires at least 2 points | Revolve exige pelo menos 2 pontos |
+| `status.right_click_on_a_face_to_select` | Right-click on a face to select its loop | Clique direito numa face para selecionar o loop |
+| `status.right_click_on_an_edge_to_select` | Right-click on an edge to select its loop | Clique direito numa aresta para selecionar o loop |
+| `status.save_as_required` | Save As required | É preciso usar Salvar como |
+| `status.section_layout_save_failed` | section layout save failed: {error} | falha ao salvar o layout das seções: {error} |
+| `status.select_3_points_or_a_face_to` | Select 3 points or a face to define workplane | Selecione 3 pontos ou uma face para definir o plano de trabalho |
+| `status.selected` | Selected '{name}' | '{name}' selecionado |
+| `status.selected_edge_edges` | Selected edge {0} ({count} edges) | Aresta {0} selecionada ({count} arestas) |
+| `status.selected_edge_loop_edges` | Selected edge loop ({count} edges) | Loop de arestas selecionado ({count} arestas) |
+| `status.selected_face_loop_faces` | Selected face loop ({count} faces) | Loop de faces selecionado ({count} faces) |
+| `status.selected_shape` | Selected shape '{name}' | Forma '{name}' selecionada |
+| `status.selected_vertex_loop_points` | Selected vertex loop ({count} points) | Loop de pontos selecionado ({count} pontos) |
+| `status.selection_cleared` | Selection cleared. | Seleção limpa. |
+| `status.selection_inverted` | Selection inverted. | Seleção invertida. |
+| `status.selection_mode` | Selection mode: {0} | Modo de seleção: {0} |
+| `status.set_as_boolean_operand` | Set as boolean operand | Definido como operando booleano |
+| `status.shading` | Shading: {0} | Sombreamento: {0} |
+| `status.shape_anchored_release_to_commit` | Shape anchored: release to commit | Forma ancorada: solte para confirmar |
+| `status.shape_builder_cancelled` | Shape Builder cancelled | Shape Builder cancelado |
+| `status.shape_builder_click_inside_a_closed_shape` | Shape Builder: click inside a closed shape | Shape Builder: clique dentro de uma forma fechada |
+| `status.shape_builder_pass_over_the_regions_you` | Shape Builder: pass over the regions you want to change | Shape Builder: passe sobre as regiões que quer alterar |
+| `status.shape_cancelled` | Shape cancelled | Forma cancelada |
+| `status.shape_committed` | Shape committed ({brush}) | Forma aplicada ({brush}) |
+| `status.shape_deleted` | Shape deleted | Forma apagada |
+| `status.shape_point_at_the_surface_to_anchor` | Shape: point at the surface to anchor the shape | Forma: aponte para a superfície para ancorar a forma |
+| `status.shape_press_on_the_surface_to_anchor` | Shape: press on the surface to anchor, release to commit | Forma: pressione na superfície para ancorar, solte para confirmar |
+| `status.shape_release_point_is_off_the_surface` | Shape: release point is off the surface, discarded | Forma: o ponto de soltura está fora da superfície; descartada |
+| `status.shape_selected` | Shape selected | Forma selecionada |
+| `status.slice_applied` | Slice applied | Slice aplicado |
+| `status.slice_cancelled` | Slice cancelled | Slice cancelado |
+| `status.slice_click_and_drag_to_draw_the` | Slice: click and drag to draw the cut line | Slice: clique e arraste para traçar a linha de corte |
+| `status.slice_drag_in_the_viewport_to_define` | Slice: drag in the viewport to define the cut plane | Slice: arraste na viewport para definir o plano de corte |
+| `status.slice_no_active_mesh` | Slice: no active mesh | Slice: nenhuma malha ativa |
+| `status.snap_target` | Snap target: {0} | Alvo do snap: {0} |
+| `status.sweep_requires_at_least_2_points` | Sweep requires at least 2 points | Sweep exige pelo menos 2 pontos |
+| `status.texel_density` | Texel density: {e} | Densidade de texel: {e} |
+| `status.the_last_layer_cannot_be_removed` | The last layer cannot be removed | A última camada não pode ser removida |
+| `status.tool_active_drag_the_gizmo_type_a` | {0} tool active · Drag the gizmo, type a value or press again for Free mode | Ferramenta {0} ativa · Arraste o gizmo, digite o valor ou aperte novamente para o modo livre |
+| `status.undo_done` | Undo done. | Desfazer executado. |
+| `status.unknown_effect_layer` | Unknown effect layer: {kind} | Camada de efeito desconhecida: {kind} |
+| `status.unknown_primitive` | Unknown primitive: {kind_str} | Primitiva desconhecida: {kind_str} |
+| `status.uv_all_pinned_vertices_cleared` | UV: all pinned vertices cleared | UV: todos os pontos fixos liberados |
+| `status.uv_all_seams_cleared` | UV: all seams cleared | UV: todas as costuras limpas |
+| `status.uv_face_selected_total` | UV: face {face} selected ({0} total) | UV: face {face} selecionada ({0} no total) |
+| `status.uv_moved_by` | UV moved by ({du}, {dv}) | UV movida em ({du}, {dv}) |
+| `status.uv_no_face_under_the_cursor` | UV: no face under the cursor | UV: nenhuma face sob o cursor |
+| `status.uv_pins_toggled_pinned_corners_total` | UV pins toggled ({count} pinned corners total) | Fixações UV alternadas ({count} cantos fixos no total) |
+| `status.uv_rotated` | UV rotated {degrees}° | UV girada {degrees}° |
+| `status.uv_scaled_x` | UV scaled ×{factor} | UV escalada ×{factor} |
+| `status.uv_seams_on_selected_edges_toggled_total` | UV seams on selected edges toggled ({count} total) | Costuras UV nas arestas selecionadas alternadas ({count} no total) |
+| `status.uv_seams_on_the_selected_face_toggled` | UV seams on the selected face toggled ({count} total) | Costuras UV da face selecionada alternadas ({count} no total) |
+| `status.uv_select_a_face_in_the_viewport` | UV: select a face in the viewport first | UV: selecione uma face na viewport primeiro |
+| `status.uv_select_face_s_to_pin_unpin` | UV: select face(s) to pin/unpin | UV: selecione face(s) para fixar/soltar |
+| `status.uv_there_are_no_pins_to_clear` | UV: there are no pins to clear | UV: não há fixações para limpar |
+| `status.uv_there_are_no_seams_to_clear` | UV: there are no seams to clear | UV: não há costuras para limpar |
+| `status.view` | View: {0} | Vista: {0} |
+| `status.view_aligned_to` | View aligned to {0} | Vista alinhada a {0} |
+| `status.volume_generation_cancelled_2d_profile_kept` | Volume generation cancelled. 2D profile kept. | Geração de volume cancelada. Perfil 2D mantido. |
+| `status.volume_preview_error` | Volume preview error: {e} | Erro na prévia do volume: {e} |
 | `surface.alpha_lock` | Toggle alpha lock | Alternar trava de alfa |
 | `surface.apply` | Apply surface paint | Aplicar pintura de superfície |
 | `surface.boolean_albedo` | Boolean albedo | Albedo do booleano |
