@@ -46,7 +46,10 @@ fn test_editor_session_isolated_lifecycle() {
     let mut session = EditorSession::new();
     assert_eq!(session.edit_mode(), EditMode::Object);
     assert_eq!(session.locked_axes, [false; 3]);
-    assert!(!session.snap_enabled);
+    assert!(
+        session.snap_enabled,
+        "Smart Snap ligado por padrão (cap. 01)"
+    );
     assert!(!session.isolate_active);
 
     // Testar restrições de eixo no EditorSession

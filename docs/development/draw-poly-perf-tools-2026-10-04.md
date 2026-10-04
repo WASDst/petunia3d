@@ -39,6 +39,23 @@ usuários continuam pendentes.
 | 8 | Oclusão de região | `PARTIALLY_COMPLIANT`: só malha ativa | Qualquer objeto visível (BVH da cena) |
 | 8 | Pontos por perfil | 512 | 4096 |
 
+## Validação (04/10/2026, ao fim do lote)
+
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D warnings`: limpos.
+- `cargo test --workspace`: 1847 testes aprovados, 0 falhas (a última falha,
+  `petunia_app` `key_extrude_starts_preview_without_mutating`, era intermitente
+  por roteamento aleatório de atalhos no legado e foi corrigida; 3 execuções
+  seguidas verdes). `petunia_ui_slint` com `animation-workspace` (lib,
+  `animate_shell`, `viewport_gestures`): aprovado.
+- `xtask docs-check` (inclui `bible-check` e `ui-check`), `ui-guard --strict`,
+  `arch-check`, `docs-generate --check`: aprovados.
+- Testes atualizados por mudança de comportamento pedida: snap ligado por
+  padrão (pré-condição "sem snap" explícita onde o teste mede geometria exata),
+  Inset métrico, rótulo Round Edge (cap. 13).
+- Correções encontradas pelos testes: Move com eixo usava a translação
+  "encaixada" sem alvo (valor digitado ignorado); arredondamento na grade por
+  padrão no Slint e no legado egui; avisos de clippy.
+
 ## Pendências conhecidas
 
 - Textos do HUD fora das mensagens de status (ex.: "MODO LIVRE", linhas do

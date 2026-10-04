@@ -86,7 +86,7 @@ pub fn pick_mesh_filtered(
         mode,
         xray,
         face,
-        |position| visible(position),
+        &visible,
         occluder,
     )
 }

@@ -268,7 +268,7 @@ pub fn imprint_region_general(
             .collect();
         let face_poly = Polygon::new(geo_ring(&face_2d), vec![]);
         let inside = face_poly.intersection(&region);
-        let inside_area: f64 = inside.0.iter().map(|p| polygon_area(p)).sum();
+        let inside_area: f64 = inside.0.iter().map(polygon_area).sum();
         if inside_area <= 1.0e-12 * size * size {
             continue;
         }

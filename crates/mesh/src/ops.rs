@@ -2594,6 +2594,70 @@ impl Mesh {
     }
 }
 
+/// Mapa afim plano → UV ajustado por mínimos quadrados nos cantos da face.
+/// Faces sem UV consistente caem na média dos cantos.
+pub(crate) fn planar_uv_map(
+    points: &[Vec3],
+    uvs: &[[f32; 2]],
+    normal: Vec3,
+) -> impl Fn(Vec3) -> [f32; 2] {
+    let origin = points[0];
+    let u_axis = (points[1] - points[0]).normalize_or_zero();
+    let v_axis = normal.cross(u_axis).normalize_or_zero();
+    let local = move |p: Vec3| [(p - origin).dot(u_axis), (p - origin).dot(v_axis)];
+    // Equações normais de uv = a·x + b·y + c para cada canal.
+    let mut ata = [[0.0f64; 3]; 3];
+    let mut atb = [[0.0f64; 2]; 3];
+    for (p, uv) in points.iter().zip(uvs) {
+        let [x, y] = local(*p);
+        let row = [x as f64, y as f64, 1.0];
+        for i in 0..3 {
+            for j in 0..3 {
+                ata[i][j] += row[i] * row[j];
+            }
+            atb[i][0] += row[i] * uv[0] as f64;
+            atb[i][1] += row[i] * uv[1] as f64;
+        }
+    }
+    let det = |m: &[[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let d = det(&ata);
+    let mean = {
+        let n = uvs.len().max(1) as f32;
+        let sum = uvs
+            .iter()
+            .fold([0.0f32; 2], |acc, uv| [acc[0] + uv[0], acc[1] + uv[1]]);
+        [sum[0] / n, sum[1] / n]
+    };
+    let coefficients = (d.abs() > 1.0e-12).then(|| {
+        let mut out = [[0.0f64; 3]; 2];
+        for channel in 0..2 {
+            for column in 0..3 {
+                let mut m = ata;
+                for row in 0..3 {
+                    m[row][column] = atb[row][channel];
+                }
+                out[channel][column] = det(&m) / d;
+            }
+        }
+        out
+    });
+    move |p: Vec3| match coefficients {
+        Some(c) => {
+            let [x, y] = local(p);
+            let (x, y) = (x as f64, y as f64);
+            [
+                (c[0][0] * x + c[0][1] * y + c[0][2]) as f32,
+                (c[1][0] * x + c[1][1] * y + c[1][2]) as f32,
+            ]
+        }
+        None => mean,
+    }
+}
+
 #[cfg(test)]
 mod region_tests {
     use super::*;
@@ -2907,69 +2971,5 @@ mod region_tests {
         assert!(mesh.make_face_from_selection().is_ok());
         assert_eq!(mesh.selected_edges.len(), 1);
         assert!(mesh.selected_edges.contains(&edge_key(0, 1)));
-    }
-}
-
-/// Mapa afim plano → UV ajustado por mínimos quadrados nos cantos da face.
-/// Faces sem UV consistente caem na média dos cantos.
-pub(crate) fn planar_uv_map(
-    points: &[Vec3],
-    uvs: &[[f32; 2]],
-    normal: Vec3,
-) -> impl Fn(Vec3) -> [f32; 2] {
-    let origin = points[0];
-    let u_axis = (points[1] - points[0]).normalize_or_zero();
-    let v_axis = normal.cross(u_axis).normalize_or_zero();
-    let local = move |p: Vec3| [(p - origin).dot(u_axis), (p - origin).dot(v_axis)];
-    // Equações normais de uv = a·x + b·y + c para cada canal.
-    let mut ata = [[0.0f64; 3]; 3];
-    let mut atb = [[0.0f64; 2]; 3];
-    for (p, uv) in points.iter().zip(uvs) {
-        let [x, y] = local(*p);
-        let row = [x as f64, y as f64, 1.0];
-        for i in 0..3 {
-            for j in 0..3 {
-                ata[i][j] += row[i] * row[j];
-            }
-            atb[i][0] += row[i] * uv[0] as f64;
-            atb[i][1] += row[i] * uv[1] as f64;
-        }
-    }
-    let det = |m: &[[f64; 3]; 3]| {
-        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
-    };
-    let d = det(&ata);
-    let mean = {
-        let n = uvs.len().max(1) as f32;
-        let sum = uvs
-            .iter()
-            .fold([0.0f32; 2], |acc, uv| [acc[0] + uv[0], acc[1] + uv[1]]);
-        [sum[0] / n, sum[1] / n]
-    };
-    let coefficients = (d.abs() > 1.0e-12).then(|| {
-        let mut out = [[0.0f64; 3]; 2];
-        for channel in 0..2 {
-            for column in 0..3 {
-                let mut m = ata;
-                for row in 0..3 {
-                    m[row][column] = atb[row][channel];
-                }
-                out[channel][column] = det(&m) / d;
-            }
-        }
-        out
-    });
-    move |p: Vec3| match coefficients {
-        Some(c) => {
-            let [x, y] = local(p);
-            let (x, y) = (x as f64, y as f64);
-            [
-                (c[0][0] * x + c[0][1] * y + c[0][2]) as f32,
-                (c[1][0] * x + c[1][1] * y + c[1][2]) as f32,
-            ]
-        }
-        None => mean,
     }
 }

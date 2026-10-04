@@ -188,7 +188,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let name = preset.name.clone();
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_BRUSH),
-            &[("name", format!("{name}"))],
+            &[("name", name.to_string())],
         ));
         self.state.mark_dirty();
         true
@@ -228,7 +228,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .map(|i| i + builtin);
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_BRUSH_SAVED),
-            &[("name", format!("{name}"))],
+            &[("name", name.to_string())],
         ));
         self.state.mark_dirty();
         true

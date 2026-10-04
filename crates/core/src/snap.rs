@@ -347,7 +347,14 @@ mod tests {
 
     #[test]
     fn test_snap_query_dispatcher() {
-        let mut settings = SnapSettings::default();
+        assert!(
+            SnapSettings::default().enabled,
+            "Smart Snap ligado por padrão (cap. 01)"
+        );
+        let mut settings = SnapSettings {
+            enabled: false,
+            ..SnapSettings::default()
+        };
         let query1 = SnapQuery {
             point: Vec3::new(1.23, 0.0, 0.0),
             start_point: None,

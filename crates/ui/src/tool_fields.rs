@@ -299,6 +299,7 @@ mod tests {
     fn modal_kind_labels_are_localized() {
         let state = AppState::new("pt-BR");
         assert_eq!(kind_label(&state, ModalKind::Move), "Mover");
-        assert_eq!(kind_label(&state, ModalKind::Bevel), "Bevel");
+        // Vocabulário de usuário (cap. 13): Round Edge; Bevel é termo técnico.
+        assert_eq!(kind_label(&state, ModalKind::Bevel), "Round Edge");
     }
 }

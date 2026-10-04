@@ -1478,7 +1478,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.begin_primitive(kind, None);
                 self.state.set_status(crate::tr::fill(
                     &self.state.t_id(petunia_config::text_id::STATUS_ADDED),
-                    &[("0", format!("{}", kind.default_name()))],
+                    &[("0", kind.default_name().to_string())],
                 ));
             }
             UiIntent::FreezeActivePrimitive => {
@@ -1573,7 +1573,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.active_tool = tool.clone();
                 self.state.set_status(crate::tr::fill(
                     &self.state.t_id(petunia_config::text_id::STATUS_ACTIVE_TOOL),
-                    &[("tool", format!("{tool}"))],
+                    &[("tool", tool.to_string())],
                 ));
                 match tool.as_str() {
                     // Transformações são transacionais por arrasto: a sessão
@@ -2667,7 +2667,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_PIVOT),
-            &[("0", format!("{}", pivot.as_str()))],
+            &[("0", pivot.as_str().to_string())],
         ));
         true
     }
@@ -5004,7 +5004,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_VOLUME_PREVIEW_ERROR),
-                    &[("e", format!("{e}"))],
+                    &[("e", e.to_string())],
                 ));
                 false
             }
@@ -5762,10 +5762,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             ModalConstraint::Free => {}
                         }
                         snapped_kind = Some(hit.kind);
-                    } else if matches!(
-                        target,
-                        petunia_core::SnapTarget::Grid | petunia_core::SnapTarget::Increment
-                    ) {
+                    } else if snap
+                        && matches!(
+                            target,
+                            petunia_core::SnapTarget::Grid | petunia_core::SnapTarget::Increment
+                        )
+                    {
+                        // Passo da grade só com Ctrl: o snap padrão é contextual.
                         let step = self.state.session.snap_settings.grid_spacing.max(0.001);
                         translation = (translation / step).round() * step;
                         scalar = (scalar / step).round() * step;
@@ -6658,7 +6661,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_SHADING),
-            &[("0", format!("{}", mode.id()))],
+            &[("0", mode.id().to_string())],
         ));
         self.state.mark_dirty();
         true
@@ -7129,7 +7132,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.camera.set_preset(preset);
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_VIEW),
-            &[("0", format!("{}", preset.title()))],
+            &[("0", preset.title().to_string())],
         ));
         self.state.mark_dirty();
         true
@@ -7280,7 +7283,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             &self
                 .state
                 .t_id(petunia_config::text_id::STATUS_VIEW_ALIGNED_TO),
-            &[("0", format!("{}", preset.title()))],
+            &[("0", preset.title().to_string())],
         ));
         self.state.mark_dirty();
         true
@@ -7481,7 +7484,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             &self
                 .state
                 .t_id(petunia_config::text_id::STATUS_RECOVERED_SNAPSHOT_OF),
-            &[("0", format!("{}", info.project_name))],
+            &[("0", info.project_name.to_string())],
         ));
         true
     }
@@ -7526,7 +7529,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.tools.fill_scope = parsed;
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_FILL_SCOPE),
-            &[("scope", format!("{scope}"))],
+            &[("scope", scope.to_string())],
         ));
         true
     }
@@ -7541,7 +7544,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.tools.brush_projection = parsed;
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_PROJECTION),
-            &[("projection", format!("{projection}"))],
+            &[("projection", projection.to_string())],
         ));
         true
     }
@@ -7559,7 +7562,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.tools.paint_lock_face = None;
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_BRUSH_LOCK),
-            &[("lock", format!("{lock}"))],
+            &[("lock", lock.to_string())],
         ));
         true
     }
@@ -8041,7 +8044,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_DECAL_COULD_NOT_READ_THE_IMAGE),
-                    &[("error", format!("{error}"))],
+                    &[("error", error.to_string())],
                 ));
                 return false;
             }
@@ -8109,7 +8112,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .state
                     .t_id(petunia_config::text_id::STATUS_DECAL_IMPORTED_X),
                 &[
-                    ("name", format!("{name}")),
+                    ("name", name.to_string()),
                     ("w", format!("{w}")),
                     ("h", format!("{h}")),
                 ],
@@ -8417,7 +8420,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.render.mark_dirty();
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_SNAP_TARGET),
-            &[("0", format!("{}", target.label()))],
+            &[("0", target.label().to_string())],
         ));
         true
     }
@@ -9014,7 +9017,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 ("0", format!("{}", session.cuts)),
                 (
                     "1",
-                    format!("{}", if session.balanced { " balanced" } else { "" }),
+                    (if session.balanced { " balanced" } else { "" }).to_string(),
                 ),
             ],
         ));
@@ -9285,7 +9288,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_TEXEL_DENSITY),
-                    &[("e", format!("{e}"))],
+                    &[("e", e.to_string())],
                 ));
                 false
             }
@@ -9966,7 +9969,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 &self
                     .state
                     .t_id(petunia_config::text_id::STATUS_COPIED_TO_CLIPBOARD),
-                &[("0", format!("{}", asset.name))],
+                &[("0", asset.name.to_string())],
             ));
             true
         }
@@ -10001,7 +10004,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_PASTED_SEPARATE_OBJECT),
-                    &[("new_name", format!("{new_name}"))],
+                    &[("new_name", new_name.to_string())],
                 ));
                 true
             }
@@ -10023,7 +10026,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_PASTED_OBJECT),
-                    &[("copy_name", format!("{copy_name}"))],
+                    &[("copy_name", copy_name.to_string())],
                 ));
                 true
             }
@@ -10201,7 +10204,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Err(error) => {
                 self.state.set_status(crate::tr::fill(
                     &self.state.t_id(petunia_config::text_id::STATUS_CUT),
-                    &[("error", format!("{error}"))],
+                    &[("error", error.to_string())],
                 ));
                 false
             }
@@ -10502,7 +10505,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .state
                 .t_id(petunia_config::text_id::STATUS_SELECTED_EDGE_EDGES),
             &[
-                ("0", format!("{}", if ring { "ring" } else { "loop" })),
+                ("0", (if ring { "ring" } else { "loop" }).to_string()),
                 ("count", format!("{count}")),
             ],
         ));
@@ -12503,7 +12506,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .map_or_else(String::new, |asset| asset.name.clone());
                 self.state.set_status(crate::tr::fill(
                     &self.state.t_id(petunia_config::text_id::STATUS_PAINTING),
-                    &[("name", format!("{name}"))],
+                    &[("name", name.to_string())],
                 ));
             }
             Target::Object(_) => {
@@ -12724,7 +12727,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let name = self.state.project.assets[index].name.clone();
                 self.state.set_status(crate::tr::fill(
                     &self.state.t_id(petunia_config::text_id::STATUS_SELECTED),
-                    &[("name", format!("{name}"))],
+                    &[("name", name.to_string())],
                 ));
             }
             Target::Vertex(index) => {
@@ -12862,7 +12865,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         &self
                             .state
                             .t_id(petunia_config::text_id::STATUS_SELECTED_SHAPE),
-                        &[("name", format!("{name}"))],
+                        &[("name", name.to_string())],
                     ));
                     self.state.session.tools.hover = Target::None;
                     self.state.sync_selection();
@@ -13329,7 +13332,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR),
-                    &[("0", format!("{}", label))],
+                    &[("0", label.to_string())],
                 ));
             }
         } else if let Some(kind) = kind.filter(|kind| *kind != ToolModalKind::ScaleSelection) {
@@ -14094,7 +14097,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR),
-                    &[("0", format!("{}", label))],
+                    &[("0", label.to_string())],
                 ));
             }
         } else {
@@ -14110,7 +14113,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 &self
                     .state
                     .t_id(petunia_config::text_id::STATUS_TOOL_ACTIVE_DRAG_THE_GIZMO_TYPE_A),
-                &[("0", format!("{}", label))],
+                &[("0", label.to_string())],
             ));
         }
     }

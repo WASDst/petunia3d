@@ -202,7 +202,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &self
                         .state
                         .t_id(petunia_config::text_id::STATUS_KEYMAP_PROFILE_CREATED),
-                    &[("candidate", format!("{candidate}"))],
+                    &[("candidate", candidate.to_string())],
                 ));
                 self.bump_keymap_revision();
                 true
@@ -249,7 +249,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             &self
                 .state
                 .t_id(petunia_config::text_id::STATUS_KEYMAP_PROFILE_ACTIVATED),
-            &[("id", format!("{id}"))],
+            &[("id", id.to_string())],
         ));
         self.bump_keymap_revision();
         true

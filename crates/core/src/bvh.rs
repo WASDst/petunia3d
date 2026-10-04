@@ -293,7 +293,7 @@ mod tests {
         for (x, y) in [(0.3, 0.2), (5.7, 9.1), (23.9, 23.9), (12.0, 12.5)] {
             let origin = Vec3::new(x, y, 5.0);
             let dir = Vec3::NEG_Z;
-            let expected = brute_nearest(&items, origin, dir).map(|(d, id)| (d, id));
+            let expected = brute_nearest(&items, origin, dir);
             let got = bvh.nearest(origin, dir, f32::INFINITY, |_| true);
             assert_eq!(got.map(|g| g.1), expected.map(|e| e.1));
             assert!((got.unwrap().0 - 5.0).abs() < 1e-4);

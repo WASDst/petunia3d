@@ -142,11 +142,13 @@ struct ExtrudePreview {
 }
 
 /// Inset/Bevel/Extrude Individual: posições afins no valor, verificadas.
+/// `(valor de referência, [(vértice, posição na referência, inclinação)])`.
+type LinearModel = (f32, Vec<(u32, Vec3, Vec3)>);
+
 #[derive(Default)]
 struct LinearPreview {
     samples: Vec<(f32, Mesh)>,
-    /// `(valor de referência, [(vértice, posição na referência, inclinação)])`.
-    model: Option<(f32, Vec<(u32, Vec3, Vec3)>)>,
+    model: Option<LinearModel>,
     validated: bool,
     disabled: bool,
     /// A malha publicada veio do modelo (não da operação exata).
@@ -526,7 +528,6 @@ impl AppState {
         let proportional = self.proportional_editing;
         let edit_pivot = self.session.edit_pivot;
         let object_mode = self.edit_mode() == EditMode::Object;
-        let snap_enabled = self.snap_enabled;
         let modal = self.session.tools.modal.as_mut()?;
         if edit_pivot
             || (object_mode
@@ -566,7 +567,7 @@ impl AppState {
                             let delta = match modal.constraint {
                                 ModalConstraint::Free => translation,
                                 ModalConstraint::Axis(i) => {
-                                    if snap_enabled {
+                                    if snap.is_some() {
                                         axis(i) * translation[i]
                                     } else {
                                         axis(i) * value
@@ -983,8 +984,10 @@ impl AppState {
             ModalKind::Move => {
                 let delta = match modal.constraint {
                     ModalConstraint::Free => translation,
+                    // A translação só vence o valor quando houve um encaixe
+                    // de fato (snap ligado sem alvo usa o valor projetado).
                     ModalConstraint::Axis(i) => {
-                        if self.snap_enabled {
+                        if snap.is_some() {
                             axis(i) * translation[i]
                         } else {
                             axis(i) * value

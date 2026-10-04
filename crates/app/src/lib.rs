@@ -433,8 +433,16 @@ impl Core {
         }
         let mods = self.mods();
         let ck = to_config_key(physical);
+        // A ordem do mapa de atalhos é aleatória: com teclas compartilhadas
+        // entre contextos (E = Extrude no modelo, borracha na pintura), `find`
+        // escolhia uma ação diferente a cada execução.
+        let context = if self.state.edit_mode() == EditMode::TexturePaint {
+            "paint"
+        } else {
+            "model"
+        };
         let action = ck
-            .and_then(|k| self.state.ui.keybinds.find(k, mods))
+            .and_then(|k| self.state.ui.keybinds.find_in_context(k, mods, context))
             .unwrap_or("");
         let action = action.to_string();
         match action.as_str() {
