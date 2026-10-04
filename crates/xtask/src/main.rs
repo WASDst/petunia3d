@@ -10,6 +10,7 @@ use std::process::Command;
 mod bible;
 mod generator;
 mod icons_check;
+mod slint_lint;
 mod ui_guard;
 use generator::GeneratedCatalog;
 
@@ -30,6 +31,7 @@ fn main() -> Result<()> {
         "verify" => task_verify()?,
         "ui-check" => task_ui_check()?,
         "icons-check" => icons_check::run(&root_dir())?,
+        "ui-lint" => slint_lint::run(&root_dir())?,
         "ui-guard" => {
             let rest: Vec<String> = args.collect();
             let strict = rest.iter().any(|a| a == "--strict");
@@ -70,6 +72,7 @@ COMANDOS:
     arch-check    Valida a integridade dos relatórios da auditoria arquitetural
     verify        Gate backend read-only (fmt, check, tests, clippy, arch-check)
     ui-check      Valida o mapa de componentes UI (docs/public/ui-map.json) contra o código
+    ui-lint       Falha se o markup Slint usar cor #hex, font-size ou sombra literal fora de tokens.slint
     ui-guard      Guarda de arquitetura da UI (§36/§37 da diretiva Egui Ecosystem Final Push)
                   Reporta, por regra, ocorrências em product code versus foundation/adapter.
                   --strict    falha se um tipo de biblioteca auxiliar escapar do adapter

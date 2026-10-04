@@ -32,6 +32,15 @@
 
 ---
 
+## Andamento
+
+| Fase | Estado | Registro |
+|---|---|---|
+| F1 — Tokens v2 + lint | Concluída em 2026-10-04 (testes, clippy e captura POLY/PAINT) | ver [§F1](#f1--registro-de-implementação) |
+| Demais fases | Não iniciadas | aguardam §12 onde indicado |
+
+---
+
 ## 1. Escopo
 
 **Dentro:** o shell Slint (`crates/ui-slint/`), seus tokens, componentes,
@@ -457,3 +466,23 @@ cargo clean -p petunia_ui_slint
 
 Quando o worktree for descartado, remover o `target/` inteiro dele. Registrar a
 limpeza no relatório da fase.
+
+## F1 — registro de implementação
+
+Feito em 2026-10-04, sem depender das decisões da §12.
+
+- `tokens.slint`: tokens de tipografia, elevação (2 níveis com sombra + brilho
+  de "armado"), cores de sobreposição da viewport/HUD e o global
+  `ColorPresets` com as paletas rápidas.
+- `app.slint` e `animate.slint`: 150 cores `#hex` trocadas por tokens; todos os
+  `font-size` em px viraram `DesignTokens.font-*`; os 60 textos de 8–9 px
+  sobem para 10 px (`font-caption`); as 8 variações de sombra viraram
+  `elevation-1` (blur ≤ 10 px) ou `elevation-2` (blur ≥ 12 px).
+- Texto branco sobre accent nos toggles de simetria, alvo e máscara do PAINT
+  passou a `on-accent` (escuro), que tem contraste maior sobre o violeta.
+- `xtask ui-lint` (`crates/xtask/src/slint_lint.rs`) com testes; ligado ao job
+  `UI Slint` do CI.
+- Fora do escopo da F1, já anotado para fases seguintes: o texto fixo
+  `(Insert)` no aviso de edição de pivô e as letras de eixo `X/Y/Z`, `UV`,
+  `U →`, `V ↑` (F6, i18n); presets de seleção ainda comparados por string hex
+  (F7, junto da D5).

@@ -48,12 +48,74 @@ export global DesignTokens {
     in-out property <color> live-mode: #e68a00;
     in-out property <color> live-mode-ring: #ffd54f;
     in-out property <color> armed-ring: #ffd54f;
+    // Cores de sobreposição da viewport e do HUD: independem do tema porque
+    // são desenhadas sobre a cena 3D, não sobre superfícies de painel.
+    /// Texto sobre `hud-surface`.
+    in-out property <color> hud-text: #ffffff;
+    /// Medidas, guias de eixo travado e régua (âmbar).
+    in-out property <color> measure: #f59e0b;
+    /// Marcador de origem/pivô em edição.
+    in-out property <color> marker-pivot: #e54d42;
+    in-out property <color> marker-pivot-text: #ffaaaa;
+    /// Anéis do cursor 3D e do pincel: claro por fora, escuro por dentro.
+    in-out property <color> cursor-light: #ffffffdd;
+    in-out property <color> cursor-dark: #000000aa;
+    /// Guia neutra (círculo de edição proporcional).
+    in-out property <color> guide-neutral: #e0e0e0;
+    /// Overlay UV no canvas 2D.
+    in-out property <color> uv-wire: #00ffff99;
+    in-out property <color> uv-selected: #ffaa00;
+    in-out property <color> uv-seam: #ff4433;
+    in-out property <color> uv-pinned: #ff3344;
+    in-out property <color> uv-pinned-outline: #ffffff;
+
+    // Tipografia (cap. 36): nunca abaixo de `font-caption`.
+    in-out property <length> font-caption: 10px;
+    in-out property <length> font-small: 11px;
+    in-out property <length> font-default: 12px;
+    in-out property <length> font-strong: 13px;
+    in-out property <length> font-exceptional: 14px;
+
+    // Elevação (plano de UI 2026-10-04 §6.3): só dois níveis com sombra.
+    // 1 = painel/HUD encostado na viewport; 2 = popover, menu, card flutuante.
+    in-out property <length> elevation-1-blur: 8px;
+    in-out property <length> elevation-1-offset: 2px;
+    out property <color> elevation-1-color: self.shadow-subtle;
+    in-out property <length> elevation-2-blur: 16px;
+    in-out property <length> elevation-2-offset: 4px;
+    out property <color> elevation-2-color: self.shadow;
+    /// Brilho de estado "armado" (não é sombra de elevação).
+    in-out property <length> glow-blur: 6px;
+
     in-out property <length> control-height: 28px;
     in-out property <length> radius-control: 4px;
     in-out property <length> radius-panel: 8px;
     in-out property <length> space-xs: 4px;
     in-out property <length> space-sm: 8px;
     in-out property <length> space-md: 12px;
+}
+
+/// Paletas de atalho (dados, não tema): cores rápidas de pintura, de parte e
+/// de seleção. Ficam aqui para que nenhum `#hex` viva fora dos tokens.
+export global ColorPresets {
+    out property <color> material-default: #bebec7;
+    out property <color> emission-off: #000000;
+
+    out property <color> paint-violet: #b58cff;
+    out property <color> paint-red: #ef4444;
+    out property <color> paint-green: #22c55e;
+    out property <color> paint-blue: #3b82f6;
+    out property <color> paint-yellow: #eab308;
+    out property <color> paint-white: #ffffff;
+    out property <color> paint-gray: #6b7280;
+    out property <color> paint-black: #111111;
+
+    out property <color> tag-orange: #e96a00;
+    out property <color> tag-cyan: #00d2ff;
+    out property <color> tag-violet: #b58cff;
+    out property <color> tag-green: #10b981;
+    out property <color> tag-amber: #f59e0b;
+    out property <color> tag-red: #ef4444;
 }
 
 /// Tradução por chave do catálogo (`assets/locales/*.toml`, tabela `[sl]`).

@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - 'crates/ui-slint/**'
+      - 'crates/xtask/**'
       - 'crates/config/**'
       - 'crates/core/**'
       - 'assets/locales/**'
@@ -23,6 +24,7 @@ on:
   pull_request:
     paths:
       - 'crates/ui-slint/**'
+      - 'crates/xtask/**'
       - 'crates/config/**'
       - 'crates/core/**'
       - 'assets/locales/**'
@@ -71,6 +73,9 @@ jobs:
 
       - name: Format
         run: cargo fmt -p petunia_ui_slint -- --check
+
+      - name: Design tokens (no literal color/font/shadow in .slint)
+        run: cargo run -p xtask -- ui-lint
 
       - name: Clippy
         run: cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
