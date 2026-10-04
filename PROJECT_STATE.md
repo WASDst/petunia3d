@@ -346,9 +346,10 @@ P3D-141, P3D-142 e P3D-154.
 Revisão de 04/10/2026 contra o código: keymap profiles (`keymap_edit.rs`,
 perfis embutidos em `petunia_config`) e i18n TOML (`src/tr.rs`,
 `assets/locales/`) **já existem** no shell Slint; ícones vêm do global
-gerado `PetuniaIcons`. Continua aberto o **fast path GPU**: `viewport_gpu.rs`
-ainda faz `copy_texture_to_buffer` + `map_async` com espera bloqueante por
-frame. Cores de overlays do viewport foram centralizadas em `DesignTokens`
+gerado `PetuniaIcons`. O **fast path GPU também já existe**: em produção
+`viewport_gpu.rs` entrega a textura wgpu ao Slint sem cópia
+(`slint::Image::try_from`); o readback com espera bloqueante ficou só nos
+testes de aparência. Cores de overlays do viewport foram centralizadas em `DesignTokens`
 (`overlay-*`); sombras e fundos de HUD seguem o tema. A lista abaixo é o
 registro original de 20/09.
 
