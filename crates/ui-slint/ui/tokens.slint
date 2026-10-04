@@ -48,6 +48,24 @@ export global DesignTokens {
     in-out property <color> live-mode: #e68a00;
     in-out property <color> live-mode-ring: #ffd54f;
     in-out property <color> armed-ring: #ffd54f;
+    /// Texto sobre fundos fortes (accent, badges do viewport).
+    in-out property <color> text-on-strong: #ffffff;
+    // Overlays semânticos do viewport. Ficam sobre a cena 3D, não sobre os
+    // painéis, por isso não acompanham o tema claro; centralizados aqui para
+    // nenhum overlay reintroduzir cor solta em `app.slint`.
+    in-out property <color> overlay-snap: #f59e0b;
+    in-out property <color> overlay-measure: #f59e0b;
+    in-out property <color> overlay-dimension: #3e63dd;
+    in-out property <color> overlay-proportional: #e0e0e0;
+    in-out property <color> overlay-cursor-3d: #e54d42;
+    in-out property <color> overlay-pivot: #e54d42;
+    in-out property <color> overlay-pivot-muted: #ffaaaa;
+    in-out property <color> overlay-contrast-light: #ffffff;
+    in-out property <color> overlay-contrast-dark: #000000;
+    in-out property <color> overlay-uv-wire: #00ffff;
+    in-out property <color> overlay-uv-selection: #ffaa00;
+    in-out property <color> overlay-uv-seam: #ff4433;
+    in-out property <color> overlay-uv-pin: #ff3344;
     in-out property <length> control-height: 28px;
     in-out property <length> radius-control: 4px;
     in-out property <length> radius-panel: 8px;

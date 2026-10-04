@@ -5,6 +5,15 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### CI, gates e tokens de cor (04/10/2026)
+
+- `ui-guard.yml` voltou a ser YAML válido (o comando `gallery::` era lido como chave e o workflow nunca rodava).
+- `deny.toml`: aceita `GPL-3.0-only`/`GPL-3.0-or-later` (licença do projeto e opção GPL do Slint) e registra `RUSTSEC-2026-0206` (`rustybuzz`, transitivo via `usvg`/`resvg`).
+- Workflow UI Slint sem debuginfo, sem incremental e com 2 jobs, para não esgotar a memória do runner.
+- `cargo clippy --workspace --all-targets -D warnings` sem erros em `petunia_mesh`.
+- Shell Slint: 90 cores fixas viram `DesignTokens`; sombras e fundos de HUD seguem o tema (o tema claro deixa de herdar HUD escuro) e overlays do viewport usam tokens `overlay-*` com os mesmos valores.
+- `PROJECT_STATE.md` e `AGENTS.md` alinhados ao estado real (próximas ações, gaps do Slint, contagem de testes).
+
 ### Repositório — remoção do Prumo (04/10/2026)
 
 - Removida a camada de orquestração Prumo: `.agents/`, `.ai/`, `.prumo/`, `prumo.json`, `ENTRYPOINT.md`, `GEMINI.md`, `docs/contracts/` e scripts do próprio Prumo em `scripts/`. Código, Livro Vivo e `docs/` preservados.

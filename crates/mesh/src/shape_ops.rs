@@ -201,6 +201,22 @@ pub fn face_loops(faces: &[Region2]) -> Vec<Vec<[f64; 2]>> {
     loops
 }
 
+/// Keeps the pieces of an open construction path outside consumed regions.
+pub fn clip_open_outside(points: &[[f64; 2]], regions: &[Region2]) -> Vec<Vec<[f64; 2]>> {
+    if points.len() < 2 {
+        return vec![];
+    }
+    let polygons = MultiPolygon(regions.iter().map(polygon_of).collect());
+    let line = LineString::new(points.iter().map(|p| Coord { x: p[0], y: p[1] }).collect());
+    polygons
+        .clip(&MultiLineString(vec![line]), true)
+        .0
+        .into_iter()
+        .map(|line| line.coords().map(|c| [c.x, c.y]).collect::<Vec<_>>())
+        .filter(|p| p.len() >= 2)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,20 +342,4 @@ mod tests {
         assert!(pathfinder(&[], PathfinderOp::Unite).is_empty());
         assert!(face_loops(&[]).is_empty());
     }
-}
-
-/// Keeps the pieces of an open construction path outside consumed regions.
-pub fn clip_open_outside(points: &[[f64; 2]], regions: &[Region2]) -> Vec<Vec<[f64; 2]>> {
-    if points.len() < 2 {
-        return vec![];
-    }
-    let polygons = MultiPolygon(regions.iter().map(polygon_of).collect());
-    let line = LineString::new(points.iter().map(|p| Coord { x: p[0], y: p[1] }).collect());
-    polygons
-        .clip(&MultiLineString(vec![line]), true)
-        .0
-        .into_iter()
-        .map(|line| line.coords().map(|c| [c.x, c.y]).collect::<Vec<_>>())
-        .filter(|p| p.len() >= 2)
-        .collect()
 }

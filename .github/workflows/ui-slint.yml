@@ -43,6 +43,15 @@ concurrency:
 jobs:
   ui-slint:
     runs-on: ubuntu-latest
+    # `petunia_ui_slint` gera um único crate muito grande (lib.rs + app.slint):
+    # com debuginfo e jobs paralelos o runner esgotava a memória ao compilar a
+    # segunda configuração de features e era derrubado (exit 143). Sem debuginfo
+    # e com paralelismo limitado, o pico de memória cabe no runner padrão.
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_BUILD_JOBS: 2
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

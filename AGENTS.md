@@ -79,7 +79,7 @@ definido em `ui/app.slint`. Regras derivadas:
 ### Guard e validação
 
 ```bash
-cargo test -p petunia_ui_slint --lib          # 55 testes unitários
+cargo test -p petunia_ui_slint --lib          # testes unitários do shell
 cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
 cargo fmt -p petunia_ui_slint -- --check
 ```

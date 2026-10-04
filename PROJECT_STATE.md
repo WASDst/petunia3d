@@ -291,7 +291,23 @@ Evidence is preserved in `docs/audits/premium-evidence/`, [`docs/GAUNTLET.md`](d
 
 ## Next action
 
-**Prioridade de trabalho solicitada em 23/09/2026:** discutir e refinar somente
+**Atualização de 04/10/2026.** O pedido de 23/09 (MODEL/viewport) foi superado
+pelo ADR 007 (DRAW/POLY) e pelas rodadas de 30/09–03/10. Pendências atuais,
+sem nova decisão de produto:
+
+1. **Aceite manual:** captura nativa e teste com usuários de DRAW/POLY/PAINT
+   ([roteiro do MVP](docs/development/paint-draw-mvp-manual-2026-10-02.md),
+   [protocolo com usuários](docs/development/user-test-protocol.md)).
+2. **Dívida técnica na ordem da [auditoria de 30/09](docs/development/draw-poly-audit-2026-09-30.md):**
+   índice espacial (picking, snap, pincel 3D); render coalescido por quadro e
+   dirty flags; buffer numérico único e migração de Loop Cut/Slice/Knife/Profile
+   para `ToolSession` (ADR 007); alças ≥ 24 px e gizmo em passo GPU.
+3. **Pendências funcionais** listadas em cada matriz de `docs/development/*-gap-matrix.md`.
+4. **Wave 11** (plugins/automação) depois da estabilização acima.
+
+O texto abaixo é o registro histórico das prioridades anteriores.
+
+**Prioridade de trabalho solicitada em 23/09/2026 (histórico):** discutir e refinar somente
 MODEL e viewport, começando pelas fases 1–4 do
 [plano de Context/workspaces](docs/development/workspace-inspector-implementation-plan.md).
 O plano completo registra PAINT/UV para preservar a arquitetura compartilhada,
@@ -325,10 +341,19 @@ Após a estabilização da iniciativa Paint, retomar a **Wave 11
 (Extensibility, Plugins & Automation)** cobrindo P3D-110, P3D-111, P3D-112,
 P3D-141, P3D-142 e P3D-154.
 
-### Frontend Slint — gaps conhecidos (2026-09-20)
+### Frontend Slint — gaps conhecidos (2026-09-20, revisado em 04/10/2026)
 
-O shell Slint (`crates/ui-slint/`) é o frontend de produção com 55 testes
-unitários verdes. Gaps conhecidos em relação ao caderno (capítulos 23/36):
+Revisão de 04/10/2026 contra o código: keymap profiles (`keymap_edit.rs`,
+perfis embutidos em `petunia_config`) e i18n TOML (`src/tr.rs`,
+`assets/locales/`) **já existem** no shell Slint; ícones vêm do global
+gerado `PetuniaIcons`. Continua aberto o **fast path GPU**: `viewport_gpu.rs`
+ainda faz `copy_texture_to_buffer` + `map_async` com espera bloqueante por
+frame. Cores de overlays do viewport foram centralizadas em `DesignTokens`
+(`overlay-*`); sombras e fundos de HUD seguem o tema. A lista abaixo é o
+registro original de 20/09.
+
+O shell Slint (`crates/ui-slint/`) é o frontend de produção (55 testes
+unitários em 20/09; 473 em 03/10). Gaps conhecidos em relação ao caderno (capítulos 23/36):
 
 - **Transform modal**: sendo corrigido transacionalmente (scrubbing, commit,
   cancel — testes `transform_scrub_*` e `escape_cancels_transform` já verdes).
