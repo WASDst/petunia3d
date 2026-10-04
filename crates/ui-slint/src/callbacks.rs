@@ -2836,10 +2836,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let tool_pointer_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     let tool_pointer_throttle = std::rc::Rc::clone(&throttle);
-    window.on_tool_pointer(move |phase, x, y, shift, ctrl| {
+    window.on_tool_pointer(move |phase, x, y, shift, ctrl, alt| {
         if let Ok(mut bridge) = tool_pointer_bridge.lock() {
             if !crate::perf::measure("tool_pointer", || {
-                bridge.tool_pointer(phase, x, y, shift, ctrl)
+                bridge.tool_pointer_ex(phase, x, y, shift, ctrl, alt)
             }) {
                 return;
             }

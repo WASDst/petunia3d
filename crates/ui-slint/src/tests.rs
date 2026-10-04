@@ -4300,7 +4300,7 @@ fn keyboard_modal_axis_numeric_confirm_flow() {
     assert!(bridge.route_shortcut("2", false, false, false));
     assert!(bridge.route_shortcut(".", false, false, false));
     assert!(bridge.route_shortcut("5", false, false, false));
-    assert_eq!(bridge.modal_text, "2.5");
+    assert_eq!(bridge.tool_session.numeric_text(), "2.5");
     assert!(
         bridge
             .view_model()
@@ -4310,7 +4310,7 @@ fn keyboard_modal_axis_numeric_confirm_flow() {
         "texto digitado aparece no HUD"
     );
     assert!(bridge.route_shortcut("Backspace", false, false, false));
-    assert_eq!(bridge.modal_text, "2.");
+    assert_eq!(bridge.tool_session.numeric_text(), "2.");
     // Enter confirma em UMA etapa de undo e fecha o modal.
     assert!(bridge.route_shortcut("Enter", false, false, false));
     assert!(bridge.state.session.tools.modal.is_none());
@@ -9217,10 +9217,16 @@ fn typed_value_does_not_leak_into_the_next_tool_modal() {
     assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
     assert!(bridge.route_shortcut("2", false, false, false));
     assert!(bridge.route_shortcut("Enter", false, false, false));
-    assert!(bridge.modal_text.is_empty(), "confirmar limpa o buffer");
+    assert!(
+        bridge.tool_session.numeric_text().is_empty(),
+        "confirmar limpa o buffer"
+    );
 
     assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
-    assert!(bridge.modal_text.is_empty(), "iniciar começa sem texto");
+    assert!(
+        bridge.tool_session.numeric_text().is_empty(),
+        "iniciar começa sem texto"
+    );
     assert!(bridge.route_shortcut("5", false, false, false));
     assert!(
         (bridge.tool_modal_value - 5.0).abs() < 1.0e-4,
@@ -9228,7 +9234,10 @@ fn typed_value_does_not_leak_into_the_next_tool_modal() {
         bridge.tool_modal_value
     );
     assert!(bridge.cancel_tool_modal());
-    assert!(bridge.modal_text.is_empty(), "cancelar limpa o buffer");
+    assert!(
+        bridge.tool_session.numeric_text().is_empty(),
+        "cancelar limpa o buffer"
+    );
 }
 
 #[test]

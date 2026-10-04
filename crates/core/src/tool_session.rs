@@ -305,6 +305,30 @@ impl ToolSession {
         }
     }
 
+    /// Buffer numérico único de todas as ferramentas (constituição 11): o
+    /// frontend pode acrescentar expressões (`10 + 5`, `*2`) além dos dígitos
+    /// aceitos por [`Self::text`], com ou sem gesto ativo. Retorna se aceitou.
+    pub fn push_numeric(&mut self, text: &str) -> bool {
+        let text = text.replace(',', ".");
+        if text.chars().any(char::is_control)
+            || self.numeric.len() + text.len() > NUMERIC_BUFFER_LIMIT
+        {
+            return false;
+        }
+        self.numeric.push_str(&text);
+        true
+    }
+
+    /// Apaga o último caractere do buffer numérico.
+    pub fn pop_numeric(&mut self) -> bool {
+        self.numeric.pop().is_some()
+    }
+
+    /// Esvazia o buffer numérico sem mexer na fase do gesto.
+    pub fn clear_numeric(&mut self) {
+        self.numeric.clear();
+    }
+
     /// Encerra o gesto sem efeito de documento (troca de ferramenta, reset).
     pub fn reset(&mut self) {
         self.phase = ToolPhase::Idle;
