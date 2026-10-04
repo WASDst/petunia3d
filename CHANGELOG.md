@@ -5,6 +5,17 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### UI Slint — F1: tokens v2 e guarda de tokens (04/10/2026)
+
+- `tokens.slint` ganha tipografia (`font-caption`…`font-exceptional`), elevação em dois níveis, cores de HUD/viewport/UV e o global `ColorPresets`.
+- `app.slint`/`animate.slint`: 150 cores `#hex`, todos os `font-size` literais e 8 variações de sombra trocados por tokens; textos de 8–9 px sobem para 10 px (cap. 36). Toggles do PAINT usam `on-accent` sobre o violeta.
+- Novo `cargo run -p xtask -- ui-lint`, ligado ao job `UI Slint`: falha com cor, fonte ou sombra literal fora de `tokens.slint`.
+- Validação: 473 testes Slint, 12 Animate e 7 de gestos; clippy `-D warnings` e fmt limpos; captura do shell em POLY/PAINT sem texto cortado.
+
+### Plano de refatoração de UI/UX (04/10/2026)
+
+- Proposta em `docs/development/ui-ux-refactor-plan-2026-10-04.md`: diagnóstico das telas e do código Slint, referências de mercado, design system v2, roteiro F0–F8 e 10 decisões pendentes de aprovação. Nenhuma mudança de código ou do caderno.
+
 ### DRAW/POLY/PAINT — seleção e perfis reeditáveis (03/10/2026)
 
 - Perfis 2D selecionáveis pelo contorno/interior; mover, girar e escalar com cancelamento e um Undo por gesto.

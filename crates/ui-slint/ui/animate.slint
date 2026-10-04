@@ -98,8 +98,8 @@ component AnimTip inherits Rectangle {
         padding: 8px;
         spacing: 3px;
         max-width: 260px;
-        Text { text: root.title; color: DesignTokens.text-primary; font-size: 11px; font-weight: 700; wrap: word-wrap; }
-        if root.detail != "": Text { text: root.detail; color: DesignTokens.text-secondary; font-size: 10px; wrap: word-wrap; }
+        Text { text: root.title; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; wrap: word-wrap; }
+        if root.detail != "": Text { text: root.detail; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
     }
 }
 
@@ -142,8 +142,8 @@ export component AnimSlider inherits Rectangle {
         spacing: 2px;
         if !root.compact: HorizontalLayout {
             height: 16px;
-            Text { text: root.label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; }
-            Text { text: root.value-text; color: DesignTokens.text-secondary; font-size: 11px; vertical-alignment: center; horizontal-alignment: right; }
+            Text { text: root.label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-stretch: 1; }
+            Text { text: root.value-text; color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; vertical-alignment: center; horizontal-alignment: right; }
         }
         track-area := Rectangle {
             height: 22px;
@@ -249,7 +249,7 @@ component AnimChip inherits Rectangle {
     Text {
         text: root.label;
         color: !root.enabled ? DesignTokens.disabled : root.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
-        font-size: 11px;
+        font-size: DesignTokens.font-small;
         font-weight: 600;
         horizontal-alignment: center;
         vertical-alignment: center;
@@ -303,7 +303,7 @@ component AnimButton inherits Rectangle {
             color: !root.enabled ? DesignTokens.disabled
                 : root.primary ? DesignTokens.on-accent
                 : root.danger ? DesignTokens.danger : DesignTokens.text-primary;
-            font-size: 11px;
+            font-size: DesignTokens.font-small;
             font-weight: 600;
             vertical-alignment: center;
         }
@@ -371,7 +371,7 @@ component AnimCard inherits Rectangle {
             if !root.compact: Text {
                 text: root.entry.detail;
                 color: root.entry.available ? DesignTokens.text-secondary : DesignTokens.disabled;
-                font-size: 10px;
+                font-size: DesignTokens.font-caption;
                 overflow: elide;
             }
         }
@@ -460,7 +460,7 @@ export component AnimateCreatureBody inherits VerticalLayout {
         Text {
             text: root.texts.empty-creature;
             color: DesignTokens.text-secondary;
-            font-size: 11px;
+            font-size: DesignTokens.font-small;
             wrap: word-wrap;
         }
         GridLayout {
@@ -484,7 +484,7 @@ export component AnimateCreatureBody inherits VerticalLayout {
         Text {
             text: root.texts.add-creature;
             color: DesignTokens.text-muted;
-            font-size: 10px;
+            font-size: DesignTokens.font-caption;
             font-weight: 700;
         }
         HorizontalLayout {
@@ -529,7 +529,7 @@ export component AnimateMotionBody inherits VerticalLayout {
         if root.linked-models != "": Text {
             text: root.texts.linked-model + ": " + root.linked-models;
             color: DesignTokens.text-secondary;
-            font-size: 10px;
+            font-size: DesignTokens.font-caption;
             overflow: elide;
         }
     }
@@ -547,7 +547,7 @@ export component AnimateMotionBody inherits VerticalLayout {
     if root.has-creature && !root.has-motion: Text {
         text: root.texts.empty-motion;
         color: DesignTokens.text-secondary;
-        font-size: 11px;
+        font-size: DesignTokens.font-small;
         wrap: word-wrap;
     }
     if root.motions.length > 1: VerticalLayout {
@@ -595,13 +595,13 @@ export component AnimateTweakBody inherits VerticalLayout {
     if root.rig-error: Text {
         text: root.texts.rig-error;
         color: DesignTokens.warning;
-        font-size: 11px;
+        font-size: DesignTokens.font-small;
         wrap: word-wrap;
     }
     Text {
         text: root.texts.title-style;
         color: DesignTokens.text-muted;
-        font-size: 10px;
+        font-size: DesignTokens.font-caption;
         font-weight: 700;
     }
     HorizontalLayout {
@@ -649,7 +649,7 @@ export component AnimateTweakBody inherits VerticalLayout {
             if param.advanced && param.choices.length > 0: VerticalLayout {
                 padding-bottom: 8px;
                 spacing: 4px;
-                Text { text: param.label; color: DesignTokens.text-primary; font-size: 11px; font-weight: 600; }
+                Text { text: param.label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; }
                 HorizontalLayout {
                     spacing: 4px;
                     for choice[i] in param.choices: AnimChip {
@@ -758,7 +758,7 @@ export component AnimateTransport inherits Rectangle {
         Text {
             text: root.time-label;
             color: DesignTokens.text-secondary;
-            font-size: 11px;
+            font-size: DesignTokens.font-small;
             font-family: "monospace";
             vertical-alignment: center;
             min-width: 84px;

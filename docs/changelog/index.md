@@ -5,6 +5,17 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### UI Slint — F1: tokens v2 e guarda de tokens (04/10/2026)
+
+- `tokens.slint` ganha tipografia (`font-caption`…`font-exceptional`), elevação em dois níveis, cores de HUD/viewport/UV e o global `ColorPresets`.
+- `app.slint`/`animate.slint`: 150 cores `#hex`, todos os `font-size` literais e 8 variações de sombra trocados por tokens; textos de 8–9 px sobem para 10 px (cap. 36). Toggles do PAINT usam `on-accent` sobre o violeta.
+- Novo `cargo run -p xtask -- ui-lint`, ligado ao job `UI Slint`: falha com cor, fonte ou sombra literal fora de `tokens.slint`.
+- Validação: 473 testes Slint, 12 Animate e 7 de gestos; clippy `-D warnings` e fmt limpos; captura do shell em POLY/PAINT sem texto cortado.
+
+### Plano de refatoração de UI/UX (04/10/2026)
+
+- Proposta em `docs/development/ui-ux-refactor-plan-2026-10-04.md`: diagnóstico das telas e do código Slint, referências de mercado, design system v2, roteiro F0–F8 e 10 decisões pendentes de aprovação. Nenhuma mudança de código ou do caderno.
+
 ### DRAW/POLY/PAINT — seleção e perfis reeditáveis (03/10/2026)
 
 - Perfis 2D selecionáveis pelo contorno/interior; mover, girar e escalar com cancelamento e um Undo por gesto.
@@ -237,7 +248,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 ### Animate procedural-first — documentação (30/09/2026)
 - **Decisão de produto registrada**: Animate acessível a quem não entende de animação, com **animação procedural primeiro**, **criaturas de primeira classe** (humanoide, quadrúpede, multi-leg, serpente, peixe, pássaro) e referência de animação por **batch de imagens** (sem vídeo, sem ML). Sem alteração de código.
 - **Caderno**: novo capítulo 45 (visão, UX em quatro camadas, Gap Matrix `AN-01…AN-15`, análise do Dust3D, pesquisa externa e fases F0–F5); novas specs **P3D-169** (Rig Roles & IK), **P3D-170** (Procedural Motion Generators), **P3D-171** (Ghosts & Trajectories), **P3D-172** (Reference Image Sequence), **P3D-173** (Secondary Motion & Ragdoll) e **P3D-174** (Layered Animation), todas em `SPEC DRAFT`.
-- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e [ADR 006](../architecture/adr/006-workspace-animate-pos-v1.md). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
+- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e [ADR 006](docs/architecture/adr/006-workspace-animate-pos-v1.md). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
 - **Achados registrados**: o domínio de rig/clipes existe em `petunia_project`, mas não alcança o Slint (AN-07) e o glTF não exporta skin/animação (AN-13).
 - **Gates**: `xtask bible-check` passa a validar P3D-001–174 e fundamentos 01–45.
 
