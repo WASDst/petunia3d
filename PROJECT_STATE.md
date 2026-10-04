@@ -349,8 +349,8 @@ perfis embutidos em `petunia_config`) e i18n TOML (`src/tr.rs`,
 gerado `PetuniaIcons`. O **fast path GPU também já existe**: em produção
 `viewport_gpu.rs` entrega a textura wgpu ao Slint sem cópia
 (`slint::Image::try_from`); o readback com espera bloqueante ficou só nos
-testes de aparência. Cores de overlays do viewport foram centralizadas em `DesignTokens`
-(`overlay-*`); sombras e fundos de HUD seguem o tema. A lista abaixo é o
+testes de aparência. Cores, fontes e sombras do shell vivem em `tokens.slint`
+(F1, tokens v2), com o guarda `xtask ui-lint`. A lista abaixo é o
 registro original de 20/09.
 
 O shell Slint (`crates/ui-slint/`) é o frontend de produção (55 testes
