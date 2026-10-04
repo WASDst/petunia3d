@@ -1833,8 +1833,8 @@ mod tests {
                 .all(|p| *p == [0, 0, 0, 255] || *p == [255; 4])
         );
         let (pixels, _) = layer.pixels.as_chunks::<4>();
-        assert!(pixels.iter().any(|p| *p == [0, 0, 0, 255]));
-        assert!(pixels.iter().any(|p| *p == [255; 4]));
+        assert!(pixels.contains(&[0, 0, 0, 255]));
+        assert!(pixels.contains(&[255; 4]));
     }
 
     #[test]

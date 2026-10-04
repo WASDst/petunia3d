@@ -69,6 +69,17 @@ jobs:
             libxkbcommon-dev libwayland-dev libfontconfig1-dev \
             libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
 
+      # Margem de memória para o rustc de `petunia_ui_slint` (vários GB por
+      # instância); sem swap o runner é derrubado (exit 143).
+      - name: Add swap
+        run: |
+          sudo swapoff -a || true
+          sudo fallocate -l 8G /mnt/swapfile-ci
+          sudo chmod 600 /mnt/swapfile-ci
+          sudo mkswap /mnt/swapfile-ci
+          sudo swapon /mnt/swapfile-ci
+          free -h
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -87,7 +98,12 @@ jobs:
       - name: Unit tests
         run: cargo test -p petunia_ui_slint --lib
 
+      # Com a feature, a lib e o harness `--lib` de `petunia_ui_slint` são
+      # recompilados ao mesmo tempo; um job por vez mantém o pico de memória
+      # em uma instância do rustc.
       - name: Integration tests (Animate workspace + viewport gestures)
+        env:
+          CARGO_BUILD_JOBS: 1
         run: >
           cargo test -p petunia_ui_slint --features animation-workspace
           --lib --test animate_shell --test viewport_gestures
