@@ -186,7 +186,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         tools.brush_style = preset.style.sanitized();
         self.active_brush_preset = Some(index);
         let name = preset.name.clone();
-        self.state.set_status(format!("Brush: {name}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_BRUSH),
+            &[("name", format!("{name}"))],
+        ));
         self.state.mark_dirty();
         true
     }
@@ -209,7 +212,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let path = self.brush_presets_path();
         if let Err(error) = BrushPreset::save_user_to(&path, &self.brush_presets) {
-            self.state.set_status(format!("Brush presets: {error}"));
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_BRUSH_PRESETS),
+                &[("error", format!("{error}"))],
+            ));
             return false;
         }
         let builtin = BrushPreset::builtin().len();
@@ -218,7 +226,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .iter()
             .position(|p| p.name == name)
             .map(|i| i + builtin);
-        self.state.set_status(format!("Brush saved: {name}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_BRUSH_SAVED),
+            &[("name", format!("{name}"))],
+        ));
         self.state.mark_dirty();
         true
     }
@@ -236,7 +247,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.brush_presets.remove(user_index);
         let path = self.brush_presets_path();
         if let Err(error) = BrushPreset::save_user_to(&path, &self.brush_presets) {
-            self.state.set_status(format!("Brush presets: {error}"));
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_BRUSH_PRESETS),
+                &[("error", format!("{error}"))],
+            ));
             return false;
         }
         self.active_brush_preset = None;

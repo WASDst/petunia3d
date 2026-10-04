@@ -4101,6 +4101,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> profile-closed: false;
     in-out property <string> profile-preview-commands: "";
     in-out property <string> region-hover-commands: "";
+    in-out property <string> profile-selection-commands: "";
     in-out property <string> region-shapes-commands: "";
     in-out property <string> profile-outline-commands: "";
     in-out property <string> poly-pen-preview-commands: "";
@@ -5417,6 +5418,14 @@ export component PetuniaSlintShell inherits Window {
                         fill: transparent;
                         stroke: DesignTokens.selection.transparentize(0.35);
                         stroke-width: 1.5px;
+                    }
+                    // Segmento selecionado no domínio Curve (DRAW): traço largo.
+                    if root.profile-selection-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.profile-selection-commands;
+                        fill: transparent;
+                        stroke: DesignTokens.selection;
+                        stroke-width: 3px;
                     }
                     // Região fechada sob o cursor (Draw/Push-Pull): tinta translúcida.
                     if root.region-hover-commands != "": Path {

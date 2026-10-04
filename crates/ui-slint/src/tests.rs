@@ -522,7 +522,7 @@ fn duplicate_active_asset_intent_duplicates_and_creates_undo() {
     bridge.apply(UiIntent::DuplicateActiveAsset);
     assert_eq!(bridge.state.project.assets.len(), 2);
     assert!(bridge.view_model().can_undo);
-    assert!(bridge.view_model().status_message.contains("duplicado"));
+    assert!(bridge.view_model().status_message.contains("duplicated"));
 
     let first_id = bridge.state.project.assets[0].id;
     let second_id = bridge.state.project.assets[1].id;
@@ -5074,7 +5074,7 @@ fn camera_projection_and_reset() {
 
     bridge.apply(UiIntent::ResetCamera);
     assert_eq!(bridge.state.session.camera.target, initial_target);
-    assert!(bridge.view_model().status_message.contains("redefinida"));
+    assert!(bridge.view_model().status_message.contains("reset"));
 }
 
 #[test]
@@ -5108,7 +5108,7 @@ fn new_commands_execute_via_command_id() {
     assert!(bridge.view_model().is_orthographic);
 
     bridge.execute_command(CommandId::ResetCamera);
-    assert!(bridge.view_model().status_message.contains("redefinida"));
+    assert!(bridge.view_model().status_message.contains("reset"));
 
     bridge.execute_command(CommandId::SelectAll);
     assert_eq!(bridge.state.session.selection.assets.len(), 2);

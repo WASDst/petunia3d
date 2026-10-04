@@ -249,6 +249,7 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
     bridge: &SlintUiBridge<V>,
 ) {
     window.set_region_hover_commands(bridge.region_hover_commands().as_str().into());
+    window.set_profile_selection_commands(bridge.profile_selection_commands().as_str().into());
     window.set_region_shapes_commands(bridge.region_shapes_commands().as_str().into());
     window.set_profile_outline_commands(bridge.profile_outline_commands().as_str().into());
     window.set_poly_pen_preview_commands(bridge.poly_pen_preview_commands().as_str().into());
@@ -885,6 +886,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
     window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
+    window.set_profile_selection_commands(vm.profile_selection_commands.as_str().into());
     window.set_region_shapes_commands(vm.region_shapes_commands.as_str().into());
     window.set_keymap_capture_action(vm.keymap_capture_action.as_str().into());
     {
@@ -1825,7 +1827,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         };
         if let Ok(mut bridge) = lasso_bridge.lock() {
             bridge.state.select_viewport_lasso(&polygon, add, subtract);
-            bridge.state.set_status("Lasso selection updated");
+            let message = bridge
+                .state
+                .t_id(petunia_config::text_id::STATUS_LASSO_SELECTION_UPDATED);
+            bridge.state.set_status(message);
             if let Some(window) = lasso_window.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
                 if let Some(frame) = bridge.render_viewport() {
@@ -1955,9 +1960,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         };
         let result = bridge.commit_transform_text(kind, axis as usize, text.as_str());
         if let Err(error) = result {
-            bridge
-                .state
-                .set_status(format!("Invalid numeric value: {error:?}"));
+            let message = crate::tr::fill(
+                &bridge
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_INVALID_NUMERIC_VALUE),
+                &[("error", format!("{error:?}"))],
+            );
+            bridge.state.set_status(message);
         }
         if let Some(window) = window_weak.upgrade() {
             sync_window_properties(&window, &bridge.view_model());
@@ -2530,7 +2539,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         let accepted = match numeric::parse_numeric_with_base(text.as_str(), base) {
             Ok(value) => bridge.set_tool_modal_value(value),
             Err(error) => {
-                bridge.state.set_status(format!("Invalid value: {error:?}"));
+                let message = crate::tr::fill(
+                    &bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_INVALID_VALUE),
+                    &[("error", format!("{error:?}"))],
+                );
+                bridge.state.set_status(message);
                 false
             }
         };
@@ -2797,9 +2812,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_effect_layer_added(move |kind| {
         if let Ok(mut bridge) = effect_add_bridge.lock() {
             if !bridge.add_paint_effect_layer(kind.as_str()) {
-                bridge
-                    .state
-                    .set_status(format!("Unknown effect layer: {kind}"));
+                let message = crate::tr::fill(
+                    &bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_UNKNOWN_EFFECT_LAYER),
+                    &[("kind", format!("{kind}"))],
+                );
+                bridge.state.set_status(message);
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3574,7 +3593,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_layer_removed(move |id| {
         if let Ok(mut bridge) = paint_remove_bridge.lock() {
             if !bridge.remove_paint_layer(id.as_str()) {
-                bridge.state.set_status("The last layer cannot be removed");
+                let message = bridge
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_THE_LAST_LAYER_CANNOT_BE_REMOVED);
+                bridge.state.set_status(message);
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3592,7 +3614,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_layer_merged_down(move |id| {
         if let Ok(mut bridge) = paint_merge_bridge.lock() {
             if !bridge.merge_down_paint_layer(id.as_str()) {
-                bridge.state.set_status("Cannot merge down this layer");
+                let message = bridge
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_CANNOT_MERGE_DOWN_THIS_LAYER);
+                bridge.state.set_status(message);
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3708,9 +3733,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     || bridge.set_loop_cut_slide(value)
             }
             Err(_) => {
-                bridge
+                let message = bridge
                     .state
-                    .set_status("Loop Cut: slide must be between -1 and 1");
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_SLIDE_MUST_BE_BETWEEN_1);
+                bridge.state.set_status(message);
                 false
             }
         };
@@ -3731,9 +3757,12 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 Ok(cuts) => {
                     bridge.adjust_loop_cut_count_from_input(cuts.clamp(1, 32) as usize);
                 }
-                Err(_) => bridge
-                    .state
-                    .set_status("Loop Cut: cuts must be a whole number from 1 to 32"),
+                Err(_) => {
+                    let message = bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_LOOP_CUT_CUTS_MUST_BE_A_WHOLE);
+                    bridge.state.set_status(message);
+                }
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -4879,9 +4908,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_add_primitive_requested(move |kind_str| {
         let Some(kind) = petunia_core::PrimitiveKind::parse(kind_str.as_str()).ok() else {
             if let Ok(mut bridge) = primitive_bridge.lock() {
-                bridge
-                    .state
-                    .set_status(format!("Unknown primitive: {kind_str}"));
+                let message = crate::tr::fill(
+                    &bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_UNKNOWN_PRIMITIVE),
+                    &[("kind_str", format!("{kind_str}"))],
+                );
+                bridge.state.set_status(message);
             }
             return;
         };

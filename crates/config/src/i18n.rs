@@ -600,6 +600,279 @@ pub mod text_id {
     pub const SNAP_KIND_PERPENDICULAR: TextId = TextId::new("snap_kind.perpendicular");
     pub const SNAP_KIND_ANGLE: TextId = TextId::new("snap_kind.angle");
 
+    pub const STATUS_SAVE_AS_REQUIRED: TextId = TextId::new("status.save_as_required");
+    pub const STATUS_FAILED_TO_SAVE: TextId = TextId::new("status.failed_to_save");
+    pub const STATUS_PROJECT_SAVED: TextId = TextId::new("status.project_saved");
+    pub const STATUS_PROJECT_OPENED: TextId = TextId::new("status.project_opened");
+    pub const STATUS_FAILED_TO_OPEN: TextId = TextId::new("status.failed_to_open");
+    pub const STATUS_IMPORTED_ASSET_S: TextId = TextId::new("status.imported_asset_s");
+    pub const STATUS_IMPORT_FAILED: TextId = TextId::new("status.import_failed");
+    pub const STATUS_EXPORTED: TextId = TextId::new("status.exported");
+    pub const STATUS_EXPORT_FAILED: TextId = TextId::new("status.export_failed");
+    pub const STATUS_IMPORTED_PALETTE_COLORS: TextId =
+        TextId::new("status.imported_palette_colors");
+    pub const STATUS_PALETTE_IMPORT_FAILED: TextId = TextId::new("status.palette_import_failed");
+    pub const STATUS_PALETTE_EXPORTED_SUCCESSFULLY: TextId =
+        TextId::new("status.palette_exported_successfully");
+    pub const STATUS_PALETTE_EXPORT_FAILED: TextId = TextId::new("status.palette_export_failed");
+    pub const STATUS_UNDO_DONE: TextId = TextId::new("status.undo_done");
+    pub const STATUS_REDO_DONE: TextId = TextId::new("status.redo_done");
+    pub const STATUS_SELECTION_MODE: TextId = TextId::new("status.selection_mode");
+    pub const STATUS_ADDED: TextId = TextId::new("status.added");
+    pub const STATUS_PRIMITIVE_FROZEN_TO_EDITABLE_MESH: TextId =
+        TextId::new("status.primitive_frozen_to_editable_mesh");
+    pub const STATUS_ACTIVE_TOOL: TextId = TextId::new("status.active_tool");
+    pub const STATUS_CUT_CHOOSE_TWO_EDGE_POINTS_IN_THE: TextId =
+        TextId::new("status.cut_choose_two_edge_points_in_the");
+    pub const STATUS_LOOP_CUT_HOVER_A_QUAD_EDGE_RING: TextId =
+        TextId::new("status.loop_cut_hover_a_quad_edge_ring");
+    pub const STATUS_SLICE_DRAG_IN_THE_VIEWPORT_TO_DEFINE: TextId =
+        TextId::new("status.slice_drag_in_the_viewport_to_define");
+    pub const STATUS_FILLED_POINTS: TextId = TextId::new("status.filled_points");
+    pub const STATUS_SHAPE_PRESS_ON_THE_SURFACE_TO_ANCHOR: TextId =
+        TextId::new("status.shape_press_on_the_surface_to_anchor");
+    pub const STATUS_OBJECT_DUPLICATED: TextId = TextId::new("status.object_duplicated");
+    pub const STATUS_EVERYTHING_SELECTED: TextId = TextId::new("status.everything_selected");
+    pub const STATUS_SELECTION_CLEARED: TextId = TextId::new("status.selection_cleared");
+    pub const STATUS_SELECTION_INVERTED: TextId = TextId::new("status.selection_inverted");
+    pub const STATUS_CAMERA_RESET: TextId = TextId::new("status.camera_reset");
+    pub const STATUS_SELECT_3_POINTS_OR_A_FACE_TO: TextId =
+        TextId::new("status.select_3_points_or_a_face_to");
+    pub const STATUS_PIVOT: TextId = TextId::new("status.pivot");
+    pub const STATUS_3D_CURSOR: TextId = TextId::new("status.3d_cursor");
+    pub const STATUS_3D_CURSOR_RESET_TO_THE_ORIGIN_0: TextId =
+        TextId::new("status.3d_cursor_reset_to_the_origin_0");
+    pub const STATUS_CAMERA_CENTERED_ON_THE_3D_CURSOR: TextId =
+        TextId::new("status.camera_centered_on_the_3d_cursor");
+    pub const STATUS_LOOP_CUT_CLICK_TO_PLACE_SCROLL_TO: TextId =
+        TextId::new("status.loop_cut_click_to_place_scroll_to");
+    pub const STATUS_CREATED_MATERIAL: TextId = TextId::new("status.created_material");
+    pub const STATUS_DUPLICATED_MATERIAL_TO_SLOT: TextId =
+        TextId::new("status.duplicated_material_to_slot");
+    pub const STATUS_PROFILE_LIMIT_REACHED_4096_POINTS: TextId =
+        TextId::new("status.profile_limit_reached_4096_points");
+    pub const STATUS_PROFILE_REQUIRES_AT_LEAST_THREE_POINTS: TextId =
+        TextId::new("status.profile_requires_at_least_three_points");
+    pub const STATUS_PROFILE_CLOSED_CHOOSE_GENERATE_VOLUME_OR_REVOLVE: TextId =
+        TextId::new("status.profile_closed_choose_generate_volume_or_revolve");
+    pub const STATUS_CHOOSE_A_TRANSFORM_PIVOT: TextId =
+        TextId::new("status.choose_a_transform_pivot");
+    pub const STATUS_PROFILE_CURVES_SMOOTHED_CUBIC_BEZIER: TextId =
+        TextId::new("status.profile_curves_smoothed_cubic_bezier");
+    pub const STATUS_PROFILE_CORNERS_SHARPENED: TextId =
+        TextId::new("status.profile_corners_sharpened");
+    pub const STATUS_SHAPE_SELECTED: TextId = TextId::new("status.shape_selected");
+    pub const STATUS_DRAW_A_PROFILE_BEFORE_GENERATING_VOLUME: TextId =
+        TextId::new("status.draw_a_profile_before_generating_volume");
+    pub const STATUS_EXTRUDE_REQUIRES_A_CLOSED_PROFILE_AT_LEAST: TextId =
+        TextId::new("status.extrude_requires_a_closed_profile_at_least");
+    pub const STATUS_REVOLVE_REQUIRES_AT_LEAST_2_POINTS: TextId =
+        TextId::new("status.revolve_requires_at_least_2_points");
+    pub const STATUS_SWEEP_REQUIRES_AT_LEAST_2_POINTS: TextId =
+        TextId::new("status.sweep_requires_at_least_2_points");
+    pub const STATUS_VOLUME_PREVIEW_ERROR: TextId = TextId::new("status.volume_preview_error");
+    pub const STATUS_PROFILE_VOLUME_TRANSACTION_HAS_NO_INITIAL_SNAPSHOT: TextId =
+        TextId::new("status.profile_volume_transaction_has_no_initial_snapshot");
+    pub const STATUS_VOLUME_GENERATION_CANCELLED_2D_PROFILE_KEPT: TextId =
+        TextId::new("status.volume_generation_cancelled_2d_profile_kept");
+    pub const STATUS_LOOP_CUT_CUT_S_CLICK_TO_PLACE: TextId =
+        TextId::new("status.loop_cut_cut_s_click_to_place");
+    pub const STATUS_LOOP_CUT_MOVE_THE_POINTER_OVER_A: TextId =
+        TextId::new("status.loop_cut_move_the_pointer_over_a");
+    pub const STATUS_DECAL_TRANSFORM_COMMITTED: TextId =
+        TextId::new("status.decal_transform_committed");
+    pub const STATUS_DECAL_TRANSFORM_CANCELLED: TextId =
+        TextId::new("status.decal_transform_cancelled");
+    pub const STATUS_NO_ACTIVE_MESH_TO_PAINT: TextId =
+        TextId::new("status.no_active_mesh_to_paint");
+    pub const STATUS_GRADIENT_COMMITTED: TextId = TextId::new("status.gradient_committed");
+    pub const STATUS_SHAPE_POINT_AT_THE_SURFACE_TO_ANCHOR: TextId =
+        TextId::new("status.shape_point_at_the_surface_to_anchor");
+    pub const STATUS_SHAPE_ANCHORED_RELEASE_TO_COMMIT: TextId =
+        TextId::new("status.shape_anchored_release_to_commit");
+    pub const STATUS_SHAPE_RELEASE_POINT_IS_OFF_THE_SURFACE: TextId =
+        TextId::new("status.shape_release_point_is_off_the_surface");
+    pub const STATUS_SHAPE_COMMITTED: TextId = TextId::new("status.shape_committed");
+    pub const STATUS_SHAPE_CANCELLED: TextId = TextId::new("status.shape_cancelled");
+    pub const STATUS_COLOR_SAMPLED_FROM_TEXTURE: TextId =
+        TextId::new("status.color_sampled_from_texture");
+    pub const STATUS_CLONE_POINT_AT_THE_SURFACE_TO_SET: TextId =
+        TextId::new("status.clone_point_at_the_surface_to_set");
+    pub const STATUS_CLONE_SOURCE_SET_PAINT_TO_COPY_FROM: TextId =
+        TextId::new("status.clone_source_set_paint_to_copy_from");
+    pub const STATUS_GRADIENT_DRAG_TO_SET_DIRECTION_AND_LENGTH: TextId =
+        TextId::new("status.gradient_drag_to_set_direction_and_length");
+    pub const STATUS_COLOR_SAMPLED_FROM_CANVAS: TextId =
+        TextId::new("status.color_sampled_from_canvas");
+    pub const STATUS_FILLED_CANVAS: TextId = TextId::new("status.filled_canvas");
+    pub const STATUS_SHADING: TextId = TextId::new("status.shading");
+    pub const STATUS_VIEW: TextId = TextId::new("status.view");
+    pub const STATUS_VIEW_ALIGNED_TO: TextId = TextId::new("status.view_aligned_to");
+    pub const STATUS_RECOVERED_SNAPSHOT_OF: TextId = TextId::new("status.recovered_snapshot_of");
+    pub const STATUS_RECOVERY_SNAPSHOTS_DISCARDED: TextId =
+        TextId::new("status.recovery_snapshots_discarded");
+    pub const STATUS_FAILED_TO_DISCARD_SNAPSHOTS: TextId =
+        TextId::new("status.failed_to_discard_snapshots");
+    pub const STATUS_FILL_SCOPE: TextId = TextId::new("status.fill_scope");
+    pub const STATUS_PROJECTION: TextId = TextId::new("status.projection");
+    pub const STATUS_BRUSH_LOCK: TextId = TextId::new("status.brush_lock");
+    pub const STATUS_UV_NO_FACE_UNDER_THE_CURSOR: TextId =
+        TextId::new("status.uv_no_face_under_the_cursor");
+    pub const STATUS_UV_FACE_SELECTED_TOTAL: TextId = TextId::new("status.uv_face_selected_total");
+    pub const STATUS_UV_MOVED_BY: TextId = TextId::new("status.uv_moved_by");
+    pub const STATUS_UV_SCALED_X: TextId = TextId::new("status.uv_scaled_x");
+    pub const STATUS_UV_ROTATED: TextId = TextId::new("status.uv_rotated");
+    pub const STATUS_UV_SEAMS_ON_SELECTED_EDGES_TOGGLED_TOTAL: TextId =
+        TextId::new("status.uv_seams_on_selected_edges_toggled_total");
+    pub const STATUS_UV_SELECT_A_FACE_IN_THE_VIEWPORT: TextId =
+        TextId::new("status.uv_select_a_face_in_the_viewport");
+    pub const STATUS_UV_SEAMS_ON_THE_SELECTED_FACE_TOGGLED: TextId =
+        TextId::new("status.uv_seams_on_the_selected_face_toggled");
+    pub const STATUS_UV_THERE_ARE_NO_SEAMS_TO_CLEAR: TextId =
+        TextId::new("status.uv_there_are_no_seams_to_clear");
+    pub const STATUS_UV_ALL_SEAMS_CLEARED: TextId = TextId::new("status.uv_all_seams_cleared");
+    pub const STATUS_UV_SELECT_FACE_S_TO_PIN_UNPIN: TextId =
+        TextId::new("status.uv_select_face_s_to_pin_unpin");
+    pub const STATUS_UV_PINS_TOGGLED_PINNED_CORNERS_TOTAL: TextId =
+        TextId::new("status.uv_pins_toggled_pinned_corners_total");
+    pub const STATUS_UV_THERE_ARE_NO_PINS_TO_CLEAR: TextId =
+        TextId::new("status.uv_there_are_no_pins_to_clear");
+    pub const STATUS_UV_ALL_PINNED_VERTICES_CLEARED: TextId =
+        TextId::new("status.uv_all_pinned_vertices_cleared");
+    pub const STATUS_DECAL_COULD_NOT_READ_THE_IMAGE: TextId =
+        TextId::new("status.decal_could_not_read_the_image");
+    pub const STATUS_DECAL_INVALID_IMAGE_DATA: TextId =
+        TextId::new("status.decal_invalid_image_data");
+    pub const STATUS_DECAL_IMPORTED_X: TextId = TextId::new("status.decal_imported_x");
+    pub const STATUS_PROPORTIONAL_RADIUS: TextId = TextId::new("status.proportional_radius");
+    pub const STATUS_SECTION_LAYOUT_SAVE_FAILED: TextId =
+        TextId::new("status.section_layout_save_failed");
+    pub const STATUS_SNAP_TARGET: TextId = TextId::new("status.snap_target");
+    pub const STATUS_RECTANGLE_PROFILE_X_CREATED: TextId =
+        TextId::new("status.rectangle_profile_x_created");
+    pub const STATUS_CIRCLE_PROFILE_RADIUS_SEG_CREATED: TextId =
+        TextId::new("status.circle_profile_radius_seg_created");
+    pub const STATUS_LOOP_CUT_NO_ACTIVE_MESH: TextId =
+        TextId::new("status.loop_cut_no_active_mesh");
+    pub const STATUS_LOOP_CUT_SELECT_AN_EDGE_ON_A: TextId =
+        TextId::new("status.loop_cut_select_an_edge_on_a");
+    pub const STATUS_LOOP_CUT_THE_SELECTED_EDGE_IS_NOT: TextId =
+        TextId::new("status.loop_cut_the_selected_edge_is_not");
+    pub const STATUS_LOOP_CUT_DRAG_TO_SLIDE_ENTER_CONFIRMS: TextId =
+        TextId::new("status.loop_cut_drag_to_slide_enter_confirms");
+    pub const STATUS_LOOP_CUT_SLIDE_MUST_BE_BETWEEN_1: TextId =
+        TextId::new("status.loop_cut_slide_must_be_between_1");
+    pub const STATUS_LOOP_CUT: TextId = TextId::new("status.loop_cut");
+    pub const STATUS_LOOP_CUT_TOPOLOGY_REFUSED_AT_COMMIT: TextId =
+        TextId::new("status.loop_cut_topology_refused_at_commit");
+    pub const STATUS_LOOP_CUT_2: TextId = TextId::new("status.loop_cut_2");
+    pub const STATUS_LOOP_CUT_CANCELLED: TextId = TextId::new("status.loop_cut_cancelled");
+    pub const STATUS_SLICE_NO_ACTIVE_MESH: TextId = TextId::new("status.slice_no_active_mesh");
+    pub const STATUS_SLICE_CLICK_AND_DRAG_TO_DRAW_THE: TextId =
+        TextId::new("status.slice_click_and_drag_to_draw_the");
+    pub const STATUS_SLICE_APPLIED: TextId = TextId::new("status.slice_applied");
+    pub const STATUS_SLICE_CANCELLED: TextId = TextId::new("status.slice_cancelled");
+    pub const STATUS_TEXEL_DENSITY: TextId = TextId::new("status.texel_density");
+    pub const STATUS_SHAPE_DELETED: TextId = TextId::new("status.shape_deleted");
+    pub const STATUS_COPIED_SELECTED_FACES_TO_CLIPBOARD: TextId =
+        TextId::new("status.copied_selected_faces_to_clipboard");
+    pub const STATUS_COPIED_SELECTED_EDGES_TO_CLIPBOARD: TextId =
+        TextId::new("status.copied_selected_edges_to_clipboard");
+    pub const STATUS_COPIED_SELECTED_VERTICES_TO_CLIPBOARD: TextId =
+        TextId::new("status.copied_selected_vertices_to_clipboard");
+    pub const STATUS_COPIED_HOVERED_FACE_TO_CLIPBOARD: TextId =
+        TextId::new("status.copied_hovered_face_to_clipboard");
+    pub const STATUS_COPIED_HOVERED_EDGE_TO_CLIPBOARD: TextId =
+        TextId::new("status.copied_hovered_edge_to_clipboard");
+    pub const STATUS_COPIED_HOVERED_VERTEX_TO_CLIPBOARD: TextId =
+        TextId::new("status.copied_hovered_vertex_to_clipboard");
+    pub const STATUS_COPIED_TO_CLIPBOARD: TextId = TextId::new("status.copied_to_clipboard");
+    pub const STATUS_PASTED_SEPARATE_OBJECT: TextId = TextId::new("status.pasted_separate_object");
+    pub const STATUS_PASTED_OBJECT: TextId = TextId::new("status.pasted_object");
+    pub const STATUS_CUT_POINT_AT_A_VISIBLE_EDGE: TextId =
+        TextId::new("status.cut_point_at_a_visible_edge");
+    pub const STATUS_KNIFE_PICK_THE_SECOND_EDGE_POINT: TextId =
+        TextId::new("status.knife_pick_the_second_edge_point");
+    pub const STATUS_CUT_PREVIEW_CHOOSE_ANOTHER_SEGMENT_ENTER_APPLIES: TextId =
+        TextId::new("status.cut_preview_choose_another_segment_enter_applies");
+    pub const STATUS_CUT: TextId = TextId::new("status.cut");
+    pub const STATUS_CUT_APPLIED: TextId = TextId::new("status.cut_applied");
+    pub const STATUS_CUT_CANCELLED: TextId = TextId::new("status.cut_cancelled");
+    pub const STATUS_ASSET_NOT_FOUND_IN_PROJECT_LIBRARY: TextId =
+        TextId::new("status.asset_not_found_in_project_library");
+    pub const STATUS_BOOLEAN_OPERAND_SET_FUSE_CUT_OR_INTERSECT: TextId =
+        TextId::new("status.boolean_operand_set_fuse_cut_or_intersect");
+    pub const STATUS_BOOLEAN_OPERAND_CLEARED: TextId =
+        TextId::new("status.boolean_operand_cleared");
+    pub const STATUS_RIGHT_CLICK_ON_AN_EDGE_TO_SELECT: TextId =
+        TextId::new("status.right_click_on_an_edge_to_select");
+    pub const STATUS_SELECTED_EDGE_EDGES: TextId = TextId::new("status.selected_edge_edges");
+    pub const STATUS_RIGHT_CLICK_ON_A_FACE_TO_SELECT: TextId =
+        TextId::new("status.right_click_on_a_face_to_select");
+    pub const STATUS_SELECTED_FACE_LOOP_FACES: TextId =
+        TextId::new("status.selected_face_loop_faces");
+    pub const STATUS_SET_AS_BOOLEAN_OPERAND: TextId = TextId::new("status.set_as_boolean_operand");
+    pub const STATUS_FILLED: TextId = TextId::new("status.filled");
+    pub const STATUS_PAINTING: TextId = TextId::new("status.painting");
+    pub const STATUS_FACE_SELECTED: TextId = TextId::new("status.face_selected");
+    pub const STATUS_NO_FACE_UNDER_THE_CURSOR: TextId =
+        TextId::new("status.no_face_under_the_cursor");
+    pub const STATUS_NOTHING_UNDER_THE_CURSOR: TextId =
+        TextId::new("status.nothing_under_the_cursor");
+    pub const STATUS_SELECTED: TextId = TextId::new("status.selected");
+    pub const STATUS_SELECTED_VERTEX_LOOP_POINTS: TextId =
+        TextId::new("status.selected_vertex_loop_points");
+    pub const STATUS_POINT_SELECTED: TextId = TextId::new("status.point_selected");
+    pub const STATUS_SELECTED_EDGE_LOOP_EDGES: TextId =
+        TextId::new("status.selected_edge_loop_edges");
+    pub const STATUS_EDGE_SELECTED: TextId = TextId::new("status.edge_selected");
+    pub const STATUS_SELECTED_SHAPE: TextId = TextId::new("status.selected_shape");
+    pub const STATUS_PROFILE_EDITING_FINISHED: TextId =
+        TextId::new("status.profile_editing_finished");
+    pub const STATUS_EDIT_PIVOT_EXITED: TextId = TextId::new("status.edit_pivot_exited");
+    pub const STATUS_OPEN_REQUESTED: TextId = TextId::new("status.open_requested");
+    pub const STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR: TextId =
+        TextId::new("status.free_mode_move_the_mouse_click_or");
+    pub const STATUS_TOOL_ACTIVE_DRAG_THE_GIZMO_TYPE_A: TextId =
+        TextId::new("status.tool_active_drag_the_gizmo_type_a");
+    pub const STATUS_BRUSH_SIZE: TextId = TextId::new("status.brush_size");
+    pub const STATUS_BRUSH_HARDNESS: TextId = TextId::new("status.brush_hardness");
+    pub const STATUS_NUDGE: TextId = TextId::new("status.nudge");
+    pub const STATUS_LASSO_SELECTION_UPDATED: TextId =
+        TextId::new("status.lasso_selection_updated");
+    pub const STATUS_INVALID_NUMERIC_VALUE: TextId = TextId::new("status.invalid_numeric_value");
+    pub const STATUS_INVALID_VALUE: TextId = TextId::new("status.invalid_value");
+    pub const STATUS_UNKNOWN_EFFECT_LAYER: TextId = TextId::new("status.unknown_effect_layer");
+    pub const STATUS_THE_LAST_LAYER_CANNOT_BE_REMOVED: TextId =
+        TextId::new("status.the_last_layer_cannot_be_removed");
+    pub const STATUS_CANNOT_MERGE_DOWN_THIS_LAYER: TextId =
+        TextId::new("status.cannot_merge_down_this_layer");
+    pub const STATUS_LOOP_CUT_CUTS_MUST_BE_A_WHOLE: TextId =
+        TextId::new("status.loop_cut_cuts_must_be_a_whole");
+    pub const STATUS_UNKNOWN_PRIMITIVE: TextId = TextId::new("status.unknown_primitive");
+    pub const STATUS_POINT_ADDED: TextId = TextId::new("status.point_added");
+    pub const STATUS_KEYMAP_PROFILE_CREATED: TextId = TextId::new("status.keymap_profile_created");
+    pub const STATUS_KEYMAP: TextId = TextId::new("status.keymap");
+    pub const STATUS_KEYMAP_PROFILE_DELETED: TextId = TextId::new("status.keymap_profile_deleted");
+    pub const STATUS_KEYMAP_PROFILE_ACTIVATED: TextId =
+        TextId::new("status.keymap_profile_activated");
+    pub const STATUS_PRESS_THE_NEW_SHORTCUT_ESC_CANCELS: TextId =
+        TextId::new("status.press_the_new_shortcut_esc_cancels");
+    pub const STATUS_SHAPE_BUILDER_PASS_OVER_THE_REGIONS_YOU: TextId =
+        TextId::new("status.shape_builder_pass_over_the_regions_you");
+    pub const STATUS_SHAPE_BUILDER_CLICK_INSIDE_A_CLOSED_SHAPE: TextId =
+        TextId::new("status.shape_builder_click_inside_a_closed_shape");
+    pub const STATUS_SHAPE_BUILDER_CANCELLED: TextId =
+        TextId::new("status.shape_builder_cancelled");
+    pub const STATUS_BRUSH: TextId = TextId::new("status.brush");
+    pub const STATUS_BRUSH_PRESETS: TextId = TextId::new("status.brush_presets");
+    pub const STATUS_BRUSH_SAVED: TextId = TextId::new("status.brush_saved");
+
+    pub const STATUS_CURVE_SELECTED: TextId = TextId::new("status.curve_selected");
+    pub const STATUS_REGION_SELECTED: TextId = TextId::new("status.region_selected");
+
+    pub const STATUS_PROFILE_POINT_SELECTED: TextId = TextId::new("status.profile_point_selected");
+
     pub const ALL: &[TextId] = &[
         UI_OUTLINER,
         UI_PROPERTIES,
@@ -992,6 +1265,185 @@ pub mod text_id {
         SNAP_KIND_PARALLEL,
         SNAP_KIND_PERPENDICULAR,
         SNAP_KIND_ANGLE,
+        STATUS_SAVE_AS_REQUIRED,
+        STATUS_FAILED_TO_SAVE,
+        STATUS_PROJECT_SAVED,
+        STATUS_PROJECT_OPENED,
+        STATUS_FAILED_TO_OPEN,
+        STATUS_IMPORTED_ASSET_S,
+        STATUS_IMPORT_FAILED,
+        STATUS_EXPORTED,
+        STATUS_EXPORT_FAILED,
+        STATUS_IMPORTED_PALETTE_COLORS,
+        STATUS_PALETTE_IMPORT_FAILED,
+        STATUS_PALETTE_EXPORTED_SUCCESSFULLY,
+        STATUS_PALETTE_EXPORT_FAILED,
+        STATUS_UNDO_DONE,
+        STATUS_REDO_DONE,
+        STATUS_SELECTION_MODE,
+        STATUS_ADDED,
+        STATUS_PRIMITIVE_FROZEN_TO_EDITABLE_MESH,
+        STATUS_ACTIVE_TOOL,
+        STATUS_CUT_CHOOSE_TWO_EDGE_POINTS_IN_THE,
+        STATUS_LOOP_CUT_HOVER_A_QUAD_EDGE_RING,
+        STATUS_SLICE_DRAG_IN_THE_VIEWPORT_TO_DEFINE,
+        STATUS_FILLED_POINTS,
+        STATUS_SHAPE_PRESS_ON_THE_SURFACE_TO_ANCHOR,
+        STATUS_OBJECT_DUPLICATED,
+        STATUS_EVERYTHING_SELECTED,
+        STATUS_SELECTION_CLEARED,
+        STATUS_SELECTION_INVERTED,
+        STATUS_CAMERA_RESET,
+        STATUS_SELECT_3_POINTS_OR_A_FACE_TO,
+        STATUS_PIVOT,
+        STATUS_3D_CURSOR,
+        STATUS_3D_CURSOR_RESET_TO_THE_ORIGIN_0,
+        STATUS_CAMERA_CENTERED_ON_THE_3D_CURSOR,
+        STATUS_LOOP_CUT_CLICK_TO_PLACE_SCROLL_TO,
+        STATUS_CREATED_MATERIAL,
+        STATUS_DUPLICATED_MATERIAL_TO_SLOT,
+        STATUS_PROFILE_LIMIT_REACHED_4096_POINTS,
+        STATUS_PROFILE_REQUIRES_AT_LEAST_THREE_POINTS,
+        STATUS_PROFILE_CLOSED_CHOOSE_GENERATE_VOLUME_OR_REVOLVE,
+        STATUS_CHOOSE_A_TRANSFORM_PIVOT,
+        STATUS_PROFILE_CURVES_SMOOTHED_CUBIC_BEZIER,
+        STATUS_PROFILE_CORNERS_SHARPENED,
+        STATUS_SHAPE_SELECTED,
+        STATUS_DRAW_A_PROFILE_BEFORE_GENERATING_VOLUME,
+        STATUS_EXTRUDE_REQUIRES_A_CLOSED_PROFILE_AT_LEAST,
+        STATUS_REVOLVE_REQUIRES_AT_LEAST_2_POINTS,
+        STATUS_SWEEP_REQUIRES_AT_LEAST_2_POINTS,
+        STATUS_VOLUME_PREVIEW_ERROR,
+        STATUS_PROFILE_VOLUME_TRANSACTION_HAS_NO_INITIAL_SNAPSHOT,
+        STATUS_VOLUME_GENERATION_CANCELLED_2D_PROFILE_KEPT,
+        STATUS_LOOP_CUT_CUT_S_CLICK_TO_PLACE,
+        STATUS_LOOP_CUT_MOVE_THE_POINTER_OVER_A,
+        STATUS_DECAL_TRANSFORM_COMMITTED,
+        STATUS_DECAL_TRANSFORM_CANCELLED,
+        STATUS_NO_ACTIVE_MESH_TO_PAINT,
+        STATUS_GRADIENT_COMMITTED,
+        STATUS_SHAPE_POINT_AT_THE_SURFACE_TO_ANCHOR,
+        STATUS_SHAPE_ANCHORED_RELEASE_TO_COMMIT,
+        STATUS_SHAPE_RELEASE_POINT_IS_OFF_THE_SURFACE,
+        STATUS_SHAPE_COMMITTED,
+        STATUS_SHAPE_CANCELLED,
+        STATUS_COLOR_SAMPLED_FROM_TEXTURE,
+        STATUS_CLONE_POINT_AT_THE_SURFACE_TO_SET,
+        STATUS_CLONE_SOURCE_SET_PAINT_TO_COPY_FROM,
+        STATUS_GRADIENT_DRAG_TO_SET_DIRECTION_AND_LENGTH,
+        STATUS_COLOR_SAMPLED_FROM_CANVAS,
+        STATUS_FILLED_CANVAS,
+        STATUS_SHADING,
+        STATUS_VIEW,
+        STATUS_VIEW_ALIGNED_TO,
+        STATUS_RECOVERED_SNAPSHOT_OF,
+        STATUS_RECOVERY_SNAPSHOTS_DISCARDED,
+        STATUS_FAILED_TO_DISCARD_SNAPSHOTS,
+        STATUS_FILL_SCOPE,
+        STATUS_PROJECTION,
+        STATUS_BRUSH_LOCK,
+        STATUS_UV_NO_FACE_UNDER_THE_CURSOR,
+        STATUS_UV_FACE_SELECTED_TOTAL,
+        STATUS_UV_MOVED_BY,
+        STATUS_UV_SCALED_X,
+        STATUS_UV_ROTATED,
+        STATUS_UV_SEAMS_ON_SELECTED_EDGES_TOGGLED_TOTAL,
+        STATUS_UV_SELECT_A_FACE_IN_THE_VIEWPORT,
+        STATUS_UV_SEAMS_ON_THE_SELECTED_FACE_TOGGLED,
+        STATUS_UV_THERE_ARE_NO_SEAMS_TO_CLEAR,
+        STATUS_UV_ALL_SEAMS_CLEARED,
+        STATUS_UV_SELECT_FACE_S_TO_PIN_UNPIN,
+        STATUS_UV_PINS_TOGGLED_PINNED_CORNERS_TOTAL,
+        STATUS_UV_THERE_ARE_NO_PINS_TO_CLEAR,
+        STATUS_UV_ALL_PINNED_VERTICES_CLEARED,
+        STATUS_DECAL_COULD_NOT_READ_THE_IMAGE,
+        STATUS_DECAL_INVALID_IMAGE_DATA,
+        STATUS_DECAL_IMPORTED_X,
+        STATUS_PROPORTIONAL_RADIUS,
+        STATUS_SECTION_LAYOUT_SAVE_FAILED,
+        STATUS_SNAP_TARGET,
+        STATUS_RECTANGLE_PROFILE_X_CREATED,
+        STATUS_CIRCLE_PROFILE_RADIUS_SEG_CREATED,
+        STATUS_LOOP_CUT_NO_ACTIVE_MESH,
+        STATUS_LOOP_CUT_SELECT_AN_EDGE_ON_A,
+        STATUS_LOOP_CUT_THE_SELECTED_EDGE_IS_NOT,
+        STATUS_LOOP_CUT_DRAG_TO_SLIDE_ENTER_CONFIRMS,
+        STATUS_LOOP_CUT_SLIDE_MUST_BE_BETWEEN_1,
+        STATUS_LOOP_CUT,
+        STATUS_LOOP_CUT_TOPOLOGY_REFUSED_AT_COMMIT,
+        STATUS_LOOP_CUT_2,
+        STATUS_LOOP_CUT_CANCELLED,
+        STATUS_SLICE_NO_ACTIVE_MESH,
+        STATUS_SLICE_CLICK_AND_DRAG_TO_DRAW_THE,
+        STATUS_SLICE_APPLIED,
+        STATUS_SLICE_CANCELLED,
+        STATUS_TEXEL_DENSITY,
+        STATUS_SHAPE_DELETED,
+        STATUS_COPIED_SELECTED_FACES_TO_CLIPBOARD,
+        STATUS_COPIED_SELECTED_EDGES_TO_CLIPBOARD,
+        STATUS_COPIED_SELECTED_VERTICES_TO_CLIPBOARD,
+        STATUS_COPIED_HOVERED_FACE_TO_CLIPBOARD,
+        STATUS_COPIED_HOVERED_EDGE_TO_CLIPBOARD,
+        STATUS_COPIED_HOVERED_VERTEX_TO_CLIPBOARD,
+        STATUS_COPIED_TO_CLIPBOARD,
+        STATUS_PASTED_SEPARATE_OBJECT,
+        STATUS_PASTED_OBJECT,
+        STATUS_CUT_POINT_AT_A_VISIBLE_EDGE,
+        STATUS_KNIFE_PICK_THE_SECOND_EDGE_POINT,
+        STATUS_CUT_PREVIEW_CHOOSE_ANOTHER_SEGMENT_ENTER_APPLIES,
+        STATUS_CUT,
+        STATUS_CUT_APPLIED,
+        STATUS_CUT_CANCELLED,
+        STATUS_ASSET_NOT_FOUND_IN_PROJECT_LIBRARY,
+        STATUS_BOOLEAN_OPERAND_SET_FUSE_CUT_OR_INTERSECT,
+        STATUS_BOOLEAN_OPERAND_CLEARED,
+        STATUS_RIGHT_CLICK_ON_AN_EDGE_TO_SELECT,
+        STATUS_SELECTED_EDGE_EDGES,
+        STATUS_RIGHT_CLICK_ON_A_FACE_TO_SELECT,
+        STATUS_SELECTED_FACE_LOOP_FACES,
+        STATUS_SET_AS_BOOLEAN_OPERAND,
+        STATUS_FILLED,
+        STATUS_PAINTING,
+        STATUS_FACE_SELECTED,
+        STATUS_NO_FACE_UNDER_THE_CURSOR,
+        STATUS_NOTHING_UNDER_THE_CURSOR,
+        STATUS_SELECTED,
+        STATUS_SELECTED_VERTEX_LOOP_POINTS,
+        STATUS_POINT_SELECTED,
+        STATUS_SELECTED_EDGE_LOOP_EDGES,
+        STATUS_EDGE_SELECTED,
+        STATUS_SELECTED_SHAPE,
+        STATUS_PROFILE_EDITING_FINISHED,
+        STATUS_EDIT_PIVOT_EXITED,
+        STATUS_OPEN_REQUESTED,
+        STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR,
+        STATUS_TOOL_ACTIVE_DRAG_THE_GIZMO_TYPE_A,
+        STATUS_BRUSH_SIZE,
+        STATUS_BRUSH_HARDNESS,
+        STATUS_NUDGE,
+        STATUS_LASSO_SELECTION_UPDATED,
+        STATUS_INVALID_NUMERIC_VALUE,
+        STATUS_INVALID_VALUE,
+        STATUS_UNKNOWN_EFFECT_LAYER,
+        STATUS_THE_LAST_LAYER_CANNOT_BE_REMOVED,
+        STATUS_CANNOT_MERGE_DOWN_THIS_LAYER,
+        STATUS_LOOP_CUT_CUTS_MUST_BE_A_WHOLE,
+        STATUS_UNKNOWN_PRIMITIVE,
+        STATUS_POINT_ADDED,
+        STATUS_KEYMAP_PROFILE_CREATED,
+        STATUS_KEYMAP,
+        STATUS_KEYMAP_PROFILE_DELETED,
+        STATUS_KEYMAP_PROFILE_ACTIVATED,
+        STATUS_PRESS_THE_NEW_SHORTCUT_ESC_CANCELS,
+        STATUS_SHAPE_BUILDER_PASS_OVER_THE_REGIONS_YOU,
+        STATUS_SHAPE_BUILDER_CLICK_INSIDE_A_CLOSED_SHAPE,
+        STATUS_SHAPE_BUILDER_CANCELLED,
+        STATUS_BRUSH,
+        STATUS_BRUSH_PRESETS,
+        STATUS_BRUSH_SAVED,
+        STATUS_CURVE_SELECTED,
+        STATUS_REGION_SELECTED,
+        STATUS_PROFILE_POINT_SELECTED,
     ];
 }
 

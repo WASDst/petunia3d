@@ -771,6 +771,10 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub profile_volume_mode: Option<petunia_module_model::ProfileVolumeMode>,
     pub profile_drag_target: Option<ProfileHitTarget>,
     pub profile_selected_point: Option<uuid::Uuid>,
+    /// Domínio Curve do DRAW: segmento selecionado do perfil ativo.
+    pub profile_selected_segment: Option<usize>,
+    /// Domínio Region do DRAW: região fechada selecionada (alvo do Push/Pull).
+    pub region_selected: Option<petunia_core::RegionHit>,
     /// Pré-seleção do Draw: onde o próximo clique cairia (ponto encaixado ou
     /// face que viraria o plano), mostrada com o marcador de snap.
     pub profile_hover_snap: Option<petunia_core::ScreenSnapHit>,
@@ -1130,6 +1134,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_volume_mode: None,
             profile_drag_target: None,
             profile_selected_point: None,
+            profile_selected_segment: None,
+            region_selected: None,
             profile_hover_snap: None,
             region_hover: None,
             modeling_mode: ModelingMode::default(),
@@ -1207,7 +1213,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if let Some(path) = self.state.project.project_path.clone() {
                     self.apply(UiIntent::SaveProjectTo(PathBuf::from(path)));
                 } else {
-                    self.state.set_status("Save As required");
+                    self.state.set_status(
+                        self.state
+                            .t_id(petunia_config::text_id::STATUS_SAVE_AS_REQUIRED),
+                    );
                 }
             }
             UiIntent::OpenCommandSearch => {
@@ -1271,12 +1280,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             UiIntent::SaveProjectTo(path) => {
                 if let Err(err) = petunia_project::format::save(&self.state.project.project, &path)
                 {
-                    self.state.set_status(format!("failed to save: {err}"));
+                    self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_FAILED_TO_SAVE),
+                        &[("err", format!("{err}"))],
+                    ));
                 } else {
                     self.state.project.project_path = Some(path.display().to_string());
                     self.state.mark_document_clean();
-                    self.state
-                        .set_status(format!("project saved: {}", path.display()));
+                    self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_PROJECT_SAVED),
+                        &[("0", format!("{}", path.display()))],
+                    ));
                 }
             }
             UiIntent::OpenProjectFrom(path) => match petunia_project::format::load(&path) {
@@ -1286,11 +1304,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.project.undo.clear();
                     self.state.project.project_path = Some(path.display().to_string());
                     self.state.mark_document_clean();
-                    self.state
-                        .set_status(format!("project opened: {}", path.display()));
+                    self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_PROJECT_OPENED),
+                        &[("0", format!("{}", path.display()))],
+                    ));
                 }
                 Err(err) => {
-                    self.state.set_status(format!("failed to open: {err}"));
+                    self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_FAILED_TO_OPEN),
+                        &[("err", format!("{err}"))],
+                    ));
                 }
             },
             UiIntent::ImportModelFrom(path) => {
@@ -1299,19 +1326,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &path,
                     &petunia_project::pipeline::ImportOptions::default(),
                 ) {
-                    Ok(names) => self
-                        .state
-                        .set_status(format!("imported {} asset(s)", names.len())),
-                    Err(error) => self.state.set_status(format!("import failed: {error}")),
+                    Ok(names) => self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_IMPORTED_ASSET_S),
+                        &[("0", format!("{}", names.len()))],
+                    )),
+                    Err(error) => self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_IMPORT_FAILED),
+                        &[("error", format!("{error}"))],
+                    )),
                 }
             }
             UiIntent::ExportActiveObjTo(path) => {
                 let index = self.state.project.active;
                 match petunia_core::ProjectService::export_obj(&self.state, index, &path) {
-                    Ok(()) => self
-                        .state
-                        .set_status(format!("exported {}", path.display())),
-                    Err(error) => self.state.set_status(format!("export failed: {error}")),
+                    Ok(()) => self.state.set_status(crate::tr::fill(
+                        &self.state.t_id(petunia_config::text_id::STATUS_EXPORTED),
+                        &[("0", format!("{}", path.display()))],
+                    )),
+                    Err(error) => self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_EXPORT_FAILED),
+                        &[("error", format!("{error}"))],
+                    )),
                 }
             }
             UiIntent::ExportSceneGlbTo(path) => {
@@ -1322,10 +1363,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     &path,
                     self.draw_parameters.export_padding,
                 ) {
-                    Ok(()) => self
-                        .state
-                        .set_status(format!("exported {}", path.display())),
-                    Err(error) => self.state.set_status(format!("export failed: {error}")),
+                    Ok(()) => self.state.set_status(crate::tr::fill(
+                        &self.state.t_id(petunia_config::text_id::STATUS_EXPORTED),
+                        &[("0", format!("{}", path.display()))],
+                    )),
+                    Err(error) => self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_EXPORT_FAILED),
+                        &[("error", format!("{error}"))],
+                    )),
                 }
             }
             UiIntent::ImportSvgProfiles(path) => {
@@ -1338,24 +1385,40 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 match petunia_module_paint::PaintModule::import_palette_file(&mut self.state, &path)
                 {
                     Ok(count) => {
-                        self.state
-                            .set_status(format!("imported palette ({count} colors)"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_IMPORTED_PALETTE_COLORS),
+                            &[("count", format!("{count}"))],
+                        ));
                         self.state.mark_dirty();
                     }
                     Err(error) => {
-                        self.state
-                            .set_status(format!("palette import failed: {error}"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_PALETTE_IMPORT_FAILED),
+                            &[("error", format!("{error}"))],
+                        ));
                     }
                 }
             }
             UiIntent::ExportPalette(path) => {
                 match petunia_module_paint::PaintModule::export_palette_file(&self.state, &path) {
                     Ok(()) => {
-                        self.state.set_status("palette exported successfully");
+                        self.state.set_status(
+                            self.state.t_id(
+                                petunia_config::text_id::STATUS_PALETTE_EXPORTED_SUCCESSFULLY,
+                            ),
+                        );
                     }
                     Err(error) => {
-                        self.state
-                            .set_status(format!("palette export failed: {error}"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_PALETTE_EXPORT_FAILED),
+                            &[("error", format!("{error}"))],
+                        ));
                     }
                 }
             }
@@ -1367,7 +1430,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return;
                 }
                 if self.state.undo() {
-                    self.state.set_status("Desfazer executado.");
+                    self.state
+                        .set_status(self.state.t_id(petunia_config::text_id::STATUS_UNDO_DONE));
                 }
             }
             UiIntent::Redo => {
@@ -1378,31 +1442,45 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return;
                 }
                 if self.state.redo() {
-                    self.state.set_status("Refazer executado.");
+                    self.state
+                        .set_status(self.state.t_id(petunia_config::text_id::STATUS_REDO_DONE));
                 }
             }
             UiIntent::SetSelectionDomain(domain) => {
                 self.state.set_selection_domain(domain);
-                self.state
-                    .set_status(format!("Modo de seleção: {:?}", domain));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_SELECTION_MODE),
+                    &[("0", format!("{:?}", domain))],
+                ));
             }
             UiIntent::CycleSelectionDomain => {
                 self.state.cycle_selection_domain();
                 let domain = self.state.selection_domain();
-                self.state
-                    .set_status(format!("Modo de seleção: {:?}", domain));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_SELECTION_MODE),
+                    &[("0", format!("{:?}", domain))],
+                ));
             }
             UiIntent::AddPrimitive(kind) => {
                 self.state.set_selection_domain(SelectionDomain::Object);
                 self.sync_viewport_context();
                 self.state.begin_primitive(kind, None);
-                self.state
-                    .set_status(format!("Added {}", kind.default_name()));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_ADDED),
+                    &[("0", format!("{}", kind.default_name()))],
+                ));
             }
             UiIntent::FreezeActivePrimitive => {
                 if self.state.freeze_active_primitive() {
-                    self.state
-                        .set_status("Primitive frozen to editable mesh".to_string());
+                    self.state.set_status(
+                        self.state.t_id(
+                            petunia_config::text_id::STATUS_PRIMITIVE_FROZEN_TO_EDITABLE_MESH,
+                        ),
+                    );
                 }
             }
             UiIntent::DeleteActiveAsset => {
@@ -1486,7 +1564,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.profile_edit_gesture = None;
                 }
                 self.state.session.tools.active_tool = tool.clone();
-                self.state.set_status(format!("Ferramenta ativa: {tool}"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_ACTIVE_TOOL),
+                    &[("tool", format!("{tool}"))],
+                ));
                 match tool.as_str() {
                     // Transformações são transacionais por arrasto: a sessão
                     // modal abre no pointer-down da viewport, não ao escolher a
@@ -1502,8 +1583,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         if let Some(mesh) = self.state.project.active_mesh().cloned() {
                             self.state.session.tools.cut_session =
                                 Some(petunia_core::CutSession::new(mesh));
-                            self.state
-                                .set_status("Cut: choose two edge points in the viewport");
+                            self.state.set_status(self.state.t_id(
+                                petunia_config::text_id::STATUS_CUT_CHOOSE_TWO_EDGE_POINTS_IN_THE,
+                            ));
                         }
                     }
                     "draw_profile" => {
@@ -1525,18 +1607,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.loop_cut_hover_source = None;
                         self.loop_cut_hover_cuts = 1;
                         self.state.session.tools.hover = petunia_core::HoverTarget::None;
-                        self.state.set_status("Loop Cut: hover a quad edge ring, click to place, scroll to change cuts");
+                        self.state.set_status(
+                            self.state.t_id(
+                                petunia_config::text_id::STATUS_LOOP_CUT_HOVER_A_QUAD_EDGE_RING,
+                            ),
+                        );
                     }
                     "slice" => {
-                        self.state
-                            .set_status("Slice: drag in the viewport to define the cut plane");
+                        self.state.set_status(self.state.t_id(
+                            petunia_config::text_id::STATUS_SLICE_DRAG_IN_THE_VIEWPORT_TO_DEFINE,
+                        ));
                     }
                     // No PAINT, Fill é o balde (age no clique, respeitando máscara e
                     // escopo). Só fora do PAINT ele pinta os vértices selecionados.
                     "fill" if self.state.workspace != Workspace::Paint => {
                         let count =
                             petunia_module_paint::PaintModule::fill_selection(&mut self.state);
-                        self.state.set_status(format!("Filled {count} points"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_FILLED_POINTS),
+                            &[("count", format!("{count}"))],
+                        ));
                     }
                     // Formas e pincéis do workspace PAINT compartilham o mesmo
                     // índice de tipo de pincel que o resto do domínio.
@@ -1547,8 +1639,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                                 "ellipse" => petunia_core::BrushType::Ellipse,
                                 _ => petunia_core::BrushType::Rectangle,
                             });
-                        self.state
-                            .set_status("Shape: press on the surface to anchor, release to commit");
+                        self.state.set_status(self.state.t_id(
+                            petunia_config::text_id::STATUS_SHAPE_PRESS_ON_THE_SURFACE_TO_ANCHOR,
+                        ));
                     }
                     "brush" | "eraser" | "picker" | "airbrush" | "pixel" | "smudge" | "blur"
                     | "dodge" | "burn" | "spray" | "clone" => {
@@ -1626,19 +1719,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 let _ = self
                     .state
                     .dispatch(&petunia_core::DuplicateAssetCmd { asset_index: None });
-                self.state.set_status("Objeto duplicado.");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_OBJECT_DUPLICATED),
+                );
             }
             UiIntent::SelectAll => {
                 let _ = self.state.dispatch(&petunia_core::SelectAllCmd);
-                self.state.set_status("Tudo selecionado.");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_EVERYTHING_SELECTED),
+                );
             }
             UiIntent::ClearSelection => {
                 let _ = self.state.dispatch(&petunia_core::ClearSelectionCmd);
-                self.state.set_status("Seleção limpa.");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_SELECTION_CLEARED),
+                );
             }
             UiIntent::InvertSelection => {
                 let _ = self.state.dispatch(&petunia_core::InvertSelectionCmd);
-                self.state.set_status("Seleção invertida.");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_SELECTION_INVERTED),
+                );
             }
             UiIntent::ToggleAssetLibrary => {
                 self.asset_library_visible = !self.asset_library_visible;
@@ -1656,7 +1761,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ResetCamera => {
                 let _ = self.state.dispatch(&petunia_core::ResetCameraCmd);
-                self.state.set_status("Câmera redefinida.");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_CAMERA_RESET),
+                );
             }
             UiIntent::ToggleProjection => {
                 let _ = self.state.dispatch(&petunia_core::ToggleProjectionCmd);
@@ -1846,8 +1954,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.profile.workplane_locked = true;
                     self.announce_locked_workplane();
                 } else {
-                    self.state
-                        .set_status("Select 3 points or a face to define workplane");
+                    self.state.set_status(
+                        self.state
+                            .t_id(petunia_config::text_id::STATUS_SELECT_3_POINTS_OR_A_FACE_TO),
+                    );
                 }
             }
             UiIntent::ProfileSetWorkplaneAuto => {
@@ -2546,7 +2656,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.session.pivot_point = pivot;
         self.state.mark_dirty();
-        self.state.set_status(format!("Pivot: {}", pivot.as_str()));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_PIVOT),
+            &[("0", format!("{}", pivot.as_str()))],
+        ));
         true
     }
 
@@ -2600,9 +2713,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
 
         self.state.session.cursor_3d = target_pos.to_array();
-        self.state.set_status(format!(
-            "3D Cursor: [{:.2}, {:.2}, {:.2}]",
-            target_pos.x, target_pos.y, target_pos.z
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_3D_CURSOR),
+            &[
+                ("0", format!("{:.2}", target_pos.x)),
+                ("1", format!("{:.2}", target_pos.y)),
+                ("2", format!("{:.2}", target_pos.z)),
+            ],
         ));
         self.state.mark_dirty();
         true
@@ -2622,8 +2739,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Redefine a posição do 3D Cursor para a origem (0, 0, 0).
     pub fn reset_cursor_3d(&mut self) -> bool {
         self.state.session.cursor_3d = [0.0, 0.0, 0.0];
-        self.state
-            .set_status("3D Cursor redefinido para a origem (0, 0, 0).");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_3D_CURSOR_RESET_TO_THE_ORIGIN_0),
+        );
         self.state.mark_dirty();
         true
     }
@@ -2631,7 +2750,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Centraliza o alvo da câmera na posição do 3D Cursor.
     pub fn frame_cursor(&mut self) -> bool {
         self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
-        self.state.set_status("Câmera centralizada no 3D Cursor.");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_CAMERA_CENTERED_ON_THE_3D_CURSOR),
+        );
         self.state.mark_dirty();
         true
     }
@@ -2826,7 +2948,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let changed = self.refresh_loop_cut_hover_preview();
             if let Some(ring) = &self.loop_cut_hover_ring {
                 if ring.face_count() > 0 {
-                    self.state.set_status("Loop Cut: click to place, scroll to change cuts, Enter to confirm, Esc to cancel");
+                    self.state.set_status(
+                        self.state.t_id(
+                            petunia_config::text_id::STATUS_LOOP_CUT_CLICK_TO_PLACE_SCROLL_TO,
+                        ),
+                    );
                 }
                 return changed || previous_edge != next_edge;
             }
@@ -3101,8 +3227,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .materials
             .push(petunia_project::Material::new(name));
         self.active_material_slot = count as i32;
-        self.state
-            .set_status(format!("Created Material {}", count + 1));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_CREATED_MATERIAL),
+            &[("0", format!("{}", count + 1))],
+        ));
         self.state.emit_material_changed();
         true
     }
@@ -3119,8 +3249,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.project.project.materials.push(dup);
         let new_idx = self.state.project.project.materials.len() - 1;
         self.active_material_slot = new_idx as i32;
-        self.state
-            .set_status(format!("Duplicated material to slot {new_idx}"));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_DUPLICATED_MATERIAL_TO_SLOT),
+            &[("new_idx", format!("{new_idx}"))],
+        ));
         self.state.emit_material_changed();
         true
     }
@@ -3876,8 +4010,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.active_profile_closed() {
             return false;
         }
-        if self.active_profile_point_count() >= 512 {
-            self.state.set_status("max 512 pts");
+        if self.active_profile_point_count()
+            >= petunia_module_model::draw_profile::MAX_PROFILE_POINTS
+        {
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_PROFILE_LIMIT_REACHED_4096_POINTS),
+            );
             return false;
         }
 
@@ -4100,20 +4239,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         let Some((_, spline)) = self.active_profile_resources() else {
-            self.state
-                .set_status("Profile requires at least three points");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_PROFILE_REQUIRES_AT_LEAST_THREE_POINTS),
+            );
             return false;
         };
         if spline.points.len() < 3 {
-            self.state
-                .set_status("Profile requires at least three points");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_PROFILE_REQUIRES_AT_LEAST_THREE_POINTS),
+            );
             return false;
         }
         if !self.close_profile_with_mirror() {
             return false;
         }
-        self.state
-            .set_status("Profile closed: choose Generate Volume or Revolve");
+        self.state.set_status(self.state.t_id(
+            petunia_config::text_id::STATUS_PROFILE_CLOSED_CHOOSE_GENERATE_VOLUME_OR_REVOLVE,
+        ));
         true
     }
 
@@ -4130,7 +4274,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 dismiss_on_click_away: true,
             });
             self.pivot_menu_open = true;
-            self.state.set_status("Choose a transform pivot");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_CHOOSE_A_TRANSFORM_PIVOT),
+            );
         } else if self.overlays.remove(OverlayId::PivotMenu).is_some() {
             self.pivot_menu_open = false;
         }
@@ -4249,8 +4396,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(error.to_string());
             return false;
         }
-        self.state
-            .set_status("Profile curves smoothed (Cubic Bézier)");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_PROFILE_CURVES_SMOOTHED_CUBIC_BEZIER),
+        );
         if self.profile_volume_mode.is_some() {
             self.update_profile_volume_preview();
         }
@@ -4281,7 +4430,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(error.to_string());
             return false;
         }
-        self.state.set_status("Profile corners sharpened");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_PROFILE_CORNERS_SHARPENED),
+        );
         if self.profile_volume_mode.is_some() {
             self.update_profile_volume_preview();
         }
@@ -4493,7 +4645,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 && let Some(id) = self.profile_hit_at(pixel)
                 && self.activate_profile(id)
             {
-                self.state.set_status("Shape selected");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_SHAPE_SELECTED),
+                );
                 return true;
             }
         }
@@ -4737,8 +4892,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.profile_pointer_up();
         let Some(profile_state) = self.active_profile_state() else {
-            self.state
-                .set_status("Draw a profile before generating volume");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_DRAW_A_PROFILE_BEFORE_GENERATING_VOLUME),
+            );
             return false;
         };
         let mode = match mode_str {
@@ -4748,22 +4905,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return false;
                 }
                 if !self.active_profile_closed() {
-                    self.state
-                        .set_status("Extrude requires a closed profile (at least 3 points)");
+                    self.state.set_status(self.state.t_id(
+                        petunia_config::text_id::STATUS_EXTRUDE_REQUIRES_A_CLOSED_PROFILE_AT_LEAST,
+                    ));
                     return false;
                 }
                 petunia_module_model::ProfileVolumeMode::Extrude
             }
             "revolve" => {
                 if profile_state.points.len() < 2 {
-                    self.state.set_status("Revolve requires at least 2 points");
+                    self.state.set_status(
+                        self.state.t_id(
+                            petunia_config::text_id::STATUS_REVOLVE_REQUIRES_AT_LEAST_2_POINTS,
+                        ),
+                    );
                     return false;
                 }
                 petunia_module_model::ProfileVolumeMode::Revolve
             }
             "sweep" => {
                 if profile_state.points.len() < 2 {
-                    self.state.set_status("Sweep requires at least 2 points");
+                    self.state
+                        .set_status(self.state.t_id(
+                            petunia_config::text_id::STATUS_SWEEP_REQUIRES_AT_LEAST_2_POINTS,
+                        ));
                     return false;
                 }
                 petunia_module_model::ProfileVolumeMode::Sweep
@@ -4826,7 +4991,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             Err(e) => {
-                self.state.set_status(format!("Volume preview error: {e}"));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_VOLUME_PREVIEW_ERROR),
+                    &[("e", format!("{e}"))],
+                ));
                 false
             }
         }
@@ -4838,8 +5008,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let had_preview = self.profile_preview_asset_id.is_some();
         let Some(original) = self.profile_volume_original.take() else {
-            self.state
-                .set_status("Profile volume transaction has no initial snapshot");
+            self.state.set_status(self.state.t_id(
+                petunia_config::text_id::STATUS_PROFILE_VOLUME_TRANSACTION_HAS_NO_INITIAL_SNAPSHOT,
+            ));
             return false;
         };
 
@@ -4905,8 +5076,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.profile_volume_mode = None;
         if had_preview {
-            self.state
-                .set_status("Geração de volume cancelada. Perfil 2D mantido.");
+            self.state.set_status(
+                self.state.t_id(
+                    petunia_config::text_id::STATUS_VOLUME_GENERATION_CANCELLED_2D_PROFILE_KEPT,
+                ),
+            );
         }
         had_preview
     }
@@ -4947,8 +5121,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.loop_cut_hover_cuts = next;
-        self.state
-            .set_status(format!("Loop Cut: {next} cut(s) · click to place"));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_LOOP_CUT_CUT_S_CLICK_TO_PLACE),
+            &[("next", format!("{next}"))],
+        ));
         true
     }
 
@@ -4960,8 +5138,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.loop_cut_hover_ring.take(),
             self.loop_cut_hover_source.take(),
         ) else {
-            self.state
-                .set_status("Loop Cut: move the pointer over a quad edge ring");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_MOVE_THE_POINTER_OVER_A),
+            );
             return false;
         };
         self.begin_loop_cut_from_ring(ring, source, self.loop_cut_hover_cuts)
@@ -5802,7 +5982,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn decal_drag_end(&mut self) -> bool {
         if self.decal_drag_initial.take().is_some() {
             self.state.finish_paint_stroke(false);
-            self.state.set_status("Decal transform committed");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_DECAL_TRANSFORM_COMMITTED),
+            );
             true
         } else {
             false
@@ -5812,7 +5995,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn cancel_decal_drag(&mut self) -> bool {
         if self.decal_drag_initial.take().is_some() {
             self.state.finish_paint_stroke(true);
-            self.state.set_status("Decal transform cancelled");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_DECAL_TRANSFORM_CANCELLED),
+            );
             true
         } else {
             false
@@ -5849,7 +6035,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         if self.state.project.active_mesh().is_none() {
-            self.state.set_status("No active mesh to paint");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_NO_ACTIVE_MESH_TO_PAINT),
+            );
             return false;
         }
         if self.active_layer_is_decal() {
@@ -5938,7 +6127,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.emit_texture_changed();
         self.state.mark_dirty();
-        self.state.set_status("Gradient committed");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_GRADIENT_COMMITTED),
+        );
     }
 
     /// Ferramentas de forma ancoram no press e confirmam no release.
@@ -5959,12 +6151,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         // A forma precisa de canvas para converter UV em pixel.
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
         let Some((px, py)) = self.canvas_pixel_at(x, y) else {
-            self.state
-                .set_status("Shape: point at the surface to anchor the shape");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_SHAPE_POINT_AT_THE_SURFACE_TO_ANCHOR),
+            );
             return false;
         };
         self.shape_anchor = Some((px, py));
-        self.state.set_status("Shape anchored: release to commit");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_SHAPE_ANCHORED_RELEASE_TO_COMMIT),
+        );
         true
     }
 
@@ -5975,8 +6172,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
         let Some((x1, y1)) = self.canvas_pixel_at(x, y) else {
-            self.state
-                .set_status("Shape: release point is off the surface, discarded");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_SHAPE_RELEASE_POINT_IS_OFF_THE_SURFACE),
+            );
             return false;
         };
         if self.is_gradient_tool() {
@@ -6007,8 +6206,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         );
         self.state.emit_texture_changed();
         self.state.mark_dirty();
-        self.state
-            .set_status(format!("Shape committed ({brush:?})"));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_SHAPE_COMMITTED),
+            &[("brush", format!("{brush:?}"))],
+        ));
         true
     }
 
@@ -6017,7 +6220,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.shape_anchor.take().is_none() {
             return false;
         }
-        self.state.set_status("Shape cancelled");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_SHAPE_CANCELLED),
+        );
         true
     }
 
@@ -6057,7 +6263,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.paint_color = color;
         self.state.session.tools.paint_color = color;
         self.state.mark_dirty();
-        self.state.set_status("Color sampled from texture");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_COLOR_SAMPLED_FROM_TEXTURE),
+        );
         true
     }
 
@@ -6093,13 +6302,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Define a origem do Clone no texel sob o cursor (Ctrl+clique).
     fn set_clone_source_at(&mut self, x: f32, y: f32) -> bool {
         let Some((px, py)) = self.canvas_pixel_at(x, y) else {
-            self.state
-                .set_status("Clone: point at the surface to set the source");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_CLONE_POINT_AT_THE_SURFACE_TO_SET),
+            );
             return false;
         };
         self.state.session.tools.clone_source = Some([px as f32, py as f32]);
-        self.state
-            .set_status("Clone source set — paint to copy from it");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_CLONE_SOURCE_SET_PAINT_TO_COPY_FROM),
+        );
         self.state.mark_dirty();
         true
     }
@@ -6233,8 +6446,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             match phase {
                 0 => {
                     self.shape_anchor = Some((px, py));
-                    self.state
-                        .set_status("Gradient: drag to set direction and length");
+                    self.state.set_status(self.state.t_id(
+                        petunia_config::text_id::STATUS_GRADIENT_DRAG_TO_SET_DIRECTION_AND_LENGTH,
+                    ));
                     return true;
                 }
                 1 => {
@@ -6274,7 +6488,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.state.paint_color = c;
                         self.state.session.tools.paint_color = c;
                         self.state.mark_dirty();
-                        self.state.set_status("Color sampled from canvas");
+                        self.state.set_status(
+                            self.state
+                                .t_id(petunia_config::text_id::STATUS_COLOR_SAMPLED_FROM_CANVAS),
+                        );
                     }
                     return true;
                 }
@@ -6288,13 +6505,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         scope,
                     );
                     self.state.finish_paint_stroke(false);
-                    self.state.set_status(format!("Filled canvas ({scope:?})"));
+                    self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_FILLED_CANVAS),
+                        &[("scope", format!("{scope:?}"))],
+                    ));
                     return true;
                 }
                 if tool == "clone" && self.state.session.tools.clone_source.is_none() {
                     self.state.session.tools.clone_source = Some([px as f32, py as f32]);
-                    self.state
-                        .set_status("Clone source set — paint to copy from it");
+                    self.state.set_status(
+                        self.state.t_id(
+                            petunia_config::text_id::STATUS_CLONE_SOURCE_SET_PAINT_TO_COPY_FROM,
+                        ),
+                    );
                     return true;
                 }
                 self.state.begin_paint_stroke();
@@ -6420,7 +6645,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if mode.samples_material() {
             self.state.session.textured = true;
         }
-        self.state.set_status(format!("Shading: {}", mode.id()));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_SHADING),
+            &[("0", format!("{}", mode.id()))],
+        ));
         self.state.mark_dirty();
         true
     }
@@ -6888,7 +7116,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Define diretamente o preset de visualização da câmera e notifica o estado.
     pub fn set_view_preset(&mut self, preset: petunia_core::ViewPreset) -> bool {
         self.state.session.camera.set_preset(preset);
-        self.state.set_status(format!("View: {}", preset.title()));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_VIEW),
+            &[("0", format!("{}", preset.title()))],
+        ));
         self.state.mark_dirty();
         true
     }
@@ -7034,8 +7265,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         };
         self.state.session.camera.set_preset(preset);
-        self.state
-            .set_status(format!("View aligned to {}", preset.title()));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_VIEW_ALIGNED_TO),
+            &[("0", format!("{}", preset.title()))],
+        ));
         self.state.mark_dirty();
         true
     }
@@ -7231,8 +7466,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         self.apply(UiIntent::OpenProjectFrom(info.snapshot_path));
-        self.state
-            .set_status(format!("Recovered snapshot of '{}'", info.project_name));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_RECOVERED_SNAPSHOT_OF),
+            &[("0", format!("{}", info.project_name))],
+        ));
         true
     }
 
@@ -7249,10 +7488,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let path = self.state.project.project_path.clone();
         let path_ref = path.as_deref().map(std::path::Path::new);
         match petunia_core::AutosaveService::discard_recovery(path_ref) {
-            Ok(()) => self.state.set_status("Recovery snapshots discarded"),
-            Err(error) => self
-                .state
-                .set_status(format!("Failed to discard snapshots: {error}")),
+            Ok(()) => self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_RECOVERY_SNAPSHOTS_DISCARDED),
+            ),
+            Err(error) => self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_FAILED_TO_DISCARD_SNAPSHOTS),
+                &[("error", format!("{error}"))],
+            )),
         }
         true
     }
@@ -7268,7 +7513,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         };
         self.state.session.tools.fill_scope = parsed;
-        self.state.set_status(format!("Fill scope: {scope}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_FILL_SCOPE),
+            &[("scope", format!("{scope}"))],
+        ));
         true
     }
 
@@ -7280,7 +7528,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         };
         self.state.session.tools.brush_projection = parsed;
-        self.state.set_status(format!("Projection: {projection}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_PROJECTION),
+            &[("projection", format!("{projection}"))],
+        ));
         true
     }
 
@@ -7295,7 +7546,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         self.state.session.tools.brush_lock = parsed;
         self.state.session.tools.paint_lock_face = None;
-        self.state.set_status(format!("Brush lock: {lock}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_BRUSH_LOCK),
+            &[("lock", format!("{lock}"))],
+        ));
         true
     }
 
@@ -7439,7 +7693,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 self.state.sync_selection();
             }
-            self.state.set_status("UV: no face under the cursor");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_UV_NO_FACE_UNDER_THE_CURSOR),
+            );
             return false;
         };
         if extend {
@@ -7464,9 +7721,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.sync_selection();
         self.state.mark_dirty();
-        self.state.set_status(format!(
-            "UV: face {face} selected ({} total)",
-            self.state.session.uv_selected.len()
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_UV_FACE_SELECTED_TOTAL),
+            &[
+                ("face", format!("{face}")),
+                ("0", format!("{}", self.state.session.uv_selected.len())),
+            ],
         ));
         true
     }
@@ -7481,8 +7743,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.checkpoint("move uv");
         petunia_module_uv::UvModule::move_selected(&mut self.state, du, dv);
-        self.state
-            .set_status(format!("UV moved by ({du:.3}, {dv:.3})"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_UV_MOVED_BY),
+            &[("du", format!("{du:.3}")), ("dv", format!("{dv:.3}"))],
+        ));
         true
     }
 
@@ -7493,7 +7757,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.checkpoint("scale uv");
         petunia_module_uv::UvModule::scale_selected(&mut self.state, factor);
-        self.state.set_status(format!("UV scaled ×{factor:.3}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_UV_SCALED_X),
+            &[("factor", format!("{factor:.3}"))],
+        ));
         true
     }
 
@@ -7504,7 +7771,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.checkpoint("rotate uv");
         petunia_module_uv::UvModule::rotate_selected(&mut self.state, degrees.to_radians());
-        self.state.set_status(format!("UV rotated {degrees:.1}°"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_UV_ROTATED),
+            &[("degrees", format!("{degrees:.1}"))],
+        ));
         true
     }
 
@@ -7528,16 +7798,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .active_mesh()
                 .map(|mesh| mesh.uv_seams.len())
                 .unwrap_or(0);
-            self.state.set_status(format!(
-                "UV seams on selected edges toggled ({count} total)"
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_UV_SEAMS_ON_SELECTED_EDGES_TOGGLED_TOTAL),
+                &[("count", format!("{count}"))],
             ));
             self.state.emit_uv_changed();
             return true;
         }
 
         let Some(face) = mesh.faces.iter().find(|face| face.selected) else {
-            self.state
-                .set_status("UV: select a face in the viewport first");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_UV_SELECT_A_FACE_IN_THE_VIEWPORT),
+            );
             return false;
         };
         let verts = face.verts.clone();
@@ -7559,8 +7834,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .active_mesh()
             .map(|mesh| mesh.uv_seams.len())
             .unwrap_or(0);
-        self.state.set_status(format!(
-            "UV seams on the selected face toggled ({count} total)"
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_UV_SEAMS_ON_THE_SELECTED_FACE_TOGGLED),
+            &[("count", format!("{count}"))],
         ));
         self.state.emit_uv_changed();
         true
@@ -7572,14 +7850,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         if mesh.uv_seams.is_empty() {
-            self.state.set_status("UV: there are no seams to clear");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_UV_THERE_ARE_NO_SEAMS_TO_CLEAR),
+            );
             return false;
         }
         self.state.checkpoint("clear uv seams");
         if let Some(mesh) = self.state.project.active_mesh_mut() {
             mesh.uv_seams.clear();
         }
-        self.state.set_status("UV: all seams cleared");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_UV_ALL_SEAMS_CLEARED),
+        );
         self.state.emit_uv_changed();
         true
     }
@@ -7592,7 +7876,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let has_sel_faces =
             mesh.faces.iter().any(|f| f.selected) || !self.state.session.uv_selected.is_empty();
         if !has_sel_faces {
-            self.state.set_status("UV: select face(s) to pin/unpin");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_UV_SELECT_FACE_S_TO_PIN_UNPIN),
+            );
             return false;
         }
 
@@ -7610,8 +7897,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         mesh.toggle_pin_selected_faces_uv(&faces_to_toggle);
         let count = mesh.uv_pinned.len();
-        self.state
-            .set_status(format!("UV pins toggled ({count} pinned corners total)"));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_UV_PINS_TOGGLED_PINNED_CORNERS_TOTAL),
+            &[("count", format!("{count}"))],
+        ));
         self.state.emit_uv_changed();
         true
     }
@@ -7622,14 +7913,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         if mesh.uv_pinned.is_empty() {
-            self.state.set_status("UV: there are no pins to clear");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_UV_THERE_ARE_NO_PINS_TO_CLEAR),
+            );
             return false;
         }
         self.state.checkpoint("clear all uv pins");
         if let Some(mesh) = self.state.project.active_mesh_mut() {
             mesh.clear_all_pins();
         }
-        self.state.set_status("UV: all pinned vertices cleared");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_UV_ALL_PINNED_VERTICES_CLEARED),
+        );
         self.state.emit_uv_changed();
         true
     }
@@ -7729,8 +8026,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let (w, h, rgba) = match files::load_image_rgba(path) {
             Ok(decoded) => decoded,
             Err(error) => {
-                self.state
-                    .set_status(format!("Decal: could not read the image ({error})"));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_DECAL_COULD_NOT_READ_THE_IMAGE),
+                    &[("error", format!("{error}"))],
+                ));
                 return false;
             }
         };
@@ -7749,7 +8050,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         .into_raw(),
                 ),
                 None => {
-                    self.state.set_status("Decal: invalid image data");
+                    self.state.set_status(
+                        self.state
+                            .t_id(petunia_config::text_id::STATUS_DECAL_INVALID_IMAGE_DATA),
+                    );
                     return false;
                 }
             }
@@ -7757,7 +8061,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             (w, h, rgba)
         };
         if rgba.len() != (w * h * 4) as usize || w == 0 || h == 0 {
-            self.state.set_status("Decal: invalid image data");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_DECAL_INVALID_IMAGE_DATA),
+            );
             return false;
         }
         let name = path
@@ -7782,8 +8089,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             true
         });
         if ok {
-            self.state
-                .set_status(format!("Decal imported: {name} ({w}×{h})"));
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_DECAL_IMPORTED_X),
+                &[
+                    ("name", format!("{name}")),
+                    ("w", format!("{w}")),
+                    ("h", format!("{h}")),
+                ],
+            ));
         }
         ok
     }
@@ -7858,8 +8173,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let current = self.state.session.proportional_settings.radius;
         let new_radius = (current + delta).clamp(0.05, 100.0);
         self.set_proportional_radius(new_radius);
-        self.state
-            .set_status(format!("Raio proporcional: {:.2}", new_radius));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_PROPORTIONAL_RADIUS),
+            &[("0", format!("{:.2}", new_radius))],
+        ));
         true
     }
 
@@ -7950,8 +8269,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .clone()
             .unwrap_or_else(petunia_config::UserPreferences::default_path);
         if let Err(error) = self.preferences.save_to_path(&path) {
-            self.state
-                .set_status(format!("section layout save failed: {error}"));
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_SECTION_LAYOUT_SAVE_FAILED),
+                &[("error", format!("{error}"))],
+            ));
         }
     }
 
@@ -8077,8 +8400,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         self.state.session.snap_settings.target = target;
         self.state.render.mark_dirty();
-        self.state
-            .set_status(format!("Snap target: {}", target.label()));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_SNAP_TARGET),
+            &[("0", format!("{}", target.label()))],
+        ));
         true
     }
 
@@ -8246,8 +8571,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.state.render.mark_dirty();
-        self.state.set_status(format!(
-            "Perfil retangular ({width:.1} x {height:.1}) criado"
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_RECTANGLE_PROFILE_X_CREATED),
+            &[
+                ("width", format!("{width:.1}")),
+                ("height", format!("{height:.1}")),
+            ],
         ));
         true
     }
@@ -8278,8 +8609,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.state.render.mark_dirty();
-        self.state.set_status(format!(
-            "Perfil circular (raio {radius:.1}, {segments} seg) criado"
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_CIRCLE_PROFILE_RADIUS_SEG_CREATED),
+            &[
+                ("radius", format!("{radius:.1}")),
+                ("segments", format!("{segments}")),
+            ],
         ));
         true
     }
@@ -8386,17 +8723,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Abre a sessão de loop cut a partir da aresta selecionada.
     pub fn begin_loop_cut(&mut self) -> bool {
         let Some(mesh) = self.state.project.active_mesh().cloned() else {
-            self.state.set_status("Loop Cut: no active mesh");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_NO_ACTIVE_MESH),
+            );
             return false;
         };
         let Some(seed) = mesh.selected_edges.iter().copied().next() else {
-            self.state
-                .set_status("Loop Cut: select an edge on a quad ring first");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_SELECT_AN_EDGE_ON_A),
+            );
             return false;
         };
         let Ok(ring) = petunia_core::LoopRing::discover(&mesh, seed) else {
-            self.state
-                .set_status("Loop Cut: the selected edge is not on a quad ring");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_THE_SELECTED_EDGE_IS_NOT),
+            );
             return false;
         };
         self.begin_loop_cut_from_ring(ring, mesh, 1)
@@ -8426,8 +8770,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.loop_cut = None;
             return false;
         }
-        self.state
-            .set_status("Loop Cut: drag to slide, Enter confirms, Esc cancels");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_LOOP_CUT_DRAG_TO_SLIDE_ENTER_CONFIRMS),
+        );
         true
     }
 
@@ -8522,8 +8868,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Campo numérico do Slide: não altera a quantidade de cortes.
     pub fn set_loop_cut_slide(&mut self, slide: f32) -> bool {
         if !slide.is_finite() || !(-1.0..=1.0).contains(&slide) {
-            self.state
-                .set_status("Loop Cut: slide must be between -1 and 1");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_SLIDE_MUST_BE_BETWEEN_1),
+            );
             return false;
         }
         let Some(session) = self.loop_cut.as_mut() else {
@@ -8602,7 +8950,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             Err(error) => {
-                self.state.set_status(format!("Loop Cut: {error}"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_LOOP_CUT),
+                    &[("error", format!("{error}"))],
+                ));
                 false
             }
         }
@@ -8628,8 +8979,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .ring
                 .apply(&session.source, session.cuts, session.slide)
         }) else {
-            self.state
-                .set_status("Loop Cut: topology refused at commit");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_TOPOLOGY_REFUSED_AT_COMMIT),
+            );
             self.state.emit_mesh_changed();
             return false;
         };
@@ -8640,10 +8993,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.sync_selection();
         self.state.emit_mesh_changed();
-        self.state.set_status(format!(
-            "Loop cut ({}{})",
-            session.cuts,
-            if session.balanced { " balanced" } else { "" }
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_LOOP_CUT_2),
+            &[
+                ("0", format!("{}", session.cuts)),
+                (
+                    "1",
+                    format!("{}", if session.balanced { " balanced" } else { "" }),
+                ),
+            ],
         ));
         true
     }
@@ -8659,7 +9017,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.tools.active_tool = "select".to_string();
         self.state.sync_selection();
         self.state.emit_mesh_changed();
-        self.state.set_status("Loop Cut cancelled");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_LOOP_CUT_CANCELLED),
+        );
         true
     }
 
@@ -8699,7 +9060,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         } else {
             let Some(mesh) = self.state.project.active_mesh().cloned() else {
-                self.state.set_status("Slice: no active mesh");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_SLICE_NO_ACTIVE_MESH),
+                );
                 return false;
             };
             let mut session = petunia_core::CutSession::new(mesh);
@@ -8778,8 +9142,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         if self.slice_anchor.is_none() {
-            self.state
-                .set_status("Slice: clique e arraste para traçar a linha de corte");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_SLICE_CLICK_AND_DRAG_TO_DRAW_THE),
+            );
             return false;
         }
         let Some(session) = self.state.session.tools.cut_session.take() else {
@@ -8803,7 +9169,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.sync_selection();
         self.state.emit_mesh_changed();
         self.state.mark_dirty();
-        self.state.set_status("Slice applied");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_SLICE_APPLIED),
+        );
         true
     }
 
@@ -8816,7 +9185,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.slice_anchor = None;
             if self.state.session.tools.active_tool == "slice" {
                 self.state.session.tools.active_tool = "select".to_string();
-                self.state.set_status("Slice cancelled");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_SLICE_CANCELLED),
+                );
                 return true;
             }
             return false;
@@ -8829,7 +9201,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.sync_selection();
         self.state.emit_mesh_changed();
         self.state.mark_dirty();
-        self.state.set_status("Slice cancelled");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_SLICE_CANCELLED),
+        );
         true
     }
 
@@ -8891,7 +9266,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             Err(e) => {
-                self.state.set_status(format!("Texel density: {e}"));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_TEXEL_DENSITY),
+                    &[("e", format!("{e}"))],
+                ));
                 false
             }
         }
@@ -9292,7 +9672,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.active_profile_id = None;
             self.profile_selected_point = None;
             self.profile_drag_target = None;
-            self.state.set_status("Shape deleted");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_SHAPE_DELETED),
+            );
             self.state.mark_dirty();
             return true;
         }
@@ -9397,7 +9780,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     ..Default::default()
                 };
                 self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
-                self.state.set_status("Copied selected faces to clipboard");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_COPIED_SELECTED_FACES_TO_CLIPBOARD),
+                );
                 return true;
             }
 
@@ -9444,7 +9830,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     ..Default::default()
                 };
                 self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
-                self.state.set_status("Copied selected edges to clipboard");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_COPIED_SELECTED_EDGES_TO_CLIPBOARD),
+                );
                 return true;
             }
 
@@ -9485,8 +9874,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     ..Default::default()
                 };
                 self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
-                self.state
-                    .set_status("Copied selected vertices to clipboard");
+                self.state.set_status(
+                    self.state.t_id(
+                        petunia_config::text_id::STATUS_COPIED_SELECTED_VERTICES_TO_CLIPBOARD,
+                    ),
+                );
                 return true;
             }
 
@@ -9509,7 +9901,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             ..Default::default()
                         };
                         self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
-                        self.state.set_status("Copied hovered face to clipboard");
+                        self.state.set_status(self.state.t_id(
+                            petunia_config::text_id::STATUS_COPIED_HOVERED_FACE_TO_CLIPBOARD,
+                        ));
                         return true;
                     }
                 }
@@ -9525,7 +9919,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             ..Default::default()
                         };
                         self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
-                        self.state.set_status("Copied hovered edge to clipboard");
+                        self.state.set_status(self.state.t_id(
+                            petunia_config::text_id::STATUS_COPIED_HOVERED_EDGE_TO_CLIPBOARD,
+                        ));
                         return true;
                     }
                 }
@@ -9536,7 +9932,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             ..Default::default()
                         };
                         self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
-                        self.state.set_status("Copied hovered vertex to clipboard");
+                        self.state.set_status(self.state.t_id(
+                            petunia_config::text_id::STATUS_COPIED_HOVERED_VERTEX_TO_CLIPBOARD,
+                        ));
                         return true;
                     }
                 }
@@ -9549,8 +9947,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return false;
             };
             self.clipboard = Some(GeometryClipboard::Asset(Box::new(asset.clone())));
-            self.state
-                .set_status(format!("Copied '{}' to clipboard", asset.name));
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_COPIED_TO_CLIPBOARD),
+                &[("0", format!("{}", asset.name))],
+            ));
             true
         }
     }
@@ -9580,8 +9982,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.select_object(Some(new_index), false);
                 self.state.emit_mesh_changed();
                 self.state.mark_dirty();
-                self.state
-                    .set_status(format!("Pasted separate object '{new_name}'"));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_PASTED_SEPARATE_OBJECT),
+                    &[("new_name", format!("{new_name}"))],
+                ));
                 true
             }
             GeometryClipboard::Asset(asset) => {
@@ -9598,8 +10004,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.select_object(Some(new_index), false);
                 self.state.emit_mesh_changed();
                 self.state.mark_dirty();
-                self.state
-                    .set_status(format!("Pasted object '{copy_name}'"));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_PASTED_OBJECT),
+                    &[("copy_name", format!("{copy_name}"))],
+                ));
                 true
             }
         }
@@ -9687,7 +10097,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let petunia_core::HoverTarget::Edge(a, b) =
             self.pick_target_for_domain(SelectionDomain::Edge, normalized_x, normalized_y)
         else {
-            self.state.set_status("Cut: point at a visible edge");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_CUT_POINT_AT_A_VISIBLE_EDGE),
+            );
             return false;
         };
         let Some(mesh) = self.state.project.active_mesh() else {
@@ -9729,7 +10142,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let Some(start) = session.edge_start else {
                 session.edge_start = Some(point);
                 session.anchor = Some([normalized_x, normalized_y]);
-                self.state.set_status("Knife: pick the second edge point");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_KNIFE_PICK_THE_SECOND_EDGE_POINT),
+                );
                 self.state.mark_dirty();
                 return true;
             };
@@ -9755,11 +10171,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.sync_selection();
                 self.state.emit_mesh_changed();
                 self.state
-                    .set_status("Cut preview: choose another segment, Enter applies, Esc restores");
+                    .set_status(self.state.t_id(petunia_config::text_id::STATUS_CUT_PREVIEW_CHOOSE_ANOTHER_SEGMENT_ENTER_APPLIES));
                 true
             }
             Err(error) => {
-                self.state.set_status(format!("Cut: {error}"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_CUT),
+                    &[("error", format!("{error}"))],
+                ));
                 false
             }
         }
@@ -9789,7 +10208,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.state.sync_selection();
         self.state.emit_mesh_changed();
-        self.state.set_status("Cut applied");
+        self.state
+            .set_status(self.state.t_id(petunia_config::text_id::STATUS_CUT_APPLIED));
         true
     }
 
@@ -9803,7 +10223,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.tools.active_tool = "select".into();
         self.state.sync_selection();
         self.state.emit_mesh_changed();
-        self.state.set_status("Cut cancelled");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_CUT_CANCELLED),
+        );
         true
     }
 
@@ -9818,7 +10241,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.set_selection_domain(SelectionDomain::Object);
         self.sync_viewport_context();
         if !self.state.instantiate_asset_by_id(asset, None) {
-            self.state.set_status("Asset not found in project library");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_ASSET_NOT_FOUND_IN_PROJECT_LIBRARY),
+            );
             return false;
         }
         self.state.mark_dirty();
@@ -9834,8 +10260,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.state.session.tools.boolean_operand = Some(asset);
-        self.state
-            .set_status("Boolean operand set: Fuse, Cut or Intersect now applies");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_BOOLEAN_OPERAND_SET_FUSE_CUT_OR_INTERSECT),
+        );
         true
     }
 
@@ -9882,7 +10310,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.tools.boolean_operand.take().is_none() {
             return false;
         }
-        self.state.set_status("Boolean operand cleared");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_BOOLEAN_OPERAND_CLEARED),
+        );
         true
     }
 
@@ -10036,13 +10467,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             mesh.selected_edges.len()
         };
         if count == 0 {
-            self.state
-                .set_status("Right-click on an edge to select its loop");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_RIGHT_CLICK_ON_AN_EDGE_TO_SELECT),
+            );
             return false;
         }
-        self.state.set_status(format!(
-            "Selected edge {} ({count} edges)",
-            if ring { "ring" } else { "loop" }
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_SELECTED_EDGE_EDGES),
+            &[
+                ("0", format!("{}", if ring { "ring" } else { "loop" })),
+                ("count", format!("{count}")),
+            ],
         ));
         self.state.sync_selection();
         self.state.mark_dirty();
@@ -10056,8 +10494,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         edge: Option<(u32, u32)>,
     ) -> bool {
         let Some(face) = face else {
-            self.state
-                .set_status("Right-click on a face to select its loop");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_RIGHT_CLICK_ON_A_FACE_TO_SELECT),
+            );
             return false;
         };
         if self.state.selection_domain() != SelectionDomain::Face {
@@ -10068,8 +10508,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         let count = mesh.select_face_loop(face, edge, false);
-        self.state
-            .set_status(format!("Selected face loop ({count} faces)"));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_SELECTED_FACE_LOOP_FACES),
+            &[("count", format!("{count}"))],
+        ));
         self.state.sync_selection();
         self.state.mark_dirty();
         true
@@ -10213,7 +10657,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "boolean_operand" => {
                     if let Some(active) = self.state.project.active() {
                         self.state.session.tools.boolean_operand = Some(active.id);
-                        self.state.set_status("Definido como operando booleano");
+                        self.state.set_status(
+                            self.state
+                                .t_id(petunia_config::text_id::STATUS_SET_AS_BOOLEAN_OPERAND),
+                        );
                         true
                     } else {
                         false
@@ -10359,7 +10806,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.active_profile_id = None;
                     self.profile_selected_point = None;
                     self.profile_drag_target = None;
-                    self.state.set_status("Shape deleted");
+                    self.state.set_status(
+                        self.state
+                            .t_id(petunia_config::text_id::STATUS_SHAPE_DELETED),
+                    );
                     self.state.mark_dirty();
                     true
                 } else if self
@@ -10377,7 +10827,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     if self.active_profile_id == Some(pid) {
                         self.active_profile_id = None;
                     }
-                    self.state.set_status("Shape deleted");
+                    self.state.set_status(
+                        self.state
+                            .t_id(petunia_config::text_id::STATUS_SHAPE_DELETED),
+                    );
                     self.state.mark_dirty();
                     true
                 } else {
@@ -10671,8 +11124,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if count == 0 {
             return false;
         }
+        // Point move só o nó; Curve, os dois nós do segmento; Shape, a forma toda.
         let selected: std::collections::HashSet<_> = if let Some(id) = self.profile_selected_point {
             [id].into_iter().collect()
+        } else if let Some(segment) = self.profile_selected_segment
+            && segment < spline.segment_count()
+        {
+            let next = (segment + 1) % count;
+            [spline.points[segment].id, spline.points[next].id]
+                .into_iter()
+                .collect()
         } else {
             std::collections::HashSet::new()
         };
@@ -10980,7 +11441,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             GrammarTool::Parametric(kind) => {
                 if self.tool_modal.is_none()
                     && kind == ToolModalKind::PushPull
-                    && let Some(hit) = self.region_hit_at(anchor)
+                    && let Some(hit) = self
+                        .region_hit_at(anchor)
+                        .or_else(|| self.region_selected.clone())
                 {
                     return self.begin_region_gesture(anchor, &hit);
                 }
@@ -11346,8 +11809,98 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Contorno (e furos) da região em hover, em px da viewport. Durante o
     /// gesto do Shape Builder também desenha todas as faces já tocadas.
+    /// Seleção pelos domínios do DRAW (capítulo 02): Curve escolhe um
+    /// segmento do perfil ativo, Point um nó e Region uma região fechada.
+    /// Shape (Object) continua no caminho de formas inteiras. Clique no vazio
+    /// limpa a seleção do domínio.
+    fn select_draw_component(&mut self, pixel: [f32; 2]) -> bool {
+        if self.state.session.tools.active_tool == "draw_profile" {
+            return false;
+        }
+        let domain = self.state.selection_domain();
+        let found = match domain {
+            SelectionDomain::Edge => self.profile_segment_hit(pixel).map(|hit| {
+                self.profile_selected_segment = Some(hit.segment);
+                self.profile_selected_point = None;
+                self.region_selected = None;
+                petunia_config::text_id::STATUS_CURVE_SELECTED
+            }),
+            SelectionDomain::Vertex => match self.hit_test_profile(pixel[0], pixel[1]) {
+                Some(ProfileHitTarget::Anchor(id)) => {
+                    self.profile_selected_point = Some(id);
+                    self.profile_selected_segment = None;
+                    self.region_selected = None;
+                    Some(petunia_config::text_id::STATUS_PROFILE_POINT_SELECTED)
+                }
+                _ => None,
+            },
+            SelectionDomain::Face => self.region_hit_at(pixel).map(|hit| {
+                self.region_selected = Some(hit);
+                self.profile_selected_point = None;
+                self.profile_selected_segment = None;
+                petunia_config::text_id::STATUS_REGION_SELECTED
+            }),
+            SelectionDomain::Object => return false,
+        };
+        let Some(message) = found else {
+            let had = self.profile_selected_segment.take().is_some()
+                | self.region_selected.take().is_some();
+            if had {
+                self.state.mark_dirty();
+            }
+            return false;
+        };
+        self.state.set_status(self.state.t_id(message));
+        self.state.session.tools.hover = petunia_core::HoverTarget::None;
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Segmento selecionado (domínio Curve) em comandos de tela.
+    pub(crate) fn profile_selection_commands(&self) -> String {
+        let mut commands = String::new();
+        let Some(segment) = self.profile_selected_segment else {
+            return commands;
+        };
+        let Some((profile, spline)) = self.active_profile_resources() else {
+            return commands;
+        };
+        if segment >= spline.segment_count() {
+            return commands;
+        }
+        let wp = profile.workplane;
+        let [origin, right, up] =
+            [wp.origin, wp.right, wp.up].map(|v| glam::DVec3::from_array(v).as_vec3());
+        let points = (0..=24).filter_map(|k| {
+            spline
+                .evaluate_segment(segment, k as f64 / 24.0)
+                .ok()
+                .map(|p| origin + right * p[0] as f32 + up * p[1] as f32)
+        });
+        crate::projection::write_clipped_path(
+            &self.state.session.camera,
+            self.viewport_size,
+            points,
+            false,
+            &mut commands,
+        );
+        commands
+    }
+
     fn region_hover_commands(&self) -> String {
         let mut commands = String::new();
+        // A região selecionada (domínio Region) fica destacada sem hover.
+        if let Some(hit) = &self.region_selected {
+            for ring in std::iter::once(&hit.region.outer).chain(hit.region.holes.iter()) {
+                crate::projection::write_clipped_path(
+                    &self.state.session.camera,
+                    self.viewport_size,
+                    ring.iter().map(|p| hit.plane.to_world(*p)),
+                    true,
+                    &mut commands,
+                );
+            }
+        }
         if let Some(hit) = &self.region_hover {
             for ring in std::iter::once(&hit.region.outer).chain(hit.region.holes.iter()) {
                 crate::projection::write_clipped_path(
@@ -11845,7 +12398,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 seed,
                 scope,
             );
-            self.state.set_status(format!("Filled ({scope:?})"));
+            self.state.set_status(crate::tr::fill(
+                &self.state.t_id(petunia_config::text_id::STATUS_FILLED),
+                &[("scope", format!("{scope:?}"))],
+            ));
             return;
         }
         if self.paint_target_vertex {
@@ -11926,7 +12482,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .project
                     .active()
                     .map_or_else(String::new, |asset| asset.name.clone());
-                self.state.set_status(format!("Painting '{name}'"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_PAINTING),
+                    &[("name", format!("{name}"))],
+                ));
             }
             Target::Object(_) => {
                 let face = self.paint_pick(origin, direction).map(|(index, _)| index);
@@ -11953,13 +12512,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                                 }
                             }
                             mesh.sync_vert_selection_from_faces();
-                            self.state.set_status(format!("Face {face} selected"));
+                            self.state.set_status(crate::tr::fill(
+                                &self
+                                    .state
+                                    .t_id(petunia_config::text_id::STATUS_FACE_SELECTED),
+                                &[("face", format!("{face}"))],
+                            ));
                         }
                         None if !extend => {
                             mesh.deselect_all();
-                            self.state.set_status("No face under the cursor");
+                            self.state
+                                .set_status(self.state.t_id(
+                                    petunia_config::text_id::STATUS_NO_FACE_UNDER_THE_CURSOR,
+                                ));
                         }
-                        None => self.state.set_status("No face under the cursor"),
+                        None => self.state.set_status(
+                            self.state
+                                .t_id(petunia_config::text_id::STATUS_NO_FACE_UNDER_THE_CURSOR),
+                        ),
                     }
                 }
             }
@@ -11972,7 +12542,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         self.state.select_object(None, false);
                     }
                 }
-                self.state.set_status("Nothing under the cursor");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_NOTHING_UNDER_THE_CURSOR),
+                );
             }
         }
         self.state.sync_selection();
@@ -12012,6 +12585,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 normalized_x * self.viewport_size[0],
                 normalized_y * self.viewport_size[1],
             ];
+            if self.select_draw_component(pixel) {
+                return;
+            }
             if let Some(profile_id) = self.profile_hit_at(pixel) {
                 let drawing = self
                     .active_profile_resources()
@@ -12021,7 +12597,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         || self.state.session.tools.active_tool != "draw_profile")
                 {
                     self.activate_profile(profile_id);
-                    self.state.set_status("Shape selected");
+                    self.state.set_status(
+                        self.state
+                            .t_id(petunia_config::text_id::STATUS_SHAPE_SELECTED),
+                    );
                     self.state.session.tools.hover = petunia_core::HoverTarget::None;
                     self.state.sync_selection();
                     self.state.mark_dirty();
@@ -12124,14 +12703,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.active_profile_id = None;
                 self.state.select_object(Some(index), extend);
                 let name = self.state.project.assets[index].name.clone();
-                self.state.set_status(format!("Selected '{name}'"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_SELECTED),
+                    &[("name", format!("{name}"))],
+                ));
             }
             Target::Vertex(index) => {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
                     if loop_select {
                         let count = mesh.select_vertex_loop(index, extend);
-                        self.state
-                            .set_status(format!("Selected vertex loop ({count} points)"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_SELECTED_VERTEX_LOOP_POINTS),
+                            &[("count", format!("{count}"))],
+                        ));
                     } else {
                         if !extend {
                             mesh.deselect_all();
@@ -12139,7 +12725,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         if let Some(vertex) = mesh.verts.get_mut(index as usize) {
                             vertex.selected = !extend || !vertex.selected;
                         }
-                        self.state.set_status(format!("Point {index} selected"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_POINT_SELECTED),
+                            &[("index", format!("{index}"))],
+                        ));
                     }
                 }
             }
@@ -12147,8 +12738,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
                     if loop_select {
                         let count = mesh.select_edge_loop((a, b), extend);
-                        self.state
-                            .set_status(format!("Selected edge loop ({count} edges)"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_SELECTED_EDGE_LOOP_EDGES),
+                            &[("count", format!("{count}"))],
+                        ));
                     } else {
                         if !extend {
                             mesh.deselect_all();
@@ -12172,7 +12767,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                                 vertex.selected = true;
                             }
                         }
-                        self.state.set_status(format!("Edge {a}-{b} selected"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_EDGE_SELECTED),
+                            &[("a", format!("{a}")), ("b", format!("{b}"))],
+                        ));
                     }
                 }
             }
@@ -12192,8 +12792,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if let Some(mesh) = self.state.project.active_mesh_mut() {
                     if loop_select {
                         let count = mesh.select_face_loop(face, nearest_edge, extend);
-                        self.state
-                            .set_status(format!("Selected face loop ({count} faces)"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_SELECTED_FACE_LOOP_FACES),
+                            &[("count", format!("{count}"))],
+                        ));
                     } else {
                         if !extend {
                             mesh.deselect_all();
@@ -12202,7 +12806,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             current.selected = !extend || !current.selected;
                         }
                         mesh.sync_vert_selection_from_faces();
-                        self.state.set_status(format!("Face {face} selected"));
+                        self.state.set_status(crate::tr::fill(
+                            &self
+                                .state
+                                .t_id(petunia_config::text_id::STATUS_FACE_SELECTED),
+                            &[("face", format!("{face}"))],
+                        ));
                     }
                 }
             }
@@ -12230,7 +12839,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         .get_profile(profile_id)
                         .map(|p| p.name.clone())
                         .unwrap_or_else(|| "Profile".to_string());
-                    self.state.set_status(format!("Selected shape '{name}'"));
+                    self.state.set_status(crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_SELECTED_SHAPE),
+                        &[("name", format!("{name}"))],
+                    ));
                     self.state.session.tools.hover = Target::None;
                     self.state.sync_selection();
                     self.state.mark_dirty();
@@ -12248,7 +12862,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 {
                     mesh.deselect_all();
                 }
-                self.state.set_status("Nothing under the cursor");
+                self.state.set_status(
+                    self.state
+                        .t_id(petunia_config::text_id::STATUS_NOTHING_UNDER_THE_CURSOR),
+                );
             }
         }
         self.state.session.tools.hover = hit;
@@ -12344,7 +12961,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.loop_cut_hover_source = None;
             self.state.session.tools.hover = petunia_core::HoverTarget::None;
             self.state.mark_dirty();
-            self.state.set_status("Loop Cut cancelled");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_CANCELLED),
+            );
             return true;
         }
         if self.profile_volume_mode.is_some() {
@@ -12360,7 +12980,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.profile_edit_gesture = None;
             self.state.session.tools.active_tool = "select".to_string();
             self.state.mark_dirty();
-            self.state.set_status("Profile editing finished");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_PROFILE_EDITING_FINISHED),
+            );
             return true;
         }
         if self.state.primitive_session_valid() {
@@ -12386,7 +13009,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.session.edit_pivot {
             self.state.session.edit_pivot = false;
             self.state.mark_dirty();
-            self.state.set_status("Edit Pivot exited");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_EDIT_PIVOT_EXITED),
+            );
             return true;
         }
         if let Some(entry) = self.overlays.esc() {
@@ -12425,7 +13051,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.overlays.remove(OverlayId::CommandPalette);
         match id {
             CommandId::SaveProject => self.apply(UiIntent::SaveProject),
-            CommandId::OpenProject => self.state.set_status("open requested by Slint frontend"),
+            CommandId::OpenProject => self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_OPEN_REQUESTED),
+            ),
             CommandId::Undo => self.apply(UiIntent::Undo),
             CommandId::Redo => self.apply(UiIntent::Redo),
             CommandId::AddCube => {
@@ -12677,9 +13306,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     });
                 }
                 let label = kind.map_or("Ferramenta", |k| k.title());
-                self.state.set_status(format!(
-                    "{} (Modo Livre) · Mova o mouse, LMB/Enter para confirmar, RMB/Esc para cancelar",
-                    label
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR),
+                    &[("0", format!("{}", label))],
                 ));
             }
         } else if let Some(kind) = kind.filter(|kind| *kind != ToolModalKind::ScaleSelection) {
@@ -13440,9 +14071,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     TransformKind::Rotation => "Rotacionar",
                     TransformKind::Scale => "Escalar",
                 };
-                self.state.set_status(format!(
-                    "{} (Modo Livre) · Mova o mouse, LMB/Enter para confirmar, RMB/Esc para cancelar",
-                    label
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR),
+                    &[("0", format!("{}", label))],
                 ));
             }
         } else {
@@ -13454,9 +14087,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 TransformKind::Rotation => "Rotacionar",
                 TransformKind::Scale => "Escalar",
             };
-            self.state.set_status(format!(
-                "Ferramenta {} ativa · Arraste o gizmo, digite o valor ou aperte novamente para Modo Livre",
-                label
+            self.state.set_status(crate::tr::fill(
+                &self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_TOOL_ACTIVE_DRAG_THE_GIZMO_TYPE_A),
+                &[("0", format!("{}", label))],
             ));
         }
     }
@@ -13532,15 +14167,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     fn adjust_brush_size(&mut self, steps: f32) {
         let next = (self.state.session.tools.paint_radius + steps).clamp(0.01, 100.0);
         self.apply(UiIntent::SetBrushSize(next));
-        self.state.set_status(format!("Brush size: {next:.2}"));
+        self.state.set_status(crate::tr::fill(
+            &self.state.t_id(petunia_config::text_id::STATUS_BRUSH_SIZE),
+            &[("next", format!("{next:.2}"))],
+        ));
     }
 
     pub fn set_brush_hardness(&mut self, val: f32) -> bool {
         self.apply(UiIntent::SetBrushHardness(val));
         self.state.mark_dirty();
-        self.state.set_status(format!(
-            "Brush hardness: {:.0}%",
-            self.state.session.tools.brush_hardness * 100.0
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_BRUSH_HARDNESS),
+            &[(
+                "0",
+                format!("{:.0}", self.state.session.tools.brush_hardness * 100.0),
+            )],
         ));
         true
     }
@@ -13599,8 +14242,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if let Some(mesh) = self.state.project.active_mesh_mut() {
                 mesh.translate_selected(delta.to_array());
                 self.state.emit_positions_changed();
-                self.state
-                    .set_status(format!("Nudge [{dx:+.2}, {dy:+.2}, {dz:+.2}]"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_NUDGE),
+                    &[
+                        ("dx", format!("{dx:+.2}")),
+                        ("dy", format!("{dy:+.2}")),
+                        ("dz", format!("{dz:+.2}")),
+                    ],
+                ));
                 return true;
             }
         } else if let Some(mesh) = self.state.project.active_mesh_mut() {
@@ -13610,8 +14259,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 v.pos[2] += dz;
             }
             self.state.emit_positions_changed();
-            self.state
-                .set_status(format!("Nudge [{dx:+.2}, {dy:+.2}, {dz:+.2}]"));
+            self.state.set_status(crate::tr::fill(
+                &self.state.t_id(petunia_config::text_id::STATUS_NUDGE),
+                &[
+                    ("dx", format!("{dx:+.2}")),
+                    ("dy", format!("{dy:+.2}")),
+                    ("dz", format!("{dz:+.2}")),
+                ],
+            ));
             return true;
         }
         false
@@ -14561,6 +15216,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             petunia_module_model::profile_workplane_label(&self.state).to_string();
         vm.profile_workplane_locked = self.state.profile.workplane_locked;
         vm.region_hover_commands = self.region_hover_commands();
+        vm.profile_selection_commands = self.profile_selection_commands();
         vm.region_shapes_commands = self.region_shapes_commands();
         vm.keymap_capture_action = self.keymap_editor.capturing.clone().unwrap_or_default();
         vm.brush_panel = self.brush_panel_model();

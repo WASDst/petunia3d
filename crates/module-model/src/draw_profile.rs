@@ -18,6 +18,10 @@ pub enum ProfileVolumeMode {
 }
 
 /// Converte cursor NDC em coords 2D do plano do perfil (com snap opcional).
+/// Pontos por perfil: cobre traços de SVG e contornos detalhados sem
+/// permitir um perfil que trave o arranjo de regiões.
+pub const MAX_PROFILE_POINTS: usize = 4096;
+
 pub fn profile_screen_to_plane(state: &AppState, nx: f32, ny: f32) -> Option<[f32; 2]> {
     let (origin, dir) = state.session.camera.ray(nx, ny);
     let p = &state.profile;
@@ -60,8 +64,10 @@ pub fn profile_add_point(state: &mut AppState, nx: f32, ny: f32) {
             return;
         }
     }
-    if state.profile.points.len() >= 512 {
-        state.set_status("max 512 pts".to_string());
+    if state.profile.points.len() >= MAX_PROFILE_POINTS {
+        state.set_status(
+            state.t_id(petunia_config::text_id::STATUS_PROFILE_LIMIT_REACHED_4096_POINTS),
+        );
         return;
     }
     state.profile.points.push([x, y]);
@@ -90,8 +96,10 @@ pub fn profile_begin_drag_node(state: &mut AppState, nx: f32, ny: f32) -> bool {
             return true;
         }
     }
-    if state.profile.points.len() >= 512 {
-        state.set_status("max 512 pts".to_string());
+    if state.profile.points.len() >= MAX_PROFILE_POINTS {
+        state.set_status(
+            state.t_id(petunia_config::text_id::STATUS_PROFILE_LIMIT_REACHED_4096_POINTS),
+        );
         return false;
     }
     state.profile.points.push([x, y]);

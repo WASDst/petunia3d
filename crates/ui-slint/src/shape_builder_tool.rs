@@ -206,8 +206,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         delete: bool,
     ) -> bool {
         if samples.is_empty() {
-            self.state
-                .set_status("Shape Builder: pass over the regions you want to change");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_SHAPE_BUILDER_PASS_OVER_THE_REGIONS_YOU),
+            );
             return true;
         }
         let edit = if delete {
@@ -239,8 +241,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Clique sem arrasto: extrai (ou, com Ctrl, apaga) a face sob o cursor.
     pub(crate) fn shape_builder_click(&mut self, at: [f32; 2]) -> bool {
         let Some(hit) = self.shape_hit_at(at) else {
-            self.state
-                .set_status("Shape Builder: click inside a closed shape");
+            self.state.set_status(
+                self.state.t_id(
+                    petunia_config::text_id::STATUS_SHAPE_BUILDER_CLICK_INSIDE_A_CLOSED_SHAPE,
+                ),
+            );
             return true;
         };
         self.finish_shape_builder(vec![hit.point], Some(hit.plane), self.tool_press_alternate)
@@ -250,7 +255,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn cancel_shape_builder(&mut self) -> bool {
         let had = self.shape_builder.take().is_some();
         if had {
-            self.state.set_status("Shape Builder cancelled");
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_SHAPE_BUILDER_CANCELLED),
+            );
         }
         had
     }

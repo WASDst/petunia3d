@@ -23,6 +23,18 @@ pub fn lookup(key: &str) -> String {
     })
 }
 
+/// Preenche os marcadores `{nome}` de uma mensagem traduzida.
+///
+/// As mensagens de status vêm do catálogo (`TextId`) com marcadores
+/// nomeados; os valores chegam já formatados por quem chama.
+pub fn fill(template: &str, args: &[(&str, String)]) -> String {
+    let mut text = template.to_string();
+    for (key, value) in args {
+        text = text.replace(&format!("{{{key}}}"), value);
+    }
+    text
+}
+
 /// Instala `lang` (idempotente) e liga o callback `Tr.lookup` na janela.
 pub fn install(window: &PetuniaSlintShell, lang: &str) {
     let changed = CATALOG.with(|c| {

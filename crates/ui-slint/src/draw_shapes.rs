@@ -390,6 +390,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_some() {
             return false;
         }
+        // O segmento selecionado (domínio Curve) pertence à forma anterior.
+        if self.active_profile_id != Some(profile_id) {
+            self.profile_selected_segment = None;
+        }
         let Some(profile) = self.state.project.project.get_profile(profile_id) else {
             return false;
         };
@@ -446,8 +450,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Divide o segmento sem mudar a forma e deixa o novo ponto pronto para arrastar.
     pub(crate) fn insert_profile_node(&mut self, hit: SegmentHit) -> Option<uuid::Uuid> {
-        if self.active_profile_point_count() >= 512 {
-            self.state.set_status("max 512 pts");
+        if self.active_profile_point_count()
+            >= petunia_module_model::draw_profile::MAX_PROFILE_POINTS
+        {
+            self.state.set_status(
+                self.state
+                    .t_id(petunia_config::text_id::STATUS_PROFILE_LIMIT_REACHED_4096_POINTS),
+            );
             return None;
         }
         let (_, spline) = self.active_profile_resources()?;
@@ -473,7 +482,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_some() {
             self.update_profile_volume_preview();
         }
-        self.state.set_status("Point added");
+        self.state
+            .set_status(self.state.t_id(petunia_config::text_id::STATUS_POINT_ADDED));
         Some(id)
     }
 
