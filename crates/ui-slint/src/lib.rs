@@ -547,6 +547,9 @@ pub trait PetuniaViewport: Send {
     fn set_pose_override(&mut self, _pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {}
     /// Objetos com contorno de seleção (domínio Object) e o ativo.
     fn set_outlined_objects(&mut self, _selected: &[uuid::Uuid], _active: Option<uuid::Uuid>) {}
+    /// Objetos em transformação rígida neste quadro (modo objeto): o backend
+    /// pode reaproveitar a geometria triangulada aplicando a matriz.
+    fn set_rigid_previews(&mut self, _previews: &[(uuid::Uuid, glam::Mat4)]) {}
     fn render_frame(
         &mut self,
         _project: &Project,
@@ -618,6 +621,10 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
         (**self).set_outlined_objects(selected, active);
+    }
+
+    fn set_rigid_previews(&mut self, previews: &[(uuid::Uuid, glam::Mat4)]) {
+        (**self).set_rigid_previews(previews);
     }
 
     fn render_frame(
@@ -2048,6 +2055,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.viewport.set_pose_override(pose);
         let (outlined, active) = self.outlined_objects();
         self.viewport.set_outlined_objects(&outlined, active);
+        self.viewport
+            .set_rigid_previews(self.state.rigid_preview_transforms());
         self.viewport.render_frame(
             &self.state.project,
             &self.state.project.refs,
@@ -3682,7 +3691,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let evaluated = asset.evaluated_mesh();
         self.state.checkpoint("apply modifier");
         if let Some(asset) = self.state.project.assets.get_mut(asset_index) {
-            asset.mesh = evaluated;
+            asset.mesh = evaluated.into();
             asset.modifiers.retain(|item| item.id != id);
         }
         self.state.emit_mesh_changed();
@@ -4975,7 +4984,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Ok(mesh) => {
                 if let Some(id) = self.profile_preview_asset_id {
                     if let Some(asset) = self.state.project.assets.iter_mut().find(|a| a.id == id) {
-                        asset.mesh = mesh;
+                        asset.mesh = mesh.into();
                     } else {
                         self.state.project.add("Profile Preview", mesh);
                         self.profile_preview_asset_id =
@@ -8081,7 +8090,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             [(0.3 / aspect).max(0.01), 0.3]
         };
         let ok = self.mutate_paint_stack("import decal", |stack| {
-            let image = petunia_project::Canvas { w, h, pixels: rgba };
+            let image = petunia_project::Canvas {
+                w,
+                h,
+                pixels: rgba.into(),
+            };
             let decal =
                 petunia_project::paint_layers::DecalLayer::new(image, [0.5, 0.5], scale_uv, 0.0);
             stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(

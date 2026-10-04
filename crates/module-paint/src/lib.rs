@@ -2476,7 +2476,7 @@ mod tests {
         let mut state = AppState::new("en");
         let active = state.project.active;
         let asset = state.project.assets.get_mut(active).unwrap();
-        asset.mesh = petunia_mesh::Mesh::cube(2.0);
+        asset.mesh = petunia_mesh::Mesh::cube(2.0).into();
         asset.texture = Some(Canvas::new(64, 64, [0, 0, 0, 255]));
 
         // Cubo tem faces em x = +1.0 e x = -1.0 (centros em (±1, 0, 0)).
@@ -2608,7 +2608,7 @@ mod tests {
     fn test_paint_vertex_color_3d() {
         let mut state = AppState::new("en");
         let active = state.project.active;
-        state.project.assets[active].mesh = petunia_mesh::Mesh::cube(2.0);
+        state.project.assets[active].mesh = petunia_mesh::Mesh::cube(2.0).into();
         let hit = glam::Vec3::new(1.0, 1.0, 1.0);
         let count = PaintModule::paint_vertex_color_3d(&mut state, hit, 1.5, 1.0, [1.0, 0.0, 0.0]);
         assert!(count > 0);

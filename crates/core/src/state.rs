@@ -1892,7 +1892,7 @@ impl AppState {
             v.pos[1] += cursor_offset[1];
             v.pos[2] += cursor_offset[2];
         }
-        asset.mesh = mesh;
+        asset.mesh = mesh.into();
         asset.parametric = Some(descriptor);
         if let Some(session) = self.session.primitive_session.as_mut() {
             session.descriptor = descriptor;
@@ -1978,7 +1978,7 @@ impl AppState {
         let Some(asset) = self.project.active_mut() else {
             return false;
         };
-        asset.mesh = mesh;
+        asset.mesh = mesh.into();
         asset.parametric = Some(descriptor);
         self.session.last_primitive = Some(descriptor);
         self.emit_mesh_changed();
@@ -2296,6 +2296,17 @@ impl AppState {
             return;
         }
         self.project.project.bump_changes(changes);
+        // Objetos com modifiers: a malha avaliada fica em cache para que
+        // render, picking e hover a emprestem sem reavaliar nem clonar.
+        if changes
+            .intersects(ProjectChanges::GEOMETRY | ProjectChanges::UVS | ProjectChanges::SELECTION)
+        {
+            for asset in &mut self.project.project.assets {
+                if asset.has_enabled_modifiers() {
+                    asset.evaluated_mesh_cached();
+                }
+            }
+        }
         self.notify_project_changed(changes);
     }
 
@@ -3376,7 +3387,7 @@ impl AppState {
             .and_then(|transfer| transfer.material.clone())
             .map(|m| self.project.project.add_material(m));
         if let Some(asset) = self.project.assets.get_mut(active_index) {
-            asset.mesh = result;
+            asset.mesh = result.into();
             asset.parametric = None;
             if let Some(material_id) = material_id {
                 asset.material_id = Some(material_id);

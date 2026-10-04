@@ -517,6 +517,11 @@ pub struct Renderer {
     /// Geometria triangulada por objeto, reaproveitada enquanto a chave de
     /// desenho do objeto não muda.
     asset_geometry: HashMap<uuid::Uuid, AssetGeometry>,
+    /// Objetos em transformação rígida (modo objeto): matriz original→atual.
+    rigid_previews: Vec<(uuid::Uuid, glam::Mat4)>,
+    /// Geometria capturada no início da transformação rígida e a inversa da
+    /// matriz daquele instante; os quadros seguintes só a transformam.
+    rigid_base: HashMap<uuid::Uuid, (AssetGeometry, glam::Mat4)>,
     /// Objetos reaproveitados do cache (métrica de diagnóstico).
     pub geometry_reuses: u64,
     selection_tri_pipeline: wgpu::RenderPipeline,
@@ -1635,6 +1640,8 @@ impl Renderer {
             outline_pipeline,
             selection_dirty: false,
             asset_geometry: HashMap::new(),
+            rigid_previews: Vec::new(),
+            rigid_base: HashMap::new(),
             geometry_reuses: 0,
             selection_tri_pipeline,
             selection_line_pipeline,
@@ -1719,6 +1726,11 @@ impl Renderer {
     }
 
     /// Objetos com contorno de seleção (domínio Object); o ativo é mais claro.
+    /// Objetos em transformação rígida neste quadro (modo objeto).
+    pub fn set_rigid_previews(&mut self, previews: &[(uuid::Uuid, glam::Mat4)]) {
+        self.rigid_previews = previews.to_vec();
+    }
+
     pub fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
         if self.outlined_objects != selected {
             self.outlined_objects = selected.to_vec();
@@ -2090,20 +2102,45 @@ impl Renderer {
             edge_mode: self.edge_mode,
             camera_eye: camera.eye(),
         };
+        let rigid_previews = std::mem::take(&mut self.rigid_previews);
+        self.rigid_base
+            .retain(|id, _| rigid_previews.iter().any(|(rid, _)| rid == id));
         for obj in &scene.assets {
             let smooth = scene.is_smooth_shaded(obj.id);
             if !obj.visible {
                 continue;
             }
             let range_start = mv.len() as u32;
-            let mesh = mesh_to_draw(pose.as_deref(), obj);
-            let key = asset_draw_key(scene, obj, &mesh, smooth, &geometry_params);
-            let geometry = match previous.remove(&obj.id) {
-                Some(cached) if cached.key == key => {
-                    self.geometry_reuses += 1;
-                    cached
+            let rigid = rigid_previews
+                .iter()
+                .find(|(id, _)| *id == obj.id)
+                .map(|(_, m)| *m)
+                .filter(|_| pose.is_none());
+            let geometry = if let Some(matrix) = rigid {
+                // Só se move: a geometria capturada é transformada pela matriz
+                // relativa, sem triangular nem classificar arestas de novo.
+                self.geometry_reuses += 1;
+                match self.rigid_base.get(&obj.id) {
+                    Some((base, inverse)) => transform_geometry(base, matrix * *inverse),
+                    None => {
+                        let mesh = mesh_to_draw(pose.as_deref(), obj);
+                        let geometry =
+                            build_asset_geometry(scene, obj, &mesh, smooth, 0, &geometry_params);
+                        self.rigid_base
+                            .insert(obj.id, (geometry.clone(), matrix.inverse()));
+                        geometry
+                    }
                 }
-                _ => build_asset_geometry(scene, obj, &mesh, smooth, key, &geometry_params),
+            } else {
+                let mesh = mesh_to_draw(pose.as_deref(), obj);
+                let key = asset_draw_key(scene, obj, &mesh, smooth, &geometry_params);
+                match previous.remove(&obj.id) {
+                    Some(cached) if cached.key == key => {
+                        self.geometry_reuses += 1;
+                        cached
+                    }
+                    _ => build_asset_geometry(scene, obj, &mesh, smooth, key, &geometry_params),
+                }
             };
             mv.extend_from_slice(&geometry.tris);
             lv.extend_from_slice(&geometry.lines);
@@ -2866,6 +2903,7 @@ struct GeometryParams {
 }
 
 /// Vértices de face e de aresta de um objeto, prontos para concatenar.
+#[derive(Clone)]
 struct AssetGeometry {
     key: u64,
     tris: Vec<MeshVertex>,
@@ -2949,6 +2987,35 @@ fn asset_draw_key(
         }
     }
     h
+}
+
+/// Geometria capturada levada por uma transformação rígida (posições,
+/// normais pela inversa-transposta e extremos das arestas).
+fn transform_geometry(base: &AssetGeometry, matrix: glam::Mat4) -> AssetGeometry {
+    let normal_matrix = glam::Mat3::from_mat4(matrix).inverse().transpose();
+    AssetGeometry {
+        key: 0,
+        tris: base
+            .tris
+            .iter()
+            .map(|v| MeshVertex {
+                pos: matrix.transform_point3(glam::Vec3::from(v.pos)).to_array(),
+                normal: (normal_matrix * glam::Vec3::from(v.normal))
+                    .normalize_or_zero()
+                    .to_array(),
+                ..*v
+            })
+            .collect(),
+        lines: base
+            .lines
+            .iter()
+            .map(|v| LineVertex {
+                pos: matrix.transform_point3(glam::Vec3::from(v.pos)).to_array(),
+                ..*v
+            })
+            .collect(),
+        widths: base.widths.clone(),
+    }
 }
 
 /// Triangula e extrai as arestas de um objeto (caminho lento do cache).

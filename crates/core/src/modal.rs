@@ -126,6 +126,11 @@ struct PreviewCache {
     affected: Option<Vec<u32>>,
     extrude: Option<ExtrudePreview>,
     linear: LinearPreview,
+    /// Modo objeto: matriz rígida (original → atual) de cada objeto em
+    /// movimento, para o renderer reaproveitar a geometria triangulada.
+    rigid: Vec<(uuid::Uuid, glam::Mat4)>,
+    /// Pivô por objeto (Individual Origins) dos outros objetos selecionados.
+    other_pivots: Option<Vec<(uuid::Uuid, Vec3)>>,
 }
 
 /// Extrude: a topologia com a tampa em distância zero, construída uma vez.
@@ -523,7 +528,13 @@ impl AppState {
         let object_mode = self.edit_mode() == EditMode::Object;
         let snap_enabled = self.snap_enabled;
         let modal = self.session.tools.modal.as_mut()?;
-        if edit_pivot || object_mode {
+        if edit_pivot
+            || (object_mode
+                && !matches!(
+                    modal.kind,
+                    ModalKind::Move | ModalKind::Rotate | ModalKind::Scale
+                ))
+        {
             return None;
         }
         let direction = Self::modal_direction(modal);
@@ -615,7 +626,13 @@ impl AppState {
                 modal.value = value;
                 modal.components = components;
                 modal.changed = changed;
-                if modal.kind == ModalKind::PushPull {
+                if object_mode {
+                    drop(transform);
+                    if !Self::fast_object_transform(&mut self.project.project, modal) {
+                        return None;
+                    }
+                    ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+                } else if modal.kind == ModalKind::PushPull {
                     ProjectChanges::GEOMETRY
                 } else {
                     ProjectChanges::POSITIONS
@@ -684,7 +701,10 @@ impl AppState {
     /// Depois de uma prévia exata: prepara os caches do caminho incremental.
     fn record_modal_preview(&mut self, value: f32) {
         let proportional = self.proportional_editing;
-        let published = self.project.active().map(|asset| &asset.mesh);
+        if let Some(modal) = self.session.tools.modal.as_mut() {
+            modal.preview.rigid.clear();
+        }
+        let published = self.project.active().map(|asset| &*asset.mesh);
         let Some(modal) = self.session.tools.modal.as_mut() else {
             return;
         };
@@ -787,6 +807,142 @@ impl AppState {
                 linear.samples.push((value, published.clone()));
             }
         }
+    }
+
+    /// Matriz rígida da transformação de objeto atual em torno de `pivot`.
+    fn object_matrix(modal: &ModalOp, pivot: Vec3) -> glam::Mat4 {
+        let c = modal.components;
+        let around = |m: glam::Mat4| {
+            glam::Mat4::from_translation(pivot) * m * glam::Mat4::from_translation(-pivot)
+        };
+        match modal.kind {
+            ModalKind::Move => glam::Mat4::from_translation(c),
+            ModalKind::Rotate => around(glam::Mat4::from_quat(Quat::from_euler(
+                EulerRot::XYZ,
+                c.x.to_radians(),
+                c.y.to_radians(),
+                c.z.to_radians(),
+            ))),
+            ModalKind::Scale => around(glam::Mat4::from_scale(c)),
+            _ => glam::Mat4::IDENTITY,
+        }
+    }
+
+    /// Modo objeto, depois da prévia exata: os outros objetos selecionados e
+    /// os metadados (origem, posição, rotação, escala) seguem a mesma
+    /// transformação sem clonar malhas. `false` = usar a prévia exata.
+    fn fast_object_transform(project: &mut Project, modal: &mut ModalOp) -> bool {
+        let active_index = project.active;
+        let Some(active_id) = project.assets.get(active_index).map(|a| a.id) else {
+            return false;
+        };
+        let pivot_of_active = modal
+            .pivots
+            .as_ref()
+            .and_then(|p| p.first().copied())
+            .unwrap_or(modal.pivot);
+        let others: Vec<uuid::Uuid> = modal
+            .selection
+            .assets
+            .iter()
+            .copied()
+            .filter(|id| *id != active_id)
+            .collect();
+        if modal.individual_origins && modal.preview.other_pivots.is_none() {
+            let pivots = others
+                .iter()
+                .filter_map(|id| {
+                    let original = modal.original.assets.iter().find(|a| a.id == *id)?;
+                    let n = original.mesh.verts.len().max(1) as f32;
+                    Some((
+                        *id,
+                        original.mesh.verts.iter().map(|v| v.vec()).sum::<Vec3>() / n,
+                    ))
+                })
+                .collect();
+            modal.preview.other_pivots = Some(pivots);
+        }
+        let mut rigid = vec![(active_id, Self::object_matrix(modal, pivot_of_active))];
+        for id in &others {
+            let Some(original) = modal.original.assets.iter().find(|a| a.id == *id) else {
+                continue;
+            };
+            if original.locked {
+                continue;
+            }
+            let pivot = if modal.individual_origins {
+                modal
+                    .preview
+                    .other_pivots
+                    .as_ref()
+                    .and_then(|p| p.iter().find(|(pid, _)| pid == id).map(|(_, p)| *p))
+                    .unwrap_or(modal.pivot)
+            } else {
+                modal.pivot
+            };
+            let matrix = Self::object_matrix(modal, pivot);
+            let Some(current) = project.assets.iter_mut().find(|a| a.id == *id) else {
+                continue;
+            };
+            if current.mesh.verts.len() != original.mesh.verts.len() {
+                return false;
+            }
+            let mesh = &mut *current.mesh;
+            for (vertex, source) in mesh.verts.iter_mut().zip(&original.mesh.verts) {
+                let next = matrix.transform_point3(source.vec());
+                if !next.is_finite() {
+                    return false;
+                }
+                vertex.pos = next.to_array();
+            }
+            Self::apply_object_metadata(current, original, modal, matrix);
+            rigid.push((*id, matrix));
+        }
+        if let (Some(current), Some(original)) = (
+            project.assets.get_mut(active_index),
+            modal.original.assets.iter().find(|a| a.id == active_id),
+        ) {
+            Self::apply_object_metadata(current, original, modal, rigid[0].1);
+        }
+        modal.preview.rigid = rigid;
+        true
+    }
+
+    /// Origem, posição, rotação e escala de um objeto transformado, como na
+    /// prévia exata.
+    fn apply_object_metadata(
+        current: &mut petunia_project::Asset,
+        original: &petunia_project::Asset,
+        modal: &ModalOp,
+        matrix: glam::Mat4,
+    ) {
+        let c = modal.components;
+        current.origin = original
+            .origin
+            .map(|origin| matrix.transform_point3(Vec3::from(origin)).to_array());
+        match modal.kind {
+            ModalKind::Move => {
+                current.position = (Vec3::from(original.position) + c).to_array();
+            }
+            ModalKind::Rotate => {
+                current.rotation = (Vec3::from(original.rotation) + c).to_array();
+            }
+            ModalKind::Scale => {
+                current.scale = (Vec3::from(original.scale) * c).to_array();
+            }
+            _ => {}
+        }
+    }
+
+    /// Matrizes rígidas (original → prévia) dos objetos em transformação no
+    /// modo objeto. Vazio fora desse caso; o renderer as usa para não
+    /// triangular de novo um objeto que só se move.
+    pub fn rigid_preview_transforms(&self) -> &[(uuid::Uuid, glam::Mat4)] {
+        self.session
+            .tools
+            .modal
+            .as_ref()
+            .map_or(&[], |modal| modal.preview.rigid.as_slice())
     }
 
     /// A prévia exata, usada no primeiro evento e quando a topologia muda.
@@ -1183,7 +1339,7 @@ impl AppState {
             .any(|(_, _, is_changed, _, _, _, _)| *is_changed);
 
         let active = self.project.active_mut().ok_or(ModalError::NoActiveMesh)?;
-        active.mesh = mesh;
+        active.mesh = mesh.into();
         if is_edit_pivot && modal_kind == ModalKind::Move {
             active.origin = Some((modal_pivot + components).to_array());
             changed = true;

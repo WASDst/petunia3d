@@ -634,7 +634,7 @@ fn decode_texture_image(
     Ok(crate::Canvas {
         w,
         h,
-        pixels: rgba.into_raw(),
+        pixels: rgba.into_raw().into(),
     })
 }
 

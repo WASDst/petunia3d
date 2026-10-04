@@ -276,6 +276,10 @@ impl PetuniaViewport for WgpuViewport {
         self.renderer.set_outlined_objects(selected, active);
     }
 
+    fn set_rigid_previews(&mut self, previews: &[(uuid::Uuid, glam::Mat4)]) {
+        self.renderer.set_rigid_previews(previews);
+    }
+
     fn update(&mut self, _dt_seconds: f32) {}
 
     fn set_workspace(&mut self, workspace: Workspace) {
@@ -750,7 +754,7 @@ mod tests {
             .unwrap();
         let base = viewport.renderer.mesh_rebuilds();
 
-        let mut moved = project.assets[0].mesh.clone();
+        let mut moved = project.assets[0].mesh.to_owned_value();
         for v in &mut moved.verts {
             v.pos[0] += 1.0;
         }

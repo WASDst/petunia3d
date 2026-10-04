@@ -298,7 +298,7 @@ fn rasterize_svg_inner(svg: &str, max_px: u32) -> Result<Canvas, SvgError> {
     Ok(Canvas {
         w: out_w,
         h: out_h,
-        pixels: pixmap.take_demultiplied(),
+        pixels: pixmap.take_demultiplied().into(),
     })
 }
 

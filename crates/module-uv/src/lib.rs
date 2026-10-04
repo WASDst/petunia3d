@@ -432,7 +432,7 @@ mod tests {
     fn test_uv_pinning_in_transforms() {
         let mut state = AppState::new("en");
         let active = state.project.active;
-        state.project.assets[active].mesh = petunia_mesh::Mesh::cube(2.0);
+        state.project.assets[active].mesh = petunia_mesh::Mesh::cube(2.0).into();
         UvModule::project_cube(&mut state);
 
         let uv0_orig = state.project.active_mesh().unwrap().faces[0].uv[0];

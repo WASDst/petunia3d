@@ -443,7 +443,12 @@ impl PaintModule {
             .as_ref()
             .is_none_or(|b| b.layer != layer_id || (b.w, b.h) != (cv.w, cv.h));
         if stale {
-            *buf_slot = Some(StrokeBuffer::new(layer_id, cv.w, cv.h, cv.pixels.clone()));
+            *buf_slot = Some(StrokeBuffer::new(
+                layer_id,
+                cv.w,
+                cv.h,
+                cv.pixels.to_owned_value(),
+            ));
         }
         let buf = buf_slot.as_mut()?;
         let tiles_x = cv.w.div_ceil(TILE_SIZE).max(1);
