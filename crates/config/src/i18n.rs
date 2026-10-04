@@ -594,6 +594,12 @@ pub mod text_id {
     pub const PRIMS_TIP_BODY_LENGTH: TextId = TextId::new("prims.tip_body_length");
 
     /// Todos os ids do catálogo (cobertura de tradução).
+    pub const SNAP_KIND_FACE_CENTER: TextId = TextId::new("snap_kind.face_center");
+    pub const SNAP_KIND_INTERSECTION: TextId = TextId::new("snap_kind.intersection");
+    pub const SNAP_KIND_PARALLEL: TextId = TextId::new("snap_kind.parallel");
+    pub const SNAP_KIND_PERPENDICULAR: TextId = TextId::new("snap_kind.perpendicular");
+    pub const SNAP_KIND_ANGLE: TextId = TextId::new("snap_kind.angle");
+
     pub const ALL: &[TextId] = &[
         UI_OUTLINER,
         UI_PROPERTIES,
@@ -981,6 +987,11 @@ pub mod text_id {
         PIVOT_GEOMETRY_TO_ORIGIN,
         PIVOT_EDIT_PIVOT,
         PIVOT_EDIT_PIVOT_HINT,
+        SNAP_KIND_FACE_CENTER,
+        SNAP_KIND_INTERSECTION,
+        SNAP_KIND_PARALLEL,
+        SNAP_KIND_PERPENDICULAR,
+        SNAP_KIND_ANGLE,
     ];
 }
 

@@ -489,6 +489,8 @@ pub mod projection;
 pub use projection::*;
 
 pub mod callbacks;
+mod perf;
+mod refresh;
 pub(crate) use callbacks::*;
 
 /// Contrato do backend de viewport.
@@ -758,6 +760,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     previous_tool: String,
     /// Cena de consultas da viewport (picking/oclusão), por geometria.
     scene_query_cache: scene_cache::SceneCache,
+    /// Geometria de snap (todos os objetos visíveis), por gesto ou revisão.
+    snap_accel_cache: std::cell::RefCell<Option<(u64, std::sync::Arc<petunia_core::SnapAccel>)>>,
     /// Edição de atalhos (perfis do usuário, captura de tecla).
     pub keymap_editor: keymap_edit::KeymapEditor,
     pub profile_preview_asset_id: Option<uuid::Uuid>,
@@ -868,6 +872,9 @@ pub struct ContextMenuState {
 
 /// Id reservado que representa um divisor entre grupos de itens de menu.
 pub const MENU_SEPARATOR: &str = "-";
+
+/// Passo das guias angulares ao desenhar perfis no DRAW (graus).
+const DRAW_ANGLE_STEP_DEGREES: f32 = 15.0;
 
 /// Menus da barra superior do shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1101,6 +1108,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             profile_last_anchor_click: None,
             previous_tool: "select".to_string(),
             scene_query_cache: std::cell::RefCell::new(None),
+            snap_accel_cache: std::cell::RefCell::new(None),
             keymap_editor: keymap_edit::KeymapEditor::default(),
             profile_preview_asset_id: None,
             profile_edit_gesture: None,
@@ -1891,6 +1899,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn render_viewport(&mut self) -> Option<slint::Image> {
+        puffin::profile_function!();
         let render_state = self.viewport_render_state();
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
@@ -2697,6 +2706,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// também não pode ser destacado: o hover valida profundidade contra a
     /// face frontal antes de aceitar o alvo.
     pub fn hover_component(&mut self, normalized_x: f32, normalized_y: f32) -> bool {
+        puffin::profile_function!();
         if normalized_x.is_finite() && normalized_y.is_finite() {
             self.pointer_position = [
                 normalized_x * self.viewport_size[0],
@@ -2713,6 +2723,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 normalized_x * self.viewport_size[0],
                 normalized_y * self.viewport_size[1],
             ];
+            let snap_before = self.profile_hover_snap;
+            let region_before = self.region_hover.clone();
             self.update_profile_preselection(normalized_x, normalized_y);
             // Com um perfil aberto em desenho, o clique adiciona pontos: sem
             // destaque de região para não sugerir outra ação.
@@ -2727,7 +2739,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     normalized_y * self.viewport_size[1],
                 ])
             };
-            return true;
+            // A linha elástica do perfil aberto segue o cursor; fora disso só
+            // redesenha quando a pré-seleção ou a região sob o cursor mudam.
+            return drawing
+                || snap_before != self.profile_hover_snap
+                || region_before != self.region_hover;
         }
         if self.state.session.tools.active_tool == "poly_pen" {
             let pixel = [
@@ -3708,7 +3724,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             };
             let mut mask = petunia_core::SnapMask::for_target(settings.target);
             mask.grid = true;
-            if let Some(snapped) = self.screen_snap(cursor, mask, anchor, Some(grid)) {
+            // Guias paralela/perpendicular ao último segmento e ângulos de 15°
+            // a partir do último ponto (inferência do desenho, capítulo 46).
+            let reference = self.active_profile_resources().and_then(|(_, spline)| {
+                let [.., before, last] = spline.points.as_slice() else {
+                    return None;
+                };
+                let direction = to_world(last.position) - to_world(before.position);
+                (direction.length_squared() > 1.0e-10).then_some(direction)
+            });
+            if let Some(snapped) = self.screen_snap_guided(
+                cursor,
+                mask,
+                anchor,
+                Some(grid),
+                reference,
+                Some(DRAW_ANGLE_STEP_DEGREES),
+            ) {
                 hit = snapped.point;
                 snap_hit = Some(snapped);
             }
@@ -4856,16 +4888,34 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         let through = self.state.session.show_xray
             || self.state.session.shading == petunia_core::Shading::Wireframe;
-        petunia_core::picking::pick_mesh_filtered(
-            &asset.mesh,
-            camera,
-            glam::Vec2::new(width, height),
-            glam::Vec2::from_array(ndc),
-            mode,
-            through,
-            |point| scene.point_visible(camera, point),
-        )
-        .map_or(Target::None, |hit| match hit.component {
+        let viewport = glam::Vec2::new(width, height);
+        let cursor = glam::Vec2::from_array(ndc);
+        // A cena em cache tem a BVH da malha avaliada: com modifiers os
+        // índices de face não batem com a malha editável e o picking volta
+        // ao caminho que triangula a própria malha.
+        let hit = if asset.has_enabled_modifiers() {
+            petunia_core::picking::pick_mesh_filtered(
+                &asset.mesh,
+                camera,
+                viewport,
+                cursor,
+                mode,
+                through,
+                |point| scene.point_visible(camera, point),
+            )
+        } else {
+            petunia_core::picking::pick_mesh_in_scene(
+                &asset.mesh,
+                self.state.project.project.active,
+                &scene,
+                camera,
+                viewport,
+                cursor,
+                mode,
+                through,
+            )
+        };
+        hit.map_or(Target::None, |hit| match hit.component {
             petunia_core::picking::PickComponent::Vertex(i) => Target::Vertex(i as u32),
             petunia_core::picking::PickComponent::Edge(a, b) => Target::Edge(a, b),
             petunia_core::picking::PickComponent::Face(i) => Target::Face(i),
@@ -5165,26 +5215,99 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         anchor: Option<petunia_core::SnapAnchor>,
         grid: Option<petunia_core::SnapGrid>,
     ) -> Option<petunia_core::ScreenSnapHit> {
+        self.screen_snap_guided(cursor, mask, anchor, grid, None, None)
+    }
+
+    /// Passada de snap com guias extras a partir da âncora: paralela e
+    /// perpendicular a `reference` e ângulos em passos de `angle_step` graus.
+    ///
+    /// Todos os objetos visíveis são alvos (snap entre objetos). Durante uma
+    /// operação, a malha ativa entra pela origem congelada sem os vértices
+    /// que se movem.
+    fn screen_snap_guided(
+        &self,
+        cursor: glam::Vec2,
+        mask: petunia_core::SnapMask,
+        anchor: Option<petunia_core::SnapAnchor>,
+        grid: Option<petunia_core::SnapGrid>,
+        reference: Option<glam::Vec3>,
+        angle_step: Option<f32>,
+    ) -> Option<petunia_core::ScreenSnapHit> {
+        let accel = self.snap_accel();
+        let session = &self.state.session;
+        petunia_core::snap_screen_with(
+            &petunia_core::ScreenSnapQuery {
+                camera: &session.camera,
+                viewport_pixels: glam::Vec2::from_array(self.viewport_size),
+                cursor_pixels: cursor,
+                mesh: None,
+                moving: &[],
+                anchor,
+                grid,
+                radius_pixels: session.snap_settings.radius_pixels,
+                mask,
+                xray: session.show_xray || session.shading == petunia_core::Shading::Wireframe,
+                reference,
+                angle_step_degrees: angle_step,
+            },
+            &accel,
+        )
+    }
+
+    /// Geometria de snap em cache: por gesto durante uma operação (a origem
+    /// congelada não muda) e por revisão de geometria fora dela.
+    fn snap_accel(&self) -> std::sync::Arc<petunia_core::SnapAccel> {
+        use std::hash::{Hash, Hasher};
         let modal = self.state.session.tools.modal.as_ref();
+        let project = &self.state.project.project;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        match modal {
+            Some(modal) => {
+                (1u8, modal.id(), project.active, project.assets.len()).hash(&mut hasher)
+            }
+            None => (2u8, self.scene_geometry_key(), project.active).hash(&mut hasher),
+        }
+        let key = hasher.finish();
+        if let Some((cached, accel)) = self.snap_accel_cache.borrow().as_ref()
+            && *cached == key
+        {
+            return std::sync::Arc::clone(accel);
+        }
+        puffin::profile_scope!("snap_accel_rebuild");
         let moving = modal
             .map(|modal| modal.moving_vertices())
             .unwrap_or_default();
-        let mesh = modal
-            .map(|modal| modal.source_mesh())
-            .or_else(|| self.state.project.active_mesh());
-        let session = &self.state.session;
-        petunia_core::snap_screen(&petunia_core::ScreenSnapQuery {
-            camera: &session.camera,
-            viewport_pixels: glam::Vec2::from_array(self.viewport_size),
-            cursor_pixels: cursor,
-            mesh,
-            moving: &moving,
-            anchor,
-            grid,
-            radius_pixels: session.snap_settings.radius_pixels,
-            mask,
-            xray: session.show_xray || session.shading == petunia_core::Shading::Wireframe,
-        })
+        let meshes: Vec<(usize, std::borrow::Cow<'_, petunia_core::Mesh>)> = project
+            .assets
+            .iter()
+            .enumerate()
+            .filter(|(_, asset)| asset.visible)
+            .map(|(index, asset)| {
+                let mesh = match modal {
+                    Some(modal) if index == project.active => {
+                        std::borrow::Cow::Borrowed(modal.source_mesh())
+                    }
+                    _ => asset.evaluated_mesh_ref(),
+                };
+                (index, mesh)
+            })
+            .collect();
+        let sources: Vec<petunia_core::SnapSource<'_>> = meshes
+            .iter()
+            .map(|(index, mesh)| petunia_core::SnapSource {
+                mesh,
+                moving: if *index == project.active {
+                    &moving
+                } else {
+                    &[]
+                },
+            })
+            .collect();
+        let accel = std::sync::Arc::new(crate::perf::measure("snap_accel_rebuild", || {
+            petunia_core::SnapAccel::build(&sources)
+        }));
+        *self.snap_accel_cache.borrow_mut() = Some((key, std::sync::Arc::clone(&accel)));
+        accel
     }
 
     /// Atualiza a transformação a partir do deslocamento absoluto do ponteiro.
@@ -10250,6 +10373,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Eventos do botão principal na viewport: 0 = pressionar, 1 = mover,
     /// 2 = soltar. Coordenadas em px lógicos da viewport.
     pub fn tool_pointer(&mut self, phase: i32, x: f32, y: f32, shift: bool, ctrl: bool) -> bool {
+        puffin::profile_function!();
         if !x.is_finite() || !y.is_finite() {
             return false;
         }
@@ -10462,10 +10586,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Some((delta, scalar)) = self.profile_transform_delta(source, current, snap) else {
             return false;
         };
-        let Some(mut gesture) = self.profile_transform_gesture.clone() else {
+        // Sem clonar o gesto (ele carrega o projeto de antes) nem restaurar o
+        // projeto inteiro por evento: só o perfil e o spline mudam no gesto.
+        let Some(gesture) = self.profile_transform_gesture.as_ref() else {
             return false;
         };
-        gesture.components = match kind {
+        let components = match kind {
             TransformKind::Position => glam::Vec3::new(delta.x, delta.y, 0.0),
             TransformKind::Rotation => glam::Vec3::new(scalar, 0.0, 0.0),
             TransformKind::Scale => glam::Vec3::new(delta.x, delta.y, 1.0),
@@ -10559,19 +10685,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .map_or(gesture.profile.revision, |current| current.revision);
         spline.revision = spline_revision;
         profile.revision = profile_revision;
-        self.state.project.project = gesture.project_before.clone();
         if let Some(target) = self.state.project.project.get_spline_mut(spline_id) {
             *target = spline;
         }
         if let Some(target) = self.state.project.project.get_profile_mut(profile_id) {
             *target = profile;
         }
-        gesture.components = match kind {
-            TransformKind::Position => glam::Vec3::new(delta.x, delta.y, 0.0),
-            TransformKind::Rotation => glam::Vec3::new(scalar, 0.0, 0.0),
-            TransformKind::Scale => glam::Vec3::new(delta.x, delta.y, 1.0),
-        };
-        self.profile_transform_gesture = Some(gesture);
+        if let Some(gesture) = self.profile_transform_gesture.as_mut() {
+            gesture.components = components;
+        }
         self.state
             .emit_project_changed(ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL);
         true
@@ -13393,6 +13515,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn view_model(&self) -> ShellViewModel {
+        puffin::profile_function!();
         let mut vm = ShellViewModel::from_state(&self.state);
         vm.paint_target_vertex = self.paint_target_vertex;
         vm.paint_mask_selection = self.state.session.tools.paint_isolate_selection;

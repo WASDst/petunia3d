@@ -16,8 +16,11 @@ use super::state::{ReferenceImage, Shading};
 /// Fingerprint separado para geometria vs layout de referências.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SceneFingerprint {
-    /// Geometria + materiais + seleção + flags de sombreamento.
+    /// Geometria + materiais + flags de sombreamento (sem seleção).
     pub mesh: u64,
+    /// Revisão da seleção. Separada para a seleção não reconstruir a
+    /// geometria em modos que a desenham numa camada própria.
+    pub selection: u64,
     /// Conteúdo/revisão das texturas, separado dos buffers de geometria.
     pub textures: u64,
     /// Layout/transform de quads de referência (não pixels; pixels têm hash próprio).
@@ -81,7 +84,6 @@ pub fn fingerprint_scene(
     h = mix(h, project.topology_revision);
     h = mix(h, project.position_revision);
     h = mix(h, project.normal_revision);
-    h = mix(h, project.selection_revision);
     h = mix(h, project.uv_revision);
     h = mix(h, project.color_revision);
     h = mix(h, project.material_revision);
@@ -234,6 +236,7 @@ pub fn fingerprint_scene(
 
     SceneFingerprint {
         mesh: h,
+        selection: mix(0x5345_4c45_4354_0000, project.selection_revision),
         textures,
         refs_layout: r,
     }

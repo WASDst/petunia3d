@@ -1619,6 +1619,11 @@ adjusted = "Last operation adjusted"
 primitive_kept = "Primitive kept · Ctrl+Z undoes"
 
 [snap_kind]
+angle = "Angle"
+perpendicular = "Perpendicular"
+parallel = "Parallel"
+intersection = "Intersection"
+face_center = "Face center"
 point = "Point"
 midpoint = "Midpoint"
 on_edge = "On edge"

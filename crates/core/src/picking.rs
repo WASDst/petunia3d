@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+use crate::bvh::TriangleBvh;
 use crate::{Camera, SelectMode};
 use glam::{Mat4, Vec2, Vec3};
 use petunia_mesh::{Mesh, triangulate};
@@ -21,11 +22,6 @@ pub enum PickComponent {
 pub struct PickHit {
     pub component: PickComponent,
     pub position: Vec3,
-}
-
-pub(crate) struct Triangle {
-    pub(crate) face: usize,
-    pub(crate) points: [Vec3; 3],
 }
 
 /// Picks the nearest visible component within a fixed pixel tolerance.
@@ -62,6 +58,79 @@ pub fn pick_mesh_filtered(
     xray: bool,
     visible: impl Fn(Vec3) -> bool,
 ) -> Option<PickHit> {
+    let matrix = camera.view_proj();
+    let inverse = matrix.inverse();
+    if !inverse.is_finite() {
+        return None;
+    }
+    let items = triangles(mesh);
+    // A árvore só é construída se algum candidato precisar de oclusão.
+    let bvh = std::cell::OnceCell::new();
+    let occluder = |ndc: Vec2, position: Vec3| {
+        occluded(
+            bvh.get_or_init(|| TriangleBvh::build(items.clone())),
+            inverse,
+            ndc,
+            position,
+        ) || !visible(position)
+    };
+    let face = |origin: Vec3, direction: Vec3| {
+        nearest_face_linear(&items, origin, direction)
+            .map(|(face, distance)| (face, origin + direction * distance))
+    };
+    pick_components(
+        mesh,
+        camera,
+        viewport_pixels,
+        cursor_ndc,
+        mode,
+        xray,
+        face,
+        |position| visible(position),
+        occluder,
+    )
+}
+
+/// Picking contra uma cena de consultas já construída (e em cache): a face sob
+/// o cursor e a oclusão usam a BVH da cena, sem triangular a malha por evento.
+/// `asset_index` é o objeto dono de `mesh` na cena.
+#[allow(clippy::too_many_arguments)]
+pub fn pick_mesh_in_scene(
+    mesh: &Mesh,
+    asset_index: usize,
+    scene: &crate::viewport_query::ViewportSceneQuery,
+    camera: &Camera,
+    viewport_pixels: Vec2,
+    cursor_ndc: Vec2,
+    mode: SelectMode,
+    xray: bool,
+) -> Option<PickHit> {
+    let face = |_: Vec3, _: Vec3| scene.nearest_face(asset_index, camera, cursor_ndc.to_array());
+    pick_components(
+        mesh,
+        camera,
+        viewport_pixels,
+        cursor_ndc,
+        mode,
+        xray,
+        face,
+        |position| scene.point_visible(camera, position),
+        |_, position| !scene.point_visible(camera, position),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pick_components(
+    mesh: &Mesh,
+    camera: &Camera,
+    viewport_pixels: Vec2,
+    cursor_ndc: Vec2,
+    mode: SelectMode,
+    xray: bool,
+    face_under_ray: impl Fn(Vec3, Vec3) -> Option<(usize, Vec3)>,
+    face_visible: impl Fn(Vec3) -> bool,
+    occluded_at: impl Fn(Vec2, Vec3) -> bool,
+) -> Option<PickHit> {
     if !viewport_pixels.is_finite()
         || viewport_pixels.min_element() <= 0.0
         || !cursor_ndc.is_finite()
@@ -73,13 +142,11 @@ pub fn pick_mesh_filtered(
     if !inverse.is_finite() {
         return None;
     }
-    let triangles = triangles(mesh);
     if mode == SelectMode::Face {
         let (origin, direction) = ray(inverse, cursor_ndc)?;
-        return nearest_face(&triangles, origin, direction).and_then(|(face, distance)| {
-            let position = origin + direction * distance;
+        return face_under_ray(origin, direction).and_then(|(face, position)| {
             project(matrix, position)
-                .filter(|_| xray || visible(position))
+                .filter(|_| xray || face_visible(position))
                 .map(|_| PickHit {
                     component: PickComponent::Face(face),
                     position,
@@ -96,24 +163,23 @@ pub fn pick_mesh_filtered(
         if pixel_distance > tolerance {
             return;
         }
-        if !xray && (occluded(&triangles, inverse, ndc.truncate(), position) || !visible(position))
-        {
-            return;
-        }
         // Pixel distance gives predictable targeting; depth breaks overlapping ties.
-        if best.as_ref().is_none_or(|(distance, depth, _)| {
+        let better = best.as_ref().is_none_or(|(distance, depth, _)| {
             pixel_distance < *distance - 0.01
                 || ((pixel_distance - distance).abs() <= 0.01 && ndc.z < *depth)
-        }) {
-            best = Some((
-                pixel_distance,
-                ndc.z,
-                PickHit {
-                    component,
-                    position,
-                },
-            ));
+        });
+        // A oclusão (o teste caro) só roda para quem venceria.
+        if !better || (!xray && occluded_at(ndc.truncate(), position)) {
+            return;
         }
+        best = Some((
+            pixel_distance,
+            ndc.z,
+            PickHit {
+                component,
+                position,
+            },
+        ));
     };
     match mode {
         SelectMode::Vertex => {
@@ -202,45 +268,47 @@ pub(crate) fn clip_depth(matrix: Mat4, mut a: Vec3, mut b: Vec3) -> Option<(Vec3
     Some((a, b))
 }
 
-pub(crate) fn triangles(mesh: &Mesh) -> Vec<Triangle> {
+/// Triângulos da malha com o índice da face de origem.
+pub(crate) fn triangles(mesh: &Mesh) -> Vec<([Vec3; 3], u32)> {
     let mut result = Vec::new();
     for (face_index, face) in mesh.faces.iter().enumerate() {
         result.extend(
             mesh.face_triangle_corners(face_index)
                 .into_iter()
-                .map(|corners| Triangle {
-                    face: face_index,
-                    points: corners.map(|corner| mesh.verts[face.verts[corner] as usize].vec()),
+                .map(|corners| {
+                    (
+                        corners.map(|corner| mesh.verts[face.verts[corner] as usize].vec()),
+                        face_index as u32,
+                    )
                 }),
         );
     }
     result
 }
 
-pub(crate) fn nearest_face(
-    triangles: &[Triangle],
+/// Um único raio: percorrer a lista sai mais barato que construir a árvore.
+fn nearest_face_linear(
+    triangles: &[([Vec3; 3], u32)],
     origin: Vec3,
     direction: Vec3,
 ) -> Option<(usize, f32)> {
     triangles
         .iter()
-        .filter_map(|triangle| {
-            let [a, b, c] = triangle.points;
-            triangulate::ray_tri(origin, direction, a, b, c)
+        .filter_map(|([a, b, c], face)| {
+            triangulate::ray_tri(origin, direction, *a, *b, *c)
                 .filter(|distance| distance.is_finite())
-                .map(|distance| (triangle.face, distance))
+                .map(|distance| (*face as usize, distance))
         })
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 
-pub(crate) fn occluded(triangles: &[Triangle], inverse: Mat4, ndc: Vec2, position: Vec3) -> bool {
+pub(crate) fn occluded(bvh: &TriangleBvh, inverse: Mat4, ndc: Vec2, position: Vec3) -> bool {
     let Some((origin, direction)) = ray(inverse, ndc) else {
         return true;
     };
     let distance = (position - origin).dot(direction);
     let tolerance = (distance.abs() * 1e-5).max(1e-5);
-    nearest_face(triangles, origin, direction)
-        .is_some_and(|(_, face_distance)| face_distance < distance - tolerance)
+    bvh.any(origin, direction, distance - tolerance, |_| true)
 }
 
 #[cfg(test)]

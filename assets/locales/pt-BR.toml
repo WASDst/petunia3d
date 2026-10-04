@@ -1621,6 +1621,11 @@ adjusted = "Última operação ajustada"
 primitive_kept = "Primitiva mantida · Ctrl+Z desfaz"
 
 [snap_kind]
+angle = "Ângulo"
+perpendicular = "Perpendicular"
+parallel = "Paralelo"
+intersection = "Interseção"
+face_center = "Centro da face"
 point = "Ponto"
 midpoint = "Ponto médio"
 on_edge = "Na aresta"

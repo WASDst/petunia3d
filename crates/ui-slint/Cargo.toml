@@ -13,6 +13,7 @@ petunia_mesh = { workspace = true }
 petunia_project = { workspace = true }
 petunia_render = { workspace = true }
 petunia_render_wgpu = { path = "../render-wgpu" }
+puffin = { workspace = true }
 petunia_module_paint = { path = "../module-paint" }
 petunia_module_model = { path = "../module-model" }
 petunia_module_uv = { path = "../module-uv" }

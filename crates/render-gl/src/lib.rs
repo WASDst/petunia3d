@@ -766,7 +766,10 @@ impl GlRenderer {
                 show_uv_checker: state.show_uv_checker,
             },
         );
-        let fp = scene_fp.mesh ^ overlay_hash(state).wrapping_mul(0x9e3779b97f4a7c15);
+        // As arestas do GL pintam a seleção: ela entra na chave deste cache.
+        let fp = scene_fp.mesh
+            ^ scene_fp.selection.rotate_left(17)
+            ^ overlay_hash(state).wrapping_mul(0x9e3779b97f4a7c15);
         if self.edge_valid && self.edge_fp == fp {
             if self.edge_cache.is_empty() {
                 return;
