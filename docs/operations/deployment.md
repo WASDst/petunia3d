@@ -10,8 +10,8 @@ Antes de gerar qualquer release pública:
 1. `cargo test --workspace` passando 100% (23+ testes).
 2. `cargo clippy --workspace --all-targets` limpo com 0 warnings.
 3. `cargo fmt --all --check` limpo.
-4. Validação do Prumo: `prumo validate .` e `prumo doctor .` sem erros.
-5. Versão incrementada no `Cargo.toml`, `prumo.json` e documentada no `CHANGELOG.md`.
+4. Gates de documentação: `cargo run -p xtask -- docs-check` e `cargo run -p xtask -- bible-check` sem erros.
+5. Versão incrementada no `Cargo.toml` e documentada no `CHANGELOG.md`.
 
 ---
 

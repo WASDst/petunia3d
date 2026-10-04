@@ -35,7 +35,6 @@ Para aprovação de qualquer alteração no repositório:
 | **Drift de referências** | `cargo run -p xtask -- docs-generate --check` | CommandIds, keybinds, IconIds, TextIds, ThemeTokens e changelog sem drift. |
 | **Mapa de UI** | `cargo run -p xtask -- ui-check` | `docs/public/ui-map.json` coerente com o código (ids, arquivos, símbolos, aciclicidade). |
 | **Architecture checks** | `cargo run -p xtask -- arch-check` | Auditoria arquitetural íntegra (P3D-122). |
-| **Prumo Governance** | `prumo validate . && prumo doctor .` | Validação estrutural de governança e diagnósticos sem erros. |
 
 ### Gates de documentação e QA por feature (P3D-114–125)
 

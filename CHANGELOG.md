@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Repositório — remoção do Prumo (04/10/2026)
+
+- Removida a camada de orquestração Prumo: `.agents/`, `.ai/`, `.prumo/`, `prumo.json`, `ENTRYPOINT.md`, `GEMINI.md`, `docs/contracts/` e scripts do próprio Prumo em `scripts/`. Código, Livro Vivo e `docs/` preservados.
+- Evidências da rodada premium movidas para `docs/audits/premium-evidence/`; roteador renomeado para `docs/NAVIGATION.md` com links corrigidos.
+- `AGENTS.md`, `PROJECT_STATE.md`, guias de contribuição, testes e deploy deixam de exigir `prumo doctor`/`prumo validate`; gates passam a ser os do `xtask`. Caps. 13, 31 e 34 do Livro Vivo citam agentes/CI em vez do Prumo.
+- Corrigido drift entre `CHANGELOG.md` e `docs/changelog/index.md` causado por link relativo.
+
 ### DRAW/POLY/PAINT — seleção e perfis reeditáveis (03/10/2026)
 
 - Perfis 2D selecionáveis pelo contorno/interior; mover, girar e escalar com cancelamento e um Undo por gesto.
@@ -237,7 +244,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 ### Animate procedural-first — documentação (30/09/2026)
 - **Decisão de produto registrada**: Animate acessível a quem não entende de animação, com **animação procedural primeiro**, **criaturas de primeira classe** (humanoide, quadrúpede, multi-leg, serpente, peixe, pássaro) e referência de animação por **batch de imagens** (sem vídeo, sem ML). Sem alteração de código.
 - **Caderno**: novo capítulo 45 (visão, UX em quatro camadas, Gap Matrix `AN-01…AN-15`, análise do Dust3D, pesquisa externa e fases F0–F5); novas specs **P3D-169** (Rig Roles & IK), **P3D-170** (Procedural Motion Generators), **P3D-171** (Ghosts & Trajectories), **P3D-172** (Reference Image Sequence), **P3D-173** (Secondary Motion & Ragdoll) e **P3D-174** (Layered Animation), todas em `SPEC DRAFT`.
-- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e [ADR 006](docs/architecture/adr/006-workspace-animate-pos-v1.md). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
+- **Emendas**: P3D-066/067 (exceções nomeadas a "constraints" e "simulation"), P3D-135/136/138/139/013/160, cap. 08 (Era 3), cap. 13 (vocabulário de animação), adendo pós-V1 no cap. 36 e ADR 006 (`docs/architecture/adr/006-workspace-animate-pos-v1.md`). A UI Baseline V1 `MODEL / PAINT / UV` **não** foi reaberta.
 - **Achados registrados**: o domínio de rig/clipes existe em `petunia_project`, mas não alcança o Slint (AN-07) e o glTF não exporta skin/animação (AN-13).
 - **Gates**: `xtask bible-check` passa a validar P3D-001–174 e fundamentos 01–45.
 

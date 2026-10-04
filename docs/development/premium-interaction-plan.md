@@ -83,7 +83,7 @@ Foi corrigido com `core::viewport::PhysicalViewport`: bordas arredondadas em
 pixels, conversão top-left→bottom-left para GL e viewport/scissor nos dois
 backends. O clear GL desativa o scissor herdado de egui antes de limpar o frame.
 Testes cobrem deslocamento de painéis, DPI e resize; a captura anterior fica
-preservada em `.prumo/history/premium/startup-gl-before-viewport-fix.png`.
+preservada em `docs/audits/premium-evidence/startup-gl-before-viewport-fix.png`.
 
 ## Evidência automatizada final
 
@@ -91,17 +91,17 @@ preservada em `.prumo/history/premium/startup-gl-before-viewport-fix.png`.
 - `cargo test --workspace`: **128 testes passaram**, incluindo domínio,
   entrada egui, câmera/picking e contrato de viewport físico.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passou sem avisos.
-- Logs completos: `.prumo/history/premium/tests.log` e `clippy.log`.
+- Logs completos: `docs/audits/premium-evidence/tests.log` e `clippy.log`.
 
 Nenhuma dependência externa foi adicionada. O grafo de 14 crates internos mais
 executável raiz foi conferido acíclico. O teste de smoke e a captura GL do binário final estão registrados abaixo.
 
 
 - `cargo run -- --smoke-test`: **SMOKE OK**, saída 0; log em
-  `.prumo/history/premium/smoke.log`.
+  `docs/audits/premium-evidence/smoke.log`.
 - Captura real OpenGL: saída 0 em Mesa 26.1.7 / Intel HD Graphics 4000,
   contexto 4.2 Core. O retângulo central contém e centraliza o cubo após a
-  correção. Captura final: `.prumo/history/premium/startup-gl.png`;
+  correção. Captura final: `docs/audits/premium-evidence/startup-gl.png`;
   diagnóstico: `startup-gl.log` no mesmo diretório.
 - O gerenciador de janelas entregou framebuffer 678×739 apesar da solicitação
   1280×800. Essa captura também mostra dívida visual em janela estreita:

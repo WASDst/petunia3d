@@ -324,7 +324,7 @@ crates/petunia-render/AGENTS.md
 ...
 ```
 
-O arquivo raiz orienta; documentos próximos do código detalham invariants locais. O Prumo deve manter esse mapa sincronizado com o Livro Vivo sem duplicar toda a documentação em cada arquivo.
+O arquivo raiz orienta; documentos próximos do código detalham invariants locais. Os agentes e o CI (`xtask`) devem manter esse mapa sincronizado com o Livro Vivo sem duplicar toda a documentação em cada arquivo.
 
 # Regra para agentes
 

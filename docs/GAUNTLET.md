@@ -264,7 +264,7 @@ Evidências finais desta execução: **128 testes**, fmt, Clippy estrito e smoke
 passaram. Captura GL real validou a correção de viewport em Intel HD Graphics
 4000; o teste visual revelou esse desalinhamento após os primeiros testes sem
 GPU, e originou três regressões adicionais de coordenadas/DPI. Ainda há dívida
-visual em janelas estreitas. Logs e capturas: `.prumo/history/premium/`.
+visual em janelas estreitas. Logs e capturas: `docs/audits/premium-evidence/`.
 
 ---
 

@@ -1,7 +1,6 @@
 # Current Project State
 
 - Project: **Petunia3D**
-- Prumo: **0.5.1**
 - Current phase: **Fundação do produto sobre as ADRs 006/007** (workspaces DRAW/POLY/PAINT, Animate F2, Paint/UV, atalhos). **Wave 11 — Extensibility, Plugins & Automation permanece planejada**: o host Lua (`petunia_plugins`) e o servidor MCP existem, mas não há ponte para o shell Slint.
 - Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (174 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 46 capítulos de fundação)
 - Referência de UI e interação (ADR 007, 2026-09-29): o próprio sistema Petunia ([cap. 23](docs/bible/foundations/23-macroarquitetura-interface.md), [24](docs/bible/foundations/24-design-system-tokens-estados.md), [36](docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md)) e a pesquisa de interação do [cap. 46](docs/bible/foundations/46-pesquisa-interacao-modelagem-referencias.md). `docs/image-references/Blender.svg` deixou de ser referência canônica e permanece apenas como material histórico.
@@ -288,7 +287,7 @@ The twenty-second implementation round delivers Wave 10 (Animation & Rigging —
   - Shelf contextual inferior com botões dedicados de presets rápidos, Auto-Rig, scrubbing de frames e transporte de reprodução.
   - 20 testes headless de fluxo UI (`kittest_ui_flows.rs`) e 47 testes unitários de domínio passando com 100% de conformidade.
 
-Evidence is preserved in `.prumo/history/premium/`, [`docs/GAUNTLET.md`](docs/GAUNTLET.md), [`docs/GAUNTLET_HANDOFF.md`](docs/GAUNTLET_HANDOFF.md), [`docs/audits/stack-modernization/`](docs/audits/stack-modernization/) and [`docs/bible/`](docs/bible/index.md).
+Evidence is preserved in `docs/audits/premium-evidence/`, [`docs/GAUNTLET.md`](docs/GAUNTLET.md), [`docs/GAUNTLET_HANDOFF.md`](docs/GAUNTLET_HANDOFF.md), [`docs/audits/stack-modernization/`](docs/audits/stack-modernization/) and [`docs/bible/`](docs/bible/index.md).
 
 ## Next action
 
@@ -366,8 +365,6 @@ estão no cap. 45. Prioridades vigentes (Sprint A–E de 2026-09-29) não mudam.
 
 ## Recovery order
 
-1. `ENTRYPOINT.md` or platform adapter.
-2. `prumo.json` and this state file.
-3. `docs/PRUMO.md` and the premium interaction plan.
-4. Historical goals in `.ai/goals/` (their DONE state does not close premium work).
-5. Only relevant canonical docs, symbols and tests.
+1. `AGENTS.md` (normative rules) and this state file.
+2. `docs/NAVIGATION.md` and the premium interaction plan.
+3. Only relevant canonical docs (`docs/bible/`), symbols and tests.
