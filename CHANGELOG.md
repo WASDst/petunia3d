@@ -5,6 +5,10 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Plano de refatoração de UI/UX (04/10/2026)
+
+- Proposta em `docs/development/ui-ux-refactor-plan-2026-10-04.md`: diagnóstico das telas e do código Slint, referências de mercado, design system v2, roteiro F0–F8 e 10 decisões pendentes de aprovação. Nenhuma mudança de código ou do caderno.
+
 ### DRAW/POLY/PAINT — seleção e perfis reeditáveis (03/10/2026)
 
 - Perfis 2D selecionáveis pelo contorno/interior; mover, girar e escalar com cancelamento e um Undo por gesto.
