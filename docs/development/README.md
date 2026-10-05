@@ -10,4 +10,5 @@ Assegura consistência estilística, disciplina de implementação orientada a t
 - `coding-standards.md`: Padrões e boas práticas de código.
 - `testing-strategy.md`: O ciclo exaustivo de testes (unitários, integração, segurança, performance, stress e UI).
 - `v1-model-paint-status-matrix.md`: Matriz completa de conformidade e status das funcionalidades V1 de Modelagem e Pintura.
+- `ui-ux-refactor-plan-2026-10-04.md`: Proposta de refatoração de UI/UX do shell Slint (diagnóstico, design system v2, roteiro F0–F8 e decisões pendentes).
 

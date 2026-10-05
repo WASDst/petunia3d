@@ -13,13 +13,24 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - DRAW: domínios Curve/Point/Region reais; Knife atravessa várias faces; imprint em várias faces, cruzando arestas e com furos; Inset métrico; plano médio entre faces paralelas; snap ligado por padrão entre todos os objetos, com centro de face, interseção, paralelo, perpendicular e 15°.
 - 176 mensagens de status passam a usar `TextId` (en/pt-BR). Medição opcional por `PETUNIA_PROFILE`/`PETUNIA_FRAME_TIMING` e benchmarks de consultas da viewport. Matriz: `docs/development/draw-poly-perf-tools-2026-10-04.md`.
 
-### CI, gates e tokens de cor (04/10/2026)
+### UI Slint — F1: tokens v2 e guarda de tokens (04/10/2026)
+
+- `tokens.slint` ganha tipografia (`font-caption`…`font-exceptional`), elevação em dois níveis, cores de HUD/viewport/UV e o global `ColorPresets`.
+- `app.slint`/`animate.slint`: 150 cores `#hex`, todos os `font-size` literais e 8 variações de sombra trocados por tokens; textos de 8–9 px sobem para 10 px (cap. 36). Toggles do PAINT usam `on-accent` sobre o violeta.
+- Novo `cargo run -p xtask -- ui-lint`, ligado ao job `UI Slint`: falha com cor, fonte ou sombra literal fora de `tokens.slint`.
+- Validação: 473 testes Slint, 12 Animate e 7 de gestos; clippy `-D warnings` e fmt limpos; captura do shell em POLY/PAINT sem texto cortado.
+
+### Plano de refatoração de UI/UX (04/10/2026)
+
+- Proposta em `docs/development/ui-ux-refactor-plan-2026-10-04.md`: diagnóstico das telas e do código Slint, referências de mercado, design system v2, roteiro F0–F8 e 10 decisões pendentes de aprovação. Nenhuma mudança de código ou do caderno.
+
+### CI e gates (04/10/2026)
 
 - `ui-guard.yml` voltou a ser YAML válido (o comando `gallery::` era lido como chave e o workflow nunca rodava).
 - `deny.toml`: aceita `GPL-3.0-only`/`GPL-3.0-or-later` (licença do projeto e opção GPL do Slint) e registra `RUSTSEC-2026-0206` (`rustybuzz`, transitivo via `usvg`/`resvg`).
 - Workflow UI Slint sem debuginfo, sem incremental e com 2 jobs, para não esgotar a memória do runner.
 - `cargo clippy --workspace --all-targets -D warnings` sem erros em `petunia_mesh`.
-- Shell Slint: 90 cores fixas viram `DesignTokens`; sombras e fundos de HUD seguem o tema (o tema claro deixa de herdar HUD escuro) e overlays do viewport usam tokens `overlay-*` com os mesmos valores.
+- A tokenização das cores do shell Slint ficou com a F1 (tokens v2 e `ui-lint`), integrada antes; a versão paralela deste PR foi descartada na mesclagem.
 - `PROJECT_STATE.md` e `AGENTS.md` alinhados ao estado real (próximas ações, gaps do Slint, contagem de testes).
 
 ### Repositório — remoção do Prumo (04/10/2026)

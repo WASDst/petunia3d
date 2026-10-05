@@ -16,6 +16,25 @@ Em vez de cores hardcoded nos componentes, a interface referencia o enum `ThemeT
 - **Borders & Dividers**: `border`, `border_focus`.
 - **Accents & States**: `accent`, `accent_hover`, `selection`, `error`, `warning`, `success`.
 
+### 1.1.1 Tokens no shell Slint (produção)
+
+No frontend Slint, `crates/ui-slint/src/theme.rs` copia as cores do tema ativo
+para o global `DesignTokens` de `crates/ui-slint/ui/tokens.slint`. Esse arquivo
+é o **único** lugar com valores literais:
+
+- cores semânticas do tema (`surface*`, `text-*`, `accent`, `selection`…);
+- cores de sobreposição da viewport, independentes do tema (`hud-text`,
+  `measure`, `marker-pivot`, `cursor-*`, `uv-*`);
+- tipografia `font-caption` 10 · `font-small` 11 · `font-default` 12 ·
+  `font-strong` 13 · `font-exceptional` 14 (cap. 36);
+- elevação em dois níveis com sombra (`elevation-1-*` painel/HUD,
+  `elevation-2-*` popover/flutuante) e `glow-blur` para estado armado;
+- o global `ColorPresets`, com as paletas rápidas de pintura e de etiqueta.
+
+`cargo run -p xtask -- ui-lint` falha se outro `.slint` usar cor `#hex`,
+`font-size` ou `drop-shadow-blur` literal (strings e comentários são
+ignorados). O job `UI Slint` executa essa guarda.
+
 ### 1.2 Estrutura de Diretório de Temas
 Os temas residem em `assets/themes/<theme_id>/`:
 
