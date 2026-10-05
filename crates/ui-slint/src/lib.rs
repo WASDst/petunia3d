@@ -485,6 +485,14 @@ pub mod section_layout;
 pub mod view_model;
 pub use view_model::*;
 
+/// Copia um view-model para o shell, como o bridge faz a cada quadro. Público
+/// só para testes headless que precisam dos rótulos reais (auditoria de
+/// acessibilidade em `tests/ui_metrics.rs`).
+#[doc(hidden)]
+pub fn sync_shell_for_tests(window: &PetuniaSlintShell, vm: &ShellViewModel) {
+    callbacks::sync_window_properties(window, vm);
+}
+
 pub mod projection;
 pub use projection::*;
 
@@ -727,6 +735,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// Override de teste do caminho do arquivo de preferências (testes herméticos).
     /// Produção mantém `None` e usa o caminho da plataforma.
     pub preferences_path_override: Option<std::path::PathBuf>,
+    /// Home (cap. 23) aberta: só no arranque sem projeto, se a preferência pedir.
+    pub home_open: bool,
     /// Rastreamento de duplo toque em atalhos de ferramenta: (nome da ferramenta, instante).
     pub last_tool_press: Option<(String, std::time::Instant)>,
     pub slice_trim: bool,
@@ -1090,6 +1100,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             decal_drag_initial: None,
             section_layouts: section_layout::default_section_layouts(),
             preferences: petunia_config::UserPreferences::default(),
+            home_open: false,
             preferences_path_override: None,
             last_tool_press: None,
             slice_trim: false,
@@ -1244,6 +1255,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.set_status(format!("failed to save: {err}"));
                 } else {
                     self.state.project.project_path = Some(path.display().to_string());
+                    self.preferences
+                        .push_recent_project(&path.display().to_string());
                     self.state.mark_document_clean();
                     self.state
                         .set_status(format!("project saved: {}", path.display()));
@@ -1255,6 +1268,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.project.project = project;
                     self.state.project.undo.clear();
                     self.state.project.project_path = Some(path.display().to_string());
+                    self.preferences
+                        .push_recent_project(&path.display().to_string());
+                    self.home_open = false;
                     self.state.mark_document_clean();
                     self.state
                         .set_status(format!("project opened: {}", path.display()));
@@ -6535,10 +6551,71 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(message);
             return false;
         }
+        if colors_too_close(rgb, self.effective_accent_rgb()) {
+            let message = self
+                .state
+                .t_id(petunia_config::text_id::UI_COLORS_TOO_CLOSE);
+            self.state.set_status(message);
+            return false;
+        }
         if self.state.ui.selection_rgb == rgb {
             return false;
         }
         self.state.ui.selection_rgb = rgb;
+        true
+    }
+
+    /// Cor de destaque do tema ativo, sem a preferência do usuário.
+    fn theme_accent_rgb(&self) -> [u8; 3] {
+        let theme = petunia_config::ThemeRegistry::global()
+            .get_theme(&self.state.ui.active_theme_id)
+            .cloned()
+            .unwrap_or_default();
+        let [r, g, b, _] = theme
+            .colors
+            .get_token_color(petunia_config::ThemeToken::AccentBlue)
+            .0;
+        [r, g, b]
+    }
+
+    /// Cor de destaque em uso: a do usuário ou a do tema.
+    pub fn effective_accent_rgb(&self) -> [u8; 3] {
+        self.preferences
+            .accent_rgb
+            .unwrap_or_else(|| self.theme_accent_rgb())
+    }
+
+    /// Define a cor de destaque da interface (`#RRGGBB`); vazio volta ao tema.
+    /// Recusa uma cor parecida demais com a da seleção na viewport (D5).
+    pub fn set_accent_color_hex(&mut self, value: &str) -> bool {
+        let value = value.trim();
+        if value.is_empty() {
+            if self.preferences.accent_rgb.is_none() {
+                return false;
+            }
+            self.preferences.accent_rgb = None;
+            self.state.mark_dirty();
+            return true;
+        }
+        let Some(rgb) = parse_hex_rgb(value) else {
+            let message = self
+                .state
+                .t_id(petunia_config::text_id::UI_SELECTION_COLOR_INVALID);
+            self.state.set_status(message);
+            return false;
+        };
+        if colors_too_close(rgb, self.state.ui.selection_rgb) {
+            let message = self
+                .state
+                .t_id(petunia_config::text_id::UI_COLORS_TOO_CLOSE);
+            self.state.set_status(message);
+            return false;
+        }
+        if self.preferences.accent_rgb == Some(rgb) {
+            return false;
+        }
+        self.preferences.accent_rgb = Some(rgb);
+        self.state.mark_dirty();
         true
     }
 
@@ -12376,6 +12453,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Mostrar a Home ao abrir o programa sem projeto.
+    pub fn set_show_home_on_start(&mut self, enabled: bool) -> bool {
+        if self.preferences.show_home_on_start == enabled {
+            return false;
+        }
+        self.preferences.show_home_on_start = enabled;
+        true
+    }
+
     /// Trilho de ferramentas com nomes ao lado dos ícones (plano de UI, D6).
     pub fn set_show_tool_labels(&mut self, enabled: bool) -> bool {
         if self.preferences.show_tool_labels == enabled {
@@ -14343,7 +14429,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_snap_radius = translated(petunia_config::text_id::PREFERENCES_SNAP_RADIUS);
         vm.click_move_click = self.preferences.click_move_click;
         vm.show_tool_labels = self.preferences.show_tool_labels;
-        vm.label_show_tool_labels = translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS);
+        vm.home_open = self.home_open;
+        vm.show_home_on_start = self.preferences.show_home_on_start;
+        vm.recent_projects = self
+            .preferences
+            .recent_projects
+            .iter()
+            .map(|path| {
+                let name = std::path::Path::new(path)
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone());
+                (name, path.clone())
+            })
+            .collect();
+        {
+            use petunia_config::text_id as T;
+            vm.home_texts = [
+                T::HOME_TITLE,
+                T::HOME_SUBTITLE,
+                T::HOME_NEW,
+                T::HOME_OPEN,
+                T::HOME_RECOVER,
+                T::HOME_RECENT,
+                T::HOME_NO_RECENT,
+                T::HOME_SETTINGS,
+                T::HOME_SHOW_ON_START,
+            ]
+            .map(translated);
+        }
+        vm.accent_rgb = self.preferences.accent_rgb;
+        let [r, g, b] = self.effective_accent_rgb();
+        vm.accent_color_hex = format!("#{r:02X}{g:02X}{b:02X}");
+        vm.label_accent_color = translated(petunia_config::text_id::UI_ACCENT_COLOR);
+        vm.label_accent_color_hint = translated(petunia_config::text_id::UI_ACCENT_COLOR_HINT);
+        vm.label_show_tool_labels =
+            translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS);
         vm.label_show_tool_labels_hint =
             translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS_HINT);
         vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
@@ -14777,6 +14898,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
     // Layouts de seção persistem por módulo: restaura no estado runtime e
     // semeia o cache para mutações futuras persistirem tudo.
     startup_bridge.restore_section_layouts(&preferences);
+    startup_bridge.home_open =
+        preferences.show_home_on_start && startup_bridge.state.project.project_path.is_none();
     #[allow(clippy::arc_with_non_send_sync)]
     let bridge = Arc::new(Mutex::new(startup_bridge));
 
@@ -14926,6 +15049,30 @@ pub fn run() -> Result<(), slint::PlatformError> {
 
 // Unit and integration test suite for Slint UI bridge and shell interactions.
 // Suíte de testes unitários e de integração para o bridge Slint UI e interações do shell.
+/// `#RRGGBB` (com ou sem `#`) para RGB.
+fn parse_hex_rgb(value: &str) -> Option<[u8; 3]> {
+    let hex = value.trim().strip_prefix('#').unwrap_or(value.trim());
+    if hex.len() != 6 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut rgb = [0u8; 3];
+    for (index, channel) in rgb.iter_mut().enumerate() {
+        *channel = u8::from_str_radix(hex.get(index * 2..index * 2 + 2)?, 16).ok()?;
+    }
+    Some(rgb)
+}
+
+/// Destaque e seleção precisam ser distinguíveis à primeira vista (D5).
+/// Distância euclidiana em RGB; 90 separa o violeta padrão de um lilás.
+fn colors_too_close(a: [u8; 3], b: [u8; 3]) -> bool {
+    let distance_sq: i32 = a
+        .iter()
+        .zip(b)
+        .map(|(&x, y)| (x as i32 - y as i32).pow(2))
+        .sum();
+    distance_sq < 90 * 90
+}
+
 #[cfg(test)]
 mod tests;
 

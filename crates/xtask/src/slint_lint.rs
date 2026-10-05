@@ -1,9 +1,10 @@
 //! Guarda de tokens do shell Slint (`crates/ui-slint/ui/*.slint`).
 //!
 //! Regras (AGENTS.md §3, cap. 24/36 e plano de UI 2026-10-04 §8.5): fora de
-//! `tokens.slint`, nenhum markup usa cor `#hex`, `font-size` em px literal ou
-//! `drop-shadow-blur` em px literal. Valores dentro de strings (ex.: o hex de
-//! um preset enviado ao Rust) e comentários não contam.
+//! `tokens.slint`, nenhum markup usa cor `#hex`, `font-size` ou
+//! `drop-shadow-blur` em px literal, nem `duration` literal (que ignoraria o
+//! movimento reduzido). Valores dentro de strings (ex.: o hex de um preset
+//! enviado ao Rust) e comentários não contam.
 
 use anyhow::{Result, bail};
 use std::path::{Path, PathBuf};
@@ -63,6 +64,17 @@ fn has_hex_color(code: &str) -> bool {
 
 /// `prop: <número>px` com valor literal.
 fn has_literal_px(code: &str, prop: &str) -> bool {
+    has_literal_unit(code, prop, "px")
+}
+
+/// `duration: <número>ms|s` literal: animação que ignora `Motion.reduced`
+/// (WCAG 2.3.3; plano de UI F8).
+fn has_literal_duration(code: &str) -> bool {
+    has_literal_unit(code, "duration", "ms") || has_literal_unit(code, "duration", "s")
+}
+
+/// `prop: <número><unidade>` com valor literal.
+fn has_literal_unit(code: &str, prop: &str, unit: &str) -> bool {
     let Some(pos) = code.find(prop) else {
         return false;
     };
@@ -75,7 +87,7 @@ fn has_literal_px(code: &str, prop: &str) -> bool {
         .chars()
         .take_while(|c| c.is_ascii_digit() || *c == '.')
         .count();
-    digits > 0 && rest[digits..].starts_with("px")
+    digits > 0 && rest[digits..].starts_with(unit)
 }
 
 fn check_source(source: &str) -> Vec<Violation> {
@@ -97,6 +109,9 @@ fn check_source(source: &str) -> Vec<Violation> {
         }
         if has_literal_px(&code, "drop-shadow-blur") {
             push("drop-shadow-blur literal (use DesignTokens.elevation-*)");
+        }
+        if has_literal_duration(&code) {
+            push("duration literal (use Motion.*, que respeita movimento reduzido)");
         }
     }
     found
@@ -156,6 +171,7 @@ mod tests {
         assert_eq!(rules("color: #fff;").len(), 1);
         assert_eq!(rules("font-size: 9px;").len(), 1);
         assert_eq!(rules("drop-shadow-blur: 12px;").len(), 1);
+        assert_eq!(rules("animate x { duration: 150ms; }").len(), 1);
     }
 
     #[test]
@@ -163,6 +179,7 @@ mod tests {
         assert!(rules("background: DesignTokens.hud-surface;").is_empty());
         assert!(rules("font-size: DesignTokens.font-small;").is_empty());
         assert!(rules("drop-shadow-blur: DesignTokens.elevation-1-blur;").is_empty());
+        assert!(rules("animate x { duration: Motion.fast; }").is_empty());
         assert!(rules(r##"clicked => { root.set("#E96A00"); }"##).is_empty());
         assert!(rules("// laranja #E96A00").is_empty());
         assert!(rules(r##"text: "\"#abc\" ok";"##).is_empty());

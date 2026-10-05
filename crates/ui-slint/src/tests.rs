@@ -10523,11 +10523,129 @@ fn draw_scale_and_rotation_keep_parametric_profile_reeditable() {
 #[test]
 fn show_tool_labels_preference_reaches_the_view_model() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
-    assert!(!bridge.view_model().show_tool_labels, "padrão: trilho estreito");
+    assert!(
+        !bridge.view_model().show_tool_labels,
+        "padrão: trilho estreito"
+    );
     assert!(bridge.set_show_tool_labels(true));
     assert!(!bridge.set_show_tool_labels(true), "repetir não muda nada");
     let vm = bridge.view_model();
     assert!(vm.show_tool_labels);
-    assert!(bridge.preferences.show_tool_labels, "vai para o arquivo de preferências");
+    assert!(
+        bridge.preferences.show_tool_labels,
+        "vai para o arquivo de preferências"
+    );
     assert!(!vm.label_show_tool_labels.is_empty());
+}
+
+#[test]
+fn everything_removed_from_the_rail_and_bar_stays_in_the_palette() {
+    // Plano de UI §13: a barra contextual pode esconder ações porque a palette
+    // e o botão direito sempre têm tudo. F5/F5b tiraram estes do trilho/barra.
+    let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let ids: Vec<String> = bridge
+        .search_commands("")
+        .into_iter()
+        .map(|item| item.id.to_string())
+        .collect();
+    for id in [
+        "model.add_cube",
+        "model.add_sphere",
+        "model.add_cylinder",
+        "model.delete",
+        "model.subdivide",
+        "model.fuse",
+        "model.cut",
+        "model.join",
+    ] {
+        assert!(ids.iter().any(|known| known == id), "{id} sumiu da palette");
+    }
+}
+
+#[test]
+fn accent_and_selection_colors_must_stay_distinguishable() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let selection = bridge.state.ui.selection_rgb;
+    let hex = format!(
+        "#{:02X}{:02X}{:02X}",
+        selection[0], selection[1], selection[2]
+    );
+    assert!(
+        !bridge.set_accent_color_hex(&hex),
+        "destaque igual à seleção é recusado"
+    );
+    assert!(bridge.set_accent_color_hex("#5B8CFF"));
+    assert_eq!(bridge.effective_accent_rgb(), [0x5B, 0x8C, 0xFF]);
+    assert!(
+        !bridge.set_selection_color_hex("#5E8FFF"),
+        "seleção parecida com o destaque é recusada"
+    );
+    assert!(bridge.set_accent_color_hex(""), "vazio volta ao tema");
+    assert!(bridge.preferences.accent_rgb.is_none());
+    assert_eq!(bridge.view_model().accent_rgb, None);
+}
+
+#[test]
+fn recent_projects_keep_newest_first_without_duplicates() {
+    let mut preferences = petunia_config::UserPreferences::default();
+    for index in 0..10 {
+        preferences.push_recent_project(&format!("/p/{index}.petunia"));
+    }
+    preferences.push_recent_project("/p/5.petunia");
+    assert_eq!(
+        preferences.recent_projects.len(),
+        petunia_config::RECENT_PROJECTS_LIMIT
+    );
+    assert_eq!(preferences.recent_projects[0], "/p/5.petunia");
+    assert_eq!(
+        preferences
+            .recent_projects
+            .iter()
+            .filter(|p| *p == "/p/5.petunia")
+            .count(),
+        1
+    );
+    let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(
+        !bridge.home_open,
+        "fora do arranque a Home não abre sozinha"
+    );
+}
+
+#[test]
+fn official_themes_meet_wcag_text_contrast() {
+    // WCAG 2.2 — 1.4.3 (contraste mínimo, AA): 4,5:1 para texto normal, em
+    // todo fundo onde o texto aparece (plano de UI F8).
+    use petunia_config::{ThemeRegistry, ThemeToken as T};
+    fn luminance(rgb: [u8; 4]) -> f32 {
+        let channel = |c: u8| {
+            let v = f32::from(c) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+    }
+    fn ratio(a: [u8; 4], b: [u8; 4]) -> f32 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+    let registry = ThemeRegistry::global();
+    for id in ["petunia-dark", "petunia-light", "petunia-high-contrast"] {
+        let theme = registry.get_theme(id).cloned().expect("tema oficial");
+        let color = |token| theme.colors.get_token_color(token).0;
+        for text in [T::TextPrimary, T::TextSecondary, T::TextMuted] {
+            for ground in [T::BgCanvas, T::BgPanel, T::BgSurface, T::BgSurfaceHover] {
+                let value = ratio(color(text), color(ground));
+                assert!(value >= 4.5, "{id}: {text:?} sobre {ground:?} = {value:.2}");
+            }
+        }
+        let on_accent = ratio(color(T::TextActive), color(T::AccentBlue));
+        assert!(
+            on_accent >= 4.5,
+            "{id}: texto sobre o destaque = {on_accent:.2}"
+        );
+    }
 }

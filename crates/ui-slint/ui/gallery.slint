@@ -1,3 +1,4 @@
+import "fonts/InterVariable.ttf";
 // Galeria dos componentes base (plano de UI 2026-10-04, F2).
 // `cargo run -p petunia_ui_slint --example gallery` abre esta janela para
 // revisar estados e temas sem subir o shell inteiro.
@@ -39,6 +40,7 @@ component GallerySection inherits VerticalLayout {
 }
 
 export component ComponentGallery inherits Window {
+    default-font-family: "Inter Variable";
     title: Tr.t("gallery.title");
     preferred-width: 760px;
     preferred-height: 720px;

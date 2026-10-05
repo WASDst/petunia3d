@@ -176,6 +176,14 @@ pub struct UserPreferences {
     /// Trilho de ferramentas com o nome ao lado do ícone (plano de UI, D6).
     /// Desligado por padrão: o trilho padrão continua estreito.
     pub show_tool_labels: bool,
+    /// Cor de destaque da interface (botões ativos, foco). `None` usa a do
+    /// tema. Separada da cor de seleção na viewport (plano de UI, D5).
+    pub accent_rgb: Option<[u8; 3]>,
+    /// Projetos abertos ou salvos por último, do mais recente ao mais antigo
+    /// (Home, cap. 23). No máximo `RECENT_PROJECTS_LIMIT`.
+    pub recent_projects: Vec<String>,
+    /// Mostra a Home ao abrir o programa sem projeto.
+    pub show_home_on_start: bool,
     /// Exibe tag flutuante com a média de medidas na multiseleção de arestas.
     pub multiselection_measure_tag: bool,
     /// Perfil ativo de atalhos de teclado ("petunia-default", "blender", "maya", "3ds-max", etc.).
@@ -195,6 +203,18 @@ pub struct UserPreferences {
     pub section_layouts: BTreeMap<String, SectionLayout>,
 }
 
+/// Quantos projetos recentes a Home lista.
+pub const RECENT_PROJECTS_LIMIT: usize = 8;
+
+impl UserPreferences {
+    /// Põe `path` no topo dos recentes, sem repetir e respeitando o limite.
+    pub fn push_recent_project(&mut self, path: &str) {
+        self.recent_projects.retain(|existing| existing != path);
+        self.recent_projects.insert(0, path.to_string());
+        self.recent_projects.truncate(RECENT_PROJECTS_LIMIT);
+    }
+}
+
 impl Default for UserPreferences {
     fn default() -> Self {
         Self {
@@ -212,6 +232,9 @@ impl Default for UserPreferences {
             colorblind_axes: false,
             reduced_motion: false,
             show_tool_labels: false,
+            accent_rgb: None,
+            recent_projects: Vec::new(),
+            show_home_on_start: true,
             multiselection_measure_tag: true,
             active_keymap_id: "petunia-default".to_string(),
             theme_id: default_theme_id(),
@@ -353,6 +376,9 @@ mod tests {
             colorblind_axes: false,
             reduced_motion: false,
             show_tool_labels: true,
+            accent_rgb: Some([91, 140, 255]),
+            recent_projects: vec!["/tmp/a.petunia".to_string()],
+            show_home_on_start: false,
             multiselection_measure_tag: true,
             active_keymap_id: "blender".to_string(),
             theme_id: "petunia-light".to_string(),

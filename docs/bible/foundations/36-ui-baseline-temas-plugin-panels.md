@@ -229,6 +229,14 @@ listados.
 4. **Modo "Mostrar nomes no trilho"**: preferência opcional, **desligada por
    padrão**. Ligada, o trilho de ferramentas DRAW/POLY pode ter até 148 px e
    mostra o nome ao lado do ícone. O padrão continua 40–46 px.
+5. **Cor de destaque ≠ cor de seleção.** São preferências separadas: o
+   destaque (botões e ferramentas ativos, foco) usa o do tema ou um escolhido
+   pelo usuário; a seleção na viewport tem a própria cor. Cores parecidas
+   demais entre as duas são recusadas.
+6. **Fonte embarcada:** Inter (SIL OFL 1.1) é a fonte padrão do shell; a
+   licença acompanha o arquivo em `crates/ui-slint/ui/fonts/`.
+7. **Layout de vistas:** no máximo 2 viewports também no modelo de layout; a
+   grade 2×2 não é selecionável.
 
 # Design System Final V1
 

@@ -616,7 +616,7 @@ export component WorkspaceSegment inherits Rectangle {
     accessible-role: tab-list;
     accessible-label: Tr.t("sl.workspaces");
     width: root.animate-available ? 327px : 246px;
-    height: 28px;
+    height: 30px;
     border-radius: 6px;
     background: DesignTokens.surface-raised;
     border-width: 1px;
@@ -627,7 +627,7 @@ export component WorkspaceSegment inherits Rectangle {
         x: root.active == "DRAW" ? 2px : (root.active == "POLY" ? 83px : (root.active == "PAINT" ? 164px : 245px));
         y: 2px;
         width: 80px;
-        height: 22px;
+        height: 24px;
         border-radius: 4px;
         background: DesignTokens.accent;
         animate x { duration: root.reduced-motion ? 0ms : 160ms; easing: ease-out-quad; }
@@ -638,7 +638,7 @@ export component WorkspaceSegment inherits Rectangle {
         spacing: 1px;
         Rectangle {
             width: 80px;
-            height: 22px;
+            height: 24px;
             background: transparent;
             accessible-role: tab;
             accessible-label: root.draw-title;
@@ -665,7 +665,7 @@ export component WorkspaceSegment inherits Rectangle {
         }
         Rectangle {
             width: 80px;
-            height: 22px;
+            height: 24px;
             background: transparent;
             accessible-role: tab;
             accessible-label: root.poly-title;
@@ -692,7 +692,7 @@ export component WorkspaceSegment inherits Rectangle {
         }
         Rectangle {
             width: 80px;
-            height: 22px;
+            height: 24px;
             background: transparent;
             accessible-role: tab;
             accessible-label: Tr.t("sl.paint_workspace");
@@ -718,7 +718,7 @@ export component WorkspaceSegment inherits Rectangle {
         }
         if root.animate-available: Rectangle {
             width: 80px;
-            height: 22px;
+            height: 24px;
             background: transparent;
             accessible-role: tab;
             accessible-label: root.animate-label;
@@ -914,8 +914,8 @@ export component ToolGroup inherits Rectangle {
     in property <string> more-hint;
     in-out property <int> current: 0;
     callback activated(string);
-    /// Pede o flyout; `y` é a posição absoluta do topo do botão.
-    callback more-requested(length);
+    /// Pede o flyout; `x`/`y` são a posição absoluta do botão.
+    callback more-requested(length, length);
 
     property <int> shown: root.tools[0].active ? 0 : (root.tools[1].active ? 1 : (root.tools[2].active ? 2 : (root.tools[3].active ? 3 : root.current)));
     width: button.width;
@@ -934,7 +934,7 @@ export component ToolGroup inherits Rectangle {
             root.current = root.shown;
             root.activated(root.tools[root.shown].id);
         }
-        secondary-clicked => { root.more-requested(root.absolute-position.y); }
+        secondary-clicked => { root.more-requested(root.absolute-position.x, root.absolute-position.y); }
     }
     // Área da marca de canto: clique abre as variações.
     if root.tools.length > 1: TouchArea {
@@ -942,7 +942,7 @@ export component ToolGroup inherits Rectangle {
         y: parent.height - 12px;
         width: 12px;
         height: 12px;
-        clicked => { root.more-requested(root.absolute-position.y); }
+        clicked => { root.more-requested(root.absolute-position.x, root.absolute-position.y); }
     }
 }
 

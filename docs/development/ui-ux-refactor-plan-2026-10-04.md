@@ -42,7 +42,9 @@
 | F4 — Inspector | Concluída em 2026-10-04 (Quick Actions movida na F5) | ver [§F4](#f4--registro-de-implementação) |
 | F5 — Ferramentas | Concluída em 2026-10-05 (F5b: grupos com flyout) | ver [§F5](#f5--registro-de-implementação) |
 | F6 — PAINT | Concluída em 2026-10-05 | ver [§F6](#f6--registro-de-implementação) |
-| Demais fases | Não iniciadas | aguardam §12 onde indicado |
+| F7 — Diálogos | Concluída em 2026-10-05, com JetBrains Mono e linhas das Preferências pendentes | ver [§F7](#f7--registro-de-implementação) |
+| F8 — Acessibilidade | Concluída em 2026-10-05; sessões com participantes pendentes | ver [§F8](#f8--registro-de-implementação) |
+| F0 — Métricas | Concluída em 2026-10-05 | ver [§F0](#f0--registro-de-implementação) |
 
 ---
 
@@ -644,3 +646,93 @@ Feito em 2026-10-05.
   `selection.domain_*`); antes eram frases fixas em português com id cru.
 - **Fora desta fase:** o canvas 2D continua como seção e painel flutuante; a
   revisão profunda do PAINT fica para a conversa pedida pelo responsável.
+
+## F7 — registro de implementação
+
+Feito em 2026-10-05; aplica **D4** (parcial), **D5**, **D7** e **D8**.
+
+- **D5 — destaque ≠ seleção:** a seção das Preferências chamava a cor de
+  seleção de "Cor de Destaque / Seleção" sem mudar o destaque. Agora há duas:
+  **Cor de destaque da interface** (preferência `accent_rgb`, vazia = do tema;
+  violeta, azul, verde-água, rosa e "Padrão do tema"), aplicada depois do tema
+  com texto claro/escuro conforme a luminância; e **Cor da seleção na
+  viewport**, sem o preset violeta. O bridge recusa uma cor a menos de 90 de
+  distância RGB da outra (`UI_COLORS_TOO_CLOSE`). Teste
+  `accent_and_selection_colors_must_stay_distinguishable`.
+- **D8 — 175 %:** escala 100 / 125 / 150 / **175** / 200 %.
+- **Referências:** grade 3 × 2 de blocos compactos (`ReferenceTile`: rótulo,
+  miniatura clicável, alinhar, mostrar, travar, remover) + `ReferenceDetails`
+  só para a vista selecionada; uma frase de ajuda no topo em vez de seis;
+  "Limpar tudo" pede confirmação na própria barra. O painel nasce com a altura
+  do conteúdo (600 px de largura), sem rolagem em 1280 × 800.
+- **Preferências:** busca na barra lateral filtra as abas por nome e
+  palavras-chave (`text-matches`, comparação no Rust); o rodapé técnico virou
+  a aba **Sobre**. Linhas "rótulo + descrição à esquerda, controle à direita"
+  em todas as abas ficam pendentes.
+- **Home (cap. 23):** Novo modelo, Abrir projeto, Recuperar sessão (quando há
+  snapshot; o diálogo de recuperação espera a Home fechar), Projetos recentes
+  (até 8, atualizados ao abrir/salvar, `recent_projects`), Ajustes e "Mostrar
+  esta tela ao abrir" (`show_home_on_start`, ligado). Abre só no arranque sem
+  projeto; Esc fecha. Teste `recent_projects_keep_newest_first_without_duplicates`.
+- **Palette:** teste `everything_removed_from_the_rail_and_bar_stays_in_the_palette`
+  garante que primitivas, Excluir e as ações rápidas padrão continuam nela.
+- **D7:** `ViewLayout::from_id("4")` não aceita mais a vista quádrupla; ela
+  fica só no modelo e nos testes (teste `quad_is_not_reachable_from_ids`).
+- **D4:** Inter (`InterVariable.ttf`, OFL, cópia do pacote do sistema) é a
+  fonte padrão do shell e da galeria. JetBrains Mono oficial não está na
+  máquina (só a variante Nerd Font) e depende de download autorizado.
+
+## F8 — registro de implementação
+
+Feito em 2026-10-05. Auditoria WCAG 2.2 AA convertida em testes, para não
+voltar a quebrar:
+
+- **1.4.3 Contraste mínimo:** `text_muted` ficava abaixo de 4,5:1 no tema
+  escuro (3,94 sobre o hover) e no claro (4,05 sobre a tela). Ajuste mínimo:
+  escuro `#8a919e` → `#969daa`, claro `#626772` → `#5a5f6a` (também nos
+  valores de fallback de `theme.rs` e no valor inicial de `tokens.slint`).
+  Teste `official_themes_meet_wcag_text_contrast` cobre texto primário,
+  secundário e apagado em quatro fundos e o texto sobre o destaque, nos três
+  temas oficiais.
+- **4.1.2 Nome, função, valor:** `every_visible_control_has_an_accessible_name`
+  varre os controles visíveis de DRAW, POLY e PAINT.
+- **2.5.8 Tamanho do alvo (AA):** `visible_controls_meet_the_minimum_target_size`
+  exige 24 × 24 px lógicos.
+- **2.3.3 Animação por interação:** todas as animações já usam `Motion.*`,
+  que zera com "Redução de movimento"; o `ui-lint` agora falha com
+  `duration:` literal.
+- **Teste do iniciante:** `user-test-protocol.md` ganhou a seção 7 (T8–T12)
+  para a nova interface. As sessões com participantes dependem de pessoas e
+  ficam pendentes; o resultado agregado entra aqui.
+
+## F0 — registro de implementação
+
+Feito em 2026-10-05 (fora da ordem do roteiro: a medição só faz sentido com
+o shell novo).
+
+- `cargo run -p xtask -- ui-metrics` roda o `ui-lint` (zero cor, fonte,
+  sombra ou duração literal fora de `tokens.slint`) e o teste
+  `tests/ui_metrics.rs`, que abre o shell headless em 1800 × 1012 e conta os
+  controles interativos visíveis por workspace (papel acessível de controle,
+  tamanho > 0, opacidade efetiva visível, dentro da janela). Falha se POLY
+  passar de 45 (meta da §11). `PETUNIA_UI_METRICS_VERBOSE=1` lista os rótulos.
+  O mesmo teste aplica a auditoria da F8 (nome acessível e alvo ≥ 24 px) com
+  os rótulos reais do bridge (`sync_shell_for_tests`).
+- **Baseline (2026-10-05):**
+
+  | Workspace | Controles visíveis | Antes (captura de 2026-10-04) |
+  |---|---|---|
+  | DRAW | 45 | — |
+  | POLY | 45 | ~125 |
+  | PAINT | 40 | — |
+
+- **Reduções para chegar à meta** (POLY estava em 56 depois da F7):
+  sombreamento num só botão (os 4 modos e o X-Ray foram para o popover, que
+  também deixou de mostrar o id cru `solid`); "Dividir viewport" e "Redefinir
+  vista" só no menu View; Duplicar fora da barra contextual (cabeçalho do
+  Inspector, Ctrl+D, paleta); Parts fora do trilho esquerdo (pílula do
+  Inspector e menu Window); Subdivide de ferramenta fora do domínio Objeto (a
+  ação rápida Subdivide fica); Knife e Slice num grupo com flyout. O flyout
+  agora abre junto do botão de origem e dentro da viewport.
+- **Auditoria corrigida:** abas de workspace de 22 para 24 px de altura e
+  eixos do gizmo de 20 para 24 px.

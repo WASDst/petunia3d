@@ -369,6 +369,18 @@ pub mod text_id {
     pub const UI_SELECTION_COLOR_INVALID: TextId = TextId::new("ui.selection_color_invalid");
     pub const UI_SELECTION_COLOR_LOW_CONTRAST: TextId =
         TextId::new("ui.selection_color_low_contrast");
+    pub const HOME_TITLE: TextId = TextId::new("home.title");
+    pub const HOME_SUBTITLE: TextId = TextId::new("home.subtitle");
+    pub const HOME_NEW: TextId = TextId::new("home.new");
+    pub const HOME_OPEN: TextId = TextId::new("home.open");
+    pub const HOME_RECOVER: TextId = TextId::new("home.recover");
+    pub const HOME_RECENT: TextId = TextId::new("home.recent");
+    pub const HOME_NO_RECENT: TextId = TextId::new("home.no_recent");
+    pub const HOME_SETTINGS: TextId = TextId::new("home.settings");
+    pub const HOME_SHOW_ON_START: TextId = TextId::new("home.show_on_start");
+    pub const UI_ACCENT_COLOR: TextId = TextId::new("ui.accent_color");
+    pub const UI_ACCENT_COLOR_HINT: TextId = TextId::new("ui.accent_color_hint");
+    pub const UI_COLORS_TOO_CLOSE: TextId = TextId::new("ui.colors_too_close");
     pub const UI_PREFERENCES_SAVE_FAILED: TextId = TextId::new("ui.preferences_save_failed");
     pub const PIVOT_MEDIAN: TextId = TextId::new("pivot.median");
     pub const PIVOT_BOUNDS: TextId = TextId::new("pivot.bounds");
@@ -804,6 +816,18 @@ pub mod text_id {
         PREFERENCES_CLICK_MOVE_CLICK,
         PREFERENCES_CLICK_MOVE_CLICK_HINT,
         PREFERENCES_SHOW_TOOL_LABELS,
+        HOME_TITLE,
+        HOME_SUBTITLE,
+        HOME_NEW,
+        HOME_OPEN,
+        HOME_RECOVER,
+        HOME_RECENT,
+        HOME_NO_RECENT,
+        HOME_SETTINGS,
+        HOME_SHOW_ON_START,
+        UI_ACCENT_COLOR,
+        UI_ACCENT_COLOR_HINT,
+        UI_COLORS_TOO_CLOSE,
         STATUS_ACTIVE_TOOL,
         SELECTION_MODE,
         SELECTION_DOMAIN_OBJECT,

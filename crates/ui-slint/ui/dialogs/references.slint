@@ -1,4 +1,4 @@
-import { IconDisplay, IconSet } from "@lucide";
+import { Icon, IconDisplay, IconSet } from "@lucide";
 import { PetuniaSlider } from "../components/controls.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { ReferenceSlotData } from "../types.slint";
@@ -266,3 +266,239 @@ export component ReferenceSlotCard inherits Rectangle {
         }
     }
 }
+
+component TileAction inherits Rectangle {
+    in property <Icon> icon;
+    in property <string> label;
+    in property <bool> on: false;
+    in property <bool> danger: false;
+    callback clicked;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: tile-action.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0);
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    tile-action := TouchArea { clicked => { root.clicked(); } }
+    IconDisplay {
+        icon: root.icon;
+        size: 13px;
+        stroke: root.danger ? DesignTokens.danger : (root.on ? DesignTokens.accent : DesignTokens.text-secondary);
+    }
+}
+
+component DetailSlider inherits HorizontalLayout {
+    in property <string> label;
+    in property <float> minimum;
+    in property <float> maximum;
+    in-out property <float> value;
+    callback changed(float);
+    spacing: 8px;
+    Text {
+        text: root.label;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-caption;
+        width: 96px;
+        vertical-alignment: center;
+    }
+    PetuniaSlider {
+        horizontal-stretch: 1;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.value;
+        changed(v) => { root.changed(v); }
+    }
+}
+
+/// Bloco compacto de uma vista de referência para a grade 3 × 2 (plano de UI
+/// F7, §5.5). Os ajustes finos ficam em `ReferenceDetails`, só para o bloco
+/// selecionado, para as seis vistas caberem sem rolagem.
+export component ReferenceTile inherits Rectangle {
+    in property <ReferenceSlotData> slot;
+    in property <bool> selected;
+    in property <string> load-label;
+    callback select();
+    callback pick-image();
+    callback remove-image();
+    callback align-view();
+    callback toggle-visible();
+    callback toggle-lock();
+
+    border-radius: 6px;
+    background: DesignTokens.surface;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? DesignTokens.accent : DesignTokens.border;
+    accessible-role: button;
+    accessible-label: slot.title;
+    accessible-action-default => { root.select(); }
+
+    TouchArea { clicked => { root.select(); } }
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            spacing: 6px;
+            Rectangle {
+                width: 26px;
+                height: 18px;
+                border-radius: 4px;
+                background: DesignTokens.accent.transparentize(0.8);
+                Text {
+                    text: slot.axis-tag;
+                    color: DesignTokens.accent;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: slot.title;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                font-weight: 600;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+
+        Rectangle {
+            height: 92px;
+            border-radius: 4px;
+            background: DesignTokens.surface-raised;
+            border-width: 1px;
+            border-color: tile-thumb.has-hover ? DesignTokens.accent : DesignTokens.border;
+            clip: true;
+            accessible-role: button;
+            accessible-label: root.load-label + " · " + slot.title;
+            accessible-action-default => { root.pick-image(); }
+            tile-thumb := TouchArea {
+                clicked => {
+                    root.select();
+                    root.pick-image();
+                }
+            }
+            if slot.has-image: Image {
+                width: 100%;
+                height: 100%;
+                source: slot.thumbnail;
+                image-fit: contain;
+            }
+            if !slot.has-image: VerticalLayout {
+                alignment: center;
+                spacing: 4px;
+                IconDisplay {
+                    icon: IconSet.Plus;
+                    size: 16px;
+                    stroke: DesignTokens.text-muted;
+                }
+                Text {
+                    text: root.load-label;
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: start;
+            TileAction {
+                icon: IconSet.Camera;
+                label: Tr.t("sl.ref_align_view");
+                clicked => { root.align-view(); }
+            }
+            if slot.has-image: TileAction {
+                icon: slot.visible ? IconSet.Eye : IconSet.EyeOff;
+                label: Tr.t("sl.ref_toggle_visible");
+                on: slot.visible;
+                clicked => { root.toggle-visible(); }
+            }
+            if slot.has-image: TileAction {
+                icon: slot.locked ? IconSet.Lock : IconSet.LockOpen;
+                label: Tr.t("sl.lock");
+                on: slot.locked;
+                clicked => { root.toggle-lock(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if slot.has-image: TileAction {
+                icon: IconSet.Trash2;
+                label: Tr.t("sl.ref_remove");
+                danger: true;
+                clicked => { root.remove-image(); }
+            }
+        }
+    }
+}
+
+
+/// Ajustes da vista selecionada: nome, dimensões e os sliders de opacidade,
+/// tamanho e deslocamento.
+export component ReferenceDetails inherits Rectangle {
+    in property <ReferenceSlotData> slot;
+    callback set-param(string, float);
+
+    in-out property <float> local-opacity: slot.opacity;
+    in-out property <float> local-size: slot.size;
+    in-out property <float> local-offset: slot.offset;
+
+    changed slot => {
+        root.local-opacity = slot.opacity;
+        root.local-size = slot.size;
+        root.local-offset = slot.offset;
+    }
+
+    border-radius: 6px;
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: slot.title + (slot.image-name != "" ? " · " + slot.image-name : "");
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                font-weight: 600;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: slot.dimensions;
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+            }
+        }
+        DetailSlider {
+            label: Tr.t("sl.opacity") + ": \{round(root.local-opacity * 100)}%";
+            minimum: 0.05;
+            maximum: 1.0;
+            value <=> root.local-opacity;
+            changed(v) => { root.set-param("opacity", v); }
+        }
+        DetailSlider {
+            label: Tr.t("sl.size") + ": \{round(root.local-size * 10) / 10}";
+            minimum: 0.5;
+            maximum: 20.0;
+            value <=> root.local-size;
+            changed(v) => { root.set-param("size", v); }
+        }
+        DetailSlider {
+            label: Tr.t("sl.offset") + ": \{round(root.local-offset * 10) / 10}";
+            minimum: -10.0;
+            maximum: 10.0;
+            value <=> root.local-offset;
+            changed(v) => { root.set-param("offset", v); }
+        }
+    }
+}
+

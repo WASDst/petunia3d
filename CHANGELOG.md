@@ -5,6 +5,22 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### UI Slint — F8 e F0: acessibilidade e métricas (05/10/2026)
+
+- Texto apagado dos temas escuro e claro passa a cumprir o contraste 4,5:1 da WCAG 2.2 AA; testes novos de contraste, nome acessível e tamanho mínimo de alvo (24 px).
+- `ui-lint` também barra animação com duração literal, que ignoraria a redução de movimento.
+- Novo `cargo run -p xtask -- ui-metrics`: conta os controles visíveis por workspace e falha se POLY passar de 45. Baseline: DRAW 45, POLY 45 (eram ~125), PAINT 40.
+- Para caber na meta: modos de sombreamento e X-Ray num só botão com popover; dividir viewport e redefinir vista só no menu View; Duplicar e Parts saem de barra e trilho (seguem no Inspector, menus e paleta); Knife e Slice viram grupo.
+- Abas de workspace e eixos do gizmo passam a 24 px (alvo mínimo WCAG 2.5.8).
+- Protocolo de teste com iniciantes ganha tarefas para a nova interface (Home, barra por seleção, pincel espelhado, grupos do trilho, cor de destaque).
+
+### UI Slint — F7: diálogos e Home (05/10/2026)
+
+- Nova **Home** ao abrir sem projeto: novo modelo, abrir, recuperar sessão, projetos recentes e ajustes; pode ser desligada.
+- Preferências: cor de destaque da interface separada da cor de seleção na viewport (cores parecidas demais são recusadas), escala de 175 %, busca na barra lateral e aba Sobre.
+- Imagens de referência em grade 3 × 2 com ajustes só da vista selecionada; "Limpar tudo" pede confirmação.
+- Fonte Inter embarcada; a vista com 4 viewports deixa de ser selecionável (cap. 36 limita a 2).
+
 ### UI Slint — F6: PAINT sem duplicação (05/10/2026)
 
 - O trilho do PAINT vira a fonte única de ferramentas, com grupos (Pincel/Aerógrafo, Formas, Gradiente); a barra de baixo passa a ajustar o pincel: cor, tamanho, opacidade e simetria.

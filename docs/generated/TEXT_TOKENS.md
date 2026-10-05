@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1622**.
+Total de chaves de localização cadastradas: **1686**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -319,6 +319,15 @@ Total de chaves de localização cadastradas: **1622**.
 | `hints.subdivide` | W: subdivide (loop cut). Triangulate below. | W: subdivide (loop cut). Triangular abaixo. |
 | `hints.symmetrize` | Alt+M: copy one side across the axis and weld the seam. | Alt+M: copia um lado para o outro no eixo e solda a costura. |
 | `hints.transform` | G/R/S: move, rotate, scale with mouse. Enter applies; Esc cancels. | G/R/S: mover, rotacionar, escalar com mouse. Enter aplica; Esc cancela. |
+| `home.new` | New model | Novo modelo |
+| `home.no_recent` | No recent projects yet. Projects you open or save appear here. | Nenhum projeto recente ainda. Os projetos que você abrir ou salvar aparecem aqui. |
+| `home.open` | Open project… | Abrir projeto… |
+| `home.recent` | Recent projects | Projetos recentes |
+| `home.recover` | Recover session | Recuperar sessão |
+| `home.settings` | Settings | Ajustes |
+| `home.show_on_start` | Show this screen at startup | Mostrar esta tela ao abrir |
+| `home.subtitle` | Pick up where you left off or start something new. | Continue de onde parou ou comece algo novo. |
+| `home.title` | Petunia3D | Petunia3D |
 | `inspector.add_component` | Add Component | Adicionar Componente |
 | `inspector.go_material` | Material (open tab) | Material (abrir aba) |
 | `inspector.go_object` | Transform (open tab) | Transform (abrir aba) |
@@ -501,6 +510,8 @@ Total de chaves de localização cadastradas: **1622**.
 | `preferences.drag_threshold` | Distance before a drag starts (px) | Distância para começar a arrastar (px) |
 | `preferences.multiselection_measure_tag` | Display average measure tag on multiple edge selection | Exibir tag de média na multiseleção de arestas |
 | `preferences.reduced_motion` | Reduced motion (disable viewport animations) | Redução de movimento (desativa animações do viewport) |
+| `preferences.show_tool_labels` | Show names in the tool rail | Mostrar nomes no trilho de ferramentas |
+| `preferences.show_tool_labels_hint` | The rail gets wider and each tool shows its name next to the icon. | O trilho fica mais largo e cada ferramenta mostra o nome ao lado do ícone. |
 | `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
 | `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
 | `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
@@ -621,6 +632,11 @@ Total de chaves de localização cadastradas: **1622**.
 | `scene_filter.unlocked` | Unlocked only | Só desbloqueados |
 | `scene_filter.visible` | Visible only | Só visíveis |
 | `selection.clear` | Clear | Limpar |
+| `selection.domain_edge` | Edge | Aresta |
+| `selection.domain_face` | Face | Face |
+| `selection.domain_object` | Object | Objeto |
+| `selection.domain_point` | Point | Ponto |
+| `selection.mode` | Selection mode: {domain} | Modo de seleção: {domain} |
 | `selection.selected` | selected | selecionados |
 | `settings.appearance` | Appearance | Aparência |
 | `settings.density` | Interface density | Densidade da interface |
@@ -672,7 +688,6 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.500_ms` | 500 ms | 500 ms |
 | `sl.90_ccw` | ↺ 90° CCW | ↺ 90° anti-horário |
 | `sl.90_cw` | ↻ 90° CW | ↻ 90° horário |
-| `sl.accent_selection_color` | Accent / Selection Color | Cor de Destaque / Seleção |
 | `sl.accessibility` | Accessibility | Acessibilidade |
 | `sl.accessibility_inclusion` | Accessibility & Inclusion | Acessibilidade & Inclusão |
 | `sl.active` | Active | Ativa |
@@ -703,7 +718,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.bake_reference_to_texture` | Bake Reference to Texture | Gerar textura da referência |
 | `sl.base_cap_off` | Base Cap: off | Tampa da base: desligada |
 | `sl.base_cap_on` | Base Cap: on | Tampa da base: ligada |
-| `sl.bevel` | Bevel | Bevel |
+| `sl.bevel` | Round Edge | Round Edge |
 | `sl.bevel_round_edge_bevel` | Bevel (Round Edge / Bevel) | Bisel (Round Edge / Bevel) |
 | `sl.blender_official` | Blender (Official) | Blender (Oficial) |
 | `sl.bottom_cap_off` | Bottom Cap: off | Tampa inferior: desligada |
@@ -723,6 +738,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.brush_clone_hint` | Ctrl+click on the surface to set the clone source. | Ctrl+clique na superfície para definir a origem do clone. |
 | `sl.brush_clone_ready` | Clone source set. Ctrl+click to change it. | Origem do clone definida. Ctrl+clique para trocar. |
 | `sl.brush_flow` | Flow | Fluxo |
+| `sl.brush_larger` | Larger brush | Pincel maior |
 | `sl.brush_lock` | Brush lock | Bloquear pincel |
 | `sl.brush_opacity_jitter` | Opacity jitter | Variação de opacidade |
 | `sl.brush_preset_delete` | Delete preset | Apagar preset |
@@ -732,6 +748,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.brush_scatter` | Scatter | Espalhamento |
 | `sl.brush_settings` | Brush Settings | Configurações do pincel |
 | `sl.brush_size_jitter` | Size jitter | Variação de tamanho |
+| `sl.brush_smaller` | Smaller brush | Pincel menor |
 | `sl.brush_smoothing` | Stabilizer | Estabilizador |
 | `sl.brush_spacing` | Spacing | Espaçamento |
 | `sl.brush_spray_density` | Spray density | Densidade do spray |
@@ -1004,6 +1021,8 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.offset` | Offset | Deslocamento |
 | `sl.on` | ON | LIGADO |
 | `sl.opacity` | Opacity | Opacidade |
+| `sl.opacity_less` | Less opacity | Menos opacidade |
+| `sl.opacity_more` | More opacity | Mais opacidade |
 | `sl.open_an_existing_project_from_disk_p3d` | Open an existing project from disk (.p3d) | Abre um projeto existente do disco (.p3d) |
 | `sl.open_application_preferences_keymaps_and_the` | Open application preferences, keymaps and theme settings | Abre preferências, atalhos e tema do aplicativo |
 | `sl.open_or_collapse_the_bottom_project_asset_li` | Open or collapse the bottom project asset library | Abre ou recolhe a biblioteca de Assets do projeto na parte inferior |
@@ -1021,7 +1040,25 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.paint` | PAINT | PINTAR |
 | `sl.paint_canvas_close` | Close canvas window | Fechar janela do canvas |
 | `sl.paint_canvas_open` | Open the canvas in a floating window | Abrir o canvas em janela flutuante |
+| `sl.paint_color` | Paint color | Cor da tinta |
 | `sl.paint_isolate_description` | Hide every other object so only the active one shows; click again to bring them back | Esconde os outros objetos para mostrar só o ativo; clique de novo para trazê-los de volta |
+| `sl.paint_opt_brightness_contrast` | Brightness & contrast | Brilho e contraste |
+| `sl.paint_opt_connected_pixels` | Connected pixels | Pixels conectados |
+| `sl.paint_opt_face` | Face | Face |
+| `sl.paint_opt_first_face` | First face | Primeira face |
+| `sl.paint_opt_first_object` | First object | Primeiro objeto |
+| `sl.paint_opt_grain` | Grain | Granulado |
+| `sl.paint_opt_hue_saturation` | Hue & saturation | Matiz e saturação |
+| `sl.paint_opt_invert` | Invert | Inverter |
+| `sl.paint_opt_levels` | Levels | Níveis |
+| `sl.paint_opt_none` | None | Nenhuma |
+| `sl.paint_opt_object` | Object | Objeto |
+| `sl.paint_opt_pixelate` | Pixelate | Pixelizar |
+| `sl.paint_opt_posterize` | Posterize | Posterizar |
+| `sl.paint_opt_screen` | Screen | Tela |
+| `sl.paint_opt_selected_faces` | Selected faces | Faces selecionadas |
+| `sl.paint_opt_surface` | Surface | Superfície |
+| `sl.paint_opt_uv_island` | UV island | Ilha UV |
 | `sl.paint_pip` | Paint on the 2D canvas with a live 3D inset | Pintar no canvas 2D com inset 3D ao vivo |
 | `sl.paint_pip_back` | Back to the 3D view | Voltar para a vista 3D |
 | `sl.paint_select_description` | Switch the object being painted or pick faces to paint; Shift adds, double-click picks a whole UV island | Troca o objeto que está sendo pintado ou escolhe faces para pintar; Shift soma, duplo clique escolhe a ilha UV inteira |
@@ -1081,12 +1118,19 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.quick_search_and_execute_any_command_tool_or` | Quick search and execute any command, tool or setting | Busque e execute qualquer comando, ferramenta ou ajuste |
 | `sl.r_rotate` | R: Rotate | R: Rotacionar |
 | `sl.radius` | Radius | Raio |
+| `sl.rail_more_hint` | Right-click or use the corner mark for similar tools. | Botão direito ou a marca no canto mostram ferramentas parecidas. |
 | `sl.reapply_the_most_recently_undone_operation` | Reapply the most recently undone operation | Reaplica a última operação desfeita |
 | `sl.rect_2d` | Rect 2D | Ret. 2D |
 | `sl.rectangle` | Rectangle | Retângulo |
 | `sl.redo` | Redo | Refazer |
 | `sl.reduced_motion_vestibular_sensitivity` | Reduced Motion (Vestibular Sensitivity) | Redução de Movimento (Sensibilidade Vestibular) |
+| `sl.ref_align_view` | Align the camera to this view | Alinhar a câmera a esta vista |
+| `sl.ref_clear_confirm` | Remove all reference images? | Remover todas as imagens de referência? |
+| `sl.ref_clear_yes` | Remove all | Remover todas |
+| `sl.ref_help` | Click a view to load an image; select it to adjust opacity, size and offset. | Clique numa vista para carregar uma imagem; selecione-a para ajustar opacidade, tamanho e deslocamento. |
 | `sl.ref_images` | Ref Images | Imagens ref. |
+| `sl.ref_remove` | Remove image | Remover imagem |
+| `sl.ref_toggle_visible` | Show or hide | Mostrar ou ocultar |
 | `sl.reference_images` | Reference Images | Imagens de referência |
 | `sl.reference_images_manager_for_background_blue` | Reference Images manager for background blueprints and modeling guides | Gerenciador de imagens de referência para blueprints de fundo e guias de modelagem |
 | `sl.region` | Region | Região |
@@ -1096,6 +1140,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.remove_selected_points_edges_faces_or_entire` | Remove selected points, edges, faces or entire objects | Remove Points, arestas, faces ou objetos inteiros selecionados |
 | `sl.rename` | Rename | Renomear |
 | `sl.reset_0_0_0` | Reset (0,0,0) | Resetar (0,0,0) |
+| `sl.reset_accent` | Theme default | Padrão do tema |
 | `sl.reset_camera_zoom_orientation_and_position_t` | Reset camera zoom, orientation and position to default origin | Restaura zoom, orientação e posição da câmera para a origem padrão |
 | `sl.reset_e96a00` | Reset (#E96A00) | Reset (#E96A00) |
 | `sl.reset_to_default_color` | Reset to default color | Restaurar cor padrão |
@@ -1150,6 +1195,17 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.set_as_boolean_operand` | Set as Boolean Operand | Definir como operando booleano |
 | `sl.set_origin` | Set Origin | Definir origem |
 | `sl.settings` | Settings | Configurações |
+| `sl.settings_about` | About | Sobre |
+| `sl.settings_kw_0` | theme color accent scale zoom icons selection highlight | tema cor destaque escala zoom ícones seleção realce |
+| `sl.settings_kw_1` | language idioma region | idioma language região |
+| `sl.settings_kw_2` | keyboard shortcuts keymap keys | teclado atalhos keymap teclas |
+| `sl.settings_kw_3` | accessibility motion contrast axes colorblind | acessibilidade movimento contraste eixos daltonismo |
+| `sl.settings_kw_4` | tools drag snap click handles labels rail | ferramentas arrastar snap clique alças nomes trilho |
+| `sl.settings_kw_5` | viewport camera light workplane navigation | viewport câmera luz plano navegação |
+| `sl.settings_kw_6` | plugins extensions | plugins extensões |
+| `sl.settings_kw_7` | automation mcp | automação mcp |
+| `sl.settings_kw_8` | about version theme keymap | sobre versão tema keymap |
+| `sl.settings_search` | Search settings | Buscar ajustes |
 | `sl.shade_flat` | Shade Flat | Sombreamento chapado |
 | `sl.shade_smooth` | Shade Smooth | Sombreamento suave |
 | `sl.shading` | Shading | Sombreamento |
@@ -1207,6 +1263,9 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.subtract_the_operand_from_the_active_part` | Subtract the operand from the active part | Subtrai o operando da parte ativa |
 | `sl.surface_shaders_colors_and_textures` | Surface shaders, colors and textures | Shaders, cores e texturas da superfície |
 | `sl.symmetry` | Symmetry: | Simetria: |
+| `sl.symmetry_x` | Mirror strokes on X | Espelhar traços em X |
+| `sl.symmetry_y` | Mirror strokes on Y | Espelhar traços em Y |
+| `sl.symmetry_z` | Mirror strokes on Z | Espelhar traços em Z |
 | `sl.tab_selection_mode_v_e_f_obj` | Tab: Selection Mode (V/E/F/Obj) | Tab: Modo de Seleção (V/E/F/Obj) |
 | `sl.target` | Target: | Alvo: |
 | `sl.target_canonical_vocabulary_point_round_edge` | Target canonical vocabulary: Point, Round Edge, Fuse, Cut, Connect. | Vocabulário canônico alvo: Point, Round Edge, Fuse, Cut, Connect. |
@@ -1260,6 +1319,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `sl.view` | View | Vista |
 | `sl.viewport_n_nslint_shell_bootstrap_ngpu_viewp` | VIEWPORT\n\nSlint shell bootstrap\nGPU viewport remains behind PetuniaViewport | VIEWPORT\n\nSlint shell bootstrap\nGPU viewport remains behind PetuniaViewport |
 | `sl.viewport_rendering_shading` | Viewport Rendering & Shading | Renderização e Shading do Viewport |
+| `sl.viewport_selection_color` | Selection color in the viewport | Cor da seleção na viewport |
 | `sl.w_toggle_selection_select_box_select` | W: Toggle Selection (Select / Box Select) | W: Alternar Seleção (Select / Box Select) |
 | `sl.wedge` | Wedge | Cunha |
 | `sl.weld_coincident_3d_edges_that_have_split_uv_` | Weld coincident 3D edges that have split UV seams | Solda arestas 3D coincidentes que têm seams UV divididas |
@@ -1352,6 +1412,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `toolbar.reset` | Reset toolbar | Redefinir barra |
 | `toolbar.two_columns` | 2 columns | 2 colunas |
 | `toolbar.visible` | Visible | Visível |
+| `tools.active` | Active tool: {tool} | Ferramenta ativa: {tool} |
 | `tools.add_primitive` | Add Primitive | Adicionar primitiva |
 | `tools.annotate` | Annotate | Anotar |
 | `tools.bevel` | Round Edge | Round Edge |
@@ -1401,6 +1462,8 @@ Total de chaves de localização cadastradas: **1622**.
 | `transform.scale` | Scale | Escala |
 | `transform.title` | Transform | Transform |
 | `transform.unlink` | Unlink axes | Desligar eixos |
+| `ui.accent_color` | Interface accent color | Cor de destaque da interface |
+| `ui.accent_color_hint` | Active buttons, tools and focus. The selection in the viewport has its own color below. | Botões e ferramentas ativos e foco. A seleção na viewport tem a própria cor, abaixo. |
 | `ui.action_cut` | Cut | Cortar |
 | `ui.action_fuse` | Fuse | Fundir |
 | `ui.action_intersect` | Intersect | Interseção |
@@ -1417,6 +1480,7 @@ Total de chaves de localização cadastradas: **1622**.
 | `ui.close` | Close | Fechar |
 | `ui.collapse` | Collapse section | Recolher painel |
 | `ui.collapse_inspector` | Collapse inspector | Recolher inspector |
+| `ui.colors_too_close` | Accent and selection colors are too similar. Pick colors that are easier to tell apart. | As cores de destaque e de seleção estão parecidas demais. Escolha cores fáceis de distinguir. |
 | `ui.decal_bake` | Bake Decal to Layer | Fixar Decalque na Camada |
 | `ui.decal_hint` | Drag on 3D surface to place decal. Shift+drag: scale, Ctrl+drag: rotate. | Arraste na superfície 3D para posicionar. Shift+arraste: escala, Ctrl+arraste: rotação. |
 | `ui.decal_position` | Position | Posição |
