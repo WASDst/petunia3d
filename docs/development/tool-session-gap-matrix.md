@@ -44,7 +44,7 @@ origem: [capítulo 46](../bible/foundations/46-pesquisa-interacao-modelagem-refe
 - Um único buffer numérico: o bridge ainda usa `modal_text`; o buffer de
   `ToolSession::text` está pronto para frontends futuros (MCP/Lua).
 - Loop Cut, Slice, Knife e Profile migram para `Collecting` nas Ondas 4 e 5.
-- Gizmo 3D em passo GPU próprio e alças ≥ 24 px para Extrude/Inset/Round Edge: Onda 6.
+- ~~Gizmo 3D em passo GPU próprio e alças ≥ 24 px para Extrude/Inset/Round Edge~~: implementados em 04/10/2026 (ver `wave6-visual-accessibility-gap-matrix.md`, parte 5, e `draw-poly-audit-2026-09-30.md`, U8).
 
 ## Testes do contrato antigo atualizados de propósito
 

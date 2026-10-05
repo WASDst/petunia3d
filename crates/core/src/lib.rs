@@ -118,7 +118,7 @@ pub use inference::{
 pub use modal_feedback::ToolFeedback;
 pub use module::{Module, ModuleRegistry};
 pub use petunia_mesh::poly_pen::PenPoint;
-pub use poly_pen::PolyPenCommandError;
+pub use poly_pen::{PenStrip, PolyPenCommandError};
 pub use primitive_session::{
     CircleFill, PrimitiveCreationSession, PrimitiveDescriptor, PrimitiveDescriptorExt,
 };

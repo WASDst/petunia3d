@@ -1296,6 +1296,56 @@ impl Project {
     /// Uses allocation capacities from the already-cloned snapshot, so history
     /// budgeting accounts for the dominant heap payloads rather than only the
     /// shallow `Project` header.
+    /// Pegada para o histórico de Undo: malhas e pixels em [`Shared`] são
+    /// blocos identificados (o mesmo bloco em vários snapshots conta uma vez);
+    /// o restante é memória própria do snapshot.
+    pub fn history_footprint(&self, visit: &mut dyn FnMut(usize, usize)) {
+        let mut shared = 0usize;
+        let mut canvas = |c: &Canvas, visit: &mut dyn FnMut(usize, usize)| {
+            let bytes = canvas_heap_bytes(c);
+            shared = shared.saturating_add(bytes);
+            visit(Shared::addr(&c.pixels), bytes);
+        };
+        for asset in &self.assets {
+            if let Some(tex) = asset.texture.as_ref() {
+                canvas(tex, visit);
+            }
+            if let Some(stack) = asset.paint_stack.as_ref() {
+                for layer in &stack.layers {
+                    if let Some(cv) = layer.canvas() {
+                        canvas(cv, visit);
+                    }
+                }
+            }
+        }
+        for mat in &self.materials {
+            for texture in [
+                mat.albedo_texture.as_ref(),
+                mat.normal_texture.as_ref(),
+                mat.roughness_texture.as_ref(),
+                mat.metallic_texture.as_ref(),
+                mat.emission_texture.as_ref(),
+                mat.height_texture.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                canvas(texture, visit);
+            }
+        }
+        let mut meshes = 0usize;
+        for asset in &self.assets {
+            let bytes = mesh_heap_bytes(&asset.mesh);
+            meshes = meshes.saturating_add(bytes);
+            visit(Shared::addr(&asset.mesh), bytes);
+        }
+        let total = self.estimated_bytes();
+        visit(
+            0,
+            total.saturating_sub(shared).saturating_sub(meshes).max(1),
+        );
+    }
+
     pub fn estimated_bytes(&self) -> usize {
         let mut n = std::mem::size_of::<Self>();
         n = n.saturating_add(self.name.capacity());
@@ -2230,6 +2280,31 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_footprint_shares_unchanged_meshes_between_clones() {
+        let mut p = Project::new();
+        p.add("Big", Mesh::sphere_low(64, 48, 1.0));
+        let clone = p.clone();
+        let blocks = |project: &Project| {
+            let mut out = Vec::new();
+            project.history_footprint(&mut |id, bytes| out.push((id, bytes)));
+            out
+        };
+        let (a, b) = (blocks(&p), blocks(&clone));
+        let total: usize = a.iter().map(|(_, n)| n).sum();
+        assert!(total >= p.estimated_bytes().saturating_sub(1));
+        // Malhas inalteradas: mesmos blocos nos dois snapshots.
+        let shared_a: Vec<_> = a.iter().filter(|(id, _)| *id != 0).collect();
+        let shared_b: Vec<_> = b.iter().filter(|(id, _)| *id != 0).collect();
+        assert_eq!(shared_a, shared_b);
+        // Editar uma malha separa só aquele bloco.
+        let mut edited = clone.clone();
+        let _ = &mut *edited.assets[1].mesh;
+        let ids_edited: Vec<_> = blocks(&edited).iter().map(|(id, _)| *id).collect();
+        assert!(!ids_edited.contains(&Shared::addr(&p.assets[1].mesh)));
+        assert!(ids_edited.contains(&Shared::addr(&p.assets[0].mesh)));
+    }
 
     #[test]
     fn test_project_remove_shifts_active_index() {

@@ -873,6 +873,72 @@ pub mod text_id {
 
     pub const STATUS_PROFILE_POINT_SELECTED: TextId = TextId::new("status.profile_point_selected");
 
+    pub const HUD_CUTS: TextId = TextId::new("hud.cuts");
+    pub const HUD_LOOP_CUT_HOVER_HINT: TextId = TextId::new("hud.loop_cut_hover_hint");
+    pub const HUD_POINTS: TextId = TextId::new("hud.points");
+    pub const HUD_PROFILE_CLOSED_HINT: TextId = TextId::new("hud.profile_closed_hint");
+    pub const HUD_PROFILE_OPEN_HINT: TextId = TextId::new("hud.profile_open_hint");
+    pub const HUD_INPUT: TextId = TextId::new("hud.input");
+    pub const HUD_FACES: TextId = TextId::new("hud.faces");
+    pub const HUD_HINT_CLICK_CONFIRM: TextId = TextId::new("hud.hint_click_confirm");
+    pub const HUD_HINT_RELEASE_CONFIRM: TextId = TextId::new("hud.hint_release_confirm");
+    pub const HUD_SLIDE: TextId = TextId::new("hud.slide");
+    pub const HUD_CUT_COUNT: TextId = TextId::new("hud.cut_count");
+    pub const HUD_LOOP_CUT_HINT: TextId = TextId::new("hud.loop_cut_hint");
+    pub const HUD_CUT_TITLE: TextId = TextId::new("hud.cut_title");
+    pub const HUD_SEGMENTS: TextId = TextId::new("hud.segments");
+    pub const HUD_CUT_HINT: TextId = TextId::new("hud.cut_hint");
+    pub const HUD_PLANE: TextId = TextId::new("hud.plane");
+    pub const HUD_VALUE: TextId = TextId::new("hud.value");
+    pub const HUD_SNAP: TextId = TextId::new("hud.snap");
+    pub const HUD_SUBJECT_PIVOT: TextId = TextId::new("hud.subject_pivot");
+    pub const HUD_SUBJECT_OBJECT: TextId = TextId::new("hud.subject_object");
+    pub const HUD_SUBJECT_SELECTION: TextId = TextId::new("hud.subject_selection");
+    pub const HUD_AXIS: TextId = TextId::new("hud.axis");
+    pub const HUD_PLANE_SUBJECT: TextId = TextId::new("hud.plane_subject");
+    pub const HUD_FREE: TextId = TextId::new("hud.free");
+    pub const HUD_TRANSFORM_HINT: TextId = TextId::new("hud.transform_hint");
+    pub const HUD_EDIT_PIVOT_TITLE: TextId = TextId::new("hud.edit_pivot_title");
+    pub const HUD_PIVOT: TextId = TextId::new("hud.pivot");
+    pub const HUD_EDIT_PIVOT_LINE: TextId = TextId::new("hud.edit_pivot_line");
+    pub const HUD_EDIT_PIVOT_HINT: TextId = TextId::new("hud.edit_pivot_hint");
+    pub const HUD_ADD_PRIMITIVE_HINT: TextId = TextId::new("hud.add_primitive_hint");
+    pub const HUD_IDLE_OBJECT: TextId = TextId::new("hud.idle_object");
+    pub const HUD_IDLE_POINT: TextId = TextId::new("hud.idle_point");
+    pub const HUD_IDLE_EDGE: TextId = TextId::new("hud.idle_edge");
+    pub const HUD_IDLE_FACE: TextId = TextId::new("hud.idle_face");
+    pub const HUD_BADGE_FREE_MODE: TextId = TextId::new("hud.badge_free_mode");
+    pub const HUD_BADGE_TOOL: TextId = TextId::new("hud.badge_tool");
+    pub const HUD_LABEL_DISTANCE: TextId = TextId::new("hud.label_distance");
+    pub const HUD_LABEL_AMOUNT: TextId = TextId::new("hud.label_amount");
+    pub const HUD_LABEL_WIDTH: TextId = TextId::new("hud.label_width");
+    pub const HUD_LABEL_FACTOR: TextId = TextId::new("hud.label_factor");
+    pub const HUD_TOOL_FALLBACK: TextId = TextId::new("hud.tool_fallback");
+
+    pub const HUD_VIEWPORT_MENU: TextId = TextId::new("hud.viewport_menu");
+
+    pub const TOOLS_POLY_PEN_MODE: TextId = TextId::new("tools.poly_pen_mode");
+    pub const TOOLS_POLY_PEN_MODE_AUTO: TextId = TextId::new("tools.poly_pen_mode_auto");
+    pub const TOOLS_POLY_PEN_MODE_POINTS: TextId = TextId::new("tools.poly_pen_mode_points");
+    pub const TOOLS_POLY_PEN_MODE_EDGES: TextId = TextId::new("tools.poly_pen_mode_edges");
+    pub const TOOLS_POLY_PEN_MODE_POLYGONS: TextId = TextId::new("tools.poly_pen_mode_polygons");
+    pub const TOOLS_POLY_PEN_MODE_AUTO_HINT: TextId = TextId::new("tools.poly_pen_mode_auto_hint");
+    pub const TOOLS_POLY_PEN_MODE_POINTS_HINT: TextId =
+        TextId::new("tools.poly_pen_mode_points_hint");
+    pub const TOOLS_POLY_PEN_MODE_EDGES_HINT: TextId =
+        TextId::new("tools.poly_pen_mode_edges_hint");
+    pub const TOOLS_POLY_PEN_MODE_POLYGONS_HINT: TextId =
+        TextId::new("tools.poly_pen_mode_polygons_hint");
+    pub const STATUS_POLY_PEN_PAINTED: TextId = TextId::new("status.poly_pen_painted");
+
+    pub const PREFERENCES_VIEWPORT_MATCAP: TextId = TextId::new("preferences.viewport_matcap");
+    pub const PREFERENCES_VIEWPORT_MATCAP_HINT: TextId =
+        TextId::new("preferences.viewport_matcap_hint");
+    pub const PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION: TextId =
+        TextId::new("preferences.viewport_ambient_occlusion");
+    pub const PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION_HINT: TextId =
+        TextId::new("preferences.viewport_ambient_occlusion_hint");
+
     pub const ALL: &[TextId] = &[
         UI_OUTLINER,
         UI_PROPERTIES,
@@ -1444,6 +1510,62 @@ pub mod text_id {
         STATUS_CURVE_SELECTED,
         STATUS_REGION_SELECTED,
         STATUS_PROFILE_POINT_SELECTED,
+        HUD_CUTS,
+        HUD_LOOP_CUT_HOVER_HINT,
+        HUD_POINTS,
+        HUD_PROFILE_CLOSED_HINT,
+        HUD_PROFILE_OPEN_HINT,
+        HUD_INPUT,
+        HUD_FACES,
+        HUD_HINT_CLICK_CONFIRM,
+        HUD_HINT_RELEASE_CONFIRM,
+        HUD_SLIDE,
+        HUD_CUT_COUNT,
+        HUD_LOOP_CUT_HINT,
+        HUD_CUT_TITLE,
+        HUD_SEGMENTS,
+        HUD_CUT_HINT,
+        HUD_PLANE,
+        HUD_VALUE,
+        HUD_SNAP,
+        HUD_SUBJECT_PIVOT,
+        HUD_SUBJECT_OBJECT,
+        HUD_SUBJECT_SELECTION,
+        HUD_AXIS,
+        HUD_PLANE_SUBJECT,
+        HUD_FREE,
+        HUD_TRANSFORM_HINT,
+        HUD_EDIT_PIVOT_TITLE,
+        HUD_PIVOT,
+        HUD_EDIT_PIVOT_LINE,
+        HUD_EDIT_PIVOT_HINT,
+        HUD_ADD_PRIMITIVE_HINT,
+        HUD_IDLE_OBJECT,
+        HUD_IDLE_POINT,
+        HUD_IDLE_EDGE,
+        HUD_IDLE_FACE,
+        HUD_BADGE_FREE_MODE,
+        HUD_BADGE_TOOL,
+        HUD_LABEL_DISTANCE,
+        HUD_LABEL_AMOUNT,
+        HUD_LABEL_WIDTH,
+        HUD_LABEL_FACTOR,
+        HUD_TOOL_FALLBACK,
+        HUD_VIEWPORT_MENU,
+        TOOLS_POLY_PEN_MODE,
+        TOOLS_POLY_PEN_MODE_AUTO,
+        TOOLS_POLY_PEN_MODE_POINTS,
+        TOOLS_POLY_PEN_MODE_EDGES,
+        TOOLS_POLY_PEN_MODE_POLYGONS,
+        TOOLS_POLY_PEN_MODE_AUTO_HINT,
+        TOOLS_POLY_PEN_MODE_POINTS_HINT,
+        TOOLS_POLY_PEN_MODE_EDGES_HINT,
+        TOOLS_POLY_PEN_MODE_POLYGONS_HINT,
+        STATUS_POLY_PEN_PAINTED,
+        PREFERENCES_VIEWPORT_MATCAP,
+        PREFERENCES_VIEWPORT_MATCAP_HINT,
+        PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION,
+        PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION_HINT,
     ];
 }
 

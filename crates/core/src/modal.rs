@@ -424,7 +424,7 @@ impl AppState {
         }
     }
 
-    fn restore_before_prelude(&mut self, before: Project, selection: Selection) {
+    pub(crate) fn restore_before_prelude(&mut self, before: Project, selection: Selection) {
         let revision_clock = self.project.project.revision_clock();
         self.project.project = before;
         self.project

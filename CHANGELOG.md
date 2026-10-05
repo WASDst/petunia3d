@@ -5,6 +5,14 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### HUD, Undo e pendências do POLY (04/10/2026)
+
+- HUD de operação, selo "MODO LIVRE"/"FREE MODE", menu da viewport e nomes de ferramenta passam por `TextId` (42 chaves `hud.*`, en/pt-BR).
+- Orçamento de memória do Undo mede bytes únicos: malhas e pixels compartilhados entre snapshots contam uma vez (`UndoStack::with_footprint`, `Project::history_footprint`, ADR 008).
+- Poly Pen: modos Auto/Points/Edges/Polygons no card da ferramenta; no modo Polygons, arrastar a partir de uma aresta de borda pinta quads (1 Undo, `Esc` restaura); pontos novos caem no plano de trabalho travado; ícone próprio. O modificador de "ação alternativa" vem do keymap (seção `[pointer]`).
+- Extrude, Inset, Round Edge e Push/Pull ganham alça visível de 24 px (alvo de 32 px, constituição 03): arrastar pela alça opera a seleção atual e a alça acompanha o valor.
+- Viewport WGPU: gizmo de transformação num passo GPU próprio (sem depth test, tamanho constante; hit test inalterado), matcap procedural no Solid e oclusão ambiente GTAO em meia resolução (Solid/Material), ambos no popover de shading e salvos nas preferências. O viewport de produção passa a repassar a escala de tela ao WGPU (HiDPI nítido).
+
 ### DRAW/POLY — desempenho e ferramentas (04/10/2026)
 
 - Arrasto e hover redesenham só a viewport e os overlays; a janela completa sincroniza no máximo a cada 50 ms. Seleção não retriangula a cena; o WGPU guarda a geometria por objeto.

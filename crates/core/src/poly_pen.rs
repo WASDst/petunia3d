@@ -6,14 +6,44 @@
 //! - [`AppState::poly_pen_melt_point`]: derrete um ponto (1 Undo);
 //! - [`AppState::begin_poly_pen_edge_extrude`]: prelúdio que extruda a aresta
 //!   e abre um Move dos pontos novos — o gesto inteiro é 1 Undo e `Esc`
-//!   restaura exatamente.
+//!   restaura exatamente;
+//! - [`AppState::begin_poly_pen_strip`]: pintura de faces (modo Polygons) —
+//!   arrastar a partir de uma aresta de borda cria uma faixa de quads que
+//!   segue o cursor; o gesto inteiro é 1 Undo e `Esc` restaura.
 
 use glam::Vec3;
 use petunia_mesh::poly_pen::{PenPoint, PolyPenError};
-use petunia_project::ProjectChanges;
+use petunia_project::{Project, ProjectChanges};
 
 use crate::modal::{ModalError, ModalKind};
-use crate::{AppState, SelectionDomain};
+use crate::{AppState, Selection, SelectionDomain};
+
+/// Quads criados no máximo por evento do ponteiro (arrasto muito rápido não
+/// gera milhares de faces de uma vez).
+const STRIP_MAX_QUADS_PER_EVENT: usize = 64;
+
+/// Gesto de pintura de faces do Poly Pen em andamento.
+#[derive(Debug, Clone)]
+pub struct PenStrip {
+    before: Box<(Project, Selection)>,
+    /// Aresta de borda na ponta da faixa (a próxima extrusão parte dela).
+    edge: (u32, u32),
+    /// Comprimento de cada passo (o da aresta inicial: quads ~quadrados).
+    step: f32,
+    faces: Vec<usize>,
+}
+
+impl PenStrip {
+    /// Quads já pintados neste gesto.
+    pub fn quads(&self) -> usize {
+        self.faces.len()
+    }
+
+    /// Aresta na ponta da faixa.
+    pub fn edge(&self) -> (u32, u32) {
+        self.edge
+    }
+}
 
 /// Por que um comando do Poly Pen foi recusado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -157,6 +187,117 @@ impl AppState {
         self.begin_modal_after_prelude(ModalKind::Move, before, before_selection)?;
         Ok(())
     }
+
+    /// Começa a pintura de faces na aresta de borda `a–b`. Nada muda até o
+    /// primeiro passo de [`Self::poly_pen_strip_to`].
+    pub fn begin_poly_pen_strip(
+        &mut self,
+        a: u32,
+        b: u32,
+    ) -> Result<PenStrip, PolyPenCommandError> {
+        self.poly_pen_ready()?;
+        let mesh = self
+            .project
+            .active_mesh()
+            .ok_or(PolyPenCommandError::NoActiveMesh)?;
+        let (Some(pa), Some(pb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize)) else {
+            return Err(PolyPenError::MissingPoint.into());
+        };
+        let step = pa.vec().distance(pb.vec());
+        match mesh.edge_faces(a, b).len() {
+            0 => return Err(PolyPenError::MissingEdge.into()),
+            1 => {}
+            _ => return Err(PolyPenError::NotBorderEdge.into()),
+        }
+        if !step.is_finite() || step < 1.0e-5 {
+            return Err(PolyPenError::Degenerate.into());
+        }
+        let before = Box::new((self.project.project.clone(), self.session.selection.clone()));
+        self.freeze_active_primitive_for_command();
+        Ok(PenStrip {
+            before,
+            edge: (a, b),
+            step,
+            faces: Vec::new(),
+        })
+    }
+
+    /// Estende a faixa em direção a `target` (mundo): um quad por passo
+    /// inteiro de distância entre o meio da aresta da ponta e o alvo.
+    /// Devolve quantos quads entraram.
+    pub fn poly_pen_strip_to(
+        &mut self,
+        strip: &mut PenStrip,
+        target: Vec3,
+    ) -> Result<usize, PolyPenCommandError> {
+        if !target.is_finite() {
+            return Ok(0);
+        }
+        let mut added = 0;
+        {
+            let mesh = self
+                .project
+                .project
+                .active_mesh_mut()
+                .ok_or(PolyPenCommandError::NoActiveMesh)?;
+            while added < STRIP_MAX_QUADS_PER_EVENT {
+                let (a, b) = strip.edge;
+                let (Some(pa), Some(pb)) = (
+                    mesh.verts.get(a as usize).map(|v| v.vec()),
+                    mesh.verts.get(b as usize).map(|v| v.vec()),
+                ) else {
+                    return Err(PolyPenError::MissingPoint.into());
+                };
+                let offset = target - (pa + pb) * 0.5;
+                if offset.length() < strip.step {
+                    break;
+                }
+                let delta = offset.normalize() * strip.step;
+                let (a_new, b_new, face) = mesh.extrude_edge(a, b)?;
+                mesh.verts[a_new as usize].pos = (pa + delta).to_array();
+                mesh.verts[b_new as usize].pos = (pb + delta).to_array();
+                strip.edge = (a_new, b_new);
+                strip.faces.push(face);
+                added += 1;
+            }
+        }
+        if added > 0 {
+            self.emit_project_changed(ProjectChanges::GEOMETRY | ProjectChanges::SELECTION);
+        }
+        Ok(added)
+    }
+
+    /// Confirma a pintura: os quads pintados ficam selecionados e o gesto
+    /// vira 1 Undo. Sem quads, o documento volta exatamente ao início.
+    pub fn finish_poly_pen_strip(&mut self, strip: PenStrip) -> bool {
+        if strip.faces.is_empty() {
+            self.cancel_poly_pen_strip(strip);
+            return false;
+        }
+        let PenStrip { before, faces, .. } = strip;
+        if let Some(mesh) = self.project.project.active_mesh_mut() {
+            mesh.deselect_all();
+            for &face in &faces {
+                if let Some(face) = mesh.faces.get_mut(face) {
+                    face.selected = true;
+                }
+            }
+            mesh.sync_vert_selection_from_faces();
+        }
+        self.project
+            .checkpoint_snapshot("Poly Pen: Paint", &before.0);
+        self.set_selection_domain(SelectionDomain::Face);
+        self.sync_selection();
+        self.emit_project_changed(ProjectChanges::GEOMETRY | ProjectChanges::SELECTION);
+        self.mark_dirty();
+        true
+    }
+
+    /// Cancela a pintura e restaura o documento e a seleção do início.
+    pub fn cancel_poly_pen_strip(&mut self, strip: PenStrip) {
+        let (project, selection) = *strip.before;
+        self.restore_before_prelude(project, selection);
+    }
 }
 
 #[cfg(test)]
@@ -254,6 +395,69 @@ mod tests {
         ));
         assert_eq!(state.project.undo.depth(), depth);
         assert!(state.modal.is_none());
+    }
+
+    #[test]
+    fn painting_a_strip_is_one_undo_and_escape_restores() {
+        let (mut state, a, b) = open_box_state();
+        let (pa, pb) = {
+            let mesh = state.project.active_mesh().unwrap();
+            (mesh.verts[a as usize].vec(), mesh.verts[b as usize].vec())
+        };
+        let faces = state.project.active_mesh().unwrap().faces.len();
+        let depth = state.project.undo.depth().0;
+        // Direção para fora do cubo, perpendicular à aresta.
+        let mid = (pa + pb) * 0.5;
+        let outward = mid.normalize();
+        let step = pa.distance(pb);
+        let mut strip = state.begin_poly_pen_strip(a, b).unwrap();
+        assert_eq!(
+            state
+                .poly_pen_strip_to(&mut strip, mid + outward * step * 0.5)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            state
+                .poly_pen_strip_to(&mut strip, mid + outward * step * 3.2)
+                .unwrap(),
+            3
+        );
+        assert_eq!(strip.quads(), 3);
+        assert!(state.finish_poly_pen_strip(strip));
+        let mesh = state.project.active_mesh().unwrap();
+        assert_eq!(mesh.faces.len(), faces + 3);
+        assert_eq!(mesh.faces.iter().filter(|f| f.selected).count(), 3);
+        assert_eq!(state.project.undo.depth().0, depth + 1);
+        assert!(state.undo());
+        assert_eq!(state.project.active_mesh().unwrap().faces.len(), faces);
+
+        let (mut state, a, b) = open_box_state();
+        let before = state.project.active_mesh().unwrap().clone();
+        let depth = state.project.undo.depth();
+        let mut strip = state.begin_poly_pen_strip(a, b).unwrap();
+        state
+            .poly_pen_strip_to(&mut strip, Vec3::splat(9.0))
+            .unwrap();
+        state.cancel_poly_pen_strip(strip);
+        let after = state.project.active_mesh().unwrap();
+        assert_eq!(after.faces.len(), before.faces.len());
+        assert_eq!(after.verts.len(), before.verts.len());
+        assert_eq!(state.project.undo.depth(), depth);
+    }
+
+    #[test]
+    fn strips_only_start_on_border_edges() {
+        let mut state = front_state();
+        let face = state.project.active_mesh().unwrap().faces[0].verts.clone();
+        assert!(matches!(
+            state.begin_poly_pen_strip(face[0], face[1]),
+            Err(PolyPenCommandError::Geometry(PolyPenError::NotBorderEdge))
+        ));
+        assert!(matches!(
+            state.begin_poly_pen_strip(face[0], face[2]),
+            Err(PolyPenCommandError::Geometry(PolyPenError::MissingEdge))
+        ));
     }
 
     #[test]

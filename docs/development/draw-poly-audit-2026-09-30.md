@@ -31,7 +31,7 @@ o que é estimativa está dito.
 | U5 | Trocar para o PAINT mantinha a ferramenta de modelagem; escolher Fill no PAINT pintava os vértices do objeto todo | Normalização de ferramenta ao trocar de workspace; Fill só pinta vértices fora do PAINT | **Corrigido** |
 | U6 | Painéis flutuantes travavam ao arrastar, não aceitavam tamanho e cortavam valores | Arrasto estável, alça de redimensionar | **Corrigido** |
 | U7 | Sliders com `value: expr` perdiam o binding no primeiro arrasto | `PetuniaSlider.controlled` | **Corrigido** |
-| U8 | Alças de Extrude/Inset/Round Edge abaixo de 24 px (WCAG 2.5.8, ADR 007) | — | **Aberto** (visual, com o agente de UI) |
+| U8 | Alças de Extrude/Inset/Round Edge abaixo de 24 px (WCAG 2.5.8, ADR 007) | Alça visível de 24 px com alvo de 32 px para Extrude, Inset, Round Edge e Push/Pull (`parametric_handle`, `PressTarget::Handle(4)`): arrastar pela alça usa a seleção atual, o clique nela não troca a seleção e a alça segue o valor (04/10/2026) | **Corrigido** |
 | U9 | Um único buffer numérico: o bridge usa `modal_text`; `ToolSession::text` está pronto e sem uso | — | **Aberto** (migração do bridge; baixo risco, alto toque) |
 | U10 | Loop Cut, Slice, Knife e Profile ainda têm ciclo próprio (não passam por `ToolSession`) | — | **Aberto** (Ondas 4/5 do ADR 007; escopo grande) |
 | U11 | Poly Pen: sem "clique na aresta para subdividir" | `Mesh::split_edge` + `poly_pen_split_edge` (1 Undo) + clique na aresta sem polígono em coleta | **Corrigido** |
@@ -51,4 +51,4 @@ o que é estimativa está dito.
 
 ## Execução de 04/10/2026
 
-Os itens 1–4 desta ordem (índice espacial, render coalescido e dirty flags, buffer numérico único e migração para `ToolSession`, alças) foram tratados na rodada registrada em [`draw-poly-perf-tools-2026-10-04.md`](draw-poly-perf-tools-2026-10-04.md); alças ≥ 24 px e gizmo em passo GPU continuam pendentes.
+Os itens 1–4 desta ordem (índice espacial, render coalescido e dirty flags, buffer numérico único e migração para `ToolSession`, alças) foram tratados na rodada registrada em [`draw-poly-perf-tools-2026-10-04.md`](draw-poly-perf-tools-2026-10-04.md); alças ≥ 24 px e gizmo em passo GPU foram entregues em 04/10/2026.

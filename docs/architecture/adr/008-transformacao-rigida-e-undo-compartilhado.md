@@ -50,8 +50,11 @@ UV, regiões, medidas). O risco não se justifica na V1.
 
 - O custo por evento de mover objetos deixa de incluir clonar, validar e
   triangular; o de confirmar uma operação deixa de copiar o projeto inteiro.
-- O orçamento de bytes do histórico ainda soma o tamanho completo de cada
-  snapshot (conservador): com o compartilhamento, a memória real é menor que
-  a medida. Medir bytes únicos fica como melhoria futura.
+- O orçamento de bytes do histórico mede bytes únicos: `UndoStack` aceita uma
+  pegada (`with_footprint`) e `Project::history_footprint` identifica cada
+  malha e cada bloco de pixels em `Shared<T>` pelo endereço, contando uma vez
+  o bloco presente em vários snapshots; o restante do projeto conta por
+  snapshot. Assim, com o mesmo orçamento, cabem muito mais passos quando as
+  edições tocam só uma parte da cena.
 - Uma matriz persistida por objeto continua possível no futuro, com migração
   de formato própria e um ADR novo.

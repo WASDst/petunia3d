@@ -84,6 +84,10 @@ pub struct ViewportRenderState {
     pub boolean_operand: Option<uuid::Uuid>,
     /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
     pub studio_light_follows_camera: bool,
+    /// Matcap procedural no Solid (preferência).
+    pub matcap: bool,
+    /// Oclusão ambiente (GTAO) no Solid/Material (preferência).
+    pub ambient_occlusion: bool,
     /// Aparência das arestas por modo (DRAW = forma, POLY = topologia).
     pub edge_mode: petunia_render_wgpu::EdgeMode,
     /// Plano de trabalho em destaque (DRAW, ferramenta de desenho).
@@ -108,6 +112,8 @@ impl Default for ViewportRenderState {
             hover: petunia_core::HoverTarget::None,
             boolean_operand: None,
             studio_light_follows_camera: true,
+            matcap: false,
+            ambient_occlusion: false,
             edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
             workplane: None,
         }
@@ -183,6 +189,85 @@ pub struct GizmoModel {
     pub cursor_visible: bool,
 }
 
+impl GizmoModel {
+    /// Remove a geometria das alças (o backend GPU a desenha); rótulos,
+    /// tripé de navegação e cursor 3D continuam no shell.
+    pub fn clear_handle_geometry(&mut self) {
+        for commands in [
+            &mut self.x_commands,
+            &mut self.y_commands,
+            &mut self.z_commands,
+            &mut self.x_arrow_commands,
+            &mut self.y_arrow_commands,
+            &mut self.z_arrow_commands,
+            &mut self.x_scale_commands,
+            &mut self.y_scale_commands,
+            &mut self.z_scale_commands,
+            &mut self.x_rotate_commands,
+            &mut self.y_rotate_commands,
+            &mut self.z_rotate_commands,
+            &mut self.plane_yz_commands,
+            &mut self.plane_xz_commands,
+            &mut self.plane_xy_commands,
+            &mut self.view_roll_commands,
+        ] {
+            commands.clear();
+        }
+    }
+}
+
+/// Subcaminhos `M x y L x y … [Z]` de um comando de `Path`: pontos e se fecha.
+fn path_polylines(commands: &str) -> Vec<(Vec<[f32; 2]>, bool)> {
+    let mut paths: Vec<(Vec<[f32; 2]>, bool)> = Vec::new();
+    let mut numbers = Vec::new();
+    let flush = |numbers: &mut Vec<f32>, paths: &mut Vec<(Vec<[f32; 2]>, bool)>| {
+        if let Some(path) = paths.last_mut() {
+            path.0.extend(numbers.as_chunks::<2>().0.iter().copied());
+        }
+        numbers.clear();
+    };
+    for token in commands.split_whitespace() {
+        match token {
+            "M" => {
+                flush(&mut numbers, &mut paths);
+                paths.push((Vec::new(), false));
+            }
+            "L" => flush(&mut numbers, &mut paths),
+            "Z" | "z" => {
+                flush(&mut numbers, &mut paths);
+                if let Some(path) = paths.last_mut() {
+                    path.1 = true;
+                }
+            }
+            other => {
+                if let Ok(value) = other.parse::<f32>() {
+                    numbers.push(value);
+                }
+            }
+        }
+    }
+    flush(&mut numbers, &mut paths);
+    paths.retain(|(points, _)| points.len() >= 2);
+    paths
+}
+
+/// Cores do gizmo desenhado na GPU: eixos dos tokens do shell
+/// (`DesignTokens.axis-*`, entregues em `connect_callbacks`); o resto vem do
+/// tema ativo no `ThemeRegistry`, a mesma fonte do `apply_theme`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GizmoAxisColors(pub [[f32; 4]; 3]);
+
+impl Default for GizmoAxisColors {
+    fn default() -> Self {
+        let rgba = |c: [f32; 3]| [c[0], c[1], c[2], 1.0];
+        Self([
+            rgba(petunia_render::scene::AXIS_X),
+            rgba(petunia_render::scene::AXIS_Y),
+            rgba(petunia_render::scene::AXIS_Z),
+        ])
+    }
+}
+
 /// Ferramenta paramétrica com preview modal e Tool Properties.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolModalKind {
@@ -238,6 +323,29 @@ impl ToolModalKind {
         }
     }
 
+    /// Nome traduzível da ferramenta (catálogo `tools.*`).
+    pub const fn title_key(self) -> &'static str {
+        match self {
+            Self::Extrude => "tools.extrude",
+            Self::ExtrudeIndividual => "tools.extrude_individual",
+            Self::Inset => "tools.inset",
+            Self::Bevel => "tools.bevel",
+            Self::PushPull => "tools.push_pull",
+            Self::ScaleSelection => "tools.scale",
+        }
+    }
+
+    /// Rótulo traduzível do valor principal.
+    pub const fn label_id(self) -> petunia_config::TextId {
+        use petunia_config::text_id as t;
+        match self {
+            Self::Extrude | Self::ExtrudeIndividual | Self::PushPull => t::HUD_LABEL_DISTANCE,
+            Self::Inset => t::HUD_LABEL_AMOUNT,
+            Self::Bevel => t::HUD_LABEL_WIDTH,
+            Self::ScaleSelection => t::HUD_LABEL_FACTOR,
+        }
+    }
+
     pub const fn modal_kind(self) -> petunia_core::ModalKind {
         match self {
             Self::Extrude => petunia_core::ModalKind::Extrude,
@@ -266,6 +374,9 @@ impl ToolModalKind {
     }
 }
 
+/// Alvo de press da alça paramétrica (`PressTarget::Handle`).
+const PARAMETRIC_HANDLE_TARGET: u8 = 4;
+
 /// Ferramenta que segue a gramática única (constituição 11, ADR 007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GrammarTool {
@@ -290,6 +401,62 @@ pub enum GrammarTool {
     LoopCut,
     /// Slice: arrastar define o plano; clique confirma.
     Slice,
+}
+
+/// Modo do Poly Pen (cap. 46 §4, Polygon Pen do Cinema 4D): que elemento o
+/// hover destaca e o que clique e arrasto fazem.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PolyPenMode {
+    /// Ponto > aresta > polígono sob o cursor.
+    #[default]
+    Auto,
+    /// Só pontos: arrastar move; cliques desenham; alternativo derrete.
+    Points,
+    /// Só arestas: clique insere ponto; arrastar move; alternativo extruda.
+    Edges,
+    /// Polígonos e arestas de borda: arrastar a partir da borda pinta quads.
+    Polygons,
+}
+
+impl PolyPenMode {
+    pub const ALL: [Self; 4] = [Self::Auto, Self::Points, Self::Edges, Self::Polygons];
+
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Points => "points",
+            Self::Edges => "edges",
+            Self::Polygons => "polygons",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.id() == id)
+    }
+
+    /// Domínios que o hover considera, em ordem de prioridade.
+    const fn domains(self) -> &'static [SelectionDomain] {
+        match self {
+            Self::Auto => &[
+                SelectionDomain::Vertex,
+                SelectionDomain::Edge,
+                SelectionDomain::Face,
+            ],
+            Self::Points => &[SelectionDomain::Vertex],
+            Self::Edges => &[SelectionDomain::Edge],
+            Self::Polygons => &[SelectionDomain::Edge, SelectionDomain::Face],
+        }
+    }
+
+    const fn hint_id(self) -> petunia_config::TextId {
+        use petunia_config::text_id as t;
+        match self {
+            Self::Auto => t::TOOLS_POLY_PEN_MODE_AUTO_HINT,
+            Self::Points => t::TOOLS_POLY_PEN_MODE_POINTS_HINT,
+            Self::Edges => t::TOOLS_POLY_PEN_MODE_EDGES_HINT,
+            Self::Polygons => t::TOOLS_POLY_PEN_MODE_POLYGONS_HINT,
+        }
+    }
 }
 
 /// Gesto da gramática única em andamento.
@@ -327,6 +494,8 @@ enum ToolGesture {
     },
     /// Plano do Slice em definição.
     Slice,
+    /// Pintura de faces do Poly Pen (estado em `poly_pen_strip`).
+    PolyPenStrip,
 }
 
 /// Id persistente da ferramenta paramétrica no trilho.
@@ -380,6 +549,8 @@ pub enum UiIntent {
     TogglePaintMaskSelection,
     SetPaintMaskSelection(bool),
     SetActiveTool(String),
+    /// Modo do Poly Pen pelo id (`auto`, `points`, `edges`, `polygons`).
+    SetPolyPenMode(String),
     OpenCommandSearch,
     OpenSettings,
     CloseSettings,
@@ -550,6 +721,14 @@ pub trait PetuniaViewport: Send {
     /// Objetos em transformação rígida neste quadro (modo objeto): o backend
     /// pode reaproveitar a geometria triangulada aplicando a matriz.
     fn set_rigid_previews(&mut self, _previews: &[(uuid::Uuid, glam::Mat4)]) {}
+    /// O backend desenha o gizmo de transformação num passo próprio (GPU,
+    /// tamanho constante em pixels, sem depth test); o shell então não o
+    /// desenha em 2D. O hit test continua no bridge, sobre a mesma geometria.
+    fn draws_gizmo(&self) -> bool {
+        false
+    }
+    /// Overlay de tela em px lógicos (gizmo) para backends que o desenham.
+    fn set_screen_overlay(&mut self, _shapes: Vec<petunia_render_wgpu::OverlayShape>) {}
     fn render_frame(
         &mut self,
         _project: &Project,
@@ -613,6 +792,22 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn draws_component_guides(&self) -> bool {
         (**self).draws_component_guides()
+    }
+
+    fn uses_physical_pixels(&self) -> bool {
+        (**self).uses_physical_pixels()
+    }
+
+    fn set_pixel_ratio(&mut self, ratio: f32) {
+        (**self).set_pixel_ratio(ratio);
+    }
+
+    fn draws_gizmo(&self) -> bool {
+        (**self).draws_gizmo()
+    }
+
+    fn set_screen_overlay(&mut self, shapes: Vec<petunia_render_wgpu::OverlayShape>) {
+        (**self).set_screen_overlay(shapes);
     }
 
     fn set_pose_override(&mut self, pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {
@@ -708,6 +903,16 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     tool_press_alternate: bool,
     /// Pontos coletados pelo Poly Pen (estado `Collecting`).
     pub poly_pen_points: Vec<petunia_core::PenPoint>,
+    /// Modo do Poly Pen (Auto/Points/Edges/Polygons).
+    pub poly_pen_mode: PolyPenMode,
+    /// Pintura de faces em andamento (modo Polygons).
+    poly_pen_strip: Option<petunia_core::PenStrip>,
+    /// Cores dos eixos do gizmo GPU (tokens do shell).
+    pub gizmo_axis_colors: GizmoAxisColors,
+    /// Cursor sobre a alça da ferramenta paramétrica (destaque).
+    pub parametric_handle_hover: bool,
+    /// O último press caiu na alça paramétrica (o clique não seleciona).
+    tool_press_parametric_handle: bool,
     /// Sessão paramétrica aberta por atalho: o movimento do mouse já manipula.
     pub keyboard_tool_modal_active: bool,
     pub tool_modal_value: f32,
@@ -1098,6 +1303,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             tool_pointer_alt: false,
             tool_press_alternate: false,
             poly_pen_points: Vec::new(),
+            poly_pen_mode: PolyPenMode::default(),
+            poly_pen_strip: None,
+            gizmo_axis_colors: GizmoAxisColors::default(),
+            parametric_handle_hover: false,
+            tool_press_parametric_handle: false,
             keyboard_tool_modal_active: false,
             tool_modal_value: 0.0,
             rename_draft: None,
@@ -1547,6 +1757,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection =
                     !self.state.session.tools.paint_isolate_selection;
             }
+            UiIntent::SetPolyPenMode(id) => {
+                if let Some(mode) = PolyPenMode::from_id(&id)
+                    && mode != self.poly_pen_mode
+                {
+                    self.poly_pen_mode = mode;
+                    self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                    self.state.mark_dirty();
+                }
+            }
             UiIntent::SetPaintMaskSelection(val) => {
                 self.state.session.tools.paint_isolate_selection = val;
             }
@@ -1556,6 +1775,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 if tool != "poly_pen" {
                     self.poly_pen_points.clear();
+                    if let Some(strip) = self.poly_pen_strip.take() {
+                        self.state.cancel_poly_pen_strip(strip);
+                    }
                 }
                 if self.state.session.tools.active_tool == "draw_profile" && tool != "draw_profile"
                 {
@@ -2041,6 +2263,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             hover: self.state.session.tools.hover,
             boolean_operand: self.state.session.tools.boolean_operand,
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
+            matcap: self.preferences.viewport_matcap,
+            ambient_occlusion: self.preferences.viewport_ambient_occlusion,
             edge_mode: self.edge_mode(),
             workplane: self.workplane_overlay(),
         }
@@ -2057,6 +2281,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.viewport.set_outlined_objects(&outlined, active);
         self.viewport
             .set_rigid_previews(self.state.rigid_preview_transforms());
+        if self.viewport.draws_gizmo() {
+            let shapes = self.gizmo_overlay_shapes();
+            self.viewport.set_screen_overlay(shapes);
+        }
         self.viewport.render_frame(
             &self.state.project,
             &self.state.project.refs,
@@ -2426,28 +2654,44 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// O HUD diz *o que está acontecendo e com que valor*; a barra diz *como
     /// controlar*. Os dois nunca repetem a mesma informação.
     fn fill_operation_hud(&self, vm: &mut ShellViewModel) {
+        use petunia_config::text_id as t;
         let axis_name = |index: usize| ["X", "Y", "Z"][index.min(2)];
+        let tr = |id: petunia_config::TextId| self.state.t_id(id);
+        let fill = |id: petunia_config::TextId, values: &[String]| {
+            let pairs: Vec<(String, String)> = values
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i.to_string(), v.clone()))
+                .collect();
+            let refs: Vec<(&str, String)> =
+                pairs.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+            crate::tr::fill(&self.state.t_id(id), &refs)
+        };
+        let input_line = || {
+            let typed = self.tool_session.numeric_text();
+            (!typed.is_empty()).then(|| fill(t::HUD_INPUT, &[typed.to_string()]))
+        };
 
         if self.state.session.tools.active_tool == "loop_cut" && self.loop_cut.is_none() {
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Loop Cut".to_string();
-            vm.operation_hud_lines = vec![format!("Cuts    {}", self.loop_cut_hover_cuts)];
-            vm.operation_hud_hint =
-                "Hover a quad edge · Scroll Cuts · Click place · Enter confirm · Esc cancel"
-                    .to_string();
+            vm.operation_hud_title = self.state.t_id(t::TOOLS_LOOP_CUT);
+            vm.operation_hud_lines =
+                vec![fill(t::HUD_CUTS, &[self.loop_cut_hover_cuts.to_string()])];
+            vm.operation_hud_hint = tr(t::HUD_LOOP_CUT_HOVER_HINT);
             vm.context_hint = vm.operation_hud_hint.clone();
             return;
         }
         if self.state.session.tools.active_tool == "draw_profile" {
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Profile".to_string();
-            vm.operation_hud_lines =
-                vec![format!("{} point(s)", self.active_profile_point_count())];
+            vm.operation_hud_title = self.state.t("tools.draw_profile");
+            vm.operation_hud_lines = vec![fill(
+                t::HUD_POINTS,
+                &[self.active_profile_point_count().to_string()],
+            )];
             vm.operation_hud_hint = if self.active_profile_closed() {
-                "Generate Volume or Revolve · Esc finishes editing".to_string()
+                tr(t::HUD_PROFILE_CLOSED_HINT)
             } else {
-                "Click to add points · Click first point to close · Esc finishes editing"
-                    .to_string()
+                tr(t::HUD_PROFILE_OPEN_HINT)
             };
             vm.context_hint = vm.operation_hud_hint.clone();
             return;
@@ -2455,16 +2699,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         // Ferramenta paramétrica modal.
         if let Some(kind) = self.tool_modal {
-            let (minimum, maximum) = kind.bounds();
-            let _ = (minimum, maximum);
+            let title = self.state.t(kind.title_key());
             vm.operation_hud_active = true;
-            vm.operation_hud_title = kind.title().to_string();
-            vm.operation_hud_lines =
-                vec![format!("{}   {:.3}", kind.label(), self.tool_modal_value)];
-            if !self.tool_session.numeric_text().is_empty() {
-                vm.operation_hud_lines
-                    .push(format!("Input   {}", self.tool_session.numeric_text()));
-            }
+            vm.operation_hud_title = title.clone();
+            vm.operation_hud_lines = vec![format!(
+                "{}   {:.3}",
+                tr(kind.label_id()),
+                self.tool_modal_value
+            )];
+            vm.operation_hud_lines.extend(input_line());
             vm.operation_hud_subject = self
                 .state
                 .project
@@ -2473,35 +2716,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let faces = mesh.faces.iter().filter(|face| face.selected).count();
                     let verts = mesh.verts.iter().filter(|vert| vert.selected).count();
                     if faces > 0 {
-                        format!("{faces} face(s)")
+                        fill(t::HUD_FACES, &[faces.to_string()])
                     } else {
-                        format!("{verts} point(s)")
+                        fill(t::HUD_POINTS, &[verts.to_string()])
                     }
                 })
                 .unwrap_or_default();
-            vm.operation_hud_hint = format!(
-                "{} Confirm   Esc Cancel   Shift Precision",
-                if self.is_instant_tool_mode() {
-                    "Click"
-                } else {
-                    "Release"
-                }
-            );
-            vm.context_hint = format!("{} · {}", kind.title(), vm.operation_hud_hint);
+            vm.operation_hud_hint = if self.is_instant_tool_mode() {
+                tr(t::HUD_HINT_CLICK_CONFIRM)
+            } else {
+                tr(t::HUD_HINT_RELEASE_CONFIRM)
+            };
+            vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
         // Loop Cut.
         if let Some(session) = &self.loop_cut {
+            let title = self.state.t_id(t::TOOLS_LOOP_CUT);
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Loop Cut".to_string();
+            vm.operation_hud_title = title.clone();
             vm.operation_hud_lines = vec![
-                format!("Cuts    {}", session.cuts),
-                format!("Slide   {:.3}", session.slide),
+                fill(t::HUD_CUTS, &[session.cuts.to_string()]),
+                fill(t::HUD_SLIDE, &[format!("{:.3}", session.slide)]),
             ];
-            vm.operation_hud_subject = format!("{} cut(s)", session.cuts);
-            vm.operation_hud_hint = "Enter Confirm   Esc Cancel   Drag to slide".to_string();
-            vm.context_hint = format!("Loop Cut · {}", vm.operation_hud_hint);
+            vm.operation_hud_subject = fill(t::HUD_CUT_COUNT, &[session.cuts.to_string()]);
+            vm.operation_hud_hint = tr(t::HUD_LOOP_CUT_HINT);
+            vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
@@ -2509,9 +2750,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             && let Some(session) = &self.state.session.tools.cut_session
         {
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Cut".into();
-            vm.operation_hud_lines = vec![format!("{} segment(s)", session.segments)];
-            vm.operation_hud_hint = "Click edge points · Enter Apply · Esc Cancel".into();
+            vm.operation_hud_title = tr(t::HUD_CUT_TITLE);
+            vm.operation_hud_lines = vec![fill(t::HUD_SEGMENTS, &[session.segments.to_string()])];
+            vm.operation_hud_hint = tr(t::HUD_CUT_HINT);
             vm.context_hint = vm.operation_hud_hint.clone();
             if let Some(point) = session.edge_start {
                 let clip = self.state.session.camera.view_proj() * point.position.extend(1.0);
@@ -2529,27 +2770,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         // Transformação por arrasto (gizmo ou ferramenta ativa).
         if let Some(modal) = self.state.session.tools.modal.as_ref() {
-            let title = match modal.kind {
-                petunia_core::ModalKind::Move => "Move",
-                petunia_core::ModalKind::Rotate => "Rotate",
-                petunia_core::ModalKind::Scale => "Scale",
-                petunia_core::ModalKind::Extrude => "Extrude",
-                petunia_core::ModalKind::ExtrudeIndividual => "Extrude Individual",
-                petunia_core::ModalKind::Inset => "Inset",
-                petunia_core::ModalKind::Bevel => "Round Edge",
-                petunia_core::ModalKind::PushPull => "Push/Pull",
-            };
+            let title = self.state.t(match modal.kind {
+                petunia_core::ModalKind::Move => "tools.move",
+                petunia_core::ModalKind::Rotate => "tools.rotate",
+                petunia_core::ModalKind::Scale => "tools.scale",
+                petunia_core::ModalKind::Extrude => "tools.extrude",
+                petunia_core::ModalKind::ExtrudeIndividual => "tools.extrude_individual",
+                petunia_core::ModalKind::Inset => "tools.inset",
+                petunia_core::ModalKind::Bevel => "tools.bevel",
+                petunia_core::ModalKind::PushPull => "tools.push_pull",
+            });
             let mut lines = Vec::new();
             match modal.constraint {
                 petunia_core::ModalConstraint::Axis(i) => {
                     lines.push(format!("{}   {:.3}", axis_name(i), modal.value));
                 }
                 petunia_core::ModalConstraint::Plane(i) => {
-                    lines.push(format!(
-                        "Plane {}{}   {:.3}",
-                        axis_name((i + 1) % 3),
-                        axis_name((i + 2) % 3),
-                        modal.value
+                    lines.push(fill(
+                        t::HUD_PLANE,
+                        &[
+                            format!("{}{}", axis_name((i + 1) % 3), axis_name((i + 2) % 3)),
+                            format!("{:.3}", modal.value),
+                        ],
                     ));
                 }
                 petunia_core::ModalConstraint::Free => {
@@ -2559,7 +2801,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         lines.push(format!("Y   {:.3}", components.y));
                         lines.push(format!("Z   {:.3}", components.z));
                     } else {
-                        lines.push(format!("Value   {:.3}", modal.value));
+                        lines.push(fill(t::HUD_VALUE, &[format!("{:.3}", modal.value)]));
                     }
                 }
             }
@@ -2567,72 +2809,66 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 // ToolFeedback telemetry for magnetic snapping (P3D-131)
                 // Telemetria de ToolFeedback para atração magnética (P3D-131)
                 if let Some(kind) = fb.snap_kind {
-                    lines.push(format!("Snap   {}", self.state.t_id(kind.text_id())));
+                    lines.push(fill(t::HUD_SNAP, &[self.state.t_id(kind.text_id())]));
                 }
             }
             vm.operation_hud_active = true;
-            vm.operation_hud_title = title.to_string();
-            if !self.tool_session.numeric_text().is_empty() {
-                lines.push(format!("Input   {}", self.tool_session.numeric_text()));
-            }
+            vm.operation_hud_title = title.clone();
+            lines.extend(input_line());
             vm.operation_hud_lines = lines;
-            vm.operation_hud_subject = format!(
-                "{} · {}",
-                if self.state.session.edit_pivot {
-                    "pivot"
-                } else if self.state.selection_domain() == petunia_core::SelectionDomain::Object {
-                    "object"
-                } else {
-                    "selection"
-                },
-                match modal.constraint {
-                    petunia_core::ModalConstraint::Axis(i) => format!("{} axis", axis_name(i)),
-                    petunia_core::ModalConstraint::Plane(i) => {
-                        format!("{}{} plane", axis_name((i + 1) % 3), axis_name((i + 2) % 3))
-                    }
-                    petunia_core::ModalConstraint::Free => "free".to_string(),
+            let subject = if self.state.session.edit_pivot {
+                tr(t::HUD_SUBJECT_PIVOT)
+            } else if self.state.selection_domain() == petunia_core::SelectionDomain::Object {
+                tr(t::HUD_SUBJECT_OBJECT)
+            } else {
+                tr(t::HUD_SUBJECT_SELECTION)
+            };
+            let constraint = match modal.constraint {
+                petunia_core::ModalConstraint::Axis(i) => {
+                    fill(t::HUD_AXIS, &[axis_name(i).to_string()])
                 }
-            );
-            vm.operation_hud_hint = "Enter Confirm   Esc Cancel   Shift Precision".to_string();
+                petunia_core::ModalConstraint::Plane(i) => fill(
+                    t::HUD_PLANE_SUBJECT,
+                    &[format!(
+                        "{}{}",
+                        axis_name((i + 1) % 3),
+                        axis_name((i + 2) % 3)
+                    )],
+                ),
+                petunia_core::ModalConstraint::Free => tr(t::HUD_FREE),
+            };
+            vm.operation_hud_subject = format!("{subject} · {constraint}");
+            vm.operation_hud_hint = tr(t::HUD_TRANSFORM_HINT);
             vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
         if self.state.session.edit_pivot {
+            let title = tr(t::HUD_EDIT_PIVOT_TITLE);
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Edit Pivot Mode".to_string();
-            vm.operation_hud_subject = "Pivot".to_string();
-            vm.operation_hud_lines = vec!["Moving object pivot point".to_string()];
-            vm.operation_hud_hint =
-                "D / Insert or Esc to exit · Geometry remains fixed".to_string();
-            vm.context_hint =
-                "Edit Pivot Mode · D / Insert or Esc to exit · Geometry remains fixed".to_string();
+            vm.operation_hud_title = title.clone();
+            vm.operation_hud_subject = tr(t::HUD_PIVOT);
+            vm.operation_hud_lines = vec![tr(t::HUD_EDIT_PIVOT_LINE)];
+            vm.operation_hud_hint = tr(t::HUD_EDIT_PIVOT_HINT);
+            vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
         if let Some(session) = &self.state.session.primitive_session {
             let name = session.descriptor.kind().default_name();
             vm.operation_hud_active = false;
-            vm.context_hint = format!("Add {name} · Enter Confirm · Esc Cancel");
+            vm.context_hint = fill(t::HUD_ADD_PRIMITIVE_HINT, &[name.to_string()]);
             return;
         }
 
         // Em repouso: a barra informa o domínio e a navegação.
         vm.operation_hud_active = false;
-        vm.context_hint = match self.state.selection_domain() {
-            petunia_core::SelectionDomain::Object => {
-                "Selection: Object   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Vertex => {
-                "Selection: Point   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Edge => {
-                "Selection: Edge   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Face => {
-                "Selection: Face   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-        };
+        vm.context_hint = tr(match self.state.selection_domain() {
+            petunia_core::SelectionDomain::Object => t::HUD_IDLE_OBJECT,
+            petunia_core::SelectionDomain::Vertex => t::HUD_IDLE_POINT,
+            petunia_core::SelectionDomain::Edge => t::HUD_IDLE_EDGE,
+            petunia_core::SelectionDomain::Face => t::HUD_IDLE_FACE,
+        });
     }
 
     /// Orbita a câmera, usando a seleção como pivô quando existe.
@@ -2906,6 +3142,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return drawing
                 || snap_before != self.profile_hover_snap
                 || region_before != self.region_hover;
+        }
+        if matches!(self.grammar_tool(), Some(GrammarTool::Parametric(_))) {
+            let hover = self.parametric_handle_at(self.pointer_position);
+            if hover != self.parametric_handle_hover {
+                self.parametric_handle_hover = hover;
+                if hover {
+                    self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                }
+                return true;
+            }
+            if hover {
+                return false;
+            }
         }
         if self.state.session.tools.active_tool == "poly_pen" {
             let pixel = [
@@ -11003,7 +11252,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let message = self
             .state
             .t_id(petunia_config::text_id::TOOL_GRAMMAR_READY)
-            .replace("{tool}", kind.title());
+            .replace("{tool}", &self.state.t(kind.title_key()));
         self.state.set_status(message);
         self.state.mark_dirty();
     }
@@ -11032,8 +11281,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.tool_pointer_alt = alt;
         let effect = match phase {
             0 => {
+                self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
                 let target = if self.grammar_tool() == Some(GrammarTool::DrawProfile) {
                     self.profile_press_target(x, y)
+                } else if self.tool_press_parametric_handle {
+                    petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
                 } else if self.profile_transform_target_at(x, y) {
                     petunia_core::PressTarget::Handle(0)
                 } else if self.gizmo_target_at(x, y).is_some() {
@@ -11041,8 +11293,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 } else {
                     petunia_core::PressTarget::Surface
                 };
-                self.tool_press_extend = shift;
-                self.tool_press_alternate = ctrl;
+                // Modificadores de ponteiro vêm do keymap (`[pointer]`).
+                let held = Mods2 { ctrl, shift, alt };
+                let keys = &self.state.ui.keybinds;
+                self.tool_press_extend = keys
+                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND)
+                    .held_in(held);
+                self.tool_press_alternate = keys
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
+                    .held_in(held);
                 self.tool_session.press([x, y], target)
             }
             1 => self.tool_session.move_to([x, y]),
@@ -11095,6 +11354,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Effect::Click { .. } if self.grammar_tool() == Some(GrammarTool::Slice) => {
                 self.slice_anchor.is_some() && self.commit_slice()
             }
+            // Clique na alça paramétrica não troca a seleção.
+            Effect::Click { .. } if self.tool_press_parametric_handle => false,
             Effect::Click { at } => {
                 let [width, height] = self.viewport_size;
                 if width > 1.0 && height > 1.0 {
@@ -11466,7 +11727,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             GrammarTool::Parametric(kind) => {
+                // Pela alça, a seleção atual é a do gesto (sem região nem
+                // reseleção sob o ponteiro).
+                let on_parametric_handle = matches!(
+                    target,
+                    petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
+                );
                 if self.tool_modal.is_none()
+                    && !on_parametric_handle
                     && kind == ToolModalKind::PushPull
                     && let Some(hit) = self
                         .region_hit_at(anchor)
@@ -11475,14 +11743,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return self.begin_region_gesture(anchor, &hit);
                 }
                 if self.tool_modal.is_none() {
-                    self.select_under_anchor_for(kind, anchor);
+                    if !on_parametric_handle {
+                        self.select_under_anchor_for(kind, anchor);
+                    }
                     if !self.begin_tool_modal(kind) {
                         let id = if kind == ToolModalKind::Bevel {
                             petunia_config::text_id::TOOL_GRAMMAR_NEEDS_EDGE
                         } else {
                             petunia_config::text_id::TOOL_GRAMMAR_NEEDS_FACE
                         };
-                        let message = self.state.t_id(id).replace("{tool}", kind.title());
+                        let message = self
+                            .state
+                            .t_id(id)
+                            .replace("{tool}", &self.state.t(kind.title_key()));
                         self.state.set_status(message);
                         return false;
                     }
@@ -11503,23 +11776,309 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
-    /// Elemento sob o cursor para o Poly Pen: ponto > aresta > face, com as
-    /// mesmas tolerâncias em pixels do picking de seleção.
+    /// Alça visível da ferramenta paramétrica ativa (Extrude, Inset, Round
+    /// Edge, Push/Pull): `(base, alça)` em px da viewport. A base é o pivô
+    /// (no Extrude, o topo da extrusão em prévia); a alça fica a
+    /// [`projection::PARAMETRIC_HANDLE_OFFSET_PX`] na direção do valor e segue
+    /// o valor durante o gesto.
+    pub(crate) fn parametric_handle(&self) -> Option<([f32; 2], [f32; 2])> {
+        let Some(GrammarTool::Parametric(tool_kind)) = self.grammar_tool() else {
+            return None;
+        };
+        if self.state.workspace != Workspace::Model || tool_kind == ToolModalKind::ScaleSelection {
+            return None;
+        }
+        let kind = self.tool_modal.unwrap_or(tool_kind);
+        let viewport = self.viewport_size;
+        if viewport[0] <= 1.0 || viewport[1] <= 1.0 {
+            return None;
+        }
+        let camera = &self.state.session.camera;
+        let (pivot, normal, value) = match self.state.session.tools.modal.as_ref() {
+            Some(modal) => (modal.pivot, modal.normal, self.tool_modal_value),
+            None => {
+                let mesh = self.state.project.active_mesh()?;
+                let mut normal = glam::Vec3::ZERO;
+                for (index, face) in mesh.faces.iter().enumerate() {
+                    if face.selected {
+                        normal += mesh.face_normal(index);
+                    }
+                }
+                let ready = if kind == ToolModalKind::Bevel {
+                    !mesh.selected_edges.is_empty()
+                } else {
+                    normal != glam::Vec3::ZERO
+                };
+                if !ready {
+                    return None;
+                }
+                let pivot = self.state.calculate_pivot(self.state.session.pivot_point);
+                (pivot, normal.normalize_or_zero(), 0.0)
+            }
+        };
+        let offset = projection::PARAMETRIC_HANDLE_OFFSET_PX;
+        let pivot_px = project_world_point(camera, viewport, pivot)?;
+        let screen_per_world = project_world_point(camera, viewport, pivot + camera.right())
+            .map(|right| (right[0] - pivot_px[0]).hypot(right[1] - pivot_px[1]))
+            .filter(|pixels| pixels.is_finite() && *pixels > 1.0e-3)?;
+        let value = if value.is_finite() { value } else { 0.0 };
+        match kind {
+            ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual | ToolModalKind::PushPull => {
+                let base = project_world_point(camera, viewport, pivot + normal * value)?;
+                let tip = project_world_point(camera, viewport, pivot + normal * (value + 1.0));
+                let handle = match tip
+                    .map(|tip| glam::Vec2::new(tip[0] - base[0], tip[1] - base[1]))
+                    .filter(|d| d.length() >= 6.0)
+                {
+                    Some(direction) => glam::Vec2::from(base) + direction.normalize() * offset,
+                    // Normal para a câmera: o arrasto vertical controla o valor
+                    // (`drag_value`), e a alça sobe com ele.
+                    None => {
+                        glam::Vec2::from(base)
+                            - glam::Vec2::Y * (offset + value.max(0.0) * screen_per_world)
+                    }
+                };
+                Some((base, handle.to_array()))
+            }
+            // Inset cresce ao aproximar do pivô; Round Edge, ao afastar.
+            ToolModalKind::Inset => {
+                let x = (offset - value * screen_per_world)
+                    .max(projection::PARAMETRIC_HANDLE_RADIUS_PX);
+                Some((pivot_px, [pivot_px[0] + x, pivot_px[1]]))
+            }
+            ToolModalKind::Bevel => {
+                let x = offset + value * screen_per_world;
+                Some((pivot_px, [pivot_px[0] + x, pivot_px[1]]))
+            }
+            ToolModalKind::ScaleSelection => None,
+        }
+    }
+
+    /// Gizmo de transformação como formas de tela para o passo GPU. A
+    /// geometria é a mesma de [`compute_gizmo`] (que também serve ao hit
+    /// test), com a hierarquia de estados do shell: o eixo ativo/travado
+    /// domina, o eixo sob o cursor clareia e os demais esmaecem no arrasto.
+    pub(crate) fn gizmo_overlay_shapes(&self) -> Vec<petunia_render_wgpu::OverlayShape> {
+        use petunia_render_wgpu::OverlayShape;
+        let [width, height] = self.viewport_size;
+        let gizmo = compute_gizmo(&self.state, width, height);
+        if !gizmo.visible || self.state.workspace != Workspace::Model {
+            return Vec::new();
+        }
+        let theme_color = |token: petunia_config::ThemeToken| -> [f32; 4] {
+            let registry = petunia_config::ThemeRegistry::global();
+            let c = registry
+                .get_theme(&self.state.ui.active_theme_id)
+                .or_else(|| registry.get_theme("petunia-dark"))
+                .map_or(petunia_config::theme::ColorRgba::WHITE, |theme| {
+                    theme.colors.get_token_color(token)
+                });
+            c.0.map(|channel| channel as f32 / 255.0)
+        };
+        let accent = theme_color(petunia_config::ThemeToken::AccentBlue);
+        let center = theme_color(petunia_config::ThemeToken::TextPrimary);
+        let canvas = theme_color(petunia_config::ThemeToken::BgCanvas);
+        let muted = theme_color(petunia_config::ThemeToken::TextSecondary);
+        let hover = self.gizmo_hover.and_then(|h| h.axis()).map(|a| a as i32);
+        let active = self.gizmo_drag.and_then(|h| h.axis()).map(|a| a as i32);
+        let constraint = match self
+            .state
+            .session
+            .tools
+            .modal
+            .as_ref()
+            .map(|op| op.constraint)
+        {
+            Some(petunia_core::ModalConstraint::Axis(axis)) => [axis as i32, -1],
+            Some(petunia_core::ModalConstraint::Plane(excluded)) => {
+                [((excluded + 1) % 3) as i32, ((excluded + 2) % 3) as i32]
+            }
+            _ => [-1, -1],
+        };
+        let fade = |c: [f32; 4], amount: f32| [c[0], c[1], c[2], c[3] * (1.0 - amount)];
+        let color = |axis: i32| -> [f32; 4] {
+            let base = self.gizmo_axis_colors.0[axis as usize];
+            if constraint.contains(&axis) {
+                base
+            } else if constraint[0] >= 0 || active.is_some_and(|a| a != axis) {
+                fade(base, 0.72)
+            } else if active == Some(axis) {
+                base
+            } else if hover == Some(axis) {
+                let lift = |v: f32| v + (1.0 - v) * 0.35;
+                [lift(base[0]), lift(base[1]), lift(base[2]), base[3]]
+            } else {
+                base
+            }
+        };
+        let stroke_width = |axis: i32| -> f32 {
+            if constraint.contains(&axis) || active == Some(axis) {
+                4.0
+            } else if constraint[0] >= 0 {
+                2.0
+            } else if hover == Some(axis) {
+                3.5
+            } else {
+                2.5
+            }
+        };
+        let mut shapes = Vec::new();
+        let mut push = |commands: &str, fill: Option<[f32; 4]>, stroke: Option<([f32; 4], f32)>| {
+            for (points, closed) in path_polylines(commands) {
+                shapes.push(OverlayShape {
+                    points,
+                    closed,
+                    fill: fill.filter(|_| closed),
+                    stroke,
+                });
+            }
+        };
+        let axes = [
+            (
+                &gizmo.x_commands,
+                &gizmo.x_arrow_commands,
+                &gizmo.x_scale_commands,
+                &gizmo.x_rotate_commands,
+                &gizmo.plane_yz_commands,
+            ),
+            (
+                &gizmo.y_commands,
+                &gizmo.y_arrow_commands,
+                &gizmo.y_scale_commands,
+                &gizmo.y_rotate_commands,
+                &gizmo.plane_xz_commands,
+            ),
+            (
+                &gizmo.z_commands,
+                &gizmo.z_arrow_commands,
+                &gizmo.z_scale_commands,
+                &gizmo.z_rotate_commands,
+                &gizmo.plane_xy_commands,
+            ),
+        ];
+        // Planos primeiro (translúcidos, por baixo das hastes).
+        for (axis, (_, _, _, _, plane)) in axes.iter().enumerate() {
+            let c = color(axis as i32);
+            push(plane, Some(fade(c, 0.65)), Some((c, 1.0)));
+        }
+        for (axis, (rod, arrow, scale, rotate, _)) in axes.iter().enumerate() {
+            let c = color(axis as i32);
+            push(rotate, None, Some((fade(c, 0.32), 1.5)));
+            push(rod, None, Some((c, stroke_width(axis as i32))));
+            push(arrow, Some(c), None);
+            push(scale, Some(c), Some((canvas, 1.0)));
+        }
+        let center_on = matches!(self.gizmo_drag, Some(GizmoHandle::Center));
+        let center_hover = matches!(self.gizmo_hover, Some(GizmoHandle::Center));
+        let ring = if center_on || center_hover {
+            accent
+        } else {
+            fade(muted, 0.4)
+        };
+        push(&gizmo.view_roll_commands, None, Some((ring, 1.5)));
+        let dot = if center_on {
+            accent
+        } else if center_hover {
+            fade(accent, 0.2)
+        } else {
+            center
+        };
+        let circle: Vec<[f32; 2]> = (0..20)
+            .map(|i| {
+                let angle = i as f32 * std::f32::consts::TAU / 20.0;
+                [
+                    gizmo.origin_x + 6.0 * angle.cos(),
+                    gizmo.origin_y + 6.0 * angle.sin(),
+                ]
+            })
+            .collect();
+        shapes.push(OverlayShape {
+            points: circle,
+            closed: true,
+            fill: Some(dot),
+            stroke: Some((canvas, 1.5)),
+        });
+        shapes
+    }
+
+    /// O ponto (px) está no alvo da alça paramétrica?
+    pub(crate) fn parametric_handle_at(&self, pixel: [f32; 2]) -> bool {
+        self.parametric_handle().is_some_and(|(_, handle)| {
+            (pixel[0] - handle[0]).hypot(pixel[1] - handle[1])
+                <= projection::PARAMETRIC_HANDLE_HIT_RADIUS_PX
+        })
+    }
+
+    /// Haste da base até a alça (px), para o overlay.
+    pub(crate) fn parametric_handle_commands(&self) -> (String, Option<[f32; 2]>) {
+        match self.parametric_handle() {
+            Some(([bx, by], [hx, hy])) => (
+                format!(
+                    "M {bx:.1} {by:.1} L {hx:.1} {hy:.1} M {bx:.1} {by:.1} m -3 0 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0"
+                ),
+                Some([hx, hy]),
+            ),
+            None => (String::new(), None),
+        }
+    }
+
+    /// Elemento sob o cursor para o Poly Pen, filtrado pelo modo (Auto:
+    /// ponto > aresta > face), com as tolerâncias em pixels do picking de
+    /// seleção. No modo Polygons só arestas de borda contam (início da pintura).
     fn poly_pen_target(&self, pixel: [f32; 2]) -> petunia_core::HoverTarget {
         let [width, height] = self.viewport_size;
         if width <= 1.0 || height <= 1.0 {
             return petunia_core::HoverTarget::None;
         }
         let (x, y) = (pixel[0] / width, pixel[1] / height);
-        [
-            SelectionDomain::Vertex,
-            SelectionDomain::Edge,
-            SelectionDomain::Face,
-        ]
-        .into_iter()
-        .map(|domain| self.pick_target_for_domain(domain, x, y))
-        .find(|target| target.is_some())
-        .unwrap_or_default()
+        let polygons = self.poly_pen_mode == PolyPenMode::Polygons;
+        self.poly_pen_mode
+            .domains()
+            .iter()
+            .map(|&domain| self.pick_target_for_domain(domain, x, y))
+            .find(|target| match *target {
+                petunia_core::HoverTarget::Edge(a, b) if polygons => self.is_border_edge(a, b),
+                _ => target.is_some(),
+            })
+            .unwrap_or_default()
+    }
+
+    fn is_border_edge(&self, a: u32, b: u32) -> bool {
+        self.state
+            .project
+            .active_mesh()
+            .is_some_and(|mesh| mesh.edge_faces(a, b).len() == 1)
+    }
+
+    /// Ponto no plano de desenho do Poly Pen sob o pixel: o plano de trabalho
+    /// travado (cap. 05) ou, sem ele, o plano de frente para a câmera por
+    /// `anchor`.
+    fn poly_pen_plane_point(&self, pixel: [f32; 2], anchor: glam::Vec3) -> Option<glam::Vec3> {
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return None;
+        }
+        let camera = &self.state.session.camera;
+        let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
+        let profile = &self.state.profile;
+        let workplane_normal = glam::Vec3::from(profile.right).cross(glam::Vec3::from(profile.up));
+        let (point, normal) =
+            if profile.workplane_locked && workplane_normal.length_squared() > 1.0e-8 {
+                (
+                    glam::Vec3::from(profile.origin),
+                    workplane_normal.normalize(),
+                )
+            } else {
+                (anchor, camera.forward())
+            };
+        let (origin, direction) = camera.ray(ndc.x, ndc.y);
+        let denominator = direction.dot(normal);
+        if denominator.abs() < 1.0e-6 {
+            return None;
+        }
+        let distance = (point - origin).dot(normal) / denominator;
+        let hit = origin + direction * distance;
+        (distance > 0.0 && hit.is_finite()).then_some(hit)
     }
 
     /// Ponto de mundo para um ponto novo do Poly Pen: snap (se ligado), face
@@ -11561,23 +12120,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return Some(hit.position);
         }
         let anchor = last.unwrap_or_else(|| mesh.center());
-        let normal = camera.forward();
-        let (origin, direction) = camera.ray(ndc.x, ndc.y);
-        let denominator = direction.dot(normal);
-        if denominator.abs() < 1.0e-6 {
-            return None;
-        }
-        let distance = (anchor - origin).dot(normal) / denominator;
-        let point = origin + direction * distance;
-        point.is_finite().then_some(point)
+        self.poly_pen_plane_point(pixel, anchor)
     }
 
-    /// Clique do Poly Pen: Ctrl-clique derrete o ponto; senão coleta um ponto
-    /// do polígono (clicar no primeiro ponto fecha).
+    /// Clique do Poly Pen: o modificador alternativo derrete o ponto; no modo
+    /// Edges (ou no Auto, sem coleta) clicar numa aresta insere um ponto; nos
+    /// demais, coleta um ponto do polígono (clicar no primeiro ponto fecha).
+    /// Pontos existentes são reaproveitados em qualquer modo de desenho.
     fn poly_pen_click(&mut self, at: [f32; 2]) -> bool {
+        let mode = self.poly_pen_mode;
         let target = self.poly_pen_target(at);
         if self.tool_press_alternate {
-            if let petunia_core::HoverTarget::Vertex(point) = target {
+            if matches!(mode, PolyPenMode::Auto | PolyPenMode::Points)
+                && let petunia_core::HoverTarget::Vertex(point) = target
+            {
                 if let Err(error) = self.state.poly_pen_melt_point(point) {
                     self.state.set_status(error.to_string());
                 }
@@ -11585,12 +12141,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             return false;
         }
-        // Sem polígono em coleta, clicar numa aresta a divide (ponto novo na aresta).
-        if self.poly_pen_points.is_empty()
-            && let petunia_core::HoverTarget::Edge(a, b) = target
-        {
+        let splits_edges = mode == PolyPenMode::Edges
+            || (mode == PolyPenMode::Auto && self.poly_pen_points.is_empty());
+        if splits_edges && let petunia_core::HoverTarget::Edge(a, b) = target {
             return self.poly_pen_split_edge_at(a, b, at);
         }
+        if mode == PolyPenMode::Edges {
+            return false;
+        }
+        let target = match mode {
+            PolyPenMode::Polygons => {
+                let [width, height] = self.viewport_size;
+                self.pick_target_for_domain(SelectionDomain::Vertex, at[0] / width, at[1] / height)
+            }
+            _ => target,
+        };
         let point = match target {
             petunia_core::HoverTarget::Vertex(index) => petunia_core::PenPoint::Existing(index),
             _ => match self.poly_pen_world_point(at) {
@@ -11663,6 +12228,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         let target = self.poly_pen_target(anchor);
+        // Modo Polygons: arrastar a partir de uma aresta de borda pinta quads.
+        if self.poly_pen_mode == PolyPenMode::Polygons
+            && !self.tool_press_alternate
+            && let petunia_core::HoverTarget::Edge(a, b) = target
+        {
+            return match self.state.begin_poly_pen_strip(a, b) {
+                Ok(strip) => {
+                    self.poly_pen_strip = Some(strip);
+                    self.tool_gesture = Some(ToolGesture::PolyPenStrip);
+                    true
+                }
+                Err(error) => {
+                    self.state.set_status(error.to_string());
+                    false
+                }
+            };
+        }
         if self.tool_press_alternate
             && let petunia_core::HoverTarget::Edge(a, b) = target
         {
@@ -12067,8 +12649,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.scrub_loop_cut_2d(current[0] - last[0], current[1] - last[1], fine)
             }
             Some(ToolGesture::Slice) => self.update_slice_modified(current[0], current[1], snap),
+            Some(ToolGesture::PolyPenStrip) => self.update_poly_pen_strip(current),
             None => false,
         }
+    }
+
+    /// Estende a pintura de faces até o cursor (no plano de desenho pela
+    /// aresta da ponta).
+    fn update_poly_pen_strip(&mut self, current: [f32; 2]) -> bool {
+        let Some(mut strip) = self.poly_pen_strip.take() else {
+            return false;
+        };
+        let (a, b) = strip.edge();
+        let tip = self.state.project.active_mesh().and_then(|mesh| {
+            Some((mesh.verts.get(a as usize)?.vec() + mesh.verts.get(b as usize)?.vec()) * 0.5)
+        });
+        let changed = match tip.and_then(|tip| self.poly_pen_plane_point(current, tip)) {
+            Some(target) => match self.state.poly_pen_strip_to(&mut strip, target) {
+                Ok(added) => added > 0,
+                Err(error) => {
+                    self.state.set_status(error.to_string());
+                    false
+                }
+            },
+            None => false,
+        };
+        self.poly_pen_strip = Some(strip);
+        if changed {
+            self.sync_viewport_context();
+        }
+        changed
     }
 
     fn commit_tool_gesture(&mut self) -> bool {
@@ -12095,6 +12705,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(ToolGesture::LoopSlide { .. }) => self.commit_loop_cut(),
             // O plano fica em prévia até o clique de confirmação (ou Esc).
             Some(ToolGesture::Slice) => true,
+            Some(ToolGesture::PolyPenStrip) => {
+                let Some(strip) = self.poly_pen_strip.take() else {
+                    return false;
+                };
+                let count = strip.quads();
+                let painted = self.state.finish_poly_pen_strip(strip);
+                if painted {
+                    let message = crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_POLY_PEN_PAINTED),
+                        &[("count", count.to_string())],
+                    );
+                    self.state.set_status(message);
+                }
+                self.sync_viewport_context();
+                painted
+            }
             Some(ToolGesture::Transform { gizmo: true }) => self.end_gizmo_drag(),
             Some(ToolGesture::Transform { gizmo: false }) => self.end_viewport_transform(),
             Some(ToolGesture::Parametric { .. }) => self.commit_tool_modal(),
@@ -12126,6 +12754,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Some(ToolGesture::LoopSlide { .. }) => self.cancel_loop_cut(),
             Some(ToolGesture::Slice) => self.cancel_slice(),
+            Some(ToolGesture::PolyPenStrip) => match self.poly_pen_strip.take() {
+                Some(strip) => {
+                    self.state.cancel_poly_pen_strip(strip);
+                    self.sync_viewport_context();
+                    true
+                }
+                None => false,
+            },
             None => false,
         }
     }
@@ -13327,7 +13963,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         start_value: self.tool_modal_value,
                     });
                 }
-                let label = kind.map_or("Ferramenta", |k| k.title());
+                let label = kind.map_or_else(
+                    || self.state.t_id(petunia_config::text_id::HUD_TOOL_FALLBACK),
+                    |k| self.state.t(k.title_key()),
+                );
                 self.state.set_status(crate::tr::fill(
                     &self
                         .state
@@ -13399,6 +14038,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.preferences.studio_light_follows_camera = follows;
+        self.state.render.mark_dirty();
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Matcap procedural no Solid (preferência persistida).
+    pub fn set_viewport_matcap(&mut self, enabled: bool) -> bool {
+        if self.preferences.viewport_matcap == enabled {
+            return false;
+        }
+        self.preferences.viewport_matcap = enabled;
+        self.state.render.mark_dirty();
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Oclusão ambiente (GTAO) no Solid e no Material (preferência persistida).
+    pub fn set_viewport_ambient_occlusion(&mut self, enabled: bool) -> bool {
+        if self.preferences.viewport_ambient_occlusion == enabled {
+            return false;
+        }
+        self.preferences.viewport_ambient_occlusion = enabled;
         self.state.render.mark_dirty();
         self.state.mark_dirty();
         true
@@ -14553,6 +15214,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.split_preset = self.split.preset_id().to_string();
         vm.prefab_items = self.prefab_item_models();
         vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        if self.viewport.draws_gizmo() {
+            vm.gizmo.clear_handle_geometry();
+        }
         vm.selection_overlay = compute_selection_overlay(
             &self.state,
             self.viewport_size[0],
@@ -14629,11 +15293,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.hud_pill_visible = true;
             vm.hud_pill_title = vm.operation_hud_title.clone();
             vm.hud_pill_badge = if self.is_instant_tool_mode() {
-                "MODO LIVRE".to_string()
+                self.state
+                    .t_id(petunia_config::text_id::HUD_BADGE_FREE_MODE)
             } else if !vm.operation_hud_subject.is_empty() {
                 vm.operation_hud_subject.clone()
             } else {
-                "CARD".to_string()
+                self.state.t_id(petunia_config::text_id::HUD_BADGE_TOOL)
             };
             vm.hud_pill_value = vm.operation_hud_lines.join("   ");
             vm.hud_pill_hint = vm.operation_hud_hint.clone();
@@ -14710,7 +15375,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.context_menu_y = menu.y;
             if menu.viewport {
                 vm.context_menu_mode = "viewport".to_string();
-                vm.context_menu_title = "Viewport".to_string();
+                vm.context_menu_title = self.state.t_id(petunia_config::text_id::HUD_VIEWPORT_MENU);
             } else if let Some(asset) = self
                 .state
                 .project
@@ -14896,6 +15561,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_model_push_pull = translated(petunia_config::text_id::TOOLS_PUSH_PULL);
         vm.label_poly_pen = translated(petunia_config::text_id::TOOLS_POLY_PEN);
         vm.label_poly_pen_hint = translated(petunia_config::text_id::TOOLS_POLY_PEN_HINT);
+        vm.poly_pen_mode = self.poly_pen_mode.id().to_string();
+        vm.label_poly_pen_mode = translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE);
+        vm.label_poly_pen_mode_auto = translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_AUTO);
+        vm.label_poly_pen_mode_points =
+            translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_POINTS);
+        vm.label_poly_pen_mode_edges =
+            translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_EDGES);
+        vm.label_poly_pen_mode_polygons =
+            translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_POLYGONS);
+        let alternate = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
+            .to_modifier_string();
+        vm.label_poly_pen_mode_hint = crate::tr::fill(
+            &translated(self.poly_pen_mode.hint_id()),
+            &[("alternate", alternate)],
+        );
         vm.poly_pen_preview_commands = self.poly_pen_preview_commands();
         vm.hint_model_push_pull = translated(petunia_config::text_id::UI_PUSH_PULL_HINT);
         vm.label_model_profile = translated(petunia_config::text_id::TOOLS_DRAW_PROFILE);
@@ -15385,6 +16069,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.click_move_click = self.preferences.click_move_click;
         vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
         vm.studio_light_follows_camera = self.preferences.studio_light_follows_camera;
+        vm.viewport_matcap = self.preferences.viewport_matcap;
+        vm.viewport_ambient_occlusion = self.preferences.viewport_ambient_occlusion;
+        vm.label_viewport_matcap = translated(petunia_config::text_id::PREFERENCES_VIEWPORT_MATCAP);
+        vm.label_viewport_matcap_hint =
+            translated(petunia_config::text_id::PREFERENCES_VIEWPORT_MATCAP_HINT);
+        vm.label_viewport_ambient_occlusion =
+            translated(petunia_config::text_id::PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION);
+        vm.label_viewport_ambient_occlusion_hint =
+            translated(petunia_config::text_id::PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION_HINT);
+        vm.gizmo_gpu = self.viewport.draws_gizmo();
         vm.label_studio_light_follows_camera =
             translated(petunia_config::text_id::PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA);
         vm.label_studio_light_follows_camera_hint =
@@ -15439,8 +16133,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let (minimum, maximum) = kind.bounds();
             vm.tool_modal_active = true;
             vm.tool_modal_id = kind.id().to_string();
-            vm.tool_modal_title = kind.title().to_string();
-            vm.tool_modal_label = kind.label().to_string();
+            vm.tool_modal_title = self.state.t(kind.title_key());
+            vm.tool_modal_label = self.state.t_id(kind.label_id());
             vm.tool_modal_value = self.tool_modal_value;
             vm.tool_modal_step = kind.step();
             vm.tool_modal_min = minimum;
@@ -15456,7 +16150,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     "select" | "box_select" | "lasso_select"
                 ));
         vm.tool_options_title = if let Some(kind) = self.tool_modal {
-            kind.title().to_string()
+            self.state.t(kind.title_key())
         } else if self.loop_cut.is_some() || self.state.session.tools.active_tool == "loop_cut" {
             self.state.t_id(petunia_config::text_id::TOOLS_LOOP_CUT)
         } else if self.state.session.tools.active_tool == "draw_profile" {
@@ -15795,6 +16489,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
         hover: state.session.tools.hover,
         boolean_operand: state.session.tools.boolean_operand,
         studio_light_follows_camera: true,
+        matcap: preferences.viewport_matcap,
+        ambient_occlusion: preferences.viewport_ambient_occlusion,
         edge_mode: ModelingMode::default().edge_mode(),
         workplane: None,
     };

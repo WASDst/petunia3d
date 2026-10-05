@@ -143,7 +143,10 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
         height,
         bridge.viewport.draws_component_guides(),
     );
-    let gizmo = compute_gizmo(&bridge.state, width, height);
+    let mut gizmo = compute_gizmo(&bridge.state, width, height);
+    if bridge.viewport.draws_gizmo() {
+        gizmo.clear_handle_geometry();
+    }
     sync_overlay_models(window, &selection, &gizmo);
     // Cordão da ferramenta ativa: arrasto na viewport, modal de teclado
     // (Move/Rotate/Scale/Extrude/...) ou modal paramétrico com Tool Props.
@@ -264,6 +267,14 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
         window.set_depth_handle_y(dy * 1.0);
     }
     window.set_depth_handle_label(depth_label.as_str().into());
+    let (handle_commands, handle_pos) = bridge.parametric_handle_commands();
+    window.set_parametric_handle_commands(handle_commands.as_str().into());
+    window.set_parametric_handle_visible(handle_pos.is_some());
+    window.set_parametric_handle_hover(bridge.parametric_handle_hover);
+    if let Some([hx, hy]) = handle_pos {
+        window.set_parametric_handle_x(hx * 1.0);
+        window.set_parametric_handle_y(hy * 1.0);
+    }
 }
 
 impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {
@@ -949,6 +960,13 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
     window.set_label_poly_pen(vm.label_poly_pen.as_str().into());
     window.set_label_poly_pen_hint(vm.label_poly_pen_hint.as_str().into());
+    window.set_poly_pen_mode(vm.poly_pen_mode.as_str().into());
+    window.set_label_poly_pen_mode(vm.label_poly_pen_mode.as_str().into());
+    window.set_label_poly_pen_mode_auto(vm.label_poly_pen_mode_auto.as_str().into());
+    window.set_label_poly_pen_mode_points(vm.label_poly_pen_mode_points.as_str().into());
+    window.set_label_poly_pen_mode_edges(vm.label_poly_pen_mode_edges.as_str().into());
+    window.set_label_poly_pen_mode_polygons(vm.label_poly_pen_mode_polygons.as_str().into());
+    window.set_label_poly_pen_mode_hint(vm.label_poly_pen_mode_hint.as_str().into());
     window.set_modeling_mode(vm.modeling_mode.as_str().into());
     window.set_label_workspace_draw_title(vm.label_workspace_draw_title.as_str().into());
     window
@@ -995,6 +1013,16 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_click_move_click(vm.click_move_click);
     window.set_workplane_prefer_ground(vm.workplane_prefer_ground);
     window.set_studio_light_follows_camera(vm.studio_light_follows_camera);
+    window.set_viewport_matcap(vm.viewport_matcap);
+    window.set_viewport_ambient_occlusion(vm.viewport_ambient_occlusion);
+    window.set_label_viewport_matcap(vm.label_viewport_matcap.as_str().into());
+    window.set_label_viewport_matcap_hint(vm.label_viewport_matcap_hint.as_str().into());
+    window
+        .set_label_viewport_ambient_occlusion(vm.label_viewport_ambient_occlusion.as_str().into());
+    window.set_label_viewport_ambient_occlusion_hint(
+        vm.label_viewport_ambient_occlusion_hint.as_str().into(),
+    );
+    window.set_gizmo_gpu(vm.gizmo_gpu);
     window.set_label_studio_light_follows_camera(
         vm.label_studio_light_follows_camera.as_str().into(),
     );
@@ -1306,6 +1334,23 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     bridge: Arc<Mutex<SlintUiBridge<V>>>,
 ) {
     crate::animate::connect_animate_callbacks(window, Arc::clone(&bridge));
+    // Cores dos eixos do gizmo GPU: as mesmas dos tokens do shell.
+    if let Ok(mut bridge) = bridge.lock() {
+        let tokens = window.global::<crate::DesignTokens>();
+        let rgba = |c: slint::Color| {
+            [
+                c.red() as f32 / 255.0,
+                c.green() as f32 / 255.0,
+                c.blue() as f32 / 255.0,
+                c.alpha() as f32 / 255.0,
+            ]
+        };
+        bridge.gizmo_axis_colors = crate::GizmoAxisColors([
+            rgba(tokens.get_axis_x()),
+            rgba(tokens.get_axis_y()),
+            rgba(tokens.get_axis_z()),
+        ]);
+    }
     // Arrasto e hover: viewport a cada evento, janela completa limitada.
     let throttle = std::rc::Rc::new(crate::refresh::RefreshThrottle::default());
     let shortcut_bridge = Arc::clone(&bridge);
@@ -2969,6 +3014,37 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             }
         }
     });
+
+    for (kind, which) in [("matcap", 0u8), ("ao", 1u8)] {
+        let _ = kind;
+        let render_bridge = Arc::clone(&bridge);
+        let window_weak = window.as_weak();
+        let apply = move |enabled: bool| {
+            if let Ok(mut bridge) = render_bridge.lock() {
+                let changed = if which == 0 {
+                    bridge.set_viewport_matcap(enabled)
+                } else {
+                    bridge.set_viewport_ambient_occlusion(enabled)
+                };
+                if changed {
+                    persist_user_preferences(&mut bridge);
+                    let vm = bridge.view_model();
+                    let frame = bridge.render_viewport();
+                    if let Some(window) = window_weak.upgrade() {
+                        sync_window_properties(&window, &vm);
+                        if let Some(frame) = frame {
+                            window.set_viewport_image(frame);
+                        }
+                    }
+                }
+            }
+        };
+        if which == 0 {
+            window.on_viewport_matcap_set(apply);
+        } else {
+            window.on_viewport_ambient_occlusion_set(apply);
+        }
+    }
 
     let workplane_ground_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
@@ -5036,6 +5112,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_target_vertex_changed(move |val| {
         if let Ok(mut bridge) = target_bridge.lock() {
             bridge.apply(UiIntent::SetPaintTargetVertex(val));
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let pen_mode_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_poly_pen_mode_selected(move |mode| {
+        if let Ok(mut bridge) = pen_mode_bridge.lock() {
+            bridge.apply(UiIntent::SetPolyPenMode(mode.as_str().to_string()));
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

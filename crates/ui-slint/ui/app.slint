@@ -4110,8 +4110,22 @@ export component PetuniaSlintShell inherits Window {
     in-out property <length> depth-handle-x: 0px;
     in-out property <length> depth-handle-y: 0px;
     in-out property <string> depth-handle-label: "";
+    // Alça das ferramentas paramétricas (Extrude, Inset, Round Edge, Push/Pull):
+    // 24 px visíveis, alvo de 32 px no bridge (constituição 03).
+    in-out property <string> parametric-handle-commands: "";
+    in-out property <bool> parametric-handle-visible: false;
+    in-out property <bool> parametric-handle-hover: false;
+    in-out property <length> parametric-handle-x: 0px;
+    in-out property <length> parametric-handle-y: 0px;
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
+    in-out property <string> poly-pen-mode: "auto";
+    in-out property <string> label-poly-pen-mode: "";
+    in-out property <string> label-poly-pen-mode-auto: "";
+    in-out property <string> label-poly-pen-mode-points: "";
+    in-out property <string> label-poly-pen-mode-edges: "";
+    in-out property <string> label-poly-pen-mode-polygons: "";
+    in-out property <string> label-poly-pen-mode-hint: "";
     in-out property <bool> profile-parametric: false;
     in-out property <bool> profile-ellipse: false;
     in-out property <float> profile-width: 0.0;
@@ -4153,6 +4167,14 @@ export component PetuniaSlintShell inherits Window {
     in property <string> label-click-move-click-hint;
     in-out property <bool> workplane-prefer-ground: false;
     in-out property <bool> studio-light-follows-camera: true;
+    in-out property <bool> viewport-matcap: false;
+    in-out property <bool> viewport-ambient-occlusion: true;
+    in property <string> label-viewport-matcap;
+    in property <string> label-viewport-matcap-hint;
+    in property <string> label-viewport-ambient-occlusion;
+    in property <string> label-viewport-ambient-occlusion-hint;
+    /// O backend GPU desenha o gizmo; o shell só mostra rótulos e o tripé.
+    in-out property <bool> gizmo-gpu: false;
     in property <string> label-studio-light-follows-camera;
     in property <string> label-studio-light-follows-camera-hint;
     in property <string> label-workplane-prefer-ground;
@@ -4316,6 +4338,8 @@ export component PetuniaSlintShell inherits Window {
     callback click-move-click-set(bool);
     callback workplane-prefer-ground-set(bool);
     callback studio-light-follows-camera-set(bool);
+    callback viewport-matcap-set(bool);
+    callback viewport-ambient-occlusion-set(bool);
     callback double-tap-interval-released(int);
     callback multiselection-measure-tag-set(bool);
     callback asset-query-changed(string);
@@ -4481,6 +4505,7 @@ export component PetuniaSlintShell inherits Window {
     callback paint-symmetry-z-toggled;
     callback paint-target-vertex-changed(bool);
     callback paint-mask-selection-toggled;
+    callback poly-pen-mode-selected(string);
     callback shortcut-requested(string, bool, bool, bool);
     callback toggle-face-orientation;
     callback toggle-uv-checker;
@@ -5435,6 +5460,29 @@ export component PetuniaSlintShell inherits Window {
                         fill: DesignTokens.selection.transparentize(0.78);
                         stroke: DesignTokens.selection;
                         stroke-width: 1.5px;
+                    }
+                    if root.parametric-handle-visible && root.parametric-handle-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.parametric-handle-commands;
+                        fill: DesignTokens.accent;
+                        stroke: DesignTokens.accent;
+                        stroke-width: 2px;
+                    }
+                    if root.parametric-handle-visible: Rectangle {
+                        x: root.parametric-handle-x - 12px;
+                        y: root.parametric-handle-y - 12px;
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 12px;
+                        background: root.parametric-handle-hover ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 2px;
+                        border-color: DesignTokens.accent;
+                        Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: root.parametric-handle-hover ? DesignTokens.on-accent : DesignTokens.accent;
+                        }
                     }
                     // Depth Handle da forma ativa em DRAW: haste com diamante + cota
                     if root.depth-handle-visible && root.depth-handle-commands != "": Path {
@@ -7270,7 +7318,7 @@ export component PetuniaSlintShell inherits Window {
                         Text { text: Tr.t("sl.enter_confirm_esc_cancel"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
                     }
 
-                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d"): ToolCard {
+                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || root.active-tool == "poly_pen"): ToolCard {
                         x: 14px;
                         y: 58px;
                         title: root.tool-options-title != "" ? root.tool-options-title : Tr.t("sl.tool_options");
@@ -7296,6 +7344,20 @@ export component PetuniaSlintShell inherits Window {
                                 label-color: DesignTokens.accent;
                                 text-committed(text) => { root.last-operation-committed(text) }
                             }
+                        }
+
+                        // Modos do Poly Pen (cap. 46 §4).
+                        if root.active-tool == "poly_pen": VerticalLayout {
+                            spacing: 6px;
+                            Text { text: root.label-poly-pen-mode; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; font-weight: 600; }
+                            HorizontalLayout {
+                                spacing: 4px;
+                                BrushChip { label: root.label-poly-pen-mode-auto; active: root.poly-pen-mode == "auto"; clicked => { root.poly-pen-mode-selected("auto"); } }
+                                BrushChip { label: root.label-poly-pen-mode-points; active: root.poly-pen-mode == "points"; clicked => { root.poly-pen-mode-selected("points"); } }
+                                BrushChip { label: root.label-poly-pen-mode-edges; active: root.poly-pen-mode == "edges"; clicked => { root.poly-pen-mode-selected("edges"); } }
+                                BrushChip { label: root.label-poly-pen-mode-polygons; active: root.poly-pen-mode == "polygons"; clicked => { root.poly-pen-mode-selected("polygons"); } }
+                            }
+                            Text { text: root.label-poly-pen-mode-hint; color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
                         }
 
                         if root.active-tool == "extrude": VerticalLayout {
@@ -7724,7 +7786,7 @@ export component PetuniaSlintShell inherits Window {
                         Path { commands: root.gizmo-plane-xz-commands; fit: ImageFit.preserve; stroke: root.gizmo-handle-color(1, DesignTokens.axis-y); stroke-width: 1px; fill: root.gizmo-handle-color(1, DesignTokens.axis-y).transparentize(0.65); }
                         Path { commands: root.gizmo-plane-xy-commands; fit: ImageFit.preserve; stroke: root.gizmo-handle-color(2, DesignTokens.axis-z); stroke-width: 1px; fill: root.gizmo-handle-color(2, DesignTokens.axis-z).transparentize(0.65); }
                         Path { commands: root.gizmo-view-roll-commands; fit: ImageFit.preserve; stroke: root.gizmo-center-active || root.gizmo-center-hover ? DesignTokens.accent : DesignTokens.text-secondary.transparentize(0.4); stroke-width: 1.5px; fill: transparent; }
-                        Rectangle {
+                        if !root.gizmo-gpu: Rectangle {
                             x: gizmo-origin-x - 6px;
                             y: gizmo-origin-y - 6px;
                             width: 12px;
@@ -7955,7 +8017,7 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
-                                icon-svg: PetuniaIcons.tool-profile;
+                                icon-svg: PetuniaIcons.tool-poly-pen;
                                 semantic-label: root.label-poly-pen;
                                 description: root.label-poly-pen-hint;
                                 active: active-tool == "poly_pen";
@@ -11156,6 +11218,49 @@ export component PetuniaSlintShell inherits Window {
                         text: Tr.t("sl.mode") + ": \{root.shading-mode}";
                         color: DesignTokens.text-muted;
                         font-size: DesignTokens.font-caption;
+                    }
+
+                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                    // Estilo do Solid: matcap procedural e oclusão ambiente (GTAO).
+                    for option in [
+                        { on: root.viewport-matcap, label: root.label-viewport-matcap, hint: root.label-viewport-matcap-hint, which: 0 },
+                        { on: root.viewport-ambient-occlusion, label: root.label-viewport-ambient-occlusion, hint: root.label-viewport-ambient-occlusion-hint, which: 1 },
+                    ]: Rectangle {
+                        height: 26px;
+                        border-radius: 4px;
+                        background: option.on ? DesignTokens.accent : DesignTokens.surface;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        accessible-role: checkbox;
+                        accessible-checkable: true;
+                        accessible-label: option.label;
+                        accessible-description: option.hint;
+                        accessible-checked: option.on;
+                        accessible-action-default => {
+                            if option.which == 0 { root.viewport-matcap-set(!option.on); } else { root.viewport-ambient-occlusion-set(!option.on); }
+                        }
+                        Text {
+                            text: option.label;
+                            color: option.on ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            font-size: DesignTokens.font-small;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => {
+                                if option.which == 0 { root.viewport-matcap-set(!option.on); } else { root.viewport-ambient-occlusion-set(!option.on); }
+                            }
+                            Tooltip {
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 2px;
+                                    Text { text: option.label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                                    Text { text: option.hint; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+                                }
+                            }
+                        }
                     }
 
                     Rectangle { height: 1px; background: DesignTokens.border; }

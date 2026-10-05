@@ -1212,6 +1212,12 @@
     "status": "current"
   },
   {
+    "id": "tool_poly_pen",
+    "group": "Mesh modeling",
+    "label": "Poly Pen",
+    "status": "current"
+  },
+  {
     "id": "tool_position",
     "group": "Selection & transform",
     "label": "Tool Position",

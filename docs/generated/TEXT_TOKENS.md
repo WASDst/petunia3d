@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1756**.
+Total de chaves de localização cadastradas: **1812**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -282,6 +282,48 @@ Total de chaves de localização cadastradas: **1756**.
 | `hints.subdivide` | W: subdivide (loop cut). Triangulate below. | W: subdivide (loop cut). Triangular abaixo. |
 | `hints.symmetrize` | Alt+M: copy one side across the axis and weld the seam. | Alt+M: copia um lado para o outro no eixo e solda a costura. |
 | `hints.transform` | G/R/S: move, rotate, scale with mouse. Enter applies; Esc cancels. | G/R/S: mover, rotacionar, escalar com mouse. Enter aplica; Esc cancela. |
+| `hud.add_primitive_hint` | Add {0} · Enter Confirm · Esc Cancel | Adicionar {0} · Enter confirma · Esc cancela |
+| `hud.axis` | {0} axis | eixo {0} |
+| `hud.badge_free_mode` | FREE MODE | MODO LIVRE |
+| `hud.badge_tool` | TOOL | FERRAMENTA |
+| `hud.cut_count` | {0} cut(s) | {0} corte(s) |
+| `hud.cut_hint` | Click edge points · Enter Apply · Esc Cancel | Clique em pontos de aresta · Enter aplica · Esc cancela |
+| `hud.cut_title` | Cut | Cortar |
+| `hud.cuts` | Cuts    {0} | Cortes    {0} |
+| `hud.edit_pivot_hint` | D / Insert or Esc to exit · Geometry remains fixed | D / Insert ou Esc sai · A geometria fica fixa |
+| `hud.edit_pivot_line` | Moving object pivot point | Movendo o pivô do objeto |
+| `hud.edit_pivot_title` | Edit Pivot Mode | Edição do pivô |
+| `hud.faces` | {0} face(s) | {0} face(s) |
+| `hud.free` | free | livre |
+| `hud.hint_click_confirm` | Click Confirm   Esc Cancel   Shift Precision | Clique confirma   Esc cancela   Shift precisão |
+| `hud.hint_release_confirm` | Release Confirm   Esc Cancel   Shift Precision | Soltar confirma   Esc cancela   Shift precisão |
+| `hud.idle_edge` | Selection: Edge   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan | Seleção: Aresta   ·   LMB seleciona   ·   MMB orbita   ·   Shift+MMB move a vista |
+| `hud.idle_face` | Selection: Face   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan | Seleção: Face   ·   LMB seleciona   ·   MMB orbita   ·   Shift+MMB move a vista |
+| `hud.idle_object` | Selection: Object   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan | Seleção: Objeto   ·   LMB seleciona   ·   MMB orbita   ·   Shift+MMB move a vista |
+| `hud.idle_point` | Selection: Point   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan | Seleção: Ponto   ·   LMB seleciona   ·   MMB orbita   ·   Shift+MMB move a vista |
+| `hud.input` | Input   {0} | Entrada   {0} |
+| `hud.label_amount` | Amount | Quantidade |
+| `hud.label_distance` | Distance | Distância |
+| `hud.label_factor` | Factor | Fator |
+| `hud.label_width` | Width | Largura |
+| `hud.loop_cut_hint` | Enter Confirm   Esc Cancel   Drag to slide | Enter confirma   Esc cancela   Arraste para deslizar |
+| `hud.loop_cut_hover_hint` | Hover a quad edge · Ctrl+wheel cuts · Click place · Enter confirm · Esc cancel | Passe sobre um anel de quads · Ctrl+roda cortes · Clique posiciona · Enter confirma · Esc cancela |
+| `hud.pivot` | Pivot | Pivô |
+| `hud.plane` | Plane {0}   {1} | Plano {0}   {1} |
+| `hud.plane_subject` | {0} plane | plano {0} |
+| `hud.points` | {0} point(s) | {0} ponto(s) |
+| `hud.profile_closed_hint` | Generate Volume or Revolve · Esc finishes editing | Gerar volume ou Revolve · Esc conclui a edição |
+| `hud.profile_open_hint` | Click to add points · Click first point to close · Esc finishes editing | Clique para adicionar pontos · Clique no primeiro ponto para fechar · Esc conclui a edição |
+| `hud.segments` | {0} segment(s) | {0} segmento(s) |
+| `hud.slide` | Slide   {0} | Deslize   {0} |
+| `hud.snap` | Snap   {0} | Snap   {0} |
+| `hud.subject_object` | object | objeto |
+| `hud.subject_pivot` | pivot | pivô |
+| `hud.subject_selection` | selection | seleção |
+| `hud.tool_fallback` | Tool | Ferramenta |
+| `hud.transform_hint` | Enter Confirm   Esc Cancel   Shift Precision | Enter confirma   Esc cancela   Shift precisão |
+| `hud.value` | Value   {0} | Valor   {0} |
+| `hud.viewport_menu` | Viewport | Viewport |
 | `inspector.add_component` | Add Component | Adicionar Componente |
 | `inspector.go_material` | Material (open tab) | Material (abrir aba) |
 | `inspector.go_object` | Transform (open tab) | Transform (abrir aba) |
@@ -467,6 +509,10 @@ Total de chaves de localização cadastradas: **1756**.
 | `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
 | `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
 | `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
+| `preferences.viewport_ambient_occlusion` | Ambient occlusion | Oclusão ambiente |
+| `preferences.viewport_ambient_occlusion_hint` | Darkens creases and contacts (GTAO, half resolution) in Solid and Material. | Escurece vincos e contatos (GTAO, meia resolução) no Solid e no Material. |
+| `preferences.viewport_matcap` | Matcap | Matcap |
+| `preferences.viewport_matcap_hint` | Solid shading with a clay studio look that follows the view; reads shape and curvature better. | Sombreamento Solid com aparência de argila de estúdio que acompanha a vista; lê melhor forma e curvatura. |
 | `preferences.workplane_from_selection` | Set Workplane from Selection (3 Points / Face) | Plano de Trabalho pela Seleção (3 Pontos / Face) |
 | `preferences.workplane_prefer_ground` | Automatic work plane favors the ground | Plano automático favorece o chão |
 | `preferences.workplane_prefer_ground_hint` | With no face under the cursor, drawing goes on the ground unless the camera is almost level. Off: the world plane that most faces the view (Modo/Cinema 4D style). | Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D). |
@@ -1334,6 +1380,7 @@ Total de chaves de localização cadastradas: **1756**.
 | `status.pivot` | Pivot: {0} | Pivô: {0} |
 | `status.point_added` | Point added | Ponto adicionado |
 | `status.point_selected` | Point {index} selected | Ponto {index} selecionado |
+| `status.poly_pen_painted` | Poly Pen: {count} polygon(s) painted | Poly Pen: {count} polígono(s) pintado(s) |
 | `status.press_the_new_shortcut_esc_cancels` | Press the new shortcut (Esc cancels) | Pressione o novo atalho (Esc cancela) |
 | `status.primitive_frozen_to_editable_mesh` | Primitive frozen to editable mesh | Primitiva convertida em malha editável |
 | `status.profile_closed_choose_generate_volume_or_revolve` | Profile closed: choose Generate Volume or Revolve | Perfil fechado: escolha Gerar volume ou Revolve |
@@ -1509,6 +1556,15 @@ Total de chaves de localização cadastradas: **1756**.
 | `tools.pivot` | Pivot | Pivô |
 | `tools.poly_pen` | Poly Pen | Poly Pen |
 | `tools.poly_pen_hint` | Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it | Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo |
+| `tools.poly_pen_mode` | Mode | Modo |
+| `tools.poly_pen_mode_auto` | Auto | Auto |
+| `tools.poly_pen_mode_auto_hint` | Edits the point, edge or polygon under the cursor. Click to draw a polygon; {alternate}-drag an edge to extrude it. | Edita o ponto, a aresta ou o polígono sob o cursor. Clique para desenhar um polígono; {alternate}-arrastar uma aresta a extruda. |
+| `tools.poly_pen_mode_edges` | Edges | Arestas |
+| `tools.poly_pen_mode_edges_hint` | Click an edge to add a point on it; drag to move it; {alternate}-drag a border edge to extrude it. | Clique numa aresta para inserir um ponto; arraste para movê-la; {alternate}-arrastar uma aresta de borda a extruda. |
+| `tools.poly_pen_mode_points` | Points | Pontos |
+| `tools.poly_pen_mode_points_hint` | Drag points to move them; clicks draw a polygon point by point; {alternate}-click melts a point. | Arraste pontos para movê-los; cliques desenham um polígono ponto a ponto; {alternate}-clique derrete o ponto. |
+| `tools.poly_pen_mode_polygons` | Polygons | Polígonos |
+| `tools.poly_pen_mode_polygons_hint` | Drag from a border edge to paint polygons; drag a polygon to move it; clicks draw a polygon. | Arraste a partir de uma aresta de borda para pintar polígonos; arraste um polígono para movê-lo; cliques desenham um polígono. |
 | `tools.primitives` | Add | Adicionar |
 | `tools.push_pull` | Push/Pull | Push/Pull |
 | `tools.pushpull` | Push/Pull | Push/Pull |

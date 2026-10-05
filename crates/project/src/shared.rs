@@ -26,6 +26,11 @@ impl<T> Shared<T> {
     pub fn ptr_eq(a: &Self, b: &Self) -> bool {
         Arc::ptr_eq(&a.0, &b.0)
     }
+
+    /// Identidade do bloco compartilhado (para contabilidade de memória).
+    pub fn addr(this: &Self) -> usize {
+        Arc::as_ptr(&this.0) as *const () as usize
+    }
 }
 
 impl<T: Clone> Shared<T> {

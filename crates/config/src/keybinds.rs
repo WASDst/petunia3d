@@ -160,10 +160,58 @@ impl Binding {
     }
 }
 
+/// `"Ctrl"`, `"Shift+Alt"` -> modificadores (sem tecla), para a seção
+/// `[pointer]` do keymap.
+pub fn parse_modifiers(s: &str) -> Option<Mods2> {
+    let mut mods = Mods2::default();
+    for part in s.split('+') {
+        match part.trim() {
+            "Ctrl" | "Control" => mods.ctrl = true,
+            "Shift" => mods.shift = true,
+            "Alt" => mods.alt = true,
+            _ => return None,
+        }
+    }
+    (mods != Mods2::default()).then_some(mods)
+}
+
+impl Mods2 {
+    pub fn to_modifier_string(self) -> String {
+        let mut parts = Vec::new();
+        if self.ctrl {
+            parts.push("Ctrl");
+        }
+        if self.shift {
+            parts.push("Shift");
+        }
+        if self.alt {
+            parts.push("Alt");
+        }
+        parts.join("+")
+    }
+
+    /// Todos os modificadores de `self` estão pressionados em `held`? Um
+    /// conjunto vazio nunca está "pressionado".
+    pub fn held_in(self, held: Mods2) -> bool {
+        self != Mods2::default()
+            && (!self.ctrl || held.ctrl)
+            && (!self.shift || held.shift)
+            && (!self.alt || held.alt)
+    }
+}
+
+/// Ação de ponteiro com modificador: o modificador muda o que o clique ou o
+/// arrasto da ferramenta faz (ex.: Poly Pen derrete/extruda), sem tecla própria.
+pub const POINTER_ALTERNATE: &str = "pointer.alternate";
+/// Modificador que estende a seleção ao clicar.
+pub const POINTER_EXTEND: &str = "pointer.extend";
+
 /// Mapa ação -> binding, ex. `"model.extrude"`.
 #[derive(Debug, Default, Clone)]
 pub struct Keybinds {
     map: HashMap<String, Binding>,
+    /// Modificadores de ponteiro (`[pointer]`): ação -> modificadores.
+    pointer: HashMap<String, Mods2>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -374,6 +422,16 @@ impl Keybinds {
             if section == "profile" {
                 continue;
             }
+            if section == "pointer" {
+                if let Some(m) = inner.as_table() {
+                    for (action, val) in m {
+                        if let Some(mods) = val.as_str().and_then(parse_modifiers) {
+                            self.pointer.insert(format!("pointer.{action}"), mods);
+                        }
+                    }
+                }
+                continue;
+            }
             if let Some(m) = inner.as_table() {
                 for (action, val) in m {
                     if let Some(s) = val.as_str()
@@ -527,6 +585,26 @@ impl Keybinds {
         self.map.insert(action.into(), binding);
     }
 
+    /// Modificador de uma ação de ponteiro (`pointer.alternate`, ...).
+    pub fn pointer_modifier(&self, action: &str) -> Mods2 {
+        self.pointer.get(action).copied().unwrap_or(match action {
+            POINTER_ALTERNATE => Mods2 {
+                ctrl: true,
+                ..Mods2::default()
+            },
+            POINTER_EXTEND => Mods2 {
+                shift: true,
+                ..Mods2::default()
+            },
+            _ => Mods2::default(),
+        })
+    }
+
+    /// Troca o modificador de uma ação de ponteiro.
+    pub fn set_pointer_modifier(&mut self, action: impl Into<String>, mods: Mods2) {
+        self.pointer.insert(action.into(), mods);
+    }
+
     /// Remove um atalho de uma ação.
     pub fn remove_binding(&mut self, action: &str) -> Option<Binding> {
         self.map.remove(action)
@@ -552,6 +630,23 @@ impl Keybinds {
             out.push_str(&format!("[{sec}]\n"));
             for (act, key) in entries {
                 out.push_str(&format!("{act} = \"{key}\"\n"));
+            }
+            out.push('\n');
+        }
+        if !self.pointer.is_empty() {
+            let pointer: BTreeMap<&str, String> = self
+                .pointer
+                .iter()
+                .map(|(action, mods)| {
+                    (
+                        action.strip_prefix("pointer.").unwrap_or(action),
+                        mods.to_modifier_string(),
+                    )
+                })
+                .collect();
+            out.push_str("[pointer]\n");
+            for (act, mods) in pointer {
+                out.push_str(&format!("{act} = \"{mods}\"\n"));
             }
             out.push('\n');
         }
@@ -690,6 +785,11 @@ impl Keybinds {
         for (a, s) in pairs {
             if let Some(b) = parse_binding(s) {
                 kb.map.insert(a.to_string(), b);
+            }
+        }
+        for (action, mods) in [(POINTER_ALTERNATE, "Ctrl"), (POINTER_EXTEND, "Shift")] {
+            if let Some(mods) = parse_modifiers(mods) {
+                kb.pointer.insert(action.to_string(), mods);
             }
         }
         kb
@@ -901,6 +1001,31 @@ pub mod winit_keys {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pointer_modifiers_have_defaults_and_roundtrip_through_toml() {
+        let mut kb = Keybinds::defaults();
+        let ctrl = Mods2 {
+            ctrl: true,
+            ..Default::default()
+        };
+        assert_eq!(kb.pointer_modifier(POINTER_ALTERNATE), ctrl);
+        assert!(ctrl.held_in(Mods2 {
+            ctrl: true,
+            shift: true,
+            alt: false
+        }));
+        assert!(!ctrl.held_in(Mods2::default()));
+        assert_eq!(parse_modifiers("E"), None);
+        let alt = parse_modifiers("Alt").unwrap();
+        kb.set_pointer_modifier(POINTER_ALTERNATE, alt);
+        let text = kb.export_to_toml();
+        assert!(text.contains("[pointer]\nalternate = \"Alt\""));
+        let mut restored = Keybinds::defaults();
+        restored.apply_profile_toml(&text);
+        assert_eq!(restored.pointer_modifier(POINTER_ALTERNATE), alt);
+        assert!(restored.detect_conflicts().is_empty() == kb.detect_conflicts().is_empty());
+    }
 
     #[test]
     fn test_all_8_keymap_profiles_load_validly() {

@@ -31,13 +31,25 @@ Cinema 4D como modelo) e [constituição 11](../bible/constitution/11-contrato-d
 | 6 | Ctrl-clique derrete o ponto | `AppState::poly_pen_melt_point` (1 Undo). Teste `poly_pen_ctrl_click_melts_a_point`. | COMPLIANT |
 | 7 | Textos por `TextId` | `tools.poly_pen`, `tools.poly_pen_hint` (en/pt-BR). | COMPLIANT |
 
+## Segunda entrega (04/10/2026)
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 8 | Modos Points/Edges/Polygons (cap. 46 §4) | `PolyPenMode` (Auto/Points/Edges/Polygons) no card da ferramenta (`BrushChip`), `UiIntent::SetPolyPenMode`; o hover e o clique seguem o modo: Points só pontos (clique coleta, alternativo derrete), Edges só arestas (clique insere ponto, alternativo extruda), Polygons faces e arestas de borda. Auto preserva o comportamento anterior. Teste `poly_pen_modes_filter_the_hover_and_the_click`. | COMPLIANT |
+| 9 | Pintar faces arrastando | `AppState::begin_poly_pen_strip`/`poly_pen_strip_to`/`finish_poly_pen_strip`/`cancel_poly_pen_strip` (`PenStrip`): arrastar a partir de uma aresta de borda no modo Polygons cria um quad por passo do tamanho da aresta, seguindo o cursor no plano de desenho; gesto = 1 Undo, quads pintados selecionados, `Esc` restaura. Testes `painting_a_strip_is_one_undo_and_escape_restores`, `strips_only_start_on_border_edges`, `poly_pen_polygons_mode_paints_quads_from_a_border_edge`. | COMPLIANT |
+| 4 | Modificador alternativo pelo keymap | Seção `[pointer]` do keymap (`pointer.alternate` = Ctrl, `pointer.extend` = Shift por padrão; `Keybinds::pointer_modifier`, exportação TOML). O bridge resolve os dois no press; o texto de ajuda mostra o modificador configurado. Testes `pointer_modifiers_have_defaults_and_roundtrip_through_toml`, `poly_pen_alternate_modifier_comes_from_the_keymap`. | COMPLIANT |
+| 10 | Ponto novo no vazio usa o plano de trabalho | `poly_pen_plane_point`: com o plano de trabalho travado (cap. 05), pontos novos e a pintura caem nele; sem ele, no plano de frente para a câmera pelo último ponto. | COMPLIANT |
+| 11 | Ícone dedicado | `tool_poly_pen` (outline e filled) no pacote Petunia, `PetuniaIcons.tool-poly-pen` no trilho POLY. | COMPLIANT |
+
 ## Pendências registradas
 
-- Ícone dedicado de caneta no pacote Petunia (hoje reaproveita o do Sketch).
-- Modificador "ação alternativa" resolvido pelo keymap (hoje Ctrl no bridge,
-  como os demais modificadores de ponteiro).
+- ~~Ícone dedicado de caneta no pacote Petunia~~ → implementado (2026-10-04).
+- ~~Modificador "ação alternativa" resolvido pelo keymap~~ → implementado
+  (2026-10-04, seção `[pointer]`).
 - ~~Clique numa aresta para subdividi-la~~ → implementado (2026-09-30): sem polígono em coleta, clicar numa aresta insere um ponto nela (`Mesh::split_edge`, todas as faces da aresta, UV interpolada, costura dividida; `AppState::poly_pen_split_edge`, 1 Undo, o ponto novo fica selecionado). Com pontos já coletados o clique continua adicionando ponto ao polígono.
-- Pintar faces arrastando; modos Points/Edges/Polygons.
-- Novo ponto no vazio usa o plano de frente para a câmera pelo último ponto;
-  integrar ao plano de trabalho da Onda 3.
+- ~~Pintar faces arrastando; modos Points/Edges/Polygons~~ → implementado (2026-10-04).
+- ~~Novo ponto no vazio integrado ao plano de trabalho~~ → implementado (2026-10-04).
+- `assets/icons/petunia-dual/generate.py` falha antes desta mudança
+  (`Unmapped command draw.exclude`); o ícone novo foi gravado com as funções do
+  próprio gerador.
 - Captura nativa e teste com usuários.
