@@ -9,6 +9,7 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 - HUD de operação, selo "MODO LIVRE"/"FREE MODE", menu da viewport e nomes de ferramenta passam por `TextId` (42 chaves `hud.*`, en/pt-BR).
 - Orçamento de memória do Undo mede bytes únicos: malhas e pixels compartilhados entre snapshots contam uma vez (`UndoStack::with_footprint`, `Project::history_footprint`, ADR 008).
+- Poly Pen: modos Auto/Points/Edges/Polygons no card da ferramenta; no modo Polygons, arrastar a partir de uma aresta de borda pinta quads (1 Undo, `Esc` restaura); pontos novos caem no plano de trabalho travado; ícone próprio. O modificador de "ação alternativa" vem do keymap (seção `[pointer]`).
 
 ### DRAW/POLY — desempenho e ferramentas (04/10/2026)
 

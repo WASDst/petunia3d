@@ -315,6 +315,62 @@ pub enum GrammarTool {
     Slice,
 }
 
+/// Modo do Poly Pen (cap. 46 §4, Polygon Pen do Cinema 4D): que elemento o
+/// hover destaca e o que clique e arrasto fazem.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PolyPenMode {
+    /// Ponto > aresta > polígono sob o cursor.
+    #[default]
+    Auto,
+    /// Só pontos: arrastar move; cliques desenham; alternativo derrete.
+    Points,
+    /// Só arestas: clique insere ponto; arrastar move; alternativo extruda.
+    Edges,
+    /// Polígonos e arestas de borda: arrastar a partir da borda pinta quads.
+    Polygons,
+}
+
+impl PolyPenMode {
+    pub const ALL: [Self; 4] = [Self::Auto, Self::Points, Self::Edges, Self::Polygons];
+
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Points => "points",
+            Self::Edges => "edges",
+            Self::Polygons => "polygons",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.id() == id)
+    }
+
+    /// Domínios que o hover considera, em ordem de prioridade.
+    const fn domains(self) -> &'static [SelectionDomain] {
+        match self {
+            Self::Auto => &[
+                SelectionDomain::Vertex,
+                SelectionDomain::Edge,
+                SelectionDomain::Face,
+            ],
+            Self::Points => &[SelectionDomain::Vertex],
+            Self::Edges => &[SelectionDomain::Edge],
+            Self::Polygons => &[SelectionDomain::Edge, SelectionDomain::Face],
+        }
+    }
+
+    const fn hint_id(self) -> petunia_config::TextId {
+        use petunia_config::text_id as t;
+        match self {
+            Self::Auto => t::TOOLS_POLY_PEN_MODE_AUTO_HINT,
+            Self::Points => t::TOOLS_POLY_PEN_MODE_POINTS_HINT,
+            Self::Edges => t::TOOLS_POLY_PEN_MODE_EDGES_HINT,
+            Self::Polygons => t::TOOLS_POLY_PEN_MODE_POLYGONS_HINT,
+        }
+    }
+}
+
 /// Gesto da gramática única em andamento.
 #[derive(Debug, Clone, Copy)]
 enum ToolGesture {
@@ -350,6 +406,8 @@ enum ToolGesture {
     },
     /// Plano do Slice em definição.
     Slice,
+    /// Pintura de faces do Poly Pen (estado em `poly_pen_strip`).
+    PolyPenStrip,
 }
 
 /// Id persistente da ferramenta paramétrica no trilho.
@@ -403,6 +461,8 @@ pub enum UiIntent {
     TogglePaintMaskSelection,
     SetPaintMaskSelection(bool),
     SetActiveTool(String),
+    /// Modo do Poly Pen pelo id (`auto`, `points`, `edges`, `polygons`).
+    SetPolyPenMode(String),
     OpenCommandSearch,
     OpenSettings,
     CloseSettings,
@@ -731,6 +791,10 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     tool_press_alternate: bool,
     /// Pontos coletados pelo Poly Pen (estado `Collecting`).
     pub poly_pen_points: Vec<petunia_core::PenPoint>,
+    /// Modo do Poly Pen (Auto/Points/Edges/Polygons).
+    pub poly_pen_mode: PolyPenMode,
+    /// Pintura de faces em andamento (modo Polygons).
+    poly_pen_strip: Option<petunia_core::PenStrip>,
     /// Sessão paramétrica aberta por atalho: o movimento do mouse já manipula.
     pub keyboard_tool_modal_active: bool,
     pub tool_modal_value: f32,
@@ -1121,6 +1185,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             tool_pointer_alt: false,
             tool_press_alternate: false,
             poly_pen_points: Vec::new(),
+            poly_pen_mode: PolyPenMode::default(),
+            poly_pen_strip: None,
             keyboard_tool_modal_active: false,
             tool_modal_value: 0.0,
             rename_draft: None,
@@ -1570,6 +1636,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.tools.paint_isolate_selection =
                     !self.state.session.tools.paint_isolate_selection;
             }
+            UiIntent::SetPolyPenMode(id) => {
+                if let Some(mode) = PolyPenMode::from_id(&id)
+                    && mode != self.poly_pen_mode
+                {
+                    self.poly_pen_mode = mode;
+                    self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                    self.state.mark_dirty();
+                }
+            }
             UiIntent::SetPaintMaskSelection(val) => {
                 self.state.session.tools.paint_isolate_selection = val;
             }
@@ -1579,6 +1654,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
                 if tool != "poly_pen" {
                     self.poly_pen_points.clear();
+                    if let Some(strip) = self.poly_pen_strip.take() {
+                        self.state.cancel_poly_pen_strip(strip);
+                    }
                 }
                 if self.state.session.tools.active_tool == "draw_profile" && tool != "draw_profile"
                 {
@@ -11072,8 +11150,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 } else {
                     petunia_core::PressTarget::Surface
                 };
-                self.tool_press_extend = shift;
-                self.tool_press_alternate = ctrl;
+                // Modificadores de ponteiro vêm do keymap (`[pointer]`).
+                let held = Mods2 { ctrl, shift, alt };
+                let keys = &self.state.ui.keybinds;
+                self.tool_press_extend = keys
+                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND)
+                    .held_in(held);
+                self.tool_press_alternate = keys
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
+                    .held_in(held);
                 self.tool_session.press([x, y], target)
             }
             1 => self.tool_session.move_to([x, y]),
@@ -11537,23 +11622,63 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
-    /// Elemento sob o cursor para o Poly Pen: ponto > aresta > face, com as
-    /// mesmas tolerâncias em pixels do picking de seleção.
+    /// Elemento sob o cursor para o Poly Pen, filtrado pelo modo (Auto:
+    /// ponto > aresta > face), com as tolerâncias em pixels do picking de
+    /// seleção. No modo Polygons só arestas de borda contam (início da pintura).
     fn poly_pen_target(&self, pixel: [f32; 2]) -> petunia_core::HoverTarget {
         let [width, height] = self.viewport_size;
         if width <= 1.0 || height <= 1.0 {
             return petunia_core::HoverTarget::None;
         }
         let (x, y) = (pixel[0] / width, pixel[1] / height);
-        [
-            SelectionDomain::Vertex,
-            SelectionDomain::Edge,
-            SelectionDomain::Face,
-        ]
-        .into_iter()
-        .map(|domain| self.pick_target_for_domain(domain, x, y))
-        .find(|target| target.is_some())
-        .unwrap_or_default()
+        let polygons = self.poly_pen_mode == PolyPenMode::Polygons;
+        self.poly_pen_mode
+            .domains()
+            .iter()
+            .map(|&domain| self.pick_target_for_domain(domain, x, y))
+            .find(|target| match *target {
+                petunia_core::HoverTarget::Edge(a, b) if polygons => self.is_border_edge(a, b),
+                _ => target.is_some(),
+            })
+            .unwrap_or_default()
+    }
+
+    fn is_border_edge(&self, a: u32, b: u32) -> bool {
+        self.state
+            .project
+            .active_mesh()
+            .is_some_and(|mesh| mesh.edge_faces(a, b).len() == 1)
+    }
+
+    /// Ponto no plano de desenho do Poly Pen sob o pixel: o plano de trabalho
+    /// travado (cap. 05) ou, sem ele, o plano de frente para a câmera por
+    /// `anchor`.
+    fn poly_pen_plane_point(&self, pixel: [f32; 2], anchor: glam::Vec3) -> Option<glam::Vec3> {
+        let [width, height] = self.viewport_size;
+        if width <= 1.0 || height <= 1.0 {
+            return None;
+        }
+        let camera = &self.state.session.camera;
+        let ndc = glam::Vec2::new(pixel[0] / width * 2.0 - 1.0, 1.0 - pixel[1] / height * 2.0);
+        let profile = &self.state.profile;
+        let workplane_normal = glam::Vec3::from(profile.right).cross(glam::Vec3::from(profile.up));
+        let (point, normal) =
+            if profile.workplane_locked && workplane_normal.length_squared() > 1.0e-8 {
+                (
+                    glam::Vec3::from(profile.origin),
+                    workplane_normal.normalize(),
+                )
+            } else {
+                (anchor, camera.forward())
+            };
+        let (origin, direction) = camera.ray(ndc.x, ndc.y);
+        let denominator = direction.dot(normal);
+        if denominator.abs() < 1.0e-6 {
+            return None;
+        }
+        let distance = (point - origin).dot(normal) / denominator;
+        let hit = origin + direction * distance;
+        (distance > 0.0 && hit.is_finite()).then_some(hit)
     }
 
     /// Ponto de mundo para um ponto novo do Poly Pen: snap (se ligado), face
@@ -11595,23 +11720,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return Some(hit.position);
         }
         let anchor = last.unwrap_or_else(|| mesh.center());
-        let normal = camera.forward();
-        let (origin, direction) = camera.ray(ndc.x, ndc.y);
-        let denominator = direction.dot(normal);
-        if denominator.abs() < 1.0e-6 {
-            return None;
-        }
-        let distance = (anchor - origin).dot(normal) / denominator;
-        let point = origin + direction * distance;
-        point.is_finite().then_some(point)
+        self.poly_pen_plane_point(pixel, anchor)
     }
 
-    /// Clique do Poly Pen: Ctrl-clique derrete o ponto; senão coleta um ponto
-    /// do polígono (clicar no primeiro ponto fecha).
+    /// Clique do Poly Pen: o modificador alternativo derrete o ponto; no modo
+    /// Edges (ou no Auto, sem coleta) clicar numa aresta insere um ponto; nos
+    /// demais, coleta um ponto do polígono (clicar no primeiro ponto fecha).
+    /// Pontos existentes são reaproveitados em qualquer modo de desenho.
     fn poly_pen_click(&mut self, at: [f32; 2]) -> bool {
+        let mode = self.poly_pen_mode;
         let target = self.poly_pen_target(at);
         if self.tool_press_alternate {
-            if let petunia_core::HoverTarget::Vertex(point) = target {
+            if matches!(mode, PolyPenMode::Auto | PolyPenMode::Points)
+                && let petunia_core::HoverTarget::Vertex(point) = target
+            {
                 if let Err(error) = self.state.poly_pen_melt_point(point) {
                     self.state.set_status(error.to_string());
                 }
@@ -11619,12 +11741,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             return false;
         }
-        // Sem polígono em coleta, clicar numa aresta a divide (ponto novo na aresta).
-        if self.poly_pen_points.is_empty()
-            && let petunia_core::HoverTarget::Edge(a, b) = target
-        {
+        let splits_edges = mode == PolyPenMode::Edges
+            || (mode == PolyPenMode::Auto && self.poly_pen_points.is_empty());
+        if splits_edges && let petunia_core::HoverTarget::Edge(a, b) = target {
             return self.poly_pen_split_edge_at(a, b, at);
         }
+        if mode == PolyPenMode::Edges {
+            return false;
+        }
+        let target = match mode {
+            PolyPenMode::Polygons => {
+                let [width, height] = self.viewport_size;
+                self.pick_target_for_domain(SelectionDomain::Vertex, at[0] / width, at[1] / height)
+            }
+            _ => target,
+        };
         let point = match target {
             petunia_core::HoverTarget::Vertex(index) => petunia_core::PenPoint::Existing(index),
             _ => match self.poly_pen_world_point(at) {
@@ -11697,6 +11828,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         let target = self.poly_pen_target(anchor);
+        // Modo Polygons: arrastar a partir de uma aresta de borda pinta quads.
+        if self.poly_pen_mode == PolyPenMode::Polygons
+            && !self.tool_press_alternate
+            && let petunia_core::HoverTarget::Edge(a, b) = target
+        {
+            return match self.state.begin_poly_pen_strip(a, b) {
+                Ok(strip) => {
+                    self.poly_pen_strip = Some(strip);
+                    self.tool_gesture = Some(ToolGesture::PolyPenStrip);
+                    true
+                }
+                Err(error) => {
+                    self.state.set_status(error.to_string());
+                    false
+                }
+            };
+        }
         if self.tool_press_alternate
             && let petunia_core::HoverTarget::Edge(a, b) = target
         {
@@ -12101,8 +12249,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.scrub_loop_cut_2d(current[0] - last[0], current[1] - last[1], fine)
             }
             Some(ToolGesture::Slice) => self.update_slice_modified(current[0], current[1], snap),
+            Some(ToolGesture::PolyPenStrip) => self.update_poly_pen_strip(current),
             None => false,
         }
+    }
+
+    /// Estende a pintura de faces até o cursor (no plano de desenho pela
+    /// aresta da ponta).
+    fn update_poly_pen_strip(&mut self, current: [f32; 2]) -> bool {
+        let Some(mut strip) = self.poly_pen_strip.take() else {
+            return false;
+        };
+        let (a, b) = strip.edge();
+        let tip = self.state.project.active_mesh().and_then(|mesh| {
+            Some((mesh.verts.get(a as usize)?.vec() + mesh.verts.get(b as usize)?.vec()) * 0.5)
+        });
+        let changed = match tip.and_then(|tip| self.poly_pen_plane_point(current, tip)) {
+            Some(target) => match self.state.poly_pen_strip_to(&mut strip, target) {
+                Ok(added) => added > 0,
+                Err(error) => {
+                    self.state.set_status(error.to_string());
+                    false
+                }
+            },
+            None => false,
+        };
+        self.poly_pen_strip = Some(strip);
+        if changed {
+            self.sync_viewport_context();
+        }
+        changed
     }
 
     fn commit_tool_gesture(&mut self) -> bool {
@@ -12129,6 +12305,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Some(ToolGesture::LoopSlide { .. }) => self.commit_loop_cut(),
             // O plano fica em prévia até o clique de confirmação (ou Esc).
             Some(ToolGesture::Slice) => true,
+            Some(ToolGesture::PolyPenStrip) => {
+                let Some(strip) = self.poly_pen_strip.take() else {
+                    return false;
+                };
+                let count = strip.quads();
+                let painted = self.state.finish_poly_pen_strip(strip);
+                if painted {
+                    let message = crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_POLY_PEN_PAINTED),
+                        &[("count", count.to_string())],
+                    );
+                    self.state.set_status(message);
+                }
+                self.sync_viewport_context();
+                painted
+            }
             Some(ToolGesture::Transform { gizmo: true }) => self.end_gizmo_drag(),
             Some(ToolGesture::Transform { gizmo: false }) => self.end_viewport_transform(),
             Some(ToolGesture::Parametric { .. }) => self.commit_tool_modal(),
@@ -12160,6 +12354,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Some(ToolGesture::LoopSlide { .. }) => self.cancel_loop_cut(),
             Some(ToolGesture::Slice) => self.cancel_slice(),
+            Some(ToolGesture::PolyPenStrip) => match self.poly_pen_strip.take() {
+                Some(strip) => {
+                    self.state.cancel_poly_pen_strip(strip);
+                    self.sync_viewport_context();
+                    true
+                }
+                None => false,
+            },
             None => false,
         }
     }
@@ -14934,6 +15136,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_model_push_pull = translated(petunia_config::text_id::TOOLS_PUSH_PULL);
         vm.label_poly_pen = translated(petunia_config::text_id::TOOLS_POLY_PEN);
         vm.label_poly_pen_hint = translated(petunia_config::text_id::TOOLS_POLY_PEN_HINT);
+        vm.poly_pen_mode = self.poly_pen_mode.id().to_string();
+        vm.label_poly_pen_mode = translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE);
+        vm.label_poly_pen_mode_auto = translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_AUTO);
+        vm.label_poly_pen_mode_points =
+            translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_POINTS);
+        vm.label_poly_pen_mode_edges =
+            translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_EDGES);
+        vm.label_poly_pen_mode_polygons =
+            translated(petunia_config::text_id::TOOLS_POLY_PEN_MODE_POLYGONS);
+        let alternate = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
+            .to_modifier_string();
+        vm.label_poly_pen_mode_hint = crate::tr::fill(
+            &translated(self.poly_pen_mode.hint_id()),
+            &[("alternate", alternate)],
+        );
         vm.poly_pen_preview_commands = self.poly_pen_preview_commands();
         vm.hint_model_push_pull = translated(petunia_config::text_id::UI_PUSH_PULL_HINT);
         vm.label_model_profile = translated(petunia_config::text_id::TOOLS_DRAW_PROFILE);

@@ -4112,6 +4112,13 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> depth-handle-label: "";
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
+    in-out property <string> poly-pen-mode: "auto";
+    in-out property <string> label-poly-pen-mode: "";
+    in-out property <string> label-poly-pen-mode-auto: "";
+    in-out property <string> label-poly-pen-mode-points: "";
+    in-out property <string> label-poly-pen-mode-edges: "";
+    in-out property <string> label-poly-pen-mode-polygons: "";
+    in-out property <string> label-poly-pen-mode-hint: "";
     in-out property <bool> profile-parametric: false;
     in-out property <bool> profile-ellipse: false;
     in-out property <float> profile-width: 0.0;
@@ -4481,6 +4488,7 @@ export component PetuniaSlintShell inherits Window {
     callback paint-symmetry-z-toggled;
     callback paint-target-vertex-changed(bool);
     callback paint-mask-selection-toggled;
+    callback poly-pen-mode-selected(string);
     callback shortcut-requested(string, bool, bool, bool);
     callback toggle-face-orientation;
     callback toggle-uv-checker;
@@ -7270,7 +7278,7 @@ export component PetuniaSlintShell inherits Window {
                         Text { text: Tr.t("sl.enter_confirm_esc_cancel"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
                     }
 
-                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d"): ToolCard {
+                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || root.active-tool == "poly_pen"): ToolCard {
                         x: 14px;
                         y: 58px;
                         title: root.tool-options-title != "" ? root.tool-options-title : Tr.t("sl.tool_options");
@@ -7296,6 +7304,20 @@ export component PetuniaSlintShell inherits Window {
                                 label-color: DesignTokens.accent;
                                 text-committed(text) => { root.last-operation-committed(text) }
                             }
+                        }
+
+                        // Modos do Poly Pen (cap. 46 §4).
+                        if root.active-tool == "poly_pen": VerticalLayout {
+                            spacing: 6px;
+                            Text { text: root.label-poly-pen-mode; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; font-weight: 600; }
+                            HorizontalLayout {
+                                spacing: 4px;
+                                BrushChip { label: root.label-poly-pen-mode-auto; active: root.poly-pen-mode == "auto"; clicked => { root.poly-pen-mode-selected("auto"); } }
+                                BrushChip { label: root.label-poly-pen-mode-points; active: root.poly-pen-mode == "points"; clicked => { root.poly-pen-mode-selected("points"); } }
+                                BrushChip { label: root.label-poly-pen-mode-edges; active: root.poly-pen-mode == "edges"; clicked => { root.poly-pen-mode-selected("edges"); } }
+                                BrushChip { label: root.label-poly-pen-mode-polygons; active: root.poly-pen-mode == "polygons"; clicked => { root.poly-pen-mode-selected("polygons"); } }
+                            }
+                            Text { text: root.label-poly-pen-mode-hint; color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
                         }
 
                         if root.active-tool == "extrude": VerticalLayout {
@@ -7955,7 +7977,7 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
-                                icon-svg: PetuniaIcons.tool-profile;
+                                icon-svg: PetuniaIcons.tool-poly-pen;
                                 semantic-label: root.label-poly-pen;
                                 description: root.label-poly-pen-hint;
                                 active: active-tool == "poly_pen";

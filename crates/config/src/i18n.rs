@@ -917,6 +917,20 @@ pub mod text_id {
 
     pub const HUD_VIEWPORT_MENU: TextId = TextId::new("hud.viewport_menu");
 
+    pub const TOOLS_POLY_PEN_MODE: TextId = TextId::new("tools.poly_pen_mode");
+    pub const TOOLS_POLY_PEN_MODE_AUTO: TextId = TextId::new("tools.poly_pen_mode_auto");
+    pub const TOOLS_POLY_PEN_MODE_POINTS: TextId = TextId::new("tools.poly_pen_mode_points");
+    pub const TOOLS_POLY_PEN_MODE_EDGES: TextId = TextId::new("tools.poly_pen_mode_edges");
+    pub const TOOLS_POLY_PEN_MODE_POLYGONS: TextId = TextId::new("tools.poly_pen_mode_polygons");
+    pub const TOOLS_POLY_PEN_MODE_AUTO_HINT: TextId = TextId::new("tools.poly_pen_mode_auto_hint");
+    pub const TOOLS_POLY_PEN_MODE_POINTS_HINT: TextId =
+        TextId::new("tools.poly_pen_mode_points_hint");
+    pub const TOOLS_POLY_PEN_MODE_EDGES_HINT: TextId =
+        TextId::new("tools.poly_pen_mode_edges_hint");
+    pub const TOOLS_POLY_PEN_MODE_POLYGONS_HINT: TextId =
+        TextId::new("tools.poly_pen_mode_polygons_hint");
+    pub const STATUS_POLY_PEN_PAINTED: TextId = TextId::new("status.poly_pen_painted");
+
     pub const ALL: &[TextId] = &[
         UI_OUTLINER,
         UI_PROPERTIES,
@@ -1530,6 +1544,16 @@ pub mod text_id {
         HUD_LABEL_FACTOR,
         HUD_TOOL_FALLBACK,
         HUD_VIEWPORT_MENU,
+        TOOLS_POLY_PEN_MODE,
+        TOOLS_POLY_PEN_MODE_AUTO,
+        TOOLS_POLY_PEN_MODE_POINTS,
+        TOOLS_POLY_PEN_MODE_EDGES,
+        TOOLS_POLY_PEN_MODE_POLYGONS,
+        TOOLS_POLY_PEN_MODE_AUTO_HINT,
+        TOOLS_POLY_PEN_MODE_POINTS_HINT,
+        TOOLS_POLY_PEN_MODE_EDGES_HINT,
+        TOOLS_POLY_PEN_MODE_POLYGONS_HINT,
+        STATUS_POLY_PEN_PAINTED,
     ];
 }
 

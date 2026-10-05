@@ -536,6 +536,15 @@ frame = "Frame"
 frame_all = "Frame All"
 
 [tools]
+poly_pen_mode_polygons_hint = "Drag from a border edge to paint polygons; drag a polygon to move it; clicks draw a polygon."
+poly_pen_mode_edges_hint = "Click an edge to add a point on it; drag to move it; {alternate}-drag a border edge to extrude it."
+poly_pen_mode_points_hint = "Drag points to move them; clicks draw a polygon point by point; {alternate}-click melts a point."
+poly_pen_mode_auto_hint = "Edits the point, edge or polygon under the cursor. Click to draw a polygon; {alternate}-drag an edge to extrude it."
+poly_pen_mode_polygons = "Polygons"
+poly_pen_mode_edges = "Edges"
+poly_pen_mode_points = "Points"
+poly_pen_mode_auto = "Auto"
+poly_pen_mode = "Mode"
 poly_pen = "Poly Pen"
 poly_pen_hint = "Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it"
 pivot = "Pivot"
@@ -1702,6 +1711,7 @@ resample = "Convert curve to N segments"
 threshold = "Trace threshold (0–254)"
 
 [status]
+poly_pen_painted = "Poly Pen: {count} polygon(s) painted"
 profile_point_selected = "Point selected"
 region_selected = "Region selected"
 curve_selected = "Curve selected"

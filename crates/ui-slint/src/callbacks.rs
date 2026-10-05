@@ -949,6 +949,13 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
     window.set_label_poly_pen(vm.label_poly_pen.as_str().into());
     window.set_label_poly_pen_hint(vm.label_poly_pen_hint.as_str().into());
+    window.set_poly_pen_mode(vm.poly_pen_mode.as_str().into());
+    window.set_label_poly_pen_mode(vm.label_poly_pen_mode.as_str().into());
+    window.set_label_poly_pen_mode_auto(vm.label_poly_pen_mode_auto.as_str().into());
+    window.set_label_poly_pen_mode_points(vm.label_poly_pen_mode_points.as_str().into());
+    window.set_label_poly_pen_mode_edges(vm.label_poly_pen_mode_edges.as_str().into());
+    window.set_label_poly_pen_mode_polygons(vm.label_poly_pen_mode_polygons.as_str().into());
+    window.set_label_poly_pen_mode_hint(vm.label_poly_pen_mode_hint.as_str().into());
     window.set_modeling_mode(vm.modeling_mode.as_str().into());
     window.set_label_workspace_draw_title(vm.label_workspace_draw_title.as_str().into());
     window
@@ -5036,6 +5043,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_target_vertex_changed(move |val| {
         if let Ok(mut bridge) = target_bridge.lock() {
             bridge.apply(UiIntent::SetPaintTargetVertex(val));
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let pen_mode_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_poly_pen_mode_selected(move |mode| {
+        if let Ok(mut bridge) = pen_mode_bridge.lock() {
+            bridge.apply(UiIntent::SetPolyPenMode(mode.as_str().to_string()));
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);

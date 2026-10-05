@@ -164,6 +164,7 @@ add('inset', M, 'Inset', ink(p(FACE), p('M8 9 16 8l1 7-8 2z'), p('M4 7l4 2m11-4-
 add('bevel', M, 'Round Edge', ink(p('M3 17V7l4-4h10l4 4v10l-4 4H7zM3 7h4V3m10 0v4h4M3 17h4v4m10 0v-4h4')), solid(p('M7 2h10l5 5v10l-5 5H7l-5-5V7z')) + ink(p('M3 8h4V3m10 0v5h4M3 16h4v5m10 0v-5h4', stroke='#252735')))
 add('loop_cut', M, 'Loop Cut', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7'), p('M7.5 4.5v15M16.5 4.5v15M7.5 9.5l9 0', stroke_dasharray='2 2')), solid(p(CUBE)) + ink(p('M7.5 4.5v15M16.5 4.5v15M7.5 9.5l9 0', stroke='#252735')))
 add('knife', M, 'Knife', ink(p('M3 20 14 9l5-6 2 2-6 5L4 21zM13 10l2 2M4 21l4-1')), solid(p('M2 21 13 10l6-8 3 3-8 6L4 22z')))
+add('tool_poly_pen', M, 'Poly Pen', ink(p('M3 21V12l7-4M3 21h7'), c(3, 21, 1), c(3, 12, 1), c(10, 8, 1), p('m13 15 6.5-6.5 2 2L15 17l-3 1z')), solid(p('M2 22V11.3l8-4.6 1 1.7-7 4V20h6v2z'), p('m12.5 14.5 7-7 3 3-7 7-4 1z')))
 add('slice', M, 'Slice', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7'), p('M2 13 22 10', stroke_dasharray='2 2')), solid(p(CUBE)) + ink(p('M2 13 22 10', stroke='#252735', stroke_width='2.2')))
 add('subdivide', M, 'Subdivide', ink(r(3, 3, 18, 18, 1), p('M12 3v18M3 12h18')), solid(r(3, 3, 8, 8, 1), r(13, 3, 8, 8, 1), r(3, 13, 8, 8, 1), r(13, 13, 8, 8, 1)))
 add('merge', M, 'Merge Center', ink(c(3, 4, 2), c(21, 4, 2), c(3, 20, 2), c(21, 20, 2), c(12, 12, 2), p('M5 6l5 5M19 6l-5 5M5 18l5-5m9 5-5-5')), solid(c(12, 12, 3), c(3, 4, 2), c(21, 4, 2), c(3, 20, 2), c(21, 20, 2)) + detail(p('M5 6l5 5M19 6l-5 5M5 18l5-5m9 5-5-5')))

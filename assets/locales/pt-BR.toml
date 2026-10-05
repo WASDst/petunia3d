@@ -538,6 +538,15 @@ frame = "Enquadrar"
 frame_all = "Enquadrar tudo"
 
 [tools]
+poly_pen_mode_polygons_hint = "Arraste a partir de uma aresta de borda para pintar polígonos; arraste um polígono para movê-lo; cliques desenham um polígono."
+poly_pen_mode_edges_hint = "Clique numa aresta para inserir um ponto; arraste para movê-la; {alternate}-arrastar uma aresta de borda a extruda."
+poly_pen_mode_points_hint = "Arraste pontos para movê-los; cliques desenham um polígono ponto a ponto; {alternate}-clique derrete o ponto."
+poly_pen_mode_auto_hint = "Edita o ponto, a aresta ou o polígono sob o cursor. Clique para desenhar um polígono; {alternate}-arrastar uma aresta a extruda."
+poly_pen_mode_polygons = "Polígonos"
+poly_pen_mode_edges = "Arestas"
+poly_pen_mode_points = "Pontos"
+poly_pen_mode_auto = "Auto"
+poly_pen_mode = "Modo"
 poly_pen = "Poly Pen"
 poly_pen_hint = "Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo"
 pivot = "Pivô"
@@ -1704,6 +1713,7 @@ resample = "Converter curva em N segmentos"
 threshold = "Limiar de vetorização (0–254)"
 
 [status]
+poly_pen_painted = "Poly Pen: {count} polígono(s) pintado(s)"
 profile_point_selected = "Ponto selecionado"
 region_selected = "Região selecionada"
 curve_selected = "Curva selecionada"
