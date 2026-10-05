@@ -7788,6 +7788,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
     }
 
+    /// "Recolher Inspector" (plano de UI F4, D1): fecha e solta o pin de todas
+    /// as seções, devolvendo o shell ao trilho de pílulas. É um comando
+    /// explícito do usuário, por isso ignora o pin — diferente do recolhimento
+    /// automático do peek, que o pin protege (ADR 005 §5).
+    pub fn collapse_inspector(&mut self) {
+        for id in petunia_config::InspectorSectionId::all() {
+            section_layout::set_open(&mut self.section_layouts, id, false);
+            section_layout::set_pin_open(&mut self.section_layouts, id, false);
+        }
+        self.persist_section_layouts();
+    }
+
     /// Alterna estado aberto/fechado de uma seção do Inspector (persistido).
     pub fn toggle_section_open(&mut self, section: petunia_config::InspectorSectionId) -> bool {
         let open = section_layout::toggle_open(&mut self.section_layouts, section);

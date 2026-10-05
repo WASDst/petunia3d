@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### UI Slint — F4: Inspector de superfície única (04/10/2026)
+
+- Inspector como um painel translúcido com seções planas (sem cartões nem sombras), cabeçalho de contexto com nome do objeto, Duplicar/Excluir e **Recolher Inspector**; pin aparece só no hover ou quando ligado.
+- Trilho de pílulas sobreposto à viewport e visível só com o Inspector recolhido (ADR 004 §3); a viewport ganha 50 px.
+- Modifiers vira subseção de Object; perfil de material em grade 2 colunas sem texto cortado.
+- Caderno: cap. 36 "Revisão de baseline — 2026-10-04"; emendas nos ADRs 004 e 005. Testes: `collapse_inspector_closes_and_unpins_every_section` e rail de 4 pílulas.
+
 ### UI Slint — F2 e F3: componentes, galeria e shell (04/10/2026)
 
 - F2: `app.slint` dividido em `types.slint`, `components/`, `inspector/` e `dialogs/` sem mudança de comportamento; componentes base `IconButton`, `Segmented`, `DropdownButton`, `PropertyRow`, `EmptyState`, `KeyHint` e `CommandSearchField`; galeria `--example gallery` com textos en/pt-BR; `ui-lint` recursivo.

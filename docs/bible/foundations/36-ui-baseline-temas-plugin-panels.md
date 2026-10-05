@@ -188,6 +188,31 @@ revisão **substitui** apenas os pontos listados; nada mais do capítulo é reab
    interativo, seções e cards com transição de altura ~140 ms, `reduced-motion`
    respeitado por um único token global.
 
+## Revisão de baseline — 2026-10-04
+
+Aprovada pelo responsável do produto ao autorizar as fases F3 e F4 do
+[plano de refatoração de UI](../../development/ui-ux-refactor-plan-2026-10-04.md)
+(decisões D1, D2, D3 e D9). Esta revisão **substitui** apenas os pontos
+listados; nada mais do capítulo é reaberto.
+
+1. **Inspector como superfície única.** Um painel translúcido com seções
+   planas separadas por fio; sem cartões empilhados. Topo com cabeçalho de
+   contexto: nome do item selecionado (ou "Nada selecionado"), ações do objeto
+   (Duplicar, Excluir) e **Recolher Inspector**.
+2. **Rail de pílulas só no estado recolhido** (ADR 004 §3): sobreposto à borda
+   direita da viewport; o painel aberto o cobre. Seção aberta = accent suave +
+   marcador lateral, nunca accent preenchido.
+3. **Seções DRAW/POLY:** `Parts → Transform → Material → Object`, como
+   congelado acima. **Modifiers é subseção de Object.** Quick Actions sai do
+   Inspector quando a barra contextual (F5) a receber.
+4. **Top bar:** menus (e o nome do projeto, ainda pendente) à esquerda, workspaces ao centro,
+   Desfazer/Refazer, **campo de busca de comandos visível** e Preferências à
+   direita. Abrir, Salvar, Imagens de referência e Parts ficam nos menus e
+   atalhos.
+5. **Viewport control bar** (cap. 23) é uma única barra: LEFT = domínio de
+   seleção, CENTER = auxiliares da ferramenta (pivô, snap, proporcional),
+   RIGHT = câmera e sombreamento.
+
 # Design System Final V1
 
 ## Tipografia

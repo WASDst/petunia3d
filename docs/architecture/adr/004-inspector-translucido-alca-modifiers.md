@@ -43,3 +43,11 @@ e painel único de ferramenta fora do canto inferior.
 - ADR 003 continua válido; este ADR refina apenas apresentação e organização.
 - Slots de extensão continuam controlados; nenhuma seção central muda de ordem.
 - PAINT e UV não são redesenhados por este ADR.
+
+## Emenda 2026-10-04
+
+O rail de pílulas do §3 volta a ser exclusivo do estado recolhido: ele passa a
+ser sobreposto à borda direita da viewport e o painel aberto o cobre (antes os
+dois apareciam juntos). O rail tem 4 pílulas (Parts, Transform, Material,
+Object) e mais Quick Actions até a F5; Modifiers vive dentro de Object. Ver a
+emenda de mesma data no [ADR 005](005-modulos-inspector-dock-float-pin.md).

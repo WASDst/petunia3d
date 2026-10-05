@@ -9046,6 +9046,31 @@ fn test_slider_and_preference_responsiveness() {
 }
 
 #[test]
+fn collapse_inspector_closes_and_unpins_every_section() {
+    use petunia_config::InspectorSectionId;
+
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Pílula clicada = seção aberta e fixada (ADR 005).
+    for id in [InspectorSectionId::Parts, InspectorSectionId::Material] {
+        bridge.set_section_pin_open(id, true);
+        bridge.set_section_open(id, true);
+    }
+    bridge.collapse_inspector();
+    for id in InspectorSectionId::all() {
+        let layout = &bridge.section_layouts[crate::section_layout::section_index(id)];
+        assert!(!layout.open, "{id:?} deveria fechar");
+        assert!(!layout.pin_open, "{id:?} deveria soltar o pin");
+    }
+    assert!(
+        bridge
+            .view_model()
+            .section_states
+            .iter()
+            .all(|state| !state.open && !state.pin_open)
+    );
+}
+
+#[test]
 fn test_inspector_section_floating_pinning_and_pill_rail_toggle() {
     use petunia_config::InspectorSectionId;
 

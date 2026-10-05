@@ -997,6 +997,10 @@ multiselection_measure_tag = "Display average measure tag on multiple edge selec
 
 # Textos do shell Slint (Tr.t). Gerado na migração de literais para chaves.
 [sl]
+nothing_selected_hint = "Click a part in the viewport or in the Parts list to see its transform, material and data."
+nothing_selected = "Nothing selected"
+collapse_inspector = "Collapse Inspector"
+collapse_inspector_hint = "Close every section and return to the pill rail. Hover a pill to peek again."
 key_lmb = "LMB"
 key_mmb = "MMB"
 key_shift_mmb = "Shift+MMB"

@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1618**.
+Total de chaves de localização cadastradas: **1622**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -793,6 +793,8 @@ Total de chaves de localização cadastradas: **1618**.
 | `sl.close_settings` | Close settings | Fechar configurações |
 | `sl.collapse` | Collapse | Recolher |
 | `sl.collapse_and_merge_all_selected_vertices_to_` | Collapse and merge all selected vertices to their median center | Colapsa e mescla todos os vértices selecionados no centro mediano |
+| `sl.collapse_inspector` | Collapse Inspector | Recolher Inspector |
+| `sl.collapse_inspector_hint` | Close every section and return to the pill rail. Hover a pill to peek again. | Fecha todas as seções e volta ao trilho de pílulas. Passe o mouse numa pílula para espiar de novo. |
 | `sl.color_palette` | Color Palette | Paleta de cores |
 | `sl.color_picker` | Color Picker | Conta-gotas |
 | `sl.color_swatch` | Color Swatch | Amostra de cor |
@@ -992,6 +994,8 @@ Total de chaves de localização cadastradas: **1618**.
 | `sl.no_extension_is_loaded_by_this_interface_in_` | No extension is loaded by this interface in this version. | Nenhuma extensão é carregada por esta interface nesta versão. |
 | `sl.no_reference_image_loaded_click_the_box_to_l` | No reference image loaded. Click the box to load blueprints or photo references. | Nenhuma imagem de referência carregada. Clique na caixa para carregar blueprints ou fotos de referência. |
 | `sl.non_color_axis_differentiation_color_blindne` | Non-Color Axis Differentiation (Color Blindness) | Diferenciação Não-Cromática de Eixos (Daltonismo) |
+| `sl.nothing_selected` | Nothing selected | Nada selecionado |
+| `sl.nothing_selected_hint` | Click a part in the viewport or in the Parts list to see its transform, material and data. | Clique numa parte na viewport ou na lista Parts para ver posição, material e dados. |
 | `sl.numeric_property_field` | Numeric property field | Campo numérico |
 | `sl.obj_import_and_gltf_export_are_native_featur` | OBJ import and glTF export are native features, available from the File menu. | Importar OBJ e exportar glTF são recursos nativos, acessíveis pelo menu Arquivo. |
 | `sl.object` | Object | Objeto |

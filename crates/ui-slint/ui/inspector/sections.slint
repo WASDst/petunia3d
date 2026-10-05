@@ -137,59 +137,71 @@ export component InspectorSection inherits Rectangle {
     callback pin-toggled(string);
     toggle-all => { root.toggled(); }
 
+    // Seção plana dentro da superfície única do Inspector (plano de UI F4,
+    // D3): sem cartão nem sombra; um fio no topo separa as seções.
     width: 100%;
     height: root.open ? section-layout.preferred-height : 36px;
     animate height { duration: Motion.medium; easing: ease-in-out; }
     clip: true;
     vertical-stretch: 0;
-    border-radius: 8px;
-    background: DesignTokens.surface-raised.with-alpha(0.96);
-    border-width: 1px;
-    border-color: DesignTokens.border-strong;
-    drop-shadow-blur: DesignTokens.elevation-2-blur;
-    drop-shadow-color: DesignTokens.elevation-2-color;
-    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+    background: transparent;
+
+    Rectangle {
+        y: 0;
+        height: 1px;
+        background: DesignTokens.border;
+    }
+
+    header-hover := TouchArea {
+        y: 0;
+        height: 36px;
+    }
 
     section-layout := VerticalLayout {
-        padding-left: 8px;
-        padding-right: 8px;
+        padding-left: DesignTokens.space-md;
+        padding-right: DesignTokens.space-sm;
         padding-top: 4px;
-        padding-bottom: 4px;
-        spacing: 4px;
+        padding-bottom: DesignTokens.space-md;
+        spacing: DesignTokens.space-sm;
 
         HorizontalLayout {
             height: 28px;
-            spacing: 4px;
-            alignment: center;
+            spacing: DesignTokens.space-xs;
 
             header-toggle := Rectangle {
                 horizontal-stretch: 1;
                 height: 28px;
-                border-width: section-focus.has-focus ? 1px : 0px;
+                border-width: section-focus.has-focus ? 2px : 0px;
                 border-color: DesignTokens.focus-ring;
-                border-radius: 4px;
+                border-radius: DesignTokens.radius-control;
                 accessible-role: button;
                 accessible-label: root.title;
                 accessible-expanded: root.open;
                 forward-focus: section-focus;
 
                 HorizontalLayout {
-                    width: 100%;
-                    height: 100%;
                     spacing: 6px;
                     alignment: start;
-                    IconDisplay {
-                        icon: root.open ? IconSet.ChevronDown : IconSet.ChevronRight;
-                        size: 12px;
-                        stroke: DesignTokens.text-muted;
+                    // Caixa fixa: sem ela o ícone esticava e empurrava o
+                    // título para o centro (achado da captura de 2026-10-04).
+                    Rectangle {
+                        width: DesignTokens.icon-small;
+                        horizontal-stretch: 0;
+                        IconDisplay {
+                            icon: root.open ? IconSet.ChevronDown : IconSet.ChevronRight;
+                            size: DesignTokens.icon-small;
+                            stroke: DesignTokens.text-muted;
+                        }
                     }
                     Text {
                         text: root.title;
                         color: DesignTokens.text-primary;
-                        font-size: DesignTokens.font-default;
+                        font-size: DesignTokens.font-strong;
                         font-weight: 600;
                         vertical-alignment: center;
                         horizontal-alignment: left;
+                        horizontal-stretch: 1;
+                        overflow: elide;
                     }
                 }
 
@@ -200,7 +212,7 @@ export component InspectorSection inherits Rectangle {
                         if event.text == Key.Return || event.text == " " { root.toggled(); return accept; }
                         reject
                     }
-                    TouchArea {
+                    toggle-touch := TouchArea {
                         width: 100%;
                         height: 100%;
                         property <bool> alt-down: false;
@@ -224,11 +236,15 @@ export component InspectorSection inherits Rectangle {
                 }
             }
 
+            // Pin: aparece no hover do cabeçalho, com foco ou quando ligado;
+            // ligado = ícone neutro, nunca fundo accent (princípio 2).
             Rectangle {
                 width: 28px;
                 height: 28px;
-                border-radius: 4px;
-                background: root.pin-open ? DesignTokens.accent : (pin-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                border-radius: DesignTokens.radius-control;
+                opacity: root.pin-open || header-hover.has-hover || toggle-touch.has-hover || pin-touch.has-hover || pin-focus.has-focus ? 1.0 : 0.0;
+                animate opacity { duration: Motion.fast; }
+                background: pin-touch.has-hover ? DesignTokens.surface-hover : transparent;
                 border-width: pin-focus.has-focus ? 2px : 0px;
                 border-color: DesignTokens.focus-ring;
                 accessible-role: button;
@@ -242,9 +258,9 @@ export component InspectorSection inherits Rectangle {
                     }
                 }
                 IconDisplay {
-                    icon: IconSet.Pin;
-                    size: 11px;
-                    stroke: root.pin-open ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                    icon: root.pin-open ? IconSet.Pin : IconSet.PinOff;
+                    size: DesignTokens.icon-small;
+                    stroke: root.pin-open ? DesignTokens.text-secondary : DesignTokens.text-muted;
                 }
                 pin-touch := TouchArea {
                     clicked => { root.pin-toggled(root.section-id); }
@@ -256,11 +272,6 @@ export component InspectorSection inherits Rectangle {
                     }
                 }
             }
-        }
-
-        if root.open: Rectangle {
-            height: 1px;
-            background: DesignTokens.border;
         }
 
         VerticalLayout {
@@ -709,6 +720,33 @@ export component PartsBody inherits VerticalLayout {
     }
 }
 
+/// Opção de perfil de material (grade do MaterialBody).
+component ProfileChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
+    horizontal-stretch: 1;
+    height: 26px;
+    border-radius: DesignTokens.radius-control;
+    background: root.selected ? DesignTokens.accent : (touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+    border-width: 1px;
+    border-color: root.selected ? DesignTokens.accent : DesignTokens.border;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    Text {
+        text: root.label;
+        color: root.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: DesignTokens.font-small;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
 /// Corpo da seção Material: definido uma vez, instanciado ancorado + flutuante.
 /// Material section body: defined once, instantiated docked + floating.
 export component MaterialBody inherits VerticalLayout {
@@ -921,38 +959,29 @@ export component MaterialBody inherits VerticalLayout {
         }
     }
 
-    HorizontalLayout {
-        spacing: 6px;
-        height: 28px;
+    // Perfil em grade 2 colunas com o rótulo acima: os cinco nomes cabem
+    // inteiros em 280 px (plano de UI F4, princípio 5 — nunca truncar).
+    VerticalLayout {
+        spacing: DesignTokens.space-xs;
         Text {
             text: root.profile-label;
             color: DesignTokens.text-secondary;
-            font-size: DesignTokens.font-caption;
-            width: 64px;
-            vertical-alignment: center;
+            font-size: DesignTokens.font-small;
         }
-        for profile[index] in [
-        { id: "pbr", label: root.profile-pbr-label },
-        { id: "unlit", label: root.profile-unlit-label },
-        { id: "toon", label: root.profile-toon-label },
-        { id: "glass", label: root.profile-glass-label },
-        { id: "emissive", label: root.profile-emissive-label },
-        ]: Rectangle {
-            horizontal-stretch: 1;
-            height: 26px;
-            border-radius: 4px;
-            background: root.profile == profile.id ? DesignTokens.accent : DesignTokens.surface-raised;
-            border-width: 1px;
-            border-color: root.profile == profile.id ? DesignTokens.accent : DesignTokens.border;
-            Text {
-                text: profile.label;
-                color: root.profile == profile.id ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                font-size: DesignTokens.font-caption;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-            TouchArea { clicked => { root.material-profile-changed(index); } }
+        HorizontalLayout {
+            spacing: DesignTokens.space-xs;
+            ProfileChip { label: root.profile-pbr-label; selected: root.profile == "pbr"; clicked => { root.material-profile-changed(0); } }
+            ProfileChip { label: root.profile-unlit-label; selected: root.profile == "unlit"; clicked => { root.material-profile-changed(1); } }
+        }
+        HorizontalLayout {
+            spacing: DesignTokens.space-xs;
+            ProfileChip { label: root.profile-toon-label; selected: root.profile == "toon"; clicked => { root.material-profile-changed(2); } }
+            ProfileChip { label: root.profile-glass-label; selected: root.profile == "glass"; clicked => { root.material-profile-changed(3); } }
+        }
+        HorizontalLayout {
+            spacing: DesignTokens.space-xs;
+            ProfileChip { label: root.profile-emissive-label; selected: root.profile == "emissive"; clicked => { root.material-profile-changed(4); } }
+            Rectangle { horizontal-stretch: 1; }
         }
     }
 
@@ -1439,62 +1468,8 @@ export component ObjectBody inherits VerticalLayout {
             }
         }
     }
-    HorizontalLayout {
-        spacing: 6px;
-        height: 28px;
-        Rectangle {
-            horizontal-stretch: 1;
-            border-radius: 5px;
-            background: DesignTokens.surface-raised;
-            border-width: 1px;
-            border-color: DesignTokens.border;
-            HorizontalLayout {
-                alignment: center;
-                spacing: 6px;
-                IconDisplay {
-                    icon: IconSet.Copy;
-                    size: 13px;
-                    stroke: DesignTokens.text-primary;
-                }
-                Text {
-                    text: root.duplicate-label;
-                    color: DesignTokens.text-primary;
-                    font-size: DesignTokens.font-small;
-                    font-weight: 600;
-                    vertical-alignment: center;
-                }
-            }
-            TouchArea {
-                clicked => { root.duplicate-requested(); }
-            }
-        }
-        Rectangle {
-            horizontal-stretch: 1;
-            border-radius: 5px;
-            background: DesignTokens.surface-raised;
-            border-width: 1px;
-            border-color: DesignTokens.border;
-            HorizontalLayout {
-                alignment: center;
-                spacing: 6px;
-                IconDisplay {
-                    icon: IconSet.Trash2;
-                    size: 13px;
-                    stroke: DesignTokens.danger;
-                }
-                Text {
-                    text: root.delete-label;
-                    color: DesignTokens.danger;
-                    font-size: DesignTokens.font-small;
-                    font-weight: 600;
-                    vertical-alignment: center;
-                }
-            }
-            TouchArea {
-                clicked => { root.delete-requested(); }
-            }
-        }
-    }
+    // Duplicar/Excluir moraram aqui até a F4; agora ficam no cabeçalho de
+    // contexto do Inspector (um lugar só para as ações do objeto).
 }
 
 /// Corpo da seção Modifiers: definido uma vez, instanciado ancorado + flutuante.

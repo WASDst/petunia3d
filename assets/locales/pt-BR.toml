@@ -999,6 +999,10 @@ multiselection_measure_tag = "Exibir tag de média na multiseleção de arestas"
 
 # Textos do shell Slint (Tr.t). Gerado na migração de literais para chaves.
 [sl]
+nothing_selected_hint = "Clique numa parte na viewport ou na lista Parts para ver posição, material e dados."
+nothing_selected = "Nada selecionado"
+collapse_inspector = "Recolher Inspector"
+collapse_inspector_hint = "Fecha todas as seções e volta ao trilho de pílulas. Passe o mouse numa pílula para espiar de novo."
 key_lmb = "LMB"
 key_mmb = "MMB"
 key_shift_mmb = "Shift+MMB"

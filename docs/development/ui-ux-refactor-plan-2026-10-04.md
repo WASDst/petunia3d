@@ -39,6 +39,7 @@
 | F1 — Tokens v2 + lint | Concluída em 2026-10-04 (testes, clippy e captura POLY/PAINT) | ver [§F1](#f1--registro-de-implementação) |
 | F2 — Componentes + galeria | Concluída em 2026-10-04 | ver [§F2](#f2--registro-de-implementação) |
 | F3 — Shell | Concluída em 2026-10-04, com D1 parcial | ver [§F3](#f3--registro-de-implementação) |
+| F4 — Inspector | Concluída em 2026-10-04 (Quick Actions aguarda F5) | ver [§F4](#f4--registro-de-implementação) |
 | Demais fases | Não iniciadas | aguardam §12 onde indicado |
 
 ---
@@ -544,3 +545,39 @@ aplica as recomendações de **D1** e **D9**.
   (lista de pares tecla/ação no view-model) fica para a F5. (2) O diálogo
   "Recover unsaved work?" não bloqueia cliques na viewport: um clique atrás
   dele desmarcou o objeto. Bug preexistente, fora do escopo da F3.
+
+## F4 — registro de implementação
+
+Feito em 2026-10-04 por pedido do responsável ("prossiga"), aplicando as
+recomendações de **D2** e **D3** e completando a **D1**. Registrado no cap. 36
+("Revisão de baseline — 2026-10-04") e nas emendas dos ADRs 004 e 005.
+
+- **Superfície única (D3):** o painel do Inspector é um retângulo translúcido
+  (alfa 0,9) com elevação 2; `InspectorSection` ficou plana (fio no topo, sem
+  cartão/sombra), título 13 px alinhado à esquerda — corrigido o bug em que o
+  chevron esticava e empurrava o título para o centro.
+- **Pin sob demanda:** aparece no hover do cabeçalho, com foco ou ligado;
+  ligado = ícone neutro.
+- **Cabeçalho de contexto:** ícone + nome do objeto (ou "Nada selecionado"),
+  Duplicar e Excluir (saíram do corpo de Objeto) e **Recolher Inspector**.
+- **D1 completa:** o trilho de pílulas virou sobreposição na borda direita da
+  viewport (a viewport ganha 50 px) e só aparece com o painel recolhido; o
+  painel aberto o cobre. Gizmo XYZ, view bar e transporte do Animate usam a
+  nova folga `right-clearance`. "Recolher" fecha e solta o pin de todas as
+  seções (`collapse_inspector`, teste `collapse_inspector_closes_and_unpins_every_section`).
+- **D2:** Modifiers virou subseção de Object (sem pílula; teste de gestos
+  atualizado para 4 pílulas). Quick Actions continua no Inspector até a barra
+  contextual da F5 recebê-la — nada é removido sem destino.
+- **Material:** o perfil virou grade 2 colunas com rótulo acima; os cinco
+  nomes cabem inteiros.
+- **Sem seleção, nada contraditório:** Transform só aparece com objeto
+  selecionado; sem seleção, um `EmptyState` explica o que fazer (teste
+  `inspector_never_shows_transform_values_without_a_selection`). O clique real
+  no botão Recolher é coberto por `collapse_inspector_button_is_clickable_and_returns_to_the_rail`.
+- **Correção da F3:** os chips da status bar dependiam de `root.width`, o que
+  criava *binding loop* com o layout (aviso do Slint, risco de pânico); agora o
+  grupo recorta à direita sem consultar a largura.
+- **Resíduos para a F5+:** grade rótulo/campo (`PropertyRow`) nas seções
+  Transform/Material, barra de eixo no lugar da letra colorida, opções raras de
+  Parts (tamanho de linha, ordenação) num menu "⋯", Quick Actions na barra
+  contextual.

@@ -5410,6 +5410,15 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let collapse_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_inspector_collapse_requested(move || {
+        if let (Ok(mut bridge), Some(window)) = (collapse_bridge.lock(), window_weak.upgrade()) {
+            bridge.collapse_inspector();
+            sync_window_properties(&window, &bridge.view_model());
+        }
+    });
+
     let section_pill_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_section_pill_clicked(move |id| {
