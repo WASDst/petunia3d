@@ -1,0 +1,93 @@
+import { DesignTokens } from "../tokens.slint";
+
+/// Superfície do canvas de pintura 2D: raster, wireframe UV, grade de pixels, pan (botão do meio)
+/// e zoom (roda). Mesma superfície no Inspector (pequena) e na janela flutuante (grande).
+export component PaintCanvasSurface inherits Rectangle {
+    in property <image> canvas-image;
+    in property <int> zoom: 1;
+    in property <bool> show-uv: false;
+    in property <string> uv-commands: "";
+    in property <bool> show-grid: false;
+    in property <string> grid-commands: "";
+    in-out property <length> pan-x: 0px;
+    in-out property <length> pan-y: 0px;
+    callback stroke(float, float, int, bool);
+    callback zoom-step(int);
+
+    background: DesignTokens.canvas;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    clip: true;
+
+    raster := Image {
+        width: root.width * root.zoom;
+        height: root.height * root.zoom;
+        x: (root.width - self.width) / 2 + root.pan-x;
+        y: (root.height - self.height) / 2 + root.pan-y;
+        image-fit: fill;
+        image-rendering: pixelated;
+        source: root.canvas-image;
+    }
+
+    if root.show-uv: Path {
+        width: raster.width;
+        height: raster.height;
+        x: raster.x;
+        y: raster.y;
+        fill: transparent;
+        stroke: DesignTokens.uv-wire;
+        stroke-width: 1px;
+        commands: root.uv-commands;
+    }
+
+    if root.show-grid && root.grid-commands != "": Path {
+        width: 100%;
+        height: 100%;
+        fill: transparent;
+        stroke: DesignTokens.border.transparentize(0.35);
+        stroke-width: 1px;
+        commands: root.grid-commands;
+    }
+
+    surface-touch := TouchArea {
+        property <bool> panning: false;
+        property <bool> shift-line: false;
+        property <length> last-x;
+        property <length> last-y;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down {
+                if event.button == PointerEventButton.middle || event.button == PointerEventButton.right {
+                    self.panning = true;
+                    self.last-x = self.mouse-x;
+                    self.last-y = self.mouse-y;
+                } else if event.button == PointerEventButton.left {
+                    self.shift-line = event.modifiers.shift;
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line);
+                }
+            } else if event.kind == PointerEventKind.up {
+                if self.panning {
+                    self.panning = false;
+                } else if event.button == PointerEventButton.left {
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line);
+                }
+            }
+        }
+        moved => {
+            if self.panning {
+                root.pan-x += self.mouse-x - self.last-x;
+                root.pan-y += self.mouse-y - self.last-y;
+                self.last-x = self.mouse-x;
+                self.last-y = self.mouse-y;
+            } else if self.pressed {
+                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line);
+            }
+        }
+        scroll-event(event) => {
+            if event.delta-y != 0px {
+                root.zoom-step(event.delta-y > 0px ? 1 : -1);
+                return accept;
+            }
+            reject
+        }
+    }
+}

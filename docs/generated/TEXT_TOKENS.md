@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1572**.
+Total de chaves de localização cadastradas: **1618**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -262,6 +262,43 @@ Total de chaves de localização cadastradas: **1572**.
 | `file.quit` | Quit | Sair |
 | `file.save` | Save | Salvar |
 | `file.save_as` | Save as… | Salvar como… |
+| `gallery.disabled` | Disabled | Desativado |
+| `gallery.edge` | Edge | Aresta |
+| `gallery.empty_action` | New shape | Nova forma |
+| `gallery.empty_message` | Click a part in the viewport or create a new shape. | Clique numa parte na viewport ou crie uma forma nova. |
+| `gallery.empty_state` | Empty state | Estado vazio |
+| `gallery.empty_title` | Nothing selected | Nada selecionado |
+| `gallery.face` | Face | Face |
+| `gallery.ghost` | Ghost action | Ação simples |
+| `gallery.hint_orbit` | Orbit | Orbitar |
+| `gallery.hint_pan` | Pan view | Mover vista |
+| `gallery.hint_select` | Select | Selecionar |
+| `gallery.icon_button` | Icon buttons | Botões de ícone |
+| `gallery.key_lmb` | LMB | LMB |
+| `gallery.key_mmb` | MMB | MMB |
+| `gallery.key_palette` | Ctrl K | Ctrl K |
+| `gallery.key_shift_mmb` | Shift MMB | Shift MMB |
+| `gallery.key_undo` | Ctrl+Z | Ctrl+Z |
+| `gallery.labelled` | Extrude | Extrudar |
+| `gallery.object` | Object | Objeto |
+| `gallery.pbr_standard` | PBR Standard | PBR padrão |
+| `gallery.point` | Point | Ponto |
+| `gallery.profile` | Profile | Perfil |
+| `gallery.properties` | Property rows | Linhas de propriedade |
+| `gallery.roughness` | Roughness | Rugosidade |
+| `gallery.search_and_hints` | Search and hints | Busca e dicas |
+| `gallery.search_placeholder` | Search command… | Buscar comando… |
+| `gallery.segmented` | Segmented control | Controle segmentado |
+| `gallery.silhouette` | Silhouette | Silhueta |
+| `gallery.solid` | Solid | Sólido |
+| `gallery.textured` | Textured | Texturizado |
+| `gallery.title` | Petunia Components — gallery | Petunia Components — galeria |
+| `gallery.toggle_off` | Toggle (off) | Alternar (desligado) |
+| `gallery.toggle_on` | Toggle (on) | Alternar (ligado) |
+| `gallery.tool_active` | Tool (active) | Ferramenta (ativa) |
+| `gallery.tool_idle` | Tool (idle) | Ferramenta (inativa) |
+| `gallery.value_short` | V | V |
+| `gallery.wireframe` | Wireframe | Aramado |
 | `geometry.title` | Geometry | Geometria |
 | `geometry.tris` | Triangles | Triângulos |
 | `help.body` | MMB orbit • Shift+MMB pan • wheel zoom • Tab mode • Del delete • Home reset • H help • Ctrl+Z/Y undo | MMB orbita • Shift+MMB pan • scroll zoom • Tab modo • Del apaga • Home reseta • H ajuda • Ctrl+Z/Y desfaz |
@@ -868,6 +905,10 @@ Total de chaves de localização cadastradas: **1572**.
 | `sl.hardness` | Hardness | Dureza |
 | `sl.height` | Height | Altura |
 | `sl.hide` | Hide | Ocultar |
+| `sl.hint_orbit` | Orbit | Orbitar |
+| `sl.hint_pan` | Pan view | Mover vista |
+| `sl.hint_select` | Select | Selecionar |
+| `sl.hint_zoom` | Zoom | Zoom |
 | `sl.hold_alt_and_click_to_toggle_all_sections` | Hold Alt and click to toggle all sections | Segure Alt e clique para alternar todas as seções |
 | `sl.icon_style` | Icon Style | Estilo dos Ícones |
 | `sl.icosphere` | Icosphere | Icosfera |
@@ -894,6 +935,10 @@ Total de chaves de localização cadastradas: **1572**.
 | `sl.keep_parts_off` | Keep Parts: off | Keep Parts: desligado |
 | `sl.keep_parts_on` | Keep Parts: on | Keep Parts: ligado |
 | `sl.keep_the_overlapping_volume` | Keep the overlapping volume | Mantém o volume sobreposto |
+| `sl.key_lmb` | LMB | LMB |
+| `sl.key_mmb` | MMB | MMB |
+| `sl.key_shift_mmb` | Shift+MMB | Shift+MMB |
+| `sl.key_wheel` | Wheel | Roda |
 | `sl.keyboard_global_shortcuts_work_tab_focus_bet` | Keyboard: global shortcuts work; Tab focus between controls is still partial. | Teclado: atalhos globais funcionam; foco por Tab entre controles ainda é parcial. |
 | `sl.keyboard_shortcut_profile` | Keyboard Shortcut Profile | Perfil de Atalhos de Teclado |
 | `sl.keyboard_shortcuts` | Keyboard & Shortcuts | Teclado & Atalhos |
@@ -1082,6 +1127,7 @@ Total de chaves de localização cadastradas: **1572**.
 | `sl.scale_uv_down` | Scale UV down | Reduzir escala UV |
 | `sl.scale_uv_up` | Scale UV up | Aumentar escala UV |
 | `sl.screen_reader_labels_and_roles_exist_only_on` | Screen reader: labels and roles exist only on some controls; WCAG compliance has not been audited yet. | Leitor de tela: rótulos e papéis existem só em parte dos controles; conformidade WCAG ainda não foi auditada. |
+| `sl.search_command_placeholder` | Search commands… | Buscar comandos… |
 | `sl.search_commands` | Search commands | Buscar comandos |
 | `sl.segments` | Segments | Segmentos |
 | `sl.select` | Select | Selecionar |

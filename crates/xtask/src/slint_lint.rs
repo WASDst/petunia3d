@@ -6,7 +6,7 @@
 //! um preset enviado ao Rust) e comentários não contam.
 
 use anyhow::{Result, bail};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Arquivo onde os valores literais são permitidos.
 const TOKENS_FILE: &str = "tokens.slint";
@@ -102,15 +102,25 @@ fn check_source(source: &str) -> Vec<Violation> {
     found
 }
 
+/// Todos os `.slint` sob `dir`, inclusive subpastas (`components/`, `inspector/`…).
+fn slint_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        if path.is_dir() {
+            slint_files(&path, out);
+        } else if path.extension().is_some_and(|e| e == "slint") {
+            out.push(path);
+        }
+    }
+}
+
 pub fn run(root: &Path) -> Result<()> {
     println!("🎨 Validando tokens do shell Slint...");
-    let ui_dir = root.join("crates/ui-slint/ui");
-    let mut files: Vec<_> = std::fs::read_dir(&ui_dir)?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "slint"))
-        .filter(|p| p.file_name().is_some_and(|n| n != TOKENS_FILE))
-        .collect();
+    let mut files = Vec::new();
+    slint_files(&root.join("crates/ui-slint/ui"), &mut files);
+    files.retain(|p| p.file_name().is_some_and(|n| n != TOKENS_FILE));
     files.sort();
 
     let mut total = 0;

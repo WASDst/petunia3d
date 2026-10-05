@@ -2699,6 +2699,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             id.as_str(),
             "file.open" | "file.save" | "file.save_as" | "file.import_obj"
         );
+        // "Parts" abre a seção no Inspector (ou a gaveta no shell compacto):
+        // é o mesmo caminho do antigo botão da top bar.
+        if id == "window.parts" {
+            if let Ok(mut bridge) = menu_item_bridge.lock() {
+                bridge.close_menu();
+            }
+            if let Some(window) = window_weak.upgrade() {
+                window.set_menu_open("".into());
+                window.invoke_scene_requested();
+            }
+            return;
+        }
         if let Ok(mut bridge) = menu_item_bridge.lock() {
             bridge.close_menu();
             if opens_dialog {

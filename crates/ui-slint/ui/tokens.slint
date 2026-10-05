@@ -69,6 +69,14 @@ export global DesignTokens {
     in-out property <color> uv-pinned: #ff3344;
     in-out property <color> uv-pinned-outline: #ffffff;
 
+    /// Fundo de toggle ligado / linha selecionada (accent a 16%).
+    out property <color> accent-subtle: self.accent.with-alpha(0.16);
+
+    // Ícones: 12 em chips, 16 em controles, 20 em trilhos (plano §6.3).
+    in-out property <length> icon-small: 12px;
+    in-out property <length> icon-control: 16px;
+    in-out property <length> icon-rail: 20px;
+
     // Tipografia (cap. 36): nunca abaixo de `font-caption`.
     in-out property <length> font-caption: 10px;
     in-out property <length> font-small: 11px;

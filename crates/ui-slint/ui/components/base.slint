@@ -1,0 +1,415 @@
+// Componentes base do design system v2 (plano de UI 2026-10-04, §7).
+//
+// Regras: só tokens (`ui-lint`), estados default/hover/pressed/focus/
+// selected/disabled, `accessible-*` em todo controle interativo e nenhum
+// texto literal — todo rótulo chega pronto (Tr.t ou view-model).
+// Accent preenchido só em `IconButton` variante "tool" ativa e no item
+// escolhido de `Segmented`; toggles ligados usam `accent-subtle` (princípio 2).
+
+import { Icon, IconDisplay, IconSet } from "@lucide";
+import { RichTooltip } from "feedback.slint";
+import { DesignTokens, Motion } from "../tokens.slint";
+
+/// Botão de ícone único do shell. Variantes:
+/// - "ghost": ação pontual (desfazer, preferências);
+/// - "toggle": liga/desliga (overlay, snap) — ligado = fundo accent suave;
+/// - "tool": ferramenta persistente — ativa = accent preenchido.
+/// Com `label` não vazio, o texto aparece à direita do ícone.
+export component IconButton inherits Rectangle {
+    in property <Icon> icon;
+    in property <image> icon-svg;
+    in property <string> label: "";
+    in property <string> semantic-label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <string> variant: "ghost";
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    in property <length> size: DesignTokens.control-height;
+    callback clicked;
+
+    property <bool> filled: root.active && root.variant == "tool";
+    property <bool> tinted: root.active && root.variant == "toggle";
+    property <color> fg: !root.enabled ? DesignTokens.disabled
+        : root.filled ? DesignTokens.on-accent
+        : root.tinted ? DesignTokens.accent
+        : DesignTokens.text-primary;
+
+    accessible-role: button;
+    accessible-label: root.semantic-label;
+    accessible-checked: root.variant != "ghost" && root.active;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    forward-focus: focus;
+    height: root.size;
+    min-width: root.size;
+    preferred-width: root.label == "" ? root.size : row.preferred-width;
+    border-radius: DesignTokens.radius-control;
+    background: root.filled ? DesignTokens.accent
+        : root.tinted ? DesignTokens.accent-subtle
+        : !root.enabled ? transparent
+        : touch.pressed ? DesignTokens.surface-pressed
+        : touch.has-hover ? DesignTokens.surface-hover
+        : transparent;
+    border-width: focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    row := HorizontalLayout {
+        padding-left: root.label == "" ? 0px : DesignTokens.space-sm;
+        padding-right: root.label == "" ? 0px : DesignTokens.space-sm;
+        spacing: DesignTokens.space-xs + 2px;
+        alignment: center;
+        if root.icon-svg.width > 0: Image {
+            source: root.icon-svg;
+            colorize: root.fg;
+            width: DesignTokens.icon-control;
+            height: DesignTokens.icon-control;
+            y: (parent.height - self.height) / 2;
+            image-fit: contain;
+        }
+        if root.icon-svg.width == 0: IconDisplay {
+            icon: root.icon;
+            size: DesignTokens.icon-control;
+            stroke: root.fg;
+        }
+        if root.label != "": Text {
+            text: root.label;
+            color: root.fg;
+            font-size: DesignTokens.font-default;
+            vertical-alignment: center;
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: root.semantic-label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                }
+            }
+        }
+    }
+}
+
+/// Item de `Segmented`: rótulo e/ou ícone, preenchido quando escolhido.
+component SegmentItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    in property <bool> focused;
+    callback clicked;
+
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
+    horizontal-stretch: 1;
+    border-radius: DesignTokens.radius-control;
+    background: root.selected ? DesignTokens.accent
+        : touch.has-hover ? DesignTokens.surface-hover
+        : transparent;
+    border-width: root.focused ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    Text {
+        text: root.label;
+        color: root.selected ? DesignTokens.on-accent : DesignTokens.text-secondary;
+        font-size: DesignTokens.font-default;
+        font-weight: root.selected ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// Escolha exclusiva entre poucas opções curtas (≤ 5). Setas ←/→ mudam a
+/// escolha com o foco no grupo. Opções longas pedem `DropdownButton`
+/// (princípio 5: nunca truncar rótulo para caber).
+export component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in-out property <int> selected: 0;
+    in property <string> semantic-label;
+    callback changed(int);
+
+    accessible-role: tab-list;
+    accessible-label: root.semantic-label;
+    forward-focus: focus;
+    height: DesignTokens.control-height;
+    border-radius: DesignTokens.radius-control + 1px;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    function pick(index: int) {
+        if index >= 0 && index < root.options.length && index != root.selected {
+            root.selected = index;
+            root.changed(index);
+        }
+    }
+
+    focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.LeftArrow { root.pick(root.selected - 1); return accept; }
+            if event.text == Key.RightArrow { root.pick(root.selected + 1); return accept; }
+            reject
+        }
+        HorizontalLayout {
+            padding: 2px;
+            spacing: 2px;
+            for option[index] in root.options: SegmentItem {
+                label: option;
+                selected: index == root.selected;
+                focused: focus.has-focus && index == root.selected;
+                clicked => { root.pick(index); }
+            }
+        }
+    }
+}
+
+/// Gatilho de lista suspensa: mostra o valor atual e um chevron. A lista em
+/// si é um `MenuDropdown` aberto pelo shell através do `OverlayStack`
+/// (AGENTS.md §0.1: nenhum popup fora da pilha).
+export component DropdownButton inherits Rectangle {
+    in property <string> value;
+    in property <string> semantic-label;
+    in property <bool> open: false;
+    in property <bool> enabled: true;
+    callback open-requested;
+
+    accessible-role: combobox;
+    accessible-label: root.semantic-label;
+    accessible-value: root.value;
+    accessible-expanded: root.open;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.open-requested(); } }
+    forward-focus: focus;
+    height: DesignTokens.control-height;
+    min-width: 64px;
+    border-radius: DesignTokens.radius-control;
+    background: touch.has-hover && root.enabled ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+    border-width: focus.has-focus ? 2px : 1px;
+    border-color: focus.has-focus ? DesignTokens.focus-ring
+        : root.open ? DesignTokens.accent
+        : DesignTokens.border;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: DesignTokens.space-sm;
+        padding-right: DesignTokens.space-xs + 2px;
+        spacing: DesignTokens.space-xs;
+        Text {
+            text: root.value;
+            color: root.enabled ? DesignTokens.text-primary : DesignTokens.disabled;
+            font-size: DesignTokens.font-default;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        IconDisplay {
+            icon: root.open ? IconSet.ChevronUp : IconSet.ChevronDown;
+            size: DesignTokens.icon-small;
+            stroke: DesignTokens.text-secondary;
+            y: (parent.height - self.height) / 2;
+        }
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " || event.text == Key.DownArrow {
+                root.open-requested();
+                return accept;
+            }
+            reject
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.open-requested(); }
+        }
+    }
+}
+
+/// Linha rótulo/campo do Inspector: coluna de rótulo fixa, campo ocupa o resto.
+export component PropertyRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <length> label-width: 76px;
+    spacing: DesignTokens.space-sm;
+    min-height: DesignTokens.control-height;
+
+    Text {
+        text: root.label;
+        width: root.label-width;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-small;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    HorizontalLayout {
+        horizontal-stretch: 1;
+        spacing: DesignTokens.space-xs;
+        @children
+    }
+}
+
+/// Estado vazio: diz o que fazer e oferece a ação (princípio 6).
+export component EmptyState inherits VerticalLayout {
+    in property <Icon> icon: IconSet.MousePointerClick;
+    in property <string> title;
+    in property <string> message;
+    in property <string> action-label: "";
+    callback action;
+
+    padding: DesignTokens.space-md;
+    spacing: DesignTokens.space-sm;
+    alignment: center;
+
+    IconDisplay {
+        icon: root.icon;
+        size: DesignTokens.icon-rail;
+        stroke: DesignTokens.text-muted;
+    }
+    Text {
+        text: root.title;
+        color: DesignTokens.text-primary;
+        font-size: DesignTokens.font-strong;
+        font-weight: 600;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    Text {
+        text: root.message;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-small;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    if root.action-label != "": HorizontalLayout {
+        alignment: center;
+        IconButton {
+            label: root.action-label;
+            semantic-label: root.action-label;
+            icon: IconSet.Plus;
+            clicked => { root.action(); }
+        }
+    }
+}
+
+/// Dica de entrada: glifo da tecla/botão em chip + o que ele faz.
+export component KeyHint inherits HorizontalLayout {
+    in property <string> key;
+    in property <string> action;
+    spacing: DesignTokens.space-xs;
+    accessible-role: text;
+    accessible-label: root.key + " " + root.action;
+
+    Rectangle {
+        height: 16px;
+        width: max(16px, key-text.preferred-width + 8px);
+        y: (parent.height - self.height) / 2;
+        border-radius: DesignTokens.radius-control - 1px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        key-text := Text {
+            text: root.key;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Text {
+        text: root.action;
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-small;
+        vertical-alignment: center;
+    }
+}
+
+/// Campo de busca de comandos sempre visível (D9). Não edita texto: abre a
+/// Command Palette, onde a digitação acontece.
+export component CommandSearchField inherits Rectangle {
+    in property <string> placeholder;
+    in property <string> shortcut: "";
+    callback activated;
+
+    accessible-role: button;
+    accessible-label: root.placeholder;
+    accessible-action-default => { root.activated(); }
+    forward-focus: focus;
+    height: DesignTokens.control-height;
+    min-width: 120px;
+    preferred-width: 220px;
+    border-radius: DesignTokens.radius-control + 2px;
+    background: touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+    border-width: focus.has-focus ? 2px : 1px;
+    border-color: focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: DesignTokens.space-sm;
+        padding-right: DesignTokens.space-xs + 2px;
+        spacing: DesignTokens.space-sm;
+        IconDisplay {
+            icon: IconSet.Search;
+            size: DesignTokens.icon-small;
+            stroke: DesignTokens.text-muted;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.placeholder;
+            color: DesignTokens.text-muted;
+            font-size: DesignTokens.font-default;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if root.shortcut != "": Rectangle {
+            height: 18px;
+            width: shortcut-text.preferred-width + 10px;
+            y: (parent.height - self.height) / 2;
+            border-radius: DesignTokens.radius-control - 1px;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            shortcut-text := Text {
+                text: root.shortcut;
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+    focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.activated();
+                return accept;
+            }
+            reject
+        }
+        touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.activated(); }
+        }
+    }
+}

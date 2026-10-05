@@ -1,0 +1,208 @@
+export struct CommandItem {
+    id: string,
+    label: string,
+    shortcut: string,
+    available: bool,
+    disabled-reason: string,
+}
+
+export struct ThemeEntry {
+    id: string,
+    name: string,
+    active: bool,
+}
+
+/// Perfil de atalhos (canônico ou do usuário) na lista de Configurações → Teclado.
+export struct KeymapProfileEntry {
+    id: string,
+    name: string,
+    custom: bool,
+    active: bool,
+}
+
+/// Uma ação com seu atalho; `capturing` = aguardando a próxima combinação.
+export struct KeymapActionEntry {
+    action: string,
+    label: string,
+    shortcut: string,
+    conflict: bool,
+    capturing: bool,
+}
+
+export struct PaintEffectParamEntry {
+    key: string,
+    label: string,
+    value: float,
+    minimum: float,
+    maximum: float,
+}
+
+export struct PaintLayerEntry {
+    id: string,
+    name: string,
+    visible: bool,
+    locked: bool,
+    opacity: float,
+    active: bool,
+    is-group: bool,
+    kind-label: string,
+}
+
+export struct MenuEntry {
+    id: string,
+    label: string,
+    shortcut: string,
+    separator: bool,
+    disabled: bool,
+    checked: bool,
+}
+
+export struct SceneItem {
+    id: string,
+    name: string,
+    visible: bool,
+    locked: bool,
+    selected: bool,
+    // Objeto ativo (referência das operações): no máximo um, com destaque
+    // próprio amarelo, distinto do apenas-selecionado laranja.
+    active: bool,
+    verts: int,
+    tris: int,
+    has-custom-color: bool,
+    custom-color: color,
+}
+
+export struct PrefabItem {
+    id: string,
+    name: string,
+    parts: int,
+    tris: int,
+    verts: int,
+    favorite: bool,
+    instances: int,
+    tags: string,
+    thumbnail: image,
+    has-thumbnail: bool,
+}
+
+export struct QuickActionEntry {
+    id: string,
+    label: string,
+    enabled: bool,
+    pinned: bool,
+}
+
+export struct SectionState {
+    id: string,
+    pin-open: bool,
+    open: bool,
+}
+
+export struct ModifierEntry {
+    id: string,
+    title: string,
+    subtitle: string,
+    enabled: bool,
+    kind: string,
+    axis: int,
+    positive-to-negative: bool,
+    can-move-up: bool,
+    can-move-down: bool,
+}
+
+export struct ReferenceSlotData {
+    axis: string,
+    axis-tag: string,
+    title: string,
+    has-image: bool,
+    image-name: string,
+    dimensions: string,
+    visible: bool,
+    locked: bool,
+    opacity: float,
+    size: float,
+    offset: float,
+    rotation: float,
+    fine-open: bool,
+    thumbnail: image,
+}
+
+export struct MeasureTag {
+    text: string,
+    x: float,
+    y: float,
+}
+
+export struct WorldAxisTag {
+    text: string,
+    x: float,
+    y: float,
+    tint: color,
+}
+
+export struct ShortcutsEntry {
+    undo: string,
+    redo: string,
+    save: string,
+    open: string,
+    search: string,
+    settings: string,
+    parts: string,
+    model-select: string,
+    model-lasso: string,
+    model-cursor: string,
+    model-measure: string,
+    model-move: string,
+    model-rotate: string,
+    model-scale: string,
+    model-transform: string,
+    model-add-primitive: string,
+    model-duplicate: string,
+    model-extrude: string,
+    model-push-pull: string,
+    model-inset: string,
+    model-bevel: string,
+    model-knife: string,
+    model-loop-cut: string,
+    model-profile: string,
+    model-subdivide: string,
+    model-merge: string,
+    model-slice: string,
+    model-connect: string,
+    model-spin: string,
+    model-dissolve: string,
+    model-delete: string,
+    select-point: string,
+    select-edge: string,
+    select-face: string,
+    select-object: string,
+    view-proj: string,
+    view-frame: string,
+    view-reset: string,
+    view-wireframe: string,
+    view-solid: string,
+    view-material: string,
+    view-lit: string,
+    view-xray: string,
+    view-pivot: string,
+    view-snap: string,
+    view-prop: string,
+    paint-select: string,
+    paint-isolate: string,
+    paint-brush: string,
+    paint-airbrush: string,
+    paint-eraser: string,
+    paint-picker: string,
+    paint-fill: string,
+    paint-line: string,
+    paint-rectangle: string,
+    paint-ellipse: string,
+    paint-gradient-radial: string,
+    paint-gradient: string,
+    uv-select: string,
+    uv-unwrap: string,
+    uv-pack: string,
+    uv-project-ref: string,
+    uv-stitch: string,
+    uv-relax: string,
+}

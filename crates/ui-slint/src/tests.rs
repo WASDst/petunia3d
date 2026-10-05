@@ -1600,6 +1600,34 @@ fn every_menu_item_publishes_a_real_translated_label_and_command_id() {
 }
 
 #[test]
+fn top_bar_actions_moved_to_menus_stay_reachable() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    let reference = vm
+        .menu_view_items
+        .iter()
+        .find(|i| i.id == "view.reference_images")
+        .expect("View publica Imagens de referência");
+    assert_eq!(reference.shortcut, "F4");
+    assert!(!reference.checked);
+    assert!(
+        vm.menu_window_items.iter().any(|i| i.id == "window.parts"),
+        "Window publica Parts"
+    );
+
+    assert!(bridge.menu_item_invoked("view.reference_images"));
+    let vm = bridge.view_model();
+    assert!(vm.reference_manager_open);
+    assert!(
+        vm.menu_view_items
+            .iter()
+            .any(|i| i.id == "view.reference_images" && i.checked)
+    );
+    assert!(bridge.menu_item_invoked("view.reference_images"));
+    assert!(!bridge.view_model().reference_manager_open);
+}
+
+#[test]
 fn menus_group_items_with_separators_and_reflect_undo_state() {
     let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let vm = bridge.view_model();

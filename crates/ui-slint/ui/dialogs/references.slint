@@ -1,0 +1,268 @@
+import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaSlider } from "../components/controls.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { ReferenceSlotData } from "../types.slint";
+
+export component ReferenceSlotCard inherits Rectangle {
+    in property <ReferenceSlotData> slot;
+    callback pick-image();
+    callback remove-image();
+    callback align-view();
+    callback toggle-visible();
+    callback toggle-lock();
+    callback set-param(string, float);
+
+    in-out property <float> local-opacity: slot.opacity;
+    in-out property <float> local-size: slot.size;
+    in-out property <float> local-offset: slot.offset;
+    changed slot => {
+        root.local-opacity = slot.opacity;
+        root.local-size = slot.size;
+        root.local-offset = slot.offset;
+    }
+
+    border-radius: 6px;
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: slot.has-image ? DesignTokens.border-strong : DesignTokens.border;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        // Header: Badge + Title + Align + Quick Tools
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: space-between;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: center;
+
+                Rectangle {
+                    width: 28px;
+                    height: 20px;
+                    border-radius: 4px;
+                    background: DesignTokens.accent.transparentize(0.8);
+                    Text {
+                        text: slot.axis-tag;
+                        color: DesignTokens.accent;
+                        font-size: DesignTokens.font-caption;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: slot.title;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-default;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: center;
+
+                // Align View button
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: align-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    align-touch := TouchArea {
+                        clicked => { root.align-view(); }
+                    }
+                    IconDisplay {
+                        icon: IconSet.Camera;
+                        size: 13px;
+                        stroke: DesignTokens.text-secondary;
+                    }
+                }
+
+                // Visibility
+                if slot.has-image: Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: vis-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    vis-touch := TouchArea {
+                        clicked => { root.toggle-visible(); }
+                    }
+                    IconDisplay {
+                        icon: slot.visible ? IconSet.Eye : IconSet.EyeOff;
+                        size: 13px;
+                        stroke: slot.visible ? DesignTokens.accent : DesignTokens.text-muted;
+                    }
+                }
+
+                // Lock
+                if slot.has-image: Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: lock-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    lock-touch := TouchArea {
+                        clicked => { root.toggle-lock(); }
+                    }
+                    IconDisplay {
+                        icon: slot.locked ? IconSet.Lock : IconSet.LockOpen;
+                        size: 13px;
+                        stroke: slot.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                    }
+                }
+
+                // Remove
+                if slot.has-image: Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: remove-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                    remove-touch := TouchArea {
+                        clicked => { root.remove-image(); }
+                    }
+                    IconDisplay {
+                        icon: IconSet.Trash2;
+                        size: 13px;
+                        stroke: DesignTokens.danger;
+                    }
+                }
+            }
+        }
+
+        // Body: Thumbnail box (left) and Parameters (right)
+        HorizontalLayout {
+            spacing: 12px;
+
+            // Thumbnail / Load Box
+            Rectangle {
+                width: 120px;
+                height: 100px;
+                border-radius: 4px;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: thumb-touch.has-hover ? DesignTokens.accent : DesignTokens.border;
+                clip: true;
+
+                thumb-touch := TouchArea {
+                    clicked => { root.pick-image(); }
+                }
+
+                if slot.has-image: Image {
+                    width: 100%;
+                    height: 100%;
+                    source: slot.thumbnail;
+                    image-fit: contain;
+                }
+
+                if !slot.has-image: VerticalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    IconDisplay {
+                        icon: IconSet.Plus;
+                        size: 16px;
+                        stroke: DesignTokens.text-muted;
+                    }
+                    Text {
+                        text: Tr.t("sl.load_image");
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+
+            // Sliders & Info
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+                alignment: center;
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: slot.image-name != "" ? slot.image-name : "reference";
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-small;
+                        font-weight: 600;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: slot.dimensions;
+                        color: DesignTokens.text-muted;
+                        font-size: DesignTokens.font-caption;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Tr.t("sl.opacity") + ": \{round(root.local-opacity * 100)}%";
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    PetuniaSlider {
+                        horizontal-stretch: 1;
+                        minimum: 0.05;
+                        maximum: 1.0;
+                        value <=> root.local-opacity;
+                        changed(v) => { root.set-param("opacity", v); }
+                    }
+                }
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Tr.t("sl.size") + ": \{round(root.local-size * 10) / 10}";
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    PetuniaSlider {
+                        horizontal-stretch: 1;
+                        minimum: 0.5;
+                        maximum: 20.0;
+                        value <=> root.local-size;
+                        changed(v) => { root.set-param("size", v); }
+                    }
+                }
+
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Tr.t("sl.offset") + ": \{round(root.local-offset * 10) / 10}";
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    PetuniaSlider {
+                        horizontal-stretch: 1;
+                        minimum: -10.0;
+                        maximum: 10.0;
+                        value <=> root.local-offset;
+                        changed(v) => { root.set-param("offset", v); }
+                    }
+                }
+
+                if !slot.has-image: Text {
+                    text: Tr.t("sl.no_reference_image_loaded_click_the_box_to_l");
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-small;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+    }
+}

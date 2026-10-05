@@ -878,6 +878,10 @@ pub enum MenuKind {
     Window,
 }
 
+/// Rótulo do item "Imagens de referência" (chave existente do catálogo `[sl]`).
+const MENU_REFERENCE_IMAGES: petunia_config::TextId =
+    petunia_config::TextId::new("sl.reference_images");
+
 impl MenuKind {
     pub const ALL: [MenuKind; 4] = [Self::File, Self::Edit, Self::View, Self::Window];
 
@@ -930,8 +934,13 @@ impl MenuKind {
                 ("view.toggle_projection", T::VIEW_TOGGLE_PROJECTION, "O"),
                 ("view.toggle_wireframe", T::VIEW_TOGGLE_WIREFRAME, "Z"),
                 ("view.toggle_split", T::VIEW_TOGGLE_SPLIT, ""),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
+                // Saiu da top bar (plano de UI 2026-10-04, F3): o menu é o
+                // caminho visível; F4 continua sendo o atalho.
+                ("view.reference_images", MENU_REFERENCE_IMAGES, "F4"),
             ],
             Self::Window => &[
+                ("window.parts", T::UI_PARTS, ""),
                 ("window.command_palette", T::MENU_COMMAND_PALETTE, "Ctrl+P"),
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("window.settings", T::MENU_PREFERENCES, ""),
@@ -6915,6 +6924,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             "view.toggle_split" => self.toggle_split_view(),
+            "view.reference_images" => self.toggle_reference_manager(),
             "window.command_palette" => {
                 self.apply(UiIntent::OpenCommandSearch);
                 true
@@ -13941,6 +13951,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         "view.toggle_wireframe" => vm.shading_mode == "wireframe",
                         "view.toggle_projection" => vm.is_orthographic,
                         "view.toggle_split" => self.split.enabled,
+                        "view.reference_images" => self.reference_manager_open,
                         _ => false,
                     },
                 })

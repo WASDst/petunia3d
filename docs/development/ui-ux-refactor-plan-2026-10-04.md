@@ -37,6 +37,8 @@
 | Fase | Estado | Registro |
 |---|---|---|
 | F1 — Tokens v2 + lint | Concluída em 2026-10-04 (testes, clippy e captura POLY/PAINT) | ver [§F1](#f1--registro-de-implementação) |
+| F2 — Componentes + galeria | Concluída em 2026-10-04 | ver [§F2](#f2--registro-de-implementação) |
+| F3 — Shell | Concluída em 2026-10-04, com D1 parcial | ver [§F3](#f3--registro-de-implementação) |
 | Demais fases | Não iniciadas | aguardam §12 onde indicado |
 
 ---
@@ -486,3 +488,59 @@ Feito em 2026-10-04, sem depender das decisões da §12.
   `(Insert)` no aviso de edição de pivô e as letras de eixo `X/Y/Z`, `UV`,
   `U →`, `V ↑` (F6, i18n); presets de seleção ainda comparados por string hex
   (F7, junto da D5).
+
+## F2 — registro de implementação
+
+Feito em 2026-10-04. Nenhum comportamento muda.
+
+- `app.slint` dividido (13 560 → ~10 100 linhas): `types.slint` (structs
+  públicas, reexportadas para o Rust), `components/feedback.slint`
+  (`RichTooltip`), `components/controls.slint` (botões, campos, menus),
+  `components/paint_canvas.slint`, `inspector/sections.slint` (seções e corpos
+  do Inspector) e `dialogs/references.slint`. Os imports foram calculados por
+  uso; o shell ficou em `app.slint` porque depende de ~700 propriedades da
+  janela (globals por domínio são a etapa seguinte, §8.2).
+- Componentes novos em `components/base.slint`: `IconButton` (ghost / toggle /
+  tool), `Segmented` (setas ←/→), `DropdownButton` (só o gatilho; a lista é
+  `MenuDropdown` via `OverlayStack`), `PropertyRow`, `EmptyState`, `KeyHint` e
+  `CommandSearchField`. Tokens novos: `accent-subtle`, `icon-small/control/rail`.
+- Galeria: `gallery.slint` + `cargo run -p petunia_ui_slint --example gallery`
+  (`PETUNIA_LANG=pt-BR` para português). Textos em `[gallery]` nos dois
+  catálogos; teste `gallery_receives_translations`.
+- `ui-lint` passa a varrer subpastas de `ui/`.
+
+## F3 — registro de implementação
+
+Feito em 2026-10-04 por pedido do responsável ("prossiga com F2 e F3"), o que
+aplica as recomendações de **D1** e **D9**.
+
+- **Top bar:** saem os ícones Parts, Abrir, Salvar, Busca e Referências. Entra
+  o `CommandSearchField` ("Buscar comandos…", abre a palette). Ficam Desfazer,
+  Refazer e Preferências. Abrir/Salvar continuam em Arquivo e nos atalhos;
+  **View → Imagens de referência (F4)** e **Window → Parts** são itens novos
+  (teste `top_bar_actions_moved_to_menus_stay_reachable`).
+- **View bar única:** as três ilhas (câmera, sombreamento/auxiliares, domínio)
+  viram uma barra centrada na área livre da viewport, com LEFT = domínio de
+  seleção, CENTER = pivô/snap/proporcional, RIGHT = projeção (rótulo
+  Persp/Ortho), enquadrar, redefinir, dividir, 4 modos de sombreamento, raio-X
+  e opções. Toggles usam `IconButton` "toggle" (fundo suave); o botão de
+  referências sai da barra (menu + F4).
+- **Status bar:** a mensagem neutra fica discreta (destaque só para
+  aviso/erro/sucesso); as dicas viram chips `KeyHint` (LMB, MMB, Shift+MMB,
+  Roda) que somem da direita para a esquerda abaixo de 1240/1100 px, em vez
+  do texto truncado.
+- **D1 (parcial):** pílula de seção aberta = `accent-subtle` + marcador lateral
+  de 3 px, ícone em accent; trilho de 56 → 50 px (pílula mantém 36 px, contrato do ADR 004 coberto por teste de gestos). **Pendente para a F4:** o
+  trilho é hoje o único controle que abre/fecha o painel (hover e pílulas);
+  escondê-lo com o painel aberto exige antes o botão de recolher no cabeçalho
+  de contexto do Inspector.
+- **Resíduos registrados:** nome do projeto na top bar (o view-model não expõe
+  o nome; F7); popovers de Câmera/Overlays (precisam de entrada no
+  `OverlayStack`; F5); textos fixos em português no HUD da ferramenta ativa
+  (`"Arraste o corte…"`, `"Mova o mouse…"`) e o padrão `"Ready"` (F6, i18n).
+- **Achados da captura (2026-10-04):** (1) o Rust sempre publica uma dica de
+  contexto ("Selection: Object · LMB Select · …"), então os chips `KeyHint`
+  quase nunca aparecem; o texto agora cabe sem truncar, mas a dica estruturada
+  (lista de pares tecla/ação no view-model) fica para a F5. (2) O diálogo
+  "Recover unsaved work?" não bloqueia cliques na viewport: um clique atrás
+  dele desmarcou o objeto. Bug preexistente, fora do escopo da F3.

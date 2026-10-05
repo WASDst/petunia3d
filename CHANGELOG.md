@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### UI Slint — F2 e F3: componentes, galeria e shell (04/10/2026)
+
+- F2: `app.slint` dividido em `types.slint`, `components/`, `inspector/` e `dialogs/` sem mudança de comportamento; componentes base `IconButton`, `Segmented`, `DropdownButton`, `PropertyRow`, `EmptyState`, `KeyHint` e `CommandSearchField`; galeria `--example gallery` com textos en/pt-BR; `ui-lint` recursivo.
+- F3: top bar com busca de comandos visível no lugar de 5 ícones (Abrir/Salvar seguem em Arquivo; novos itens View → Imagens de referência e Window → Parts); as três ilhas da viewport viram uma barra única LEFT/CENTER/RIGHT; status bar com chips de tecla que somem por largura em vez de texto truncado; pílulas do Inspector sem roxo cheio e trilho de 50 px.
+- Testes novos: itens movidos para os menus e tradução da galeria.
+
 ### UI Slint — F1: tokens v2 e guarda de tokens (04/10/2026)
 
 - `tokens.slint` ganha tipografia (`font-caption`…`font-exceptional`), elevação em dois níveis, cores de HUD/viewport/UV e o global `ColorPresets`.
