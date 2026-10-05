@@ -291,6 +291,16 @@ Evidence is preserved in `docs/audits/premium-evidence/`, [`docs/GAUNTLET.md`](d
 
 ## Next action
 
+**Decisão de 05/10/2026:** antes do Animate, executar o
+[pacote de 5 waves de modelagem e superfície](docs/development/surface-modeling-waves-2026-10-05.md),
+uma wave por vez, com bateria completa de testes e aceite ao fim de cada uma.
+Ordem: W1 materiais e canais → W2 modificadores → W3 curvas e geradores →
+W4 superfície procedural e node system → W5 UV, atlas, decalques e variantes.
+Decisões pendentes antes do código: D1 (camadas × canais), D2 (forma do editor de
+nós), D3 (propriedades paramétricas já animáveis). A pesquisa para o Animate está em
+[`docs/development/research/animate-2026-10-05/`](docs/development/research/animate-2026-10-05/README.md).
+
+
 **Rodada de 04/10/2026 (branch `claude/draw-poly-perf-tools`):** itens 1–9 da
 análise de DRAW/POLY implementados — desempenho por evento, cache por objeto na
 GPU, BVH, prévia incremental, gramática única, domínios do DRAW, mensagens com
