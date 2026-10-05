@@ -11,6 +11,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use glam::Vec3;
+use petunia_mesh::Mesh;
+
 use crate::Canvas;
 use crate::svg::{SvgError, rasterize_svg, svg_info};
 
@@ -60,6 +63,81 @@ pub enum PaintEffect {
     HueSaturation { hue_shift_deg: f32, saturation: f32 },
 }
 
+/// Fixação do decalque na superfície (cap. 39, "surface attachment"): um
+/// projetor ortogonal no espaço do objeto. Cada texel recebe a cor pela sua
+/// posição 3D projetada no plano do decalque, então o decalque fica onde foi
+/// colocado, atravessa costuras e mantém a proporção da imagem.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DecalAnchor {
+    /// Centro do decalque na superfície (mundo).
+    pub point: [f32; 3],
+    /// Direção de projeção (normal da superfície no ponto, unitária).
+    pub normal: [f32; 3],
+    /// Direção "direita" da imagem antes da rotação (unitária, ⟂ normal).
+    pub tangent: [f32; 3],
+    /// Largura da imagem em unidades de mundo; a altura segue a proporção.
+    pub width: f32,
+    /// Alcance do projetor ao longo da normal, para os dois lados (mundo).
+    pub depth: f32,
+}
+
+impl DecalAnchor {
+    /// Fixação em `point` com `normal`, a imagem "em pé" segundo `up` (ex.:
+    /// o vetor cima da câmera); `up` paralelo à normal cai num eixo do mundo.
+    pub fn new(point: Vec3, normal: Vec3, up: Vec3, width: f32) -> Option<Self> {
+        let normal = normal.normalize_or_zero();
+        if normal == Vec3::ZERO || !point.is_finite() || !(width.is_finite() && width > 0.0) {
+            return None;
+        }
+        let tangent = [up, Vec3::Y, Vec3::Z, Vec3::X]
+            .into_iter()
+            .map(|reference| reference.cross(normal))
+            .find(|t| t.length_squared() > 1.0e-6)?
+            .normalize();
+        Some(Self {
+            point: point.to_array(),
+            normal: normal.to_array(),
+            tangent: tangent.to_array(),
+            width,
+            depth: width * 0.5,
+        })
+    }
+
+    /// Base do projetor com a rotação aplicada: (direita, cima, normal).
+    fn frame(&self, rotation_rad: f32) -> (Vec3, Vec3, Vec3) {
+        let n = Vec3::from(self.normal).normalize_or_zero();
+        let t0 = Vec3::from(self.tangent).normalize_or_zero();
+        let b0 = n.cross(t0);
+        let (sin, cos) = rotation_rad.sin_cos();
+        (t0 * cos + b0 * sin, b0 * cos - t0 * sin, n)
+    }
+}
+
+/// Amostra bilinear (`u`, `v` em 0..1, origem no canto superior esquerdo).
+fn sample_bilinear(image: &Canvas, u: f32, v: f32) -> Option<[u8; 4]> {
+    if image.w == 0 || image.h == 0 || !(u.is_finite() && v.is_finite()) {
+        return None;
+    }
+    let x = (u * image.w as f32 - 0.5).clamp(0.0, image.w as f32 - 1.0);
+    let y = (v * image.h as f32 - 0.5).clamp(0.0, image.h as f32 - 1.0);
+    let (x0, y0) = (x.floor() as u32, y.floor() as u32);
+    let (x1, y1) = ((x0 + 1).min(image.w - 1), (y0 + 1).min(image.h - 1));
+    let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+    let (a, b, c, d) = (
+        image.get(x0, y0)?,
+        image.get(x1, y0)?,
+        image.get(x0, y1)?,
+        image.get(x1, y1)?,
+    );
+    let mut out = [0u8; 4];
+    for i in 0..4 {
+        let top = a[i] as f32 * (1.0 - fx) + b[i] as f32 * fx;
+        let bottom = c[i] as f32 * (1.0 - fx) + d[i] as f32 * fx;
+        out[i] = (top * (1.0 - fy) + bottom * fy).round().clamp(0.0, 255.0) as u8;
+    }
+    Some(out)
+}
+
 /// Decalque / projeção 2D parametrizada e reposicionável (P3D-133, MVP).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecalLayer {
@@ -74,6 +152,9 @@ pub struct DecalLayer {
     /// re-rasterizar em outra resolução sem perder nitidez (P3D-133).
     /// Projetos antigos não têm o campo e abrem como `None`.
     pub source_svg: Option<String>,
+    /// Fixação na superfície. `None` = decalque em espaço UV (legado):
+    /// `center_uv`/`scale_uv` posicionam a imagem no atlas.
+    pub anchor: Option<DecalAnchor>,
 }
 
 // Legacy postcard files predate SVG. Their fixed decal layout has four fields;
@@ -82,13 +163,14 @@ impl Serialize for DecalLayer {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
         let human = serializer.is_human_readable();
-        let mut value = serializer.serialize_struct("DecalLayer", if human { 5 } else { 4 })?;
+        let mut value = serializer.serialize_struct("DecalLayer", if human { 6 } else { 4 })?;
         value.serialize_field("image", &self.image)?;
         value.serialize_field("center_uv", &self.center_uv)?;
         value.serialize_field("scale_uv", &self.scale_uv)?;
         value.serialize_field("rotation_rad", &self.rotation_rad)?;
         if human {
             value.serialize_field("source_svg", &self.source_svg)?;
+            value.serialize_field("anchor", &self.anchor)?;
         }
         value.end()
     }
@@ -110,6 +192,8 @@ impl<'de> Deserialize<'de> for DecalLayer {
             rotation_rad: f32,
             #[serde(default)]
             source_svg: Option<String>,
+            #[serde(default)]
+            anchor: Option<DecalAnchor>,
         }
         if deserializer.is_human_readable() {
             let c = Current::deserialize(deserializer)?;
@@ -119,6 +203,7 @@ impl<'de> Deserialize<'de> for DecalLayer {
                 scale_uv: c.scale_uv,
                 rotation_rad: c.rotation_rad,
                 source_svg: c.source_svg,
+                anchor: c.anchor,
             })
         } else {
             let c = Old::deserialize(deserializer)?;
@@ -135,7 +220,72 @@ impl DecalLayer {
             scale_uv,
             rotation_rad,
             source_svg: None,
+            anchor: None,
         }
+    }
+
+    /// Altura em mundo de um decalque de superfície (proporção da imagem).
+    pub fn surface_height(&self, width: f32) -> f32 {
+        width * self.image.h.max(1) as f32 / self.image.w.max(1) as f32
+    }
+
+    /// Cores projetadas pelo decalque de superfície: `(x, y, rgba)` por texel
+    /// de uma textura `w × h` da malha. Só faces voltadas para o projetor e
+    /// dentro do seu alcance; amostragem bilinear. Vazio sem fixação.
+    pub fn surface_samples(&self, mesh: &Mesh, w: u32, h: u32) -> Vec<(u32, u32, [u8; 4])> {
+        let Some(anchor) = self.anchor else {
+            return Vec::new();
+        };
+        let (right, up, normal) = anchor.frame(self.rotation_rad);
+        let half_w = anchor.width * 0.5;
+        let half_h = self.surface_height(anchor.width) * 0.5;
+        if normal == Vec3::ZERO || !(half_w > 0.0 && half_h > 0.0) {
+            return Vec::new();
+        }
+        let center = Vec3::from(anchor.point);
+        let reach = (half_w * half_w + half_h * half_h + anchor.depth * anchor.depth).sqrt();
+        let mut written = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for fi in 0..mesh.faces.len() {
+            // Superfície de costas para o projetor não recebe o decalque.
+            if mesh.face_normal(fi).normalize_or_zero().dot(normal) < 0.1 {
+                continue;
+            }
+            mesh.rasterize_face_near(fi, center, reach, w, h, 1.0, |x, y, _, pos, _| {
+                let local = pos - center;
+                if local.dot(normal).abs() > anchor.depth {
+                    return;
+                }
+                let u = local.dot(right) / (2.0 * half_w) + 0.5;
+                let v = 0.5 - local.dot(up) / (2.0 * half_h);
+                if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
+                    return;
+                }
+                if !written.insert((x, y)) {
+                    return;
+                }
+                if let Some(color) = sample_bilinear(&self.image, u, v) {
+                    out.push((x, y, color));
+                }
+            });
+        }
+        out
+    }
+
+    /// Cor do decalque UV (legado) no texel `(x, y)` de uma textura `w × h`.
+    fn uv_sample(&self, x: u32, y: u32, w: u32, h: u32) -> Option<[u8; 4]> {
+        if self.scale_uv[0].abs() < 1e-5 || self.scale_uv[1].abs() < 1e-5 {
+            return None;
+        }
+        let (sin_rot, cos_rot) = (-self.rotation_rad).sin_cos();
+        let dx = (x as f32 + 0.5) / w as f32 - self.center_uv[0];
+        let dy = (y as f32 + 0.5) / h as f32 - self.center_uv[1];
+        let decal_u = (dx * cos_rot - dy * sin_rot) / self.scale_uv[0] + 0.5;
+        let decal_v = (dx * sin_rot + dy * cos_rot) / self.scale_uv[1] + 0.5;
+        if !(0.0..=1.0).contains(&decal_u) || !(0.0..=1.0).contains(&decal_v) {
+            return None;
+        }
+        sample_bilinear(&self.image, decal_u, decal_v)
     }
 
     /// Cria um decalque a partir de SVG: rasteriza (maior lado = `max_px`,
@@ -562,6 +712,18 @@ impl PaintLayerStack {
     /// Converts a Decal layer into a static Raster layer by baking its projection (P3D-160).
     /// Converte uma camada de Decal em Raster aplicando sua projeção estaticamente (P3D-160).
     pub fn bake_decal_to_raster(&mut self, id: uuid::Uuid, target_w: u32, target_h: u32) -> bool {
+        self.bake_decal_to_raster_on(id, target_w, target_h, None)
+    }
+
+    /// Como [`Self::bake_decal_to_raster`], com a malha para decalques de
+    /// superfície (sem malha eles não têm onde cair e ficam transparentes).
+    pub fn bake_decal_to_raster_on(
+        &mut self,
+        id: uuid::Uuid,
+        target_w: u32,
+        target_h: u32,
+        mesh: Option<&Mesh>,
+    ) -> bool {
         if target_w == 0 || target_h == 0 {
             return false;
         }
@@ -573,30 +735,16 @@ impl PaintLayerStack {
         };
 
         let mut baked = Canvas::new(target_w, target_h, [0, 0, 0, 0]);
-        let cos_rot = (-decal.rotation_rad).cos();
-        let sin_rot = (-decal.rotation_rad).sin();
-
-        for y in 0..target_h {
-            for x in 0..target_w {
-                let u = (x as f32 + 0.5) / target_w as f32;
-                let v = (y as f32 + 0.5) / target_h as f32;
-
-                let dx = u - decal.center_uv[0];
-                let dy = v - decal.center_uv[1];
-
-                let rx = dx * cos_rot - dy * sin_rot;
-                let ry = dx * sin_rot + dy * cos_rot;
-
-                let decal_u = rx / decal.scale_uv[0] + 0.5;
-                let decal_v = ry / decal.scale_uv[1] + 0.5;
-
-                if (0.0..=1.0).contains(&decal_u) && (0.0..=1.0).contains(&decal_v) {
-                    let sx = (decal_u * decal.image.w as f32).clamp(0.0, decal.image.w as f32 - 1.0)
-                        as u32;
-                    let sy = (decal_v * decal.image.h as f32).clamp(0.0, decal.image.h as f32 - 1.0)
-                        as u32;
-
-                    if let Some(src) = decal.image.get(sx, sy) {
+        if decal.anchor.is_some() {
+            if let Some(mesh) = mesh {
+                for (x, y, src) in decal.surface_samples(mesh, target_w, target_h) {
+                    baked.set(x, y, src);
+                }
+            }
+        } else {
+            for y in 0..target_h {
+                for x in 0..target_w {
+                    if let Some(src) = decal.uv_sample(x, y, target_w, target_h) {
                         baked.set(x, y, src);
                     }
                 }
@@ -609,6 +757,12 @@ impl PaintLayerStack {
 
     /// Executa a composição determinística de todas as camadas sobre o canvas base.
     pub fn composite(&self, base: &mut Canvas) {
+        self.composite_on(base, None);
+    }
+
+    /// Composição com a malha do asset: decalques de superfície caem nos
+    /// texels pela posição 3D (sem malha, são ignorados).
+    pub fn composite_on(&self, base: &mut Canvas, mesh: Option<&Mesh>) {
         for layer in &self.layers {
             if !layer.visible || layer.opacity <= 0.0 {
                 continue;
@@ -628,43 +782,27 @@ impl PaintLayerStack {
                     }
                 }
                 LayerKind::Decal(decal) => {
-                    if decal.scale_uv[0].abs() < 1e-5 || decal.scale_uv[1].abs() < 1e-5 {
+                    let (w, h) = (base.w, base.h);
+                    if decal.anchor.is_some() {
+                        if let Some(mesh) = mesh {
+                            for (x, y, src) in decal.surface_samples(mesh, w, h) {
+                                if let Some(dst) = base.get(x, y) {
+                                    base.set(
+                                        x,
+                                        y,
+                                        blend_pixels(dst, src, layer.opacity, layer.blend),
+                                    );
+                                }
+                            }
+                        }
                         continue;
                     }
-                    let w = base.w;
-                    let h = base.h;
-                    let cos_rot = (-decal.rotation_rad).cos();
-                    let sin_rot = (-decal.rotation_rad).sin();
-
                     for y in 0..h {
                         for x in 0..w {
-                            let u = (x as f32 + 0.5) / w as f32;
-                            let v = (y as f32 + 0.5) / h as f32;
-
-                            let dx = u - decal.center_uv[0];
-                            let dy = v - decal.center_uv[1];
-
-                            let rx = dx * cos_rot - dy * sin_rot;
-                            let ry = dx * sin_rot + dy * cos_rot;
-
-                            let decal_u = rx / decal.scale_uv[0] + 0.5;
-                            let decal_v = ry / decal.scale_uv[1] + 0.5;
-
-                            if (0.0..=1.0).contains(&decal_u) && (0.0..=1.0).contains(&decal_v) {
-                                let sx = (decal_u * decal.image.w as f32)
-                                    .clamp(0.0, decal.image.w as f32 - 1.0)
-                                    as u32;
-                                let sy = (decal_v * decal.image.h as f32)
-                                    .clamp(0.0, decal.image.h as f32 - 1.0)
-                                    as u32;
-
-                                if let (Some(dst), Some(src)) =
-                                    (base.get(x, y), decal.image.get(sx, sy))
-                                {
-                                    let blended =
-                                        blend_pixels(dst, src, layer.opacity, layer.blend);
-                                    base.set(x, y, blended);
-                                }
+                            if let (Some(dst), Some(src)) =
+                                (base.get(x, y), decal.uv_sample(x, y, w, h))
+                            {
+                                base.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
                             }
                         }
                     }
@@ -718,6 +856,11 @@ impl PaintLayerStack {
     /// com tiles de [`TILE_SIZE`] a partir do canto superior esquerdo.
     /// Exige [`Self::is_tileable`] — em stacks com Pixelate use `composite`.
     pub fn composite_tiles(&self, out: &mut Canvas, dirty_tiles: &[u32]) {
+        self.composite_tiles_on(out, dirty_tiles, None);
+    }
+
+    /// Composição parcial com a malha (decalques de superfície).
+    pub fn composite_tiles_on(&self, out: &mut Canvas, dirty_tiles: &[u32], mesh: Option<&Mesh>) {
         assert!(
             self.is_tileable(),
             "composição parcial exige stack tileável (sem Pixelate)"
@@ -726,6 +869,17 @@ impl PaintLayerStack {
             return;
         }
         let tiles_x = out.w.div_ceil(TILE_SIZE).max(1);
+        // Projeção de cada decalque de superfície, uma vez por chamada.
+        let surface: Vec<Vec<(u32, u32, [u8; 4])>> = self
+            .layers
+            .iter()
+            .map(|layer| match (&layer.kind, mesh) {
+                (LayerKind::Decal(decal), Some(mesh)) if decal.anchor.is_some() => {
+                    decal.surface_samples(mesh, out.w, out.h)
+                }
+                _ => Vec::new(),
+            })
+            .collect();
         for tile in dirty_tiles {
             let tx = tile % tiles_x;
             let ty = tile / tiles_x;
@@ -733,14 +887,22 @@ impl PaintLayerStack {
             let y0 = ty * TILE_SIZE;
             let x1 = (x0 + TILE_SIZE).min(out.w);
             let y1 = (y0 + TILE_SIZE).min(out.h);
-            self.composite_tile_region(out, x0, y0, x1, y1);
+            self.composite_tile_region(out, x0, y0, x1, y1, &surface);
         }
     }
 
     /// Recompõe a região de um tile: reset da base (primeiro layer) sobre
     /// transparente, depois os layers restantes com blend — a mesma
     /// aritmética do `composite` completo sobre scratch transparente.
-    fn composite_tile_region(&self, out: &mut Canvas, x0: u32, y0: u32, x1: u32, y1: u32) {
+    fn composite_tile_region(
+        &self,
+        out: &mut Canvas,
+        x0: u32,
+        y0: u32,
+        x1: u32,
+        y1: u32,
+        surface: &[Vec<(u32, u32, [u8; 4])>],
+    ) {
         if x0 >= x1 || y0 >= y1 {
             return;
         }
@@ -768,32 +930,19 @@ impl PaintLayerStack {
                     }
                 }
                 LayerKind::Decal(decal) => {
-                    if decal.scale_uv[0].abs() < 1e-5 || decal.scale_uv[1].abs() < 1e-5 {
+                    if decal.anchor.is_some() {
+                        for &(x, y, src) in surface.get(li).map_or(&[][..], Vec::as_slice) {
+                            if (x0..x1).contains(&x) && (y0..y1).contains(&y) {
+                                let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
+                                out.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
+                            }
+                        }
                         continue;
                     }
                     let (w, h) = (out.w, out.h);
-                    let cos_rot = (-decal.rotation_rad).cos();
-                    let sin_rot = (-decal.rotation_rad).sin();
                     for y in y0..y1 {
                         for x in x0..x1 {
-                            let u = (x as f32 + 0.5) / w as f32;
-                            let v = (y as f32 + 0.5) / h as f32;
-                            let dx = u - decal.center_uv[0];
-                            let dy = v - decal.center_uv[1];
-                            let rx = dx * cos_rot - dy * sin_rot;
-                            let ry = dx * sin_rot + dy * cos_rot;
-                            let decal_u = rx / decal.scale_uv[0] + 0.5;
-                            let decal_v = ry / decal.scale_uv[1] + 0.5;
-                            if !(0.0..=1.0).contains(&decal_u) || !(0.0..=1.0).contains(&decal_v) {
-                                continue;
-                            }
-                            let sx = (decal_u * decal.image.w as f32)
-                                .clamp(0.0, decal.image.w as f32 - 1.0)
-                                as u32;
-                            let sy = (decal_v * decal.image.h as f32)
-                                .clamp(0.0, decal.image.h as f32 - 1.0)
-                                as u32;
-                            let Some(src) = decal.image.get(sx, sy) else {
+                            let Some(src) = decal.uv_sample(x, y, w, h) else {
                                 continue;
                             };
                             let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
@@ -1103,6 +1252,114 @@ fn hsv_to_rgb(hue: f32, sat: f32, val: f32) -> (u8, u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Faces do cubo com a normal mais próxima de `dir`.
+    fn cube_face(mesh: &Mesh, dir: Vec3) -> usize {
+        (0..mesh.faces.len())
+            .max_by(|&a, &b| {
+                mesh.face_normal(a)
+                    .dot(dir)
+                    .total_cmp(&mesh.face_normal(b).dot(dir))
+            })
+            .unwrap()
+    }
+
+    fn surface_decal(width: f32, normal: Vec3, point: Vec3, image: Canvas) -> DecalLayer {
+        let mut decal = DecalLayer::new(image, [0.5; 2], [0.3; 2], 0.0);
+        decal.anchor = DecalAnchor::new(point, normal, Vec3::Y, width);
+        decal
+    }
+
+    #[test]
+    fn surface_decal_lands_only_where_it_was_placed() {
+        let mesh = Mesh::cube(2.0);
+        let (w, h) = (256, 256);
+        let red = Canvas::new(16, 16, [255, 0, 0, 255]);
+        let decal = surface_decal(1.0, Vec3::Z, Vec3::new(0.0, 0.0, 1.0), red);
+        let samples = decal.surface_samples(&mesh, w, h);
+        assert!(!samples.is_empty());
+        let front = cube_face(&mesh, Vec3::Z);
+        let front_mask = mesh.uv_coverage_mask([front], w, h, 1.0);
+        for &(x, y, color) in &samples {
+            assert!(
+                front_mask.allows(x, y),
+                "texel ({x},{y}) fora da face da frente"
+            );
+            assert_eq!(color, [255, 0, 0, 255]);
+        }
+        // Metade da largura e da altura da face (2 m): ~1/4 dos texels dela.
+        let face_texels = mesh.uv_coverage_mask([front], w, h, 0.0).covered() as f32;
+        let ratio = samples.len() as f32 / face_texels;
+        assert!((0.18..0.36).contains(&ratio), "cobertura {ratio:.3}");
+    }
+
+    #[test]
+    fn surface_decal_crosses_a_seam_and_keeps_the_image_aspect() {
+        let mesh = Mesh::cube(2.0);
+        let (w, h) = (256, 256);
+        let wide = Canvas::new(32, 16, [0, 0, 255, 255]);
+        // Centrado na aresta entre a frente (+Z) e a direita (+X).
+        let normal = Vec3::new(1.0, 0.0, 1.0).normalize();
+        let decal = surface_decal(1.2, normal, Vec3::new(1.0, 0.0, 1.0), wide.clone());
+        let samples = decal.surface_samples(&mesh, w, h);
+        let front = mesh.uv_coverage_mask([cube_face(&mesh, Vec3::Z)], w, h, 1.0);
+        let right = mesh.uv_coverage_mask([cube_face(&mesh, Vec3::X)], w, h, 1.0);
+        assert!(samples.iter().any(|&(x, y, _)| front.allows(x, y)));
+        assert!(samples.iter().any(|&(x, y, _)| right.allows(x, y)));
+        assert!(
+            (decal.surface_height(1.2) - 0.6).abs() < 1e-6,
+            "altura = largura × 16/32"
+        );
+        // De costas para o projetor (face de trás) nada recebe.
+        let back = mesh.uv_coverage_mask([cube_face(&mesh, -Vec3::Z)], w, h, 0.0);
+        assert!(
+            !samples
+                .iter()
+                .any(|&(x, y, _)| back.allows(x, y) && !front.allows(x, y) && !right.allows(x, y))
+        );
+    }
+
+    #[test]
+    fn surface_decal_composites_bakes_and_round_trips() {
+        let mesh = Mesh::cube(2.0);
+        let mut stack =
+            PaintLayerStack::with_base("Base", Canvas::new(128, 128, [255, 255, 255, 255]));
+        let decal = surface_decal(
+            1.0,
+            Vec3::Z,
+            Vec3::new(0.0, 0.0, 1.0),
+            Canvas::new(8, 8, [0, 255, 0, 255]),
+        );
+        let id = stack.add_layer(PaintLayer::new_decal("Logo", decal.clone()));
+        let mut composed = Canvas::new(128, 128, [0, 0, 0, 0]);
+        stack.composite_on(&mut composed, Some(&mesh));
+        let green = composed
+            .pixels
+            .chunks(4)
+            .filter(|p| p[..3] == [0, 255, 0])
+            .count();
+        assert!(green > 0);
+        // Composição parcial por tiles = completa.
+        let mut tiles = Canvas::new(128, 128, [0, 0, 0, 0]);
+        stack.composite_on(&mut tiles, Some(&mesh));
+        let all: Vec<u32> = (0..(128 / TILE_SIZE) * (128 / TILE_SIZE)).collect();
+        stack.composite_tiles_on(&mut tiles, &all, Some(&mesh));
+        assert_eq!(tiles.pixels.to_vec(), composed.pixels.to_vec());
+        // JSON guarda a fixação.
+        let json = serde_json::to_string(&decal).unwrap();
+        let back: DecalLayer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.anchor, decal.anchor);
+        // Bake na mesma posição.
+        assert!(stack.bake_decal_to_raster_on(id, 128, 128, Some(&mesh)));
+        let mut baked = Canvas::new(128, 128, [0, 0, 0, 0]);
+        stack.composite(&mut baked);
+        let baked_green = baked
+            .pixels
+            .chunks(4)
+            .filter(|p| p[..3] == [0, 255, 0])
+            .count();
+        assert_eq!(baked_green, green);
+    }
 
     #[test]
     fn layer_stack_composition_is_deterministic() {

@@ -5740,12 +5740,22 @@ impl Command for BakeDecalCmd {
         if let Some(asset) = state.project.assets.get_mut(active)
             && let Some(stack) = asset.paint_stack.as_mut()
         {
-            let (target_w, target_h) = stack
-                .active()
-                .and_then(|l| l.canvas())
+            // O raster assado tem o tamanho da textura do objeto (a camada
+            // ativa é o próprio decalque, que não tem canvas).
+            let (target_w, target_h) = asset
+                .texture
+                .as_ref()
                 .map(|c| (c.w, c.h))
+                .or_else(|| {
+                    stack
+                        .layers
+                        .iter()
+                        .find_map(|l| l.canvas())
+                        .map(|c| (c.w, c.h))
+                })
                 .unwrap_or((512, 512));
-            if stack.bake_decal_to_raster(self.layer_id, target_w, target_h) {
+            if stack.bake_decal_to_raster_on(self.layer_id, target_w, target_h, Some(&*asset.mesh))
+            {
                 baked = true;
             }
         }

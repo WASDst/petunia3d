@@ -1278,7 +1278,7 @@ impl Project {
             .unwrap_or((256, 256));
         let material_id = asset.material_id;
         let mut composed = Canvas::new(width, height, [0, 0, 0, 0]);
-        stack.composite(&mut composed);
+        stack.composite_on(&mut composed, Some(&*asset.mesh));
 
         if let Some(asset) = self.assets.get_mut(asset_index) {
             asset.texture = Some(composed.clone());

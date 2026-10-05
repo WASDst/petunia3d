@@ -291,7 +291,7 @@ impl PaintModule {
                 let canvas = asset
                     .texture
                     .get_or_insert_with(|| Canvas::new(w, h, [0, 0, 0, 0]));
-                stack.composite_tiles(canvas, dirty_tiles);
+                stack.composite_tiles_on(canvas, dirty_tiles, Some(&*asset.mesh));
             }
         } else {
             state.project.project.composite_paint_stack(active_idx);
