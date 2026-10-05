@@ -297,6 +297,7 @@ impl PaintModule {
             return;
         }
         let partial = tileable && !dirty_tiles.is_empty();
+        let time = state.session.decal_time;
         if partial {
             if let Some(asset) = state.project.assets.get_mut(active_idx)
                 && let Some(stack) = asset.paint_stack.as_ref()
@@ -304,10 +305,13 @@ impl PaintModule {
                 let canvas = asset
                     .texture
                     .get_or_insert_with(|| Canvas::new(w, h, [0, 0, 0, 0]));
-                stack.composite_tiles_on(canvas, dirty_tiles, Some(&*asset.mesh));
+                stack.composite_tiles_on(canvas, dirty_tiles, Some(&*asset.mesh), time);
             }
         } else {
-            state.project.project.composite_paint_stack(active_idx);
+            state
+                .project
+                .project
+                .composite_paint_stack_at(active_idx, time);
         }
         if partial {
             Self::sync_material_tiles(state, active_idx, dirty_tiles);
@@ -410,6 +414,79 @@ impl PaintModule {
             }
         }
         Self::composite_active(state);
+    }
+
+    /// Retângulo de texels que o decalque ativo cobre na textura do ativo.
+    pub fn active_decal_bounds(state: &AppState) -> Option<[u32; 4]> {
+        let asset = state.project.active()?;
+        let texture = asset.texture.as_ref()?;
+        let LayerKind::Decal(decal) = &asset.paint_stack.as_ref()?.active()?.kind else {
+            return None;
+        };
+        decal.texel_bounds(Some(&*asset.mesh), texture.w, texture.h)
+    }
+
+    /// Recompõe só os tiles que o decalque ativo cobria (`before`) ou cobre
+    /// agora (P3D-061: mover um decalque não recompõe a textura inteira).
+    pub fn composite_decal_region(state: &mut AppState, before: Option<[u32; 4]>) {
+        let Some((w, h)) = state
+            .project
+            .active()
+            .and_then(|asset| asset.texture.as_ref())
+            .map(|texture| (texture.w, texture.h))
+        else {
+            Self::composite_active(state);
+            return;
+        };
+        let mut tiles: Vec<u32> = [before, Self::active_decal_bounds(state)]
+            .into_iter()
+            .flatten()
+            .flat_map(|bounds| PaintLayerStack::tiles_for_bounds(bounds, w, h))
+            .collect();
+        tiles.sort_unstable();
+        tiles.dedup();
+        if tiles.is_empty() {
+            // Nada coberto antes nem agora: nenhum texel muda.
+            return;
+        }
+        Self::composite_active_tiles(state, &tiles);
+    }
+
+    /// Textura composta do ativo com cada variante do decalque `layer_id`
+    /// (exportação em quadros do Decal Set, cap. 39 "bake universal").
+    pub fn decal_variant_textures(state: &AppState, layer_id: uuid::Uuid) -> Vec<(String, Canvas)> {
+        let Some(asset) = state.project.active() else {
+            return Vec::new();
+        };
+        let Some(stack) = asset.paint_stack.as_ref() else {
+            return Vec::new();
+        };
+        let Some(layer) = stack.layers.iter().find(|layer| layer.id == layer_id) else {
+            return Vec::new();
+        };
+        let LayerKind::Decal(decal) = &layer.kind else {
+            return Vec::new();
+        };
+        let (w, h) = asset
+            .texture
+            .as_ref()
+            .map_or((DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE), |c| (c.w, c.h));
+        (0..decal.variant_count())
+            .map(|index| {
+                let mut frame_stack = stack.clone();
+                if let Some(LayerKind::Decal(variant)) = frame_stack
+                    .layers
+                    .iter_mut()
+                    .find(|l| l.id == layer_id)
+                    .map(|l| &mut l.kind)
+                {
+                    variant.set_variant(index);
+                }
+                let mut canvas = Canvas::new(w, h, [0, 0, 0, 0]);
+                frame_stack.composite_on(&mut canvas, Some(&*asset.mesh), None);
+                (decal.variant_name(index, &layer.name).to_owned(), canvas)
+            })
+            .collect()
     }
 
     /// Troca a resolução da textura de pintura do ativo (quadrada, um dos

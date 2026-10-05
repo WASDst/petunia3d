@@ -1273,6 +1273,12 @@ impl Project {
     /// Rebuilds the derived texture cache for one asset from its canonical
     /// paint stack and mirrors it to the assigned material albedo channel.
     pub fn composite_paint_stack(&mut self, asset_index: usize) -> bool {
+        self.composite_paint_stack_at(asset_index, None)
+    }
+
+    /// Like [`Self::composite_paint_stack`], at playback `time` (seconds):
+    /// decals with a variant track show the variant keyed at that instant.
+    pub fn composite_paint_stack_at(&mut self, asset_index: usize, time: Option<f32>) -> bool {
         let Some(asset) = self.assets.get(asset_index) else {
             return false;
         };
@@ -1286,7 +1292,7 @@ impl Project {
             .unwrap_or((256, 256));
         let material_id = asset.material_id;
         let mut composed = Canvas::new(width, height, [0, 0, 0, 0]);
-        stack.composite_on(&mut composed, Some(&*asset.mesh));
+        stack.composite_on(&mut composed, Some(&*asset.mesh), time);
 
         if let Some(asset) = self.assets.get_mut(asset_index) {
             asset.texture = Some(composed.clone());

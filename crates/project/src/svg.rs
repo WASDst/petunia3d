@@ -36,7 +36,7 @@ use crate::spline::{SplineInterpolation, SplinePoint, SplineResource};
 /// Tamanho máximo do texto SVG aceito (bytes), checado antes de parsear.
 pub const MAX_SVG_BYTES: usize = 2 * 1024 * 1024;
 /// Maior lado (px) que [`rasterize_svg`] produz, mesmo se `max_px` for maior.
-pub const MAX_RASTER_PX: u32 = 1024;
+pub const MAX_RASTER_PX: u32 = crate::Canvas::MAX_SIDE;
 /// Teto de nós Bézier extraídos por [`svg_subpaths`].
 pub const MAX_SVG_NODES: usize = 20_000;
 

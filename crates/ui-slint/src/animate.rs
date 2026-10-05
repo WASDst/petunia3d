@@ -594,14 +594,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         Some(shared)
     }
 
-    /// Avança o playhead em `dt` segundos. `true` se a pose mudou.
+    /// Avança o playhead em `dt` segundos. `true` se a pose mudou ou se uma
+    /// trilha de variantes de decalque trocou de variante (cap. 39: o
+    /// Animate referencia `variant_index`).
     pub fn animate_advance(&mut self, dt: f32) -> bool {
         self.state.animate_resolve();
         let project = &self.state.project.project;
-        self.animate
-            .preview
-            .get_mut()
-            .advance(project, &mut self.state.session.animate, dt)
+        let posed =
+            self.animate
+                .preview
+                .get_mut()
+                .advance(project, &mut self.state.session.animate, dt);
+        let time = self.state.session.animate.time;
+        let decals = self.show_decal_time(Some(time));
+        posed || decals
     }
 
     /// Tique do temporizador da UI (~30 Hz). Só anda com o Animate ativo e
@@ -694,6 +700,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .cycle_seconds(&self.state.project.project, &self.state.session.animate)
                     .unwrap_or(0.0);
                 self.state.animate_seek(progress * cycle);
+                let time = self.state.session.animate.time;
+                self.show_decal_time(Some(time));
                 Ok(())
             }
             A::ApplyNow { keep } => self.state.animate_apply_now(keep),

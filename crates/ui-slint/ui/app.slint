@@ -618,31 +618,43 @@ component BrushCursor inherits Rectangle {
     in property <bool> erase;
     /// Pixel: borda sempre dura, sem anel de núcleo.
     in property <bool> hard-edge;
+    /// Superfície inclinada: o círculo do carimbo é visto como elipse
+    /// (achatamento no eixo Y local, depois o giro em graus).
+    in property <float> squash: 1.0;
+    in property <float> tilt: 0.0;
     width: max(root.diameter, 2px);
     height: self.width;
-    border-radius: self.width / 2;
-    border-width: 1.5px;
-    border-color: root.erase ? DesignTokens.danger : DesignTokens.cursor-light;
-    background: (root.erase ? DesignTokens.danger : root.tint).with-alpha(0.04 + 0.32 * clamp(root.strength, 0, 1));
-    // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
-    Rectangle {
-        x: 1.5px;
-        y: 1.5px;
-        width: parent.width - 3px;
-        height: parent.height - 3px;
+    // O Slint só transforma elementos filhos: o anel vive num retângulo interno.
+    ring := Rectangle {
+        width: parent.width;
+        height: parent.height;
+        transform-rotation: root.tilt * 1deg;
+        transform-scale-y: root.squash;
         border-radius: self.width / 2;
-        border-width: 1px;
-        border-color: DesignTokens.cursor-dark;
+        border-width: 1.5px;
+        border-color: root.erase ? DesignTokens.danger : DesignTokens.cursor-light;
+        background: (root.erase ? DesignTokens.danger : root.tint).with-alpha(0.04 + 0.32 * clamp(root.strength, 0, 1));
+        // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
+        Rectangle {
+            x: 1.5px;
+            y: 1.5px;
+            width: parent.width - 3px;
+            height: parent.height - 3px;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: DesignTokens.cursor-dark;
+        }
+        if !root.hard-edge && root.hardness > 0.02 && root.hardness < 0.98 && root.width > 10px: Rectangle {
+            width: parent.width * root.hardness;
+            height: self.width;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: DesignTokens.cursor-light.transparentize(0.3);
+        }
     }
-    if !root.hard-edge && root.hardness > 0.02 && root.hardness < 0.98 && root.width > 10px: Rectangle {
-        width: parent.width * root.hardness;
-        height: self.width;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        border-radius: self.width / 2;
-        border-width: 1px;
-        border-color: DesignTokens.cursor-light.transparentize(0.3);
-    }
+    // O ponto central marca o cursor e não se deforma.
     Rectangle {
         x: (parent.width - 3px) / 2;
         y: (parent.height - 3px) / 2;
@@ -670,11 +682,17 @@ component PaintCanvasSurface inherits Rectangle {
     in property <string> uv-commands: "";
     in property <bool> show-grid: false;
     in property <string> grid-commands: "";
+    /// Ferramenta Select: clique/caixa selecionam faces pelo UV.
+    in property <bool> select-mode: false;
+    /// Faces selecionadas (caixa de 256 × 256, V para cima).
+    in property <string> selected-commands: "";
     in-out property <length> pan-x: 0px;
     in-out property <length> pan-y: 0px;
     /// x, y normalizados na textura, fase, Shift, largura da textura em px.
     callback stroke(float, float, int, bool, float);
     callback zoom-step(int);
+    /// x0, y0, x1, y1 em frações da textura; Shift, Ctrl, Alt.
+    callback select-region(float, float, float, float, bool, bool, bool);
     // A textura cabe no canvas sem deformar (proporção da imagem).
     property <float> fit: min(root.width / 1px / max(1, root.canvas-image.width), root.height / 1px / max(1, root.canvas-image.height));
 
@@ -698,10 +716,29 @@ component PaintCanvasSurface inherits Rectangle {
         height: raster.height;
         x: raster.x;
         y: raster.y;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 256;
+        viewbox-height: 256;
         fill: transparent;
         stroke: DesignTokens.uv-wire;
         stroke-width: 1px;
         commands: root.uv-commands;
+    }
+
+    if root.selected-commands != "": Path {
+        width: raster.width;
+        height: raster.height;
+        x: raster.x;
+        y: raster.y;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 256;
+        viewbox-height: 256;
+        fill: DesignTokens.accent.transparentize(0.75);
+        stroke: DesignTokens.accent;
+        stroke-width: 1px;
+        commands: root.selected-commands;
     }
 
     if root.show-grid && root.grid-commands != "": Path {
@@ -716,6 +753,9 @@ component PaintCanvasSurface inherits Rectangle {
     surface-touch := TouchArea {
         property <bool> panning: false;
         property <bool> shift-line: false;
+        property <bool> selecting: false;
+        property <length> select-x;
+        property <length> select-y;
         property <length> last-x;
         property <length> last-y;
         pointer-event(event) => {
@@ -724,6 +764,10 @@ component PaintCanvasSurface inherits Rectangle {
                     self.panning = true;
                     self.last-x = self.mouse-x;
                     self.last-y = self.mouse-y;
+                } else if event.button == PointerEventButton.left && root.select-mode {
+                    self.selecting = true;
+                    self.select-x = self.mouse-x;
+                    self.select-y = self.mouse-y;
                 } else if event.button == PointerEventButton.left {
                     self.shift-line = event.modifiers.shift;
                     root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line, raster.width / 1px);
@@ -731,6 +775,12 @@ component PaintCanvasSurface inherits Rectangle {
             } else if event.kind == PointerEventKind.up {
                 if self.panning {
                     self.panning = false;
+                } else if self.selecting && event.button == PointerEventButton.left {
+                    self.selecting = false;
+                    root.select-region(
+                        (self.select-x - raster.x) / raster.width, (self.select-y - raster.y) / raster.height,
+                        (self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height,
+                        event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                 } else if event.button == PointerEventButton.left {
                     root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line, raster.width / 1px);
                 }
@@ -742,7 +792,7 @@ component PaintCanvasSurface inherits Rectangle {
                 root.pan-y += self.mouse-y - self.last-y;
                 self.last-x = self.mouse-x;
                 self.last-y = self.mouse-y;
-            } else if self.pressed {
+            } else if self.pressed && !self.selecting {
                 root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line, raster.width / 1px);
             }
         }
@@ -755,7 +805,18 @@ component PaintCanvasSurface inherits Rectangle {
         }
     }
 
-    if root.show-brush && surface-touch.has-hover && !surface-touch.panning: BrushCursor {
+    // Caixa de seleção em andamento.
+    if surface-touch.selecting: Rectangle {
+        x: min(surface-touch.select-x, surface-touch.mouse-x);
+        y: min(surface-touch.select-y, surface-touch.mouse-y);
+        width: abs(surface-touch.mouse-x - surface-touch.select-x);
+        height: abs(surface-touch.mouse-y - surface-touch.select-y);
+        border-width: 1px;
+        border-color: DesignTokens.accent;
+        background: DesignTokens.accent.transparentize(0.85);
+    }
+
+    if root.show-brush && !root.select-mode && surface-touch.has-hover && !surface-touch.panning: BrushCursor {
         diameter: root.brush-diameter;
         hardness: root.brush-hardness;
         strength: root.brush-strength;
@@ -3707,6 +3768,12 @@ export component PetuniaSlintShell inherits Window {
             root.toast-visible = false;
         }
     }
+    decal-playback-timer := Timer {
+        interval: 33ms;
+        running: root.decal-playing;
+        triggered => { root.decal-playback-tick(0.033); }
+    }
+
     toast-timer := Timer {
         interval: 3200ms;
         running: false;
@@ -4145,6 +4212,31 @@ export component PetuniaSlintShell inherits Window {
     /// Lado (px) da textura de pintura do ativo; 0 sem textura quadrada.
     in-out property <int> paint-texture-side: 0;
     callback paint-texture-side-selected(int);
+    /// Decal Set do decalque ativo (cap. 39).
+    in-out property <[string]> decal-variant-names;
+    in-out property <int> decal-variant-index: 0;
+    in-out property <int> decal-frame: 0;
+    in-out property <int> decal-track-length: 24;
+    in-out property <float> decal-track-fps: 12;
+    in-out property <string> decal-keys-text: "";
+    in-out property <bool> decal-has-keys: false;
+    in-out property <bool> decal-frame-keyed: false;
+    in-out property <bool> decal-playing: false;
+    callback decal-variant-selected(int);
+    callback decal-variant-remove-requested;
+    callback decal-key-set-requested;
+    callback decal-key-remove-requested;
+    callback decal-frame-changed(int);
+    callback decal-fps-changed(float);
+    callback decal-length-changed(int);
+    callback decal-play-toggled;
+    callback decal-playback-tick(float);
+    /// Pegada do pincel 3D em superfície inclinada: achatamento e giro (graus).
+    in-out property <float> brush-cursor-squash: 1.0;
+    in-out property <float> brush-cursor-tilt: 0.0;
+    /// Seleção de faces pelo UV no canvas 2D: x0, y0, x1, y1 (frações da
+    /// textura), Shift (somar), Ctrl (subtrair), Alt (ilha inteira).
+    callback paint-2d-select(float, float, float, float, bool, bool, bool);
     in-out property <float> decal-center-u: 0.5;
     in-out property <float> decal-center-v: 0.5;
     in-out property <float> decal-scale-u: 0.25;
@@ -5723,6 +5815,8 @@ export component PetuniaSlintShell inherits Window {
                             tint: root.paint-color;
                             erase: root.active-tool == "eraser";
                             hard-edge: root.active-tool == "pixel";
+                            squash: root.brush-cursor-squash;
+                            tilt: root.brush-cursor-tilt;
                             x: viewport-touch.mouse-x - self.width / 2;
                             y: viewport-touch.mouse-y - self.height / 2;
                         }
@@ -7382,7 +7476,7 @@ export component PetuniaSlintShell inherits Window {
                         Text { text: Tr.t("sl.enter_confirm_esc_cancel"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
                     }
 
-                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || root.active-tool == "poly_pen"): ToolCard {
+                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && ((root.active-workspace == "PAINT" && root.last-operation-active) || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || root.active-tool == "poly_pen"): ToolCard {
                         x: 14px;
                         y: 58px;
                         title: root.tool-options-title != "" ? root.tool-options-title : Tr.t("sl.tool_options");
@@ -9257,6 +9351,9 @@ export component PetuniaSlintShell inherits Window {
                                         uv-commands: root.uv-layout-commands;
                                         show-grid: root.paint-pixel-grid;
                                         grid-commands: root.paint-canvas-grid-commands;
+                                        select-mode: root.active-tool == "select";
+                                        selected-commands: root.uv-selected-commands;
+                                        select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
                                         stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                                         zoom-step(direction) => {
                                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
@@ -9733,6 +9830,106 @@ export component PetuniaSlintShell inherits Window {
                                             bake-touch := TouchArea {
                                                 clicked => { root.bake-active-decal(); }
                                             }
+                                        }
+
+                                        // Decal Set (cap. 39): variantes equivalentes e troca em degraus.
+                                        Text {
+                                            text: Tr.t("ui.decal_variants");
+                                            color: DesignTokens.text-primary;
+                                            font-size: DesignTokens.font-small;
+                                            font-weight: 600;
+                                        }
+                                        VerticalLayout {
+                                            spacing: 4px;
+                                            for name[index] in root.decal-variant-names: BrushChip {
+                                                label: name;
+                                                active: index == root.decal-variant-index;
+                                                clicked => { root.decal-variant-selected(index); }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            BrushChip {
+                                                label: Tr.t("ui.decal_add_variant");
+                                                clicked => { root.command-file-action("paint.add_decal_variant"); }
+                                            }
+                                            if root.decal-variant-names.length > 1: BrushChip {
+                                                label: Tr.t("ui.decal_remove_variant");
+                                                clicked => { root.decal-variant-remove-requested(); }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: Tr.t("ui.decal_animation");
+                                            color: DesignTokens.text-primary;
+                                            font-size: DesignTokens.font-small;
+                                            font-weight: 600;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            NumericField {
+                                                label: Tr.t("ui.decal_frame");
+                                                full-label: Tr.t("ui.decal_frame");
+                                                value: root.decal-frame;
+                                                step: 1;
+                                                scrubbed(delta, _) => { root.decal-frame-changed(root.decal-frame + Math.round(delta)); }
+                                                text-committed(text) => {
+                                                    if !text.is-float() { return false; }
+                                                    root.decal-frame-changed(Math.round(text.to-float()));
+                                                    return true;
+                                                }
+                                            }
+                                            NumericField {
+                                                label: Tr.t("ui.decal_fps");
+                                                full-label: Tr.t("ui.decal_fps");
+                                                value: root.decal-track-fps;
+                                                step: 1;
+                                                scrubbed(delta, _) => { root.decal-fps-changed(root.decal-track-fps + Math.round(delta)); }
+                                                text-committed(text) => {
+                                                    if !text.is-float() { return false; }
+                                                    root.decal-fps-changed(text.to-float());
+                                                    return true;
+                                                }
+                                            }
+                                            NumericField {
+                                                label: Tr.t("ui.decal_length");
+                                                full-label: Tr.t("ui.decal_length");
+                                                value: root.decal-track-length;
+                                                step: 1;
+                                                scrubbed(delta, _) => { root.decal-length-changed(root.decal-track-length + Math.round(delta)); }
+                                                text-committed(text) => {
+                                                    if !text.is-float() { return false; }
+                                                    root.decal-length-changed(Math.round(text.to-float()));
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            BrushChip {
+                                                label: Tr.t("ui.decal_set_key");
+                                                active: root.decal-frame-keyed;
+                                                clicked => { root.decal-key-set-requested(); }
+                                            }
+                                            if root.decal-frame-keyed: BrushChip {
+                                                label: Tr.t("ui.decal_remove_key");
+                                                clicked => { root.decal-key-remove-requested(); }
+                                            }
+                                            if root.decal-has-keys: BrushChip {
+                                                label: root.decal-playing ? Tr.t("ui.decal_stop") : Tr.t("ui.decal_play");
+                                                active: root.decal-playing;
+                                                clicked => { root.decal-play-toggled(); }
+                                            }
+                                        }
+                                        Text {
+                                            text: root.decal-has-keys ? root.decal-keys-text : Tr.t("ui.decal_no_keys");
+                                            color: DesignTokens.text-muted;
+                                            font-size: DesignTokens.font-caption;
+                                            wrap: word-wrap;
+                                        }
+                                        BrushChip {
+                                            label: Tr.t("ui.decal_export_frames");
+                                            clicked => { root.command-file-action("paint.export_decal_frames"); }
                                         }
                                     }
                                 }
@@ -10672,6 +10869,9 @@ export component PetuniaSlintShell inherits Window {
                             uv-commands: root.uv-layout-commands;
                             show-grid: root.paint-pixel-grid;
                             grid-commands: root.paint-canvas-grid-commands;
+                            select-mode: root.active-tool == "select";
+                            selected-commands: root.uv-selected-commands;
+                            select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
                             stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                             zoom-step(direction) => {
                                 if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
@@ -12526,6 +12726,9 @@ export component PetuniaSlintShell inherits Window {
                         uv-commands: root.uv-layout-commands;
                         show-grid: root.paint-pixel-grid;
                         grid-commands: root.paint-canvas-grid-commands;
+                        select-mode: root.active-tool == "select";
+                        selected-commands: root.uv-selected-commands;
+                        select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
                         stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                         zoom-step(direction) => {
                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }

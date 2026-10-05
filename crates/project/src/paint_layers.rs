@@ -138,6 +138,96 @@ fn sample_bilinear(image: &Canvas, u: f32, v: f32) -> Option<[u8; 4]> {
     Some(out)
 }
 
+/// Uma variante de um Decal Set (cap. 39): olhos abertos/fechados, bocas,
+/// estados de dano. Variantes são equivalentes: mesma fixação, outra imagem.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DecalVariant {
+    pub name: String,
+    pub image: Canvas,
+    /// SVG de origem desta variante (re-rasterizável sem perder nitidez).
+    #[serde(default)]
+    pub source_svg: Option<String>,
+}
+
+/// Chave da trilha de variantes: a partir de `frame`, mostra `variant`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DecalVariantKey {
+    pub frame: u32,
+    pub variant: u32,
+}
+
+/// Trilha `variant_index` (cap. 39, "step animation"): troca de variante em
+/// degraus, sem interpolação. Chaves ordenadas por quadro e únicas.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DecalVariantTrack {
+    pub fps: f32,
+    /// Duração do ciclo em quadros (o último quadro é `length_frames - 1`).
+    pub length_frames: u32,
+    pub looping: bool,
+    pub keys: Vec<DecalVariantKey>,
+}
+
+impl Default for DecalVariantTrack {
+    fn default() -> Self {
+        Self {
+            fps: 12.0,
+            length_frames: 24,
+            looping: true,
+            keys: Vec::new(),
+        }
+    }
+}
+
+impl DecalVariantTrack {
+    /// Quadro mostrado no instante `time` (segundos), dando a volta no ciclo.
+    pub fn frame_at(&self, time: f32) -> u32 {
+        if !(time.is_finite() && self.fps.is_finite() && self.fps > 0.0) || time <= 0.0 {
+            return 0;
+        }
+        let frame = (time * self.fps).floor() as u64;
+        let length = u64::from(self.length_frames.max(1));
+        if self.looping {
+            (frame % length) as u32
+        } else {
+            frame.min(length - 1) as u32
+        }
+    }
+
+    /// Variante no quadro `frame`: a da última chave em ou antes dele; antes
+    /// da primeira chave, vale a primeira. `None` sem chaves.
+    pub fn variant_at_frame(&self, frame: u32) -> Option<u32> {
+        let first = self.keys.first()?;
+        Some(
+            self.keys
+                .iter()
+                .take_while(|key| key.frame <= frame)
+                .last()
+                .unwrap_or(first)
+                .variant,
+        )
+    }
+
+    /// Grava (ou substitui) a chave do quadro `frame`.
+    pub fn set_key(&mut self, frame: u32, variant: u32) {
+        match self.keys.binary_search_by_key(&frame, |key| key.frame) {
+            Ok(index) => self.keys[index].variant = variant,
+            Err(index) => self.keys.insert(index, DecalVariantKey { frame, variant }),
+        }
+        self.length_frames = self.length_frames.max(frame + 1);
+    }
+
+    /// Remove a chave do quadro `frame`. `false` se não havia.
+    pub fn remove_key(&mut self, frame: u32) -> bool {
+        match self.keys.binary_search_by_key(&frame, |key| key.frame) {
+            Ok(index) => {
+                self.keys.remove(index);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+}
+
 /// Decalque / projeção 2D parametrizada e reposicionável (P3D-133, MVP).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecalLayer {
@@ -155,6 +245,13 @@ pub struct DecalLayer {
     /// Fixação na superfície. `None` = decalque em espaço UV (legado):
     /// `center_uv`/`scale_uv` posicionam a imagem no atlas.
     pub anchor: Option<DecalAnchor>,
+    /// Decal Set: todas as variantes, inclusive a mostrada. Vazio = uma
+    /// variante só (`image`). Com variantes, `image` e `source_svg` são a
+    /// cópia da variante `variant_index`.
+    pub variants: Vec<DecalVariant>,
+    pub variant_index: usize,
+    /// Trilha de variantes em degraus (`None` = decalque estático).
+    pub track: Option<DecalVariantTrack>,
 }
 
 // Legacy postcard files predate SVG. Their fixed decal layout has four fields;
@@ -163,7 +260,7 @@ impl Serialize for DecalLayer {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeStruct;
         let human = serializer.is_human_readable();
-        let mut value = serializer.serialize_struct("DecalLayer", if human { 6 } else { 4 })?;
+        let mut value = serializer.serialize_struct("DecalLayer", if human { 9 } else { 4 })?;
         value.serialize_field("image", &self.image)?;
         value.serialize_field("center_uv", &self.center_uv)?;
         value.serialize_field("scale_uv", &self.scale_uv)?;
@@ -171,6 +268,9 @@ impl Serialize for DecalLayer {
         if human {
             value.serialize_field("source_svg", &self.source_svg)?;
             value.serialize_field("anchor", &self.anchor)?;
+            value.serialize_field("variants", &self.variants)?;
+            value.serialize_field("variant_index", &self.variant_index)?;
+            value.serialize_field("track", &self.track)?;
         }
         value.end()
     }
@@ -194,17 +294,31 @@ impl<'de> Deserialize<'de> for DecalLayer {
             source_svg: Option<String>,
             #[serde(default)]
             anchor: Option<DecalAnchor>,
+            #[serde(default)]
+            variants: Vec<DecalVariant>,
+            #[serde(default)]
+            variant_index: usize,
+            #[serde(default)]
+            track: Option<DecalVariantTrack>,
         }
         if deserializer.is_human_readable() {
             let c = Current::deserialize(deserializer)?;
-            Ok(Self {
+            let mut decal = Self {
                 image: c.image,
                 center_uv: c.center_uv,
                 scale_uv: c.scale_uv,
                 rotation_rad: c.rotation_rad,
                 source_svg: c.source_svg,
                 anchor: c.anchor,
-            })
+                variants: c.variants,
+                variant_index: c.variant_index,
+                track: c.track,
+            };
+            // Arquivo editado à mão ou corrompido: índice dentro da lista.
+            if decal.variant_index >= decal.variants.len().max(1) {
+                decal.variant_index = 0;
+            }
+            Ok(decal)
         } else {
             let c = Old::deserialize(deserializer)?;
             Ok(Self::new(c.image, c.center_uv, c.scale_uv, c.rotation_rad))
@@ -221,6 +335,116 @@ impl DecalLayer {
             rotation_rad,
             source_svg: None,
             anchor: None,
+            variants: Vec::new(),
+            variant_index: 0,
+            track: None,
+        }
+    }
+
+    /// Número de variantes (um decalque simples tem uma).
+    pub fn variant_count(&self) -> usize {
+        self.variants.len().max(1)
+    }
+
+    /// Nome da variante `index` (`base` para o decalque de variante única).
+    pub fn variant_name<'a>(&'a self, index: usize, base: &'a str) -> &'a str {
+        self.variants.get(index).map_or(base, |v| v.name.as_str())
+    }
+
+    /// Imagem da variante `index`.
+    pub fn variant_image(&self, index: usize) -> &Canvas {
+        self.variants.get(index).map_or(&self.image, |v| &v.image)
+    }
+
+    /// Transforma o decalque simples num Decal Set de uma variante (`name`).
+    fn ensure_variants(&mut self, name: &str) {
+        if self.variants.is_empty() {
+            self.variants.push(DecalVariant {
+                name: name.to_owned(),
+                image: self.image.clone(),
+                source_svg: self.source_svg.clone(),
+            });
+            self.variant_index = 0;
+        }
+    }
+
+    /// Acrescenta uma variante; `base_name` nomeia a imagem atual se o
+    /// decalque ainda não era um Decal Set. Devolve o índice da nova.
+    pub fn add_variant(&mut self, base_name: &str, variant: DecalVariant) -> usize {
+        self.ensure_variants(base_name);
+        self.variants.push(variant);
+        self.variants.len() - 1
+    }
+
+    /// Mostra a variante `index` (estado parado do decalque).
+    pub fn set_variant(&mut self, index: usize) -> bool {
+        let Some(variant) = self.variants.get(index) else {
+            return index == 0 && self.variants.is_empty();
+        };
+        self.image = variant.image.clone();
+        self.source_svg = variant.source_svg.clone();
+        self.variant_index = index;
+        true
+    }
+
+    /// Remove a variante `index` e as chaves que a mostravam; as chaves das
+    /// seguintes descem um índice. A última variante não pode sair.
+    pub fn remove_variant(&mut self, index: usize) -> bool {
+        if self.variants.len() < 2 || index >= self.variants.len() {
+            return false;
+        }
+        self.variants.remove(index);
+        if let Some(track) = self.track.as_mut() {
+            let removed = index as u32;
+            track.keys.retain(|key| key.variant != removed);
+            for key in &mut track.keys {
+                if key.variant > removed {
+                    key.variant -= 1;
+                }
+            }
+        }
+        let shown = if self.variant_index > index {
+            self.variant_index - 1
+        } else {
+            self.variant_index.min(self.variants.len() - 1)
+        };
+        self.set_variant(shown)
+    }
+
+    /// Renomeia a variante `index`.
+    pub fn rename_variant(&mut self, index: usize, name: &str) -> bool {
+        let name = name.trim();
+        match self.variants.get_mut(index) {
+            Some(variant) if !name.is_empty() => {
+                variant.name = name.to_owned();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Variante mostrada no instante `time` (segundos da reprodução).
+    /// Parado (`None`), sem trilha ou sem chaves: `variant_index`.
+    pub fn variant_at(&self, time: Option<f32>) -> usize {
+        let keyed = time
+            .zip(self.track.as_ref())
+            .and_then(|(time, track)| track.variant_at_frame(track.frame_at(time)));
+        match keyed {
+            Some(variant) if (variant as usize) < self.variants.len() => variant as usize,
+            _ => self.variant_index,
+        }
+    }
+
+    /// Imagem mostrada no instante `time` (ver [`Self::variant_at`]).
+    pub fn image_at(&self, time: Option<f32>) -> &Canvas {
+        if self.variants.is_empty() {
+            return &self.image;
+        }
+        let index = self.variant_at(time);
+        if index == self.variant_index {
+            &self.image
+        } else {
+            self.variant_image(index)
         }
     }
 
@@ -248,6 +472,17 @@ impl DecalLayer {
     /// de uma textura `w × h` da malha. Só faces voltadas para o projetor e
     /// dentro do seu alcance; amostragem bilinear. Vazio sem fixação.
     pub fn surface_samples(&self, mesh: &Mesh, w: u32, h: u32) -> Vec<(u32, u32, [u8; 4])> {
+        self.surface_samples_of(&self.image, mesh, w, h)
+    }
+
+    /// Como [`Self::surface_samples`], com a imagem de uma variante.
+    pub fn surface_samples_of(
+        &self,
+        image: &Canvas,
+        mesh: &Mesh,
+        w: u32,
+        h: u32,
+    ) -> Vec<(u32, u32, [u8; 4])> {
         let Some(anchor) = self.anchor else {
             return Vec::new();
         };
@@ -279,7 +514,7 @@ impl DecalLayer {
                 if !written.insert((x, y)) {
                     return;
                 }
-                if let Some(color) = sample_bilinear(&self.image, u, v) {
+                if let Some(color) = sample_bilinear(image, u, v) {
                     out.push((x, y, color));
                 }
             });
@@ -289,6 +524,10 @@ impl DecalLayer {
 
     /// Cor do decalque UV (legado) no texel `(x, y)` de uma textura `w × h`.
     fn uv_sample(&self, x: u32, y: u32, w: u32, h: u32) -> Option<[u8; 4]> {
+        self.uv_sample_of(&self.image, x, y, w, h)
+    }
+
+    fn uv_sample_of(&self, image: &Canvas, x: u32, y: u32, w: u32, h: u32) -> Option<[u8; 4]> {
         if self.scale_uv[0].abs() < 1e-5 || self.scale_uv[1].abs() < 1e-5 {
             return None;
         }
@@ -300,7 +539,85 @@ impl DecalLayer {
         if !(0.0..=1.0).contains(&decal_u) || !(0.0..=1.0).contains(&decal_v) {
             return None;
         }
-        sample_bilinear(&self.image, decal_u, decal_v)
+        sample_bilinear(image, decal_u, decal_v)
+    }
+
+    /// Retângulo de texels `[x0, y0, x1, y1)` que o decalque cobre numa
+    /// textura `w × h` (pela imagem parada). `None` se não cobre nada.
+    pub fn texel_bounds(&self, mesh: Option<&Mesh>, w: u32, h: u32) -> Option<[u32; 4]> {
+        if w == 0 || h == 0 {
+            return None;
+        }
+        if self.anchor.is_some() {
+            let samples = self.surface_samples(mesh?, w, h);
+            let mut bounds = [u32::MAX, u32::MAX, 0, 0];
+            for &(x, y, _) in &samples {
+                bounds = [
+                    bounds[0].min(x),
+                    bounds[1].min(y),
+                    bounds[2].max(x + 1),
+                    bounds[3].max(y + 1),
+                ];
+            }
+            return (!samples.is_empty()).then_some(bounds);
+        }
+        // Retângulo UV girado: caixa dos quatro cantos.
+        let (sin, cos) = self.rotation_rad.sin_cos();
+        let (hu, hv) = (self.scale_uv[0] * 0.5, self.scale_uv[1] * 0.5);
+        let corners = [(-hu, -hv), (hu, -hv), (hu, hv), (-hu, hv)].map(|(du, dv)| {
+            (
+                self.center_uv[0] + du * cos - dv * sin,
+                self.center_uv[1] + du * sin + dv * cos,
+            )
+        });
+        let (mut u0, mut v0, mut u1, mut v1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for (u, v) in corners {
+            (u0, v0, u1, v1) = (u0.min(u), v0.min(v), u1.max(u), v1.max(v));
+        }
+        let x0 = (u0.max(0.0) * w as f32).floor() as u32;
+        let y0 = (v0.max(0.0) * h as f32).floor() as u32;
+        let x1 = ((u1.min(1.0) * w as f32).ceil() as u32 + 1).min(w);
+        let y1 = ((v1.min(1.0) * h as f32).ceil() as u32 + 1).min(h);
+        (x0 < x1 && y0 < y1).then_some([x0, y0, x1, y1])
+    }
+
+    /// Lado (px) que a imagem precisa para não perder nitidez na textura
+    /// `w × h`: o maior lado, em texels, da área que o decalque ocupa.
+    pub fn needed_raster_px(&self, mesh: Option<&Mesh>, w: u32, h: u32) -> Option<u32> {
+        let [x0, y0, x1, y1] = self.texel_bounds(mesh, w, h)?;
+        Some((x1 - x0).max(y1 - y0))
+    }
+
+    /// Re-rasteriza as variantes vindas de SVG quando a área na textura pede
+    /// bem mais pixels que a imagem tem (10% de tolerância: o rasterizador
+    /// arredonda) ou menos da metade (memória). Posição, largura e rotação não
+    /// mudam. `Ok(true)` se refez alguma imagem.
+    pub fn fit_svg_resolution(&mut self, needed_px: u32) -> Result<bool, SvgError> {
+        let target = needed_px.clamp(64, crate::svg::MAX_RASTER_PX);
+        let refit = |image: &Canvas| {
+            let side = image.w.max(image.h);
+            side.saturating_mul(10) < target.saturating_mul(9) || side > target.saturating_mul(2)
+        };
+        let mut changed = false;
+        if self.source_svg.is_some() && refit(&self.image) {
+            changed |= self.rerasterize(target)?;
+        }
+        for (index, variant) in self.variants.iter_mut().enumerate() {
+            if index == self.variant_index {
+                if let Some(svg) = &self.source_svg {
+                    variant.image = self.image.clone();
+                    variant.source_svg = Some(svg.clone());
+                }
+                continue;
+            }
+            if let Some(svg) = variant.source_svg.as_deref()
+                && refit(&variant.image)
+            {
+                variant.image = rasterize_svg(svg, target)?;
+                changed = true;
+            }
+        }
+        Ok(changed)
     }
 
     /// Cria um decalque a partir de SVG: rasteriza (maior lado = `max_px`,
@@ -340,6 +657,9 @@ impl DecalLayer {
             return Ok(false);
         };
         self.image = rasterize_svg(source, max_px)?;
+        if let Some(variant) = self.variants.get_mut(self.variant_index) {
+            variant.image = self.image.clone();
+        }
         Ok(true)
     }
 }
@@ -577,6 +897,11 @@ impl PaintLayerStack {
 
     /// Funde a camada na posição `pos` com a camada imediatamente abaixo (`pos - 1`).
     pub fn merge_down(&mut self, pos: usize) -> bool {
+        self.merge_down_on(pos, None)
+    }
+
+    /// Como [`Self::merge_down`], com a malha para decalques de superfície.
+    pub fn merge_down_on(&mut self, pos: usize, mesh: Option<&Mesh>) -> bool {
         if pos == 0 || pos >= self.layers.len() {
             return false;
         }
@@ -616,33 +941,31 @@ impl PaintLayerStack {
                     }
                 }
                 LayerKind::Decal(decal) => {
-                    let blend_w = lower_cv.w;
-                    let blend_h = lower_cv.h;
-                    let cos_rot = (-decal.rotation_rad).cos();
-                    let sin_rot = (-decal.rotation_rad).sin();
-                    for y in 0..blend_h {
-                        for x in 0..blend_w {
-                            let u = (x as f32 + 0.5) / blend_w as f32;
-                            let v = (y as f32 + 0.5) / blend_h as f32;
-                            let dx = u - decal.center_uv[0];
-                            let dy = v - decal.center_uv[1];
-                            let rx = dx * cos_rot - dy * sin_rot;
-                            let ry = dx * sin_rot + dy * cos_rot;
-                            let decal_u = rx / decal.scale_uv[0] + 0.5;
-                            let decal_v = ry / decal.scale_uv[1] + 0.5;
-                            if (0.0..=1.0).contains(&decal_u) && (0.0..=1.0).contains(&decal_v) {
-                                let sx = (decal_u * decal.image.w as f32)
-                                    .clamp(0.0, decal.image.w as f32 - 1.0)
-                                    as u32;
-                                let sy = (decal_v * decal.image.h as f32)
-                                    .clamp(0.0, decal.image.h as f32 - 1.0)
-                                    as u32;
+                    let (w, h) = (lower_cv.w, lower_cv.h);
+                    if decal.anchor.is_some() {
+                        for (x, y, src) in mesh
+                            .map(|mesh| decal.surface_samples(mesh, w, h))
+                            .unwrap_or_default()
+                        {
+                            if let Some(dst) = lower_cv.get(x, y) {
+                                lower_cv.set(
+                                    x,
+                                    y,
+                                    blend_pixels(dst, src, upper.opacity, upper.blend),
+                                );
+                            }
+                        }
+                    } else {
+                        for y in 0..h {
+                            for x in 0..w {
                                 if let (Some(dst), Some(src)) =
-                                    (lower_cv.get(x, y), decal.image.get(sx, sy))
+                                    (lower_cv.get(x, y), decal.uv_sample(x, y, w, h))
                                 {
-                                    let blended =
-                                        blend_pixels(dst, src, upper.opacity, upper.blend);
-                                    lower_cv.set(x, y, blended);
+                                    lower_cv.set(
+                                        x,
+                                        y,
+                                        blend_pixels(dst, src, upper.opacity, upper.blend),
+                                    );
                                 }
                             }
                         }
@@ -779,12 +1102,13 @@ impl PaintLayerStack {
 
     /// Executa a composição determinística de todas as camadas sobre o canvas base.
     pub fn composite(&self, base: &mut Canvas) {
-        self.composite_on(base, None);
+        self.composite_on(base, None, None);
     }
 
     /// Composição com a malha do asset: decalques de superfície caem nos
-    /// texels pela posição 3D (sem malha, são ignorados).
-    pub fn composite_on(&self, base: &mut Canvas, mesh: Option<&Mesh>) {
+    /// texels pela posição 3D (sem malha, são ignorados). `time` (segundos)
+    /// escolhe a variante dos decalques com trilha; `None` = estado parado.
+    pub fn composite_on(&self, base: &mut Canvas, mesh: Option<&Mesh>, time: Option<f32>) {
         for layer in &self.layers {
             if !layer.visible || layer.opacity <= 0.0 {
                 continue;
@@ -805,9 +1129,10 @@ impl PaintLayerStack {
                 }
                 LayerKind::Decal(decal) => {
                     let (w, h) = (base.w, base.h);
+                    let image = decal.image_at(time);
                     if decal.anchor.is_some() {
                         if let Some(mesh) = mesh {
-                            for (x, y, src) in decal.surface_samples(mesh, w, h) {
+                            for (x, y, src) in decal.surface_samples_of(image, mesh, w, h) {
                                 if let Some(dst) = base.get(x, y) {
                                     base.set(
                                         x,
@@ -822,7 +1147,7 @@ impl PaintLayerStack {
                     for y in 0..h {
                         for x in 0..w {
                             if let (Some(dst), Some(src)) =
-                                (base.get(x, y), decal.uv_sample(x, y, w, h))
+                                (base.get(x, y), decal.uv_sample_of(image, x, y, w, h))
                             {
                                 base.set(x, y, blend_pixels(dst, src, layer.opacity, layer.blend));
                             }
@@ -871,6 +1196,44 @@ impl PaintLayerStack {
             .any(|l| matches!(l.kind, LayerKind::Effect(PaintEffect::Pixelate { .. })))
     }
 
+    /// Ajusta a resolução das variantes SVG do decalque `id` à área que ele
+    /// ocupa numa textura `w × h` (ver [`DecalLayer::fit_svg_resolution`]).
+    pub fn fit_decal_svg(
+        &mut self,
+        id: uuid::Uuid,
+        mesh: Option<&Mesh>,
+        w: u32,
+        h: u32,
+    ) -> Result<bool, SvgError> {
+        let Some(LayerKind::Decal(decal)) = self
+            .layers
+            .iter_mut()
+            .find(|layer| layer.id == id)
+            .map(|layer| &mut layer.kind)
+        else {
+            return Ok(false);
+        };
+        match decal.needed_raster_px(mesh, w, h) {
+            Some(needed) => decal.fit_svg_resolution(needed),
+            None => Ok(false),
+        }
+    }
+
+    /// Tiles (indexação de [`Self::composite_tiles`]) que cobrem o retângulo
+    /// de texels `[x0, y0, x1, y1)` numa textura `w × h`.
+    pub fn tiles_for_bounds(bounds: [u32; 4], w: u32, h: u32) -> Vec<u32> {
+        let [x0, y0, x1, y1] = bounds;
+        if w == 0 || h == 0 || x0 >= x1.min(w) || y0 >= y1.min(h) {
+            return Vec::new();
+        }
+        let tiles_x = w.div_ceil(TILE_SIZE).max(1);
+        let (tx0, ty0) = (x0 / TILE_SIZE, y0 / TILE_SIZE);
+        let (tx1, ty1) = ((x1.min(w) - 1) / TILE_SIZE, (y1.min(h) - 1) / TILE_SIZE);
+        (ty0..=ty1)
+            .flat_map(|ty| (tx0..=tx1).map(move |tx| ty * tiles_x + tx))
+            .collect()
+    }
+
     /// Recompõe apenas os tiles listados sobre `out`, que **deve conter o
     /// resultado da composição anterior** (completa ou parcial).
     ///
@@ -878,11 +1241,18 @@ impl PaintLayerStack {
     /// com tiles de [`TILE_SIZE`] a partir do canto superior esquerdo.
     /// Exige [`Self::is_tileable`] — em stacks com Pixelate use `composite`.
     pub fn composite_tiles(&self, out: &mut Canvas, dirty_tiles: &[u32]) {
-        self.composite_tiles_on(out, dirty_tiles, None);
+        self.composite_tiles_on(out, dirty_tiles, None, None);
     }
 
-    /// Composição parcial com a malha (decalques de superfície).
-    pub fn composite_tiles_on(&self, out: &mut Canvas, dirty_tiles: &[u32], mesh: Option<&Mesh>) {
+    /// Composição parcial com a malha (decalques de superfície) e o instante
+    /// da reprodução (variantes com trilha).
+    pub fn composite_tiles_on(
+        &self,
+        out: &mut Canvas,
+        dirty_tiles: &[u32],
+        mesh: Option<&Mesh>,
+        time: Option<f32>,
+    ) {
         assert!(
             self.is_tileable(),
             "composição parcial exige stack tileável (sem Pixelate)"
@@ -897,7 +1267,7 @@ impl PaintLayerStack {
             .iter()
             .map(|layer| match (&layer.kind, mesh) {
                 (LayerKind::Decal(decal), Some(mesh)) if decal.anchor.is_some() => {
-                    decal.surface_samples(mesh, out.w, out.h)
+                    decal.surface_samples_of(decal.image_at(time), mesh, out.w, out.h)
                 }
                 _ => Vec::new(),
             })
@@ -909,7 +1279,7 @@ impl PaintLayerStack {
             let y0 = ty * TILE_SIZE;
             let x1 = (x0 + TILE_SIZE).min(out.w);
             let y1 = (y0 + TILE_SIZE).min(out.h);
-            self.composite_tile_region(out, x0, y0, x1, y1, &surface);
+            self.composite_tile_region(out, [x0, y0, x1, y1], &surface, time);
         }
     }
 
@@ -919,11 +1289,9 @@ impl PaintLayerStack {
     fn composite_tile_region(
         &self,
         out: &mut Canvas,
-        x0: u32,
-        y0: u32,
-        x1: u32,
-        y1: u32,
+        [x0, y0, x1, y1]: [u32; 4],
         surface: &[Vec<(u32, u32, [u8; 4])>],
+        time: Option<f32>,
     ) {
         if x0 >= x1 || y0 >= y1 {
             return;
@@ -962,9 +1330,10 @@ impl PaintLayerStack {
                         continue;
                     }
                     let (w, h) = (out.w, out.h);
+                    let image = decal.image_at(time);
                     for y in y0..y1 {
                         for x in x0..x1 {
-                            let Some(src) = decal.uv_sample(x, y, w, h) else {
+                            let Some(src) = decal.uv_sample_of(image, x, y, w, h) else {
                                 continue;
                             };
                             let dst = out.get(x, y).unwrap_or([0, 0, 0, 0]);
@@ -1292,6 +1661,215 @@ mod tests {
         decal
     }
 
+    fn variant(name: &str, color: [u8; 4]) -> DecalVariant {
+        DecalVariant {
+            name: name.to_owned(),
+            image: Canvas::new(8, 8, color),
+            source_svg: None,
+        }
+    }
+
+    #[test]
+    fn variant_track_steps_without_interpolation_and_loops() {
+        let mut track = DecalVariantTrack {
+            fps: 12.0,
+            length_frames: 12,
+            looping: true,
+            keys: Vec::new(),
+        };
+        assert_eq!(track.variant_at_frame(3), None);
+        track.set_key(5, 1);
+        track.set_key(0, 0);
+        track.set_key(8, 2);
+        track.set_key(5, 3); // substitui, não duplica
+        assert_eq!(track.keys.len(), 3);
+        assert_eq!(track.variant_at_frame(4), Some(0));
+        assert_eq!(track.variant_at_frame(5), Some(3));
+        assert_eq!(track.variant_at_frame(11), Some(2));
+        // 1 s a 12 fps = quadro 12, que dá a volta para 0.
+        assert_eq!(track.frame_at(1.0), 0);
+        assert_eq!(track.frame_at(0.5), 6);
+        track.looping = false;
+        assert_eq!(track.frame_at(5.0), 11);
+        assert!(track.remove_key(8));
+        assert!(!track.remove_key(8));
+        track.set_key(30, 1);
+        assert_eq!(track.length_frames, 31, "a duração cresce até a chave");
+    }
+
+    #[test]
+    fn decal_set_variants_switch_remove_and_follow_the_track() {
+        let red = Canvas::new(8, 8, [255, 0, 0, 255]);
+        let mut decal = DecalLayer::new(red.clone(), [0.5; 2], [0.3; 2], 0.0);
+        assert_eq!(decal.variant_count(), 1);
+        assert_eq!(
+            decal.add_variant("Neutra", variant("Sorriso", [0, 255, 0, 255])),
+            1
+        );
+        decal.add_variant("Neutra", variant("Aberta", [0, 0, 255, 255]));
+        assert_eq!(decal.variant_count(), 3);
+        assert_eq!(decal.variant_name(0, "x"), "Neutra");
+        assert!(decal.set_variant(2));
+        assert_eq!(decal.image.get(0, 0), Some([0, 0, 255, 255]));
+
+        let mut track = DecalVariantTrack::default();
+        track.set_key(0, 0);
+        track.set_key(6, 1);
+        track.set_key(9, 2);
+        decal.track = Some(track);
+        let fps = decal.track.as_ref().unwrap().fps;
+        assert_eq!(decal.variant_at(None), 2, "parado: a variante escolhida");
+        assert_eq!(decal.variant_at(Some(6.5 / fps)), 1);
+        assert_eq!(
+            decal.image_at(Some(0.5 / fps)).get(0, 0),
+            Some([255, 0, 0, 255])
+        );
+
+        // Remover a variante 1 apaga a chave dela e desce as seguintes.
+        assert!(decal.remove_variant(1));
+        let keys = &decal.track.as_ref().unwrap().keys;
+        assert_eq!(
+            keys.iter()
+                .map(|k| (k.frame, k.variant))
+                .collect::<Vec<_>>(),
+            vec![(0, 0), (9, 1)]
+        );
+        assert_eq!(decal.variant_index, 1);
+        assert_eq!(decal.image.get(0, 0), Some([0, 0, 255, 255]));
+        assert!(decal.remove_variant(0));
+        assert!(!decal.remove_variant(0), "a última variante não sai");
+    }
+
+    #[test]
+    fn composite_shows_the_variant_keyed_at_the_playback_time() {
+        let mut decal =
+            DecalLayer::new(Canvas::new(8, 8, [255, 0, 0, 255]), [0.5; 2], [0.5; 2], 0.0);
+        decal.add_variant("A", variant("B", [0, 255, 0, 255]));
+        let mut track = DecalVariantTrack::default();
+        track.set_key(0, 0);
+        track.set_key(3, 1);
+        let fps = track.fps;
+        decal.track = Some(track);
+        let mut stack = PaintLayerStack::with_base("Base", Canvas::new(32, 32, [0, 0, 0, 255]));
+        stack.add_layer(PaintLayer::new_decal("Boca", decal));
+        let center = |time: Option<f32>| {
+            let mut out = Canvas::new(32, 32, [0, 0, 0, 0]);
+            stack.composite_on(&mut out, None, time);
+            out.get(16, 16).unwrap()
+        };
+        assert_eq!(center(None), [255, 0, 0, 255]);
+        assert_eq!(center(Some(1.5 / fps)), [255, 0, 0, 255]);
+        assert_eq!(center(Some(3.5 / fps)), [0, 255, 0, 255]);
+        // Composição por tiles no mesmo instante = completa.
+        let mut full = Canvas::new(32, 32, [0, 0, 0, 0]);
+        stack.composite_on(&mut full, None, Some(3.5 / fps));
+        let mut tiles = Canvas::new(32, 32, [0, 0, 0, 0]);
+        stack.composite_on(&mut tiles, None, None);
+        stack.composite_tiles_on(&mut tiles, &[0], None, Some(3.5 / fps));
+        assert_eq!(tiles.pixels.to_vec(), full.pixels.to_vec());
+    }
+
+    #[test]
+    fn decal_set_round_trips_json_and_old_files_open_without_variants() {
+        let mut decal = DecalLayer::new(Canvas::new(4, 4, [9, 9, 9, 255]), [0.5; 2], [0.3; 2], 0.0);
+        decal.add_variant("A", variant("B", [1, 2, 3, 255]));
+        decal.track = Some(DecalVariantTrack::default());
+        decal.track.as_mut().unwrap().set_key(4, 1);
+        let json = serde_json::to_string(&decal).unwrap();
+        let back: DecalLayer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, decal);
+        // JSON sem os campos novos (versão anterior) e índice fora da lista.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("variants");
+        object.remove("track");
+        object.insert("variant_index".into(), 7.into());
+        let old: DecalLayer = serde_json::from_value(value).unwrap();
+        assert!(old.variants.is_empty() && old.track.is_none());
+        assert_eq!(old.variant_index, 0);
+    }
+
+    #[test]
+    fn svg_variants_are_rerasterized_to_the_area_they_cover() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="red"/></svg>"#;
+        let mut decal = DecalLayer::from_svg(svg, 64, [0.5; 2], 0.5).unwrap();
+        decal.add_variant(
+            "A",
+            DecalVariant {
+                name: "B".into(),
+                image: crate::svg::rasterize_svg(svg, 64).unwrap(),
+                source_svg: Some(svg.to_owned()),
+            },
+        );
+        // Metade de uma textura de 1024: ~512 texels de largura.
+        let needed = decal.needed_raster_px(None, 1024, 1024).unwrap();
+        assert!((500..=530).contains(&needed), "{needed}");
+        assert!(decal.fit_svg_resolution(needed).unwrap());
+        let side = decal
+            .image
+            .w
+            .abs_diff(needed.clamp(64, crate::svg::MAX_RASTER_PX));
+        assert!(side <= 1, "o rasterizador arredonda no máximo 1 px");
+        assert_eq!(
+            decal.variants[1].image.w, decal.image.w,
+            "a outra variante também"
+        );
+        assert_eq!(
+            decal.variants[0].image, decal.image,
+            "a cópia da mostrada segue a imagem"
+        );
+        // Já na resolução certa: nada muda.
+        assert!(!decal.fit_svg_resolution(needed).unwrap());
+        // Muito maior que o necessário: encolhe (memória).
+        assert!(decal.fit_svg_resolution(100).unwrap());
+        assert_eq!(decal.image.w, 100);
+    }
+
+    #[test]
+    fn decal_bounds_map_to_the_tiles_they_touch() {
+        assert_eq!(
+            PaintLayerStack::tiles_for_bounds([0, 0, 1, 1], 128, 128),
+            vec![0]
+        );
+        assert_eq!(
+            PaintLayerStack::tiles_for_bounds([30, 30, 34, 34], 128, 128),
+            vec![0, 1, 4, 5]
+        );
+        assert!(PaintLayerStack::tiles_for_bounds([5, 5, 5, 9], 128, 128).is_empty());
+        let decal = DecalLayer::new(Canvas::new(4, 4, [0; 4]), [0.5; 2], [0.25; 2], 0.0);
+        let [x0, y0, x1, y1] = decal.texel_bounds(None, 128, 128).unwrap();
+        assert!(x0 <= 48 && y0 <= 48 && x1 >= 80 && y1 >= 80 && x1 - x0 <= 36);
+        // Girado 45°: a caixa cresce (diagonal do quadrado).
+        let turned = DecalLayer::new(
+            Canvas::new(4, 4, [0; 4]),
+            [0.5; 2],
+            [0.25; 2],
+            std::f32::consts::FRAC_PI_4,
+        );
+        let [a, _, b, _] = turned.texel_bounds(None, 128, 128).unwrap();
+        assert!(b - a > x1 - x0);
+    }
+
+    #[test]
+    fn merging_a_surface_decal_down_uses_the_mesh() {
+        let mesh = Mesh::cube(2.0);
+        let mut stack =
+            PaintLayerStack::with_base("Base", Canvas::new(128, 128, [255, 255, 255, 255]));
+        let decal = surface_decal(
+            1.0,
+            Vec3::Z,
+            Vec3::new(0.0, 0.0, 1.0),
+            Canvas::new(8, 8, [0, 0, 255, 255]),
+        );
+        stack.add_layer(PaintLayer::new_decal("Logo", decal));
+        let mut expected = Canvas::new(128, 128, [0, 0, 0, 0]);
+        stack.composite_on(&mut expected, Some(&mesh), None);
+        assert!(stack.merge_down_on(1, Some(&mesh)));
+        let mut merged = Canvas::new(128, 128, [0, 0, 0, 0]);
+        stack.composite(&mut merged);
+        assert_eq!(merged.pixels.to_vec(), expected.pixels.to_vec());
+    }
+
     #[test]
     fn surface_decal_lands_only_where_it_was_placed() {
         let mesh = Mesh::cube(2.0);
@@ -1354,7 +1932,7 @@ mod tests {
         );
         let id = stack.add_layer(PaintLayer::new_decal("Logo", decal.clone()));
         let mut composed = Canvas::new(128, 128, [0, 0, 0, 0]);
-        stack.composite_on(&mut composed, Some(&mesh));
+        stack.composite_on(&mut composed, Some(&mesh), None);
         let green = composed
             .pixels
             .chunks(4)
@@ -1363,9 +1941,9 @@ mod tests {
         assert!(green > 0);
         // Composição parcial por tiles = completa.
         let mut tiles = Canvas::new(128, 128, [0, 0, 0, 0]);
-        stack.composite_on(&mut tiles, Some(&mesh));
+        stack.composite_on(&mut tiles, Some(&mesh), None);
         let all: Vec<u32> = (0..(128 / TILE_SIZE) * (128 / TILE_SIZE)).collect();
-        stack.composite_tiles_on(&mut tiles, &all, Some(&mesh));
+        stack.composite_tiles_on(&mut tiles, &all, Some(&mesh), None);
         assert_eq!(tiles.pixels.to_vec(), composed.pixels.to_vec());
         // JSON guarda a fixação.
         let json = serde_json::to_string(&decal).unwrap();

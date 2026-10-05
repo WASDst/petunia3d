@@ -4516,6 +4516,9 @@ impl Command for SetDecalTransformCmd {
                 self.scale_uv,
                 self.rotation_rad,
             ) {
+            // SVG re-rasterizado na resolução que a nova área pede.
+            let (w, h) = asset.texture.as_ref().map_or((0, 0), |c| (c.w, c.h));
+            let _ = stack.fit_decal_svg(self.layer_id, Some(&*asset.mesh), w, h);
             true
         } else {
             false

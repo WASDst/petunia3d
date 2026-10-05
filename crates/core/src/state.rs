@@ -874,6 +874,9 @@ pub struct EditorSession {
     pub last_primitive: Option<crate::primitive_session::PrimitiveDescriptor>,
     /// Criatura, Motion e playhead do workspace Animate (não persistido).
     pub animate: crate::animate_session::AnimateSession,
+    /// Instante (s) da reprodução das trilhas de variantes de decalque; `None`
+    /// = parado (cada decalque mostra a variante escolhida). Não persistido.
+    pub decal_time: Option<f32>,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -937,6 +940,7 @@ impl EditorSession {
             primitive_session: None,
             last_primitive: None,
             animate: crate::animate_session::AnimateSession::default(),
+            decal_time: None,
         }
     }
 

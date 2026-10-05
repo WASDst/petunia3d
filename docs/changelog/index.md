@@ -15,6 +15,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - Decalques ganham fixação na superfície: projetados pela posição 3D, atravessam costuras sem emenda e mantêm a proporção da imagem; amostragem bilinear e bake no tamanho da textura do objeto.
 - Decalques novos nascem fixados na superfície sob o centro da vista; arrastar move pela superfície, Shift muda a largura e Ctrl gira; o Inspector mostra a largura em mundo.
 - Textura de pintura nasce com 1024 px e a resolução é escolhível no painel Canvas (256–2048), reamostrando todas as camadas com undo.
+- Ferramenta de decalque na gramática única: clique posiciona, arrastar move, alças escalam e giram, valor digitado com Tab, Esc cancela, card "Última operação" ajusta sem novo passo de undo.
+- Decal Sets: variantes (olhos, bocas, estados), trilha em degraus com reprodução, playhead do Animate, exportação de quadros (PNG + JSON) e metadata no GLB.
+- Mover decalques recompõe só a região afetada; SVGs são re-rasterizados na resolução que a área pede.
+- Canvas 2D destaca e seleciona faces pelo UV (clique, caixa, ilha).
+- Cursor do pincel vira elipse em superfícies inclinadas.
+- Mesclar para baixo um decalque de superfície respeita a posição 3D.
 
 ### HUD, Undo e pendências do POLY (04/10/2026)
 
