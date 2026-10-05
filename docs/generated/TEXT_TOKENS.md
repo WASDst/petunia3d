@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1686**.
+Total de chaves de localização cadastradas: **1694**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -1414,18 +1414,25 @@ Total de chaves de localização cadastradas: **1686**.
 | `toolbar.visible` | Visible | Visível |
 | `tools.active` | Active tool: {tool} | Ferramenta ativa: {tool} |
 | `tools.add_primitive` | Add Primitive | Adicionar primitiva |
+| `tools.airbrush` | Airbrush | Aerógrafo |
 | `tools.annotate` | Annotate | Anotar |
 | `tools.bevel` | Round Edge | Round Edge |
+| `tools.brush` | Brush | Pincel |
 | `tools.connect` | Connect | Conectar |
 | `tools.cursor_3d` | 3D Cursor | Cursor 3D |
 | `tools.dissolve` | Dissolve | Dissolver |
 | `tools.draw_profile` | Profile | Perfil |
+| `tools.ellipse` | Ellipse | Elipse |
 | `tools.eraser` | Eraser | Borracha |
 | `tools.extrude` | Extrude | Extrudar |
 | `tools.extrude_individual` | Extrude Individual | Extrusão individual |
+| `tools.fill` | Fill | Balde |
 | `tools.flip_diagonal` | Flip Diagonal | Inverter diagonal |
+| `tools.gradient` | Gradient | Gradiente |
+| `tools.gradient_radial` | Radial gradient | Gradiente radial |
 | `tools.inset` | Inset | Inset |
 | `tools.knife` | Knife | Faca |
+| `tools.line` | Line | Linha |
 | `tools.loop_cut` | Loop Cut | Corte em loop |
 | `tools.measure` | Measure | Medir |
 | `tools.merge` | Merge | Fundir |
@@ -1439,6 +1446,7 @@ Total de chaves de localização cadastradas: **1686**.
 | `tools.primitives` | Add | Adicionar |
 | `tools.push_pull` | Push/Pull | Push/Pull |
 | `tools.pushpull` | Push/Pull | Push/Pull |
+| `tools.rectangle` | Rectangle | Retângulo |
 | `tools.revolve` | Revolve | Revolução |
 | `tools.rotate` | Rotate | Rotacionar |
 | `tools.scale` | Scale | Escalar |

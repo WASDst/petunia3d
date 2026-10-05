@@ -715,3 +715,23 @@ fn poly_context_bar_follows_the_selection_domain() {
         assert!(shows(&shell, "Knife"), "{domain}: Knife sempre visível");
     }
 }
+
+#[test]
+fn escape_closes_the_home_screen() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_home_open(true);
+    let closed = Rc::new(Cell::new(false));
+    let closed_flag = Rc::clone(&closed);
+    shell.on_home_closed(move || closed_flag.set(true));
+    shell.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::Escape.into(),
+    });
+    shell.window().dispatch_event(WindowEvent::KeyReleased {
+        text: slint::platform::Key::Escape.into(),
+    });
+    assert!(closed.get(), "Esc fecha a Home");
+}

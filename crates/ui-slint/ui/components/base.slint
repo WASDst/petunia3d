@@ -69,6 +69,7 @@ export component IconButton inherits Rectangle {
             image-fit: contain;
         }
         if root.icon-svg.width == 0: IconDisplay {
+            y: (parent.height - self.height) / 2;
             icon: root.icon;
             size: DesignTokens.icon-control;
             stroke: root.fg;
