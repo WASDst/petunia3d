@@ -5,6 +5,11 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### HUD, Undo e pendências do POLY (04/10/2026)
+
+- HUD de operação, selo "MODO LIVRE"/"FREE MODE", menu da viewport e nomes de ferramenta passam por `TextId` (42 chaves `hud.*`, en/pt-BR).
+- Orçamento de memória do Undo mede bytes únicos: malhas e pixels compartilhados entre snapshots contam uma vez (`UndoStack::with_footprint`, `Project::history_footprint`, ADR 008).
+
 ### DRAW/POLY — desempenho e ferramentas (04/10/2026)
 
 - Arrasto e hover redesenham só a viewport e os overlays; a janela completa sincroniza no máximo a cada 50 ms. Seleção não retriangula a cena; o WGPU guarda a geometria por objeto.

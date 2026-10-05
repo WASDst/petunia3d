@@ -4,7 +4,12 @@
 //! document are acceptable for V1. History is bounded by a **byte budget**
 //! (default 256 MiB), discarding oldest entries first — not a fixed op count.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
+
+/// Pegada de memória de um snapshot: chama `visit(id, bytes)` para cada bloco.
+/// Blocos com `id != 0` são compartilháveis (o mesmo `id` em vários snapshots
+/// conta uma vez); `id == 0` é memória própria do snapshot.
+pub type HistoryFootprint<T> = fn(&T, &mut dyn FnMut(usize, usize));
 
 /// Default history memory budget (ch. 16): 256 MiB per document.
 pub const DEFAULT_HISTORY_BUDGET_BYTES: usize = 256 * 1024 * 1024;
@@ -38,6 +43,8 @@ pub struct UndoStack<T: Clone> {
     clean_version: Option<usize>,
     current_version: usize,
     next_version: usize,
+    /// Com pegada, o orçamento conta blocos compartilhados uma vez só.
+    footprint: Option<HistoryFootprint<T>>,
 }
 
 impl<T: Clone> Default for UndoStack<T> {
@@ -58,6 +65,38 @@ impl<T: Clone> UndoStack<T> {
             clean_version: Some(0),
             current_version: 0,
             next_version: 0,
+            footprint: None,
+        }
+    }
+
+    /// Mede o histórico pelos blocos únicos dos snapshots (dados
+    /// compartilhados entre entradas, como malhas em cópia na escrita, contam
+    /// uma vez) em vez da soma dos tamanhos declarados.
+    pub fn with_footprint(mut self, footprint: HistoryFootprint<T>) -> Self {
+        self.footprint = Some(footprint);
+        self.refresh_shared_bytes();
+        self
+    }
+
+    /// Bytes únicos de uma pilha segundo a pegada.
+    fn unique_bytes(footprint: HistoryFootprint<T>, entries: &VecDeque<HistoryEntry<T>>) -> usize {
+        let mut seen = HashSet::new();
+        let mut total = 0usize;
+        for entry in entries {
+            footprint(&entry.value, &mut |id, bytes| {
+                if id == 0 || seen.insert(id) {
+                    total = total.saturating_add(bytes);
+                }
+            });
+        }
+        total
+    }
+
+    /// Recalcula `undo_bytes`/`redo_bytes` quando há pegada.
+    fn refresh_shared_bytes(&mut self) {
+        if let Some(footprint) = self.footprint {
+            self.undo_bytes = Self::unique_bytes(footprint, &self.undo);
+            self.redo_bytes = Self::unique_bytes(footprint, &self.redo);
         }
     }
 
@@ -102,6 +141,7 @@ impl<T: Clone> UndoStack<T> {
         self.current_version = self.next_version;
         self.redo_bytes = 0;
         self.redo.clear();
+        self.refresh_shared_bytes();
         self.evict_to_budget();
         while self.undo.len() > self.cap {
             if let Some(old) = self.undo.pop_front() {
@@ -117,11 +157,13 @@ impl<T: Clone> UndoStack<T> {
         while self.undo_bytes > self.byte_budget && self.undo.len() > 1 {
             if let Some(old) = self.undo.pop_front() {
                 self.undo_bytes = self.undo_bytes.saturating_sub(old.bytes);
+                self.refresh_shared_bytes();
             }
         }
         while self.redo_bytes > self.byte_budget && self.redo.len() > 1 {
             if let Some(old) = self.redo.pop_front() {
                 self.redo_bytes = self.redo_bytes.saturating_sub(old.bytes);
+                self.refresh_shared_bytes();
             }
         }
     }
@@ -200,6 +242,7 @@ impl<T: Clone> UndoStack<T> {
         });
         self.current_version = prev.version;
         self.redo_bytes = self.redo_bytes.saturating_add(current_bytes);
+        self.refresh_shared_bytes();
         self.evict_to_budget();
         Some(prev.value)
     }
@@ -223,6 +266,7 @@ impl<T: Clone> UndoStack<T> {
         });
         self.current_version = next.version;
         self.undo_bytes = self.undo_bytes.saturating_add(current_bytes);
+        self.refresh_shared_bytes();
         self.evict_to_budget();
         Some(next.value)
     }
@@ -260,6 +304,29 @@ pub trait Command<Context, Res = (), Err = String>: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn footprint_counts_shared_blocks_once() {
+        // Cada snapshot: um bloco compartilhado de 100 bytes (id 7) e 10 próprios.
+        fn footprint(_: &u8, visit: &mut dyn FnMut(usize, usize)) {
+            visit(7, 100);
+            visit(0, 10);
+        }
+        let mut shared: UndoStack<u8> = UndoStack::new().with_footprint(footprint);
+        for i in 0..5 {
+            shared.push_sized("step", i, 110);
+        }
+        assert_eq!(shared.metrics().history_bytes, 100 + 5 * 10);
+        let mut plain: UndoStack<u8> = UndoStack::new();
+        for i in 0..5 {
+            plain.push_sized("step", i, 110);
+        }
+        assert_eq!(plain.metrics().history_bytes, 5 * 110);
+        // Com orçamento apertado, a pegada mantém mais entradas.
+        shared.set_byte_budget(200);
+        plain.set_byte_budget(200);
+        assert!(shared.depth().0 > plain.depth().0);
+    }
 
     #[test]
     fn undo_redo_roundtrip() {

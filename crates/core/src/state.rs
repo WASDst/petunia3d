@@ -363,7 +363,9 @@ impl ProjectState {
         let pal = p.palette.clone();
         Self {
             project: p,
-            undo: UndoStack::new(),
+            // Malhas e texturas são compartilhadas entre snapshots (cópia na
+            // escrita): o orçamento conta cada bloco uma vez (ADR 008).
+            undo: UndoStack::new().with_footprint(Project::history_footprint),
             project_path: None,
             is_dirty: false,
             refs: Vec::new(),
