@@ -905,6 +905,9 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub poly_pen_points: Vec<petunia_core::PenPoint>,
     /// Modo do Poly Pen (Auto/Points/Edges/Polygons).
     pub poly_pen_mode: PolyPenMode,
+    /// Largura em px lógicos em que a textura aparece no canvas 2D (0 =
+    /// desconhecida: o pincel 2D fica em texels).
+    pub paint_2d_raster_px: f32,
     /// Pintura de faces em andamento (modo Polygons).
     poly_pen_strip: Option<petunia_core::PenStrip>,
     /// Cores dos eixos do gizmo GPU (tokens do shell).
@@ -1304,6 +1307,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             tool_press_alternate: false,
             poly_pen_points: Vec::new(),
             poly_pen_mode: PolyPenMode::default(),
+            paint_2d_raster_px: 0.0,
             poly_pen_strip: None,
             gizmo_axis_colors: GizmoAxisColors::default(),
             parametric_handle_hover: false,
@@ -6644,7 +6648,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             changed = true;
         }
         if let Some((px, py)) = self.paint_2d_last {
-            let settings = self.state.brush_settings();
+            let settings = self.canvas_brush_settings();
             petunia_module_paint::PaintModule::canvas_brush_with_symmetry(
                 &mut self.state,
                 px,
@@ -6786,7 +6790,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return true;
                 }
                 self.state.begin_paint_stroke();
-                let settings = self.state.brush_settings();
+                let settings = self.canvas_brush_settings();
                 self.paint_2d_stabilizer.reset();
                 let smoothing = self.state.session.tools.brush_style.smoothing;
                 let [fx, fy] = self
@@ -6814,7 +6818,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.paint_2d_last.is_none() {
                     return false;
                 }
-                let settings = self.state.brush_settings();
+                let settings = self.canvas_brush_settings();
                 let smoothing = self.state.session.tools.brush_style.smoothing;
                 let [fx, fy] = self
                     .paint_2d_stabilizer
@@ -6839,7 +6843,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.paint_2d_last.take().is_none() {
                     return false;
                 }
-                let settings = self.state.brush_settings();
+                let settings = self.canvas_brush_settings();
                 self.paint_2d_stabilizer.reset();
                 let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
                 let mut dabs = texture_points(&dabs, width, height);
@@ -13002,6 +13006,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "clone" => B::Clone,
             _ => B::Soft,
         }
+    }
+
+    /// Pincel do canvas 2D: o mesmo descriptor do viewport (tipo pela
+    /// ferramenta, tamanho pelo slider em px de tela), convertido para texels
+    /// pela escala em que a textura aparece no canvas.
+    fn canvas_brush_settings(&self) -> petunia_core::BrushSettings {
+        let mut settings = self.viewport_brush_settings();
+        let texture_w = self
+            .state
+            .project
+            .assets
+            .get(self.state.project.active)
+            .and_then(|a| a.texture.as_ref())
+            .map_or(256, |t| t.w);
+        if self.paint_2d_raster_px > 1.0 {
+            settings.size_px *= texture_w as f32 / self.paint_2d_raster_px;
+        }
+        settings.sanitized()
     }
 
     fn viewport_brush_settings(&self) -> petunia_core::BrushSettings {

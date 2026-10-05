@@ -10,6 +10,8 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - Auditoria PAINT/ANIMATE com matriz e plano: `docs/development/paint-animate-audit-2026-10-05.md`.
 - Seleção parcial de faces restringe a pintura sem precisar ligar a opção; "Sempre mascarar" mantém a máscara com tudo ou nada selecionado.
 - A sangria da costura não invade mais faces vizinhas não selecionadas (pincel 3D e canvas 2D usam a mesma máscara).
+- Cursor do pincel mostra tamanho, dureza (anel interno) e opacidade × fluxo (preenchimento) em todos os pincéis de traço, no viewport e no canvas 2D.
+- Canvas 2D usa o mesmo pincel do viewport (tipo e tamanho em px de tela) e não deforma mais a textura; a Borracha respeita a dureza.
 
 ### HUD, Undo e pendências do POLY (04/10/2026)
 

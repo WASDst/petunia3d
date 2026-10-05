@@ -607,8 +607,64 @@ component PetuniaSlider inherits Rectangle {
 
 /// Superfície do canvas de pintura 2D: raster, wireframe UV, grade de pixels, pan (botão do meio)
 /// e zoom (roda). Mesma superfície no Inspector (pequena) e na janela flutuante (grande).
+/// Cursor dos pincéis (3D e canvas 2D): anel externo = tamanho; anel interno
+/// = núcleo duro (dureza); preenchimento = opacidade × fluxo; ponto central
+/// no lugar do cursor do sistema.
+component BrushCursor inherits Rectangle {
+    in property <length> diameter;
+    in property <float> hardness;
+    in property <float> strength;
+    in property <color> tint;
+    in property <bool> erase;
+    /// Pixel: borda sempre dura, sem anel de núcleo.
+    in property <bool> hard-edge;
+    width: max(root.diameter, 2px);
+    height: self.width;
+    border-radius: self.width / 2;
+    border-width: 1.5px;
+    border-color: root.erase ? DesignTokens.danger : DesignTokens.cursor-light;
+    background: (root.erase ? DesignTokens.danger : root.tint).with-alpha(0.04 + 0.32 * clamp(root.strength, 0, 1));
+    // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
+    Rectangle {
+        x: 1.5px;
+        y: 1.5px;
+        width: parent.width - 3px;
+        height: parent.height - 3px;
+        border-radius: self.width / 2;
+        border-width: 1px;
+        border-color: DesignTokens.cursor-dark;
+    }
+    if !root.hard-edge && root.hardness > 0.02 && root.hardness < 0.98 && root.width > 10px: Rectangle {
+        width: parent.width * root.hardness;
+        height: self.width;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: self.width / 2;
+        border-width: 1px;
+        border-color: DesignTokens.cursor-light.transparentize(0.3);
+    }
+    Rectangle {
+        x: (parent.width - 3px) / 2;
+        y: (parent.height - 3px) / 2;
+        width: 3px;
+        height: 3px;
+        border-radius: 1.5px;
+        background: DesignTokens.cursor-light;
+        border-width: 1px;
+        border-color: DesignTokens.cursor-dark;
+    }
+}
+
 component PaintCanvasSurface inherits Rectangle {
     in property <image> canvas-image;
+    /// Cursor do pincel no canvas (mesmo diâmetro em tela do viewport).
+    in property <bool> show-brush: false;
+    in property <length> brush-diameter;
+    in property <float> brush-hardness;
+    in property <float> brush-strength;
+    in property <color> brush-tint;
+    in property <bool> brush-erase;
+    in property <bool> brush-hard-edge;
     in property <int> zoom: 1;
     in property <bool> show-uv: false;
     in property <string> uv-commands: "";
@@ -616,8 +672,11 @@ component PaintCanvasSurface inherits Rectangle {
     in property <string> grid-commands: "";
     in-out property <length> pan-x: 0px;
     in-out property <length> pan-y: 0px;
-    callback stroke(float, float, int, bool);
+    /// x, y normalizados na textura, fase, Shift, largura da textura em px.
+    callback stroke(float, float, int, bool, float);
     callback zoom-step(int);
+    // A textura cabe no canvas sem deformar (proporção da imagem).
+    property <float> fit: min(root.width / 1px / max(1, root.canvas-image.width), root.height / 1px / max(1, root.canvas-image.height));
 
     background: DesignTokens.canvas;
     border-width: 1px;
@@ -625,8 +684,8 @@ component PaintCanvasSurface inherits Rectangle {
     clip: true;
 
     raster := Image {
-        width: root.width * root.zoom;
-        height: root.height * root.zoom;
+        width: max(1, root.canvas-image.width) * root.fit * root.zoom * 1px;
+        height: max(1, root.canvas-image.height) * root.fit * root.zoom * 1px;
         x: (root.width - self.width) / 2 + root.pan-x;
         y: (root.height - self.height) / 2 + root.pan-y;
         image-fit: fill;
@@ -667,13 +726,13 @@ component PaintCanvasSurface inherits Rectangle {
                     self.last-y = self.mouse-y;
                 } else if event.button == PointerEventButton.left {
                     self.shift-line = event.modifiers.shift;
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line);
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line, raster.width / 1px);
                 }
             } else if event.kind == PointerEventKind.up {
                 if self.panning {
                     self.panning = false;
                 } else if event.button == PointerEventButton.left {
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line);
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line, raster.width / 1px);
                 }
             }
         }
@@ -684,7 +743,7 @@ component PaintCanvasSurface inherits Rectangle {
                 self.last-x = self.mouse-x;
                 self.last-y = self.mouse-y;
             } else if self.pressed {
-                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line);
+                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line, raster.width / 1px);
             }
         }
         scroll-event(event) => {
@@ -694,6 +753,17 @@ component PaintCanvasSurface inherits Rectangle {
             }
             reject
         }
+    }
+
+    if root.show-brush && surface-touch.has-hover && !surface-touch.panning: BrushCursor {
+        diameter: root.brush-diameter;
+        hardness: root.brush-hardness;
+        strength: root.brush-strength;
+        tint: root.brush-tint;
+        erase: root.brush-erase;
+        hard-edge: root.brush-hard-edge;
+        x: surface-touch.mouse-x - self.width / 2;
+        y: surface-touch.mouse-y - self.height / 2;
     }
 }
 
@@ -4315,7 +4385,7 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-paint-begin(float, float, bool, bool);
     callback viewport-paint-update(float, float, bool, bool);
     callback viewport-paint-end(float, float);
-    callback paint-2d-stroke(float, float, int, bool);
+    callback paint-2d-stroke(float, float, int, bool, float);
     callback toggle-paint-pixel-grid;
     callback set-paint-canvas-zoom(int);
     callback add-menu-changed(bool);
@@ -4562,6 +4632,13 @@ export component PetuniaSlintShell inherits Window {
             text == Key.F11 ? "F11" :
             text == Key.F12 ? "F12" :
             text;
+    }
+
+    /// Ferramentas de traço com pincel (têm cursor de tamanho/dureza/força).
+    pure function brush-stroke-tool(tool: string) -> bool {
+        return tool == "brush" || tool == "eraser" || tool == "airbrush" || tool == "pixel"
+            || tool == "smudge" || tool == "blur" || tool == "dodge" || tool == "burn"
+            || tool == "spray" || tool == "clone";
     }
 
     // Cor e espessura de um handle do gizmo conforme o estado da interação.
@@ -5620,7 +5697,7 @@ export component PetuniaSlintShell inherits Window {
                     viewport-touch := TouchArea {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
-                            : (root.active-workspace == "PAINT") ? ((root.active-tool == "brush" || root.active-tool == "eraser" || root.active-tool == "airbrush" || root.active-tool == "pixel") ? none : crosshair)
+                            : (root.active-workspace == "PAINT") ? (root.brush-stroke-tool(root.active-tool) ? none : crosshair)
                             : (root.active-tool == "slice" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
                             : (root.active-tool == "extrude" || root.active-tool == "push_pull") ? ns-resize
                             : root.active-tool == "bevel" ? nesw-resize
@@ -5631,36 +5708,17 @@ export component PetuniaSlintShell inherits Window {
                             : root.gizmo-has-hover ? grab
                             : default;
                         // Anel do pincel: mesmo diâmetro (px) que o carimbo e o pincel 2D usam.
-                        if root.active-workspace == "PAINT" && viewport-touch.has-hover && (root.active-tool == "brush" || root.active-tool == "eraser" || root.active-tool == "airbrush" || root.active-tool == "pixel"): Rectangle {
-                            width: max(root.brush-size * 16px, 2px);
-                            height: self.width;
+                        // Cursor do pincel: mesmo diâmetro (px) que o carimbo e o canvas 2D;
+                        // núcleo pela dureza e preenchimento pela opacidade × fluxo.
+                        if root.active-workspace == "PAINT" && viewport-touch.has-hover && root.brush-stroke-tool(root.active-tool): BrushCursor {
+                            diameter: root.brush-size * 16px;
+                            hardness: root.brush-hardness;
+                            strength: root.brush-opacity * root.brush-flow;
+                            tint: root.paint-color;
+                            erase: root.active-tool == "eraser";
+                            hard-edge: root.active-tool == "pixel";
                             x: viewport-touch.mouse-x - self.width / 2;
                             y: viewport-touch.mouse-y - self.height / 2;
-                            border-radius: self.width / 2;
-                            border-width: 1.5px;
-                            border-color: root.active-tool == "eraser" ? DesignTokens.danger : DesignTokens.cursor-light;
-                            background: root.active-tool == "eraser" ? DesignTokens.danger.with-alpha(0.10) : root.paint-color.with-alpha(0.14);
-                            // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
-                            // Ponto central: substitui o cursor do sistema, escondido nas ferramentas de pincel.
-                            Rectangle {
-                                x: (parent.width - 3px) / 2;
-                                y: (parent.height - 3px) / 2;
-                                width: 3px;
-                                height: 3px;
-                                border-radius: 1.5px;
-                                background: DesignTokens.cursor-light;
-                                border-width: 1px;
-                                border-color: DesignTokens.cursor-dark;
-                            }
-                            Rectangle {
-                                x: 1.5px;
-                                y: 1.5px;
-                                width: parent.width - 3px;
-                                height: parent.height - 3px;
-                                border-radius: self.width / 2;
-                                border-width: 1px;
-                                border-color: DesignTokens.cursor-dark;
-                            }
                         }
                         property <length> last-x;
                         property <length> last-y;
@@ -9164,11 +9222,18 @@ export component PetuniaSlintShell inherits Window {
                                         horizontal-stretch: 0;
                                         canvas-image: root.paint-canvas-image;
                                         zoom: root.paint-canvas-zoom;
+                                        show-brush: root.brush-stroke-tool(root.active-tool);
+                                        brush-diameter: root.brush-size * 16px;
+                                        brush-hardness: root.brush-hardness;
+                                        brush-strength: root.brush-opacity * root.brush-flow;
+                                        brush-tint: root.paint-color;
+                                        brush-erase: root.active-tool == "eraser";
+                                        brush-hard-edge: root.active-tool == "pixel";
                                         show-uv: root.paint-show-uv;
                                         uv-commands: root.uv-layout-commands;
                                         show-grid: root.paint-pixel-grid;
                                         grid-commands: root.paint-canvas-grid-commands;
-                                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                                        stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                                         zoom-step(direction) => {
                                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -10572,11 +10637,18 @@ export component PetuniaSlintShell inherits Window {
                             height: parent.height;
                             canvas-image: root.paint-canvas-image;
                             zoom: root.paint-canvas-zoom;
+                            show-brush: root.brush-stroke-tool(root.active-tool);
+                            brush-diameter: root.brush-size * 16px;
+                            brush-hardness: root.brush-hardness;
+                            brush-strength: root.brush-opacity * root.brush-flow;
+                            brush-tint: root.paint-color;
+                            brush-erase: root.active-tool == "eraser";
+                            brush-hard-edge: root.active-tool == "pixel";
                             show-uv: root.paint-show-uv;
                             uv-commands: root.uv-layout-commands;
                             show-grid: root.paint-pixel-grid;
                             grid-commands: root.paint-canvas-grid-commands;
-                            stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                            stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                             zoom-step(direction) => {
                                 if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                 if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -12419,11 +12491,18 @@ export component PetuniaSlintShell inherits Window {
                         vertical-stretch: 1;
                         canvas-image: root.paint-canvas-image;
                         zoom: root.paint-canvas-zoom;
+                        show-brush: root.brush-stroke-tool(root.active-tool);
+                        brush-diameter: root.brush-size * 16px;
+                        brush-hardness: root.brush-hardness;
+                        brush-strength: root.brush-opacity * root.brush-flow;
+                        brush-tint: root.paint-color;
+                        brush-erase: root.active-tool == "eraser";
+                        brush-hard-edge: root.active-tool == "pixel";
                         show-uv: root.paint-show-uv;
                         uv-commands: root.uv-layout-commands;
                         show-grid: root.paint-pixel-grid;
                         grid-commands: root.paint-canvas-grid-commands;
-                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                        stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                         zoom-step(direction) => {
                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }

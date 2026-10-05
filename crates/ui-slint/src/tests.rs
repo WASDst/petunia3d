@@ -2977,6 +2977,33 @@ fn matcap_and_ambient_occlusion_are_persisted_viewport_preferences() {
 }
 
 #[test]
+fn canvas_brush_uses_the_viewport_descriptor_in_screen_pixels() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetActiveTool("eraser".into()));
+    petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
+    let texture_w = bridge
+        .state
+        .project
+        .active()
+        .unwrap()
+        .texture
+        .as_ref()
+        .unwrap()
+        .w as f32;
+    let viewport = bridge.viewport_brush_settings();
+    // Sem escala conhecida o 2D fica em texels, mas já com o mesmo pincel.
+    let canvas = bridge.canvas_brush_settings();
+    assert_eq!(canvas.kind, petunia_core::BrushType::Eraser);
+    assert_eq!(canvas.size_px, viewport.size_px);
+    // Textura mostrada com o dobro da largura: metade dos texels por px.
+    bridge.paint_2d_raster_px = texture_w * 2.0;
+    let canvas = bridge.canvas_brush_settings();
+    assert!((canvas.size_px - viewport.size_px * 0.5).abs() < 1e-3);
+    assert_eq!(canvas.hardness, viewport.hardness);
+}
+
+#[test]
 fn snap_radius_is_an_accessibility_setting_with_real_effect() {
     let mut bridge = front_view_bridge_with_cube();
     let vm = bridge.view_model();

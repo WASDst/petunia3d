@@ -3443,8 +3443,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let paint_stroke_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_paint_2d_stroke(move |norm_x, norm_y, phase, shift| {
+    window.on_paint_2d_stroke(move |norm_x, norm_y, phase, shift, raster_px| {
         if let Ok(mut bridge) = paint_stroke_bridge.lock() {
+            bridge.paint_2d_raster_px = raster_px;
             if !bridge.paint_2d_line(norm_x, norm_y, phase, shift) {
                 bridge.apply(UiIntent::Paint2dStroke {
                     norm_x,

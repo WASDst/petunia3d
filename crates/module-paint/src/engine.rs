@@ -34,8 +34,9 @@ pub fn dab_falloff(kind: BrushType, t: f32, hardness: f32) -> f32 {
         return 0.0;
     }
     match kind {
+        // Pixel é borda dura por definição (P3D-056); os demais, inclusive a
+        // Borracha, seguem a dureza do descriptor único (P3D-057).
         BrushType::Pixel => 1.0,
-        BrushType::Eraser => 1.0 - t,
         _ => {
             let core = hardness.clamp(0.0, 1.0);
             if t <= core {

@@ -2346,6 +2346,19 @@ mod tests {
     }
 
     #[test]
+    fn eraser_follows_hardness_like_the_soft_brush() {
+        use crate::engine::dab_falloff;
+        for t in [0.0, 0.3, 0.6, 0.9] {
+            assert_eq!(
+                dab_falloff(BrushType::Eraser, t, 0.4),
+                dab_falloff(BrushType::Soft, t, 0.4)
+            );
+        }
+        assert_eq!(dab_falloff(BrushType::Eraser, 0.5, 1.0), 1.0, "dura");
+        assert!(dab_falloff(BrushType::Eraser, 0.5, 0.0) < 0.3, "suave");
+    }
+
+    #[test]
     fn partial_selection_restricts_painting_without_the_toggle() {
         let mut state = AppState::new("en");
         assert!(!state.session.tools.paint_isolate_selection);
