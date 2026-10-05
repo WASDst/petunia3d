@@ -679,6 +679,10 @@ pub struct ShellViewModel {
     /// Indicates if the active layer is a Decal layer (P3D-133).
     /// Indica se a camada ativa é uma camada de Decalque (P3D-133).
     pub active_layer_is_decal: bool,
+    /// Decalque ativo fixado na superfície (largura em mundo, sem posição UV).
+    pub decal_surface: bool,
+    /// Lado (px) da textura de pintura do ativo; 0 sem textura.
+    pub paint_texture_side: i32,
     pub decal_center_u: f32,
     pub decal_center_v: f32,
     pub decal_scale_u: f32,
@@ -687,6 +691,7 @@ pub struct ShellViewModel {
     pub label_decal_transform: String,
     pub label_decal_position: String,
     pub label_decal_scale: String,
+    pub label_decal_width: String,
     pub label_decal_rotation: String,
     pub label_decal_bake: String,
     pub label_decal_hint: String,
@@ -1649,6 +1654,8 @@ impl ShellViewModel {
             paint_projection: "Surface".to_string(),
             paint_lock: "None".to_string(),
             active_layer_is_decal: false,
+            decal_surface: false,
+            paint_texture_side: 0,
             decal_center_u: 0.5,
             decal_center_v: 0.5,
             decal_scale_u: 0.25,
@@ -1657,6 +1664,7 @@ impl ShellViewModel {
             label_decal_transform: String::new(),
             label_decal_position: String::new(),
             label_decal_scale: String::new(),
+            label_decal_width: String::new(),
             label_decal_rotation: String::new(),
             label_decal_bake: String::new(),
             label_decal_hint: String::new(),

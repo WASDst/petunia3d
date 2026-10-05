@@ -104,7 +104,7 @@ impl DecalAnchor {
     }
 
     /// Base do projetor com a rotação aplicada: (direita, cima, normal).
-    fn frame(&self, rotation_rad: f32) -> (Vec3, Vec3, Vec3) {
+    pub fn frame(&self, rotation_rad: f32) -> (Vec3, Vec3, Vec3) {
         let n = Vec3::from(self.normal).normalize_or_zero();
         let t0 = Vec3::from(self.tangent).normalize_or_zero();
         let b0 = n.cross(t0);
@@ -227,6 +227,21 @@ impl DecalLayer {
     /// Altura em mundo de um decalque de superfície (proporção da imagem).
     pub fn surface_height(&self, width: f32) -> f32 {
         width * self.image.h.max(1) as f32 / self.image.w.max(1) as f32
+    }
+
+    /// Cantos do retângulo do projetor (mundo), na ordem superior-esquerdo,
+    /// superior-direito, inferior-direito, inferior-esquerdo. `None` sem fixação.
+    pub fn surface_corners(&self) -> Option<[Vec3; 4]> {
+        let anchor = self.anchor?;
+        let (right, up, _) = anchor.frame(self.rotation_rad);
+        let center = Vec3::from(anchor.point);
+        let (hw, hh) = (anchor.width * 0.5, self.surface_height(anchor.width) * 0.5);
+        Some([
+            center - right * hw + up * hh,
+            center + right * hw + up * hh,
+            center + right * hw - up * hh,
+            center - right * hw - up * hh,
+        ])
     }
 
     /// Cores projetadas pelo decalque de superfície: `(x, y, rgba)` por texel
@@ -701,9 +716,16 @@ impl PaintLayerStack {
         if let Some(layer) = self.layers.iter_mut().find(|l| l.id == id)
             && let LayerKind::Decal(ref mut decal) = layer.kind
         {
-            decal.center_uv = center_uv;
-            decal.scale_uv = scale_uv;
             decal.rotation_rad = rotation_rad;
+            if let Some(anchor) = decal.anchor.as_mut() {
+                // Decalque de superfície: a posição vem da fixação 3D e a
+                // altura da proporção da imagem; `scale_uv[0]` é a largura.
+                anchor.width = scale_uv[0];
+                anchor.depth = scale_uv[0] * 0.5;
+            } else {
+                decal.center_uv = center_uv;
+                decal.scale_uv = scale_uv;
+            }
             return true;
         }
         false

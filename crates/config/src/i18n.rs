@@ -324,6 +324,7 @@ pub mod text_id {
     pub const UI_DECAL_TRANSFORM: TextId = TextId::new("ui.decal_transform");
     pub const UI_DECAL_POSITION: TextId = TextId::new("ui.decal_position");
     pub const UI_DECAL_SCALE: TextId = TextId::new("ui.decal_scale");
+    pub const UI_DECAL_WIDTH: TextId = TextId::new("ui.decal_width");
     pub const UI_DECAL_ROTATION: TextId = TextId::new("ui.decal_rotation");
     pub const UI_DECAL_BAKE: TextId = TextId::new("ui.decal_bake");
     pub const UI_DECAL_HINT: TextId = TextId::new("ui.decal_hint");
@@ -1085,6 +1086,7 @@ pub mod text_id {
         UI_DECAL_TRANSFORM,
         UI_DECAL_POSITION,
         UI_DECAL_SCALE,
+        UI_DECAL_WIDTH,
         UI_DECAL_ROTATION,
         UI_DECAL_BAKE,
         UI_DECAL_HINT,

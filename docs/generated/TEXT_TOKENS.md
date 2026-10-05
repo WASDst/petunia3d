@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1812**.
+Total de chaves de localização cadastradas: **1813**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -967,7 +967,7 @@ Total de chaves de localização cadastradas: **1812**.
 | `sl.manage_scene_parts_groups_and_hierarchy` | Manage scene parts, groups and hierarchy | Gerencie partes, grupos e hierarquia da cena |
 | `sl.mark_clear_seam` | Mark / Clear Seam | Marcar / limpar costura |
 | `sl.mark_unmark_seams` | Mark/Unmark Seams | Marcar/desmarcar costuras |
-| `sl.mask_selection` | Mask Selection: | Máscara de seleção: |
+| `sl.mask_selection` | Always mask: | Sempre mascarar: |
 | `sl.mcp_automation` | MCP & Automation | MCP & Automação |
 | `sl.measure` | Measure | Medir |
 | `sl.measure_distances_and_angles_between_geometr` | Measure distances and angles between geometry elements in 3D | Mede distâncias e ângulos entre elementos da geometria em 3D |
@@ -1612,7 +1612,8 @@ Total de chaves de localização cadastradas: **1812**.
 | `ui.decal_position` | Position | Posição |
 | `ui.decal_rotation` | Rotation | Rotação |
 | `ui.decal_scale` | Scale | Escala |
-| `ui.decal_transform` | Decal Transform (UV) | Transformação do Decalque (UV) |
+| `ui.decal_transform` | Decal Transform | Transformação do Decalque |
+| `ui.decal_width` | Width | Largura |
 | `ui.dock_split_hint` | Drag to resize panels | Arraste para redimensionar os painéis |
 | `ui.duplicate` | Duplicate | Duplicar |
 | `ui.expand` | Expand section | Expandir painel |

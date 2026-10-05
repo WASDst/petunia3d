@@ -3205,12 +3205,24 @@ fn decal_layer_transform_and_bake_workflow() {
     bridge.apply(UiIntent::AddDecalLayer);
     let vm = bridge.view_model();
     assert!(vm.active_layer_is_decal);
-    assert_eq!(vm.decal_center_u, 0.5);
-    assert_eq!(vm.decal_center_v, 0.5);
-    assert_eq!(vm.decal_scale_u, 0.25);
-    assert_eq!(vm.decal_scale_v, 0.25);
+    // Nasce fixado na superfície: escala U = largura, V = altura (imagem 1:1).
+    let width = bridge.active_decal().unwrap().anchor.unwrap().width;
+    assert!(vm.decal_surface);
+    assert_eq!(vm.decal_scale_u, width);
+    assert_eq!(vm.decal_scale_v, width);
 
     let decal_id = vm.paint_layers.last().unwrap().id.clone();
+
+    // Decalque UV (projetos antigos): o Inspector edita centro e escala no atlas.
+    {
+        let asset = bridge.state.project.active_mut().unwrap();
+        let layer = asset.paint_stack.as_mut().unwrap().active_mut().unwrap();
+        let petunia_project::paint_layers::LayerKind::Decal(ref mut decal) = layer.kind else {
+            panic!("camada ativa é decalque");
+        };
+        decal.anchor = None;
+    }
+    assert!(!bridge.view_model().decal_surface);
 
     // Mutate decal transform / Modifica transformação do decalque
     let transform_revision_before = bridge.state.project.project.texture_revision;
@@ -3294,19 +3306,18 @@ fn test_decal_live_interactive_drag_manipulator_and_preview_commands() {
     assert!(bridge.paint_stroke_to(520.0, 390.0));
     assert!(bridge.end_paint_stroke_at(520.0, 390.0));
     let decal = bridge.active_decal().expect("active decal");
-    assert!(decal.center_uv[0] > 0.0 && decal.center_uv[0] < 1.0);
-    assert!(decal.center_uv[1] > 0.0 && decal.center_uv[1] < 1.0);
+    assert!(decal.anchor.is_some(), "o arrasto refixa na superfície");
 
     // Interactive drag uniform scale (Shift + drag):
-    let initial_scale = decal.scale_uv;
+    let initial_width = decal.anchor.unwrap().width;
     assert!(bridge.begin_paint_stroke_with_modifiers(512.0, 384.0, true, false));
     // Dragging upwards (384 -> 334) increases scale
     assert!(bridge.paint_stroke_to_with_modifiers(512.0, 334.0, true, false));
     assert!(bridge.end_paint_stroke_at(512.0, 334.0));
     let scaled_decal = bridge.active_decal().expect("scaled decal");
     assert!(
-        scaled_decal.scale_uv[0] > initial_scale[0],
-        "scale should increase when dragged up with Shift"
+        scaled_decal.anchor.unwrap().width > initial_width,
+        "width should increase when dragged up with Shift"
     );
 
     // Interactive drag rotation (Ctrl + drag):
@@ -3326,12 +3337,10 @@ fn test_decal_live_interactive_drag_manipulator_and_preview_commands() {
     assert!(bridge.begin_paint_stroke_at(512.0, 384.0));
     assert!(bridge.paint_stroke_to(530.0, 395.0));
     let in_drag_decal = bridge.active_decal().expect("in drag decal");
-    assert_ne!(in_drag_decal.center_uv, pre_cancel_decal.center_uv);
+    assert_ne!(in_drag_decal.anchor, pre_cancel_decal.anchor);
     assert!(bridge.cancel_paint_stroke());
     let restored_decal = bridge.active_decal().expect("restored decal");
-    assert_eq!(restored_decal.center_uv, pre_cancel_decal.center_uv);
-    assert_eq!(restored_decal.scale_uv, pre_cancel_decal.scale_uv);
-    assert_eq!(restored_decal.rotation_rad, pre_cancel_decal.rotation_rad);
+    assert_eq!(restored_decal, pre_cancel_decal);
 
     // Non-destructive preservation: layer remains Decal until explicit bake
     assert!(bridge.active_layer_is_decal());
@@ -3366,6 +3375,144 @@ fn decal_drag_commits_once_and_cancel_restores_without_history() {
     assert!(bridge.cancel_decal_drag());
     assert_eq!(bridge.active_decal().expect("decal after cancel"), after);
     assert_eq!(bridge.state.project.undo.depth(), depth_before_cancel);
+}
+
+#[test]
+fn new_decals_are_attached_to_the_surface_under_the_view_center() {
+    let dir = tempfile::tempdir().unwrap();
+    let png = dir.path().join("logo.png");
+    image::RgbaImage::from_pixel(40, 20, image::Rgba([10, 200, 30, 255]))
+        .save(&png)
+        .unwrap();
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert!(bridge.import_decal_image(&png));
+    let decal = bridge.active_decal().unwrap();
+    let anchor = decal
+        .anchor
+        .expect("decalque importado nasce na superfície");
+    let [w, h] = bridge.viewport_size;
+    let expected = bridge
+        .decal_anchor_at(w * 0.5, h * 0.5, anchor.width)
+        .unwrap();
+    assert_eq!(anchor.point, expected.point);
+    // 30% do maior lado do cubo padrão; altura pela proporção 2:1.
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    let xs = mesh.verts.iter().map(|v| v.vec().x);
+    let extent = xs.clone().fold(f32::MIN, f32::max) - xs.fold(f32::MAX, f32::min);
+    assert!((anchor.width - extent * 0.3).abs() < 1e-4);
+    let vm = bridge.view_model();
+    assert!(vm.decal_surface);
+    assert!((vm.decal_scale_u - anchor.width).abs() < 1e-6);
+    assert!((vm.decal_scale_v - anchor.width * 0.5).abs() < 1e-6);
+    assert!(!vm.decal_preview_commands.is_empty());
+    // A cor do decalque chegou na textura composta.
+    let texture = bridge
+        .state
+        .project
+        .active()
+        .unwrap()
+        .texture
+        .clone()
+        .unwrap();
+    assert!(texture.pixels.chunks(4).any(|p| p[..3] == [10, 200, 30]));
+}
+
+#[test]
+fn surface_decal_drag_moves_scales_rotates_and_cancels() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    assert!(bridge.add_decal_layer());
+    let start = bridge.active_decal().unwrap();
+    let anchor = start.anchor.expect("decalque de superfície");
+
+    // Mover: refixa no ponto sob o cursor, mesma largura.
+    assert!(bridge.decal_drag_begin(530.0, 400.0, false, false));
+    assert!(bridge.decal_drag_end());
+    let moved = bridge.active_decal().unwrap().anchor.unwrap();
+    assert_ne!(moved.point, anchor.point);
+    assert_eq!(moved.width, anchor.width);
+
+    // Shift: largura cresce arrastando para cima.
+    assert!(bridge.decal_drag_begin(512.0, 384.0, true, false));
+    assert!(bridge.decal_drag_to(512.0, 334.0, true, false));
+    assert!(bridge.decal_drag_end());
+    let scaled = bridge.active_decal().unwrap().anchor.unwrap();
+    assert!((scaled.width - moved.width * 1.5).abs() < 1e-4);
+    assert_eq!(scaled.point, moved.point);
+
+    // Ctrl: gira; cancelar volta ao estado anterior sem histórico.
+    let depth = bridge.state.project.undo.depth();
+    let before = bridge.active_decal().unwrap();
+    assert!(bridge.decal_drag_begin(512.0, 384.0, false, true));
+    assert!(bridge.decal_drag_to(572.0, 384.0, false, true));
+    assert!((bridge.active_decal().unwrap().rotation_rad - 30f32.to_radians()).abs() < 1e-4);
+    assert!(bridge.cancel_decal_drag());
+    assert_eq!(bridge.active_decal().unwrap(), before);
+    assert_eq!(bridge.state.project.undo.depth(), depth);
+
+    // Inspector: o campo de escala U é a largura em mundo.
+    let id = bridge
+        .state
+        .project
+        .active()
+        .and_then(|a| a.paint_stack.as_ref())
+        .and_then(|s| s.active())
+        .map(|l| l.id.to_string())
+        .unwrap();
+    bridge.apply(UiIntent::SetDecalTransform {
+        layer_id: id,
+        center_u: 0.1,
+        center_v: 0.1,
+        scale_u: 0.8,
+        scale_v: 3.0,
+        rotation_deg: 0.0,
+    });
+    let decal = bridge.active_decal().unwrap();
+    assert_eq!(decal.anchor.unwrap().width, 0.8);
+    assert_eq!(
+        decal.anchor.unwrap().point,
+        scaled.point,
+        "a posição continua na superfície"
+    );
+}
+
+#[test]
+fn paint_texture_resolution_is_choosable_and_undoable() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
+    let side = petunia_module_paint::DEFAULT_TEXTURE_SIDE;
+    assert_eq!(bridge.paint_canvas_dimensions(), Some((side, side)));
+    assert_eq!(bridge.view_model().paint_texture_side, side as i32);
+
+    let depth = bridge.state.project.undo.depth().0;
+    bridge.apply(UiIntent::SetPaintTextureSide(2048));
+    assert_eq!(bridge.paint_canvas_dimensions(), Some((2048, 2048)));
+    let stack = bridge
+        .state
+        .project
+        .active()
+        .unwrap()
+        .paint_stack
+        .clone()
+        .unwrap();
+    assert!(
+        stack
+            .layers
+            .iter()
+            .filter_map(|l| l.canvas())
+            .all(|c| (c.w, c.h) == (2048, 2048))
+    );
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+
+    // Lado fora da lista não muda nada.
+    bridge.apply(UiIntent::SetPaintTextureSide(300));
+    assert_eq!(bridge.paint_canvas_dimensions(), Some((2048, 2048)));
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+
+    assert!(bridge.state.undo());
+    assert_eq!(bridge.paint_canvas_dimensions(), Some((side, side)));
 }
 
 #[test]
@@ -5568,13 +5715,13 @@ fn paint_2d_stroke_flow_and_undo() {
     // Set bright red paint color
     bridge.apply(UiIntent::SetPaintColor([1.0, 0.0, 0.0]));
 
-    // Check active texture initial pixel at (128, 128)
+    // Pixel no centro da textura (onde cai o traço em 0,5; 0,5)
     let initial_color = bridge
         .state
         .project
         .active()
         .and_then(|a| a.texture.as_ref())
-        .and_then(|t| t.get(128, 128))
+        .and_then(|t| t.get(t.w / 2, t.h / 2))
         .unwrap_or([0, 0, 0, 0]);
 
     // Begin 2D stroke at center (0.5, 0.5)
@@ -5606,7 +5753,7 @@ fn paint_2d_stroke_flow_and_undo() {
         .project
         .active()
         .and_then(|a| a.texture.as_ref())
-        .and_then(|t| t.get(128, 128))
+        .and_then(|t| t.get(t.w / 2, t.h / 2))
         .expect("pixel");
     assert_eq!(painted_color[0], 255);
     assert_eq!(painted_color[1], 0);
@@ -5619,7 +5766,7 @@ fn paint_2d_stroke_flow_and_undo() {
         .project
         .active()
         .and_then(|a| a.texture.as_ref())
-        .and_then(|t| t.get(128, 128))
+        .and_then(|t| t.get(t.w / 2, t.h / 2))
         .unwrap_or([0, 0, 0, 0]);
     assert_eq!(undone_color, initial_color);
 
@@ -5630,7 +5777,7 @@ fn paint_2d_stroke_flow_and_undo() {
         .project
         .active()
         .and_then(|a| a.texture.as_ref())
-        .and_then(|t| t.get(128, 128))
+        .and_then(|t| t.get(t.w / 2, t.h / 2))
         .expect("pixel");
     assert_eq!(redone_color[0], 255);
 }
@@ -5694,7 +5841,8 @@ fn paint_pixel_grid_and_canvas_zoom() {
     assert_eq!(bridge.paint_canvas_zoom, 1);
 
     // Zoom stays presentation-only: the published RGBA buffer is native-size.
-    bridge.apply(UiIntent::SetPaintCanvasZoom(4));
+    // A grade só aparece com texel >= 4 px na tela: 1024 px precisa de zoom 16.
+    bridge.apply(UiIntent::SetPaintCanvasZoom(16));
     petunia_module_paint::PaintModule::ensure_stack(&mut bridge.state);
     let dimensions = bridge.paint_canvas_dimensions().unwrap();
     let image = bridge.render_paint_canvas().expect("native canvas image");

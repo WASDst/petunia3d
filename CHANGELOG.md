@@ -13,6 +13,8 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - Cursor do pincel mostra tamanho, dureza (anel interno) e opacidade × fluxo (preenchimento) em todos os pincéis de traço, no viewport e no canvas 2D.
 - Canvas 2D usa o mesmo pincel do viewport (tipo e tamanho em px de tela) e não deforma mais a textura; a Borracha respeita a dureza.
 - Decalques ganham fixação na superfície: projetados pela posição 3D, atravessam costuras sem emenda e mantêm a proporção da imagem; amostragem bilinear e bake no tamanho da textura do objeto.
+- Decalques novos nascem fixados na superfície sob o centro da vista; arrastar move pela superfície, Shift muda a largura e Ctrl gira; o Inspector mostra a largura em mundo.
+- Textura de pintura nasce com 1024 px e a resolução é escolhível no painel Canvas (256–2048), reamostrando todas as camadas com undo.
 
 ### HUD, Undo e pendências do POLY (04/10/2026)
 

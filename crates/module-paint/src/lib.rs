@@ -36,6 +36,13 @@ pub use petunia_project::paint_layers::{
 /// com call sites existentes (`petunia_module_paint::BrushType`).
 pub use petunia_core::{BrushSettings, BrushType};
 
+/// Lado (px) da textura de pintura criada para um objeto sem textura.
+/// 1024 dá detalhe de decalque e traço sem estourar o orçamento do histórico.
+pub const DEFAULT_TEXTURE_SIDE: u32 = 1024;
+
+/// Lados que o usuário pode escolher para a textura de pintura.
+pub const TEXTURE_SIDES: [u32; 4] = [256, 512, 1024, 2048];
+
 /// Tiles alterados por uma amostra consolidada de pintura raster.
 ///
 /// A lista é normalizada antes de sair do módulo: índices ordenados, únicos e
@@ -253,7 +260,9 @@ impl PaintModule {
             .assets
             .get(active_idx)
             .and_then(|a| a.texture.clone())
-            .unwrap_or_else(|| Canvas::new(256, 256, [0, 0, 0, 0]));
+            .unwrap_or_else(|| {
+                Canvas::new(DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE, [0, 0, 0, 0])
+            });
         if let Some(o) = state.project.assets.get_mut(active_idx) {
             o.paint_stack = Some(PaintLayerStack::with_base("Base", base));
         }
@@ -274,7 +283,11 @@ impl PaintModule {
         let active_idx = state.project.active;
         let (w, h, tileable, has_stack) = match state.project.assets.get(active_idx) {
             Some(a) => {
-                let (w, h) = a.texture.as_ref().map(|c| (c.w, c.h)).unwrap_or((256, 256));
+                let (w, h) = a
+                    .texture
+                    .as_ref()
+                    .map(|c| (c.w, c.h))
+                    .unwrap_or((DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE));
                 let tileable = a.paint_stack.as_ref().is_some_and(|s| s.is_tileable());
                 (w, h, tileable, a.paint_stack.is_some())
             }
@@ -399,6 +412,27 @@ impl PaintModule {
         Self::composite_active(state);
     }
 
+    /// Troca a resolução da textura de pintura do ativo (quadrada, um dos
+    /// [`TEXTURE_SIDES`]), reamostrando todas as camadas raster, numa entrada
+    /// do histórico. `false` se o lado não é permitido, já é o atual ou o
+    /// objeto está travado.
+    pub fn set_texture_side(state: &mut AppState, side: u32) -> bool {
+        if !TEXTURE_SIDES.contains(&side) {
+            return false;
+        }
+        let Some(asset) = state.project.active() else {
+            return false;
+        };
+        if asset.locked || asset.texture.as_ref().map(|c| (c.w, c.h)) == Some((side, side)) {
+            return false;
+        }
+        state.checkpoint("texture resolution");
+        Self::resize_canvas(state, side, side);
+        state.render.canvas_dirty = true;
+        state.mark_dirty();
+        true
+    }
+
     pub fn has_canvas(state: &AppState) -> bool {
         if let Some(o) = state.project.assets.get(state.project.active) {
             if o.texture.is_some() {
@@ -434,14 +468,22 @@ impl PaintModule {
             && let Some(mat) = state.project.project.get_material_mut(mid)
             && mat.albedo_texture.is_none()
         {
-            mat.albedo_texture = Some(Canvas::new(256, 256, fill_rgba));
+            mat.albedo_texture = Some(Canvas::new(
+                DEFAULT_TEXTURE_SIDE,
+                DEFAULT_TEXTURE_SIDE,
+                fill_rgba,
+            ));
         }
 
         // Sincroniza no Asset
         if let Some(o) = state.project.active_mut()
             && o.texture.is_none()
         {
-            o.texture = Some(Canvas::new(256, 256, fill_rgba));
+            o.texture = Some(Canvas::new(
+                DEFAULT_TEXTURE_SIDE,
+                DEFAULT_TEXTURE_SIDE,
+                fill_rgba,
+            ));
             state.mark_dirty();
         }
     }
@@ -836,7 +878,7 @@ impl PaintModule {
             .and_then(|a| a.texture.as_ref())
         {
             Some(t) => (t.w, t.h),
-            None => (256, 256),
+            None => (DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE),
         };
 
         let mut dabs = Vec::with_capacity(points.len() * 4);

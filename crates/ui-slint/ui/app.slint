@@ -4077,6 +4077,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-decal-transform: "";
     in-out property <string> label-decal-position: "";
     in-out property <string> label-decal-scale: "";
+    in-out property <string> label-decal-width: "";
     in-out property <string> label-decal-rotation: "";
     in-out property <string> label-decal-bake: "";
     in-out property <string> label-decal-hint: "";
@@ -4139,6 +4140,11 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> paint-projection: "Surface";
     in-out property <string> paint-lock: "None";
     in-out property <bool> active-layer-is-decal: false;
+    /// Decalque fixado na superfície: largura em mundo, sem posição UV.
+    in-out property <bool> decal-surface: false;
+    /// Lado (px) da textura de pintura do ativo; 0 sem textura quadrada.
+    in-out property <int> paint-texture-side: 0;
+    callback paint-texture-side-selected(int);
     in-out property <float> decal-center-u: 0.5;
     in-out property <float> decal-center-v: 0.5;
     in-out property <float> decal-scale-u: 0.25;
@@ -9094,6 +9100,24 @@ export component PetuniaSlintShell inherits Window {
                                     spacing: 6px;
                                     padding-top: 4px;
 
+                                    // Resolução da textura de pintura (reamostra todas as camadas).
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text {
+                                            text: Tr.t("paint.canvas_size");
+                                            color: DesignTokens.text-secondary;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            for side in [256, 512, 1024, 2048]: BrushChip {
+                                                label: side;
+                                                active: root.paint-texture-side == side;
+                                                clicked => { root.paint-texture-side-selected(side); }
+                                            }
+                                        }
+                                    }
+
                                     HorizontalLayout {
                                         alignment: space-between;
                                         HorizontalLayout {
@@ -9610,7 +9634,7 @@ export component PetuniaSlintShell inherits Window {
                                             wrap: word-wrap;
                                         }
 
-                                        HorizontalLayout {
+                                        if !root.decal-surface: HorizontalLayout {
                                             spacing: 6px;
                                             Text {
                                                 text: root.label-decal-position;
@@ -9642,14 +9666,14 @@ export component PetuniaSlintShell inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             Text {
-                                                text: root.label-decal-scale;
+                                                text: root.decal-surface ? root.label-decal-width : root.label-decal-scale;
                                                 color: DesignTokens.text-secondary;
                                                 font-size: DesignTokens.font-caption;
                                                 width: 52px;
                                                 vertical-alignment: center;
                                             }
                                             NumericField {
-                                                label: "U";
+                                                label: root.decal-surface ? "" : "U";
                                                 value: root.decal-scale-u;
                                                 step: 0.05;
                                                 scrubbed(delta, _) => {
@@ -9657,7 +9681,7 @@ export component PetuniaSlintShell inherits Window {
                                                     root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
                                                 }
                                             }
-                                            NumericField {
+                                            if !root.decal-surface: NumericField {
                                                 label: "V";
                                                 value: root.decal-scale-v;
                                                 step: 0.05;

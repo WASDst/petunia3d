@@ -722,6 +722,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_decal_transform(vm.label_decal_transform.as_str().into());
     window.set_label_decal_position(vm.label_decal_position.as_str().into());
     window.set_label_decal_scale(vm.label_decal_scale.as_str().into());
+    window.set_label_decal_width(vm.label_decal_width.as_str().into());
     window.set_label_decal_rotation(vm.label_decal_rotation.as_str().into());
     window.set_label_decal_bake(vm.label_decal_bake.as_str().into());
     window.set_label_decal_hint(vm.label_decal_hint.as_str().into());
@@ -867,6 +868,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         .collect();
     window.set_paint_layers(layer_entries.as_slice().into());
     window.set_active_layer_is_decal(vm.active_layer_is_decal);
+    window.set_decal_surface(vm.decal_surface);
+    window.set_paint_texture_side(vm.paint_texture_side);
     window.set_decal_center_u(vm.decal_center_u);
     window.set_decal_center_v(vm.decal_center_v);
     window.set_decal_scale_u(vm.decal_scale_u);
@@ -5613,6 +5616,23 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     if let Some(frame) = new_frame {
                         window.set_viewport_image(frame);
                     }
+                }
+            }
+        }
+    });
+
+    let texture_side_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_texture_side_selected(move |side| {
+        if let Ok(mut bridge) = texture_side_bridge.lock() {
+            bridge.apply(UiIntent::SetPaintTextureSide(side.max(0) as u32));
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                bridge.publish_canvas_image(&window);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
                 }
             }
         }

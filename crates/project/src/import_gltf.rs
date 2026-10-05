@@ -18,7 +18,7 @@
 //! - One Petunia [`Mesh`] per glTF mesh (primitives merged). Per-face
 //!   `material_slot` points into the returned [`GltfImport::materials`].
 //! - Textures are decoded via `image` (PNG/JPEG) into [`crate::Canvas`]
-//!   (max 1024, clamped by `Canvas::new`). Failures become warnings,
+//!   (max `Canvas::MAX_SIDE`, clamped by `Canvas::new`). Failures become warnings,
 //!   never silent drops nor panics.
 
 /// Structural summary of a validated glTF JSON document.
@@ -78,7 +78,7 @@ const MAX_VERTICES: usize = 1_000_000;
 const MAX_FACES: usize = 1_000_000;
 const MAX_BUFFER_BYTES: usize = 256 * 1024 * 1024;
 const MAX_IMAGES: usize = 64;
-const MAX_CANVAS_DIM: u32 = 1024;
+const MAX_CANVAS_DIM: u32 = crate::Canvas::MAX_SIDE;
 
 /// Imports a GLB (or glTF with embedded buffers) into meshes.
 ///
