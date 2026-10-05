@@ -80,7 +80,7 @@ petunia3d/
 
 ## Documentação e fonte única da verdade
 
-- Roteador do projeto: [`docs/PRUMO.md`](docs/PRUMO.md).
+- Mapa de navegação do projeto: [`docs/NAVIGATION.md`](docs/NAVIGATION.md).
 - **Livro Vivo (SSOT):** [`docs/bible/index.md`](docs/bible/index.md), atualmente
   com catálogo até `P3D-174`.
 - Interface e contratos visuais: [`docs/ui/README.md`](docs/ui/README.md).

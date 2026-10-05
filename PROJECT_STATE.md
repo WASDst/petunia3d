@@ -1,7 +1,6 @@
 # Current Project State
 
 - Project: **Petunia3D**
-- Prumo: **0.5.1**
 - Current phase: **Fundação do produto sobre as ADRs 006/007** (workspaces DRAW/POLY/PAINT, Animate F2, Paint/UV, atalhos). **Wave 11 — Extensibility, Plugins & Automation permanece planejada**: o host Lua (`petunia_plugins`) e o servidor MCP existem, mas não há ponte para o shell Slint.
 - Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (174 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 46 capítulos de fundação)
 - Referência de UI e interação (ADR 007, 2026-09-29): o próprio sistema Petunia ([cap. 23](docs/bible/foundations/23-macroarquitetura-interface.md), [24](docs/bible/foundations/24-design-system-tokens-estados.md), [36](docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md)) e a pesquisa de interação do [cap. 46](docs/bible/foundations/46-pesquisa-interacao-modelagem-referencias.md). `docs/image-references/Blender.svg` deixou de ser referência canônica e permanece apenas como material histórico.
@@ -288,11 +287,27 @@ The twenty-second implementation round delivers Wave 10 (Animation & Rigging —
   - Shelf contextual inferior com botões dedicados de presets rápidos, Auto-Rig, scrubbing de frames e transporte de reprodução.
   - 20 testes headless de fluxo UI (`kittest_ui_flows.rs`) e 47 testes unitários de domínio passando com 100% de conformidade.
 
-Evidence is preserved in `.prumo/history/premium/`, [`docs/GAUNTLET.md`](docs/GAUNTLET.md), [`docs/GAUNTLET_HANDOFF.md`](docs/GAUNTLET_HANDOFF.md), [`docs/audits/stack-modernization/`](docs/audits/stack-modernization/) and [`docs/bible/`](docs/bible/index.md).
+Evidence is preserved in `docs/audits/premium-evidence/`, [`docs/GAUNTLET.md`](docs/GAUNTLET.md), [`docs/GAUNTLET_HANDOFF.md`](docs/GAUNTLET_HANDOFF.md), [`docs/audits/stack-modernization/`](docs/audits/stack-modernization/) and [`docs/bible/`](docs/bible/index.md).
 
 ## Next action
 
-**Prioridade de trabalho solicitada em 23/09/2026:** discutir e refinar somente
+**Atualização de 04/10/2026.** O pedido de 23/09 (MODEL/viewport) foi superado
+pelo ADR 007 (DRAW/POLY) e pelas rodadas de 30/09–03/10. Pendências atuais,
+sem nova decisão de produto:
+
+1. **Aceite manual:** captura nativa e teste com usuários de DRAW/POLY/PAINT
+   ([roteiro do MVP](docs/development/paint-draw-mvp-manual-2026-10-02.md),
+   [protocolo com usuários](docs/development/user-test-protocol.md)).
+2. **Dívida técnica na ordem da [auditoria de 30/09](docs/development/draw-poly-audit-2026-09-30.md):**
+   índice espacial (picking, snap, pincel 3D); render coalescido por quadro e
+   dirty flags; buffer numérico único e migração de Loop Cut/Slice/Knife/Profile
+   para `ToolSession` (ADR 007); alças ≥ 24 px e gizmo em passo GPU.
+3. **Pendências funcionais** listadas em cada matriz de `docs/development/*-gap-matrix.md`.
+4. **Wave 11** (plugins/automação) depois da estabilização acima.
+
+O texto abaixo é o registro histórico das prioridades anteriores.
+
+**Prioridade de trabalho solicitada em 23/09/2026 (histórico):** discutir e refinar somente
 MODEL e viewport, começando pelas fases 1–4 do
 [plano de Context/workspaces](docs/development/workspace-inspector-implementation-plan.md).
 O plano completo registra PAINT/UV para preservar a arquitetura compartilhada,
@@ -326,10 +341,20 @@ Após a estabilização da iniciativa Paint, retomar a **Wave 11
 (Extensibility, Plugins & Automation)** cobrindo P3D-110, P3D-111, P3D-112,
 P3D-141, P3D-142 e P3D-154.
 
-### Frontend Slint — gaps conhecidos (2026-09-20)
+### Frontend Slint — gaps conhecidos (2026-09-20, revisado em 04/10/2026)
 
-O shell Slint (`crates/ui-slint/`) é o frontend de produção com 55 testes
-unitários verdes. Gaps conhecidos em relação ao caderno (capítulos 23/36):
+Revisão de 04/10/2026 contra o código: keymap profiles (`keymap_edit.rs`,
+perfis embutidos em `petunia_config`) e i18n TOML (`src/tr.rs`,
+`assets/locales/`) **já existem** no shell Slint; ícones vêm do global
+gerado `PetuniaIcons`. O **fast path GPU também já existe**: em produção
+`viewport_gpu.rs` entrega a textura wgpu ao Slint sem cópia
+(`slint::Image::try_from`); o readback com espera bloqueante ficou só nos
+testes de aparência. Cores, fontes e sombras do shell vivem em `tokens.slint`
+(F1, tokens v2), com o guarda `xtask ui-lint`. A lista abaixo é o
+registro original de 20/09.
+
+O shell Slint (`crates/ui-slint/`) é o frontend de produção (55 testes
+unitários em 20/09; 473 em 03/10). Gaps conhecidos em relação ao caderno (capítulos 23/36):
 
 - **Transform modal**: sendo corrigido transacionalmente (scrubbing, commit,
   cancel — testes `transform_scrub_*` e `escape_cancels_transform` já verdes).
@@ -366,8 +391,6 @@ estão no cap. 45. Prioridades vigentes (Sprint A–E de 2026-09-29) não mudam.
 
 ## Recovery order
 
-1. `ENTRYPOINT.md` or platform adapter.
-2. `prumo.json` and this state file.
-3. `docs/PRUMO.md` and the premium interaction plan.
-4. Historical goals in `.ai/goals/` (their DONE state does not close premium work).
-5. Only relevant canonical docs, symbols and tests.
+1. `AGENTS.md` (normative rules) and this state file.
+2. `docs/NAVIGATION.md` and the premium interaction plan.
+3. Only relevant canonical docs (`docs/bible/`), symbols and tests.

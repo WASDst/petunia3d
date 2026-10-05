@@ -13,13 +13,12 @@ O site público (VitePress) está **congelado até o fim do desenvolvimento do p
 Implementa o princípio de **Documentação Canônica Viva**: o repositório é autossuficiente e todo o conhecimento técnico essencial reside diretamente no código, no caderno e em arquivos Markdown padronizados e versionados.
 
 ## Roteador Central
-Consulte [`PRUMO.md`](PRUMO.md) como ponto de entrada principal para navegação guiada por intenção (usuário, desenvolvedor, operador, agente).
+Consulte [`NAVIGATION.md`](NAVIGATION.md) como ponto de entrada principal para navegação guiada por intenção (usuário, desenvolvedor, operador, agente).
 
 ## Inventário Completo de Documentação
-- [`PRUMO.md`](PRUMO.md): Roteador central de intenção (mapa mestre de navegação).
+- [`NAVIGATION.md`](NAVIGATION.md): Roteador central de intenção (mapa mestre de navegação).
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): Grafo de crates, regras de dependência, eventos e render-on-demand.
 - [`GAUNTLET.md`](GAUNTLET.md): Histórico de validações independentes, estabilidade, benchmarks e evidências.
-- `contracts/`: Contratos formais e mapeamento semântico de documentação (`bindings.json`).
 - `architecture/`: Arquitetura do sistema, boundaries, contratos de Clean Code e ADRs.
 - `product/`: Visão de produto, proposta de valor, público-alvo e limites de escopo.
 - [`development/premium-interaction-plan.md`](development/premium-interaction-plan.md): plano e evidências da rodada premium.

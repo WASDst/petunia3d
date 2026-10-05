@@ -856,7 +856,7 @@ crates/petunia-render/AGENTS.md
 ...
 ```
 
-O arquivo raiz orienta; documentos locais explicam invariantes específicas do diretório. O Prumo deve gerar/manter esse mapa a partir da documentação canônica, sem duplicar integralmente o Livro Vivo em cada arquivo.
+O arquivo raiz orienta; documentos locais explicam invariantes específicas do diretório. Os agentes e o CI (`xtask`) devem gerar/manter esse mapa a partir da documentação canônica, sem duplicar integralmente o Livro Vivo em cada arquivo.
 
 # Definition of Done por feature
 
@@ -875,7 +875,7 @@ Uma feature só está concluída quando:
 
 # Architecture invariants obrigatórias
 
-O Prumo e CI devem tratar estas regras como invariants:
+Agentes e CI devem tratar estas regras como invariants:
 
 - Geometry não depende de egui, eframe, MCP ou Lua.
 - Core/Domain não depende de wgpu.

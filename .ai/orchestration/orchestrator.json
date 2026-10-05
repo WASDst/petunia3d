@@ -1,8 +1,0 @@
-{
-  "version": 2,
-  "primary": "native",
-  "protocol": "project-orchestration-protocol-v2",
-  "autonomy": "agentic",
-  "source_of_truth": "repository",
-  "context_methodology": "LPC"
-}

@@ -76,7 +76,7 @@ jobs:
         run: cargo run -p xtask -- ui-guard --strict
 
       - name: Verify Component Gallery renders in every density
-        run: cargo test -p petunia_ui --lib gallery::
+        run: "cargo test -p petunia_ui --lib gallery::"
 
       - name: Verify Component Gallery example compiles
         run: cargo check -p petunia_ui --example component_gallery

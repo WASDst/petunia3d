@@ -79,7 +79,7 @@ definido em `ui/app.slint`. Regras derivadas:
 ### Guard e validação
 
 ```bash
-cargo test -p petunia_ui_slint --lib          # 55 testes unitários
+cargo test -p petunia_ui_slint --lib          # testes unitários do shell
 cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
 cargo fmt -p petunia_ui_slint -- --check
 ```
@@ -153,8 +153,8 @@ testes relevantes, `cargo clippy` quando viável, architecture checks,
 
 ## 5. Protocolo de contexto
 
-Leia, nesta ordem: este `AGENTS.md` → `ENTRYPOINT.md` → `prumo.json` →
-`docs/PRUMO.md` → a página relevante em `docs/bible/` → o código e os testes
+Leia, nesta ordem: este `AGENTS.md` → `PROJECT_STATE.md` →
+`docs/NAVIGATION.md` → a página relevante em `docs/bible/` → o código e os testes
 envolvidos. Contexto mínimo suficiente, expansão progressiva, ponteiro em vez de
 payload. Nunca enfraquecer critérios de aceitação em silêncio.
 
@@ -164,7 +164,7 @@ Não há modelo ou provedor obrigatório para nenhuma função, inclusive para a
 sessão primária. Use o modelo disponível e adequado à tarefa, considerando
 capacidade, custo e contexto.
 
-Preferências em `prumo.json` e modelos configurados nos agentes são sugestões ou
+Modelos configurados nos agentes (por exemplo em `.opencode/agent/`) são sugestões ou
 configurações de execução, não requisitos de autorização. Não interrompa o
 trabalho, exija troca de modelo nem solicite confirmação apenas por divergência
 entre o modelo da sessão e essas configurações.

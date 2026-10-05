@@ -1,7 +1,4 @@
 /target
-# Prumo derived/runtime state
-.prumo/runtime/
-.prumo/cache/
 __pycache__/
 *.pyc
 

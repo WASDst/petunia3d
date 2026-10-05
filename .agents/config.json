@@ -1,8 +1,0 @@
-{
-  "harness": "antigravity",
-  "hooks_file": ".agents/hooks.json",
-  "instructions": "GEMINI.md",
-  "rules_dir": ".agents/rules",
-  "skills_dir": ".agents/skills",
-  "version": "0.5.1"
-}

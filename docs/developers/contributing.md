@@ -30,6 +30,6 @@ Agradecemos o interesse em contribuir com o **Petunia3D**! Nosso projeto segue r
    cargo test --workspace
    cargo clippy --workspace --all-targets -- -D warnings
    cargo fmt --all -- --check
-   prumo doctor
+   cargo run -p xtask -- docs-check
    ```
 5. Abra o Pull Request detalhando as alterações e citando as issues relacionadas.

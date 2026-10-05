@@ -1827,11 +1827,14 @@ mod tests {
         assert!(
             layer
                 .pixels
-                .chunks_exact(4)
-                .all(|p| p == [0, 0, 0, 255] || p == [255; 4])
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| *p == [0, 0, 0, 255] || *p == [255; 4])
         );
-        assert!(layer.pixels.chunks_exact(4).any(|p| p == [0, 0, 0, 255]));
-        assert!(layer.pixels.chunks_exact(4).any(|p| p == [255; 4]));
+        let (pixels, _) = layer.pixels.as_chunks::<4>();
+        assert!(pixels.contains(&[0, 0, 0, 255]));
+        assert!(pixels.contains(&[255; 4]));
     }
 
     #[test]

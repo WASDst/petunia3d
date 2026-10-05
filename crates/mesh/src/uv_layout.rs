@@ -873,7 +873,7 @@ mod tests {
         m.rasterize_face_texels(0, 8, 8, -3.0, |_, _, _, _| hits += 1);
         // 2 chamadas × 64 texels + os texels da diagonal visitados duas vezes
         let valid_hits = hits;
-        assert!(valid_hits >= 128 && valid_hits <= 160, "{valid_hits}");
+        assert!((128..=160).contains(&valid_hits), "{valid_hits}");
         // UV NaN e vértice NaN: nada
         let mut bad_uv = m.clone();
         bad_uv.faces[0].uv = vec![[f32::NAN, 0.0]; 4];

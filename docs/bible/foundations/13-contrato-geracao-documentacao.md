@@ -3,7 +3,7 @@
 <aside>
 📚
 
-Este capítulo define **como o Project/Prumo Framework deve interpretar o Livro Vivo do Petunia3D** ao gerar documentação, especificações, planos de implementação, tarefas e validações. O objetivo é evitar que hipóteses antigas, itens experimentais ou termos técnicos internos sejam promovidos acidentalmente a requisitos do produto.
+Este capítulo define **como qualquer agente ou ferramenta de documentação deve interpretar o Livro Vivo do Petunia3D** ao gerar documentação, especificações, planos de implementação, tarefas e validações. O objetivo é evitar que hipóteses antigas, itens experimentais ou termos técnicos internos sejam promovidos acidentalmente a requisitos do produto.
 
 </aside>
 
