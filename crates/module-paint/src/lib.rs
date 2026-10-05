@@ -36,6 +36,13 @@ pub use petunia_project::paint_layers::{
 /// com call sites existentes (`petunia_module_paint::BrushType`).
 pub use petunia_core::{BrushSettings, BrushType};
 
+/// Lado (px) da textura de pintura criada para um objeto sem textura.
+/// 1024 dá detalhe de decalque e traço sem estourar o orçamento do histórico.
+pub const DEFAULT_TEXTURE_SIDE: u32 = 1024;
+
+/// Lados que o usuário pode escolher para a textura de pintura.
+pub const TEXTURE_SIDES: [u32; 4] = [256, 512, 1024, 2048];
+
 /// Tiles alterados por uma amostra consolidada de pintura raster.
 ///
 /// A lista é normalizada antes de sair do módulo: índices ordenados, únicos e
@@ -253,7 +260,9 @@ impl PaintModule {
             .assets
             .get(active_idx)
             .and_then(|a| a.texture.clone())
-            .unwrap_or_else(|| Canvas::new(256, 256, [0, 0, 0, 0]));
+            .unwrap_or_else(|| {
+                Canvas::new(DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE, [0, 0, 0, 0])
+            });
         if let Some(o) = state.project.assets.get_mut(active_idx) {
             o.paint_stack = Some(PaintLayerStack::with_base("Base", base));
         }
@@ -274,7 +283,11 @@ impl PaintModule {
         let active_idx = state.project.active;
         let (w, h, tileable, has_stack) = match state.project.assets.get(active_idx) {
             Some(a) => {
-                let (w, h) = a.texture.as_ref().map(|c| (c.w, c.h)).unwrap_or((256, 256));
+                let (w, h) = a
+                    .texture
+                    .as_ref()
+                    .map(|c| (c.w, c.h))
+                    .unwrap_or((DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE));
                 let tileable = a.paint_stack.as_ref().is_some_and(|s| s.is_tileable());
                 (w, h, tileable, a.paint_stack.is_some())
             }
@@ -284,6 +297,7 @@ impl PaintModule {
             return;
         }
         let partial = tileable && !dirty_tiles.is_empty();
+        let time = state.session.decal_time;
         if partial {
             if let Some(asset) = state.project.assets.get_mut(active_idx)
                 && let Some(stack) = asset.paint_stack.as_ref()
@@ -291,10 +305,13 @@ impl PaintModule {
                 let canvas = asset
                     .texture
                     .get_or_insert_with(|| Canvas::new(w, h, [0, 0, 0, 0]));
-                stack.composite_tiles(canvas, dirty_tiles);
+                stack.composite_tiles_on(canvas, dirty_tiles, Some(&*asset.mesh), time);
             }
         } else {
-            state.project.project.composite_paint_stack(active_idx);
+            state
+                .project
+                .project
+                .composite_paint_stack_at(active_idx, time);
         }
         if partial {
             Self::sync_material_tiles(state, active_idx, dirty_tiles);
@@ -399,6 +416,100 @@ impl PaintModule {
         Self::composite_active(state);
     }
 
+    /// Retângulo de texels que o decalque ativo cobre na textura do ativo.
+    pub fn active_decal_bounds(state: &AppState) -> Option<[u32; 4]> {
+        let asset = state.project.active()?;
+        let texture = asset.texture.as_ref()?;
+        let LayerKind::Decal(decal) = &asset.paint_stack.as_ref()?.active()?.kind else {
+            return None;
+        };
+        decal.texel_bounds(Some(&*asset.mesh), texture.w, texture.h)
+    }
+
+    /// Recompõe só os tiles que o decalque ativo cobria (`before`) ou cobre
+    /// agora (P3D-061: mover um decalque não recompõe a textura inteira).
+    pub fn composite_decal_region(state: &mut AppState, before: Option<[u32; 4]>) {
+        let Some((w, h)) = state
+            .project
+            .active()
+            .and_then(|asset| asset.texture.as_ref())
+            .map(|texture| (texture.w, texture.h))
+        else {
+            Self::composite_active(state);
+            return;
+        };
+        let mut tiles: Vec<u32> = [before, Self::active_decal_bounds(state)]
+            .into_iter()
+            .flatten()
+            .flat_map(|bounds| PaintLayerStack::tiles_for_bounds(bounds, w, h))
+            .collect();
+        tiles.sort_unstable();
+        tiles.dedup();
+        if tiles.is_empty() {
+            // Nada coberto antes nem agora: nenhum texel muda.
+            return;
+        }
+        Self::composite_active_tiles(state, &tiles);
+    }
+
+    /// Textura composta do ativo com cada variante do decalque `layer_id`
+    /// (exportação em quadros do Decal Set, cap. 39 "bake universal").
+    pub fn decal_variant_textures(state: &AppState, layer_id: uuid::Uuid) -> Vec<(String, Canvas)> {
+        let Some(asset) = state.project.active() else {
+            return Vec::new();
+        };
+        let Some(stack) = asset.paint_stack.as_ref() else {
+            return Vec::new();
+        };
+        let Some(layer) = stack.layers.iter().find(|layer| layer.id == layer_id) else {
+            return Vec::new();
+        };
+        let LayerKind::Decal(decal) = &layer.kind else {
+            return Vec::new();
+        };
+        let (w, h) = asset
+            .texture
+            .as_ref()
+            .map_or((DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE), |c| (c.w, c.h));
+        (0..decal.variant_count())
+            .map(|index| {
+                let mut frame_stack = stack.clone();
+                if let Some(LayerKind::Decal(variant)) = frame_stack
+                    .layers
+                    .iter_mut()
+                    .find(|l| l.id == layer_id)
+                    .map(|l| &mut l.kind)
+                {
+                    variant.set_variant(index);
+                }
+                let mut canvas = Canvas::new(w, h, [0, 0, 0, 0]);
+                frame_stack.composite_on(&mut canvas, Some(&*asset.mesh), None);
+                (decal.variant_name(index, &layer.name).to_owned(), canvas)
+            })
+            .collect()
+    }
+
+    /// Troca a resolução da textura de pintura do ativo (quadrada, um dos
+    /// [`TEXTURE_SIDES`]), reamostrando todas as camadas raster, numa entrada
+    /// do histórico. `false` se o lado não é permitido, já é o atual ou o
+    /// objeto está travado.
+    pub fn set_texture_side(state: &mut AppState, side: u32) -> bool {
+        if !TEXTURE_SIDES.contains(&side) {
+            return false;
+        }
+        let Some(asset) = state.project.active() else {
+            return false;
+        };
+        if asset.locked || asset.texture.as_ref().map(|c| (c.w, c.h)) == Some((side, side)) {
+            return false;
+        }
+        state.checkpoint("texture resolution");
+        Self::resize_canvas(state, side, side);
+        state.render.canvas_dirty = true;
+        state.mark_dirty();
+        true
+    }
+
     pub fn has_canvas(state: &AppState) -> bool {
         if let Some(o) = state.project.assets.get(state.project.active) {
             if o.texture.is_some() {
@@ -434,14 +545,22 @@ impl PaintModule {
             && let Some(mat) = state.project.project.get_material_mut(mid)
             && mat.albedo_texture.is_none()
         {
-            mat.albedo_texture = Some(Canvas::new(256, 256, fill_rgba));
+            mat.albedo_texture = Some(Canvas::new(
+                DEFAULT_TEXTURE_SIDE,
+                DEFAULT_TEXTURE_SIDE,
+                fill_rgba,
+            ));
         }
 
         // Sincroniza no Asset
         if let Some(o) = state.project.active_mut()
             && o.texture.is_none()
         {
-            o.texture = Some(Canvas::new(256, 256, fill_rgba));
+            o.texture = Some(Canvas::new(
+                DEFAULT_TEXTURE_SIDE,
+                DEFAULT_TEXTURE_SIDE,
+                fill_rgba,
+            ));
             state.mark_dirty();
         }
     }
@@ -836,7 +955,7 @@ impl PaintModule {
             .and_then(|a| a.texture.as_ref())
         {
             Some(t) => (t.w, t.h),
-            None => (256, 256),
+            None => (DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE),
         };
 
         let mut dabs = Vec::with_capacity(points.len() * 4);
@@ -2343,6 +2462,69 @@ mod tests {
             }
         }
         assert!(inside > 0);
+    }
+
+    #[test]
+    fn eraser_follows_hardness_like_the_soft_brush() {
+        use crate::engine::dab_falloff;
+        for t in [0.0, 0.3, 0.6, 0.9] {
+            assert_eq!(
+                dab_falloff(BrushType::Eraser, t, 0.4),
+                dab_falloff(BrushType::Soft, t, 0.4)
+            );
+        }
+        assert_eq!(dab_falloff(BrushType::Eraser, 0.5, 1.0), 1.0, "dura");
+        assert!(dab_falloff(BrushType::Eraser, 0.5, 0.0) < 0.3, "suave");
+    }
+
+    #[test]
+    fn partial_selection_restricts_painting_without_the_toggle() {
+        let mut state = AppState::new("en");
+        assert!(!state.session.tools.paint_isolate_selection);
+        let (right, right_hit) = face_toward(&state, Vec3::X);
+        let (front, front_hit) = face_toward(&state, Vec3::Z);
+        state.project.active_mesh_mut().unwrap().faces[right].selected = true;
+        let settings = BrushSettings {
+            kind: BrushType::Pixel,
+            size_px: 10.0,
+            ..Default::default()
+        };
+        assert!(!PaintModule::paint_mesh_3d_with_settings(
+            &mut state, front, front_hit, settings, false
+        ));
+        PaintModule::reset_stroke_scratch(&mut state);
+        assert!(PaintModule::paint_mesh_3d_with_settings(
+            &mut state, right, right_hit, settings, false
+        ));
+        PaintModule::reset_stroke_scratch(&mut state);
+        // Tudo selecionado não é uma restrição: pinta em qualquer face.
+        for face in &mut state.project.active_mesh_mut().unwrap().faces {
+            face.selected = true;
+        }
+        assert!(PaintModule::paint_mesh_3d_with_settings(
+            &mut state, front, front_hit, settings, false
+        ));
+    }
+
+    #[test]
+    fn restriction_mask_never_bleeds_into_unselected_neighbors() {
+        let mut state = AppState::new("en");
+        let (right, _) = face_toward(&state, Vec3::X);
+        state.project.active_mesh_mut().unwrap().faces[right].selected = true;
+        PaintModule::ensure_stack(&mut state);
+        let (w, h) = PaintModule::active_canvas_dims(&state).unwrap();
+        let restriction = PaintModule::resolve_restriction(&mut state, None).expect("restrição");
+        let mesh = state.project.active_mesh().unwrap();
+        let mask = restriction.mask(mesh, w, h);
+        let others =
+            mesh.uv_coverage_mask((0..mesh.faces.len()).filter(|&i| i != right), w, h, 0.0);
+        let mine = mesh.uv_coverage_mask([right], w, h, 0.0);
+        for i in 0..mask.texels.len() {
+            if mask.texels[i] != 0 && others.texels[i] != 0 {
+                assert!(mine.texels[i] != 0, "texel {i} de outra face na máscara");
+            }
+        }
+        assert!(mask.covered() >= mine.covered());
     }
 
     #[test]

@@ -607,17 +607,94 @@ component PetuniaSlider inherits Rectangle {
 
 /// Superfície do canvas de pintura 2D: raster, wireframe UV, grade de pixels, pan (botão do meio)
 /// e zoom (roda). Mesma superfície no Inspector (pequena) e na janela flutuante (grande).
+/// Cursor dos pincéis (3D e canvas 2D): anel externo = tamanho; anel interno
+/// = núcleo duro (dureza); preenchimento = opacidade × fluxo; ponto central
+/// no lugar do cursor do sistema.
+component BrushCursor inherits Rectangle {
+    in property <length> diameter;
+    in property <float> hardness;
+    in property <float> strength;
+    in property <color> tint;
+    in property <bool> erase;
+    /// Pixel: borda sempre dura, sem anel de núcleo.
+    in property <bool> hard-edge;
+    /// Superfície inclinada: o círculo do carimbo é visto como elipse
+    /// (achatamento no eixo Y local, depois o giro em graus).
+    in property <float> squash: 1.0;
+    in property <float> tilt: 0.0;
+    width: max(root.diameter, 2px);
+    height: self.width;
+    // O Slint só transforma elementos filhos: o anel vive num retângulo interno.
+    ring := Rectangle {
+        width: parent.width;
+        height: parent.height;
+        transform-rotation: root.tilt * 1deg;
+        transform-scale-y: root.squash;
+        border-radius: self.width / 2;
+        border-width: 1.5px;
+        border-color: root.erase ? DesignTokens.danger : DesignTokens.cursor-light;
+        background: (root.erase ? DesignTokens.danger : root.tint).with-alpha(0.04 + 0.32 * clamp(root.strength, 0, 1));
+        // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
+        Rectangle {
+            x: 1.5px;
+            y: 1.5px;
+            width: parent.width - 3px;
+            height: parent.height - 3px;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: DesignTokens.cursor-dark;
+        }
+        if !root.hard-edge && root.hardness > 0.02 && root.hardness < 0.98 && root.width > 10px: Rectangle {
+            width: parent.width * root.hardness;
+            height: self.width;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: DesignTokens.cursor-light.transparentize(0.3);
+        }
+    }
+    // O ponto central marca o cursor e não se deforma.
+    Rectangle {
+        x: (parent.width - 3px) / 2;
+        y: (parent.height - 3px) / 2;
+        width: 3px;
+        height: 3px;
+        border-radius: 1.5px;
+        background: DesignTokens.cursor-light;
+        border-width: 1px;
+        border-color: DesignTokens.cursor-dark;
+    }
+}
+
 component PaintCanvasSurface inherits Rectangle {
     in property <image> canvas-image;
+    /// Cursor do pincel no canvas (mesmo diâmetro em tela do viewport).
+    in property <bool> show-brush: false;
+    in property <length> brush-diameter;
+    in property <float> brush-hardness;
+    in property <float> brush-strength;
+    in property <color> brush-tint;
+    in property <bool> brush-erase;
+    in property <bool> brush-hard-edge;
     in property <int> zoom: 1;
     in property <bool> show-uv: false;
     in property <string> uv-commands: "";
     in property <bool> show-grid: false;
     in property <string> grid-commands: "";
+    /// Ferramenta Select: clique/caixa selecionam faces pelo UV.
+    in property <bool> select-mode: false;
+    /// Faces selecionadas (caixa de 256 × 256, V para cima).
+    in property <string> selected-commands: "";
     in-out property <length> pan-x: 0px;
     in-out property <length> pan-y: 0px;
-    callback stroke(float, float, int, bool);
+    /// x, y normalizados na textura, fase, Shift, largura da textura em px.
+    callback stroke(float, float, int, bool, float);
     callback zoom-step(int);
+    /// x0, y0, x1, y1 em frações da textura; Shift, Ctrl, Alt.
+    callback select-region(float, float, float, float, bool, bool, bool);
+    // A textura cabe no canvas sem deformar (proporção da imagem).
+    property <float> fit: min(root.width / 1px / max(1, root.canvas-image.width), root.height / 1px / max(1, root.canvas-image.height));
 
     background: DesignTokens.canvas;
     border-width: 1px;
@@ -625,8 +702,8 @@ component PaintCanvasSurface inherits Rectangle {
     clip: true;
 
     raster := Image {
-        width: root.width * root.zoom;
-        height: root.height * root.zoom;
+        width: max(1, root.canvas-image.width) * root.fit * root.zoom * 1px;
+        height: max(1, root.canvas-image.height) * root.fit * root.zoom * 1px;
         x: (root.width - self.width) / 2 + root.pan-x;
         y: (root.height - self.height) / 2 + root.pan-y;
         image-fit: fill;
@@ -639,10 +716,29 @@ component PaintCanvasSurface inherits Rectangle {
         height: raster.height;
         x: raster.x;
         y: raster.y;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 256;
+        viewbox-height: 256;
         fill: transparent;
         stroke: DesignTokens.uv-wire;
         stroke-width: 1px;
         commands: root.uv-commands;
+    }
+
+    if root.selected-commands != "": Path {
+        width: raster.width;
+        height: raster.height;
+        x: raster.x;
+        y: raster.y;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: 256;
+        viewbox-height: 256;
+        fill: DesignTokens.accent.transparentize(0.75);
+        stroke: DesignTokens.accent;
+        stroke-width: 1px;
+        commands: root.selected-commands;
     }
 
     if root.show-grid && root.grid-commands != "": Path {
@@ -657,6 +753,9 @@ component PaintCanvasSurface inherits Rectangle {
     surface-touch := TouchArea {
         property <bool> panning: false;
         property <bool> shift-line: false;
+        property <bool> selecting: false;
+        property <length> select-x;
+        property <length> select-y;
         property <length> last-x;
         property <length> last-y;
         pointer-event(event) => {
@@ -665,15 +764,25 @@ component PaintCanvasSurface inherits Rectangle {
                     self.panning = true;
                     self.last-x = self.mouse-x;
                     self.last-y = self.mouse-y;
+                } else if event.button == PointerEventButton.left && root.select-mode {
+                    self.selecting = true;
+                    self.select-x = self.mouse-x;
+                    self.select-y = self.mouse-y;
                 } else if event.button == PointerEventButton.left {
                     self.shift-line = event.modifiers.shift;
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line);
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 0, self.shift-line, raster.width / 1px);
                 }
             } else if event.kind == PointerEventKind.up {
                 if self.panning {
                     self.panning = false;
+                } else if self.selecting && event.button == PointerEventButton.left {
+                    self.selecting = false;
+                    root.select-region(
+                        (self.select-x - raster.x) / raster.width, (self.select-y - raster.y) / raster.height,
+                        (self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height,
+                        event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                 } else if event.button == PointerEventButton.left {
-                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line);
+                    root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 2, self.shift-line, raster.width / 1px);
                 }
             }
         }
@@ -683,8 +792,8 @@ component PaintCanvasSurface inherits Rectangle {
                 root.pan-y += self.mouse-y - self.last-y;
                 self.last-x = self.mouse-x;
                 self.last-y = self.mouse-y;
-            } else if self.pressed {
-                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line);
+            } else if self.pressed && !self.selecting {
+                root.stroke((self.mouse-x - raster.x) / raster.width, (self.mouse-y - raster.y) / raster.height, 1, self.shift-line, raster.width / 1px);
             }
         }
         scroll-event(event) => {
@@ -694,6 +803,28 @@ component PaintCanvasSurface inherits Rectangle {
             }
             reject
         }
+    }
+
+    // Caixa de seleção em andamento.
+    if surface-touch.selecting: Rectangle {
+        x: min(surface-touch.select-x, surface-touch.mouse-x);
+        y: min(surface-touch.select-y, surface-touch.mouse-y);
+        width: abs(surface-touch.mouse-x - surface-touch.select-x);
+        height: abs(surface-touch.mouse-y - surface-touch.select-y);
+        border-width: 1px;
+        border-color: DesignTokens.accent;
+        background: DesignTokens.accent.transparentize(0.85);
+    }
+
+    if root.show-brush && !root.select-mode && surface-touch.has-hover && !surface-touch.panning: BrushCursor {
+        diameter: root.brush-diameter;
+        hardness: root.brush-hardness;
+        strength: root.brush-strength;
+        tint: root.brush-tint;
+        erase: root.brush-erase;
+        hard-edge: root.brush-hard-edge;
+        x: surface-touch.mouse-x - self.width / 2;
+        y: surface-touch.mouse-y - self.height / 2;
     }
 }
 
@@ -3637,6 +3768,12 @@ export component PetuniaSlintShell inherits Window {
             root.toast-visible = false;
         }
     }
+    decal-playback-timer := Timer {
+        interval: 33ms;
+        running: root.decal-playing;
+        triggered => { root.decal-playback-tick(0.033); }
+    }
+
     toast-timer := Timer {
         interval: 3200ms;
         running: false;
@@ -4007,6 +4144,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-decal-transform: "";
     in-out property <string> label-decal-position: "";
     in-out property <string> label-decal-scale: "";
+    in-out property <string> label-decal-width: "";
     in-out property <string> label-decal-rotation: "";
     in-out property <string> label-decal-bake: "";
     in-out property <string> label-decal-hint: "";
@@ -4069,6 +4207,36 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> paint-projection: "Surface";
     in-out property <string> paint-lock: "None";
     in-out property <bool> active-layer-is-decal: false;
+    /// Decalque fixado na superfície: largura em mundo, sem posição UV.
+    in-out property <bool> decal-surface: false;
+    /// Lado (px) da textura de pintura do ativo; 0 sem textura quadrada.
+    in-out property <int> paint-texture-side: 0;
+    callback paint-texture-side-selected(int);
+    /// Decal Set do decalque ativo (cap. 39).
+    in-out property <[string]> decal-variant-names;
+    in-out property <int> decal-variant-index: 0;
+    in-out property <int> decal-frame: 0;
+    in-out property <int> decal-track-length: 24;
+    in-out property <float> decal-track-fps: 12;
+    in-out property <string> decal-keys-text: "";
+    in-out property <bool> decal-has-keys: false;
+    in-out property <bool> decal-frame-keyed: false;
+    in-out property <bool> decal-playing: false;
+    callback decal-variant-selected(int);
+    callback decal-variant-remove-requested;
+    callback decal-key-set-requested;
+    callback decal-key-remove-requested;
+    callback decal-frame-changed(int);
+    callback decal-fps-changed(float);
+    callback decal-length-changed(int);
+    callback decal-play-toggled;
+    callback decal-playback-tick(float);
+    /// Pegada do pincel 3D em superfície inclinada: achatamento e giro (graus).
+    in-out property <float> brush-cursor-squash: 1.0;
+    in-out property <float> brush-cursor-tilt: 0.0;
+    /// Seleção de faces pelo UV no canvas 2D: x0, y0, x1, y1 (frações da
+    /// textura), Shift (somar), Ctrl (subtrair), Alt (ilha inteira).
+    callback paint-2d-select(float, float, float, float, bool, bool, bool);
     in-out property <float> decal-center-u: 0.5;
     in-out property <float> decal-center-v: 0.5;
     in-out property <float> decal-scale-u: 0.25;
@@ -4315,7 +4483,7 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-paint-begin(float, float, bool, bool);
     callback viewport-paint-update(float, float, bool, bool);
     callback viewport-paint-end(float, float);
-    callback paint-2d-stroke(float, float, int, bool);
+    callback paint-2d-stroke(float, float, int, bool, float);
     callback toggle-paint-pixel-grid;
     callback set-paint-canvas-zoom(int);
     callback add-menu-changed(bool);
@@ -4562,6 +4730,13 @@ export component PetuniaSlintShell inherits Window {
             text == Key.F11 ? "F11" :
             text == Key.F12 ? "F12" :
             text;
+    }
+
+    /// Ferramentas de traço com pincel (têm cursor de tamanho/dureza/força).
+    pure function brush-stroke-tool(tool: string) -> bool {
+        return tool == "brush" || tool == "eraser" || tool == "airbrush" || tool == "pixel"
+            || tool == "smudge" || tool == "blur" || tool == "dodge" || tool == "burn"
+            || tool == "spray" || tool == "clone";
     }
 
     // Cor e espessura de um handle do gizmo conforme o estado da interação.
@@ -5620,7 +5795,7 @@ export component PetuniaSlintShell inherits Window {
                     viewport-touch := TouchArea {
                         mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
                             : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
-                            : (root.active-workspace == "PAINT") ? ((root.active-tool == "brush" || root.active-tool == "eraser" || root.active-tool == "airbrush" || root.active-tool == "pixel") ? none : crosshair)
+                            : (root.active-workspace == "PAINT") ? (root.brush-stroke-tool(root.active-tool) ? none : crosshair)
                             : (root.active-tool == "slice" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
                             : (root.active-tool == "extrude" || root.active-tool == "push_pull") ? ns-resize
                             : root.active-tool == "bevel" ? nesw-resize
@@ -5631,36 +5806,19 @@ export component PetuniaSlintShell inherits Window {
                             : root.gizmo-has-hover ? grab
                             : default;
                         // Anel do pincel: mesmo diâmetro (px) que o carimbo e o pincel 2D usam.
-                        if root.active-workspace == "PAINT" && viewport-touch.has-hover && (root.active-tool == "brush" || root.active-tool == "eraser" || root.active-tool == "airbrush" || root.active-tool == "pixel"): Rectangle {
-                            width: max(root.brush-size * 16px, 2px);
-                            height: self.width;
+                        // Cursor do pincel: mesmo diâmetro (px) que o carimbo e o canvas 2D;
+                        // núcleo pela dureza e preenchimento pela opacidade × fluxo.
+                        if root.active-workspace == "PAINT" && viewport-touch.has-hover && root.brush-stroke-tool(root.active-tool): BrushCursor {
+                            diameter: root.brush-size * 16px;
+                            hardness: root.brush-hardness;
+                            strength: root.brush-opacity * root.brush-flow;
+                            tint: root.paint-color;
+                            erase: root.active-tool == "eraser";
+                            hard-edge: root.active-tool == "pixel";
+                            squash: root.brush-cursor-squash;
+                            tilt: root.brush-cursor-tilt;
                             x: viewport-touch.mouse-x - self.width / 2;
                             y: viewport-touch.mouse-y - self.height / 2;
-                            border-radius: self.width / 2;
-                            border-width: 1.5px;
-                            border-color: root.active-tool == "eraser" ? DesignTokens.danger : DesignTokens.cursor-light;
-                            background: root.active-tool == "eraser" ? DesignTokens.danger.with-alpha(0.10) : root.paint-color.with-alpha(0.14);
-                            // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
-                            // Ponto central: substitui o cursor do sistema, escondido nas ferramentas de pincel.
-                            Rectangle {
-                                x: (parent.width - 3px) / 2;
-                                y: (parent.height - 3px) / 2;
-                                width: 3px;
-                                height: 3px;
-                                border-radius: 1.5px;
-                                background: DesignTokens.cursor-light;
-                                border-width: 1px;
-                                border-color: DesignTokens.cursor-dark;
-                            }
-                            Rectangle {
-                                x: 1.5px;
-                                y: 1.5px;
-                                width: parent.width - 3px;
-                                height: parent.height - 3px;
-                                border-radius: self.width / 2;
-                                border-width: 1px;
-                                border-color: DesignTokens.cursor-dark;
-                            }
                         }
                         property <length> last-x;
                         property <length> last-y;
@@ -7318,7 +7476,7 @@ export component PetuniaSlintShell inherits Window {
                         Text { text: Tr.t("sl.enter_confirm_esc_cancel"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
                     }
 
-                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && (root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || root.active-tool == "poly_pen"): ToolCard {
+                    if !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active && !operation-hud-active && !primitive-active && ((root.active-workspace == "PAINT" && root.last-operation-active) || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "extrude" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "slice" || root.active-tool == "bevel" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || root.active-tool == "poly_pen"): ToolCard {
                         x: 14px;
                         y: 58px;
                         title: root.tool-options-title != "" ? root.tool-options-title : Tr.t("sl.tool_options");
@@ -9036,6 +9194,24 @@ export component PetuniaSlintShell inherits Window {
                                     spacing: 6px;
                                     padding-top: 4px;
 
+                                    // Resolução da textura de pintura (reamostra todas as camadas).
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text {
+                                            text: Tr.t("paint.canvas_size");
+                                            color: DesignTokens.text-secondary;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            for side in [256, 512, 1024, 2048]: BrushChip {
+                                                label: side;
+                                                active: root.paint-texture-side == side;
+                                                clicked => { root.paint-texture-side-selected(side); }
+                                            }
+                                        }
+                                    }
+
                                     HorizontalLayout {
                                         alignment: space-between;
                                         HorizontalLayout {
@@ -9164,11 +9340,21 @@ export component PetuniaSlintShell inherits Window {
                                         horizontal-stretch: 0;
                                         canvas-image: root.paint-canvas-image;
                                         zoom: root.paint-canvas-zoom;
+                                        show-brush: root.brush-stroke-tool(root.active-tool);
+                                        brush-diameter: root.brush-size * 16px;
+                                        brush-hardness: root.brush-hardness;
+                                        brush-strength: root.brush-opacity * root.brush-flow;
+                                        brush-tint: root.paint-color;
+                                        brush-erase: root.active-tool == "eraser";
+                                        brush-hard-edge: root.active-tool == "pixel";
                                         show-uv: root.paint-show-uv;
                                         uv-commands: root.uv-layout-commands;
                                         show-grid: root.paint-pixel-grid;
                                         grid-commands: root.paint-canvas-grid-commands;
-                                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                                        select-mode: root.active-tool == "select";
+                                        selected-commands: root.uv-selected-commands;
+                                        select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
+                                        stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                                         zoom-step(direction) => {
                                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -9545,7 +9731,7 @@ export component PetuniaSlintShell inherits Window {
                                             wrap: word-wrap;
                                         }
 
-                                        HorizontalLayout {
+                                        if !root.decal-surface: HorizontalLayout {
                                             spacing: 6px;
                                             Text {
                                                 text: root.label-decal-position;
@@ -9577,14 +9763,14 @@ export component PetuniaSlintShell inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             Text {
-                                                text: root.label-decal-scale;
+                                                text: root.decal-surface ? root.label-decal-width : root.label-decal-scale;
                                                 color: DesignTokens.text-secondary;
                                                 font-size: DesignTokens.font-caption;
                                                 width: 52px;
                                                 vertical-alignment: center;
                                             }
                                             NumericField {
-                                                label: "U";
+                                                label: root.decal-surface ? "" : "U";
                                                 value: root.decal-scale-u;
                                                 step: 0.05;
                                                 scrubbed(delta, _) => {
@@ -9592,7 +9778,7 @@ export component PetuniaSlintShell inherits Window {
                                                     root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
                                                 }
                                             }
-                                            NumericField {
+                                            if !root.decal-surface: NumericField {
                                                 label: "V";
                                                 value: root.decal-scale-v;
                                                 step: 0.05;
@@ -9644,6 +9830,106 @@ export component PetuniaSlintShell inherits Window {
                                             bake-touch := TouchArea {
                                                 clicked => { root.bake-active-decal(); }
                                             }
+                                        }
+
+                                        // Decal Set (cap. 39): variantes equivalentes e troca em degraus.
+                                        Text {
+                                            text: Tr.t("ui.decal_variants");
+                                            color: DesignTokens.text-primary;
+                                            font-size: DesignTokens.font-small;
+                                            font-weight: 600;
+                                        }
+                                        VerticalLayout {
+                                            spacing: 4px;
+                                            for name[index] in root.decal-variant-names: BrushChip {
+                                                label: name;
+                                                active: index == root.decal-variant-index;
+                                                clicked => { root.decal-variant-selected(index); }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            BrushChip {
+                                                label: Tr.t("ui.decal_add_variant");
+                                                clicked => { root.command-file-action("paint.add_decal_variant"); }
+                                            }
+                                            if root.decal-variant-names.length > 1: BrushChip {
+                                                label: Tr.t("ui.decal_remove_variant");
+                                                clicked => { root.decal-variant-remove-requested(); }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: Tr.t("ui.decal_animation");
+                                            color: DesignTokens.text-primary;
+                                            font-size: DesignTokens.font-small;
+                                            font-weight: 600;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            NumericField {
+                                                label: Tr.t("ui.decal_frame");
+                                                full-label: Tr.t("ui.decal_frame");
+                                                value: root.decal-frame;
+                                                step: 1;
+                                                scrubbed(delta, _) => { root.decal-frame-changed(root.decal-frame + Math.round(delta)); }
+                                                text-committed(text) => {
+                                                    if !text.is-float() { return false; }
+                                                    root.decal-frame-changed(Math.round(text.to-float()));
+                                                    return true;
+                                                }
+                                            }
+                                            NumericField {
+                                                label: Tr.t("ui.decal_fps");
+                                                full-label: Tr.t("ui.decal_fps");
+                                                value: root.decal-track-fps;
+                                                step: 1;
+                                                scrubbed(delta, _) => { root.decal-fps-changed(root.decal-track-fps + Math.round(delta)); }
+                                                text-committed(text) => {
+                                                    if !text.is-float() { return false; }
+                                                    root.decal-fps-changed(text.to-float());
+                                                    return true;
+                                                }
+                                            }
+                                            NumericField {
+                                                label: Tr.t("ui.decal_length");
+                                                full-label: Tr.t("ui.decal_length");
+                                                value: root.decal-track-length;
+                                                step: 1;
+                                                scrubbed(delta, _) => { root.decal-length-changed(root.decal-track-length + Math.round(delta)); }
+                                                text-committed(text) => {
+                                                    if !text.is-float() { return false; }
+                                                    root.decal-length-changed(Math.round(text.to-float()));
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            BrushChip {
+                                                label: Tr.t("ui.decal_set_key");
+                                                active: root.decal-frame-keyed;
+                                                clicked => { root.decal-key-set-requested(); }
+                                            }
+                                            if root.decal-frame-keyed: BrushChip {
+                                                label: Tr.t("ui.decal_remove_key");
+                                                clicked => { root.decal-key-remove-requested(); }
+                                            }
+                                            if root.decal-has-keys: BrushChip {
+                                                label: root.decal-playing ? Tr.t("ui.decal_stop") : Tr.t("ui.decal_play");
+                                                active: root.decal-playing;
+                                                clicked => { root.decal-play-toggled(); }
+                                            }
+                                        }
+                                        Text {
+                                            text: root.decal-has-keys ? root.decal-keys-text : Tr.t("ui.decal_no_keys");
+                                            color: DesignTokens.text-muted;
+                                            font-size: DesignTokens.font-caption;
+                                            wrap: word-wrap;
+                                        }
+                                        BrushChip {
+                                            label: Tr.t("ui.decal_export_frames");
+                                            clicked => { root.command-file-action("paint.export_decal_frames"); }
                                         }
                                     }
                                 }
@@ -10572,11 +10858,21 @@ export component PetuniaSlintShell inherits Window {
                             height: parent.height;
                             canvas-image: root.paint-canvas-image;
                             zoom: root.paint-canvas-zoom;
+                            show-brush: root.brush-stroke-tool(root.active-tool);
+                            brush-diameter: root.brush-size * 16px;
+                            brush-hardness: root.brush-hardness;
+                            brush-strength: root.brush-opacity * root.brush-flow;
+                            brush-tint: root.paint-color;
+                            brush-erase: root.active-tool == "eraser";
+                            brush-hard-edge: root.active-tool == "pixel";
                             show-uv: root.paint-show-uv;
                             uv-commands: root.uv-layout-commands;
                             show-grid: root.paint-pixel-grid;
                             grid-commands: root.paint-canvas-grid-commands;
-                            stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                            select-mode: root.active-tool == "select";
+                            selected-commands: root.uv-selected-commands;
+                            select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
+                            stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                             zoom-step(direction) => {
                                 if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                                 if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
@@ -12419,11 +12715,21 @@ export component PetuniaSlintShell inherits Window {
                         vertical-stretch: 1;
                         canvas-image: root.paint-canvas-image;
                         zoom: root.paint-canvas-zoom;
+                        show-brush: root.brush-stroke-tool(root.active-tool);
+                        brush-diameter: root.brush-size * 16px;
+                        brush-hardness: root.brush-hardness;
+                        brush-strength: root.brush-opacity * root.brush-flow;
+                        brush-tint: root.paint-color;
+                        brush-erase: root.active-tool == "eraser";
+                        brush-hard-edge: root.active-tool == "pixel";
                         show-uv: root.paint-show-uv;
                         uv-commands: root.uv-layout-commands;
                         show-grid: root.paint-pixel-grid;
                         grid-commands: root.paint-canvas-grid-commands;
-                        stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                        select-mode: root.active-tool == "select";
+                        selected-commands: root.uv-selected-commands;
+                        select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
+                        stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
                         zoom-step(direction) => {
                             if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
                             if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }

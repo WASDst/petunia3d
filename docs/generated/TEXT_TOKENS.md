@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1812**.
+Total de chaves de localização cadastradas: **1835**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -290,6 +290,10 @@ Total de chaves de localização cadastradas: **1812**.
 | `hud.cut_hint` | Click edge points · Enter Apply · Esc Cancel | Clique em pontos de aresta · Enter aplica · Esc cancela |
 | `hud.cut_title` | Cut | Cortar |
 | `hud.cuts` | Cuts    {0} | Cortes    {0} |
+| `hud.decal_hint` | Type a value · Tab switches field · Enter confirms · Esc cancels | Digite um valor · Tab troca o campo · Enter confirma · Esc cancela |
+| `hud.decal_idle_hint` | Click the surface to place · drag to move · corners scale · top handle rotates | Clique na superfície para posicionar · arraste para mover · cantos escalam · alça de cima gira |
+| `hud.decal_rotation` | Rotation: {0}° | Rotação: {0}° |
+| `hud.decal_width` | Width: {0} m | Largura: {0} m |
 | `hud.edit_pivot_hint` | D / Insert or Esc to exit · Geometry remains fixed | D / Insert ou Esc sai · A geometria fica fixa |
 | `hud.edit_pivot_line` | Moving object pivot point | Movendo o pivô do objeto |
 | `hud.edit_pivot_title` | Edit Pivot Mode | Edição do pivô |
@@ -967,7 +971,7 @@ Total de chaves de localização cadastradas: **1812**.
 | `sl.manage_scene_parts_groups_and_hierarchy` | Manage scene parts, groups and hierarchy | Gerencie partes, grupos e hierarquia da cena |
 | `sl.mark_clear_seam` | Mark / Clear Seam | Marcar / limpar costura |
 | `sl.mark_unmark_seams` | Mark/Unmark Seams | Marcar/desmarcar costuras |
-| `sl.mask_selection` | Mask Selection: | Máscara de seleção: |
+| `sl.mask_selection` | Always mask: | Sempre mascarar: |
 | `sl.mcp_automation` | MCP & Automation | MCP & Automação |
 | `sl.measure` | Measure | Medir |
 | `sl.measure_distances_and_angles_between_geometr` | Measure distances and angles between geometry elements in 3D | Mede distâncias e ângulos entre elementos da geometria em 3D |
@@ -1317,10 +1321,13 @@ Total de chaves de localização cadastradas: **1812**.
 | `status.cut_point_at_a_visible_edge` | Cut: point at a visible edge | Cortar: aponte para uma aresta visível |
 | `status.cut_preview_choose_another_segment_enter_applies` | Cut preview: choose another segment, Enter applies, Esc restores | Prévia do corte: escolha outro segmento, Enter aplica, Esc restaura |
 | `status.decal_could_not_read_the_image` | Decal: could not read the image ({error}) | Decalque: não foi possível ler a imagem ({error}) |
+| `status.decal_export_failed` | Frame export failed: {error} | Exportação de quadros falhou: {error} |
+| `status.decal_frames_exported` | {count} frames exported to {dir} | {count} quadros exportados em {dir} |
 | `status.decal_imported_x` | Decal imported: {name} ({w}×{h}) | Decalque importado: {name} ({w}×{h}) |
 | `status.decal_invalid_image_data` | Decal: invalid image data | Decalque: dados de imagem inválidos |
 | `status.decal_transform_cancelled` | Decal transform cancelled | Transformação do decalque cancelada |
 | `status.decal_transform_committed` | Decal transform committed | Transformação do decalque confirmada |
+| `status.decal_variant_added` | Variant added: {name} | Variante adicionada: {name} |
 | `status.draw_a_profile_before_generating_volume` | Draw a profile before generating volume | Desenhe um perfil antes de gerar o volume |
 | `status.duplicated_material_to_slot` | Duplicated material to slot {new_idx} | Material duplicado no slot {new_idx} |
 | `status.edge_selected` | Edge {a}-{b} selected | Aresta {a}-{b} selecionada |
@@ -1444,6 +1451,7 @@ Total de chaves de localização cadastradas: **1812**.
 | `status.uv_all_pinned_vertices_cleared` | UV: all pinned vertices cleared | UV: todos os pontos fixos liberados |
 | `status.uv_all_seams_cleared` | UV: all seams cleared | UV: todas as costuras limpas |
 | `status.uv_face_selected_total` | UV: face {face} selected ({0} total) | UV: face {face} selecionada ({0} no total) |
+| `status.uv_faces_selected` | {count} faces selected in UV | {count} faces selecionadas no UV |
 | `status.uv_moved_by` | UV moved by ({du}, {dv}) | UV movida em ({du}, {dv}) |
 | `status.uv_no_face_under_the_cursor` | UV: no face under the cursor | UV: nenhuma face sob o cursor |
 | `status.uv_pins_toggled_pinned_corners_total` | UV pins toggled ({count} pinned corners total) | Fixações UV alternadas ({count} cantos fixos no total) |
@@ -1538,6 +1546,7 @@ Total de chaves de localização cadastradas: **1812**.
 | `tools.bevel` | Round Edge | Round Edge |
 | `tools.connect` | Connect | Conectar |
 | `tools.cursor_3d` | 3D Cursor | Cursor 3D |
+| `tools.decal` | Decal | Decalque |
 | `tools.dissolve` | Dissolve | Dissolver |
 | `tools.draw_profile` | Profile | Perfil |
 | `tools.eraser` | Eraser | Borracha |
@@ -1607,12 +1616,26 @@ Total de chaves de localização cadastradas: **1812**.
 | `ui.close` | Close | Fechar |
 | `ui.collapse` | Collapse section | Recolher painel |
 | `ui.collapse_inspector` | Collapse inspector | Recolher inspector |
+| `ui.decal_add_variant` | Add variant | Adicionar variante |
+| `ui.decal_animation` | Variant animation | Animação de variantes |
 | `ui.decal_bake` | Bake Decal to Layer | Fixar Decalque na Camada |
-| `ui.decal_hint` | Drag on 3D surface to place decal. Shift+drag: scale, Ctrl+drag: rotate. | Arraste na superfície 3D para posicionar. Shift+arraste: escala, Ctrl+arraste: rotação. |
+| `ui.decal_export_frames` | Export frames | Exportar quadros |
+| `ui.decal_fps` | Frames/s | Quadros/s |
+| `ui.decal_frame` | Frame | Quadro |
+| `ui.decal_hint` | Click the surface to place it. Drag to move; corners scale and the top handle rotates. | Clique na superfície para posicionar. Arraste para mover; os cantos escalam e a alça de cima gira. |
+| `ui.decal_length` | Length | Duração |
+| `ui.decal_no_keys` | No keys: pick a variant and set a key at the current frame. | Sem chaves: escolha uma variante e grave a chave no quadro atual. |
+| `ui.decal_play` | Play | Tocar |
 | `ui.decal_position` | Position | Posição |
+| `ui.decal_remove_key` | Delete key | Apagar chave |
+| `ui.decal_remove_variant` | Remove variant | Remover variante |
 | `ui.decal_rotation` | Rotation | Rotação |
 | `ui.decal_scale` | Scale | Escala |
-| `ui.decal_transform` | Decal Transform (UV) | Transformação do Decalque (UV) |
+| `ui.decal_set_key` | Set key | Gravar chave |
+| `ui.decal_stop` | Stop | Parar |
+| `ui.decal_transform` | Decal Transform | Transformação do Decalque |
+| `ui.decal_variants` | Variants | Variantes |
+| `ui.decal_width` | Width | Largura |
 | `ui.dock_split_hint` | Drag to resize panels | Arraste para redimensionar os painéis |
 | `ui.duplicate` | Duplicate | Duplicar |
 | `ui.expand` | Expand section | Expandir painel |

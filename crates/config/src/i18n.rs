@@ -324,6 +324,29 @@ pub mod text_id {
     pub const UI_DECAL_TRANSFORM: TextId = TextId::new("ui.decal_transform");
     pub const UI_DECAL_POSITION: TextId = TextId::new("ui.decal_position");
     pub const UI_DECAL_SCALE: TextId = TextId::new("ui.decal_scale");
+    pub const UI_DECAL_WIDTH: TextId = TextId::new("ui.decal_width");
+    pub const TOOLS_DECAL: TextId = TextId::new("tools.decal");
+    pub const HUD_DECAL_WIDTH: TextId = TextId::new("hud.decal_width");
+    pub const HUD_DECAL_ROTATION: TextId = TextId::new("hud.decal_rotation");
+    pub const HUD_DECAL_HINT: TextId = TextId::new("hud.decal_hint");
+    pub const HUD_DECAL_IDLE_HINT: TextId = TextId::new("hud.decal_idle_hint");
+    pub const UI_DECAL_VARIANTS: TextId = TextId::new("ui.decal_variants");
+    pub const UI_DECAL_ADD_VARIANT: TextId = TextId::new("ui.decal_add_variant");
+    pub const UI_DECAL_REMOVE_VARIANT: TextId = TextId::new("ui.decal_remove_variant");
+    pub const UI_DECAL_ANIMATION: TextId = TextId::new("ui.decal_animation");
+    pub const UI_DECAL_FRAME: TextId = TextId::new("ui.decal_frame");
+    pub const UI_DECAL_FPS: TextId = TextId::new("ui.decal_fps");
+    pub const UI_DECAL_LENGTH: TextId = TextId::new("ui.decal_length");
+    pub const UI_DECAL_SET_KEY: TextId = TextId::new("ui.decal_set_key");
+    pub const UI_DECAL_REMOVE_KEY: TextId = TextId::new("ui.decal_remove_key");
+    pub const UI_DECAL_PLAY: TextId = TextId::new("ui.decal_play");
+    pub const UI_DECAL_STOP: TextId = TextId::new("ui.decal_stop");
+    pub const UI_DECAL_EXPORT_FRAMES: TextId = TextId::new("ui.decal_export_frames");
+    pub const UI_DECAL_NO_KEYS: TextId = TextId::new("ui.decal_no_keys");
+    pub const STATUS_DECAL_FRAMES_EXPORTED: TextId = TextId::new("status.decal_frames_exported");
+    pub const STATUS_DECAL_EXPORT_FAILED: TextId = TextId::new("status.decal_export_failed");
+    pub const STATUS_DECAL_VARIANT_ADDED: TextId = TextId::new("status.decal_variant_added");
+    pub const STATUS_UV_FACES_SELECTED: TextId = TextId::new("status.uv_faces_selected");
     pub const UI_DECAL_ROTATION: TextId = TextId::new("ui.decal_rotation");
     pub const UI_DECAL_BAKE: TextId = TextId::new("ui.decal_bake");
     pub const UI_DECAL_HINT: TextId = TextId::new("ui.decal_hint");
@@ -1085,6 +1108,29 @@ pub mod text_id {
         UI_DECAL_TRANSFORM,
         UI_DECAL_POSITION,
         UI_DECAL_SCALE,
+        UI_DECAL_WIDTH,
+        TOOLS_DECAL,
+        HUD_DECAL_WIDTH,
+        HUD_DECAL_ROTATION,
+        HUD_DECAL_HINT,
+        HUD_DECAL_IDLE_HINT,
+        UI_DECAL_VARIANTS,
+        UI_DECAL_ADD_VARIANT,
+        UI_DECAL_REMOVE_VARIANT,
+        UI_DECAL_ANIMATION,
+        UI_DECAL_FRAME,
+        UI_DECAL_FPS,
+        UI_DECAL_LENGTH,
+        UI_DECAL_SET_KEY,
+        UI_DECAL_REMOVE_KEY,
+        UI_DECAL_PLAY,
+        UI_DECAL_STOP,
+        UI_DECAL_EXPORT_FRAMES,
+        UI_DECAL_NO_KEYS,
+        STATUS_DECAL_FRAMES_EXPORTED,
+        STATUS_DECAL_EXPORT_FAILED,
+        STATUS_DECAL_VARIANT_ADDED,
+        STATUS_UV_FACES_SELECTED,
         UI_DECAL_ROTATION,
         UI_DECAL_BAKE,
         UI_DECAL_HINT,

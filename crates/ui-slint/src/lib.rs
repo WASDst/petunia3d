@@ -14,6 +14,7 @@ pub mod animate;
 mod brush_panel;
 pub mod color_wheel;
 pub mod commands;
+mod decal_tool;
 mod draw_extensions;
 mod draw_shapes;
 pub mod files;
@@ -22,6 +23,7 @@ pub mod keymap_edit;
 pub mod numeric;
 pub mod overlay;
 mod paint_surface_tools;
+mod paint_view_tools;
 mod scene_cache;
 mod shape_builder_tool;
 pub mod split_view;
@@ -391,6 +393,9 @@ pub enum GrammarTool {
     /// clique extrai a face.
     ShapeBuilder,
     SurfacePaint,
+    /// Decalque ativo no PAINT: clique posiciona, arrastar move, alças
+    /// escalam e giram (`decal_tool`).
+    Decal,
     /// Draw Profile (DRAW): clique adiciona ponto; arrastar no vazio puxa a
     /// alça do ponto novo; arrastar um nó/alça o move; a alça de profundidade
     /// e o volume em edição seguem o arrasto.
@@ -474,6 +479,8 @@ enum ToolGesture {
     /// O estado vive em `SlintUiBridge::shape_builder`.
     ShapeBuilder,
     SurfacePaint,
+    /// O estado vive em `SlintUiBridge::decal_gesture`.
+    Decal,
     /// Nó ou alça do perfil (estado em `profile_edit_gesture`).
     ProfilePoint,
     /// Ponto novo com a alça puxada pelo arrasto.
@@ -573,6 +580,18 @@ pub enum UiIntent {
     ImportPalette(PathBuf),
     /// Importa uma imagem (PNG/JPEG/WebP/BMP) como camada de decalque.
     ImportDecalFrom(PathBuf),
+    /// Acrescenta a imagem como variante do decalque ativo (Decal Set).
+    AddDecalVariantFrom(PathBuf),
+    /// Exporta a textura com cada variante do decalque ativo e a trilha.
+    ExportDecalFramesTo(PathBuf),
+    SetDecalVariant(usize),
+    RemoveDecalVariant,
+    SetDecalKey,
+    RemoveDecalKey,
+    SetDecalFrame(i32),
+    SetDecalTrackFps(f32),
+    SetDecalTrackLength(i32),
+    ToggleDecalPlayback,
     ImportSvgProfiles(PathBuf),
     ExportPalette(PathBuf),
     SelectSceneAsset(String),
@@ -630,6 +649,8 @@ pub enum UiIntent {
         segments: usize,
     },
     AddDecalLayer,
+    /// Resolução (lado em px) da textura de pintura do ativo.
+    SetPaintTextureSide(u32),
     SetDecalTransform {
         layer_id: String,
         center_u: f32,
@@ -687,6 +708,7 @@ pub mod view_model;
 pub use view_model::*;
 
 pub mod projection;
+pub use decal_tool::{DecalHandles, DecalMode, DecalParam};
 pub use projection::*;
 
 pub mod callbacks;
@@ -832,8 +854,6 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
         (**self).render_frame(project, refs, camera, state)
     }
 }
-/// Sessão de manipulação interativa de decalque 3D: (origem_x, origem_y, center_uv_inicial, scale_uv_inicial, rot_deg_inicial).
-pub type DecalDragInitial = (f32, f32, [f32; 2], [f32; 2], f32);
 
 /// Bridge entre callbacks Slint e a aplicação. O bridge só aplica intenção
 /// semântica ao `AppState`; algoritmos geométricos permanecem no core/commands.
@@ -905,6 +925,9 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub poly_pen_points: Vec<petunia_core::PenPoint>,
     /// Modo do Poly Pen (Auto/Points/Edges/Polygons).
     pub poly_pen_mode: PolyPenMode,
+    /// Largura em px lógicos em que a textura aparece no canvas 2D (0 =
+    /// desconhecida: o pincel 2D fica em texels).
+    pub paint_2d_raster_px: f32,
     /// Pintura de faces em andamento (modo Polygons).
     poly_pen_strip: Option<petunia_core::PenStrip>,
     /// Cores dos eixos do gizmo GPU (tokens do shell).
@@ -957,8 +980,14 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// Amostragem incremental do stroke no espaço de pixels da textura.
     pub paint_2d_sampler: petunia_core::StrokeSampler,
     pub paint_target_vertex: bool,
-    /// Sessão de manipulação interativa de decalque 3D: (origem_x, origem_y, center_uv_inicial, scale_uv_inicial, rot_deg_inicial).
-    pub decal_drag_initial: Option<DecalDragInitial>,
+    /// Gesto da ferramenta de decalque em andamento (`decal_tool`).
+    pub(crate) decal_gesture: Option<decal_tool::DecalGesture>,
+    /// Último gesto de decalque confirmado (card "Última operação").
+    pub decal_last_operation: Option<decal_tool::DecalLastOperation>,
+    /// Quadro atual da trilha de variantes do decalque ativo.
+    pub decal_frame: u32,
+    /// A trilha de variantes está tocando.
+    pub decal_playing: bool,
     /// Runtime dock/float/pin layouts of the six Inspector sections.
     /// Presentation-only: the document and its Undo history never see this.
     /// Layouts de dock/flutuação/pin das seis seções do Inspector.
@@ -1304,6 +1333,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             tool_press_alternate: false,
             poly_pen_points: Vec::new(),
             poly_pen_mode: PolyPenMode::default(),
+            paint_2d_raster_px: 0.0,
             poly_pen_strip: None,
             gizmo_axis_colors: GizmoAxisColors::default(),
             parametric_handle_hover: false,
@@ -1337,7 +1367,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             draw_parameters: Default::default(),
             paint_2d_sampler: petunia_core::StrokeSampler::default(),
             paint_target_vertex: false,
-            decal_drag_initial: None,
+            decal_gesture: None,
+            decal_last_operation: None,
+            decal_frame: 0,
+            decal_playing: false,
             section_layouts: section_layout::default_section_layouts(),
             preferences: petunia_config::UserPreferences::default(),
             preferences_path_override: None,
@@ -1418,6 +1451,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             UiIntent::SetWorkspace(workspace) => {
                 let changed = self.state.workspace != workspace;
                 self.state.switch_workspace(workspace);
+                // De volta ao PAINT, o decalque mostra a variante escolhida
+                // (o playhead do Animate não manda mais na textura).
+                if changed && workspace == Workspace::Paint && !self.decal_playing {
+                    self.show_decal_time(None);
+                }
                 // Preselection morta de outro workspace não pode vazar para
                 // cá: o hover pertence ao domínio e ao modo onde nasceu.
                 self.state.session.tools.hover = petunia_core::HoverTarget::None;
@@ -1597,6 +1635,53 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ImportDecalFrom(path) => {
                 self.import_decal_image(&path);
+            }
+            UiIntent::AddDecalVariantFrom(path) => {
+                self.add_decal_variant_from_path(&path);
+            }
+            UiIntent::ExportDecalFramesTo(dir) => {
+                let message = match self.export_decal_frames(&dir) {
+                    Ok(count) => crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_DECAL_FRAMES_EXPORTED),
+                        &[
+                            ("count", count.to_string()),
+                            ("dir", dir.display().to_string()),
+                        ],
+                    ),
+                    Err(error) => crate::tr::fill(
+                        &self
+                            .state
+                            .t_id(petunia_config::text_id::STATUS_DECAL_EXPORT_FAILED),
+                        &[("error", error)],
+                    ),
+                };
+                self.state.set_status(message);
+            }
+            UiIntent::SetDecalVariant(index) => {
+                self.set_decal_variant(index);
+            }
+            UiIntent::RemoveDecalVariant => {
+                self.remove_decal_variant();
+            }
+            UiIntent::SetDecalKey => {
+                self.set_decal_key();
+            }
+            UiIntent::RemoveDecalKey => {
+                self.remove_decal_key();
+            }
+            UiIntent::SetDecalFrame(frame) => {
+                self.set_decal_frame(frame);
+            }
+            UiIntent::SetDecalTrackFps(fps) => {
+                self.set_decal_track_fps(fps);
+            }
+            UiIntent::SetDecalTrackLength(frames) => {
+                self.set_decal_track_length(frames);
+            }
+            UiIntent::ToggleDecalPlayback => {
+                self.toggle_decal_playback();
             }
             UiIntent::ImportPalette(path) => {
                 match petunia_module_paint::PaintModule::import_palette_file(&mut self.state, &path)
@@ -2067,6 +2152,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             UiIntent::AddDecalLayer => {
                 self.add_decal_layer();
             }
+            UiIntent::SetPaintTextureSide(side) => {
+                petunia_module_paint::PaintModule::set_texture_side(&mut self.state, side);
+            }
             UiIntent::SetDecalTransform {
                 layer_id,
                 center_u,
@@ -2515,7 +2603,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let tangent = c_norm.cross(up).normalize_or_zero();
         let bitangent = c_norm.cross(tangent).normalize_or_zero();
 
+        // Decalque de superfície: o contorno é o retângulo do projetor.
+        let surface = decal.anchor.map(|anchor| {
+            let (right, up, normal) = anchor.frame(decal.rotation_rad);
+            (
+                glam::Vec3::from(anchor.point),
+                right * anchor.width,
+                up * decal.surface_height(anchor.width),
+                normal,
+            )
+        });
         let sample_world_pos = |lx: f32, ly: f32| -> glam::Vec3 {
+            if let Some((point, right, up, normal)) = surface {
+                return point + right * lx - up * ly + normal * 0.003;
+            }
             let uv = local_to_uv(lx, ly);
             if let Some((pos, norm)) = mesh.uv_to_world(uv) {
                 pos + norm * 0.003
@@ -2616,6 +2717,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             );
         }
 
+        // 4. Alças da ferramenta (constituição 11): cantos escalam, a de cima gira.
+        if self.decal_tool_active()
+            && let Some(handles) = self.decal_handles()
+        {
+            const HALF: f32 = 5.0;
+            const KNOB: f32 = 6.0;
+            for [x, y] in handles.corners {
+                let _ = write!(
+                    commands,
+                    "M {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} L {:.2} {:.2} Z ",
+                    x - HALF,
+                    y - HALF,
+                    x + HALF,
+                    y - HALF,
+                    x + HALF,
+                    y + HALF,
+                    x - HALF,
+                    y + HALF
+                );
+            }
+            let ([tx, ty], [rx, ry]) = (handles.top, handles.rotate);
+            let _ = write!(commands, "M {tx:.2} {ty:.2} L {rx:.2} {ry:.2} ");
+            for step in 0..=12 {
+                let angle = step as f32 / 12.0 * std::f32::consts::TAU;
+                let (px, py) = (rx + KNOB * angle.cos(), ry + KNOB * angle.sin());
+                let verb = if step == 0 { 'M' } else { 'L' };
+                let _ = write!(commands, "{verb} {px:.2} {py:.2} ");
+            }
+            commands.push_str("Z ");
+        }
+
         commands
     }
 
@@ -2671,6 +2803,45 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let typed = self.tool_session.numeric_text();
             (!typed.is_empty()).then(|| fill(t::HUD_INPUT, &[typed.to_string()]))
         };
+
+        // Ferramenta de decalque: gesto em andamento ou dica de uso.
+        if let Some(gesture) = self.decal_gesture.as_ref() {
+            let decal = self.active_decal();
+            let value = |param| {
+                decal
+                    .as_ref()
+                    .map_or(0.0, |d| decal_tool::decal_value(d, param))
+            };
+            let mark = |param| if gesture.param == param { "▸ " } else { "" };
+            let width = value(DecalParam::Width);
+            let width_line = if decal.as_ref().is_some_and(|d| d.anchor.is_some()) {
+                fill(t::HUD_DECAL_WIDTH, &[format!("{width:.3}")])
+            } else {
+                format!("{}: {width:.3}", tr(t::UI_DECAL_SCALE))
+            };
+            let mut lines = vec![
+                format!("{}{width_line}", mark(DecalParam::Width)),
+                format!(
+                    "{}{}",
+                    mark(DecalParam::Rotation),
+                    fill(
+                        t::HUD_DECAL_ROTATION,
+                        &[format!("{:.1}", value(DecalParam::Rotation))]
+                    )
+                ),
+            ];
+            lines.extend(input_line());
+            vm.operation_hud_active = true;
+            vm.operation_hud_title = tr(t::TOOLS_DECAL);
+            vm.operation_hud_lines = lines;
+            vm.operation_hud_hint = tr(t::HUD_DECAL_HINT);
+            vm.context_hint = vm.operation_hud_hint.clone();
+            return;
+        }
+        if self.decal_tool_active() {
+            vm.context_hint = tr(t::HUD_DECAL_IDLE_HINT);
+            return;
+        }
 
         if self.state.session.tools.active_tool == "loop_cut" && self.loop_cut.is_none() {
             vm.operation_hud_active = true;
@@ -6157,115 +6328,115 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         scale_uv: [f32; 2],
         rotation_rad: f32,
     ) -> bool {
-        let active = self.state.project.active;
-        let Some(asset) = self.state.project.assets.get_mut(active) else {
+        let Some(mut next) = self.active_decal() else {
             return false;
         };
-        let Some(stack) = asset.paint_stack.as_mut() else {
-            return false;
-        };
-        let Some(layer) = stack.active_mut() else {
-            return false;
-        };
-        let petunia_project::paint_layers::LayerKind::Decal(ref mut decal) = layer.kind else {
-            return false;
-        };
-        decal.center_uv = [center_uv[0].clamp(0.0, 1.0), center_uv[1].clamp(0.0, 1.0)];
-        decal.scale_uv = [scale_uv[0].clamp(0.01, 5.0), scale_uv[1].clamp(0.01, 5.0)];
-        decal.rotation_rad = rotation_rad;
-        petunia_module_paint::PaintModule::composite_active(&mut self.state);
-        self.state.mark_dirty();
+        next.center_uv = [center_uv[0].clamp(0.0, 1.0), center_uv[1].clamp(0.0, 1.0)];
+        next.scale_uv = [scale_uv[0].clamp(0.01, 5.0), scale_uv[1].clamp(0.01, 5.0)];
+        next.rotation_rad = rotation_rad;
+        self.apply_decal_state(next);
         true
     }
 
-    pub fn decal_drag_begin(&mut self, x: f32, y: f32, is_shift: bool, is_ctrl: bool) -> bool {
-        let Some(decal) = self.active_decal() else {
+    /// Fixa o decalque ativo na superfície (`anchor`) com a rotação dada.
+    pub fn set_active_decal_anchor(
+        &mut self,
+        anchor: petunia_project::paint_layers::DecalAnchor,
+        rotation_rad: f32,
+    ) -> bool {
+        if !(anchor.width.is_finite() && anchor.width > 0.0 && rotation_rad.is_finite()) {
+            return false;
+        }
+        let Some(mut next) = self.active_decal() else {
             return false;
         };
-        self.state.begin_paint_stroke();
-        self.decal_drag_initial = Some((
-            x,
-            y,
-            decal.center_uv,
-            decal.scale_uv,
-            decal.rotation_rad.to_degrees(),
-        ));
-        if self.decal_drag_to(x, y, is_shift, is_ctrl) {
-            true
-        } else {
-            self.decal_drag_initial = None;
-            self.state.finish_paint_stroke(true);
-            false
-        }
+        next.anchor = Some(anchor);
+        next.rotation_rad = rotation_rad;
+        self.apply_decal_state(next);
+        true
     }
 
-    pub fn decal_drag_to(&mut self, x: f32, y: f32, is_shift: bool, is_ctrl: bool) -> bool {
-        let Some((init_x, init_y, init_center, init_scale, init_rot)) = self.decal_drag_initial
-        else {
-            return false;
-        };
-
-        if is_shift {
-            let delta_y = init_y - y;
-            let factor = (1.0 + delta_y * 0.01).max(0.05);
-            let new_scale_u = (init_scale[0] * factor).clamp(0.01, 5.0);
-            let new_scale_v = (init_scale[1] * factor).clamp(0.01, 5.0);
-            self.set_active_decal_transform(
-                init_center,
-                [new_scale_u, new_scale_v],
-                init_rot.to_radians(),
-            )
-        } else if is_ctrl {
-            let delta_x = x - init_x;
-            let new_rot_deg = init_rot + delta_x * 0.5;
-            self.set_active_decal_transform(init_center, init_scale, new_rot_deg.to_radians())
-        } else {
-            let width = self.viewport_size[0].max(1.0);
-            let height = self.viewport_size[1].max(1.0);
-            if !x.is_finite()
-                || !y.is_finite()
-                || !(0.0..width).contains(&x)
-                || !(0.0..height).contains(&y)
-            {
-                return false;
-            }
-            let ndc_x = x / width * 2.0 - 1.0;
-            let ndc_y = 1.0 - y / height * 2.0;
-            let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
-            let uv_opt = pick_face_hit(&self.state, origin, direction).and_then(|(face, hit)| {
-                petunia_module_paint::PaintModule::face_hit_uv(&self.state, face, hit, false)
-            });
-            if let Some(uv) = uv_opt {
-                return self.set_active_decal_transform(uv, init_scale, init_rot.to_radians());
-            }
-            true
+    /// Fixação de decalque no ponto da superfície sob `(x, y)` do viewport,
+    /// com a imagem "em pé" segundo a câmera. `None` fora do objeto.
+    pub fn decal_anchor_at(
+        &self,
+        x: f32,
+        y: f32,
+        width: f32,
+    ) -> Option<petunia_project::paint_layers::DecalAnchor> {
+        let width_px = self.viewport_size[0].max(1.0);
+        let height_px = self.viewport_size[1].max(1.0);
+        if !x.is_finite()
+            || !y.is_finite()
+            || !(0.0..width_px).contains(&x)
+            || !(0.0..height_px).contains(&y)
+        {
+            return None;
         }
+        let camera = &self.state.session.camera;
+        let (origin, direction) = camera.ray(x / width_px * 2.0 - 1.0, 1.0 - y / height_px * 2.0);
+        let (face, hit) = pick_face_hit(&self.state, origin, direction)?;
+        let normal = self.state.project.active_mesh()?.face_normal(face);
+        petunia_project::paint_layers::DecalAnchor::new(hit, normal, camera.up(), width)
+    }
+
+    /// Fixação de um decalque novo: o ponto do objeto sob o centro da vista
+    /// ou, se o centro não cai no objeto, o ponto que a câmera vê na direção
+    /// do centro do objeto. Largura = 30% do maior lado do objeto.
+    pub fn new_decal_anchor(&self) -> Option<petunia_project::paint_layers::DecalAnchor> {
+        let mesh = self.state.project.active_mesh()?;
+        let (min, max) = mesh.verts.iter().map(|v| v.vec()).fold(
+            (glam::Vec3::splat(f32::MAX), glam::Vec3::splat(f32::MIN)),
+            |(lo, hi), p| (lo.min(p), hi.max(p)),
+        );
+        let extent = (max - min).max_element();
+        if !(extent.is_finite() && extent > 0.0) {
+            return None;
+        }
+        let width = extent * 0.3;
+        let center = [self.viewport_size[0] * 0.5, self.viewport_size[1] * 0.5];
+        self.decal_anchor_at(center[0], center[1], width)
+            .or_else(|| {
+                let camera = &self.state.session.camera;
+                let eye = camera.eye();
+                let direction = ((min + max) * 0.5 - eye).normalize_or_zero();
+                let (face, hit) = pick_face_hit(&self.state, eye, direction)?;
+                petunia_project::paint_layers::DecalAnchor::new(
+                    hit,
+                    mesh.face_normal(face),
+                    camera.up(),
+                    width,
+                )
+            })
+    }
+
+    /// Arrasto de decalque pelo caminho do traço: sem modificador move, Shift
+    /// escala e Ctrl gira — o mesmo gesto da ferramenta de decalque.
+    pub fn decal_drag_begin(&mut self, x: f32, y: f32, is_shift: bool, is_ctrl: bool) -> bool {
+        let mode = if is_shift {
+            DecalMode::Scale
+        } else if is_ctrl {
+            DecalMode::Rotate
+        } else {
+            DecalMode::Move
+        };
+        if !self.begin_decal_gesture([x, y], mode) {
+            return false;
+        }
+        self.update_decal_gesture([x, y], false, false);
+        true
+    }
+
+    pub fn decal_drag_to(&mut self, x: f32, y: f32, _is_shift: bool, _is_ctrl: bool) -> bool {
+        self.decal_gesture.is_some() && self.update_decal_gesture([x, y], false, false)
     }
 
     pub fn decal_drag_end(&mut self) -> bool {
-        if self.decal_drag_initial.take().is_some() {
-            self.state.finish_paint_stroke(false);
-            self.state.set_status(
-                self.state
-                    .t_id(petunia_config::text_id::STATUS_DECAL_TRANSFORM_COMMITTED),
-            );
-            true
-        } else {
-            false
-        }
+        self.commit_decal_gesture()
     }
 
     pub fn cancel_decal_drag(&mut self) -> bool {
-        if self.decal_drag_initial.take().is_some() {
-            self.state.finish_paint_stroke(true);
-            self.state.set_status(
-                self.state
-                    .t_id(petunia_config::text_id::STATUS_DECAL_TRANSFORM_CANCELLED),
-            );
-            true
-        } else {
-            false
-        }
+        self.cancel_decal_gesture()
     }
 
     /// Inicia um traço de pintura ou manipulação de decalque contínuo.
@@ -6582,7 +6753,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Confirma o traço de pintura ou manipulação de decalque como uma única entrada de undo.
     pub fn end_paint_stroke_at(&mut self, x: f32, y: f32) -> bool {
-        if self.decal_drag_initial.is_some() {
+        if self.decal_gesture.is_some() {
             return self.decal_drag_end();
         }
         if self.shape_anchor.is_some() {
@@ -6644,7 +6815,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             changed = true;
         }
         if let Some((px, py)) = self.paint_2d_last {
-            let settings = self.state.brush_settings();
+            let settings = self.canvas_brush_settings();
             petunia_module_paint::PaintModule::canvas_brush_with_symmetry(
                 &mut self.state,
                 px,
@@ -6786,7 +6957,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return true;
                 }
                 self.state.begin_paint_stroke();
-                let settings = self.state.brush_settings();
+                let settings = self.canvas_brush_settings();
                 self.paint_2d_stabilizer.reset();
                 let smoothing = self.state.session.tools.brush_style.smoothing;
                 let [fx, fy] = self
@@ -6814,7 +6985,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.paint_2d_last.is_none() {
                     return false;
                 }
-                let settings = self.state.brush_settings();
+                let settings = self.canvas_brush_settings();
                 let smoothing = self.state.session.tools.brush_style.smoothing;
                 let [fx, fy] = self
                     .paint_2d_stabilizer
@@ -6839,7 +7010,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 if self.paint_2d_last.take().is_none() {
                     return false;
                 }
-                let settings = self.state.brush_settings();
+                let settings = self.canvas_brush_settings();
                 self.paint_2d_stabilizer.reset();
                 let dabs = self.paint_2d_sampler.extend([px as f32, py as f32]);
                 let mut dabs = texture_points(&dabs, width, height);
@@ -8225,7 +8396,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn add_paint_layer(&mut self) -> bool {
-        let (w, h) = self.paint_canvas_dimensions().unwrap_or((256, 256));
+        let side = petunia_module_paint::DEFAULT_TEXTURE_SIDE;
+        let (w, h) = self.paint_canvas_dimensions().unwrap_or((side, side));
         self.mutate_paint_stack("add paint layer", |stack| {
             stack.add_layer(petunia_project::paint_layers::PaintLayer::new(
                 format!("Layer {}", stack.layers.len() + 1),
@@ -8250,107 +8422,34 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// lado maior a 512 texels (a imagem é persistida no projeto) e preserva a
     /// proporção na escala UV.
     pub fn import_decal_image(&mut self, path: &std::path::Path) -> bool {
-        if path
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("svg"))
-        {
-            let svg = match files::load_svg(path) {
-                Ok(svg) => svg,
-                Err(error) => {
-                    self.state.set_status(error);
-                    return false;
-                }
-            };
-            let decal = match petunia_project::paint_layers::DecalLayer::from_svg(
-                &svg,
-                512,
-                [0.5, 0.5],
-                0.3,
-            ) {
-                Ok(decal) => decal,
-                Err(error) => {
-                    self.state.set_status(error.to_string());
-                    return false;
-                }
-            };
-            let name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("SVG")
-                .to_owned();
-            return self.mutate_paint_stack("import SVG decal", |stack| {
-                stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
-                    name.clone(),
-                    decal.clone(),
-                ));
-                true
-            });
-        }
-        let (w, h, rgba) = match files::load_image_rgba(path) {
-            Ok(decoded) => decoded,
-            Err(error) => {
-                self.state.set_status(crate::tr::fill(
-                    &self
-                        .state
-                        .t_id(petunia_config::text_id::STATUS_DECAL_COULD_NOT_READ_THE_IMAGE),
-                    &[("error", error.to_string())],
-                ));
-                return false;
-            }
-        };
-        const MAX_DECAL: u32 = 512;
-        let (w, h, rgba) = if w.max(h) > MAX_DECAL {
-            let scale = MAX_DECAL as f32 / w.max(h) as f32;
-            let (nw, nh) = (
-                ((w as f32 * scale).round() as u32).max(1),
-                ((h as f32 * scale).round() as u32).max(1),
-            );
-            match image::RgbaImage::from_raw(w, h, rgba) {
-                Some(image) => (
-                    nw,
-                    nh,
-                    image::imageops::resize(&image, nw, nh, image::imageops::FilterType::Lanczos3)
-                        .into_raw(),
-                ),
-                None => {
-                    self.state.set_status(
-                        self.state
-                            .t_id(petunia_config::text_id::STATUS_DECAL_INVALID_IMAGE_DATA),
-                    );
-                    return false;
-                }
-            }
-        } else {
-            (w, h, rgba)
-        };
-        if rgba.len() != (w * h * 4) as usize || w == 0 || h == 0 {
-            self.state.set_status(
-                self.state
-                    .t_id(petunia_config::text_id::STATUS_DECAL_INVALID_IMAGE_DATA),
-            );
+        let Some(source) = self.read_decal_source(path) else {
             return false;
-        }
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Decal")
-            .to_string();
+        };
+        let (w, h) = (source.image.w, source.image.h);
         let aspect = h as f32 / w as f32;
         let scale_uv = if aspect <= 1.0 {
             [0.3, (0.3 * aspect).max(0.01)]
         } else {
             [(0.3 / aspect).max(0.01), 0.3]
         };
-        let ok = self.mutate_paint_stack("import decal", |stack| {
-            let image = petunia_project::Canvas {
-                w,
-                h,
-                pixels: rgba.into(),
-            };
-            let decal =
-                petunia_project::paint_layers::DecalLayer::new(image, [0.5, 0.5], scale_uv, 0.0);
+        let anchor = self.new_decal_anchor();
+        let name = source.name.clone();
+        let label = if source.source_svg.is_some() {
+            "import SVG decal"
+        } else {
+            "import decal"
+        };
+        let ok = self.mutate_paint_stack(label, |stack| {
+            let mut decal = petunia_project::paint_layers::DecalLayer::new(
+                source.image,
+                [0.5, 0.5],
+                scale_uv,
+                0.0,
+            );
+            decal.source_svg = source.source_svg;
+            decal.anchor = anchor;
             stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
-                name.clone(),
+                source.name,
                 decal,
             ));
             true
@@ -8360,25 +8459,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 &self
                     .state
                     .t_id(petunia_config::text_id::STATUS_DECAL_IMPORTED_X),
-                &[
-                    ("name", name.to_string()),
-                    ("w", format!("{w}")),
-                    ("h", format!("{h}")),
-                ],
+                &[("name", name), ("w", format!("{w}")), ("h", format!("{h}"))],
             ));
         }
         ok
     }
 
     pub fn add_decal_layer(&mut self) -> bool {
+        let anchor = self.new_decal_anchor();
         self.mutate_paint_stack("add decal layer", |stack| {
             let decal_img = petunia_project::Canvas::new(64, 64, [255, 200, 50, 255]);
-            let decal = petunia_project::paint_layers::DecalLayer::new(
+            let mut decal = petunia_project::paint_layers::DecalLayer::new(
                 decal_img,
                 [0.5, 0.5],
                 [0.25, 0.25],
                 0.0,
             );
+            decal.anchor = anchor;
             stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
                 format!("Decal {}", stack.layers.len() + 1),
                 decal,
@@ -8939,6 +9036,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
+        let mesh = self.state.project.active().map(|asset| asset.mesh.clone());
         self.mutate_paint_stack("merge down paint layer", |stack| {
             let Some(pos) = stack.layers.iter().position(|layer| layer.id == id) else {
                 return false;
@@ -8946,7 +9044,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if pos == 0 {
                 return false;
             }
-            stack.merge_down(pos)
+            stack.merge_down_on(pos, mesh.as_deref())
         })
     }
 
@@ -11180,6 +11278,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Ferramenta ativa que segue a gramática única, se houver.
     pub fn grammar_tool(&self) -> Option<GrammarTool> {
+        if self.decal_tool_active() {
+            return Some(GrammarTool::Decal);
+        }
         if self.state.workspace == Workspace::Paint
             && matches!(
                 self.state.session.tools.active_tool.as_str(),
@@ -11282,7 +11383,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let effect = match phase {
             0 => {
                 self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
-                let target = if self.grammar_tool() == Some(GrammarTool::DrawProfile) {
+                let target = if self.grammar_tool() == Some(GrammarTool::Decal) {
+                    self.decal_press_target(x, y)
+                } else if self.grammar_tool() == Some(GrammarTool::DrawProfile) {
                     self.profile_press_target(x, y)
                 } else if self.tool_press_parametric_handle {
                     petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
@@ -11327,6 +11430,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         use petunia_core::ToolEffect as Effect;
         match effect {
             Effect::Nothing | Effect::TypedValue(_) | Effect::TypedCleared => false,
+            Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::Decal) => {
+                self.decal_click(at)
+            }
             Effect::Click { at } if self.grammar_tool() == Some(GrammarTool::SurfacePaint) => {
                 self.surface_paint_click(at)
             }
@@ -11704,6 +11810,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 begun
             }
             GrammarTool::SurfacePaint => self.begin_surface_paint(anchor),
+            GrammarTool::Decal => {
+                let mode = match target {
+                    petunia_core::PressTarget::Handle(decal_tool::DECAL_HANDLE_SCALE) => {
+                        DecalMode::Scale
+                    }
+                    petunia_core::PressTarget::Handle(decal_tool::DECAL_HANDLE_ROTATE) => {
+                        DecalMode::Rotate
+                    }
+                    _ => DecalMode::Move,
+                };
+                self.begin_decal_gesture(anchor, mode)
+            }
             GrammarTool::PolyPen => self.begin_poly_pen_drag(anchor),
             GrammarTool::ShapeBuilder => self.begin_shape_builder(anchor),
             GrammarTool::DrawProfile => self.begin_draw_profile_gesture(anchor, target),
@@ -12622,6 +12740,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.set_tool_modal_value(value)
             }
             Some(ToolGesture::SurfacePaint) => self.update_surface_paint(current),
+            Some(ToolGesture::Decal) => self.update_decal_gesture(current, fine, snap),
             Some(ToolGesture::ShapeBuilder) => self.update_shape_builder(current),
             Some(ToolGesture::ProfilePoint) => {
                 self.profile_pointer_move(current[0], current[1], self.tool_pointer_alt)
@@ -12687,6 +12806,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return self.commit_profile_transform();
         }
         match self.tool_gesture.take() {
+            Some(ToolGesture::Decal) => self.commit_decal_gesture(),
             Some(ToolGesture::SurfacePaint) => {
                 self.surface_paint.anchor = None;
                 self.state.mark_dirty();
@@ -12744,6 +12864,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Some(ToolGesture::Parametric { .. }) => self.cancel_tool_modal(),
             Some(ToolGesture::SurfacePaint) => self.cancel_surface_paint(),
+            Some(ToolGesture::Decal) => self.cancel_decal_gesture(),
             Some(ToolGesture::ShapeBuilder) => self.cancel_shape_builder(),
             Some(ToolGesture::ProfilePoint | ToolGesture::ProfileHandlePull) => {
                 self.cancel_profile_point_drag()
@@ -12780,6 +12901,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Ajusta a última operação pelo texto do card (mesma entrada de Undo).
     pub fn commit_last_operation_text(&mut self, text: &str) -> bool {
+        if self.decal_last_operation_adjustable()
+            && let Some(last) = self.decal_last_operation.as_ref()
+        {
+            return match numeric::parse_numeric_with_base(text, last.value) {
+                Ok(value) => self.adjust_decal_last_operation(value),
+                Err(_) => false,
+            };
+        }
         let Some(last) = self.last_operation.as_ref() else {
             return false;
         };
@@ -13002,6 +13131,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "clone" => B::Clone,
             _ => B::Soft,
         }
+    }
+
+    /// Pincel do canvas 2D: o mesmo descriptor do viewport (tipo pela
+    /// ferramenta, tamanho pelo slider em px de tela), convertido para texels
+    /// pela escala em que a textura aparece no canvas.
+    fn canvas_brush_settings(&self) -> petunia_core::BrushSettings {
+        let mut settings = self.viewport_brush_settings();
+        let texture_w = self
+            .state
+            .project
+            .assets
+            .get(self.state.project.active)
+            .and_then(|a| a.texture.as_ref())
+            .map_or(256, |t| t.w);
+        if self.paint_2d_raster_px > 1.0 {
+            settings.size_px *= texture_w as f32 / self.paint_2d_raster_px;
+        }
+        settings.sanitized()
     }
 
     fn viewport_brush_settings(&self) -> petunia_core::BrushSettings {
@@ -14089,6 +14236,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if text == "Enter" && !ctrl && !alt {
             return self.confirm_active_operation();
         }
+        if self.decal_gesture.is_some() && !ctrl && !alt {
+            // Buffer numérico do gesto de decalque (constituição 11).
+            if text == "Tab" {
+                return self.decal_toggle_param();
+            }
+            // A tecla é do buffer mesmo quando o texto ainda não é um valor
+            // aplicável (ex.: "0" antes de "0.5"): a prévia só não muda.
+            if text == "Backspace" || text == "Delete" {
+                self.tool_session.pop_numeric();
+                self.decal_typed_input();
+                return true;
+            }
+            if text.len() == 1
+                && text
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || matches!(c, '.' | ',' | '-' | '+' | '*' | '/'))
+            {
+                self.tool_session.push_numeric(text);
+                self.decal_typed_input();
+                return true;
+            }
+        }
         if text == "F4" && !ctrl && !alt && !shift {
             return self.toggle_reference_manager();
         }
@@ -14809,6 +14978,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     fn confirm_active_operation(&mut self) -> bool {
+        if self.decal_gesture.is_some() {
+            let effect = self.tool_session.key(petunia_core::ToolKey::Confirm);
+            if effect == petunia_core::ToolEffect::Nothing {
+                // Gesto aberto pelo caminho do traço (sem sessão da gramática).
+                return self.commit_decal_gesture();
+            }
+            return self.apply_tool_effect(effect, false, false);
+        }
         if matches!(
             self.state.session.tools.active_tool.as_str(),
             "path_paint" | "projection"
@@ -15617,6 +15794,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.label_decal_transform = translated(petunia_config::text_id::UI_DECAL_TRANSFORM);
         vm.label_decal_position = translated(petunia_config::text_id::UI_DECAL_POSITION);
         vm.label_decal_scale = translated(petunia_config::text_id::UI_DECAL_SCALE);
+        vm.label_decal_width = translated(petunia_config::text_id::UI_DECAL_WIDTH);
         vm.label_decal_rotation = translated(petunia_config::text_id::UI_DECAL_ROTATION);
         vm.label_decal_bake = translated(petunia_config::text_id::UI_DECAL_BAKE);
         vm.label_decal_hint = translated(petunia_config::text_id::UI_DECAL_HINT);
@@ -15776,11 +15954,47 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.decal_center_v = decal.center_uv[1];
             vm.decal_scale_u = decal.scale_uv[0];
             vm.decal_scale_v = decal.scale_uv[1];
+            if let Some(anchor) = decal.anchor {
+                vm.decal_surface = true;
+                vm.decal_scale_u = anchor.width;
+                vm.decal_scale_v = decal.surface_height(anchor.width);
+            }
             vm.decal_rotation_deg = decal.rotation_rad.to_degrees();
             vm.decal_preview_commands = self.decal_preview_commands();
+            let base = self
+                .state
+                .project
+                .active()
+                .and_then(|asset| asset.paint_stack.as_ref())
+                .and_then(|stack| stack.active())
+                .map_or_else(String::new, |layer| layer.name.clone());
+            vm.decal_variant_names = (0..decal.variant_count())
+                .map(|index| decal.variant_name(index, &base).to_owned())
+                .collect();
+            vm.decal_variant_index = decal.variant_index as i32;
+            let track = decal.track.clone().unwrap_or_default();
+            vm.decal_frame = self.decal_frame as i32;
+            vm.decal_track_length = track.length_frames as i32;
+            vm.decal_track_fps = track.fps;
+            vm.decal_has_keys = !track.keys.is_empty();
+            vm.decal_frame_keyed = track.keys.iter().any(|key| key.frame == self.decal_frame);
+            vm.decal_keys_text = track
+                .keys
+                .iter()
+                .map(|key| {
+                    format!(
+                        "{}: {}",
+                        key.frame,
+                        decal.variant_name(key.variant as usize, &base)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" · ");
+            vm.decal_playing = self.decal_playing;
         }
         if let Some((width, height)) = self.paint_canvas_dimensions() {
             vm.paint_canvas_size = format!("{width} × {height}");
+            vm.paint_texture_side = if width == height { width as i32 } else { 0 };
             vm.paint_canvas_revision = self.state.project.assets[self.state.project.active]
                 .paint_stack
                 .as_ref()
@@ -16117,6 +16331,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 Kind::Bevel => (0.01, "m"),
                 Kind::Move | Kind::Extrude | Kind::ExtrudeIndividual | Kind::PushPull => (0.1, "m"),
             };
+            vm.last_operation_step = step;
+            vm.last_operation_unit = unit.to_string();
+        } else if self.decal_last_operation_adjustable()
+            && let Some(last) = &self.decal_last_operation
+        {
+            let (field, step, unit) = match last.param {
+                DecalParam::Width => (petunia_config::text_id::UI_DECAL_WIDTH, 0.05, "m"),
+                DecalParam::Rotation => (petunia_config::text_id::UI_DECAL_ROTATION, 5.0, "°"),
+            };
+            vm.last_operation_active = true;
+            vm.last_operation_title = format!(
+                "{} · {}",
+                self.state.t_id(petunia_config::text_id::TOOLS_DECAL),
+                self.state.t_id(field)
+            );
+            vm.last_operation_value = last.value;
             vm.last_operation_step = step;
             vm.last_operation_unit = unit.to_string();
         }

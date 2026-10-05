@@ -722,10 +722,25 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_decal_transform(vm.label_decal_transform.as_str().into());
     window.set_label_decal_position(vm.label_decal_position.as_str().into());
     window.set_label_decal_scale(vm.label_decal_scale.as_str().into());
+    window.set_label_decal_width(vm.label_decal_width.as_str().into());
     window.set_label_decal_rotation(vm.label_decal_rotation.as_str().into());
     window.set_label_decal_bake(vm.label_decal_bake.as_str().into());
     window.set_label_decal_hint(vm.label_decal_hint.as_str().into());
     window.set_decal_preview_commands(vm.decal_preview_commands.as_str().into());
+    let decal_variants: Vec<slint::SharedString> = vm
+        .decal_variant_names
+        .iter()
+        .map(|name| name.as_str().into())
+        .collect();
+    window.set_decal_variant_names(decal_variants.as_slice().into());
+    window.set_decal_variant_index(vm.decal_variant_index);
+    window.set_decal_frame(vm.decal_frame);
+    window.set_decal_track_length(vm.decal_track_length);
+    window.set_decal_track_fps(vm.decal_track_fps);
+    window.set_decal_keys_text(vm.decal_keys_text.as_str().into());
+    window.set_decal_has_keys(vm.decal_has_keys);
+    window.set_decal_frame_keyed(vm.decal_frame_keyed);
+    window.set_decal_playing(vm.decal_playing);
     window.set_hint_model_select(vm.hint_model_select.as_str().into());
     window.set_hint_model_position(vm.hint_model_position.as_str().into());
     window.set_hint_model_rotate(vm.hint_model_rotate.as_str().into());
@@ -867,6 +882,8 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         .collect();
     window.set_paint_layers(layer_entries.as_slice().into());
     window.set_active_layer_is_decal(vm.active_layer_is_decal);
+    window.set_decal_surface(vm.decal_surface);
+    window.set_paint_texture_side(vm.paint_texture_side);
     window.set_decal_center_u(vm.decal_center_u);
     window.set_decal_center_v(vm.decal_center_v);
     window.set_decal_scale_u(vm.decal_scale_u);
@@ -1334,6 +1351,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     bridge: Arc<Mutex<SlintUiBridge<V>>>,
 ) {
     crate::animate::connect_animate_callbacks(window, Arc::clone(&bridge));
+    connect_decal_callbacks(window, Arc::clone(&bridge));
     // Cores dos eixos do gizmo GPU: as mesmas dos tokens do shell.
     if let Ok(mut bridge) = bridge.lock() {
         let tokens = window.global::<crate::DesignTokens>();
@@ -1497,7 +1515,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 "file.export_glb" => service.export_glb().await,
                 "palette.import" => service.import_palette().await,
                 "palette.export" => service.export_palette().await,
-                "paint.import_decal" => service.open_decal_image().await,
+                "paint.import_decal" | "paint.add_decal_variant" => {
+                    service.open_decal_image().await
+                }
+                "paint.export_decal_frames" => service.select_asset_folder().await,
                 "draw.import_svg" => service.open_svg().await,
                 _ => None,
             };
@@ -1513,10 +1534,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     "palette.import" => UiIntent::ImportPalette(path),
                     "palette.export" => UiIntent::ExportPalette(path),
                     "paint.import_decal" => UiIntent::ImportDecalFrom(path),
+                    "paint.add_decal_variant" => UiIntent::AddDecalVariantFrom(path),
+                    "paint.export_decal_frames" => UiIntent::ExportDecalFramesTo(path),
                     "draw.import_svg" => UiIntent::ImportSvgProfiles(path),
                     _ => UiIntent::SaveProjectTo(path),
                 };
-                let needs_render = matches!(id.as_str(), "file.open" | "file.import_obj");
+                let needs_render = matches!(
+                    id.as_str(),
+                    "file.open"
+                        | "file.import_obj"
+                        | "paint.import_decal"
+                        | "paint.add_decal_variant"
+                );
                 bridge.apply(intent);
                 bridge.command_search_visible = false;
                 bridge.overlays.remove(OverlayId::CommandPalette);
@@ -3064,6 +3093,17 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let hover_throttle = std::rc::Rc::clone(&throttle);
     window.on_viewport_hover(move |x, y| {
         if let Ok(mut bridge) = component_hover_bridge.lock() {
+            // Pegada do pincel em superfície inclinada (B1): só o cursor muda.
+            if bridge.state.workspace == Workspace::Paint
+                && let Some(window) = window_weak.upgrade()
+            {
+                let [width, height] = bridge.viewport_size;
+                let (squash, tilt) = bridge
+                    .brush_footprint_at(x * width, y * height)
+                    .unwrap_or((1.0, 0.0));
+                window.set_brush_cursor_squash(squash);
+                window.set_brush_cursor_tilt(tilt);
+            }
             let changed = if bridge.state.session.tools.active_tool == "loop_cut" {
                 let viewport_size = bridge.viewport_size;
                 bridge.update_loop_cut_hover(x * viewport_size[0], y * viewport_size[1])
@@ -3089,6 +3129,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let hover_clear_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_viewport_hover_clear(move || {
+        if let Some(window) = window_weak.upgrade() {
+            window.set_brush_cursor_squash(1.0);
+            window.set_brush_cursor_tilt(0.0);
+        }
         if let Ok(mut bridge) = hover_clear_bridge.lock()
             && bridge.clear_hover()
         {
@@ -3443,8 +3487,9 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let paint_stroke_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_paint_2d_stroke(move |norm_x, norm_y, phase, shift| {
+    window.on_paint_2d_stroke(move |norm_x, norm_y, phase, shift, raster_px| {
         if let Ok(mut bridge) = paint_stroke_bridge.lock() {
+            bridge.paint_2d_raster_px = raster_px;
             if !bridge.paint_2d_line(norm_x, norm_y, phase, shift) {
                 bridge.apply(UiIntent::Paint2dStroke {
                     norm_x,
@@ -5617,6 +5662,23 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let texture_side_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_texture_side_selected(move |side| {
+        if let Ok(mut bridge) = texture_side_bridge.lock() {
+            bridge.apply(UiIntent::SetPaintTextureSide(side.max(0) as u32));
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                bridge.publish_canvas_image(&window);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
     let bake_decal_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     // Bakes active decal layer to static raster (P3D-160) / Converte decalque ativo em raster estático (P3D-160)
@@ -5775,6 +5837,88 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     window.set_viewport_image(frame);
                 }
             }
+        }
+    });
+}
+
+/// Atualiza a janela depois de uma ação que pode mudar a textura.
+fn refresh_after_texture_change<V: PetuniaViewport>(
+    bridge: &mut SlintUiBridge<V>,
+    window: &PetuniaSlintShell,
+) {
+    let vm = bridge.view_model();
+    let frame = bridge.render_viewport();
+    sync_window_properties(window, &vm);
+    bridge.publish_canvas_image(window);
+    if let Some(frame) = frame {
+        window.set_viewport_image(frame);
+    }
+}
+
+/// Decal Set (variantes e trilha), seleção pelo UV no canvas 2D.
+fn connect_decal_callbacks<V: PetuniaViewport + 'static>(
+    window: &PetuniaSlintShell,
+    bridge: Arc<Mutex<SlintUiBridge<V>>>,
+) {
+    macro_rules! on_intent {
+        ($setter:ident, || $intent:expr) => {
+            on_intent!($setter, | | $intent)
+        };
+        ($setter:ident, |$($arg:ident),*| $intent:expr) => {{
+            let bridge = Arc::clone(&bridge);
+            let window_weak = window.as_weak();
+            window.$setter(move |$($arg),*| {
+                if let Ok(mut bridge) = bridge.lock() {
+                    bridge.apply($intent);
+                    if let Some(window) = window_weak.upgrade() {
+                        refresh_after_texture_change(&mut bridge, &window);
+                    }
+                }
+            });
+        }};
+    }
+    on_intent!(
+        on_decal_variant_selected,
+        |index| UiIntent::SetDecalVariant(index.max(0) as usize)
+    );
+    on_intent!(on_decal_variant_remove_requested, || {
+        UiIntent::RemoveDecalVariant
+    });
+    on_intent!(on_decal_key_set_requested, || UiIntent::SetDecalKey);
+    on_intent!(on_decal_key_remove_requested, || UiIntent::RemoveDecalKey);
+    on_intent!(on_decal_frame_changed, |frame| UiIntent::SetDecalFrame(
+        frame
+    ));
+    on_intent!(on_decal_fps_changed, |fps| UiIntent::SetDecalTrackFps(fps));
+    on_intent!(on_decal_length_changed, |frames| {
+        UiIntent::SetDecalTrackLength(frames)
+    });
+    on_intent!(on_decal_play_toggled, || UiIntent::ToggleDecalPlayback);
+
+    // Reprodução: o quadro anda a cada tique; a textura só é refeita quando
+    // a variante mostrada muda.
+    let tick_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_decal_playback_tick(move |dt| {
+        if let Ok(mut bridge) = tick_bridge.lock() {
+            let changed = bridge.decal_playback_tick(dt);
+            if let Some(window) = window_weak.upgrade() {
+                window.set_decal_frame(bridge.decal_frame as i32);
+                if changed {
+                    refresh_after_texture_change(&mut bridge, &window);
+                }
+            }
+        }
+    });
+
+    let select_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_2d_select(move |x0, y0, x1, y1, extend, subtract, island| {
+        if let Ok(mut bridge) = select_bridge.lock()
+            && bridge.paint_2d_select(x0, y0, x1, y1, extend, subtract, island)
+            && let Some(window) = window_weak.upgrade()
+        {
+            refresh_after_texture_change(&mut bridge, &window);
         }
     });
 }

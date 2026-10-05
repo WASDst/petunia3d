@@ -106,6 +106,46 @@ mod bleed_tests {
     }
 }
 
+/// Decal Sets do asset (decalques com variantes ou trilha) como JSON, para
+/// `extras.petunia` do material: a textura exportada é a composição parada
+/// ("bake universal"); a metadata permite reproduzir a troca na engine.
+fn decal_sets_json(asset: &Asset) -> Option<String> {
+    use crate::paint_layers::LayerKind;
+    let sets: Vec<serde_json::Value> = asset
+        .paint_stack
+        .as_ref()?
+        .layers
+        .iter()
+        .filter_map(|layer| match &layer.kind {
+            LayerKind::Decal(decal)
+                if decal.variants.len() > 1
+                    || decal.track.as_ref().is_some_and(|t| !t.keys.is_empty()) =>
+            {
+                let names: Vec<&str> = (0..decal.variant_count())
+                    .map(|index| decal.variant_name(index, &layer.name))
+                    .collect();
+                let track = decal.track.as_ref().map(|track| {
+                    serde_json::json!({
+                        "fps": track.fps,
+                        "length_frames": track.length_frames,
+                        "looping": track.looping,
+                        "keys": track.keys.iter().map(|k| [k.frame, k.variant]).collect::<Vec<_>>(),
+                    })
+                });
+                Some(serde_json::json!({
+                    "name": layer.name,
+                    "variants": names,
+                    "variant_index": decal.variant_index,
+                    "interpolation": "STEP",
+                    "track": track,
+                }))
+            }
+            _ => None,
+        })
+        .collect();
+    (!sets.is_empty()).then(|| serde_json::Value::Array(sets).to_string())
+}
+
 /// Exporta assets como um único GLB (uma mesh por asset).
 pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, ExportError> {
     let picked: Vec<&Asset> = indices
@@ -128,6 +168,8 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
         uv: Vec<f32>,
         idx: Vec<u32>,
         texture_png: Option<Vec<u8>>,
+        /// Decal Sets do asset (cap. 39) como JSON para `extras.petunia`.
+        decal_sets: Option<String>,
         skin: Option<SkinBinding>,
         joints: Vec<u16>,
         weights: Vec<f32>,
@@ -203,6 +245,7 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             uv: Vec::new(),
             idx: Vec::new(),
             texture_png,
+            decal_sets: decal_sets_json(a),
             skin: bind_skin(project, a, m.verts.len()),
             joints: Vec::new(),
             weights: Vec::new(),
@@ -386,8 +429,13 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
         if let Some(img_idx) = part_image[i] {
             pbr.push_str(&format!(",\"baseColorTexture\":{{\"index\":{img_idx}}}"));
         }
+        let extras = p
+            .decal_sets
+            .as_ref()
+            .map(|sets| format!(",\"extras\":{{\"petunia\":{{\"decal_sets\":{sets}}}}}"))
+            .unwrap_or_default();
         j.push_str(&format!(
-            "{{\"name\":{},\"doubleSided\":true,\"pbrMetallicRoughness\":{{{pbr}}},\"emissiveFactor\":[{:.4},{:.4},{:.4}]}}",
+            "{{\"name\":{},\"doubleSided\":true,\"pbrMetallicRoughness\":{{{pbr}}},\"emissiveFactor\":[{:.4},{:.4},{:.4}]{extras}}}",
             json_str(&format!("{}_mat", p.name)),
             p.emissive[0], p.emissive[1], p.emissive[2]
         ));
@@ -684,6 +732,50 @@ mod tests {
         let props: Vec<_> = idle.channels().map(|c| c.target().property()).collect();
         assert!(props.contains(&gltf::animation::Property::Translation));
         assert!(props.contains(&gltf::animation::Property::Scale));
+    }
+
+    #[test]
+    fn glb_carries_decal_sets_in_material_extras() {
+        use crate::paint_layers::{
+            DecalLayer, DecalVariant, DecalVariantTrack, PaintLayer, PaintLayerStack,
+        };
+        let mut p = sample_project();
+        let mut decal = DecalLayer::new(Canvas::new(4, 4, [255; 4]), [0.5; 2], [0.3; 2], 0.0);
+        decal.add_variant(
+            "Neutra",
+            DecalVariant {
+                name: "Sorriso".into(),
+                image: Canvas::new(4, 4, [0, 255, 0, 255]),
+                source_svg: None,
+            },
+        );
+        let mut track = DecalVariantTrack::default();
+        track.set_key(0, 0);
+        track.set_key(4, 1);
+        decal.track = Some(track);
+        let mut stack = PaintLayerStack::with_base("Base", Canvas::new(8, 8, [0, 0, 0, 255]));
+        stack.add_layer(PaintLayer::new_decal("Boca", decal));
+        p.assets[0].paint_stack = Some(stack);
+        let bytes = export_gltf(&p, &[0]).expect("glb");
+        let (doc, _, _) = gltf::import_slice(&bytes).expect("parse glb");
+        let extras = doc
+            .materials()
+            .next()
+            .unwrap()
+            .extras()
+            .clone()
+            .expect("extras");
+        let extras: serde_json::Value = serde_json::from_str(extras.get()).unwrap();
+        let set = &extras["petunia"]["decal_sets"][0];
+        assert_eq!(set["name"], "Boca");
+        assert_eq!(set["variants"], serde_json::json!(["Neutra", "Sorriso"]));
+        assert_eq!(set["interpolation"], "STEP");
+        assert_eq!(set["track"]["keys"], serde_json::json!([[0, 0], [4, 1]]));
+        // Sem Decal Set, o material não ganha extras.
+        p.assets[0].paint_stack = None;
+        let bytes = export_gltf(&p, &[0]).expect("glb");
+        let (doc, _, _) = gltf::import_slice(&bytes).expect("parse glb");
+        assert!(doc.materials().next().unwrap().extras().is_none());
     }
 
     #[test]

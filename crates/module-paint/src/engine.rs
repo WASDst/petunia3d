@@ -34,8 +34,9 @@ pub fn dab_falloff(kind: BrushType, t: f32, hardness: f32) -> f32 {
         return 0.0;
     }
     match kind {
+        // Pixel é borda dura por definição (P3D-056); os demais, inclusive a
+        // Borracha, seguem a dureza do descriptor único (P3D-057).
         BrushType::Pixel => 1.0,
-        BrushType::Eraser => 1.0 - t,
         _ => {
             let core = hardness.clamp(0.0, 1.0);
             if t <= core {
@@ -347,6 +348,17 @@ fn dab_jitter(style: &BrushStyle, n: u32) -> DabJitter {
     }
 }
 
+/// A seleção de faces restringe o traço? (P3D-132)
+///
+/// `isolate_toggle` é a opção "mascarar pela seleção" do painel do PAINT;
+/// `selected` e `total` contam as faces da malha ativa. Devolver `true` com
+/// `selected == 0` bloqueia o traço inteiro (a UI explica o motivo).
+fn selection_masks_paint(isolate_toggle: bool, selected: usize, total: usize) -> bool {
+    // Seleção parcial restringe sozinha; a opção liga a máscara sempre
+    // (inclusive sem seleção, quando bloquear o traço é o pedido explícito).
+    isolate_toggle || (selected > 0 && selected < total)
+}
+
 impl PaintModule {
     /// Faces elegíveis pelo isolamento de seleção e pela trava de pincel.
     ///
@@ -360,8 +372,17 @@ impl PaintModule {
             return cached.clone();
         }
         let tools = &state.session.tools;
-        let by_selection =
-            tools.paint_isolate_selection || tools.brush_lock == BrushLock::SelectedFaces;
+        let (selected, total) = state.project.active_mesh().map_or((0, 0), |mesh| {
+            let selected = mesh
+                .faces
+                .iter()
+                .enumerate()
+                .filter(|(i, face)| face.selected || state.session.selection.faces.contains(i))
+                .count();
+            (selected, mesh.faces.len())
+        });
+        let by_selection = tools.brush_lock == BrushLock::SelectedFaces
+            || selection_masks_paint(tools.paint_isolate_selection, selected, total);
         let by_first_face = tools.brush_lock == BrushLock::FirstFace;
         let resolved = if !by_selection && !by_first_face {
             None
@@ -686,6 +707,9 @@ impl PaintModule {
             })
             .cloned();
         let result = Self::with_stroke_target(state, |target, mesh| {
+            // Com restrição, a sangria da face só cai em calha ou em face
+            // permitida (P3D-132: nenhuma tinta fora da área permitida).
+            let mask = restriction.as_ref().map(|r| r.mask(mesh, w, h));
             // Normal, centro e raio de cada face, uma vez por chamada (e não por
             // dab): descarta de graça as faces longe do pincel.
             let infos: Vec<(Vec3, Vec3, f32)> = (0..mesh.faces.len())
@@ -772,6 +796,9 @@ impl PaintModule {
                         h,
                         BLEED_PX,
                         |x, y, t_dist, pos, r_eff| {
+                            if mask.is_some_and(|mask| !mask.allows(x, y)) {
+                                return;
+                            }
                             let t = if plain_round {
                                 t_dist
                             } else {

@@ -245,7 +245,11 @@ impl Canvas {
         use std::collections::VecDeque;
         let mut out = self.clone();
         let n = self.w as usize * self.h as usize;
-        if n > 1024 * 1024 || self.pixels.len() != n * 4 || self.w == 0 || self.h == 0 {
+        if n > (Self::MAX_SIDE * Self::MAX_SIDE) as usize
+            || self.pixels.len() != n * 4
+            || self.w == 0
+            || self.h == 0
+        {
             return out;
         }
         let padding = padding.min(64);
@@ -289,8 +293,8 @@ impl Canvas {
     }
 
     pub fn new(w: u32, h: u32, fill: [u8; 4]) -> Self {
-        let w = w.clamp(1, 1024);
-        let h = h.clamp(1, 1024);
+        let w = w.clamp(1, Self::MAX_SIDE);
+        let h = h.clamp(1, Self::MAX_SIDE);
         let mut pixels = vec![0u8; (w * h * 4) as usize];
         for i in (0..pixels.len()).step_by(4) {
             pixels[i..i + 4].copy_from_slice(&fill);
@@ -329,11 +333,15 @@ impl Canvas {
         }
     }
 
+    /// Lado máximo de um canvas. 2048² × 4 bytes = 16 MiB por camada; o
+    /// histórico tem orçamento de bytes, então lados maiores encurtam o undo.
+    pub const MAX_SIDE: u32 = 2048;
+
     /// Redimensiona por vizinho mais próximo (operação explícita de resize;
     /// preserva o conteúdo proporcionalmente, sem filtros caros).
     pub fn resized(&self, w: u32, h: u32) -> Self {
-        let w = w.clamp(1, 1024);
-        let h = h.clamp(1, 1024);
+        let w = w.clamp(1, Self::MAX_SIDE);
+        let h = h.clamp(1, Self::MAX_SIDE);
         if w == self.w && h == self.h {
             return self.clone();
         }
@@ -350,10 +358,10 @@ impl Canvas {
         out
     }
 
-    /// Repara canvas vindo de arquivo (M4): dims 1..1024 + pixels exatos.
+    /// Repara canvas vindo de arquivo (M4): dims 1..[`Self::MAX_SIDE`] + pixels exatos.
     pub fn validate(&mut self) {
-        self.w = self.w.clamp(1, 1024);
-        self.h = self.h.clamp(1, 1024);
+        self.w = self.w.clamp(1, Self::MAX_SIDE);
+        self.h = self.h.clamp(1, Self::MAX_SIDE);
         let want = (self.w * self.h * 4) as usize;
         self.pixels.resize(want, 0);
     }
@@ -1265,6 +1273,12 @@ impl Project {
     /// Rebuilds the derived texture cache for one asset from its canonical
     /// paint stack and mirrors it to the assigned material albedo channel.
     pub fn composite_paint_stack(&mut self, asset_index: usize) -> bool {
+        self.composite_paint_stack_at(asset_index, None)
+    }
+
+    /// Like [`Self::composite_paint_stack`], at playback `time` (seconds):
+    /// decals with a variant track show the variant keyed at that instant.
+    pub fn composite_paint_stack_at(&mut self, asset_index: usize, time: Option<f32>) -> bool {
         let Some(asset) = self.assets.get(asset_index) else {
             return false;
         };
@@ -1278,7 +1292,7 @@ impl Project {
             .unwrap_or((256, 256));
         let material_id = asset.material_id;
         let mut composed = Canvas::new(width, height, [0, 0, 0, 0]);
-        stack.composite(&mut composed);
+        stack.composite_on(&mut composed, Some(&*asset.mesh), time);
 
         if let Some(asset) = self.assets.get_mut(asset_index) {
             asset.texture = Some(composed.clone());

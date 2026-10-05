@@ -119,18 +119,27 @@ impl PaintRestriction {
         self.faces.iter().filter(|f| **f).count()
     }
 
-    /// Máscara de texels `w × h` das faces elegíveis (com 1 px de sangria).
+    /// Máscara de texels `w × h` das faces elegíveis. A sangria de 1 px (que
+    /// esconde a costura na filtragem) só entra em texels de calha, sem face
+    /// dona: nunca invade uma face vizinha não elegível, mesmo com as ilhas UV
+    /// encostadas.
     pub fn mask(&self, mesh: &petunia_mesh::Mesh, w: u32, h: u32) -> &petunia_mesh::CoverageMask {
         self.mask.get_or_init(|| {
-            mesh.uv_coverage_mask(
+            let allowed = || {
                 self.faces
                     .iter()
                     .enumerate()
-                    .filter_map(|(i, ok)| ok.then_some(i)),
-                w,
-                h,
-                1.0,
-            )
+                    .filter_map(|(i, ok)| ok.then_some(i))
+            };
+            let core = mesh.uv_coverage_mask(allowed(), w, h, 0.0);
+            let bled = mesh.uv_coverage_mask(allowed(), w, h, 1.0);
+            let owned = mesh.uv_coverage_mask(0..mesh.faces.len(), w, h, 0.0);
+            let mut mask = petunia_mesh::CoverageMask::new(w, h);
+            for (i, texel) in mask.texels.iter_mut().enumerate() {
+                let gutter = bled.texels[i] != 0 && owned.texels[i] == 0;
+                *texel = u8::from(core.texels[i] != 0 || gutter);
+            }
+            mask
         })
     }
 }
