@@ -264,6 +264,14 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
         window.set_depth_handle_y(dy * 1.0);
     }
     window.set_depth_handle_label(depth_label.as_str().into());
+    let (handle_commands, handle_pos) = bridge.parametric_handle_commands();
+    window.set_parametric_handle_commands(handle_commands.as_str().into());
+    window.set_parametric_handle_visible(handle_pos.is_some());
+    window.set_parametric_handle_hover(bridge.parametric_handle_hover);
+    if let Some([hx, hy]) = handle_pos {
+        window.set_parametric_handle_x(hx * 1.0);
+        window.set_parametric_handle_y(hy * 1.0);
+    }
 }
 
 impl From<&crate::view_model::ShortcutsModel> for ShortcutsEntry {

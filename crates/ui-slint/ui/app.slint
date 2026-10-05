@@ -4110,6 +4110,13 @@ export component PetuniaSlintShell inherits Window {
     in-out property <length> depth-handle-x: 0px;
     in-out property <length> depth-handle-y: 0px;
     in-out property <string> depth-handle-label: "";
+    // Alça das ferramentas paramétricas (Extrude, Inset, Round Edge, Push/Pull):
+    // 24 px visíveis, alvo de 32 px no bridge (constituição 03).
+    in-out property <string> parametric-handle-commands: "";
+    in-out property <bool> parametric-handle-visible: false;
+    in-out property <bool> parametric-handle-hover: false;
+    in-out property <length> parametric-handle-x: 0px;
+    in-out property <length> parametric-handle-y: 0px;
     in-out property <string> label-poly-pen: "";
     in-out property <string> label-poly-pen-hint: "";
     in-out property <string> poly-pen-mode: "auto";
@@ -5443,6 +5450,29 @@ export component PetuniaSlintShell inherits Window {
                         fill: DesignTokens.selection.transparentize(0.78);
                         stroke: DesignTokens.selection;
                         stroke-width: 1.5px;
+                    }
+                    if root.parametric-handle-visible && root.parametric-handle-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.parametric-handle-commands;
+                        fill: DesignTokens.accent;
+                        stroke: DesignTokens.accent;
+                        stroke-width: 2px;
+                    }
+                    if root.parametric-handle-visible: Rectangle {
+                        x: root.parametric-handle-x - 12px;
+                        y: root.parametric-handle-y - 12px;
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 12px;
+                        background: root.parametric-handle-hover ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 2px;
+                        border-color: DesignTokens.accent;
+                        Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: root.parametric-handle-hover ? DesignTokens.on-accent : DesignTokens.accent;
+                        }
                     }
                     // Depth Handle da forma ativa em DRAW: haste com diamante + cota
                     if root.depth-handle-visible && root.depth-handle-commands != "": Path {

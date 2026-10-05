@@ -2848,6 +2848,72 @@ fn poly_pen_alternate_modifier_comes_from_the_keymap() {
     assert!(bridge.view_model().label_poly_pen_mode_hint.contains("Alt"));
 }
 
+/// Cubo de frente com só a face frontal (+Z) selecionada.
+fn front_face_selected_bridge() -> SlintUiBridge<PlaceholderViewport> {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    bridge.state.set_selection_domain(SelectionDomain::Face);
+    {
+        let mesh = bridge.state.project.project.active_mesh_mut().unwrap();
+        mesh.deselect_all();
+        let front = (0..mesh.faces.len())
+            .find(|&i| mesh.face_normal(i).z > 0.9)
+            .unwrap();
+        mesh.faces[front].selected = true;
+        mesh.sync_vert_selection_from_faces();
+    }
+    bridge.state.sync_selection();
+    bridge
+}
+
+#[test]
+fn parametric_handles_have_a_24px_target_and_drive_the_value() {
+    const _: () = assert!(crate::projection::PARAMETRIC_HANDLE_HIT_RADIUS_PX * 2.0 >= 24.0);
+    const _: () = assert!(crate::projection::PARAMETRIC_HANDLE_RADIUS_PX * 2.0 >= 24.0);
+    let mut bridge = front_face_selected_bridge();
+    assert!(
+        bridge.parametric_handle().is_none(),
+        "Select não mostra alça"
+    );
+    bridge.activate_parametric_tool(ToolModalKind::Extrude);
+    let (base, handle) = bridge.parametric_handle().expect("alça do Extrude");
+    assert!((handle[0] - base[0]).hypot(handle[1] - base[1]) > 30.0);
+    let (commands, pos) = bridge.parametric_handle_commands();
+    assert!(!commands.is_empty() && pos == Some(handle));
+
+    // Hover destaca; 15 px fora do centro ainda é alvo (32 px de diâmetro).
+    let [w, h] = bridge.viewport_size;
+    bridge.hover_component((handle[0] + 15.0) / w, handle[1] / h);
+    assert!(bridge.parametric_handle_hover);
+    bridge.hover_component((handle[0] + 40.0) / w, handle[1] / h);
+    assert!(!bridge.parametric_handle_hover);
+
+    // Arrastar a alça extruda a seleção atual (1 Undo).
+    let faces = bridge.state.project.active_mesh().unwrap().faces.len();
+    let depth = bridge.state.project.undo.depth().0;
+    bridge.tool_pointer(0, handle[0], handle[1], false, false);
+    bridge.tool_pointer(1, handle[0], handle[1] - 20.0, false, false);
+    bridge.tool_pointer(1, handle[0], handle[1] - 40.0, false, false);
+    let (_, moved) = bridge.parametric_handle().expect("alça durante o gesto");
+    assert!(moved[1] < handle[1] - 20.0, "a alça segue o valor");
+    bridge.tool_pointer(2, handle[0], handle[1] - 40.0, false, false);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert!(mesh.faces.len() > faces, "extrudou");
+    assert!(mesh.verts.iter().any(|v| v.pos[2] > 1.05));
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+
+    // Inset e Round Edge têm alça; sem seleção adequada, nenhuma.
+    let mut bridge = front_face_selected_bridge();
+    bridge.activate_parametric_tool(ToolModalKind::Inset);
+    let (base, handle) = bridge.parametric_handle().expect("alça do Inset");
+    assert!(handle[0] > base[0]);
+    bridge.activate_parametric_tool(ToolModalKind::Bevel);
+    assert!(
+        bridge.parametric_handle().is_none(),
+        "Round Edge pede arestas"
+    );
+}
+
 #[test]
 fn snap_radius_is_an_accessibility_setting_with_real_effect() {
     let mut bridge = front_view_bridge_with_cube();

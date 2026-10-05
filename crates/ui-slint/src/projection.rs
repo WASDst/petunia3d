@@ -186,6 +186,14 @@ pub(crate) const GIZMO_VIEW_ROLL_RADIUS: f32 = GIZMO_ROD_LENGTH * 1.18;
 /// Meia-largura da faixa clicável de anéis: 24 px lógicos no total (WCAG 2.5.8).
 pub(crate) const GIZMO_RING_HIT_HALF_WIDTH: f32 = 12.0;
 
+/// Alça das ferramentas paramétricas (Extrude, Inset, Round Edge, Push/Pull):
+/// distância em px lógicos entre a base e a alça.
+pub(crate) const PARAMETRIC_HANDLE_OFFSET_PX: f32 = 44.0;
+/// Raio visível da alça: 24 px de diâmetro (constituição 03, WCAG 2.5.8).
+pub(crate) const PARAMETRIC_HANDLE_RADIUS_PX: f32 = 12.0;
+/// Raio do alvo da alça: 32 px de diâmetro, folga sobre o mínimo de 24 px.
+pub(crate) const PARAMETRIC_HANDLE_HIT_RADIUS_PX: f32 = 16.0;
+
 pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoModel {
     const ROD_LENGTH: f32 = GIZMO_ROD_LENGTH;
     /// Tamanho da seta: recuo da ponta e meia-largura da base.

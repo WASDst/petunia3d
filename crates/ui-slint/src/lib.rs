@@ -289,6 +289,9 @@ impl ToolModalKind {
     }
 }
 
+/// Alvo de press da alça paramétrica (`PressTarget::Handle`).
+const PARAMETRIC_HANDLE_TARGET: u8 = 4;
+
 /// Ferramenta que segue a gramática única (constituição 11, ADR 007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GrammarTool {
@@ -795,6 +798,10 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub poly_pen_mode: PolyPenMode,
     /// Pintura de faces em andamento (modo Polygons).
     poly_pen_strip: Option<petunia_core::PenStrip>,
+    /// Cursor sobre a alça da ferramenta paramétrica (destaque).
+    pub parametric_handle_hover: bool,
+    /// O último press caiu na alça paramétrica (o clique não seleciona).
+    tool_press_parametric_handle: bool,
     /// Sessão paramétrica aberta por atalho: o movimento do mouse já manipula.
     pub keyboard_tool_modal_active: bool,
     pub tool_modal_value: f32,
@@ -1187,6 +1194,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             poly_pen_points: Vec::new(),
             poly_pen_mode: PolyPenMode::default(),
             poly_pen_strip: None,
+            parametric_handle_hover: false,
+            tool_press_parametric_handle: false,
             keyboard_tool_modal_active: false,
             tool_modal_value: 0.0,
             rename_draft: None,
@@ -3015,6 +3024,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return drawing
                 || snap_before != self.profile_hover_snap
                 || region_before != self.region_hover;
+        }
+        if matches!(self.grammar_tool(), Some(GrammarTool::Parametric(_))) {
+            let hover = self.parametric_handle_at(self.pointer_position);
+            if hover != self.parametric_handle_hover {
+                self.parametric_handle_hover = hover;
+                if hover {
+                    self.state.session.tools.hover = petunia_core::HoverTarget::None;
+                }
+                return true;
+            }
+            if hover {
+                return false;
+            }
         }
         if self.state.session.tools.active_tool == "poly_pen" {
             let pixel = [
@@ -11141,8 +11163,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.tool_pointer_alt = alt;
         let effect = match phase {
             0 => {
+                self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
                 let target = if self.grammar_tool() == Some(GrammarTool::DrawProfile) {
                     self.profile_press_target(x, y)
+                } else if self.tool_press_parametric_handle {
+                    petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
                 } else if self.profile_transform_target_at(x, y) {
                     petunia_core::PressTarget::Handle(0)
                 } else if self.gizmo_target_at(x, y).is_some() {
@@ -11211,6 +11236,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Effect::Click { .. } if self.grammar_tool() == Some(GrammarTool::Slice) => {
                 self.slice_anchor.is_some() && self.commit_slice()
             }
+            // Clique na alça paramétrica não troca a seleção.
+            Effect::Click { .. } if self.tool_press_parametric_handle => false,
             Effect::Click { at } => {
                 let [width, height] = self.viewport_size;
                 if width > 1.0 && height > 1.0 {
@@ -11582,7 +11609,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             GrammarTool::Parametric(kind) => {
+                // Pela alça, a seleção atual é a do gesto (sem região nem
+                // reseleção sob o ponteiro).
+                let on_parametric_handle = matches!(
+                    target,
+                    petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
+                );
                 if self.tool_modal.is_none()
+                    && !on_parametric_handle
                     && kind == ToolModalKind::PushPull
                     && let Some(hit) = self
                         .region_hit_at(anchor)
@@ -11591,7 +11625,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     return self.begin_region_gesture(anchor, &hit);
                 }
                 if self.tool_modal.is_none() {
-                    self.select_under_anchor_for(kind, anchor);
+                    if !on_parametric_handle {
+                        self.select_under_anchor_for(kind, anchor);
+                    }
                     if !self.begin_tool_modal(kind) {
                         let id = if kind == ToolModalKind::Bevel {
                             petunia_config::text_id::TOOL_GRAMMAR_NEEDS_EDGE
@@ -11619,6 +11655,105 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 });
                 true
             }
+        }
+    }
+
+    /// Alça visível da ferramenta paramétrica ativa (Extrude, Inset, Round
+    /// Edge, Push/Pull): `(base, alça)` em px da viewport. A base é o pivô
+    /// (no Extrude, o topo da extrusão em prévia); a alça fica a
+    /// [`projection::PARAMETRIC_HANDLE_OFFSET_PX`] na direção do valor e segue
+    /// o valor durante o gesto.
+    pub(crate) fn parametric_handle(&self) -> Option<([f32; 2], [f32; 2])> {
+        let Some(GrammarTool::Parametric(tool_kind)) = self.grammar_tool() else {
+            return None;
+        };
+        if self.state.workspace != Workspace::Model || tool_kind == ToolModalKind::ScaleSelection {
+            return None;
+        }
+        let kind = self.tool_modal.unwrap_or(tool_kind);
+        let viewport = self.viewport_size;
+        if viewport[0] <= 1.0 || viewport[1] <= 1.0 {
+            return None;
+        }
+        let camera = &self.state.session.camera;
+        let (pivot, normal, value) = match self.state.session.tools.modal.as_ref() {
+            Some(modal) => (modal.pivot, modal.normal, self.tool_modal_value),
+            None => {
+                let mesh = self.state.project.active_mesh()?;
+                let mut normal = glam::Vec3::ZERO;
+                for (index, face) in mesh.faces.iter().enumerate() {
+                    if face.selected {
+                        normal += mesh.face_normal(index);
+                    }
+                }
+                let ready = if kind == ToolModalKind::Bevel {
+                    !mesh.selected_edges.is_empty()
+                } else {
+                    normal != glam::Vec3::ZERO
+                };
+                if !ready {
+                    return None;
+                }
+                let pivot = self.state.calculate_pivot(self.state.session.pivot_point);
+                (pivot, normal.normalize_or_zero(), 0.0)
+            }
+        };
+        let offset = projection::PARAMETRIC_HANDLE_OFFSET_PX;
+        let pivot_px = project_world_point(camera, viewport, pivot)?;
+        let screen_per_world = project_world_point(camera, viewport, pivot + camera.right())
+            .map(|right| (right[0] - pivot_px[0]).hypot(right[1] - pivot_px[1]))
+            .filter(|pixels| pixels.is_finite() && *pixels > 1.0e-3)?;
+        let value = if value.is_finite() { value } else { 0.0 };
+        match kind {
+            ToolModalKind::Extrude | ToolModalKind::ExtrudeIndividual | ToolModalKind::PushPull => {
+                let base = project_world_point(camera, viewport, pivot + normal * value)?;
+                let tip = project_world_point(camera, viewport, pivot + normal * (value + 1.0));
+                let handle = match tip
+                    .map(|tip| glam::Vec2::new(tip[0] - base[0], tip[1] - base[1]))
+                    .filter(|d| d.length() >= 6.0)
+                {
+                    Some(direction) => glam::Vec2::from(base) + direction.normalize() * offset,
+                    // Normal para a câmera: o arrasto vertical controla o valor
+                    // (`drag_value`), e a alça sobe com ele.
+                    None => {
+                        glam::Vec2::from(base)
+                            - glam::Vec2::Y * (offset + value.max(0.0) * screen_per_world)
+                    }
+                };
+                Some((base, handle.to_array()))
+            }
+            // Inset cresce ao aproximar do pivô; Round Edge, ao afastar.
+            ToolModalKind::Inset => {
+                let x = (offset - value * screen_per_world)
+                    .max(projection::PARAMETRIC_HANDLE_RADIUS_PX);
+                Some((pivot_px, [pivot_px[0] + x, pivot_px[1]]))
+            }
+            ToolModalKind::Bevel => {
+                let x = offset + value * screen_per_world;
+                Some((pivot_px, [pivot_px[0] + x, pivot_px[1]]))
+            }
+            ToolModalKind::ScaleSelection => None,
+        }
+    }
+
+    /// O ponto (px) está no alvo da alça paramétrica?
+    pub(crate) fn parametric_handle_at(&self, pixel: [f32; 2]) -> bool {
+        self.parametric_handle().is_some_and(|(_, handle)| {
+            (pixel[0] - handle[0]).hypot(pixel[1] - handle[1])
+                <= projection::PARAMETRIC_HANDLE_HIT_RADIUS_PX
+        })
+    }
+
+    /// Haste da base até a alça (px), para o overlay.
+    pub(crate) fn parametric_handle_commands(&self) -> (String, Option<[f32; 2]>) {
+        match self.parametric_handle() {
+            Some(([bx, by], [hx, hy])) => (
+                format!(
+                    "M {bx:.1} {by:.1} L {hx:.1} {hy:.1} M {bx:.1} {by:.1} m -3 0 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0"
+                ),
+                Some([hx, hy]),
+            ),
+            None => (String::new(), None),
         }
     }
 
