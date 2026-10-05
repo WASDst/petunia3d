@@ -4456,7 +4456,7 @@ fn modeling_tool_shortcut_double_tap_behavior() {
     assert!(bridge.keyboard_tool_modal_active);
     assert!(bridge.view_model().keyboard_tool_modal_active);
     assert!(bridge.view_model().is_instant_tool_mode);
-    assert_eq!(bridge.view_model().hud_pill_badge, "MODO LIVRE");
+    assert_eq!(bridge.view_model().hud_pill_badge, "FREE MODE");
 
     // No Modo Livre, arrasto/mouse ajusta o valor:
     assert!(bridge.scrub_tool_modal(-32.0, false));

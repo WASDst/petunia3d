@@ -238,6 +238,29 @@ impl ToolModalKind {
         }
     }
 
+    /// Nome traduzível da ferramenta (catálogo `tools.*`).
+    pub const fn title_key(self) -> &'static str {
+        match self {
+            Self::Extrude => "tools.extrude",
+            Self::ExtrudeIndividual => "tools.extrude_individual",
+            Self::Inset => "tools.inset",
+            Self::Bevel => "tools.bevel",
+            Self::PushPull => "tools.push_pull",
+            Self::ScaleSelection => "tools.scale",
+        }
+    }
+
+    /// Rótulo traduzível do valor principal.
+    pub const fn label_id(self) -> petunia_config::TextId {
+        use petunia_config::text_id as t;
+        match self {
+            Self::Extrude | Self::ExtrudeIndividual | Self::PushPull => t::HUD_LABEL_DISTANCE,
+            Self::Inset => t::HUD_LABEL_AMOUNT,
+            Self::Bevel => t::HUD_LABEL_WIDTH,
+            Self::ScaleSelection => t::HUD_LABEL_FACTOR,
+        }
+    }
+
     pub const fn modal_kind(self) -> petunia_core::ModalKind {
         match self {
             Self::Extrude => petunia_core::ModalKind::Extrude,
@@ -2426,28 +2449,44 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// O HUD diz *o que está acontecendo e com que valor*; a barra diz *como
     /// controlar*. Os dois nunca repetem a mesma informação.
     fn fill_operation_hud(&self, vm: &mut ShellViewModel) {
+        use petunia_config::text_id as t;
         let axis_name = |index: usize| ["X", "Y", "Z"][index.min(2)];
+        let tr = |id: petunia_config::TextId| self.state.t_id(id);
+        let fill = |id: petunia_config::TextId, values: &[String]| {
+            let pairs: Vec<(String, String)> = values
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i.to_string(), v.clone()))
+                .collect();
+            let refs: Vec<(&str, String)> =
+                pairs.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+            crate::tr::fill(&self.state.t_id(id), &refs)
+        };
+        let input_line = || {
+            let typed = self.tool_session.numeric_text();
+            (!typed.is_empty()).then(|| fill(t::HUD_INPUT, &[typed.to_string()]))
+        };
 
         if self.state.session.tools.active_tool == "loop_cut" && self.loop_cut.is_none() {
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Loop Cut".to_string();
-            vm.operation_hud_lines = vec![format!("Cuts    {}", self.loop_cut_hover_cuts)];
-            vm.operation_hud_hint =
-                "Hover a quad edge · Scroll Cuts · Click place · Enter confirm · Esc cancel"
-                    .to_string();
+            vm.operation_hud_title = self.state.t_id(t::TOOLS_LOOP_CUT);
+            vm.operation_hud_lines =
+                vec![fill(t::HUD_CUTS, &[self.loop_cut_hover_cuts.to_string()])];
+            vm.operation_hud_hint = tr(t::HUD_LOOP_CUT_HOVER_HINT);
             vm.context_hint = vm.operation_hud_hint.clone();
             return;
         }
         if self.state.session.tools.active_tool == "draw_profile" {
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Profile".to_string();
-            vm.operation_hud_lines =
-                vec![format!("{} point(s)", self.active_profile_point_count())];
+            vm.operation_hud_title = self.state.t("tools.draw_profile");
+            vm.operation_hud_lines = vec![fill(
+                t::HUD_POINTS,
+                &[self.active_profile_point_count().to_string()],
+            )];
             vm.operation_hud_hint = if self.active_profile_closed() {
-                "Generate Volume or Revolve · Esc finishes editing".to_string()
+                tr(t::HUD_PROFILE_CLOSED_HINT)
             } else {
-                "Click to add points · Click first point to close · Esc finishes editing"
-                    .to_string()
+                tr(t::HUD_PROFILE_OPEN_HINT)
             };
             vm.context_hint = vm.operation_hud_hint.clone();
             return;
@@ -2455,16 +2494,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         // Ferramenta paramétrica modal.
         if let Some(kind) = self.tool_modal {
-            let (minimum, maximum) = kind.bounds();
-            let _ = (minimum, maximum);
+            let title = self.state.t(kind.title_key());
             vm.operation_hud_active = true;
-            vm.operation_hud_title = kind.title().to_string();
-            vm.operation_hud_lines =
-                vec![format!("{}   {:.3}", kind.label(), self.tool_modal_value)];
-            if !self.tool_session.numeric_text().is_empty() {
-                vm.operation_hud_lines
-                    .push(format!("Input   {}", self.tool_session.numeric_text()));
-            }
+            vm.operation_hud_title = title.clone();
+            vm.operation_hud_lines = vec![format!(
+                "{}   {:.3}",
+                tr(kind.label_id()),
+                self.tool_modal_value
+            )];
+            vm.operation_hud_lines.extend(input_line());
             vm.operation_hud_subject = self
                 .state
                 .project
@@ -2473,35 +2511,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let faces = mesh.faces.iter().filter(|face| face.selected).count();
                     let verts = mesh.verts.iter().filter(|vert| vert.selected).count();
                     if faces > 0 {
-                        format!("{faces} face(s)")
+                        fill(t::HUD_FACES, &[faces.to_string()])
                     } else {
-                        format!("{verts} point(s)")
+                        fill(t::HUD_POINTS, &[verts.to_string()])
                     }
                 })
                 .unwrap_or_default();
-            vm.operation_hud_hint = format!(
-                "{} Confirm   Esc Cancel   Shift Precision",
-                if self.is_instant_tool_mode() {
-                    "Click"
-                } else {
-                    "Release"
-                }
-            );
-            vm.context_hint = format!("{} · {}", kind.title(), vm.operation_hud_hint);
+            vm.operation_hud_hint = if self.is_instant_tool_mode() {
+                tr(t::HUD_HINT_CLICK_CONFIRM)
+            } else {
+                tr(t::HUD_HINT_RELEASE_CONFIRM)
+            };
+            vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
         // Loop Cut.
         if let Some(session) = &self.loop_cut {
+            let title = self.state.t_id(t::TOOLS_LOOP_CUT);
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Loop Cut".to_string();
+            vm.operation_hud_title = title.clone();
             vm.operation_hud_lines = vec![
-                format!("Cuts    {}", session.cuts),
-                format!("Slide   {:.3}", session.slide),
+                fill(t::HUD_CUTS, &[session.cuts.to_string()]),
+                fill(t::HUD_SLIDE, &[format!("{:.3}", session.slide)]),
             ];
-            vm.operation_hud_subject = format!("{} cut(s)", session.cuts);
-            vm.operation_hud_hint = "Enter Confirm   Esc Cancel   Drag to slide".to_string();
-            vm.context_hint = format!("Loop Cut · {}", vm.operation_hud_hint);
+            vm.operation_hud_subject = fill(t::HUD_CUT_COUNT, &[session.cuts.to_string()]);
+            vm.operation_hud_hint = tr(t::HUD_LOOP_CUT_HINT);
+            vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
@@ -2509,9 +2545,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             && let Some(session) = &self.state.session.tools.cut_session
         {
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Cut".into();
-            vm.operation_hud_lines = vec![format!("{} segment(s)", session.segments)];
-            vm.operation_hud_hint = "Click edge points · Enter Apply · Esc Cancel".into();
+            vm.operation_hud_title = tr(t::HUD_CUT_TITLE);
+            vm.operation_hud_lines = vec![fill(t::HUD_SEGMENTS, &[session.segments.to_string()])];
+            vm.operation_hud_hint = tr(t::HUD_CUT_HINT);
             vm.context_hint = vm.operation_hud_hint.clone();
             if let Some(point) = session.edge_start {
                 let clip = self.state.session.camera.view_proj() * point.position.extend(1.0);
@@ -2529,27 +2565,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
         // Transformação por arrasto (gizmo ou ferramenta ativa).
         if let Some(modal) = self.state.session.tools.modal.as_ref() {
-            let title = match modal.kind {
-                petunia_core::ModalKind::Move => "Move",
-                petunia_core::ModalKind::Rotate => "Rotate",
-                petunia_core::ModalKind::Scale => "Scale",
-                petunia_core::ModalKind::Extrude => "Extrude",
-                petunia_core::ModalKind::ExtrudeIndividual => "Extrude Individual",
-                petunia_core::ModalKind::Inset => "Inset",
-                petunia_core::ModalKind::Bevel => "Round Edge",
-                petunia_core::ModalKind::PushPull => "Push/Pull",
-            };
+            let title = self.state.t(match modal.kind {
+                petunia_core::ModalKind::Move => "tools.move",
+                petunia_core::ModalKind::Rotate => "tools.rotate",
+                petunia_core::ModalKind::Scale => "tools.scale",
+                petunia_core::ModalKind::Extrude => "tools.extrude",
+                petunia_core::ModalKind::ExtrudeIndividual => "tools.extrude_individual",
+                petunia_core::ModalKind::Inset => "tools.inset",
+                petunia_core::ModalKind::Bevel => "tools.bevel",
+                petunia_core::ModalKind::PushPull => "tools.push_pull",
+            });
             let mut lines = Vec::new();
             match modal.constraint {
                 petunia_core::ModalConstraint::Axis(i) => {
                     lines.push(format!("{}   {:.3}", axis_name(i), modal.value));
                 }
                 petunia_core::ModalConstraint::Plane(i) => {
-                    lines.push(format!(
-                        "Plane {}{}   {:.3}",
-                        axis_name((i + 1) % 3),
-                        axis_name((i + 2) % 3),
-                        modal.value
+                    lines.push(fill(
+                        t::HUD_PLANE,
+                        &[
+                            format!("{}{}", axis_name((i + 1) % 3), axis_name((i + 2) % 3)),
+                            format!("{:.3}", modal.value),
+                        ],
                     ));
                 }
                 petunia_core::ModalConstraint::Free => {
@@ -2559,7 +2596,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         lines.push(format!("Y   {:.3}", components.y));
                         lines.push(format!("Z   {:.3}", components.z));
                     } else {
-                        lines.push(format!("Value   {:.3}", modal.value));
+                        lines.push(fill(t::HUD_VALUE, &[format!("{:.3}", modal.value)]));
                     }
                 }
             }
@@ -2567,72 +2604,66 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 // ToolFeedback telemetry for magnetic snapping (P3D-131)
                 // Telemetria de ToolFeedback para atração magnética (P3D-131)
                 if let Some(kind) = fb.snap_kind {
-                    lines.push(format!("Snap   {}", self.state.t_id(kind.text_id())));
+                    lines.push(fill(t::HUD_SNAP, &[self.state.t_id(kind.text_id())]));
                 }
             }
             vm.operation_hud_active = true;
-            vm.operation_hud_title = title.to_string();
-            if !self.tool_session.numeric_text().is_empty() {
-                lines.push(format!("Input   {}", self.tool_session.numeric_text()));
-            }
+            vm.operation_hud_title = title.clone();
+            lines.extend(input_line());
             vm.operation_hud_lines = lines;
-            vm.operation_hud_subject = format!(
-                "{} · {}",
-                if self.state.session.edit_pivot {
-                    "pivot"
-                } else if self.state.selection_domain() == petunia_core::SelectionDomain::Object {
-                    "object"
-                } else {
-                    "selection"
-                },
-                match modal.constraint {
-                    petunia_core::ModalConstraint::Axis(i) => format!("{} axis", axis_name(i)),
-                    petunia_core::ModalConstraint::Plane(i) => {
-                        format!("{}{} plane", axis_name((i + 1) % 3), axis_name((i + 2) % 3))
-                    }
-                    petunia_core::ModalConstraint::Free => "free".to_string(),
+            let subject = if self.state.session.edit_pivot {
+                tr(t::HUD_SUBJECT_PIVOT)
+            } else if self.state.selection_domain() == petunia_core::SelectionDomain::Object {
+                tr(t::HUD_SUBJECT_OBJECT)
+            } else {
+                tr(t::HUD_SUBJECT_SELECTION)
+            };
+            let constraint = match modal.constraint {
+                petunia_core::ModalConstraint::Axis(i) => {
+                    fill(t::HUD_AXIS, &[axis_name(i).to_string()])
                 }
-            );
-            vm.operation_hud_hint = "Enter Confirm   Esc Cancel   Shift Precision".to_string();
+                petunia_core::ModalConstraint::Plane(i) => fill(
+                    t::HUD_PLANE_SUBJECT,
+                    &[format!(
+                        "{}{}",
+                        axis_name((i + 1) % 3),
+                        axis_name((i + 2) % 3)
+                    )],
+                ),
+                petunia_core::ModalConstraint::Free => tr(t::HUD_FREE),
+            };
+            vm.operation_hud_subject = format!("{subject} · {constraint}");
+            vm.operation_hud_hint = tr(t::HUD_TRANSFORM_HINT);
             vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
         if self.state.session.edit_pivot {
+            let title = tr(t::HUD_EDIT_PIVOT_TITLE);
             vm.operation_hud_active = true;
-            vm.operation_hud_title = "Edit Pivot Mode".to_string();
-            vm.operation_hud_subject = "Pivot".to_string();
-            vm.operation_hud_lines = vec!["Moving object pivot point".to_string()];
-            vm.operation_hud_hint =
-                "D / Insert or Esc to exit · Geometry remains fixed".to_string();
-            vm.context_hint =
-                "Edit Pivot Mode · D / Insert or Esc to exit · Geometry remains fixed".to_string();
+            vm.operation_hud_title = title.clone();
+            vm.operation_hud_subject = tr(t::HUD_PIVOT);
+            vm.operation_hud_lines = vec![tr(t::HUD_EDIT_PIVOT_LINE)];
+            vm.operation_hud_hint = tr(t::HUD_EDIT_PIVOT_HINT);
+            vm.context_hint = format!("{title} · {}", vm.operation_hud_hint);
             return;
         }
 
         if let Some(session) = &self.state.session.primitive_session {
             let name = session.descriptor.kind().default_name();
             vm.operation_hud_active = false;
-            vm.context_hint = format!("Add {name} · Enter Confirm · Esc Cancel");
+            vm.context_hint = fill(t::HUD_ADD_PRIMITIVE_HINT, &[name.to_string()]);
             return;
         }
 
         // Em repouso: a barra informa o domínio e a navegação.
         vm.operation_hud_active = false;
-        vm.context_hint = match self.state.selection_domain() {
-            petunia_core::SelectionDomain::Object => {
-                "Selection: Object   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Vertex => {
-                "Selection: Point   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Edge => {
-                "Selection: Edge   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Face => {
-                "Selection: Face   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-        };
+        vm.context_hint = tr(match self.state.selection_domain() {
+            petunia_core::SelectionDomain::Object => t::HUD_IDLE_OBJECT,
+            petunia_core::SelectionDomain::Vertex => t::HUD_IDLE_POINT,
+            petunia_core::SelectionDomain::Edge => t::HUD_IDLE_EDGE,
+            petunia_core::SelectionDomain::Face => t::HUD_IDLE_FACE,
+        });
     }
 
     /// Orbita a câmera, usando a seleção como pivô quando existe.
@@ -11003,7 +11034,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let message = self
             .state
             .t_id(petunia_config::text_id::TOOL_GRAMMAR_READY)
-            .replace("{tool}", kind.title());
+            .replace("{tool}", &self.state.t(kind.title_key()));
         self.state.set_status(message);
         self.state.mark_dirty();
     }
@@ -11482,7 +11513,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         } else {
                             petunia_config::text_id::TOOL_GRAMMAR_NEEDS_FACE
                         };
-                        let message = self.state.t_id(id).replace("{tool}", kind.title());
+                        let message = self
+                            .state
+                            .t_id(id)
+                            .replace("{tool}", &self.state.t(kind.title_key()));
                         self.state.set_status(message);
                         return false;
                     }
@@ -13327,7 +13361,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         start_value: self.tool_modal_value,
                     });
                 }
-                let label = kind.map_or("Ferramenta", |k| k.title());
+                let label = kind.map_or_else(
+                    || self.state.t_id(petunia_config::text_id::HUD_TOOL_FALLBACK),
+                    |k| self.state.t(k.title_key()),
+                );
                 self.state.set_status(crate::tr::fill(
                     &self
                         .state
@@ -14629,11 +14666,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.hud_pill_visible = true;
             vm.hud_pill_title = vm.operation_hud_title.clone();
             vm.hud_pill_badge = if self.is_instant_tool_mode() {
-                "MODO LIVRE".to_string()
+                self.state
+                    .t_id(petunia_config::text_id::HUD_BADGE_FREE_MODE)
             } else if !vm.operation_hud_subject.is_empty() {
                 vm.operation_hud_subject.clone()
             } else {
-                "CARD".to_string()
+                self.state.t_id(petunia_config::text_id::HUD_BADGE_TOOL)
             };
             vm.hud_pill_value = vm.operation_hud_lines.join("   ");
             vm.hud_pill_hint = vm.operation_hud_hint.clone();
@@ -14710,7 +14748,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.context_menu_y = menu.y;
             if menu.viewport {
                 vm.context_menu_mode = "viewport".to_string();
-                vm.context_menu_title = "Viewport".to_string();
+                vm.context_menu_title = self.state.t_id(petunia_config::text_id::HUD_VIEWPORT_MENU);
             } else if let Some(asset) = self
                 .state
                 .project
@@ -15439,8 +15477,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             let (minimum, maximum) = kind.bounds();
             vm.tool_modal_active = true;
             vm.tool_modal_id = kind.id().to_string();
-            vm.tool_modal_title = kind.title().to_string();
-            vm.tool_modal_label = kind.label().to_string();
+            vm.tool_modal_title = self.state.t(kind.title_key());
+            vm.tool_modal_label = self.state.t_id(kind.label_id());
             vm.tool_modal_value = self.tool_modal_value;
             vm.tool_modal_step = kind.step();
             vm.tool_modal_min = minimum;
@@ -15456,7 +15494,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     "select" | "box_select" | "lasso_select"
                 ));
         vm.tool_options_title = if let Some(kind) = self.tool_modal {
-            kind.title().to_string()
+            self.state.t(kind.title_key())
         } else if self.loop_cut.is_some() || self.state.session.tools.active_tool == "loop_cut" {
             self.state.t_id(petunia_config::text_id::TOOLS_LOOP_CUT)
         } else if self.state.session.tools.active_tool == "draw_profile" {
