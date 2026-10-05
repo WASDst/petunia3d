@@ -1217,19 +1217,19 @@ mod tests {
         let empty = Canvas {
             w: 0,
             h: 0,
-            pixels: Vec::new(),
+            pixels: Vec::new().into(),
         };
         assert_eq!(sample_bilinear(&empty, [0.5, 0.5]), [0.0; 4]);
         let short = Canvas {
             w: 100,
             h: 100,
-            pixels: vec![255; 8],
+            pixels: (vec![255; 8]).into(),
         };
         assert_eq!(sample_bilinear(&short, [0.5, 0.5]), [0.0; 4]);
         let huge = Canvas {
             w: u32::MAX,
             h: u32::MAX,
-            pixels: vec![255; 8],
+            pixels: (vec![255; 8]).into(),
         };
         assert_eq!(sample_bilinear(&huge, [0.5, 0.5]), [0.0; 4]);
         // uv absurdo é preso à borda
@@ -1571,20 +1571,20 @@ mod tests {
         let mut bad = Canvas {
             w: 0,
             h: 0,
-            pixels: Vec::new(),
+            pixels: Vec::new().into(),
         };
         assert!(run(&mut bad, &mesh, &depth, &image, &ok).is_empty());
         let mut short = Canvas {
             w: 16,
             h: 16,
-            pixels: vec![0; 4],
+            pixels: (vec![0; 4]).into(),
         };
         assert!(run(&mut short, &mesh, &depth, &image, &ok).is_empty());
         // imagem inválida
         let empty_img = Canvas {
             w: 0,
             h: 0,
-            pixels: Vec::new(),
+            pixels: Vec::new().into(),
         };
         let mut t = Canvas::new(16, 16, CLEAR);
         assert!(run(&mut t, &mesh, &depth, &empty_img, &ok).is_empty());
@@ -1792,7 +1792,7 @@ mod tests {
         let mut bad = Canvas {
             w: 5,
             h: 5,
-            pixels: Vec::new(),
+            pixels: Vec::new().into(),
         };
         assert!(go(&mut bad, &full, &depth, vp, viewport).is_empty());
     }

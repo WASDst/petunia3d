@@ -65,6 +65,8 @@ impl std::ops::BitOrAssign for ProjectChanges {
 }
 
 pub mod animation;
+pub mod shared;
+pub use shared::Shared;
 pub mod autosave;
 pub mod export;
 pub mod format;
@@ -171,8 +173,9 @@ pub struct Canvas {
     pub w: u32,
     pub h: u32,
     /// RGBA8 row-major, origem em cima.
+    /// Compartilhado com os snapshots de Undo até a primeira escrita.
     #[serde(with = "pixel_bytes")]
-    pub pixels: Vec<u8>,
+    pub pixels: Shared<Vec<u8>>,
 }
 
 /// Serialização compacta de pixels: base64 em formatos legíveis (JSON, ~1,33×)
@@ -222,7 +225,9 @@ mod pixel_bytes {
         }
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<super::Shared<Vec<u8>>, D::Error> {
         if deserializer.is_human_readable() {
             deserializer.deserialize_any(BytesVisitor)
         } else {
@@ -230,6 +235,7 @@ mod pixel_bytes {
             // varint + bytes, idêntico ao layout de `Vec<u8>` antigo.
             deserializer.deserialize_seq(BytesVisitor)
         }
+        .map(super::Shared::new)
     }
 }
 
@@ -289,7 +295,11 @@ impl Canvas {
         for i in (0..pixels.len()).step_by(4) {
             pixels[i..i + 4].copy_from_slice(&fill);
         }
-        Self { w, h, pixels }
+        Self {
+            w,
+            h,
+            pixels: pixels.into(),
+        }
     }
 
     pub fn get(&self, x: u32, y: u32) -> Option<[u8; 4]> {
@@ -402,7 +412,8 @@ impl ModifierInstance {
 pub struct Asset {
     pub id: Uuid,
     pub name: String,
-    pub mesh: Mesh,
+    /// Compartilhada com os snapshots de Undo até a primeira escrita.
+    pub mesh: Shared<Mesh>,
     pub visible: bool,
     #[serde(default)]
     pub locked: bool,
@@ -453,7 +464,7 @@ impl Asset {
         Self {
             id: Uuid::new_v4(),
             name: name.to_string(),
-            mesh,
+            mesh: mesh.into(),
             visible: true,
             locked: false,
             collection: None,
@@ -604,11 +615,18 @@ impl Asset {
     /// cópia e zero hash) e calculada quando há. Preferir esta API em caminhos
     /// por frame (render, seleção, picking).
     pub fn evaluated_mesh_ref(&self) -> std::borrow::Cow<'_, Mesh> {
-        if self.has_enabled_modifiers() {
-            std::borrow::Cow::Owned(self.evaluated_mesh())
-        } else {
-            std::borrow::Cow::Borrowed(&self.mesh)
+        if !self.has_enabled_modifiers() {
+            return std::borrow::Cow::Borrowed(&self.mesh);
         }
+        // Cache válido (preenchido a cada mudança do documento): empresta em
+        // vez de clonar a malha avaliada por chamada.
+        let key = (self.source_mesh_hash(), self.modifier_hash());
+        if let Some((k0, k1, cached)) = &self.eval_cache
+            && (*k0, *k1) == key
+        {
+            return std::borrow::Cow::Borrowed(cached);
+        }
+        std::borrow::Cow::Owned(self.evaluated_mesh())
     }
 
     /// Avalia a pilha de modifiers sem alterar a malha-base.
@@ -616,7 +634,7 @@ impl Asset {
     /// sobre `mesh`, preservando a natureza não destrutiva da pilha.
     pub fn evaluated_mesh(&self) -> Mesh {
         if !self.has_enabled_modifiers() {
-            return self.mesh.clone();
+            return self.mesh.to_owned_value();
         }
         let key = (self.source_mesh_hash(), self.modifier_hash());
         if let Some((k0, k1, cached)) = &self.eval_cache
@@ -624,7 +642,7 @@ impl Asset {
         {
             return cached.clone();
         }
-        let mut mesh = self.mesh.clone();
+        let mut mesh = self.mesh.to_owned_value();
         for modifier in &self.modifiers {
             if !modifier.enabled {
                 continue;
@@ -1795,14 +1813,14 @@ impl Project {
         self.assets.get(self.active)
     }
     pub fn active_mesh(&self) -> Option<&Mesh> {
-        self.active().map(|o| &o.mesh)
+        self.active().map(|o| &*o.mesh)
     }
 
     pub fn active_mut(&mut self) -> Option<&mut Asset> {
         self.assets.get_mut(self.active)
     }
     pub fn active_mesh_mut(&mut self) -> Option<&mut Mesh> {
-        self.active_mut().map(|o| &mut o.mesh)
+        self.active_mut().map(|o| &mut *o.mesh)
     }
 
     pub fn add(&mut self, name: &str, mesh: Mesh) {

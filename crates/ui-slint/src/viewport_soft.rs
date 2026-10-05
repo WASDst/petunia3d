@@ -617,7 +617,7 @@ mod tests {
         let rest = viewport.color_buffer.clone();
 
         // A mesma malha, deslocada: o documento não muda, o desenho sim.
-        let mut moved = project.assets.last().unwrap().mesh.clone();
+        let mut moved = project.assets.last().unwrap().mesh.to_owned_value();
         for v in &mut moved.verts {
             v.pos[0] += 1.5;
         }

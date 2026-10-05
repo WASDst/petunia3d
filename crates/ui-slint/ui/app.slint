@@ -4101,6 +4101,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> profile-closed: false;
     in-out property <string> profile-preview-commands: "";
     in-out property <string> region-hover-commands: "";
+    in-out property <string> profile-selection-commands: "";
     in-out property <string> region-shapes-commands: "";
     in-out property <string> profile-outline-commands: "";
     in-out property <string> poly-pen-preview-commands: "";
@@ -4306,7 +4307,7 @@ export component PetuniaSlintShell inherits Window {
     callback reduced-motion-set(bool);
     callback double-tap-interval-set(int);
     /// Botão principal da gramática única: 0 pressionar, 1 mover, 2 soltar, 3 cancelar.
-    callback tool-pointer(int, float, float, bool, bool);
+    callback tool-pointer(int, float, float, bool, bool, bool);
     callback last-operation-committed(string) -> bool;
     /// Ctrl+roda: contagens e raios da ferramenta (a roda sozinha sempre faz zoom).
     callback viewport-ctrl-scroll(float);
@@ -5418,6 +5419,14 @@ export component PetuniaSlintShell inherits Window {
                         stroke: DesignTokens.selection.transparentize(0.35);
                         stroke-width: 1.5px;
                     }
+                    // Segmento selecionado no domínio Curve (DRAW): traço largo.
+                    if root.profile-selection-commands != "": Path {
+                        fit: ImageFit.preserve;
+                        commands: root.profile-selection-commands;
+                        fill: transparent;
+                        stroke: DesignTokens.selection;
+                        stroke-width: 3px;
+                    }
                     // Região fechada sob o cursor (Draw/Push-Pull): tinta translúcida.
                     if root.region-hover-commands != "": Path {
                         fit: ImageFit.preserve;
@@ -5629,17 +5638,11 @@ export component PetuniaSlintShell inherits Window {
                         property <bool> is-painting: false;
                         property <bool> is-tool-drag: false;
                         property <bool> is-loop-drag: false;
-                        property <bool> is-loop-place: false;
-                        property <bool> pending-slice: false;
-                        property <bool> is-slice-drag: false;
                         property <bool> is-gizmo-drag: false;
                         property <bool> is-keyboard-transform-drag: false;
                         // Gesto da gramática única em andamento (botão pressionado).
                         property <bool> is-tool-gesture: false;
                         property <bool> is-profile-depth-drag: false;
-                        property <bool> is-profile-volume-drag: false;
-                        property <bool> is-profile-draw-drag: false;
-                        property <bool> is-profile-point-drag: false;
                         property <bool> consume-click: false;
                         property <bool> tool-drag-fine: false;
                         property <bool> loop-selection: false;
@@ -5657,13 +5660,7 @@ export component PetuniaSlintShell inherits Window {
                             self.pending-box-select = false;
                             self.is-tool-drag = false;
                             self.is-profile-depth-drag = false;
-                            self.is-profile-volume-drag = false;
-                            self.is-profile-draw-drag = false;
-                            self.is-profile-point-drag = false;
                             self.is-loop-drag = false;
-                            self.is-loop-place = false;
-                            self.pending-slice = false;
-                            self.is-slice-drag = false;
                             self.is-gizmo-drag = false;
                             self.is-keyboard-transform-drag = false;
                             self.is-tool-gesture = false;
@@ -5697,11 +5694,11 @@ export component PetuniaSlintShell inherits Window {
                             if event.kind == PointerEventKind.down && event.button == PointerEventButton.right
                                 && (is-tool-gesture || root.tool-gesture-latched || is-transform || is-gizmo-drag
                                     || is-tool-drag || is-keyboard-transform-drag || root.transform-instant-active
-                                    || is-loop-drag || is-slice-drag) {
+                                    || is-loop-drag) {
                                 // RMB nunca cancela um gesto (constituição 11); cancelar é Esc.
                             } else if event.kind == PointerEventKind.cancel || (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
                                 if event.kind == PointerEventKind.cancel && (is-tool-gesture || root.tool-gesture-latched) {
-                                    root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false);
+                                    root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false, false);
                                 }
                                 self.clear-gesture();
                                 if event.kind == PointerEventKind.down && event.modifiers.shift {
@@ -5723,30 +5720,28 @@ export component PetuniaSlintShell inherits Window {
                                 pending-transform = false;
                                 pending-box-select = false;
                                 pending-lasso-select = false;
-                                 if event.button == PointerEventButton.left && (root.active-tool == "draw_profile" || (root.active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.depth-handle-visible)) {
-                                     let d-handle-dx = abs(self.mouse-x - root.depth-handle-x);
-                                     let d-handle-dy = abs(self.mouse-y - root.depth-handle-y);
-                                     if root.depth-handle-visible && d-handle-dx <= 20px && d-handle-dy <= 20px {
-                                         is-profile-depth-drag = true;
-                                         tool-drag-fine = event.modifiers.shift;
-                                         consume-click = true;
-                                     } else if root.active-tool == "draw_profile" {
-                                         if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
-                                             is-profile-point-drag = true;
-                                             consume-click = true;
-                                         } else if root.profile-volume-mode != "none" {
-                                             is-profile-volume-drag = true;
-                                             tool-drag-fine = event.modifiers.shift;
-                                         } else if root.profile-closed {
-                                             is-profile-depth-drag = true;
-                                             tool-drag-fine = event.modifiers.shift;
-                                         } else {
-                                             consume-click = true;
-                                             is-profile-draw-drag = true;
-                                             root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
-                                         }
-                                     }
-                                 } else if event.button == PointerEventButton.middle {
+                                if event.button == PointerEventButton.left
+                                    && (root.tool-gesture-latched
+                                        || (root.tool-grammar-active && !root.transform-instant-active
+                                            && (!event.modifiers.alt || root.active-tool == "draw_profile")
+                                            && !(event.modifiers.alt && root.active-keymap-id == "maya"))) {
+                                    // Gramática única (constituição 11): todas as ferramentas
+                                    // de operação — Move/Rotate/Scale, Extrude, Inset, Round
+                                    // Edge, Push/Pull, Poly Pen, Shape Builder, Draw Profile,
+                                    // Knife, Loop Cut e Slice — e os modais por atalho
+                                    // decidem clique × arrasto no bridge.
+                                    is-tool-gesture = true;
+                                    consume-click = true;
+                                    root.tool-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                                } else if event.button == PointerEventButton.left
+                                    && root.active-workspace == "MODEL" && root.modeling-mode == "DRAW"
+                                    && root.depth-handle-visible
+                                    && abs(self.mouse-x - root.depth-handle-x) <= 20px
+                                    && abs(self.mouse-y - root.depth-handle-y) <= 20px {
+                                    is-profile-depth-drag = true;
+                                    tool-drag-fine = event.modifiers.shift;
+                                    consume-click = true;
+                                } else if event.button == PointerEventButton.middle {
                                     if event.modifiers.shift {
                                         is-pan = true;
                                         is-orbit = false;
@@ -5772,15 +5767,7 @@ export component PetuniaSlintShell inherits Window {
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
                                 } else if event.button == PointerEventButton.left
                                     && (!event.modifiers.alt || root.active-keymap-id != "maya") {
-                                    // Gramática única: ferramentas persistentes (Move/Rotate/Scale,
-                                    // Extrude, Inset, Round Edge, Push/Pull) e o gizmo delas decidem
-                                    // clique × arrasto no bridge; o clique sem arrasto seleciona lá.
-                                    if root.tool-gesture-latched
-                                        || (root.tool-grammar-active && !event.modifiers.alt && !root.transform-instant-active) {
-                                        is-tool-gesture = true;
-                                        consume-click = true;
-                                        root.tool-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
-                                    } else if root.gizmo-has-hover {
+                                    if root.gizmo-has-hover {
                                         is-gizmo-drag = true;
                                         root.gizmo-drag-begin(self.mouse-x / 1px, self.mouse-y / 1px);
                                     } else if root.transform-instant-active {
@@ -5792,11 +5779,6 @@ export component PetuniaSlintShell inherits Window {
                                     } else if root.active-workspace == "PAINT" && root.active-tool != "select" {
                                         is-painting = true;
                                         root.viewport-paint-begin(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
-                                    } else if root.active-tool == "slice" {
-                                        pending-slice = true;
-                                    } else if root.active-tool == "loop_cut" && !root.loop-cut-active {
-                                        is-loop-place = true;
-                                        consume-click = true;
                                     } else if root.loop-cut-active {
                                         is-loop-drag = true;
                                         tool-drag-fine = event.modifiers.shift;
@@ -5877,7 +5859,7 @@ export component PetuniaSlintShell inherits Window {
                                 } else if (is-tool-gesture && self.pressed) || root.tool-gesture-latched {
                                     // Gramática única: o bridge decide clique × arrasto e aplica.
                                     moved-since-down = true;
-                                    root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
+                                    root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                                 } else if event.modifiers.alt && root.active-keymap-id != "maya"
                                     && (abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px) {
                                     moved-since-down = true;
@@ -5910,25 +5892,6 @@ export component PetuniaSlintShell inherits Window {
                                     root.tool-modal-scrubbed((self.mouse-y - last-y) / 1px, tool-drag-fine, self.mouse-x / 1px, self.mouse-y / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
-                                } else if is-profile-point-drag {
-                                    moved-since-down = true;
-                                    root.viewport-profile-pointer-move(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt);
-                                } else if is-profile-volume-drag {
-                                    moved-since-down = true;
-                                    if root.profile-volume-mode == "extrude" {
-                                        let delta = (last-y - self.mouse-y) / 1px * (tool-drag-fine ? 0.005 : 0.02);
-                                        root.profile-depth-set("\{max(0.05, root.profile-depth + delta)}");
-                                    } else if root.profile-volume-mode == "revolve" {
-                                        let delta = (self.mouse-x - last-x) / 1px * (tool-drag-fine ? 0.2 : 1.0);
-                                        root.profile-revolve-angle-set("\{max(1.0, min(360.0, root.profile-revolve-angle + delta))}");
-                                    }
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                } else if is-profile-draw-drag {
-                                    if abs(self.mouse-x - last-x) > 3px || abs(self.mouse-y - last-y) > 3px {
-                                        moved-since-down = true;
-                                        root.viewport-profile-drag-handle(self.mouse-x / self.width, self.mouse-y / self.height, event.modifiers.alt);
-                                    }
                                 } else if is-profile-depth-drag {
                                     moved-since-down = true;
                                     let delta = (last-y - self.mouse-y) / 1px * (tool-drag-fine ? 0.005 : 0.02);
@@ -5940,23 +5903,10 @@ export component PetuniaSlintShell inherits Window {
                                     root.loop-cut-scrubbed((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
                                     last-x = self.mouse-x;
                                     last-y = self.mouse-y;
-                                } else if is-loop-place {
-                                    root.viewport-hover(self.mouse-x / self.width, self.mouse-y / self.height);
-                                } else if pending-slice && self.pressed
-                                    && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
-                                        || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
-                                    pending-slice = false;
-                                    is-slice-drag = true;
-                                    moved-since-down = true;
-                                    root.viewport-transform-begin("slice", last-x / 1px, last-y / 1px);
-                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
-                                } else if is-slice-drag {
-                                    moved-since-down = true;
-                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
                                 }
                             } else if event.kind == PointerEventKind.up {
                                 if is-tool-gesture {
-                                    root.tool-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
+                                    root.tool-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                                     is-tool-gesture = false;
                                 }
                                 if is-box-select {
@@ -5982,16 +5932,7 @@ export component PetuniaSlintShell inherits Window {
                                 pending-lasso-select = false;
                                 is-orbit = false;
                                 is-pan = false;
-                                if is-profile-point-drag {
-                                    root.viewport-profile-pointer-up();
-                                    is-profile-point-drag = false;
-                                }
-                                if is-profile-draw-drag {
-                                    root.viewport-profile-pointer-up();
-                                }
                                 is-profile-depth-drag = false;
-                                is-profile-volume-drag = false;
-                                is-profile-draw-drag = false;
                                 if is-transform {
                                     root.viewport-transform-end();
                                     is-transform = false;
@@ -6004,7 +5945,6 @@ export component PetuniaSlintShell inherits Window {
                                 }
                                 pending-transform = false;
                                 pending-box-select = false;
-                                pending-slice = false;
                                 if is-painting {
                                     root.viewport-paint-end(self.mouse-x / 1px, self.mouse-y / 1px);
                                     is-painting = false;
@@ -6019,13 +5959,7 @@ export component PetuniaSlintShell inherits Window {
                                     root.loop-cut-apply();
                                     is-loop-drag = false;
                                 }
-                                if is-loop-place {
-                                    root.loop-cut-place();
-                                    is-loop-place = false;
-                                }
-                                if is-slice-drag {
-                                    is-slice-drag = false;
-                                }
+
                                 if is-gizmo-drag {
                                     root.gizmo-drag-end();
                                     is-gizmo-drag = false;
@@ -6037,11 +5971,7 @@ export component PetuniaSlintShell inherits Window {
                         clicked => {
                             if !consume-click && !moved-since-down && !is-transform && !is-painting
                                 && (root.active-workspace != "PAINT" || root.active-tool == "select") {
-                                if root.active-tool == "slice" {
-                                    root.slice-confirm();
-                                } else {
-                                    root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, extend-selection, loop-selection);
-                                }
+                                root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, extend-selection, loop-selection);
                             }
                             consume-click = false;
                         }

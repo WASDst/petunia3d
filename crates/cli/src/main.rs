@@ -114,7 +114,7 @@ fn cmd_new(output_path: &str, primitive: &str) -> Result<()> {
     let kind = PrimitiveKind::parse(primitive).map_err(|e| anyhow::anyhow!("{e}"))?;
     if let Some(first) = state.project.active_mut() {
         first.name = kind.default_name().to_string();
-        first.mesh = kind.generate_mesh();
+        first.mesh = kind.generate_mesh().into();
     }
 
     let p = Path::new(output_path);

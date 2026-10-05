@@ -41,3 +41,7 @@ harness = false
 [[bench]]
 name = "command_spine"
 harness = false
+
+[[bench]]
+name = "viewport_queries"
+harness = false

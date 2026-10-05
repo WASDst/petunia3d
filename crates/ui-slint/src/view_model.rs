@@ -577,6 +577,8 @@ pub struct ShellViewModel {
     pub profile_workplane_locked: bool,
     /// Região de perfil em hover (caminho SVG em px da viewport).
     pub region_hover_commands: String,
+    /// Segmento do perfil selecionado no domínio Curve (DRAW).
+    pub profile_selection_commands: String,
     /// Estilo do pincel (ponta, mistura, estabilizador, jitter, presets).
     pub brush_panel: crate::brush_panel::BrushPanelModel,
     /// Revisão das listas de atalhos (`-1` = Configurações fechadas, nada a enviar).
@@ -1540,6 +1542,7 @@ impl ShellViewModel {
             label_profile_look_at_plane: String::new(),
             profile_workplane_locked: false,
             region_hover_commands: String::new(),
+            profile_selection_commands: String::new(),
             brush_panel: Default::default(),
             keymap_revision: -1,
             keymap_snapshot: std::sync::Arc::default(),

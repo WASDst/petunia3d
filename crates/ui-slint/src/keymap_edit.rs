@@ -198,13 +198,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             Ok(id) => {
                 self.state.ui.active_keymap_id = id.clone();
                 self.preferences.active_keymap_id = id;
-                self.state
-                    .set_status(format!("Keymap profile created: {candidate}"));
+                self.state.set_status(crate::tr::fill(
+                    &self
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_KEYMAP_PROFILE_CREATED),
+                    &[("candidate", candidate.to_string())],
+                ));
                 self.bump_keymap_revision();
                 true
             }
             Err(error) => {
-                self.state.set_status(format!("Keymap: {error}"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_KEYMAP),
+                    &[("error", format!("{error}"))],
+                ));
                 false
             }
         }
@@ -221,7 +228,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 Keybinds::load_profile_in("petunia-default", &self.keymap_dir());
             self.preferences.active_keymap_id = "petunia-default".to_string();
         }
-        self.state.set_status("Keymap profile deleted");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_KEYMAP_PROFILE_DELETED),
+        );
         self.bump_keymap_revision();
         true
     }
@@ -235,8 +245,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.ui.keybinds = Keybinds::load_profile_in(id, &self.keymap_dir());
         self.preferences.active_keymap_id = id.to_string();
         self.keymap_editor.capturing = None;
-        self.state
-            .set_status(format!("Perfil de atalhos ativado: {id}"));
+        self.state.set_status(crate::tr::fill(
+            &self
+                .state
+                .t_id(petunia_config::text_id::STATUS_KEYMAP_PROFILE_ACTIVATED),
+            &[("id", id.to_string())],
+        ));
         self.bump_keymap_revision();
         true
     }
@@ -254,7 +268,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         match self.state.ui.keybinds.save_user_profile_in(&dir, &name, "") {
             Ok(_) => true,
             Err(error) => {
-                self.state.set_status(format!("Keymap: {error}"));
+                self.state.set_status(crate::tr::fill(
+                    &self.state.t_id(petunia_config::text_id::STATUS_KEYMAP),
+                    &[("error", format!("{error}"))],
+                ));
                 false
             }
         }
@@ -269,8 +286,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         self.keymap_editor.capturing = Some(action.to_string());
-        self.state
-            .set_status("Press the new shortcut (Esc cancels)");
+        self.state.set_status(
+            self.state
+                .t_id(petunia_config::text_id::STATUS_PRESS_THE_NEW_SHORTCUT_ESC_CANCELS),
+        );
         self.bump_keymap_revision();
         true
     }

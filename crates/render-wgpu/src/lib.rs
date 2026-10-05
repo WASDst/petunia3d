@@ -11,6 +11,7 @@ use petunia_core::RefAxis;
 use petunia_core::{FingerprintFlags, SceneFingerprint, TextureUpdate, fingerprint_scene};
 use petunia_project::{PoseOverride, Project, mesh_to_draw};
 use petunia_render::Shading;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[repr(C)]
@@ -513,6 +514,16 @@ pub struct Renderer {
     outline_pipeline: wgpu::RenderPipeline,
     /// A camada de seleção precisa ser refeita (mudou algo fora da cena).
     selection_dirty: bool,
+    /// Geometria triangulada por objeto, reaproveitada enquanto a chave de
+    /// desenho do objeto não muda.
+    asset_geometry: HashMap<uuid::Uuid, AssetGeometry>,
+    /// Objetos em transformação rígida (modo objeto): matriz original→atual.
+    rigid_previews: Vec<(uuid::Uuid, glam::Mat4)>,
+    /// Geometria capturada no início da transformação rígida e a inversa da
+    /// matriz daquele instante; os quadros seguintes só a transformam.
+    rigid_base: HashMap<uuid::Uuid, (AssetGeometry, glam::Mat4)>,
+    /// Objetos reaproveitados do cache (métrica de diagnóstico).
+    pub geometry_reuses: u64,
     selection_tri_pipeline: wgpu::RenderPipeline,
     selection_line_pipeline: wgpu::RenderPipeline,
     selection_tri_xray_pipeline: wgpu::RenderPipeline,
@@ -1628,6 +1639,10 @@ impl Renderer {
             outline_mask_active_pipeline,
             outline_pipeline,
             selection_dirty: false,
+            asset_geometry: HashMap::new(),
+            rigid_previews: Vec::new(),
+            rigid_base: HashMap::new(),
+            geometry_reuses: 0,
             selection_tri_pipeline,
             selection_line_pipeline,
             selection_tri_xray_pipeline,
@@ -1711,6 +1726,11 @@ impl Renderer {
     }
 
     /// Objetos com contorno de seleção (domínio Object); o ativo é mais claro.
+    /// Objetos em transformação rígida neste quadro (modo objeto).
+    pub fn set_rigid_previews(&mut self, previews: &[(uuid::Uuid, glam::Mat4)]) {
+        self.rigid_previews = previews.to_vec();
+    }
+
     pub fn set_outlined_objects(&mut self, selected: &[uuid::Uuid], active: Option<uuid::Uuid>) {
         if self.outlined_objects != selected {
             self.outlined_objects = selected.to_vec();
@@ -2020,7 +2040,12 @@ impl Renderer {
         );
         let pose = self.pose.clone();
         let pose_changed = pose_revision_changed(&mut self.last_pose_revision, pose.as_deref());
-        let mesh_changed = pose_changed || self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh);
+        let selection_changed = self.last_fingerprint.map(|f| f.selection) != Some(fp.selection);
+        // A seleção só altera a geometria no Wireframe (arestas coloridas);
+        // nos demais modos ela vive na camada de seleção.
+        let mesh_changed = pose_changed
+            || self.last_fingerprint.map(|f| f.mesh) != Some(fp.mesh)
+            || (!shading.fills_faces() && selection_changed);
         let texture_changed = self.last_fingerprint.map(|f| f.textures) != Some(fp.textures);
         let refs_changed = self.last_fingerprint.map(|f| f.refs_layout) != Some(fp.refs_layout);
         let texture_updates = std::mem::take(&mut self.pending_texture_updates);
@@ -2040,6 +2065,7 @@ impl Renderer {
             if hover_changed
                 || camera_changed
                 || domain_changed
+                || selection_changed
                 || std::mem::take(&mut self.selection_dirty)
             {
                 self.update_selection_layer(device, scene, camera, edit_domain, hover);
@@ -2062,99 +2088,63 @@ impl Renderer {
         // luz da cena. `smooth` é ortogonal: normais suavizadas por vértice.
         let is_wire = !shading.fills_faces();
         let unlit = false;
+        // Geometria por objeto em cache: só objetos cuja chave de desenho
+        // mudou são triangulados de novo; os demais reaproveitam os vértices.
+        let mut previous = std::mem::take(&mut self.asset_geometry);
+        let mut next = HashMap::with_capacity(scene.assets.len());
+        let geometry_params = GeometryParams {
+            is_wire,
+            unlit,
+            show_face_orientation,
+            show_uv_checker,
+            show_wireframe_overlay,
+            show_triangulation,
+            edge_mode: self.edge_mode,
+            camera_eye: camera.eye(),
+        };
+        let rigid_previews = std::mem::take(&mut self.rigid_previews);
+        self.rigid_base
+            .retain(|id, _| rigid_previews.iter().any(|(rid, _)| rid == id));
         for obj in &scene.assets {
             let smooth = scene.is_smooth_shaded(obj.id);
             if !obj.visible {
                 continue;
             }
             let range_start = mv.len() as u32;
-            let mesh = mesh_to_draw(pose.as_deref(), obj);
-            if !is_wire {
-                let (mat_profile, mat_color, has_emission, emission_color) =
-                    if let Some(mat) = obj.material(scene) {
-                        (
-                            mat.profile,
-                            [mat.base_color[0], mat.base_color[1], mat.base_color[2]],
-                            mat.emission_strength > 0.0,
-                            [
-                                mat.emission_color[0] * mat.emission_strength,
-                                mat.emission_color[1] * mat.emission_strength,
-                                mat.emission_color[2] * mat.emission_strength,
-                            ],
-                        )
-                    } else {
-                        (
-                            petunia_project::ShaderProfile::Pbr,
-                            obj.base_color,
-                            false,
-                            [0.0, 0.0, 0.0],
-                        )
-                    };
-
-                let obj_unlit = unlit
-                    || mat_profile == petunia_project::ShaderProfile::Unlit
-                    || mat_profile == petunia_project::ShaderProfile::Emissive;
-
-                let tris = if obj_unlit {
-                    mesh.to_triangles_unlit()
-                } else {
-                    mesh.to_triangles_smooth(smooth)
-                };
-                for (pos, n, mut col, uv) in tris {
-                    if show_face_orientation {
-                        let to_cam = (camera.eye() - glam::Vec3::from(pos)).normalize_or_zero();
-                        let n_vec = glam::Vec3::from(n);
-                        if n_vec.dot(to_cam) >= 0.0 {
-                            col = [0.2, 0.45, 0.95];
-                        } else {
-                            col = [0.95, 0.2, 0.2];
-                        }
-                    } else if show_uv_checker {
-                        let u_cell = (uv[0] * 16.0).floor() as i32;
-                        let v_cell = (uv[1] * 16.0).floor() as i32;
-                        let is_even = (u_cell + v_cell).rem_euclid(2) == 0;
-                        let u_macro = u_cell.rem_euclid(8) == 0;
-                        let v_macro = v_cell.rem_euclid(8) == 0;
-                        if is_even {
-                            if u_macro {
-                                col = [0.95, 0.55, 0.45];
-                            } else if v_macro {
-                                col = [0.45, 0.75, 0.95];
-                            } else {
-                                col = [0.85, 0.85, 0.85];
-                            }
-                        } else {
-                            if u_macro {
-                                col = [0.45, 0.20, 0.18];
-                            } else if v_macro {
-                                col = [0.18, 0.28, 0.45];
-                            } else {
-                                col = [0.25, 0.25, 0.25];
-                            }
-                        }
-                    } else {
-                        if (col[0] - 0.72).abs() < 0.02
-                            && (col[1] - 0.73).abs() < 0.02
-                            && (col[2] - 0.78).abs() < 0.02
-                        {
-                            col = mat_color;
-                        }
-                        if has_emission {
-                            col = [
-                                (col[0] + emission_color[0]).min(1.0),
-                                (col[1] + emission_color[1]).min(1.0),
-                                (col[2] + emission_color[2]).min(1.0),
-                            ];
-                        }
+            let rigid = rigid_previews
+                .iter()
+                .find(|(id, _)| *id == obj.id)
+                .map(|(_, m)| *m)
+                .filter(|_| pose.is_none());
+            let geometry = if let Some(matrix) = rigid {
+                // Só se move: a geometria capturada é transformada pela matriz
+                // relativa, sem triangular nem classificar arestas de novo.
+                self.geometry_reuses += 1;
+                match self.rigid_base.get(&obj.id) {
+                    Some((base, inverse)) => transform_geometry(base, matrix * *inverse),
+                    None => {
+                        let mesh = mesh_to_draw(pose.as_deref(), obj);
+                        let geometry =
+                            build_asset_geometry(scene, obj, &mesh, smooth, 0, &geometry_params);
+                        self.rigid_base
+                            .insert(obj.id, (geometry.clone(), matrix.inverse()));
+                        geometry
                     }
-                    mv.push(MeshVertex {
-                        pos,
-                        normal: n,
-                        color: col,
-                        uv,
-                    });
                 }
-            }
+            } else {
+                let mesh = mesh_to_draw(pose.as_deref(), obj);
+                let key = asset_draw_key(scene, obj, &mesh, smooth, &geometry_params);
+                match previous.remove(&obj.id) {
+                    Some(cached) if cached.key == key => {
+                        self.geometry_reuses += 1;
+                        cached
+                    }
+                    _ => build_asset_geometry(scene, obj, &mesh, smooth, key, &geometry_params),
+                }
+            };
+            mv.extend_from_slice(&geometry.tris);
+            lv.extend_from_slice(&geometry.lines);
+            line_widths.extend_from_slice(&geometry.widths);
             let range_count = mv.len() as u32 - range_start;
             if range_count > 0 {
                 let tex_canvas = obj
@@ -2175,56 +2165,9 @@ impl Renderer {
                 });
             }
 
-            if is_wire {
-                // Wireframe mostra topologia, não seleção: arestas neutras para
-                // a camada de seleção continuar sendo o único destaque.
-                for (a, b, sel) in mesh.to_edges() {
-                    let c = if sel {
-                        [1.0, 0.62, 0.20]
-                    } else {
-                        [0.62, 0.66, 0.74]
-                    };
-                    lv.push(LineVertex { pos: a, color: c });
-                    lv.push(LineVertex { pos: b, color: c });
-                    line_widths.push(1.0);
-                }
-            } else {
-                // Aparência por modo (capítulo 05, "Overlays, não novos
-                // modos"): o toggle do overlay é o mestre das arestas finas
-                // em qualquer modo — sem ele, o modo contribui só com a
-                // leitura de forma/topologia (arestas de feição). Ver
-                // [`edge_overlay_visible`]: forçar todas as arestas no modo
-                // POLY tornava o toggle um no-op no workspace padrão.
-                for (a, b, _sel, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
-                    let visible =
-                        edge_overlay_visible(show_wireframe_overlay, self.edge_mode, feature);
-                    let (color, width) = if feature {
-                        (FEATURE_EDGE_COLOR, 1.0)
-                    } else {
-                        (THIN_EDGE_COLOR, THIN_EDGE_SCALE)
-                    };
-                    if visible {
-                        lv.push(LineVertex { pos: a, color });
-                        lv.push(LineVertex { pos: b, color });
-                        line_widths.push(width);
-                    }
-                }
-            }
-            if show_triangulation {
-                let diag_c = [0.3, 0.65, 0.95];
-                for (a, b) in mesh.triangulation_wireframe() {
-                    line_widths.push(THIN_EDGE_SCALE);
-                    lv.push(LineVertex {
-                        pos: a,
-                        color: diag_c,
-                    });
-                    lv.push(LineVertex {
-                        pos: b,
-                        color: diag_c,
-                    });
-                }
-            }
+            next.insert(obj.id, geometry);
         }
+        self.asset_geometry = next;
         self.update_selection_layer(device, scene, camera, edit_domain, hover);
 
         self.mesh_count = mv.len() as u32;
@@ -2943,6 +2886,299 @@ impl Renderer {
 
     pub fn depth_view(&self) -> Option<&wgpu::TextureView> {
         self.depth_view.as_ref()
+    }
+}
+
+/// Flags globais que mudam a geometria desenhada de cada objeto.
+#[derive(Clone, Copy)]
+struct GeometryParams {
+    is_wire: bool,
+    unlit: bool,
+    show_face_orientation: bool,
+    show_uv_checker: bool,
+    show_wireframe_overlay: bool,
+    show_triangulation: bool,
+    edge_mode: EdgeMode,
+    camera_eye: glam::Vec3,
+}
+
+/// Vértices de face e de aresta de um objeto, prontos para concatenar.
+#[derive(Clone)]
+struct AssetGeometry {
+    key: u64,
+    tris: Vec<MeshVertex>,
+    lines: Vec<LineVertex>,
+    widths: Vec<f32>,
+}
+
+/// Chave de desenho de um objeto: conteúdo da malha (posições, cores, faces,
+/// UVs, slots), material e flags globais. A seleção só entra no Wireframe,
+/// único modo que a desenha na própria geometria; nos demais ela vive na
+/// camada de seleção e não invalida os vértices.
+fn asset_draw_key(
+    scene: &Project,
+    obj: &petunia_project::Asset,
+    mesh: &petunia_core::Mesh,
+    smooth: bool,
+    params: &GeometryParams,
+) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    let mut mix = |value: u64| {
+        h ^= value;
+        h = h.wrapping_mul(0x100000001b3);
+    };
+    for flag in [
+        params.is_wire,
+        params.unlit,
+        params.show_face_orientation,
+        params.show_uv_checker,
+        params.show_wireframe_overlay,
+        params.show_triangulation,
+        smooth,
+    ] {
+        mix(flag as u64);
+    }
+    mix(params.edge_mode as u64);
+    if params.show_face_orientation {
+        // A cor de orientação depende da direção até a câmera.
+        for c in params.camera_eye.to_array() {
+            mix(c.to_bits() as u64);
+        }
+    }
+    for c in obj.base_color {
+        mix(c.to_bits() as u64);
+    }
+    if let Some(mat) = obj.material(scene) {
+        mix(mat.profile as u64);
+        for c in mat.base_color.iter().chain(mat.emission_color.iter()) {
+            mix(c.to_bits() as u64);
+        }
+        mix(mat.emission_strength.to_bits() as u64);
+    }
+    mix(mesh.verts.len() as u64);
+    mix(mesh.faces.len() as u64);
+    for vertex in &mesh.verts {
+        for c in vertex.pos.iter().chain(vertex.color.iter()) {
+            mix(c.to_bits() as u64);
+        }
+        if params.is_wire {
+            mix(vertex.selected as u64);
+        }
+    }
+    for face in &mesh.faces {
+        mix(face.verts.len() as u64);
+        for &index in &face.verts {
+            mix(index as u64);
+        }
+        for uv in &face.uv {
+            mix(uv[0].to_bits() as u64);
+            mix(uv[1].to_bits() as u64);
+        }
+        mix(face.material_slot.map_or(u64::MAX, |slot| slot as u64));
+        if params.is_wire {
+            mix(face.selected as u64);
+        }
+    }
+    if params.is_wire {
+        let mut edges: Vec<_> = mesh.selected_edges.iter().copied().collect();
+        edges.sort_unstable();
+        for (a, b) in edges {
+            mix(((a as u64) << 32) | b as u64);
+        }
+    }
+    h
+}
+
+/// Geometria capturada levada por uma transformação rígida (posições,
+/// normais pela inversa-transposta e extremos das arestas).
+fn transform_geometry(base: &AssetGeometry, matrix: glam::Mat4) -> AssetGeometry {
+    let normal_matrix = glam::Mat3::from_mat4(matrix).inverse().transpose();
+    AssetGeometry {
+        key: 0,
+        tris: base
+            .tris
+            .iter()
+            .map(|v| MeshVertex {
+                pos: matrix.transform_point3(glam::Vec3::from(v.pos)).to_array(),
+                normal: (normal_matrix * glam::Vec3::from(v.normal))
+                    .normalize_or_zero()
+                    .to_array(),
+                ..*v
+            })
+            .collect(),
+        lines: base
+            .lines
+            .iter()
+            .map(|v| LineVertex {
+                pos: matrix.transform_point3(glam::Vec3::from(v.pos)).to_array(),
+                ..*v
+            })
+            .collect(),
+        widths: base.widths.clone(),
+    }
+}
+
+/// Triangula e extrai as arestas de um objeto (caminho lento do cache).
+fn build_asset_geometry(
+    scene: &Project,
+    obj: &petunia_project::Asset,
+    mesh: &petunia_core::Mesh,
+    smooth: bool,
+    key: u64,
+    params: &GeometryParams,
+) -> AssetGeometry {
+    let GeometryParams {
+        is_wire,
+        unlit,
+        show_face_orientation,
+        show_uv_checker,
+        show_wireframe_overlay,
+        show_triangulation,
+        edge_mode,
+        camera_eye,
+    } = *params;
+    let mut mv: Vec<MeshVertex> = Vec::new();
+    let mut lv: Vec<LineVertex> = Vec::new();
+    let mut line_widths: Vec<f32> = Vec::new();
+    if !is_wire {
+        let (mat_profile, mat_color, has_emission, emission_color) =
+            if let Some(mat) = obj.material(scene) {
+                (
+                    mat.profile,
+                    [mat.base_color[0], mat.base_color[1], mat.base_color[2]],
+                    mat.emission_strength > 0.0,
+                    [
+                        mat.emission_color[0] * mat.emission_strength,
+                        mat.emission_color[1] * mat.emission_strength,
+                        mat.emission_color[2] * mat.emission_strength,
+                    ],
+                )
+            } else {
+                (
+                    petunia_project::ShaderProfile::Pbr,
+                    obj.base_color,
+                    false,
+                    [0.0, 0.0, 0.0],
+                )
+            };
+
+        let obj_unlit = unlit
+            || mat_profile == petunia_project::ShaderProfile::Unlit
+            || mat_profile == petunia_project::ShaderProfile::Emissive;
+
+        let tris = if obj_unlit {
+            mesh.to_triangles_unlit()
+        } else {
+            mesh.to_triangles_smooth(smooth)
+        };
+        for (pos, n, mut col, uv) in tris {
+            if show_face_orientation {
+                let to_cam = (camera_eye - glam::Vec3::from(pos)).normalize_or_zero();
+                let n_vec = glam::Vec3::from(n);
+                if n_vec.dot(to_cam) >= 0.0 {
+                    col = [0.2, 0.45, 0.95];
+                } else {
+                    col = [0.95, 0.2, 0.2];
+                }
+            } else if show_uv_checker {
+                let u_cell = (uv[0] * 16.0).floor() as i32;
+                let v_cell = (uv[1] * 16.0).floor() as i32;
+                let is_even = (u_cell + v_cell).rem_euclid(2) == 0;
+                let u_macro = u_cell.rem_euclid(8) == 0;
+                let v_macro = v_cell.rem_euclid(8) == 0;
+                if is_even {
+                    if u_macro {
+                        col = [0.95, 0.55, 0.45];
+                    } else if v_macro {
+                        col = [0.45, 0.75, 0.95];
+                    } else {
+                        col = [0.85, 0.85, 0.85];
+                    }
+                } else {
+                    if u_macro {
+                        col = [0.45, 0.20, 0.18];
+                    } else if v_macro {
+                        col = [0.18, 0.28, 0.45];
+                    } else {
+                        col = [0.25, 0.25, 0.25];
+                    }
+                }
+            } else {
+                if (col[0] - 0.72).abs() < 0.02
+                    && (col[1] - 0.73).abs() < 0.02
+                    && (col[2] - 0.78).abs() < 0.02
+                {
+                    col = mat_color;
+                }
+                if has_emission {
+                    col = [
+                        (col[0] + emission_color[0]).min(1.0),
+                        (col[1] + emission_color[1]).min(1.0),
+                        (col[2] + emission_color[2]).min(1.0),
+                    ];
+                }
+            }
+            mv.push(MeshVertex {
+                pos,
+                normal: n,
+                color: col,
+                uv,
+            });
+        }
+    }
+    if is_wire {
+        // Wireframe mostra topologia, não seleção: arestas neutras para
+        // a camada de seleção continuar sendo o único destaque.
+        for (a, b, sel) in mesh.to_edges() {
+            let c = if sel {
+                [1.0, 0.62, 0.20]
+            } else {
+                [0.62, 0.66, 0.74]
+            };
+            lv.push(LineVertex { pos: a, color: c });
+            lv.push(LineVertex { pos: b, color: c });
+            line_widths.push(1.0);
+        }
+    } else {
+        // Aparência por modo (capítulo 05, "Overlays, não novos
+        // modos"): o toggle do overlay é o mestre das arestas finas
+        // em qualquer modo — sem ele, o modo contribui só com a
+        // leitura de forma/topologia (arestas de feição). Ver
+        // [`edge_overlay_visible`]: forçar todas as arestas no modo
+        // POLY tornava o toggle um no-op no workspace padrão.
+        for (a, b, _sel, feature) in mesh.to_classified_edges(CREASE_DEGREES) {
+            let visible = edge_overlay_visible(show_wireframe_overlay, edge_mode, feature);
+            let (color, width) = if feature {
+                (FEATURE_EDGE_COLOR, 1.0)
+            } else {
+                (THIN_EDGE_COLOR, THIN_EDGE_SCALE)
+            };
+            if visible {
+                lv.push(LineVertex { pos: a, color });
+                lv.push(LineVertex { pos: b, color });
+                line_widths.push(width);
+            }
+        }
+    }
+    if show_triangulation {
+        let diag_c = [0.3, 0.65, 0.95];
+        for (a, b) in mesh.triangulation_wireframe() {
+            line_widths.push(THIN_EDGE_SCALE);
+            lv.push(LineVertex {
+                pos: a,
+                color: diag_c,
+            });
+            lv.push(LineVertex {
+                pos: b,
+                color: diag_c,
+            });
+        }
+    }
+    AssetGeometry {
+        key,
+        tris: mv,
+        lines: lv,
+        widths: line_widths,
     }
 }
 

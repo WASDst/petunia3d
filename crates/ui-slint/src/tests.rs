@@ -522,7 +522,7 @@ fn duplicate_active_asset_intent_duplicates_and_creates_undo() {
     bridge.apply(UiIntent::DuplicateActiveAsset);
     assert_eq!(bridge.state.project.assets.len(), 2);
     assert!(bridge.view_model().can_undo);
-    assert!(bridge.view_model().status_message.contains("duplicado"));
+    assert!(bridge.view_model().status_message.contains("duplicated"));
 
     let first_id = bridge.state.project.assets[0].id;
     let second_id = bridge.state.project.assets[1].id;
@@ -766,6 +766,12 @@ fn vertical_drag_preference_reverses_transform_without_dirtying_the_document() {
     let mut inverted = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     regular.resize_viewport(800, 600);
     inverted.resize_viewport(800, 600);
+    // Pré-condição explícita: a simetria é medida sem o Smart Snap (ligado
+    // por padrão, capítulo 01), que encaixaria cada arrasto num alvo próprio.
+    for bridge in [&mut regular, &mut inverted] {
+        bridge.state.session.snap_enabled = false;
+        bridge.state.session.snap_settings.enabled = false;
+    }
     let origin = glam::Vec3::from_array(regular.state.project.active_mesh().unwrap().verts[0].pos);
 
     assert!(inverted.set_invert_vertical_drag(true));
@@ -2367,12 +2373,16 @@ fn auto_workplane_uses_the_face_under_the_cursor_on_the_first_click() {
     ));
     let vm = bridge.view_model();
     assert!(vm.snap_marker_visible);
-    assert_eq!(
-        vm.snap_marker_label,
+    // No centro da face o Smart Snap prefere o centro (cap. 01, "Center").
+    let face_labels = [
         bridge
             .state
-            .t_id(petunia_config::text_id::SNAP_KIND_ON_FACE)
-    );
+            .t_id(petunia_config::text_id::SNAP_KIND_ON_FACE),
+        bridge
+            .state
+            .t_id(petunia_config::text_id::SNAP_KIND_FACE_CENTER),
+    ];
+    assert!(face_labels.contains(&vm.snap_marker_label));
 
     bridge.select_viewport_ext(0.5, 0.5, false, false);
     bridge.profile_pointer_up();
@@ -2771,7 +2781,8 @@ fn locked_workplane_ignores_the_face_under_the_cursor() {
     bridge.apply(UiIntent::ProfileSetWorkplaneGround);
     assert!(bridge.view_model().profile_workplane_locked);
 
-    assert!(bridge.hover_component(0.5, 0.5));
+    // Plano do chão de perfil na vista frontal: nada para pré-selecionar.
+    bridge.hover_component(0.5, 0.5);
     assert_eq!(
         bridge.state.session.tools.hover,
         petunia_core::HoverTarget::None
@@ -4300,7 +4311,7 @@ fn keyboard_modal_axis_numeric_confirm_flow() {
     assert!(bridge.route_shortcut("2", false, false, false));
     assert!(bridge.route_shortcut(".", false, false, false));
     assert!(bridge.route_shortcut("5", false, false, false));
-    assert_eq!(bridge.modal_text, "2.5");
+    assert_eq!(bridge.tool_session.numeric_text(), "2.5");
     assert!(
         bridge
             .view_model()
@@ -4310,7 +4321,7 @@ fn keyboard_modal_axis_numeric_confirm_flow() {
         "texto digitado aparece no HUD"
     );
     assert!(bridge.route_shortcut("Backspace", false, false, false));
-    assert_eq!(bridge.modal_text, "2.");
+    assert_eq!(bridge.tool_session.numeric_text(), "2.");
     // Enter confirma em UMA etapa de undo e fecha o modal.
     assert!(bridge.route_shortcut("Enter", false, false, false));
     assert!(bridge.state.session.tools.modal.is_none());
@@ -5074,7 +5085,7 @@ fn camera_projection_and_reset() {
 
     bridge.apply(UiIntent::ResetCamera);
     assert_eq!(bridge.state.session.camera.target, initial_target);
-    assert!(bridge.view_model().status_message.contains("redefinida"));
+    assert!(bridge.view_model().status_message.contains("reset"));
 }
 
 #[test]
@@ -5108,7 +5119,7 @@ fn new_commands_execute_via_command_id() {
     assert!(bridge.view_model().is_orthographic);
 
     bridge.execute_command(CommandId::ResetCamera);
-    assert!(bridge.view_model().status_message.contains("redefinida"));
+    assert!(bridge.view_model().status_message.contains("reset"));
 
     bridge.execute_command(CommandId::SelectAll);
     assert_eq!(bridge.state.session.selection.assets.len(), 2);
@@ -5632,6 +5643,10 @@ fn proportional_editing_radius_adjustment_and_falloff() {
 #[test]
 fn advanced_snap_to_edge_and_face() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Pré-condição explícita: este teste mede o caminho sem snap (o padrão
+    // passou a ser o Smart Snap ligado, capítulo 01).
+    bridge.state.session.snap_enabled = false;
+    bridge.state.session.snap_settings.enabled = false;
     bridge.apply(UiIntent::ToggleSnapEnabled);
     assert!(bridge.view_model().snap_enabled);
 
@@ -6324,6 +6339,10 @@ fn test_dimension_annotation_blueprint_and_hud_pill() {
 #[test]
 fn test_magnetic_snap_marker_projection() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Pré-condição explícita: este teste mede o caminho sem snap (o padrão
+    // passou a ser o Smart Snap ligado, capítulo 01).
+    bridge.state.session.snap_enabled = false;
+    bridge.state.session.snap_settings.enabled = false;
 
     // Sem snap ativado: marcador invisível
     assert!(!bridge.state.snap_enabled);
@@ -8570,6 +8589,10 @@ fn test_loop_cut_2d_scrubbing_and_candidate_detection() {
 #[test]
 fn test_profile_point_and_handle_interactive_manipulation() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Pré-condição explícita: este teste mede o caminho sem snap (o padrão
+    // passou a ser o Smart Snap ligado, capítulo 01).
+    bridge.state.session.snap_enabled = false;
+    bridge.state.session.snap_settings.enabled = false;
     bridge.viewport_size = [800.0, 600.0];
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
 
@@ -9217,10 +9240,16 @@ fn typed_value_does_not_leak_into_the_next_tool_modal() {
     assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
     assert!(bridge.route_shortcut("2", false, false, false));
     assert!(bridge.route_shortcut("Enter", false, false, false));
-    assert!(bridge.modal_text.is_empty(), "confirmar limpa o buffer");
+    assert!(
+        bridge.tool_session.numeric_text().is_empty(),
+        "confirmar limpa o buffer"
+    );
 
     assert!(bridge.begin_tool_modal(ToolModalKind::Extrude));
-    assert!(bridge.modal_text.is_empty(), "iniciar começa sem texto");
+    assert!(
+        bridge.tool_session.numeric_text().is_empty(),
+        "iniciar começa sem texto"
+    );
     assert!(bridge.route_shortcut("5", false, false, false));
     assert!(
         (bridge.tool_modal_value - 5.0).abs() < 1.0e-4,
@@ -9228,7 +9257,10 @@ fn typed_value_does_not_leak_into_the_next_tool_modal() {
         bridge.tool_modal_value
     );
     assert!(bridge.cancel_tool_modal());
-    assert!(bridge.modal_text.is_empty(), "cancelar limpa o buffer");
+    assert!(
+        bridge.tool_session.numeric_text().is_empty(),
+        "cancelar limpa o buffer"
+    );
 }
 
 #[test]
@@ -10433,6 +10465,10 @@ fn parametric_profiles_reedit_persist_and_undo_without_replacing_identity() {
 #[test]
 fn draw_scale_and_rotation_keep_parametric_profile_reeditable() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Pré-condição explícita: este teste mede o caminho sem snap (o padrão
+    // passou a ser o Smart Snap ligado, capítulo 01).
+    bridge.state.session.snap_enabled = false;
+    bridge.state.session.snap_settings.enabled = false;
     bridge.viewport_size = [800.0, 600.0];
     bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
     assert!(bridge.add_profile_rectangle(2.0, 1.0));

@@ -282,8 +282,8 @@ mod tests {
         let state = crate::AppState::default();
         let mut a = state.project.assets[0].clone();
         let mut b = a.clone();
-        a.mesh = Mesh::cube(2.0);
-        b.mesh = Mesh::cube(1.0);
+        a.mesh = Mesh::cube(2.0).into();
+        b.mesh = Mesh::cube(1.0).into();
         for vertex in &mut b.mesh.verts {
             vertex.pos[0] += 0.8;
         }

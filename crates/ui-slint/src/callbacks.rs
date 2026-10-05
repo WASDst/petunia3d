@@ -135,6 +135,7 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
     window: &PetuniaSlintShell,
     bridge: &SlintUiBridge<V>,
 ) {
+    puffin::profile_function!();
     let [width, height] = bridge.viewport_size;
     let selection = compute_selection_overlay(
         &bridge.state,
@@ -207,7 +208,9 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
             y: tag.y,
         })
         .collect();
-    window.set_measure_tags(std::rc::Rc::new(slint::VecModel::from(measure_tags)).into());
+    crate::refresh::set_model_if_changed(window.get_measure_tags(), measure_tags, |model| {
+        window.set_measure_tags(model)
+    });
 
     let world_axis_labels = compute_world_axis_labels(&bridge.state, width, height);
     let world_axis_tags: Vec<WorldAxisTag> = world_axis_labels
@@ -219,7 +222,11 @@ pub(crate) fn sync_viewport_overlays<V: PetuniaViewport>(
             tint: slint::Color::from_rgb_u8(tag.color[0], tag.color[1], tag.color[2]),
         })
         .collect();
-    window.set_world_axis_labels(std::rc::Rc::new(slint::VecModel::from(world_axis_tags)).into());
+    crate::refresh::set_model_if_changed(
+        window.get_world_axis_labels(),
+        world_axis_tags,
+        |model| window.set_world_axis_labels(model),
+    );
 
     window.set_micro_inspector_open(bridge.micro_inspector_open);
     window.set_micro_inspector_x(bridge.micro_inspector_pos[0]);
@@ -242,6 +249,7 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
     bridge: &SlintUiBridge<V>,
 ) {
     window.set_region_hover_commands(bridge.region_hover_commands().as_str().into());
+    window.set_profile_selection_commands(bridge.profile_selection_commands().as_str().into());
     window.set_region_shapes_commands(bridge.region_shapes_commands().as_str().into());
     window.set_profile_outline_commands(bridge.profile_outline_commands().as_str().into());
     window.set_poly_pen_preview_commands(bridge.poly_pen_preview_commands().as_str().into());
@@ -379,6 +387,7 @@ fn to_prefab_item(item: &crate::view_model::PrefabItemModel) -> PrefabItem {
 }
 
 pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewModel) {
+    puffin::profile_function!();
     window.set_active_workspace(vm.workspace_label().into());
     crate::animate::sync_animate_properties(window, &vm.animate);
     window.set_saved(vm.saved);
@@ -490,16 +499,21 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         ),
     };
     let scene_items: Vec<SceneItem> = vm.scene_items.iter().map(to_scene_item).collect();
-    let model = std::rc::Rc::new(slint::VecModel::from(scene_items));
-    window.set_scene_items(model.into());
+    crate::refresh::set_model_if_changed(window.get_scene_items(), scene_items, |model| {
+        window.set_scene_items(model)
+    });
     let parts_items: Vec<SceneItem> = vm.parts_items.iter().map(to_scene_item).collect();
-    window.set_parts_items(std::rc::Rc::new(slint::VecModel::from(parts_items)).into());
+    crate::refresh::set_model_if_changed(window.get_parts_items(), parts_items, |model| {
+        window.set_parts_items(model)
+    });
     window.set_parts_query(vm.parts_query.as_str().into());
     window.set_parts_selected_only(vm.parts_selected_only);
     window.set_parts_sort_by_name(vm.parts_sort_by_name);
     window.set_parts_row_height(vm.parts_row_height);
     let prefab_items: Vec<PrefabItem> = vm.prefab_items.iter().map(to_prefab_item).collect();
-    window.set_prefab_items(std::rc::Rc::new(slint::VecModel::from(prefab_items)).into());
+    crate::refresh::set_model_if_changed(window.get_prefab_items(), prefab_items, |model| {
+        window.set_prefab_items(model)
+    });
     window.set_asset_only_favorites(vm.asset_only_favorites);
     window.set_split_enabled(vm.split_enabled);
     window.set_paint_pip(vm.paint_pip);
@@ -795,7 +809,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             thumbnail: s.thumbnail.clone().unwrap_or_default(),
         })
         .collect();
-    window.set_reference_slots(std::rc::Rc::new(slint::VecModel::from(ref_slots)).into());
+    crate::refresh::set_model_if_changed(window.get_reference_slots(), ref_slots, |model| {
+        window.set_reference_slots(model)
+    });
     window.set_uv_layout_commands(vm.uv_editor.layout_commands.as_str().into());
     window.set_uv_seam_commands(vm.uv_editor.seam_commands.as_str().into());
     window.set_uv_pinned_commands(vm.uv_editor.pinned_commands.as_str().into());
@@ -870,6 +886,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_profile_closed(vm.profile_closed);
     window.set_profile_preview_commands(vm.profile_preview_commands.as_str().into());
     window.set_region_hover_commands(vm.region_hover_commands.as_str().into());
+    window.set_profile_selection_commands(vm.profile_selection_commands.as_str().into());
     window.set_region_shapes_commands(vm.region_shapes_commands.as_str().into());
     window.set_keymap_capture_action(vm.keymap_capture_action.as_str().into());
     {
@@ -891,7 +908,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
         let current: Vec<slint::SharedString> =
             slint::Model::iter(&window.get_brush_presets()).collect();
         if current != names {
-            window.set_brush_presets(std::rc::Rc::new(slint::VecModel::from(names)).into());
+            crate::refresh::set_model_if_changed(window.get_brush_presets(), names, |model| {
+                window.set_brush_presets(model)
+            });
         }
     }
     if vm.keymap_revision >= 0 && i64::from(window.get_keymap_revision()) != vm.keymap_revision {
@@ -907,7 +926,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
                 active: p.active,
             })
             .collect();
-        window.set_keymap_profiles(std::rc::Rc::new(slint::VecModel::from(profiles)).into());
+        crate::refresh::set_model_if_changed(window.get_keymap_profiles(), profiles, |model| {
+            window.set_keymap_profiles(model)
+        });
         let rows: Vec<KeymapActionEntry> = vm
             .keymap_snapshot
             .rows
@@ -920,7 +941,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
                 capturing: r.capturing,
             })
             .collect();
-        window.set_keymap_rows(std::rc::Rc::new(slint::VecModel::from(rows)).into());
+        crate::refresh::set_model_if_changed(window.get_keymap_rows(), rows, |model| {
+            window.set_keymap_rows(model)
+        });
     }
     window.set_profile_outline_commands(vm.profile_outline_commands.as_str().into());
     window.set_poly_pen_preview_commands(vm.poly_pen_preview_commands.as_str().into());
@@ -1058,7 +1081,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             y: tag.y,
         })
         .collect();
-    window.set_measure_tags(std::rc::Rc::new(slint::VecModel::from(measure_tags)).into());
+    crate::refresh::set_model_if_changed(window.get_measure_tags(), measure_tags, |model| {
+        window.set_measure_tags(model)
+    });
 
     let world_axis_tags: Vec<WorldAxisTag> = vm
         .world_axis_labels
@@ -1070,7 +1095,11 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             tint: slint::Color::from_rgb_u8(tag.color[0], tag.color[1], tag.color[2]),
         })
         .collect();
-    window.set_world_axis_labels(std::rc::Rc::new(slint::VecModel::from(world_axis_tags)).into());
+    crate::refresh::set_model_if_changed(
+        window.get_world_axis_labels(),
+        world_axis_tags,
+        |model| window.set_world_axis_labels(model),
+    );
 
     window.set_micro_inspector_open(vm.micro_inspector_open);
     window.set_micro_inspector_x(vm.micro_inspector_x);
@@ -1125,7 +1154,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             pinned: action.pinned,
         })
         .collect();
-    window.set_quick_actions(std::rc::Rc::new(slint::VecModel::from(quick_actions)).into());
+    crate::refresh::set_model_if_changed(window.get_quick_actions(), quick_actions, |model| {
+        window.set_quick_actions(model)
+    });
     let quick_action_candidates: Vec<QuickActionEntry> = vm
         .quick_action_candidates
         .iter()
@@ -1136,8 +1167,10 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             pinned: action.pinned,
         })
         .collect();
-    window.set_quick_action_candidates(
-        std::rc::Rc::new(slint::VecModel::from(quick_action_candidates)).into(),
+    crate::refresh::set_model_if_changed(
+        window.get_quick_action_candidates(),
+        quick_action_candidates,
+        |model| window.set_quick_action_candidates(model),
     );
     let modifier_rows: Vec<ModifierEntry> = vm
         .modifier_rows
@@ -1154,7 +1187,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             can_move_down: modifier.can_move_down,
         })
         .collect();
-    window.set_modifier_rows(std::rc::Rc::new(slint::VecModel::from(modifier_rows)).into());
+    crate::refresh::set_model_if_changed(window.get_modifier_rows(), modifier_rows, |model| {
+        window.set_modifier_rows(model)
+    });
     let section_states: Vec<SectionState> = vm
         .section_states
         .iter()
@@ -1164,7 +1199,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
             open: state.open,
         })
         .collect();
-    window.set_section_states(std::rc::Rc::new(slint::VecModel::from(section_states)).into());
+    crate::refresh::set_model_if_changed(window.get_section_states(), section_states, |model| {
+        window.set_section_states(model)
+    });
     for state in &vm.section_states {
         match state.id.as_str() {
             "parts" => {
@@ -1269,6 +1306,8 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     bridge: Arc<Mutex<SlintUiBridge<V>>>,
 ) {
     crate::animate::connect_animate_callbacks(window, Arc::clone(&bridge));
+    // Arrasto e hover: viewport a cada evento, janela completa limitada.
+    let throttle = std::rc::Rc::new(crate::refresh::RefreshThrottle::default());
     let shortcut_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_shortcut_requested(move |text, ctrl, shift, alt| {
@@ -1788,7 +1827,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         };
         if let Ok(mut bridge) = lasso_bridge.lock() {
             bridge.state.select_viewport_lasso(&polygon, add, subtract);
-            bridge.state.set_status("Lasso selection updated");
+            let message = bridge
+                .state
+                .t_id(petunia_config::text_id::STATUS_LASSO_SELECTION_UPDATED);
+            bridge.state.set_status(message);
             if let Some(window) = lasso_window.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
                 if let Some(frame) = bridge.render_viewport() {
@@ -1918,9 +1960,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         };
         let result = bridge.commit_transform_text(kind, axis as usize, text.as_str());
         if let Err(error) = result {
-            bridge
-                .state
-                .set_status(format!("Invalid numeric value: {error:?}"));
+            let message = crate::tr::fill(
+                &bridge
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_INVALID_NUMERIC_VALUE),
+                &[("error", format!("{error:?}"))],
+            );
+            bridge.state.set_status(message);
         }
         if let Some(window) = window_weak.upgrade() {
             sync_window_properties(&window, &bridge.view_model());
@@ -2060,18 +2106,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let profile_move_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    let profile_move_throttle = std::rc::Rc::clone(&throttle);
     window.on_viewport_profile_pointer_move(move |x, y, alt| {
         if let Ok(mut bridge) = profile_move_bridge.lock()
             && bridge.profile_pointer_move(x, y, alt)
+            && let Some(window) = window_weak.upgrade()
         {
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
-            }
+            crate::refresh::refresh_interactive(
+                &window,
+                &profile_move_bridge,
+                &mut *bridge,
+                &profile_move_throttle,
+            );
         }
     });
 
@@ -2110,28 +2156,20 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let transform_drag_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    let transform_drag_throttle = std::rc::Rc::clone(&throttle);
     window.on_viewport_transform_update(move |x, y, fine, snap| {
         if let Ok(mut bridge) = transform_drag_bridge.lock() {
             bridge.pointer_position = [x, y];
-            if bridge.update_viewport_slice_modified(x, y, snap) {
-                let vm = bridge.view_model();
-                let new_frame = bridge.render_viewport();
-                if let Some(window) = window_weak.upgrade() {
-                    sync_window_properties(&window, &vm);
-                    if let Some(frame) = new_frame {
-                        window.set_viewport_image(frame);
-                    }
-                }
-                return;
+            if !bridge.update_viewport_slice_modified(x, y, snap) {
+                bridge.update_viewport_transform_modified(x, y, fine, snap);
             }
-            bridge.update_viewport_transform_modified(x, y, fine, snap);
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
+                crate::refresh::refresh_interactive(
+                    &window,
+                    &transform_drag_bridge,
+                    &mut *bridge,
+                    &transform_drag_throttle,
+                );
             }
         }
     });
@@ -2171,16 +2209,17 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let paint_update_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    let paint_update_throttle = std::rc::Rc::clone(&throttle);
     window.on_viewport_paint_update(move |x, y, is_shift, is_ctrl| {
         if let Ok(mut bridge) = paint_update_bridge.lock() {
             bridge.paint_stroke_to_with_modifiers(x, y, is_shift, is_ctrl);
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
+                crate::refresh::refresh_interactive(
+                    &window,
+                    &paint_update_bridge,
+                    &mut *bridge,
+                    &paint_update_throttle,
+                );
                 bridge.publish_canvas_image(&window);
             }
         }
@@ -2211,6 +2250,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let tool_hover_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    let tool_hover_throttle = std::rc::Rc::clone(&throttle);
     window.on_tool_modal_hovered(move |delta, x, y| {
         if let Ok(mut bridge) = tool_hover_bridge.lock()
             && bridge.is_instant_tool_mode()
@@ -2218,13 +2258,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         {
             bridge.pointer_position = [x, y];
             bridge.scrub_tool_modal(delta, false);
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
+                crate::refresh::refresh_interactive(
+                    &window,
+                    &tool_hover_bridge,
+                    &mut *bridge,
+                    &tool_hover_throttle,
+                );
             }
         }
     });
@@ -2499,7 +2539,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         let accepted = match numeric::parse_numeric_with_base(text.as_str(), base) {
             Ok(value) => bridge.set_tool_modal_value(value),
             Err(error) => {
-                bridge.state.set_status(format!("Invalid value: {error:?}"));
+                let message = crate::tr::fill(
+                    &bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_INVALID_VALUE),
+                    &[("error", format!("{error:?}"))],
+                );
+                bridge.state.set_status(message);
                 false
             }
         };
@@ -2766,9 +2812,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_effect_layer_added(move |kind| {
         if let Ok(mut bridge) = effect_add_bridge.lock() {
             if !bridge.add_paint_effect_layer(kind.as_str()) {
-                bridge
-                    .state
-                    .set_status(format!("Unknown effect layer: {kind}"));
+                let message = crate::tr::fill(
+                    &bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_UNKNOWN_EFFECT_LAYER),
+                    &[("kind", format!("{kind}"))],
+                );
+                bridge.state.set_status(message);
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -2804,17 +2854,25 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     // cancelar (3). Movimentos sem efeito não redesenham nada.
     let tool_pointer_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_tool_pointer(move |phase, x, y, shift, ctrl| {
+    let tool_pointer_throttle = std::rc::Rc::clone(&throttle);
+    window.on_tool_pointer(move |phase, x, y, shift, ctrl, alt| {
         if let Ok(mut bridge) = tool_pointer_bridge.lock() {
-            if !bridge.tool_pointer(phase, x, y, shift, ctrl) {
+            if !crate::perf::measure("tool_pointer", || {
+                bridge.tool_pointer_ex(phase, x, y, shift, ctrl, alt)
+            }) {
                 return;
             }
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
+                // Pressionar e soltar mudam o documento/a seleção: janela inteira.
+                if phase == 1 {
+                    crate::refresh::refresh_interactive(
+                        &window,
+                        &tool_pointer_bridge,
+                        &mut *bridge,
+                        &tool_pointer_throttle,
+                    );
+                } else {
+                    crate::refresh::refresh_full(&window, &mut *bridge, &tool_pointer_throttle);
                 }
             }
         }
@@ -2927,26 +2985,27 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let component_hover_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    let hover_throttle = std::rc::Rc::clone(&throttle);
     window.on_viewport_hover(move |x, y| {
         if let Ok(mut bridge) = component_hover_bridge.lock() {
             let changed = if bridge.state.session.tools.active_tool == "loop_cut" {
                 let viewport_size = bridge.viewport_size;
                 bridge.update_loop_cut_hover(x * viewport_size[0], y * viewport_size[1])
             } else {
-                bridge.hover_component(x, y)
+                crate::perf::measure("hover_component", || bridge.hover_component(x, y))
             };
             // Mouse parado sobre o mesmo alvo: nada a redesenhar. Evita o
             // view model completo, a sincronização da janela e o frame GPU.
             if !changed {
                 return;
             }
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
+                crate::refresh::refresh_interactive(
+                    &window,
+                    &component_hover_bridge,
+                    &mut *bridge,
+                    &hover_throttle,
+                );
             }
         }
     });
@@ -2970,14 +3029,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let gizmo_hover_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    let gizmo_hover_throttle = std::rc::Rc::clone(&throttle);
     window.on_gizmo_hover(move |x, y| {
         if let Ok(mut bridge) = gizmo_hover_bridge.lock()
             && bridge.hover_gizmo(x, y)
+            && let Some(window) = window_weak.upgrade()
         {
-            let vm = bridge.view_model();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-            }
+            crate::refresh::refresh_interactive(
+                &window,
+                &gizmo_hover_bridge,
+                &mut *bridge,
+                &gizmo_hover_throttle,
+            );
         }
     });
 
@@ -3530,7 +3593,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_layer_removed(move |id| {
         if let Ok(mut bridge) = paint_remove_bridge.lock() {
             if !bridge.remove_paint_layer(id.as_str()) {
-                bridge.state.set_status("The last layer cannot be removed");
+                let message = bridge
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_THE_LAST_LAYER_CANNOT_BE_REMOVED);
+                bridge.state.set_status(message);
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3548,7 +3614,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_paint_layer_merged_down(move |id| {
         if let Ok(mut bridge) = paint_merge_bridge.lock() {
             if !bridge.merge_down_paint_layer(id.as_str()) {
-                bridge.state.set_status("Cannot merge down this layer");
+                let message = bridge
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_CANNOT_MERGE_DOWN_THIS_LAYER);
+                bridge.state.set_status(message);
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -3664,9 +3733,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                     || bridge.set_loop_cut_slide(value)
             }
             Err(_) => {
-                bridge
+                let message = bridge
                     .state
-                    .set_status("Loop Cut: slide must be between -1 and 1");
+                    .t_id(petunia_config::text_id::STATUS_LOOP_CUT_SLIDE_MUST_BE_BETWEEN_1);
+                bridge.state.set_status(message);
                 false
             }
         };
@@ -3687,9 +3757,12 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 Ok(cuts) => {
                     bridge.adjust_loop_cut_count_from_input(cuts.clamp(1, 32) as usize);
                 }
-                Err(_) => bridge
-                    .state
-                    .set_status("Loop Cut: cuts must be a whole number from 1 to 32"),
+                Err(_) => {
+                    let message = bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_LOOP_CUT_CUTS_MUST_BE_A_WHOLE);
+                    bridge.state.set_status(message);
+                }
             }
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -4835,9 +4908,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_add_primitive_requested(move |kind_str| {
         let Some(kind) = petunia_core::PrimitiveKind::parse(kind_str.as_str()).ok() else {
             if let Ok(mut bridge) = primitive_bridge.lock() {
-                bridge
-                    .state
-                    .set_status(format!("Unknown primitive: {kind_str}"));
+                let message = crate::tr::fill(
+                    &bridge
+                        .state
+                        .t_id(petunia_config::text_id::STATUS_UNKNOWN_PRIMITIVE),
+                    &[("kind_str", format!("{kind_str}"))],
+                );
+                bridge.state.set_status(message);
             }
             return;
         };

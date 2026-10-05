@@ -727,7 +727,7 @@ fn spline_authoring_commands_cover_point_handles_loop_reverse_convert_and_delete
 #[test]
 fn spline_surface_attachment_commands_are_transactional() {
     let mut state = AppState::default();
-    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0);
+    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0).into();
     let target_id = state.project.project.assets[0].id;
     let spline = SplineResource::from_polyline(
         "Surface guide",
@@ -867,7 +867,7 @@ fn spline_surface_attachment_commands_are_transactional() {
 #[test]
 fn spline_attachment_reprojection_repairs_topology_and_can_change_target() {
     let mut state = AppState::default();
-    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0);
+    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0).into();
     let first_target = state.project.project.assets[0].id;
     let mut second_mesh = petunia_mesh::Mesh::plane(2.0);
     for vertex in &mut second_mesh.verts {
@@ -946,7 +946,7 @@ fn spline_attachment_reprojection_repairs_topology_and_can_change_target() {
 #[test]
 fn spline_conversion_resolves_attached_points_before_baking() {
     let mut state = AppState::default();
-    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0);
+    state.project.project.assets[0].mesh = petunia_mesh::Mesh::plane(2.0).into();
     let target_id = state.project.project.assets[0].id;
     let spline = SplineResource::from_polyline(
         "Bake attached guide",
@@ -1713,7 +1713,7 @@ fn test_boolean_fuse_and_cut_between_active_and_operand() {
 
     let mut state = AppState::new("en");
     ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0);
+    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
     state.project.assets[0].name = "A".to_string();
     let a_id = state.project.assets[0].id;
 
@@ -1799,7 +1799,7 @@ fn test_keep_parts_keeps_the_operand_in_the_scene() {
 
     let mut state = AppState::new("en");
     ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0);
+    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
 
     let mut b = petunia_mesh::Mesh::cube(2.0);
     b.select_all();
@@ -1829,7 +1829,7 @@ fn test_boolean_cut_returns_quads_not_kernel_triangles_and_undoes_in_one_step() 
 
     let mut state = AppState::new("en");
     ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0);
+    state.project.assets[0].mesh = (petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0)).into();
     let before_faces = state.project.assets[0].mesh.faces.len();
     state
         .project
@@ -1880,7 +1880,7 @@ fn test_boolean_cleanup_can_be_turned_off_to_keep_the_kernel_triangles() {
 
     let mut state = AppState::new("en");
     ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0);
+    state.project.assets[0].mesh = (petunia_mesh::Mesh::box_dim(4.0, 1.0, 4.0)).into();
     state
         .project
         .add("Hole", petunia_mesh::Mesh::cylinder(24, 1.0, 3.0));
@@ -1905,7 +1905,7 @@ fn test_join_merges_both_topologies_without_a_boolean_kernel() {
 
     let mut state = AppState::new("en");
     ProjectService::new_project(&mut state);
-    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0);
+    state.project.assets[0].mesh = petunia_mesh::Mesh::cube(2.0).into();
     let a_verts = state.project.assets[0].mesh.verts.len();
     let a_faces = state.project.assets[0].mesh.faces.len();
 

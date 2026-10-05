@@ -674,7 +674,7 @@ mod tests {
             assets: vec![Asset {
                 id: uuid::Uuid::new_v4(),
                 name: "bad".into(),
-                mesh: bad_mesh,
+                mesh: bad_mesh.into(),
                 visible: true,
                 locked: false,
                 collection: None,
@@ -682,7 +682,7 @@ mod tests {
                 texture: Some(Canvas {
                     w: 0,
                     h: 999999,
-                    pixels: vec![],
+                    pixels: vec![].into(),
                 }),
                 material_id: None,
                 skeleton_id: None,

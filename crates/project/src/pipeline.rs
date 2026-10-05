@@ -579,7 +579,7 @@ impl FormatImporter for PkgImporter {
             let idx = asset
                 .material_id
                 .and_then(|id| proj.materials.iter().position(|m| m.id == id));
-            meshes.push((asset.name.clone(), asset.mesh.clone()));
+            meshes.push((asset.name.clone(), asset.mesh.to_owned_value()));
             mesh_materials.push(idx);
         }
         Ok(ImportPayload {

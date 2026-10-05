@@ -48,7 +48,8 @@ struct QuerySurface {
     locked: bool,
     min: Vec3,
     max: Vec3,
-    triangles: Vec<[Vec3; 3]>,
+    /// Triângulos do objeto com o índice da face de origem.
+    bvh: crate::bvh::TriangleBvh,
 }
 
 impl ViewportSceneQuery {
@@ -65,30 +66,27 @@ impl ViewportSceneQuery {
                     .iter()
                     .enumerate()
                     .flat_map(|(fi, face)| {
-                        mesh.face_triangle_corners(fi).into_iter().map(|corners| {
-                            corners.map(|corner| mesh.verts[face.verts[corner] as usize].vec())
-                        })
+                        let mesh = &mesh;
+                        mesh.face_triangle_corners(fi)
+                            .into_iter()
+                            .map(move |corners| {
+                                (
+                                    corners.map(|corner| {
+                                        mesh.verts[face.verts[corner] as usize].vec()
+                                    }),
+                                    fi as u32,
+                                )
+                            })
                     })
                     .collect();
-                if triangles.is_empty() {
-                    return None;
-                }
-                let min = triangles
-                    .iter()
-                    .flatten()
-                    .copied()
-                    .fold(Vec3::splat(f32::INFINITY), Vec3::min);
-                let max = triangles
-                    .iter()
-                    .flatten()
-                    .copied()
-                    .fold(Vec3::splat(f32::NEG_INFINITY), Vec3::max);
+                let bvh = crate::bvh::TriangleBvh::build(triangles);
+                let (min, max) = bvh.bounds()?;
                 Some(QuerySurface {
                     asset_index,
                     locked: asset.locked,
                     min,
                     max,
-                    triangles,
+                    bvh,
                 })
             })
             .collect();
@@ -121,34 +119,71 @@ impl ViewportSceneQuery {
     pub fn nearest_object(&self, camera: &crate::Camera, ndc: [f32; 2]) -> Option<usize> {
         let (origin, direction) = camera.ray(ndc[0], ndc[1]);
         let matrix = camera.view_proj();
+        let in_depth_range = |depth: f32| {
+            let clip = matrix * (origin + direction * depth).extend(1.0);
+            clip.w > 0.0 && clip.z >= 0.0 && clip.z <= clip.w
+        };
         let mut nearest: Option<(usize, f32, bool)> = None;
         for surface in &self.surfaces {
-            if !Self::ray_hits_bounds(
-                surface,
-                origin,
-                direction,
-                nearest.map_or(f32::INFINITY, |(_, d, _)| d),
-            ) {
+            let limit = nearest.map_or(f32::INFINITY, |(_, d, _)| d);
+            if !Self::ray_hits_bounds(surface, origin, direction, limit) {
                 continue;
             }
-            for &[a, b, c] in &surface.triangles {
-                let Some(depth) = petunia_mesh::triangulate::ray_tri(origin, direction, a, b, c)
-                else {
-                    continue;
-                };
-                let clip = matrix * (origin + direction * depth).extend(1.0);
-                if clip.w > 0.0
-                    && clip.z >= 0.0
-                    && clip.z <= clip.w
-                    && nearest.is_none_or(|(_, d, _)| depth < d)
-                {
-                    nearest = Some((surface.asset_index, depth, surface.locked));
-                }
+            if let Some((depth, _)) = surface
+                .bvh
+                .nearest(origin, direction, limit, in_depth_range)
+            {
+                nearest = Some((surface.asset_index, depth, surface.locked));
             }
         }
         nearest
             .filter(|(_, _, locked)| !locked)
             .map(|(index, _, _)| index)
+    }
+
+    /// Profundidade (ao longo do raio de `ndc`) da superfície visível mais
+    /// próxima, de qualquer objeto — inclusive bloqueados, que ocultam.
+    pub fn nearest_depth(&self, camera: &crate::Camera, ndc: [f32; 2]) -> Option<f32> {
+        let (origin, direction) = camera.ray(ndc[0], ndc[1]);
+        let matrix = camera.view_proj();
+        let in_depth_range = |depth: f32| {
+            let clip = matrix * (origin + direction * depth).extend(1.0);
+            clip.w > 0.0 && clip.z >= 0.0 && clip.z <= clip.w
+        };
+        let mut nearest: Option<f32> = None;
+        for surface in &self.surfaces {
+            let limit = nearest.unwrap_or(f32::INFINITY);
+            if !Self::ray_hits_bounds(surface, origin, direction, limit) {
+                continue;
+            }
+            if let Some((depth, _)) = surface
+                .bvh
+                .nearest(origin, direction, limit, in_depth_range)
+            {
+                nearest = Some(depth);
+            }
+        }
+        nearest
+    }
+
+    /// Face mais próxima do objeto `asset_index` sob o raio de `ndc`, com a
+    /// posição do acerto. A oclusão por outros objetos é responsabilidade do
+    /// chamador (`point_visible`).
+    pub fn nearest_face(
+        &self,
+        asset_index: usize,
+        camera: &crate::Camera,
+        ndc: [f32; 2],
+    ) -> Option<(usize, Vec3)> {
+        let (origin, direction) = camera.ray(ndc[0], ndc[1]);
+        let surface = self
+            .surfaces
+            .iter()
+            .find(|s| s.asset_index == asset_index)?;
+        surface
+            .bvh
+            .nearest(origin, direction, f32::INFINITY, |_| true)
+            .map(|(depth, face)| (face as usize, origin + direction * depth))
     }
 
     pub fn point_visible(&self, camera: &crate::Camera, point: Vec3) -> bool {
@@ -160,23 +195,15 @@ impl ViewportSceneQuery {
         let (origin, direction) = camera.ray(clip.x / clip.w, clip.y / clip.w);
         let target = (point - origin).dot(direction);
         let limit = target - 1.0e-5 * target.abs().max(1.0);
-        for surface in &self.surfaces {
-            if !Self::ray_hits_bounds(surface, origin, direction, limit) {
-                continue;
-            }
-            for &[a, b, c] in &surface.triangles {
-                if let Some(depth) = petunia_mesh::triangulate::ray_tri(origin, direction, a, b, c)
-                    && depth < limit
-                {
-                    // Geometry outside the camera depth range cannot occlude.
-                    let hit = matrix * (origin + direction * depth).extend(1.0);
-                    if hit.w > 0.0 && hit.z >= 0.0 {
-                        return false;
-                    }
-                }
-            }
-        }
-        true
+        // Geometry outside the camera depth range cannot occlude.
+        let in_front = |depth: f32| {
+            let hit = matrix * (origin + direction * depth).extend(1.0);
+            hit.w > 0.0 && hit.z >= 0.0
+        };
+        !self.surfaces.iter().any(|surface| {
+            Self::ray_hits_bounds(surface, origin, direction, limit)
+                && surface.bvh.any(origin, direction, limit, in_front)
+        })
     }
 }
 

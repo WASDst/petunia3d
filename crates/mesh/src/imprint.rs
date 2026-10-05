@@ -168,6 +168,254 @@ pub fn imprint_region(
     imprint_boolean_cut(mesh, face, &outer, &hole, frame, tol)
 }
 
+/// Imprint geral: a região (contorno e furos em mundo, num plano) é gravada
+/// em **todas** as faces coplanares que ela toca — inclusive cruzando arestas
+/// entre faces, ocupando várias faces coplanares ou com furos.
+///
+/// Cada face tocada é substituída pelas peças `face ∩ região` (selecionadas)
+/// e `face \ região` (não selecionadas); polígonos com furo são triangulados.
+/// Vértices são soldados por posição e os que caem sobre arestas de faces
+/// vizinhas são inseridos nelas, para a malha não ganhar junções em T.
+/// Devolve a malha nova e os índices das faces internas.
+pub fn imprint_region_general(
+    mesh: &Mesh,
+    outer: &[Vec3],
+    holes: &[Vec<Vec3>],
+    plane_point: Vec3,
+    plane_normal: Vec3,
+) -> Result<(Mesh, Vec<usize>), ImprintError> {
+    let normal = plane_normal.normalize_or_zero();
+    if normal == Vec3::ZERO || outer.len() < 3 {
+        return Err(ImprintError::Degenerate);
+    }
+    let seed = outer
+        .iter()
+        .map(|p| *p - plane_point)
+        .find(|d| d.length_squared() > 1.0e-12)
+        .unwrap_or(Vec3::X);
+    let u = (seed - normal * seed.dot(normal)).normalize_or_zero();
+    let u = if u == Vec3::ZERO {
+        normal.any_orthonormal_vector()
+    } else {
+        u
+    };
+    let frame = Frame {
+        origin: plane_point,
+        u,
+        v: normal.cross(u),
+    };
+    let project_ring = |ring: &[Vec3]| -> Vec<[f64; 2]> {
+        dedup_ring(ring.iter().map(|p| frame.project(*p)).collect())
+    };
+    let outer_2d = project_ring(outer);
+    if outer_2d.len() < 3 || signed_area(&outer_2d).abs() < 1.0e-12 {
+        return Err(ImprintError::Degenerate);
+    }
+    let region = Polygon::new(
+        geo_ring(&outer_2d),
+        holes.iter().map(|h| geo_ring(&project_ring(h))).collect(),
+    );
+    let size = outer_2d
+        .iter()
+        .map(|p| p[0].abs().max(p[1].abs()))
+        .fold(1.0e-6, f64::max);
+    let plane_tolerance = (size as f32 * 1.0e-5).max(1.0e-5);
+
+    // Faces coplanares com a região.
+    let coplanar: Vec<usize> = (0..mesh.faces.len())
+        .filter(|&fi| {
+            let face = &mesh.faces[fi];
+            if face.verts.len() < 3 {
+                return false;
+            }
+            let n = mesh.face_normal(fi).normalize_or_zero();
+            n.dot(normal).abs() > 0.9999
+                && face.verts.iter().all(|&v| {
+                    (mesh.verts[v as usize].vec() - plane_point)
+                        .dot(normal)
+                        .abs()
+                        <= plane_tolerance
+                })
+        })
+        .collect();
+
+    let mut result = mesh.clone();
+    let original_vertex_count = result.verts.len();
+    let mut replaced: Vec<usize> = Vec::new();
+    let mut new_faces: Vec<Face> = Vec::new();
+    let weld = (size * 1.0e-7).max(1.0e-9);
+    let find_or_add = |result: &mut Mesh, p: Vec3, color: [f32; 3]| -> u32 {
+        if let Some(i) = result
+            .verts
+            .iter()
+            .position(|v| f64::from(v.vec().distance_squared(p)) <= weld * weld)
+        {
+            return i as u32;
+        }
+        result.verts.push(Vertex {
+            pos: p.to_array(),
+            color,
+            selected: false,
+        });
+        (result.verts.len() - 1) as u32
+    };
+    for &fi in &coplanar {
+        let face = mesh.faces[fi].clone();
+        let face_2d: Vec<[f64; 2]> = face
+            .verts
+            .iter()
+            .map(|&v| frame.project(mesh.verts[v as usize].vec()))
+            .collect();
+        let face_poly = Polygon::new(geo_ring(&face_2d), vec![]);
+        let inside = face_poly.intersection(&region);
+        let inside_area: f64 = inside.0.iter().map(polygon_area).sum();
+        if inside_area <= 1.0e-12 * size * size {
+            continue;
+        }
+        let outside = face_poly.difference(&region);
+        let face_normal = mesh.face_normal(fi).normalize_or_zero();
+        let flip = face_normal.dot(normal) < 0.0;
+        let points_3d: Vec<Vec3> = face
+            .verts
+            .iter()
+            .map(|&v| mesh.verts[v as usize].vec())
+            .collect();
+        let uv_at = crate::ops::planar_uv_map(&points_3d, &face.uv, face_normal);
+        let color = mesh.verts[face.verts[0] as usize].color;
+        replaced.push(fi);
+        for (pieces, selected) in [(&inside, true), (&outside, false)] {
+            for polygon in &pieces.0 {
+                if polygon_area(polygon) <= 1.0e-12 * size * size {
+                    continue;
+                }
+                // Polígonos sem furo viram uma face; com furo, triângulos.
+                let loops: Vec<Vec<[f64; 2]>> = if polygon.interiors().is_empty() {
+                    let mut ring = dedup_ring(open_ring_points(polygon.exterior()));
+                    if signed_area(&ring) < 0.0 {
+                        ring.reverse();
+                    }
+                    vec![ring]
+                } else {
+                    let raw = polygon.earcut_triangles_raw();
+                    raw.triangle_indices
+                        .as_chunks::<3>()
+                        .0
+                        .iter()
+                        .map(|t| {
+                            let mut tri: Vec<[f64; 2]> =
+                                t.iter().map(|i| raw.vertices[*i]).collect();
+                            if signed_area(&tri) < 0.0 {
+                                tri.reverse();
+                            }
+                            tri
+                        })
+                        .collect()
+                };
+                for mut ring in loops {
+                    if ring.len() < 3 {
+                        continue;
+                    }
+                    if flip {
+                        ring.reverse();
+                    }
+                    let mut verts = Vec::with_capacity(ring.len());
+                    let mut uv = Vec::with_capacity(ring.len());
+                    for p in &ring {
+                        let world = frame.lift(*p);
+                        let index = find_or_add(&mut result, world, color);
+                        if verts.last() != Some(&index) {
+                            verts.push(index);
+                            uv.push(uv_at(world));
+                        }
+                    }
+                    if verts.len() >= 3 && verts.first() == verts.last() {
+                        verts.pop();
+                        uv.pop();
+                    }
+                    if verts.len() < 3 {
+                        continue;
+                    }
+                    let mut new_face = Face::with_uv(verts, uv);
+                    new_face.selected = selected;
+                    new_face.material_slot = face.material_slot;
+                    new_faces.push(new_face);
+                }
+            }
+        }
+    }
+    if replaced.is_empty() {
+        return Err(ImprintError::OutsideFace);
+    }
+
+    // Faces mantidas: insere nas arestas os vértices novos que caem sobre elas.
+    let added: Vec<u32> = (original_vertex_count as u32..result.verts.len() as u32).collect();
+    replaced.sort_unstable();
+    let mut kept: Vec<Face> = result
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| replaced.binary_search(i).is_err())
+        .map(|(_, f)| {
+            let mut f = f.clone();
+            f.selected = false;
+            f
+        })
+        .collect();
+    let verts_snapshot: Vec<Vec3> = result.verts.iter().map(|v| v.vec()).collect();
+    let split_edges = |face: &mut Face| {
+        let n = face.verts.len();
+        let mut verts = Vec::with_capacity(n);
+        let mut uv = Vec::with_capacity(n);
+        for k in 0..n {
+            let (a, b) = (face.verts[k], face.verts[(k + 1) % n]);
+            let (pa, pb) = (verts_snapshot[a as usize], verts_snapshot[b as usize]);
+            verts.push(a);
+            uv.push(face.uv[k]);
+            let edge = pb - pa;
+            let length_sq = edge.length_squared();
+            if length_sq < 1.0e-18 {
+                continue;
+            }
+            let mut on_edge: Vec<(f32, u32)> = added
+                .iter()
+                .filter(|&&i| i != a && i != b)
+                .filter_map(|&i| {
+                    let p = verts_snapshot[i as usize];
+                    let t = (p - pa).dot(edge) / length_sq;
+                    let off = (pa + edge * t).distance_squared(p);
+                    (t > 1.0e-6 && t < 1.0 - 1.0e-6 && f64::from(off) <= weld * weld * 100.0)
+                        .then_some((t, i))
+                })
+                .collect();
+            on_edge.sort_by(|x, y| x.0.total_cmp(&y.0));
+            let (ua, ub) = (face.uv[k], face.uv[(k + 1) % n]);
+            for (t, i) in on_edge {
+                verts.push(i);
+                uv.push([ua[0] + (ub[0] - ua[0]) * t, ua[1] + (ub[1] - ua[1]) * t]);
+            }
+        }
+        face.verts = verts;
+        face.uv = uv;
+    };
+    for face in kept.iter_mut().chain(new_faces.iter_mut()) {
+        split_edges(face);
+    }
+    let first_new = kept.len();
+    result.faces = kept;
+    result.faces.extend(new_faces);
+    let inside: Vec<usize> = (first_new..result.faces.len())
+        .filter(|&i| result.faces[i].selected)
+        .collect();
+    result.selected_edges.clear();
+    result.sync_vert_selection_from_faces();
+    Ok((result, inside))
+}
+
+fn polygon_area(polygon: &Polygon<f64>) -> f64 {
+    let ring = |line: &LineString<f64>| signed_area(&open_ring_points(line)).abs();
+    ring(polygon.exterior()) - polygon.interiors().iter().map(ring).sum::<f64>()
+}
+
 fn geo_ring(points: &[[f64; 2]]) -> LineString<f64> {
     let mut coords: Vec<Coord<f64>> = points.iter().map(|p| Coord { x: p[0], y: p[1] }).collect();
     if coords.first() != coords.last()

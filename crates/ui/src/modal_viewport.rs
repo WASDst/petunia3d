@@ -211,7 +211,9 @@ pub fn draw(
     if let Some(number) = numeric {
         value = number;
     }
-    let snap = ctx.input(|i| i.modifiers.ctrl) || state.snap_enabled;
+    // Passo da grade só com Ctrl: o snap ligado por padrão (cap. 01) é
+    // contextual, não arredonda todo valor.
+    let snap = ctx.input(|i| i.modifiers.ctrl);
     let grid_step = state.snap_settings.grid_spacing.max(0.001);
     let translation = if snap && numeric.is_none() {
         value = snap_value(

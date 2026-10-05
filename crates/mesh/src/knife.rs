@@ -109,6 +109,151 @@ pub fn cut_face(source: &Mesh, start: EdgePoint, end: EdgePoint) -> Result<Mesh,
     Ok(mesh)
 }
 
+/// Corte que atravessa várias faces entre dois pontos de aresta, sem cliques
+/// intermediários.
+///
+/// O caminho segue a interseção da malha com o plano que contém os dois
+/// pontos e a direção de visão (o que o usuário vê como uma linha reta na
+/// tela): da face da aresta inicial, a aresta de saída é a que cruza o plano
+/// em direção ao ponto final; a caminhada passa à face vizinha até chegar à
+/// face que contém a aresta final. Cada trecho é um [`cut_face`] sobre a
+/// malha já cortada, então pontos, UVs e cores seguem as mesmas regras.
+pub fn cut_path(
+    source: &Mesh,
+    start: EdgePoint,
+    end: EdgePoint,
+    view_direction: Vec3,
+) -> Result<Mesh, String> {
+    // Mesma face: o corte simples já resolve.
+    if let Ok(mesh) = cut_face(source, start, end) {
+        return Ok(mesh);
+    }
+    let chord = end.position - start.position;
+    let plane_normal = chord.cross(view_direction).normalize_or_zero();
+    if plane_normal == Vec3::ZERO || !plane_normal.is_finite() {
+        return Err("Corte paralelo à direção de visão".into());
+    }
+    let side = |p: Vec3| (p - start.position).dot(plane_normal);
+    let face_edges = |face: &Face| -> Vec<(u32, u32)> {
+        (0..face.verts.len())
+            .map(|k| (face.verts[k], face.verts[(k + 1) % face.verts.len()]))
+            .collect()
+    };
+    let has_edge = |face: &Face, edge: (u32, u32)| {
+        face_edges(face)
+            .iter()
+            .any(|&(a, b)| edge_key(a, b) == edge_key(edge.0, edge.1))
+    };
+    let end_key = edge_key(end.edge.0, end.edge.1);
+    // Faces da aresta inicial; a primeira escolhida é a que avança para o fim.
+    let mut points = vec![start];
+    let mut current_edge = start.edge;
+    let mut visited: Vec<usize> = Vec::new();
+    let mut previous_face: Option<usize> = None;
+    for _ in 0..source.faces.len().max(1) {
+        let candidates: Vec<usize> = source
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(i, face)| Some(*i) != previous_face && has_edge(face, current_edge))
+            .map(|(i, _)| i)
+            .collect();
+        let mut step: Option<(usize, EdgePoint, f32)> = None;
+        for fi in candidates {
+            if visited.contains(&fi) {
+                continue;
+            }
+            let face = &source.faces[fi];
+            if face_edges(face)
+                .iter()
+                .any(|&(a, b)| edge_key(a, b) == end_key)
+            {
+                step = Some((fi, end, f32::INFINITY));
+                break;
+            }
+            let here = points.last().map_or(start.position, |p| p.position);
+            for (a, b) in face_edges(face) {
+                if edge_key(a, b) == edge_key(current_edge.0, current_edge.1) {
+                    continue;
+                }
+                let (pa, pb) = (
+                    source.verts[a as usize].vec(),
+                    source.verts[b as usize].vec(),
+                );
+                let (da, db) = (side(pa), side(pb));
+                if (da > 0.0 && db > 0.0) || (da < 0.0 && db < 0.0) || (da - db).abs() < 1.0e-12 {
+                    continue;
+                }
+                let t = (da / (da - db)).clamp(0.0, 1.0);
+                let position = pa.lerp(pb, t);
+                // Avança em direção ao ponto final (não volta pelo caminho).
+                let progress = (position - here).dot(chord);
+                if progress <= 1.0e-9 {
+                    continue;
+                }
+                if step.as_ref().is_none_or(|(_, _, best)| progress < *best) {
+                    step = Some((
+                        fi,
+                        EdgePoint {
+                            edge: (a, b),
+                            position,
+                        },
+                        progress,
+                    ));
+                }
+            }
+        }
+        let Some((fi, point, _)) = step else {
+            return Err("O corte não encontra caminho pela superfície até o ponto final".into());
+        };
+        visited.push(fi);
+        previous_face = Some(fi);
+        points.push(point);
+        if edge_key(point.edge.0, point.edge.1) == end_key {
+            break;
+        }
+        current_edge = point.edge;
+    }
+    if points
+        .last()
+        .is_none_or(|p| edge_key(p.edge.0, p.edge.1) != end_key)
+    {
+        return Err("O corte não alcança o ponto final".into());
+    }
+    // Aplica trecho por trecho; o ponto compartilhado vira um vértice da malha.
+    let mut mesh = source.clone();
+    let mut path_edges = Vec::new();
+    for pair in points.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        let from = resolve_on_split_edge(&mesh, from);
+        mesh = cut_face(&mesh, from, to)?;
+        path_edges.extend(mesh.selected_edges.iter().copied());
+    }
+    mesh.selected_edges = path_edges.into_iter().collect();
+    Ok(mesh)
+}
+
+/// Depois de um trecho, o ponto inicial do seguinte já é um vértice que
+/// dividiu a aresta original: devolve uma meia-aresta que ainda existe.
+fn resolve_on_split_edge(mesh: &Mesh, point: EdgePoint) -> EdgePoint {
+    let found = mesh
+        .verts
+        .iter()
+        .position(|v| v.vec().distance_squared(point.position) <= 1.0e-12);
+    match found {
+        Some(index) => {
+            let index = index as u32;
+            let (a, b) = point.edge;
+            let edge = if index != a { (a, index) } else { (index, b) };
+            EdgePoint {
+                edge,
+                position: point.position,
+            }
+        }
+        None => point,
+    }
+}
+
 fn insert_point(mesh: &mut Mesh, point: EdgePoint) -> Result<u32, String> {
     let (a, b) = point.edge;
     let va = mesh.verts.get(a as usize).ok_or("Aresta inválida")?;

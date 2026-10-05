@@ -305,6 +305,30 @@ impl ToolSession {
         }
     }
 
+    /// Buffer numérico único de todas as ferramentas (constituição 11): o
+    /// frontend pode acrescentar expressões (`10 + 5`, `*2`) além dos dígitos
+    /// aceitos por [`Self::text`], com ou sem gesto ativo. Retorna se aceitou.
+    pub fn push_numeric(&mut self, text: &str) -> bool {
+        let text = text.replace(',', ".");
+        if text.chars().any(char::is_control)
+            || self.numeric.len() + text.len() > NUMERIC_BUFFER_LIMIT
+        {
+            return false;
+        }
+        self.numeric.push_str(&text);
+        true
+    }
+
+    /// Apaga o último caractere do buffer numérico.
+    pub fn pop_numeric(&mut self) -> bool {
+        self.numeric.pop().is_some()
+    }
+
+    /// Esvazia o buffer numérico sem mexer na fase do gesto.
+    pub fn clear_numeric(&mut self) {
+        self.numeric.clear();
+    }
+
     /// Encerra o gesto sem efeito de documento (troca de ferramenta, reset).
     pub fn reset(&mut self) {
         self.phase = ToolPhase::Idle;
@@ -380,9 +404,10 @@ pub fn drag_value(
             }
         }
         ModalKind::Inset => {
-            // Fração 0–0,95: aproximar o cursor do pivô aumenta o inset.
-            let (away, reach) = away_from_pivot(frame.pivot_px, anchor, delta);
-            (start_value - away / reach.max(24.0)).clamp(0.0, 0.95)
+            // Distância de mundo: aproximar o cursor do pivô aumenta o inset
+            // (o limite anti-interseção é aplicado pela geometria).
+            let (away, _) = away_from_pivot(frame.pivot_px, anchor, delta);
+            (start_value - away * world_per_pixel).max(0.0)
         }
         ModalKind::Bevel => {
             // Distância de mundo: afastar o cursor do pivô aumenta.
@@ -792,9 +817,16 @@ mod tests {
             world_per_pixel: 0.01,
         };
         let inset = drag_value(ModalKind::Inset, frame, [500.0, 300.0], [450.0, 300.0], 0.0);
-        assert!((inset - 0.5).abs() < 1.0e-5, "metade do caminho até o pivô");
-        let capped = drag_value(ModalKind::Inset, frame, [500.0, 300.0], [300.0, 300.0], 0.0);
-        assert_eq!(capped, 0.95);
+        assert!(
+            (inset - 0.5).abs() < 1.0e-5,
+            "50 px × 0,01 m/px em direção ao pivô"
+        );
+        // Inset métrico: distância de mundo, sem teto de fração (o limite
+        // anti-interseção é da geometria).
+        let past_pivot = drag_value(ModalKind::Inset, frame, [500.0, 300.0], [300.0, 300.0], 0.0);
+        assert!((past_pivot - 2.0).abs() < 1.0e-5);
+        let outward = drag_value(ModalKind::Inset, frame, [500.0, 300.0], [600.0, 300.0], 0.0);
+        assert_eq!(outward, 0.0);
         let bevel = drag_value(ModalKind::Bevel, frame, [500.0, 300.0], [550.0, 300.0], 0.0);
         assert!((bevel - 0.5).abs() < 1.0e-5);
         let bevel_in = drag_value(ModalKind::Bevel, frame, [500.0, 300.0], [300.0, 300.0], 0.0);
@@ -873,9 +905,9 @@ mod tests {
         let before = state.project.active_mesh().unwrap().clone();
 
         assert_eq!(
-            state.adjust_last_operation(&last, 5.0),
+            state.adjust_last_operation(&last, -1.0),
             Err(ModalError::InvalidInput),
-            "inset fora de 0–0,95 é recusado"
+            "inset negativo é recusado"
         );
         assert_eq!(state.project.undo.depth(), (1, 0));
         let after = state.project.active_mesh().unwrap();

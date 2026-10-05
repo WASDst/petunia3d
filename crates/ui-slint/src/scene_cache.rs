@@ -18,7 +18,7 @@ use crate::{PetuniaViewport, SlintUiBridge};
 pub(crate) type SceneCache = std::cell::RefCell<Option<(u64, Arc<ViewportSceneQuery>)>>;
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
-    fn scene_geometry_key(&self) -> u64 {
+    pub(crate) fn scene_geometry_key(&self) -> u64 {
         let project = &self.state.project.project;
         let clock = project.revision_clock();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -42,7 +42,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return Arc::clone(scene);
         }
-        let scene = Arc::new(ViewportSceneQuery::new(&self.state.project.project));
+        puffin::profile_scope!("scene_query_rebuild");
+        let scene = Arc::new(crate::perf::measure("scene_query_rebuild", || {
+            ViewportSceneQuery::new(&self.state.project.project)
+        }));
         *slot = Some((key, Arc::clone(&scene)));
         scene
     }

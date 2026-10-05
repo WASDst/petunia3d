@@ -3,6 +3,7 @@
 
 pub mod animate_session;
 pub mod brush;
+pub mod bvh;
 pub mod camera;
 pub mod command;
 pub mod cutting_session;
@@ -111,8 +112,8 @@ pub use brush::{
 pub use camera::{Camera, Projection, ViewPreset};
 pub use events::{AppEvent, EventBus};
 pub use inference::{
-    DEFAULT_SNAP_RADIUS_PIXELS, ScreenSnapHit, ScreenSnapQuery, SnapAnchor, SnapGrid, SnapKind,
-    SnapMask, clamp_snap_radius, snap_screen,
+    DEFAULT_SNAP_RADIUS_PIXELS, ScreenSnapHit, ScreenSnapQuery, SnapAccel, SnapAnchor, SnapGrid,
+    SnapKind, SnapMask, SnapSource, clamp_snap_radius, snap_screen, snap_screen_with,
 };
 pub use modal_feedback::ToolFeedback;
 pub use module::{Module, ModuleRegistry};

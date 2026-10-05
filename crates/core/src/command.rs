@@ -2002,7 +2002,7 @@ impl Command for SeparateSelectionCmd {
             return Err(CommandError::NoActiveAsset);
         };
         let orig_name = active_asset.name.clone();
-        let mut orig_mesh = active_asset.mesh.clone();
+        let mut orig_mesh = active_asset.mesh.to_owned_value();
         let mat_id = active_asset.material_id;
         let base_color = active_asset.base_color;
         let collection = active_asset.collection.clone();
