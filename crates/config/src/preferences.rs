@@ -173,6 +173,9 @@ pub struct UserPreferences {
     pub colorblind_axes: bool,
     /// Redução de movimento para usuários com sensibilidade vestibular / labirintite.
     pub reduced_motion: bool,
+    /// Trilho de ferramentas com o nome ao lado do ícone (plano de UI, D6).
+    /// Desligado por padrão: o trilho padrão continua estreito.
+    pub show_tool_labels: bool,
     /// Exibe tag flutuante com a média de medidas na multiseleção de arestas.
     pub multiselection_measure_tag: bool,
     /// Perfil ativo de atalhos de teclado ("petunia-default", "blender", "maya", "3ds-max", etc.).
@@ -208,6 +211,7 @@ impl Default for UserPreferences {
             snap_radius_px: default_snap_radius_px(),
             colorblind_axes: false,
             reduced_motion: false,
+            show_tool_labels: false,
             multiselection_measure_tag: true,
             active_keymap_id: "petunia-default".to_string(),
             theme_id: default_theme_id(),
@@ -348,6 +352,7 @@ mod tests {
             model_quick_actions: vec!["model.fuse".to_string()],
             colorblind_axes: false,
             reduced_motion: false,
+            show_tool_labels: true,
             multiselection_measure_tag: true,
             active_keymap_id: "blender".to_string(),
             theme_id: "petunia-light".to_string(),

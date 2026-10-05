@@ -4859,15 +4859,11 @@ fn the_operation_hud_reports_the_real_value_and_the_axis() {
     bridge.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
     bridge.state.sync_selection();
 
-    // Em repouso o HUD some e a barra informa domínio e navegação.
+    // Em repouso o HUD some e não há dica de ferramenta: os gestos ficam nos
+    // chips traduzidos da status bar (plano de UI F5).
     let vm = bridge.view_model();
     assert!(!vm.operation_hud_active);
-    assert!(
-        vm.context_hint.contains("Selection:"),
-        "veio: {}",
-        vm.context_hint
-    );
-    assert!(vm.context_hint.contains("Orbit"));
+    assert!(vm.context_hint.is_empty(), "veio: {}", vm.context_hint);
 
     // Com ferramenta aberta o HUD mostra título, valor e como confirmar.
     bridge.execute_core_command("model.extrude").unwrap();
@@ -10522,4 +10518,16 @@ fn draw_scale_and_rotation_keep_parametric_profile_reeditable() {
     assert!(bridge.view_model().profile_width < width * 2.0);
     assert!(bridge.cancel_profile_transform());
     assert!((bridge.view_model().profile_width - width).abs() < 1e-4);
+}
+
+#[test]
+fn show_tool_labels_preference_reaches_the_view_model() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(!bridge.view_model().show_tool_labels, "padrão: trilho estreito");
+    assert!(bridge.set_show_tool_labels(true));
+    assert!(!bridge.set_show_tool_labels(true), "repetir não muda nada");
+    let vm = bridge.view_model();
+    assert!(vm.show_tool_labels);
+    assert!(bridge.preferences.show_tool_labels, "vai para o arquivo de preferências");
+    assert!(!vm.label_show_tool_labels.is_empty());
 }

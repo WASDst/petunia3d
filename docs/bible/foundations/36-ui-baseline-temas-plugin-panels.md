@@ -213,6 +213,23 @@ listados; nada mais do capítulo é reaberto.
    seleção, CENTER = auxiliares da ferramenta (pivô, snap, proporcional),
    RIGHT = câmera e sombreamento.
 
+## Revisão de baseline — 2026-10-05
+
+Aprovada pelo responsável do produto ao autorizar todas as fases restantes do
+plano de UI (F5 em diante; decisões D2, D6 e D10). Substitui apenas os pontos
+listados.
+
+1. **Barra contextual por seleção.** Em POLY, a barra da base mostra só as
+   ferramentas que agem no domínio de seleção atual; desenho e corte (Poly Pen,
+   Knife, Loop Cut, Slice) aparecem em qualquer domínio.
+2. **Quick Actions na barra contextual** (fecha o item 3 da revisão anterior):
+   ações com rótulo e cartão de personalização não modal acima da barra.
+3. **Excluir não é botão fixo da barra contextual.** Continua pela tecla
+   Delete, pelo menu do botão direito e pelo cabeçalho do Inspector.
+4. **Modo "Mostrar nomes no trilho"**: preferência opcional, **desligada por
+   padrão**. Ligada, o trilho de ferramentas DRAW/POLY pode ter até 148 px e
+   mostra o nome ao lado do ícone. O padrão continua 40–46 px.
+
 # Design System Final V1
 
 ## Tipografia

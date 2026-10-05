@@ -970,6 +970,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_snap_radius_px(vm.snap_radius_px);
     window.set_label_snap_radius(vm.label_snap_radius.as_str().into());
     window.set_click_move_click(vm.click_move_click);
+    window.set_show_tool_labels(vm.show_tool_labels);
+    window.set_label_show_tool_labels(vm.label_show_tool_labels.as_str().into());
+    window.set_label_show_tool_labels_hint(vm.label_show_tool_labels_hint.as_str().into());
     window.set_workplane_prefer_ground(vm.workplane_prefer_ground);
     window.set_studio_light_follows_camera(vm.studio_light_follows_camera);
     window.set_label_studio_light_follows_camera(
@@ -2898,6 +2901,19 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_click_move_click_set(move |enabled| {
         if let Ok(mut bridge) = click_move_click_bridge.lock()
             && bridge.set_click_move_click(enabled)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let show_tool_labels_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_show_tool_labels_set(move |enabled| {
+        if let Ok(mut bridge) = show_tool_labels_bridge.lock()
+            && bridge.set_show_tool_labels(enabled)
         {
             persist_user_preferences(&mut bridge);
             if let Some(window) = window_weak.upgrade() {

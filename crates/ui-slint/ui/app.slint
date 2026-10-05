@@ -12,7 +12,7 @@ import {
     AnimateTweakBody,
     AnimTile,
 } from "animate.slint";
-import { BrushChip, BrushStepper, ColorSwatch, ContextMenuItem, MenuButton, MenuDropdown, NumericField, PanelDragHandle, PanelResizeGrip, PetuniaSlider, SplitterHorizontal, ToolButton, ToolCard, TopAction, Vector3Field, ViewportBarButton, ViewportSvgButton, WorkspaceSegment } from "components/controls.slint";
+import { BrushChip, BrushStepper, ColorSwatch, ContextMenuItem, MenuButton, MenuDropdown, NumericField, PanelDragHandle, PanelResizeGrip, PetuniaSlider, SplitterHorizontal, RailTool, ToolButton, ToolCard, ToolGroup, TopAction, Vector3Field, ViewportBarButton, ViewportSvgButton, WorkspaceSegment } from "components/controls.slint";
 import { CommandSearchField, EmptyState, IconButton, KeyHint } from "components/base.slint";
 import { PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceSlotCard } from "dialogs/references.slint";
@@ -70,8 +70,7 @@ export component PetuniaSlintShell inherits Window {
         root.model-parts-open ||
         root.model-transform-open ||
         root.model-material-open ||
-        root.model-object-open ||
-        root.quick-actions-section-open
+        root.model-object-open
     );
     out property <length> inspector-clearance: (root.inspector-flyout-open && inspector-visible && !compact-shell)
         ? (min(320px, viewport-region.width - 60px) + 12px)
@@ -81,6 +80,88 @@ export component PetuniaSlintShell inherits Window {
     out property <length> rail-clearance: (inspector-visible && !compact-shell && !root.inspector-flyout-open) ? 56px : 0px;
     out property <length> right-clearance: root.inspector-clearance + root.rail-clearance;
     callback inspector-collapse-requested;
+    /// Ferramentas de POLY que aparecem na barra contextual para o domínio de
+    /// seleção atual (`selection-domain`: "OBJECT", "FACE", "EDGE" ou
+    /// "POINT"). Plano de UI F5: contextualidade antes de volume de botões.
+    /// Trilho por dados (plano de UI F5b): grupos de ferramentas com flyout.
+    out property <[RailTool]> rail-select-tools: [
+        { id: "select", label: root.label-model-select, shortcut: root.shortcuts.model-select, description: Tr.t("sl.box_click_selection_of_scene_points_edges_an"), icon: IconSet.MousePointer2, active: root.active-tool == "select" || root.active-tool == "box_select" },
+        { id: "lasso", label: root.label-model-lasso, shortcut: root.shortcuts.model-lasso, description: Tr.t("sl.freehand_polygon_loop_lasso_selection"), icon: IconSet.Spline, active: root.active-tool == "lasso_select" },
+    ];
+    out property <[RailTool]> rail-helper-tools: [
+        { id: "cursor", label: Tr.t("sl.3d_cursor"), shortcut: root.shortcuts.model-cursor, description: Tr.t("sl.place_3d_cursor_as_origin_for_new_objects_an"), icon: IconSet.Crosshair, active: root.active-tool == "cursor" || root.active-tool == "cursor_3d" },
+        { id: "measure", label: Tr.t("sl.measure"), shortcut: root.shortcuts.model-measure, description: Tr.t("sl.measure_distances_and_angles_between_geometr"), icon: IconSet.ArrowUpDown, active: root.active-tool == "measure" },
+    ];
+    out property <[RailTool]> rail-paint-brush-tools: [
+        { id: "brush", label: Tr.t("sl.brush"), shortcut: root.shortcuts.paint-brush, description: Tr.t("sl.brush"), icon: IconSet.Paintbrush, active: root.active-tool == "brush" },
+        { id: "airbrush", label: Tr.t("sl.airbrush"), shortcut: "", description: Tr.t("sl.airbrush"), icon: IconSet.SprayCan, active: root.active-tool == "airbrush" },
+    ];
+    out property <[RailTool]> rail-paint-shape-tools: [
+        { id: "line", label: Tr.t("sl.line"), shortcut: root.shortcuts.paint-line, description: Tr.t("sl.draw_straight_brush_strokes_between_clicked_"), icon: IconSet.Slash, active: root.active-tool == "line" },
+        { id: "rectangle", label: Tr.t("sl.rectangle"), shortcut: root.shortcuts.paint-rectangle, description: Tr.t("sl.rectangle"), icon: IconSet.Square, active: root.active-tool == "rectangle" },
+        { id: "ellipse", label: Tr.t("sl.ellipse"), shortcut: "", description: Tr.t("sl.ellipse"), icon: IconSet.Circle, active: root.active-tool == "ellipse" },
+    ];
+    out property <[RailTool]> rail-paint-gradient-tools: [
+        { id: "gradient", label: Tr.t("sl.gradient"), shortcut: "", description: Tr.t("sl.gradient"), icon: IconSet.Blend, active: root.active-tool == "gradient" },
+        { id: "gradient_radial", label: Tr.t("sl.gradient_radial"), shortcut: "", description: Tr.t("sl.gradient_radial"), icon: IconSet.Sun, active: root.active-tool == "gradient_radial" },
+    ];
+    /// Rótulo humano de um id de opção do PAINT (plano de UI F6): os ids
+    /// continuam iguais no bridge; só o texto visível é traduzido.
+    pure function paint-label(id: string) -> string {
+        if id == "ConnectedPixels" { return Tr.t("sl.paint_opt_connected_pixels"); }
+        if id == "Face" { return Tr.t("sl.paint_opt_face"); }
+        if id == "SelectedFaces" { return Tr.t("sl.paint_opt_selected_faces"); }
+        if id == "UvIsland" { return Tr.t("sl.paint_opt_uv_island"); }
+        if id == "Object" { return Tr.t("sl.paint_opt_object"); }
+        if id == "Surface" { return Tr.t("sl.paint_opt_surface"); }
+        if id == "ScreenSpace" { return Tr.t("sl.paint_opt_screen"); }
+        if id == "None" { return Tr.t("sl.paint_opt_none"); }
+        if id == "FirstObject" { return Tr.t("sl.paint_opt_first_object"); }
+        if id == "FirstFace" { return Tr.t("sl.paint_opt_first_face"); }
+        if id == "Pixelate" { return Tr.t("sl.paint_opt_pixelate"); }
+        if id == "Posterize" { return Tr.t("sl.paint_opt_posterize"); }
+        if id == "Invert" { return Tr.t("sl.paint_opt_invert"); }
+        if id == "Grain" { return Tr.t("sl.paint_opt_grain"); }
+        if id == "Levels" { return Tr.t("sl.paint_opt_levels"); }
+        if id == "BrightnessContrast" { return Tr.t("sl.paint_opt_brightness_contrast"); }
+        if id == "HueSaturation" { return Tr.t("sl.paint_opt_hue_saturation"); }
+        return id;
+    }
+    /// Flyout aberto ("" = nenhum), suas variações e a altura do botão de origem.
+    in-out property <string> rail-flyout: "";
+    in-out property <[RailTool]> rail-flyout-tools: [];
+    in-out property <length> rail-flyout-y: 0px;
+
+    /// Despacha uma ferramenta do trilho pelo id.
+    function rail-activate(id: string) {
+        root.rail-flyout = "";
+        if id == "select" { root.active-tool-changed("select"); }
+        else if id == "lasso" { root.command-executed("model.tool_lasso"); }
+        else if id == "cursor" { root.command-executed("model.tool_cursor"); }
+        else if id == "measure" { root.command-executed("model.measure"); }
+        else { root.active-tool-changed(id); }
+    }
+
+    pure function poly-tool-visible(tool: string) -> bool {
+        // Desenho e corte agem pelo gesto, não pela seleção: sempre visíveis.
+        if tool == "poly_pen" || tool == "knife" || tool == "loop_cut" || tool == "slice" {
+            return true;
+        }
+        if root.selection-domain == "OBJECT" {
+            return tool == "push_pull" || tool == "subdivide";
+        }
+        if root.selection-domain == "FACE" {
+            return tool == "extrude" || tool == "push_pull" || tool == "inset" || tool == "subdivide" || tool == "spin" || tool == "dissolve";
+        }
+        if root.selection-domain == "EDGE" {
+            return tool == "bevel" || tool == "connect" || tool == "make_face" || tool == "subdivide" || tool == "spin" || tool == "dissolve";
+        }
+        if root.selection-domain == "POINT" {
+            return tool == "merge" || tool == "make_face" || tool == "dissolve";
+        }
+        // Domínio desconhecido: nada some por engano.
+        return true;
+    }
     in-out property <bool> compact-shell: false;
     in-out property <bool> command-search-visible: false;
     in-out property <bool> scene-drawer-visible: false;
@@ -752,6 +833,10 @@ export component PetuniaSlintShell inherits Window {
     in property <string> label-drag-threshold;
     in property <string> label-click-move-click;
     in property <string> label-click-move-click-hint;
+    /// Trilho de ferramentas com nomes ao lado dos ícones (D6).
+    in-out property <bool> show-tool-labels: false;
+    in property <string> label-show-tool-labels;
+    in property <string> label-show-tool-labels-hint;
     in-out property <bool> workplane-prefer-ground: false;
     in-out property <bool> studio-light-follows-camera: true;
     in property <string> label-studio-light-follows-camera;
@@ -915,6 +1000,7 @@ export component PetuniaSlintShell inherits Window {
     callback drag-threshold-set(float);
     callback snap-radius-set(float);
     callback click-move-click-set(bool);
+    callback show-tool-labels-set(bool);
     callback workplane-prefer-ground-set(bool);
     callback studio-light-follows-camera-set(bool);
     callback double-tap-interval-released(int);
@@ -1248,6 +1334,14 @@ export component PetuniaSlintShell inherits Window {
                 }
             }
             if event.text == Key.Escape {
+                if root.rail-flyout != "" {
+                    root.rail-flyout = "";
+                    return accept;
+                }
+                if root.quick-actions-open {
+                    root.quick-actions-open = false;
+                    return accept;
+                }
                 if root.context-menu-open {
                     root.context-menu-open = false;
                     root.click-away-requested();
@@ -1445,7 +1539,7 @@ export component PetuniaSlintShell inherits Window {
 
                 // Contextual Tool Tray. Workspaces live only in the header.
                 Rectangle {
-                    width: 44px;
+                    width: root.show-tool-labels ? 148px : 44px;
                     background: DesignTokens.surface-raised;
                     border-width: 1px;
                     border-color: DesignTokens.border;
@@ -1461,52 +1555,20 @@ export component PetuniaSlintShell inherits Window {
                         if active-workspace == "MODEL" && root.modeling-mode == "DRAW": VerticalLayout {
                             spacing: 5px;
 
-                            // Grupo de Seleção (Box & Lasso)
-                            Rectangle {
-                                border-radius: 6px;
-                                background: DesignTokens.canvas;
-                                border-width: 1px;
-                                border-color: DesignTokens.border;
-                                VerticalLayout {
-                                    padding: 2px;
-                                    spacing: 2px;
-                                    ToolButton {
-                                        icon: IconSet.MousePointer2;
-                                        semantic-label: root.label-model-select;
-                                        shortcut: root.shortcuts.model-select;
-                                        description: Tr.t("sl.box_click_selection_of_scene_points_edges_an");
-                                        active: active-tool == "select" || active-tool == "box_select";
-                                        clicked => { root.active-tool-changed("select"); }
-                                    }
-                                    ToolButton {
-                                        icon: IconSet.Spline;
-                                        semantic-label: root.label-model-lasso;
-                                        shortcut: root.shortcuts.model-lasso;
-                                        description: Tr.t("sl.freehand_polygon_loop_lasso_selection");
-                                        active: active-tool == "lasso_select";
-                                        clicked => { root.command-executed("model.tool_lasso"); }
-                                    }
-                                }
+                            // Grupos com flyout (F5b): Seleção/Laço e Cursor 3D/Medir.
+                            ToolGroup {
+                                tools: root.rail-select-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-select-tools; root.rail-flyout-y = y; root.rail-flyout = "select"; }
                             }
-
-                            // 3D Cursor / Ponto Âncora 3D
-                            ToolButton {
-                                icon: IconSet.Crosshair;
-                                semantic-label: Tr.t("sl.3d_cursor");
-                                shortcut: root.shortcuts.model-cursor;
-                                description: Tr.t("sl.place_3d_cursor_as_origin_for_new_objects_an");
-                                active: active-tool == "cursor" || active-tool == "cursor_3d";
-                                clicked => { root.command-executed("model.tool_cursor"); }
-                            }
-
-                            // Quick Measure Tool
-                            ToolButton {
-                                icon: IconSet.ArrowUpDown;
-                                semantic-label: Tr.t("sl.measure");
-                                shortcut: root.shortcuts.model-measure;
-                                description: Tr.t("sl.measure_distances_and_angles_between_geometr");
-                                active: active-tool == "measure";
-                                clicked => { root.command-executed("model.measure"); }
+                            ToolGroup {
+                                tools: root.rail-helper-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-helper-tools; root.rail-flyout-y = y; root.rail-flyout = "helpers"; }
                             }
 
                             Rectangle {
@@ -1515,6 +1577,7 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-position;
                                 label: root.label-model-position;
                                 shortcut: root.shortcuts.model-move;
@@ -1524,6 +1587,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("move"); }
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-rotate;
                                 label: root.label-model-rotate;
                                 shortcut: root.shortcuts.model-rotate;
@@ -1533,6 +1597,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("rotate"); }
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-scale;
                                 label: root.label-model-scale;
                                 shortcut: root.shortcuts.model-scale;
@@ -1542,6 +1607,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("scale"); }
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-transform;
                                 label: root.label-model-transform;
                                 shortcut: root.shortcuts.model-transform;
@@ -1559,6 +1625,7 @@ export component PetuniaSlintShell inherits Window {
 
                             // Ferramentas exclusivas de DRAW:
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon-svg: PetuniaIcons.tool-profile;
                                 semantic-label: Tr.t("sl.sketch_profile");
                                 shortcut: root.shortcuts.model-profile;
@@ -1567,6 +1634,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("draw_profile"); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon-svg: PetuniaIcons.boolean-fuse;
                                 semantic-label: Tr.t("sl.shape_builder");
                                 description: Tr.t("sl.shape_builder_description");
@@ -1574,6 +1642,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("shape_builder"); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Square;
                                 semantic-label: Tr.t("sl.2d_rectangle");
                                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
@@ -1581,6 +1650,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.add-profile-rectangle(2.0, 1.5); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Circle;
                                 semantic-label: Tr.t("sl.2d_circle");
                                 description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
@@ -1588,6 +1658,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.add-profile-circle(1.0, 16); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon-svg: PetuniaIcons.tool-pushpull;
                                 active: active-tool == "push_pull";
                                 semantic-label: root.label-model-push-pull;
@@ -1600,52 +1671,20 @@ export component PetuniaSlintShell inherits Window {
                         if active-workspace == "MODEL" && root.modeling-mode == "POLY": VerticalLayout {
                             spacing: 5px;
 
-                            // Grupo de Seleção (Box & Lasso)
-                            Rectangle {
-                                border-radius: 6px;
-                                background: DesignTokens.canvas;
-                                border-width: 1px;
-                                border-color: DesignTokens.border;
-                                VerticalLayout {
-                                    padding: 2px;
-                                    spacing: 2px;
-                                    ToolButton {
-                                        icon: IconSet.MousePointer2;
-                                        semantic-label: root.label-model-select;
-                                        shortcut: root.shortcuts.model-select;
-                                        description: Tr.t("sl.box_click_selection_of_scene_points_edges_an");
-                                        active: active-tool == "select" || active-tool == "box_select";
-                                        clicked => { root.active-tool-changed("select"); }
-                                    }
-                                    ToolButton {
-                                        icon: IconSet.Spline;
-                                        semantic-label: root.label-model-lasso;
-                                        shortcut: root.shortcuts.model-lasso;
-                                        description: Tr.t("sl.freehand_polygon_loop_lasso_selection");
-                                        active: active-tool == "lasso_select";
-                                        clicked => { root.command-executed("model.tool_lasso"); }
-                                    }
-                                }
+                            // Grupos com flyout (F5b): Seleção/Laço e Cursor 3D/Medir.
+                            ToolGroup {
+                                tools: root.rail-select-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-select-tools; root.rail-flyout-y = y; root.rail-flyout = "select"; }
                             }
-
-                            // 3D Cursor / Ponto Âncora 3D
-                            ToolButton {
-                                icon: IconSet.Crosshair;
-                                semantic-label: Tr.t("sl.3d_cursor");
-                                shortcut: root.shortcuts.model-cursor;
-                                description: Tr.t("sl.place_3d_cursor_as_origin_for_new_objects_an");
-                                active: active-tool == "cursor" || active-tool == "cursor_3d";
-                                clicked => { root.command-executed("model.tool_cursor"); }
-                            }
-
-                            // Quick Measure Tool
-                            ToolButton {
-                                icon: IconSet.ArrowUpDown;
-                                semantic-label: Tr.t("sl.measure");
-                                shortcut: root.shortcuts.model-measure;
-                                description: Tr.t("sl.measure_distances_and_angles_between_geometr");
-                                active: active-tool == "measure";
-                                clicked => { root.command-executed("model.measure"); }
+                            ToolGroup {
+                                tools: root.rail-helper-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-helper-tools; root.rail-flyout-y = y; root.rail-flyout = "helpers"; }
                             }
 
                             Rectangle {
@@ -1654,6 +1693,7 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-position;
                                 label: root.label-model-position;
                                 shortcut: root.shortcuts.model-move;
@@ -1663,6 +1703,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("move"); }
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-rotate;
                                 label: root.label-model-rotate;
                                 shortcut: root.shortcuts.model-rotate;
@@ -1672,6 +1713,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("rotate"); }
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-scale;
                                 label: root.label-model-scale;
                                 shortcut: root.shortcuts.model-scale;
@@ -1681,6 +1723,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("scale"); }
                             }
                             ViewportSvgButton {
+                                show-label: root.show-tool-labels;
                                 glyph: PetuniaIcons.tool-transform;
                                 label: root.label-model-transform;
                                 shortcut: root.shortcuts.model-transform;
@@ -1698,6 +1741,7 @@ export component PetuniaSlintShell inherits Window {
 
                             // Ferramentas exclusivas de POLY:
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Plus;
                                 semantic-label: Tr.t("sl.add_primitive");
                                 shortcut: root.shortcuts.model-add-primitive;
@@ -1708,87 +1752,84 @@ export component PetuniaSlintShell inherits Window {
                                     root.add-menu-changed(root.add-menu-open);
                                 }
                             }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.cube;
-                                semantic-label: Tr.t("sl.add_cube");
-                                shortcut: "Shift+A, 1";
-                                description: Tr.t("sl.add_parametric_3d_cube_mesh_with_customizabl");
-                                active: false;
-                                clicked => { root.add-primitive-requested("cube"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.sphere;
-                                semantic-label: Tr.t("sl.add_sphere");
-                                shortcut: "Shift+A, 2";
-                                description: Tr.t("sl.add_uv_sphere_mesh_with_longitude_and_latitu");
-                                active: false;
-                                clicked => { root.add-primitive-requested("sphere"); }
-                            }
-                            ToolButton {
-                                icon-svg: PetuniaIcons.cylinder;
-                                semantic-label: Tr.t("sl.add_cylinder");
-                                shortcut: "Shift+A, 3";
-                                description: Tr.t("sl.add_parametric_cylinder_with_radial_subdivis");
-                                active: false;
-                                clicked => { root.add-primitive-requested("cylinder"); }
-                            }
                         }
 
                         if active-workspace == "PAINT": VerticalLayout {
+                            // Fonte única das ferramentas de pintura (F6); a barra de baixo só
+                            // ajusta o pincel. Variações ficam em grupos com flyout (F5b).
                             spacing: 6px;
                             ToolButton {
-                                icon: IconSet.Paintbrush;
-                                semantic-label: Tr.t("sl.brush");
-                                shortcut: root.shortcuts.paint-brush;
-                                description: Tr.t("sl.freehand_raster_texture_painting_with_adjust");
-                                active: active-tool == "brush";
-                                clicked => { root.active-tool-changed("brush"); }
+                                show-label: root.show-tool-labels;
+                                icon: IconSet.MousePointer2;
+                                semantic-label: Tr.t("sl.select");
+                                shortcut: "";
+                                description: Tr.t("sl.select");
+                                active: active-tool == "select";
+                                clicked => { root.active-tool-changed("select"); }
+                            }
+                            ToolGroup {
+                                tools: root.rail-paint-brush-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-paint-brush-tools; root.rail-flyout-y = y; root.rail-flyout = "paint-brush"; }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Eraser;
                                 semantic-label: Tr.t("sl.eraser");
                                 shortcut: root.shortcuts.paint-eraser;
-                                description: Tr.t("sl.erase_pixel_color_values_and_alpha_transpare");
+                                description: Tr.t("sl.eraser");
                                 active: active-tool == "eraser";
                                 clicked => { root.active-tool-changed("eraser"); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Pipette;
                                 semantic-label: Tr.t("sl.color_picker");
                                 shortcut: root.shortcuts.paint-picker;
-                                description: Tr.t("sl.sample_color_from_viewport_pixels_under_mous");
+                                description: Tr.t("sl.color_picker");
                                 active: active-tool == "picker";
                                 clicked => { root.active-tool-changed("picker"); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.PaintBucket;
                                 semantic-label: Tr.t("sl.fill_bucket");
                                 shortcut: root.shortcuts.paint-fill;
-                                description: Tr.t("sl.flood_fill_contiguous_color_areas_on_active_");
+                                description: Tr.t("sl.fill_bucket");
                                 active: active-tool == "fill";
                                 clicked => { root.active-tool-changed("fill"); }
                             }
-                            ToolButton {
-                                icon: IconSet.SquareDashed;
-                                semantic-label: Tr.t("sl.line");
-                                shortcut: root.shortcuts.paint-line;
-                                description: Tr.t("sl.draw_straight_brush_strokes_between_clicked_");
-                                active: active-tool == "line";
-                                clicked => { root.active-tool-changed("line"); }
+                            ToolGroup {
+                                tools: root.rail-paint-shape-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-paint-shape-tools; root.rail-flyout-y = y; root.rail-flyout = "paint-shapes"; }
+                            }
+                            ToolGroup {
+                                tools: root.rail-paint-gradient-tools;
+                                show-label: root.show-tool-labels;
+                                more-hint: Tr.t("sl.rail_more_hint");
+                                activated(id) => { root.rail-activate(id); }
+                                more-requested(y) => { root.rail-flyout-tools = root.rail-paint-gradient-tools; root.rail-flyout-y = y; root.rail-flyout = "paint-gradients"; }
                             }
                             ToolButton {
-                                icon: IconSet.Square;
-                                semantic-label: Tr.t("sl.rectangle");
-                                shortcut: root.shortcuts.paint-rectangle;
-                                description: Tr.t("sl.fill_or_stroke_rectangular_2d_shapes_on_text");
-                                active: active-tool == "rectangle";
-                                clicked => { root.active-tool-changed("rectangle"); }
+                                show-label: root.show-tool-labels;
+                                icon: IconSet.MousePointerClick;
+                                semantic-label: Tr.t("sl.uv_select");
+                                shortcut: "";
+                                description: Tr.t("sl.uv_select");
+                                active: active-tool == "uv_select";
+                                clicked => { root.active-tool-changed("uv_select"); }
                             }
                         }
 
                         if active-workspace == "UV": VerticalLayout {
                             spacing: 6px;
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.MousePointer2;
                                 semantic-label: Tr.t("sl.uv_select");
                                 shortcut: root.shortcuts.uv-select;
@@ -1797,6 +1838,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.active-tool-changed("uv_select"); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Maximize2;
                                 semantic-label: Tr.t("sl.unwrap");
                                 shortcut: root.shortcuts.uv-unwrap;
@@ -1805,6 +1847,7 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("uv.unwrap"); }
                             }
                             ToolButton {
+                                show-label: root.show-tool-labels;
                                 icon: IconSet.Grid2x2;
                                 semantic-label: Tr.t("sl.pack_islands");
                                 shortcut: root.shortcuts.uv-pack;
@@ -1833,6 +1876,7 @@ export component PetuniaSlintShell inherits Window {
                             background: DesignTokens.border;
                         }
                         ToolButton {
+                            show-label: root.show-tool-labels;
                             icon: IconSet.Layers3;
                             semantic-label: root.label-parts;
                             shortcut: "F4";
@@ -1841,6 +1885,7 @@ export component PetuniaSlintShell inherits Window {
                             clicked => { root.scene-requested(); }
                         }
                         ToolButton {
+                            show-label: root.show-tool-labels;
                             icon: IconSet.FolderArchive;
                             semantic-label: root.label-asset-library;
                             shortcut: "Shift+F5";
@@ -4452,49 +4497,17 @@ export component PetuniaSlintShell inherits Window {
                             alignment: center;
 
                             // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
-                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW": ToolButton {
-                                icon-svg: PetuniaIcons.tool-profile;
-                                semantic-label: Tr.t("sl.sketch");
-                                shortcut: root.shortcuts.model-profile;
-                                description: Tr.t("sl.draw_2d_profile_curves_on_ground_face_or_vie");
-                                active: active-tool == "draw_profile";
-                                clicked => { root.active-tool-changed("draw_profile"); }
-                            }
-                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW": ToolButton {
-                                icon-svg: PetuniaIcons.boolean-fuse;
-                                semantic-label: Tr.t("sl.shape_builder");
-                                description: Tr.t("sl.shape_builder_description");
-                                active: active-tool == "shape_builder";
-                                clicked => { root.active-tool-changed("shape_builder"); }
-                            }
-                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Square;
-                                semantic-label: Tr.t("sl.rect_2d");
-                                description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
-                                clicked => { root.add-profile-rectangle(2.0, 1.5); }
-                            }
-                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Circle;
-                                semantic-label: Tr.t("sl.circle_2d");
-                                description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
-                                clicked => { root.add-profile-circle(1.0, 16); }
-                            }
 
-                            if active-workspace == "MODEL" && root.modeling-mode == "DRAW": Rectangle {
-                                width: 1px;
-                                height: 20px;
-                                background: DesignTokens.border;
-                            }
 
                             // --- MODEL: Ferramentas principais de edição poligonal ---
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("extrude"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-extrude;
                                 semantic-label: Tr.t("sl.extrude");
                                 shortcut: root.shortcuts.model-extrude;
                                 description: Tr.t("sl.pull_new_vertices_and_faces_outward_from_sel");
                                 clicked => { root.command-executed("model.extrude"); }
                             }
-                            if active-workspace == "MODEL" && (root.modeling-mode == "DRAW" || root.viewport-region-width >= 760): ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("push_pull"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-pushpull;
                                 active: active-tool == "push_pull";
                                 semantic-label: root.label-model-push-pull;
@@ -4502,14 +4515,14 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.push_or_pull_faces_along_surface_normals_dir");
                                 clicked => { root.command-executed("model.push_pull"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("inset"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-inset;
                                 semantic-label: Tr.t("sl.inset");
                                 shortcut: root.shortcuts.model-inset;
                                 description: Tr.t("sl.inset_new_polygonal_boundary_inside_selected");
                                 clicked => { root.command-executed("model.inset"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("bevel"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-bevel;
                                 semantic-label: Tr.t("sl.bevel");
                                 shortcut: root.shortcuts.model-bevel;
@@ -4523,14 +4536,14 @@ export component PetuniaSlintShell inherits Window {
                                 background: DesignTokens.border;
                             }
 
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("poly_pen"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-profile;
                                 semantic-label: root.label-poly-pen;
                                 description: root.label-poly-pen-hint;
                                 active: active-tool == "poly_pen";
                                 clicked => { root.active-tool-changed("poly_pen"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY": ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("knife"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-knife;
                                 semantic-label: Tr.t("sl.knife");
                                 shortcut: root.shortcuts.model-knife;
@@ -4538,7 +4551,7 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "cut";
                                 clicked => { root.command-executed("model.knife"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("loop_cut"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-loopcut;
                                 semantic-label: root.label-model-loop-cut;
                                 shortcut: root.shortcuts.model-loop-cut;
@@ -4553,21 +4566,21 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.create_an_identical_clone_of_selected_geomet");
                                 clicked => { root.duplicate-requested(); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("subdivide"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-subdivide;
                                 semantic-label: Tr.t("sl.subdivide");
                                 shortcut: root.shortcuts.model-subdivide;
                                 description: Tr.t("sl.subdivide_faces_into_quad_quarters_creating_");
                                 clicked => { root.command-executed("model.subdivide"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("merge"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-merge;
                                 semantic-label: Tr.t("sl.merge_center");
                                 shortcut: root.shortcuts.model-merge;
                                 description: Tr.t("sl.collapse_and_merge_all_selected_vertices_to_");
                                 clicked => { root.command-executed("model.merge"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("slice"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-slice;
                                 semantic-label: root.label-model-slice;
                                 shortcut: root.shortcuts.model-slice;
@@ -4575,28 +4588,28 @@ export component PetuniaSlintShell inherits Window {
                                 active: active-tool == "slice";
                                 clicked => { root.active-tool-changed("slice"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("connect"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-connect;
                                 semantic-label: Tr.t("sl.connect");
                                 shortcut: root.shortcuts.model-connect;
                                 description: Tr.t("sl.bridge_edge_loops_with_configurable_quad_seg");
                                 clicked => { root.command-executed("model.connect"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 720: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 720 && root.poly-tool-visible("make_face"): ToolButton {
                                 icon: IconSet.Square;
                                 semantic-label: Tr.t("sl.make_face");
                                 shortcut: "F";
                                 description: Tr.t("sl.create_face_or_edge_connecting_selected_vert");
                                 clicked => { root.command-executed("model.make_face"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("spin"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-spin;
                                 semantic-label: Tr.t("sl.spin");
                                 shortcut: root.shortcuts.model-spin;
                                 description: Tr.t("sl.revolve_selection_around_cursor_or_axis_into");
                                 clicked => { root.command-executed("model.spin"); }
                             }
-                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760: ToolButton {
+                            if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("dissolve"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-dissolve;
                                 semantic-label: Tr.t("sl.dissolve");
                                 shortcut: root.shortcuts.model-dissolve;
@@ -4605,14 +4618,6 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.MousePointer2;
-                                semantic-label: Tr.t("sl.select");
-                                shortcut: root.shortcuts.paint-select;
-                                description: Tr.t("sl.paint_select_description");
-                                active: active-tool == "select";
-                                clicked => { root.active-tool-changed("select"); }
-                            }
-                            if active-workspace == "PAINT": ToolButton {
                                 icon: root.isolate-active ? IconSet.EyeOff : IconSet.Eye;
                                 semantic-label: root.isolate-active ? Tr.t("sl.un_isolate") : Tr.t("sl.isolate");
                                 shortcut: root.shortcuts.paint-isolate;
@@ -4620,85 +4625,90 @@ export component PetuniaSlintShell inherits Window {
                                 active: root.isolate-active;
                                 clicked => { root.command-executed("view.isolate"); }
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Paintbrush;
-                                semantic-label: Tr.t("sl.brush");
-                                shortcut: root.shortcuts.paint-brush;
-                                description: Tr.t("sl.freehand_raster_texture_painting_with_adjust");
-                                active: active-tool == "brush";
-                                clicked => { root.active-tool-changed("brush"); }
+                            // Ajustes do pincel ativo (F6): cor, tamanho, opacidade e simetria.
+                            if active-workspace == "PAINT": Rectangle {
+                                width: 1px;
+                                height: 22px;
+                                background: DesignTokens.border;
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Spline;
-                                semantic-label: Tr.t("sl.airbrush");
-                                shortcut: root.shortcuts.paint-airbrush;
-                                description: Tr.t("sl.smooth_gradual_airbrush_spray_effect_onto_ac");
-                                active: active-tool == "airbrush";
-                                clicked => { root.active-tool-changed("airbrush"); }
+                            if active-workspace == "PAINT": Rectangle {
+                                y: (parent.height - self.height) / 2;
+                                width: 22px;
+                                height: 22px;
+                                border-radius: 11px;
+                                background: root.paint-color;
+                                border-width: 1px;
+                                border-color: DesignTokens.border;
+                                accessible-role: image;
+                                accessible-label: Tr.t("sl.paint_color");
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Eraser;
-                                semantic-label: Tr.t("sl.eraser");
-                                shortcut: root.shortcuts.paint-eraser;
-                                description: Tr.t("sl.erase_pixel_color_values_and_alpha_transpare");
-                                active: active-tool == "eraser";
-                                clicked => { root.active-tool-changed("eraser"); }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.Minus;
+                                semantic-label: Tr.t("sl.brush_smaller");
+                                clicked => { root.brush-size-changed(Math.max(0.1, root.brush-size - 0.2)); }
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Pipette;
-                                semantic-label: Tr.t("sl.color_picker");
-                                shortcut: root.shortcuts.paint-picker;
-                                description: Tr.t("sl.sample_color_from_viewport_pixels_under_mous");
-                                active: active-tool == "picker";
-                                clicked => { root.active-tool-changed("picker"); }
+                            if active-workspace == "PAINT": Text {
+                                text: Tr.t("sl.size") + " \{Math.round(root.brush-size * 10) / 10}";
+                                color: DesignTokens.text-secondary;
+                                font-size: DesignTokens.font-small;
+                                vertical-alignment: center;
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.PaintBucket;
-                                semantic-label: Tr.t("sl.fill");
-                                shortcut: root.shortcuts.paint-fill;
-                                description: Tr.t("sl.flood_fill_contiguous_color_areas_on_active_");
-                                active: active-tool == "fill";
-                                clicked => { root.active-tool-changed("fill"); }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.Plus;
+                                semantic-label: Tr.t("sl.brush_larger");
+                                clicked => { root.brush-size-changed(Math.min(10.0, root.brush-size + 0.2)); }
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.SquareDashed;
-                                semantic-label: Tr.t("sl.line");
-                                shortcut: root.shortcuts.paint-line;
-                                description: Tr.t("sl.draw_straight_brush_strokes_between_clicked_");
-                                active: active-tool == "line";
-                                clicked => { root.active-tool-changed("line"); }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.Minus;
+                                semantic-label: Tr.t("sl.opacity_less");
+                                clicked => { root.brush-opacity-changed(Math.max(0.05, root.brush-opacity - 0.1)); }
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Square;
-                                semantic-label: Tr.t("sl.rectangle");
-                                shortcut: root.shortcuts.paint-rectangle;
-                                description: Tr.t("sl.fill_or_stroke_rectangular_2d_shapes_on_text");
-                                active: active-tool == "rectangle";
-                                clicked => { root.active-tool-changed("rectangle"); }
+                            if active-workspace == "PAINT": Text {
+                                text: Tr.t("sl.opacity") + " \{Math.round(root.brush-opacity * 100)}%";
+                                color: DesignTokens.text-secondary;
+                                font-size: DesignTokens.font-small;
+                                vertical-alignment: center;
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Circle;
-                                semantic-label: Tr.t("sl.ellipse");
-                                shortcut: root.shortcuts.paint-ellipse;
-                                description: Tr.t("sl.ellipse_description");
-                                active: active-tool == "ellipse";
-                                clicked => { root.active-tool-changed("ellipse"); }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.Plus;
+                                semantic-label: Tr.t("sl.opacity_more");
+                                clicked => { root.brush-opacity-changed(Math.min(1.0, root.brush-opacity + 0.1)); }
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Sliders;
-                                semantic-label: Tr.t("sl.gradient");
-                                shortcut: root.shortcuts.paint-gradient;
-                                description: Tr.t("sl.draw_linear_color_gradients_between_endpoint");
-                                active: active-tool == "gradient";
-                                clicked => { root.active-tool-changed("gradient"); }
+                            if active-workspace == "PAINT": Rectangle {
+                                width: 1px;
+                                height: 22px;
+                                background: DesignTokens.border;
                             }
-                            if active-workspace == "PAINT": ToolButton {
-                                icon: IconSet.Sun;
-                                semantic-label: Tr.t("sl.gradient_radial");
-                                shortcut: root.shortcuts.paint-gradient-radial;
-                                description: Tr.t("sl.gradient_radial_description");
-                                active: active-tool == "gradient_radial";
-                                clicked => { root.active-tool-changed("gradient_radial"); }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.FlipHorizontal2;
+                                semantic-label: Tr.t("sl.symmetry_x");
+                                label: "X";
+                                variant: "toggle";
+                                active: root.paint-symmetry-x;
+                                clicked => { root.paint-symmetry-x-toggled(); }
+                            }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.FlipHorizontal2;
+                                semantic-label: Tr.t("sl.symmetry_y");
+                                label: "Y";
+                                variant: "toggle";
+                                active: root.paint-symmetry-y;
+                                clicked => { root.paint-symmetry-y-toggled(); }
+                            }
+                            if active-workspace == "PAINT": IconButton {
+                                y: (parent.height - self.height) / 2;
+                                icon: IconSet.FlipHorizontal2;
+                                semantic-label: Tr.t("sl.symmetry_z");
+                                label: "Z";
+                                variant: "toggle";
+                                active: root.paint-symmetry-z;
+                                clicked => { root.paint-symmetry-z-toggled(); }
                             }
 
                             if active-workspace == "UV": ToolButton {
@@ -4737,17 +4747,32 @@ export component PetuniaSlintShell inherits Window {
                                 clicked => { root.command-executed("uv.relax"); }
                             }
 
-                            Rectangle {
+                            // Ações rápidas do usuário: saíram do Inspector (D2) e moram
+                            // aqui, com rótulo. A lixeira saiu da barra (D10): Delete no
+                            // teclado e o menu do botão direito continuam excluindo.
+                            if active-workspace == "MODEL": Rectangle {
                                 width: 1px;
                                 height: 22px;
                                 background: DesignTokens.border;
                             }
-                            if active-workspace != "MODEL" || root.viewport-region-width >= 760: ToolButton {
-                                icon: IconSet.Trash2;
-                                semantic-label: Tr.t("sl.delete");
-                                shortcut: root.shortcuts.model-delete;
-                                description: Tr.t("sl.remove_selected_points_edges_faces_or_entire");
-                                clicked => { root.delete-requested(); }
+                            if active-workspace == "MODEL": HorizontalLayout {
+                                spacing: 4px;
+                                for action in root.quick-actions: IconButton {
+                                    y: (parent.height - self.height) / 2;
+                                    icon: IconSet.Zap;
+                                    label: action.label;
+                                    semantic-label: action.label;
+                                    enabled: action.enabled;
+                                    clicked => { root.quick-action-executed(action.id); }
+                                }
+                                IconButton {
+                                    y: (parent.height - self.height) / 2;
+                                    icon: IconSet.SlidersHorizontal;
+                                    variant: "toggle";
+                                    semantic-label: root.label-quick-action-customize;
+                                    active: root.quick-actions-open;
+                                    clicked => { root.quick-actions-open = !root.quick-actions-open; }
+                                }
                             }
                             if active-workspace == "MODEL" && root.viewport-region-width < 760: ToolButton {
                                 icon: IconSet.MoreHorizontal;
@@ -4757,6 +4782,39 @@ export component PetuniaSlintShell inherits Window {
                                 active: root.shelf-overflow-open;
                                 clicked => { root.shelf-overflow-open = !root.shelf-overflow-open; }
                             }
+                        }
+                    }
+
+                    // Personalizar ações rápidas: cartão não modal acima da barra.
+                    if active-workspace == "MODEL" && root.quick-actions-open: Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: context-bar.y - self.height - 8px;
+                        width: 300px;
+                        height: qa-body.preferred-height + 24px;
+                        border-radius: DesignTokens.radius-panel;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        drop-shadow-blur: DesignTokens.elevation-2-blur;
+                        drop-shadow-color: DesignTokens.elevation-2-color;
+                        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+                        TouchArea { }
+                        qa-body := QuickActionsBody {
+                            x: 12px;
+                            y: 12px;
+                            width: parent.width - 24px;
+                            title-label: root.label-quick-actions;
+                            customize-open <=> root.quick-actions-open;
+                            actions: root.quick-actions;
+                            candidates: root.quick-action-candidates;
+                            customize-label: root.label-quick-action-customize;
+                            remove-label: root.label-quick-action-remove;
+                            add-label: root.label-quick-action-add;
+                            reset-label: root.label-quick-action-reset;
+                            done-label: root.label-quick-action-done;
+                            action-executed(id) => { root.quick-action-executed(id); }
+                            action-toggled(id) => { root.quick-action-toggled(id); }
+                            actions-reset => { root.quick-actions-reset(); }
                         }
                     }
 
@@ -4983,6 +5041,34 @@ export component PetuniaSlintShell inherits Window {
                         }
                     }
 
+                    // Flyout de um grupo do trilho (F5b): clique fora ou Esc fecha.
+                    if root.rail-flyout != "": TouchArea {
+                        clicked => { root.rail-flyout = ""; }
+                    }
+                    if root.rail-flyout != "": Rectangle {
+                        x: 6px;
+                        y: max(6px, root.rail-flyout-y - parent.absolute-position.y);
+                        width: 220px;
+                        height: fly-col.preferred-height;
+                        border-radius: DesignTokens.radius-panel;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        drop-shadow-blur: DesignTokens.elevation-2-blur;
+                        drop-shadow-color: DesignTokens.elevation-2-color;
+                        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+                        TouchArea { }
+                        fly-col := VerticalLayout {
+                            padding: 4px;
+                            spacing: 2px;
+                            for tool in root.rail-flyout-tools: ContextMenuItem {
+                                label: tool.label;
+                                shortcut: tool.shortcut;
+                                clicked => { root.rail-activate(tool.id); }
+                            }
+                        }
+                    }
+
                     // Menu de criação aberto a partir do trilho esquerdo.
                     if add-menu-open && active-workspace == "MODEL": Rectangle {
                         x: 14px;
@@ -5143,16 +5229,6 @@ export component PetuniaSlintShell inherits Window {
                                 description: Tr.t("sl.object_metadata_visibility_and_display_optio");
                                 active: root.model-object-open;
                                 clicked => { root.section-pill-clicked("object"); }
-                                hovered(id) => { root.hovered-inspector-section = id; }
-                            }
-                            InspectorPill {
-                                section-id: "quick_actions";
-                                icon: IconSet.Zap;
-                                icon-svg: PetuniaIcons.tool-profile;
-                                semantic-label: root.label-quick-actions;
-                                description: Tr.t("sl.quick_actions_and_modeling_tools");
-                                active: root.quick-actions-section-open;
-                                clicked => { root.section-pill-clicked("quick_actions"); }
                                 hovered(id) => { root.hovered-inspector-section = id; }
                             }
                         }
@@ -5478,30 +5554,6 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
                                 }
-                                 if (root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions"): InspectorSection {
-                                    title: root.label-quick-actions;
-                                    section-id: "quick_actions";
-                                    open: root.quick-actions-section-open || root.hovered-inspector-section == "quick_actions";
-                                    pin-open: root.section-states.length > 5 ? root.section-states[5].pin-open : false;
-                                    toggled => { root.section-open-toggled("quick_actions"); }
-                                    toggle-all => { root.toggle-all-sections(); }
-                                    pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                     QuickActionsBody {
-                                         title-label: root.label-quick-actions;
-                                         customize-open <=> root.quick-actions-open;
-                                         actions: root.quick-actions;
-                                         candidates: root.quick-action-candidates;
-                                         customize-label: root.label-quick-action-customize;
-                                         remove-label: root.label-quick-action-remove;
-                                         add-label: root.label-quick-action-add;
-                                         reset-label: root.label-quick-action-reset;
-                                         done-label: root.label-quick-action-done;
-                                         action-executed(id) => { root.quick-action-executed(id); }
-                                         action-toggled(id) => { root.quick-action-toggled(id); }
-                                         actions-reset => { root.quick-actions-reset(); }
-                                     }
-                                 }
-
                                  if root.scene-items.length > 1 || root.boolean-operand-name != "": InspectorSection {
                                     title: Tr.t("sl.combine");
                                     open: true;
@@ -5576,423 +5628,6 @@ export component PetuniaSlintShell inherits Window {
 
                             if active-workspace == "PAINT": VerticalLayout {
                                 spacing: 0px;
-
-                                // Preparar superfície (UV): desembrulhar e empacotar ilhas dentro do fluxo de pintura.
-                                InspectorSection {
-                                    title: Tr.t("sl.prepare_surface");
-                                    open: true;
-                                    toggled => { self.open = !self.open; }
-
-                                    HorizontalLayout {
-                                        spacing: 6px;
-                                        padding-top: 4px;
-                                        Rectangle {
-                                            height: 28px;
-                                            horizontal-stretch: 1;
-                                            border-radius: DesignTokens.radius-control;
-                                            background: unwrap-touch.pressed ? DesignTokens.accent.darker(0.15) : (unwrap-touch.has-hover ? DesignTokens.accent.brighter(0.1) : DesignTokens.accent);
-                                            animate background { duration: Motion.fast; easing: ease-out; }
-                                            accessible-role: button;
-                                            accessible-label: root.label-unwrap-mesh;
-                                            Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                            unwrap-touch := TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
-                                        }
-                                        Rectangle {
-                                            height: 28px;
-                                            horizontal-stretch: 1;
-                                            border-radius: DesignTokens.radius-control;
-                                            background: pack-touch.pressed ? DesignTokens.surface-pressed : (pack-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
-                                            animate background { duration: Motion.fast; easing: ease-out; }
-                                            border-width: 1px;
-                                            border-color: DesignTokens.border;
-                                            accessible-role: button;
-                                            accessible-label: root.label-pack-islands;
-                                            Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
-                                            pack-touch := TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
-                                        }
-                                    }
-                                }
-
-                                InspectorSection {
-                                    title: Tr.t("sl.effects");
-                                    open: true;
-                                    toggled => { self.open = !self.open; }
-
-                                    VerticalLayout {
-                                        spacing: 6px;
-                                        padding-top: 4px;
-
-                                        Text {
-                                            text: Tr.t("sl.add_an_effect_layer");
-                                            color: DesignTokens.text-secondary;
-                                            font-size: DesignTokens.font-caption;
-                                        }
-                                        HorizontalLayout {
-                                            spacing: 4px;
-                                            height: 26px;
-
-                                            for effect in ["Pixelate", "Posterize", "Invert"]: Rectangle {
-                                                horizontal-stretch: 1;
-                                                border-radius: 4px;
-                                                background: DesignTokens.surface-raised;
-                                                border-width: 1px;
-                                                border-color: DesignTokens.border;
-                                                accessible-role: button;
-                                                accessible-label: effect;
-                                                Text { text: effect; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
-                                                TouchArea { clicked => { root.paint-effect-layer-added(effect); } }
-                                            }
-                                        }
-                                        HorizontalLayout {
-                                            spacing: 4px;
-                                            height: 26px;
-
-                                            for effect in ["Grain", "Levels", "BrightnessContrast", "HueSaturation"]: Rectangle {
-                                                horizontal-stretch: 1;
-                                                border-radius: 4px;
-                                                background: DesignTokens.surface-raised;
-                                                border-width: 1px;
-                                                border-color: DesignTokens.border;
-                                                accessible-role: button;
-                                                accessible-label: effect;
-                                                Text { text: effect; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
-                                                TouchArea { clicked => { root.paint-effect-layer-added(effect); } }
-                                            }
-                                        }
-
-                                        if paint-effect-kind != "": Text {
-                                            text: Tr.t("sl.active_effect") + ": \{root.paint-effect-kind}";
-                                            color: DesignTokens.accent;
-                                            font-size: DesignTokens.font-caption;
-                                            font-weight: 600;
-                                        }
-                                        if paint-effect-kind != "" && paint-effect-params.length == 0: Text {
-                                            text: Tr.t("sl.this_effect_has_no_parameters");
-                                            color: DesignTokens.text-muted;
-                                            font-size: DesignTokens.font-caption;
-                                        }
-
-                                        for param in root.paint-effect-params: HorizontalLayout {
-                                            spacing: 6px;
-                                            height: 24px;
-
-                                            Text {
-                                                text: param.label;
-                                                color: DesignTokens.text-secondary;
-                                                font-size: DesignTokens.font-caption;
-                                                width: 78px;
-                                                vertical-alignment: center;
-                                            }
-                                            PetuniaSlider {
-                                                horizontal-stretch: 1;
-                                                minimum: param.minimum;
-                                                maximum: param.maximum;
-                                                value: param.value;
-                                                controlled: true;
-                                                changed(value) => { root.paint-effect-param-set(param.key, value); }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                InspectorSection {
-                                    title: Tr.t("sl.canvas");
-                                    open: true;
-                                    toggled => { self.open = !self.open; }
-
-                                    VerticalLayout {
-                                        spacing: 6px;
-                                        padding-top: 4px;
-
-                                        HorizontalLayout {
-                                            alignment: space-between;
-                                            HorizontalLayout {
-                                                spacing: 6px;
-                                                Text {
-                                                    text: root.paint-canvas-size;
-                                                    color: DesignTokens.text-muted;
-                                                    font-size: DesignTokens.font-caption;
-                                                    vertical-alignment: center;
-                                                }
-                                                Rectangle {
-                                                    width: 20px;
-                                                    height: 20px;
-                                                    border-radius: 3px;
-                                                    background: root.paint-pip ? DesignTokens.accent : (pipbtn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
-                                                    animate background { duration: Motion.fast; easing: ease-out; }
-                                                    border-width: 1px;
-                                                    border-color: DesignTokens.border;
-                                                    accessible-role: button;
-                                                    accessible-checked: root.paint-pip;
-                                                    accessible-label: Tr.t("sl.paint_pip");
-                                                    IconDisplay { icon: IconSet.PictureInPicture2; size: 11px; stroke: root.paint-pip ? DesignTokens.on-accent : DesignTokens.text-primary; }
-                                                    pipbtn-touch := TouchArea {
-                                                        clicked => { root.paint-pip-toggle-requested(); }
-                                                        Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_pip"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; } } }
-                                                    }
-                                                }
-                                                Rectangle {
-                                                    width: 20px;
-                                                    height: 20px;
-                                                    border-radius: 3px;
-                                                    background: root.paint-canvas-panel-visible ? DesignTokens.accent : (expand-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
-                                                    animate background { duration: Motion.fast; easing: ease-out; }
-                                                    border-width: 1px;
-                                                    border-color: DesignTokens.border;
-                                                    accessible-role: button;
-                                                    accessible-label: Tr.t("sl.paint_canvas_open");
-                                                    IconDisplay { icon: IconSet.Maximize2; size: 11px; stroke: root.paint-canvas-panel-visible ? DesignTokens.on-accent : DesignTokens.text-primary; }
-                                                    expand-touch := TouchArea {
-                                                        clicked => { root.paint-canvas-panel-visible = !root.paint-canvas-panel-visible; }
-                                                        Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_canvas_open"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; } } }
-                                                    }
-                                                }
-                                            }
-                                            HorizontalLayout {
-                                                spacing: 4px;
-                                                // Pixel Grid toggle button
-                                                Rectangle {
-                                                    width: 42px;
-                                                    height: 20px;
-                                                    border-radius: 3px;
-                                                    background: root.paint-pixel-grid ? DesignTokens.accent : DesignTokens.surface-raised;
-                                                    border-width: 1px;
-                                                    border-color: DesignTokens.border;
-                                                    Text {
-                                                        text: Tr.t("sl.grid");
-                                                        color: root.paint-pixel-grid ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                                                        font-size: DesignTokens.font-caption;
-                                                        font-weight: 600;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                    }
-                                                    TouchArea {
-                                                        clicked => { root.toggle-paint-pixel-grid(); }
-                                                    }
-                                                }
-                                                // Zoom In / Out
-                                                Rectangle {
-                                                    width: 20px;
-                                                    height: 20px;
-                                                    border-radius: 3px;
-                                                    background: DesignTokens.surface-raised;
-                                                    border-width: 1px;
-                                                    border-color: DesignTokens.border;
-                                                    Text {
-                                                        text: "-";
-                                                        color: DesignTokens.text-primary;
-                                                        font-size: DesignTokens.font-small;
-                                                        font-weight: 700;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                    }
-                                                    TouchArea {
-                                                        clicked => {
-                                                            if root.paint-canvas-zoom > 1 {
-                                                                root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Text {
-                                                    text: root.paint-canvas-zoom + "x";
-                                                    color: DesignTokens.text-primary;
-                                                    font-size: DesignTokens.font-caption;
-                                                    vertical-alignment: center;
-                                                }
-                                                Rectangle {
-                                                    width: 20px;
-                                                    height: 20px;
-                                                    border-radius: 3px;
-                                                    background: DesignTokens.surface-raised;
-                                                    border-width: 1px;
-                                                    border-color: DesignTokens.border;
-                                                    Text {
-                                                        text: "+";
-                                                        color: DesignTokens.text-primary;
-                                                        font-size: DesignTokens.font-small;
-                                                        font-weight: 700;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                    }
-                                                    TouchArea {
-                                                        clicked => {
-                                                            if root.paint-canvas-zoom < 16 {
-                                                                root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        PaintCanvasSurface {
-                                            width: 256px;
-                                            height: 256px;
-                                            horizontal-stretch: 0;
-                                            canvas-image: root.paint-canvas-image;
-                                            zoom: root.paint-canvas-zoom;
-                                            show-uv: root.paint-show-uv;
-                                            uv-commands: root.uv-layout-commands;
-                                            show-grid: root.paint-pixel-grid;
-                                            grid-commands: root.paint-canvas-grid-commands;
-                                            stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
-                                            zoom-step(direction) => {
-                                                if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
-                                                if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
-                                            }
-                                        }
-
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            height: 26px;
-                                            Rectangle {
-                                                horizontal-stretch: 1;
-                                                border-radius: 4px;
-                                                background: root.paint-show-uv ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
-                                                border-width: 1px;
-                                                border-color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.border;
-                                                Text {
-                                                    text: root.paint-show-uv ? Tr.t("sl.uv_wireframe_overlay") : Tr.t("sl.uv_wireframe_overlay_2");
-                                                    color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.text-primary;
-                                                    font-size: DesignTokens.font-caption;
-                                                    font-weight: root.paint-show-uv ? 700 : 400;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
-                                                }
-                                                TouchArea { clicked => { root.toggle-paint-show-uv(); } }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                InspectorSection {
-                                    title: Tr.t("sl.fill_projection");
-                                    open: true;
-                                    toggled => { self.open = !self.open; }
-
-                                    VerticalLayout {
-                                        spacing: 6px;
-                                        padding-top: 4px;
-
-                                        Text {
-                                            text: Tr.t("sl.fill_scope");
-                                            color: DesignTokens.text-secondary;
-                                            font-size: DesignTokens.font-caption;
-                                        }
-                                        HorizontalLayout {
-                                            spacing: 4px;
-                                            height: 26px;
-
-                                            for scope in ["ConnectedPixels", "Face", "SelectedFaces", "UvIsland", "Object"]: Rectangle {
-                                                horizontal-stretch: 1;
-                                                border-radius: 4px;
-                                                background: root.paint-fill-scope == scope ? DesignTokens.accent : DesignTokens.surface-raised;
-                                                border-width: 1px;
-                                                border-color: DesignTokens.border;
-                                                accessible-role: radio-button;
-                                                accessible-label: scope;
-                                                accessible-checked: root.paint-fill-scope == scope;
-                                                Text {
-                                                    text: scope;
-                                                    color: root.paint-fill-scope == scope ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                                                    font-size: DesignTokens.font-caption;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
-                                                    overflow: elide;
-                                                }
-                                                TouchArea { clicked => { root.paint-fill-scope-set(scope); } }
-                                            }
-                                        }
-
-                                        Text {
-                                            text: Tr.t("sl.projection");
-                                            color: DesignTokens.text-secondary;
-                                            font-size: DesignTokens.font-caption;
-                                        }
-                                        HorizontalLayout {
-                                            spacing: 4px;
-                                            height: 26px;
-
-                                            for projection in ["Surface", "ScreenSpace"]: Rectangle {
-                                                horizontal-stretch: 1;
-                                                border-radius: 4px;
-                                                background: root.paint-projection == projection ? DesignTokens.accent : DesignTokens.surface-raised;
-                                                border-width: 1px;
-                                                border-color: DesignTokens.border;
-                                                accessible-role: radio-button;
-                                                accessible-label: projection;
-                                                accessible-checked: root.paint-projection == projection;
-                                                Text {
-                                                    text: projection;
-                                                    color: root.paint-projection == projection ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                                                    font-size: DesignTokens.font-caption;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
-                                                }
-                                                TouchArea { clicked => { root.paint-projection-set(projection); } }
-                                            }
-                                        }
-
-                                        // Ação: Bake Reference to Texture
-                                        Rectangle {
-                                            height: 26px;
-                                            border-radius: 4px;
-                                            background: DesignTokens.surface-raised;
-                                            border-width: 1px;
-                                            border-color: DesignTokens.border;
-                                            HorizontalLayout {
-                                                alignment: center;
-                                                spacing: 6px;
-                                                IconDisplay {
-                                                    icon: IconSet.Camera;
-                                                    size: 13px;
-                                                    stroke: DesignTokens.accent;
-                                                }
-                                                Text {
-                                                    text: Tr.t("sl.bake_reference_to_texture");
-                                                    color: DesignTokens.text-primary;
-                                                    font-size: DesignTokens.font-caption;
-                                                    font-weight: 600;
-                                                    vertical-alignment: center;
-                                                }
-                                            }
-                                            TouchArea {
-                                                clicked => { root.command-executed("paint.bake_reference"); }
-                                            }
-                                        }
-
-                                        Text {
-                                            text: Tr.t("sl.brush_lock");
-                                            color: DesignTokens.text-secondary;
-                                            font-size: DesignTokens.font-caption;
-                                        }
-                                        HorizontalLayout {
-                                            spacing: 4px;
-                                            height: 26px;
-
-                                            for lock in ["None", "FirstObject", "FirstFace"]: Rectangle {
-                                                horizontal-stretch: 1;
-                                                border-radius: 4px;
-                                                background: root.paint-lock == lock ? DesignTokens.accent : DesignTokens.surface-raised;
-                                                border-width: 1px;
-                                                border-color: DesignTokens.border;
-                                                accessible-role: radio-button;
-                                                accessible-label: lock;
-                                                accessible-checked: root.paint-lock == lock;
-                                                Text {
-                                                    text: lock;
-                                                    color: root.paint-lock == lock ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                                                    font-size: DesignTokens.font-caption;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
-                                                    overflow: elide;
-                                                }
-                                                TouchArea { clicked => { root.paint-lock-set(lock); } }
-                                            }
-                                        }
-                                    }
-                                }
 
                                 InspectorSection {
                                     title: Tr.t("sl.layers");
@@ -6316,7 +5951,87 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
                                 }
+                                InspectorSection {
+                                    title: Tr.t("sl.effects");
+                                    open: true;
+                                    toggled => { self.open = !self.open; }
 
+                                    VerticalLayout {
+                                        spacing: 6px;
+                                        padding-top: 4px;
+
+                                        Text {
+                                            text: Tr.t("sl.add_an_effect_layer");
+                                            color: DesignTokens.text-secondary;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            height: 26px;
+
+                                            for effect in ["Pixelate", "Posterize", "Invert"]: Rectangle {
+                                                horizontal-stretch: 1;
+                                                border-radius: 4px;
+                                                background: DesignTokens.surface-raised;
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: button;
+                                                accessible-label: root.paint-label(effect);
+                                                Text { text: root.paint-label(effect); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                                                TouchArea { clicked => { root.paint-effect-layer-added(effect); } }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            height: 26px;
+
+                                            for effect in ["Grain", "Levels", "BrightnessContrast", "HueSaturation"]: Rectangle {
+                                                horizontal-stretch: 1;
+                                                border-radius: 4px;
+                                                background: DesignTokens.surface-raised;
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: button;
+                                                accessible-label: root.paint-label(effect);
+                                                Text { text: root.paint-label(effect); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                                                TouchArea { clicked => { root.paint-effect-layer-added(effect); } }
+                                            }
+                                        }
+
+                                        if paint-effect-kind != "": Text {
+                                            text: Tr.t("sl.active_effect") + ": " + root.paint-label(root.paint-effect-kind);
+                                            color: DesignTokens.accent;
+                                            font-size: DesignTokens.font-caption;
+                                            font-weight: 600;
+                                        }
+                                        if paint-effect-kind != "" && paint-effect-params.length == 0: Text {
+                                            text: Tr.t("sl.this_effect_has_no_parameters");
+                                            color: DesignTokens.text-muted;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+
+                                        for param in root.paint-effect-params: HorizontalLayout {
+                                            spacing: 6px;
+                                            height: 24px;
+
+                                            Text {
+                                                text: param.label;
+                                                color: DesignTokens.text-secondary;
+                                                font-size: DesignTokens.font-caption;
+                                                width: 78px;
+                                                vertical-alignment: center;
+                                            }
+                                            PetuniaSlider {
+                                                horizontal-stretch: 1;
+                                                minimum: param.minimum;
+                                                maximum: param.maximum;
+                                                value: param.value;
+                                                controlled: true;
+                                                changed(value) => { root.paint-effect-param-set(param.key, value); }
+                                            }
+                                        }
+                                    }
+                                }
                                 InspectorSection {
                                     title: Tr.t("sl.color_palette");
                                     open: true;
@@ -6430,7 +6145,6 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
                                 }
-
                                 InspectorSection {
                                     title: Tr.t("sl.brush_settings");
                                     open: true;
@@ -6710,10 +6424,341 @@ export component PetuniaSlintShell inherits Window {
                                         }
                                     }
                                 }
+                                InspectorSection {
+                                    title: Tr.t("sl.fill_projection");
+                                    open: true;
+                                    toggled => { self.open = !self.open; }
 
+                                    VerticalLayout {
+                                        spacing: 6px;
+                                        padding-top: 4px;
+
+                                        Text {
+                                            text: Tr.t("sl.fill_scope");
+                                            color: DesignTokens.text-secondary;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+                                        VerticalLayout {
+                                            spacing: 2px;
+                                            
+
+                                            for scope in ["ConnectedPixels", "Face", "SelectedFaces", "UvIsland", "Object"]: Rectangle {
+                                                height: 24px;
+                                                border-radius: 4px;
+                                                background: root.paint-fill-scope == scope ? DesignTokens.accent : DesignTokens.surface-raised;
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: radio-button;
+                                                accessible-label: root.paint-label(scope);
+                                                accessible-checked: root.paint-fill-scope == scope;
+                                                Text {
+                                                    text: root.paint-label(scope);
+                                                    color: root.paint-fill-scope == scope ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                                                    font-size: DesignTokens.font-caption;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                }
+                                                TouchArea { clicked => { root.paint-fill-scope-set(scope); } }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: Tr.t("sl.projection");
+                                            color: DesignTokens.text-secondary;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            height: 26px;
+
+                                            for projection in ["Surface", "ScreenSpace"]: Rectangle {
+                                                horizontal-stretch: 1;
+                                                border-radius: 4px;
+                                                background: root.paint-projection == projection ? DesignTokens.accent : DesignTokens.surface-raised;
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: radio-button;
+                                                accessible-label: root.paint-label(projection);
+                                                accessible-checked: root.paint-projection == projection;
+                                                Text {
+                                                    text: root.paint-label(projection);
+                                                    color: root.paint-projection == projection ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                                                    font-size: DesignTokens.font-caption;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                                TouchArea { clicked => { root.paint-projection-set(projection); } }
+                                            }
+                                        }
+
+                                        // Ação: Bake Reference to Texture
+                                        Rectangle {
+                                            height: 26px;
+                                            border-radius: 4px;
+                                            background: DesignTokens.surface-raised;
+                                            border-width: 1px;
+                                            border-color: DesignTokens.border;
+                                            HorizontalLayout {
+                                                alignment: center;
+                                                spacing: 6px;
+                                                IconDisplay {
+                                                    icon: IconSet.Camera;
+                                                    size: 13px;
+                                                    stroke: DesignTokens.accent;
+                                                }
+                                                Text {
+                                                    text: Tr.t("sl.bake_reference_to_texture");
+                                                    color: DesignTokens.text-primary;
+                                                    font-size: DesignTokens.font-caption;
+                                                    font-weight: 600;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            TouchArea {
+                                                clicked => { root.command-executed("paint.bake_reference"); }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: Tr.t("sl.brush_lock");
+                                            color: DesignTokens.text-secondary;
+                                            font-size: DesignTokens.font-caption;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            height: 26px;
+
+                                            for lock in ["None", "FirstObject", "FirstFace"]: Rectangle {
+                                                horizontal-stretch: 1;
+                                                border-radius: 4px;
+                                                background: root.paint-lock == lock ? DesignTokens.accent : DesignTokens.surface-raised;
+                                                border-width: 1px;
+                                                border-color: DesignTokens.border;
+                                                accessible-role: radio-button;
+                                                accessible-label: root.paint-label(lock);
+                                                accessible-checked: root.paint-lock == lock;
+                                                Text {
+                                                    text: root.paint-label(lock);
+                                                    color: root.paint-lock == lock ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                                                    font-size: DesignTokens.font-caption;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                }
+                                                TouchArea { clicked => { root.paint-lock-set(lock); } }
+                                            }
+                                        }
+                                    }
+                                }
+                                InspectorSection {
+                                    title: Tr.t("sl.canvas");
+                                    open: true;
+                                    toggled => { self.open = !self.open; }
+
+                                    VerticalLayout {
+                                        spacing: 6px;
+                                        padding-top: 4px;
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                Text {
+                                                    text: root.paint-canvas-size;
+                                                    color: DesignTokens.text-muted;
+                                                    font-size: DesignTokens.font-caption;
+                                                    vertical-alignment: center;
+                                                }
+                                                Rectangle {
+                                                    width: 20px;
+                                                    height: 20px;
+                                                    border-radius: 3px;
+                                                    background: root.paint-pip ? DesignTokens.accent : (pipbtn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                                    animate background { duration: Motion.fast; easing: ease-out; }
+                                                    border-width: 1px;
+                                                    border-color: DesignTokens.border;
+                                                    accessible-role: button;
+                                                    accessible-checked: root.paint-pip;
+                                                    accessible-label: Tr.t("sl.paint_pip");
+                                                    IconDisplay { icon: IconSet.PictureInPicture2; size: 11px; stroke: root.paint-pip ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                                    pipbtn-touch := TouchArea {
+                                                        clicked => { root.paint-pip-toggle-requested(); }
+                                                        Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_pip"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; } } }
+                                                    }
+                                                }
+                                                Rectangle {
+                                                    width: 20px;
+                                                    height: 20px;
+                                                    border-radius: 3px;
+                                                    background: root.paint-canvas-panel-visible ? DesignTokens.accent : (expand-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                                    animate background { duration: Motion.fast; easing: ease-out; }
+                                                    border-width: 1px;
+                                                    border-color: DesignTokens.border;
+                                                    accessible-role: button;
+                                                    accessible-label: Tr.t("sl.paint_canvas_open");
+                                                    IconDisplay { icon: IconSet.Maximize2; size: 11px; stroke: root.paint-canvas-panel-visible ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                                                    expand-touch := TouchArea {
+                                                        clicked => { root.paint-canvas-panel-visible = !root.paint-canvas-panel-visible; }
+                                                        Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_canvas_open"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; } } }
+                                                    }
+                                                }
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 4px;
+                                                // Pixel Grid toggle button
+                                                Rectangle {
+                                                    width: 42px;
+                                                    height: 20px;
+                                                    border-radius: 3px;
+                                                    background: root.paint-pixel-grid ? DesignTokens.accent : DesignTokens.surface-raised;
+                                                    border-width: 1px;
+                                                    border-color: DesignTokens.border;
+                                                    Text {
+                                                        text: Tr.t("sl.grid");
+                                                        color: root.paint-pixel-grid ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                                                        font-size: DesignTokens.font-caption;
+                                                        font-weight: 600;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    TouchArea {
+                                                        clicked => { root.toggle-paint-pixel-grid(); }
+                                                    }
+                                                }
+                                                // Zoom In / Out
+                                                Rectangle {
+                                                    width: 20px;
+                                                    height: 20px;
+                                                    border-radius: 3px;
+                                                    background: DesignTokens.surface-raised;
+                                                    border-width: 1px;
+                                                    border-color: DesignTokens.border;
+                                                    Text {
+                                                        text: "-";
+                                                        color: DesignTokens.text-primary;
+                                                        font-size: DesignTokens.font-small;
+                                                        font-weight: 700;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    TouchArea {
+                                                        clicked => {
+                                                            if root.paint-canvas-zoom > 1 {
+                                                                root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Text {
+                                                    text: root.paint-canvas-zoom + "x";
+                                                    color: DesignTokens.text-primary;
+                                                    font-size: DesignTokens.font-caption;
+                                                    vertical-alignment: center;
+                                                }
+                                                Rectangle {
+                                                    width: 20px;
+                                                    height: 20px;
+                                                    border-radius: 3px;
+                                                    background: DesignTokens.surface-raised;
+                                                    border-width: 1px;
+                                                    border-color: DesignTokens.border;
+                                                    Text {
+                                                        text: "+";
+                                                        color: DesignTokens.text-primary;
+                                                        font-size: DesignTokens.font-small;
+                                                        font-weight: 700;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    TouchArea {
+                                                        clicked => {
+                                                            if root.paint-canvas-zoom < 16 {
+                                                                root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        PaintCanvasSurface {
+                                            width: 256px;
+                                            height: 256px;
+                                            horizontal-stretch: 0;
+                                            canvas-image: root.paint-canvas-image;
+                                            zoom: root.paint-canvas-zoom;
+                                            show-uv: root.paint-show-uv;
+                                            uv-commands: root.uv-layout-commands;
+                                            show-grid: root.paint-pixel-grid;
+                                            grid-commands: root.paint-canvas-grid-commands;
+                                            stroke(x, y, phase, shift) => { root.paint-2d-stroke(x, y, phase, shift); }
+                                            zoom-step(direction) => {
+                                                if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
+                                                if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            height: 26px;
+                                            Rectangle {
+                                                horizontal-stretch: 1;
+                                                border-radius: 4px;
+                                                background: root.paint-show-uv ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                                                border-width: 1px;
+                                                border-color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.border;
+                                                Text {
+                                                    text: root.paint-show-uv ? Tr.t("sl.uv_wireframe_overlay") : Tr.t("sl.uv_wireframe_overlay_2");
+                                                    color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.text-primary;
+                                                    font-size: DesignTokens.font-caption;
+                                                    font-weight: root.paint-show-uv ? 700 : 400;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                                TouchArea { clicked => { root.toggle-paint-show-uv(); } }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Preparar superfície (UV): desembrulhar e empacotar ilhas dentro do fluxo de pintura.
+                                InspectorSection {
+                                    title: Tr.t("sl.prepare_surface");
+                                    open: false;
+                                    toggled => { self.open = !self.open; }
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        padding-top: 4px;
+                                        Rectangle {
+                                            height: 28px;
+                                            horizontal-stretch: 1;
+                                            border-radius: DesignTokens.radius-control;
+                                            background: unwrap-touch.pressed ? DesignTokens.accent.darker(0.15) : (unwrap-touch.has-hover ? DesignTokens.accent.brighter(0.1) : DesignTokens.accent);
+                                            animate background { duration: Motion.fast; easing: ease-out; }
+                                            accessible-role: button;
+                                            accessible-label: root.label-unwrap-mesh;
+                                            Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                                            unwrap-touch := TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
+                                        }
+                                        Rectangle {
+                                            height: 28px;
+                                            horizontal-stretch: 1;
+                                            border-radius: DesignTokens.radius-control;
+                                            background: pack-touch.pressed ? DesignTokens.surface-pressed : (pack-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                                            animate background { duration: Motion.fast; easing: ease-out; }
+                                            border-width: 1px;
+                                            border-color: DesignTokens.border;
+                                            accessible-role: button;
+                                            accessible-label: root.label-pack-islands;
+                                            Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                                            pack-touch := TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
+                                        }
+                                    }
+                                }
                                 InspectorSection {
                                     title: Tr.t("sl.texture_layers");
-                                    open: true;
+                                    open: false;
                                     toggled => { self.open = !self.open; }
 
                                     VerticalLayout {
@@ -9908,6 +9953,24 @@ export component PetuniaSlintShell inherits Window {
                                         TouchArea { clicked => { root.click-move-click-set(!root.click-move-click); } }
                                     }
                                     Text { text: root.label-click-move-click-hint; color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+
+                                    Rectangle {
+                                        height: 30px; border-radius: 4px;
+                                        background: root.show-tool-labels ? DesignTokens.accent : DesignTokens.surface;
+                                        border-width: 1px; border-color: root.show-tool-labels ? DesignTokens.focus-ring : DesignTokens.border;
+                                        accessible-role: checkbox;
+                                        accessible-checkable: true;
+                                        accessible-checked: root.show-tool-labels;
+                                        accessible-label: root.label-show-tool-labels;
+                                        accessible-description: root.label-show-tool-labels-hint;
+                                        accessible-action-default => { root.show-tool-labels-set(!root.show-tool-labels); }
+                                        HorizontalLayout {
+                                            padding-left: 10px; alignment: center;
+                                            Text { text: root.label-show-tool-labels; color: root.show-tool-labels ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; vertical-alignment: center; }
+                                        }
+                                        TouchArea { clicked => { root.show-tool-labels-set(!root.show-tool-labels); } }
+                                    }
+                                    Text { text: root.label-show-tool-labels-hint; color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
 
                                     Rectangle {
                                         height: 30px; border-radius: 4px;

@@ -5,6 +5,20 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### UI Slint — F6: PAINT sem duplicação (05/10/2026)
+
+- O trilho do PAINT vira a fonte única de ferramentas, com grupos (Pincel/Aerógrafo, Formas, Gradiente); a barra de baixo passa a ajustar o pincel: cor, tamanho, opacidade e simetria.
+- Inspector do PAINT começa por Camadas; Preparar superfície fica fechada por padrão.
+- Ids como `ConnectedPixels` e `BrightnessContrast` dão lugar a "Pixels conectados" e "Brilho e contraste"; os avisos de ferramenta ativa e modo de seleção passam a ser traduzidos.
+
+### UI Slint — F5: ferramentas e barra contextual (05/10/2026)
+
+- Barra contextual de POLY mostra só as ferramentas do domínio de seleção atual (objeto, face, aresta ou ponto); o botão "Bevel" passa a se chamar "Round Edge", como pede o vocabulário do caderno.
+- Ações rápidas saem do Inspector e vão para a barra contextual, com rótulo e cartão de personalização; a lixeira deixa de ser botão fixo (Delete, menu do botão direito e cabeçalho do Inspector continuam excluindo).
+- Nova preferência **Mostrar nomes no trilho de ferramentas** (desligada por padrão): trilho de 148 px com nome ao lado de cada ícone.
+- A dica em repouso em inglês ("Selection: Object · LMB Select…") deu lugar aos chips traduzidos da status bar.
+- Trilho com grupos: Seleção/Laço e Cursor 3D/Medir num botão cada, com flyout pelo botão direito; atalhos repetidos de primitivas e de DRAW saem do trilho e da barra.
+
 ### UI Slint — F4: Inspector de superfície única (04/10/2026)
 
 - Inspector como um painel translúcido com seções planas (sem cartões nem sombras), cabeçalho de contexto com nome do objeto, Duplicar/Excluir e **Recolher Inspector**; pin aparece só no hover ou quando ligado.

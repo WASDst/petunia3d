@@ -1353,14 +1353,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::SetSelectionDomain(domain) => {
                 self.state.set_selection_domain(domain);
-                self.state
-                    .set_status(format!("Modo de seleção: {:?}", domain));
+                self.report_selection_domain();
             }
             UiIntent::CycleSelectionDomain => {
                 self.state.cycle_selection_domain();
-                let domain = self.state.selection_domain();
-                self.state
-                    .set_status(format!("Modo de seleção: {:?}", domain));
+                self.report_selection_domain();
             }
             UiIntent::AddPrimitive(kind) => {
                 self.state.set_selection_domain(SelectionDomain::Object);
@@ -1456,7 +1453,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.profile_edit_gesture = None;
                 }
                 self.state.session.tools.active_tool = tool.clone();
-                self.state.set_status(format!("Ferramenta ativa: {tool}"));
+                // Nome traduzido em `tools.<id>`; sem tradução, o id fica.
+                let key = format!("tools.{tool}");
+                let name = match self.state.t(&key) {
+                    translated if translated == key => tool.clone(),
+                    translated => translated,
+                };
+                let message = self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_ACTIVE_TOOL)
+                    .replace("{tool}", &name);
+                self.state.set_status(message);
                 match tool.as_str() {
                     // Transformações são transacionais por arrasto: a sessão
                     // modal abre no pointer-down da viewport, não ao escolher a
@@ -2467,22 +2474,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return;
         }
 
-        // Em repouso: a barra informa o domínio e a navegação.
+        // Em repouso não há dica de ferramenta: a status bar mostra os gestos
+        // como chips traduzidos (plano de UI F5) e o domínio já aparece na
+        // view bar. Antes era uma frase fixa em inglês.
         vm.operation_hud_active = false;
-        vm.context_hint = match self.state.selection_domain() {
-            petunia_core::SelectionDomain::Object => {
-                "Selection: Object   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Vertex => {
-                "Selection: Point   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Edge => {
-                "Selection: Edge   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
-            petunia_core::SelectionDomain::Face => {
-                "Selection: Face   ·   LMB Select   ·   MMB Orbit   ·   Shift+MMB Pan".to_string()
-            }
+        vm.context_hint = String::new();
+    }
+
+    /// Status traduzido do domínio de seleção atual.
+    fn report_selection_domain(&mut self) {
+        let domain = match self.state.selection_domain() {
+            SelectionDomain::Object => petunia_config::text_id::SELECTION_DOMAIN_OBJECT,
+            SelectionDomain::Vertex => petunia_config::text_id::SELECTION_DOMAIN_POINT,
+            SelectionDomain::Edge => petunia_config::text_id::SELECTION_DOMAIN_EDGE,
+            SelectionDomain::Face => petunia_config::text_id::SELECTION_DOMAIN_FACE,
         };
+        let message = self
+            .state
+            .t_id(petunia_config::text_id::SELECTION_MODE)
+            .replace("{domain}", &self.state.t_id(domain));
+        self.state.set_status(message);
     }
 
     /// Orbita a câmera, usando a seleção como pivô quando existe.
@@ -12365,6 +12376,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Trilho de ferramentas com nomes ao lado dos ícones (plano de UI, D6).
+    pub fn set_show_tool_labels(&mut self, enabled: bool) -> bool {
+        if self.preferences.show_tool_labels == enabled {
+            return false;
+        }
+        self.preferences.show_tool_labels = enabled;
+        self.state.mark_dirty();
+        true
+    }
+
     /// Luz de estúdio presa à câmera (padrão) ou fixa no mundo.
     pub fn set_studio_light_follows_camera(&mut self, follows: bool) -> bool {
         if self.preferences.studio_light_follows_camera == follows {
@@ -14321,6 +14342,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.snap_radius_px = self.preferences.snap_radius_px;
         vm.label_snap_radius = translated(petunia_config::text_id::PREFERENCES_SNAP_RADIUS);
         vm.click_move_click = self.preferences.click_move_click;
+        vm.show_tool_labels = self.preferences.show_tool_labels;
+        vm.label_show_tool_labels = translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS);
+        vm.label_show_tool_labels_hint =
+            translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS_HINT);
         vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
         vm.studio_light_follows_camera = self.preferences.studio_light_follows_camera;
         vm.label_studio_light_follows_camera =

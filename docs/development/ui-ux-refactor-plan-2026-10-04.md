@@ -39,7 +39,9 @@
 | F1 — Tokens v2 + lint | Concluída em 2026-10-04 (testes, clippy e captura POLY/PAINT) | ver [§F1](#f1--registro-de-implementação) |
 | F2 — Componentes + galeria | Concluída em 2026-10-04 | ver [§F2](#f2--registro-de-implementação) |
 | F3 — Shell | Concluída em 2026-10-04, com D1 parcial | ver [§F3](#f3--registro-de-implementação) |
-| F4 — Inspector | Concluída em 2026-10-04 (Quick Actions aguarda F5) | ver [§F4](#f4--registro-de-implementação) |
+| F4 — Inspector | Concluída em 2026-10-04 (Quick Actions movida na F5) | ver [§F4](#f4--registro-de-implementação) |
+| F5 — Ferramentas | Concluída em 2026-10-05 (F5b: grupos com flyout) | ver [§F5](#f5--registro-de-implementação) |
+| F6 — PAINT | Concluída em 2026-10-05 | ver [§F6](#f6--registro-de-implementação) |
 | Demais fases | Não iniciadas | aguardam §12 onde indicado |
 
 ---
@@ -581,3 +583,64 @@ recomendações de **D2** e **D3** e completando a **D1**. Registrado no cap. 36
   Transform/Material, barra de eixo no lugar da letra colorida, opções raras de
   Parts (tamanho de linha, ordenação) num menu "⋯", Quick Actions na barra
   contextual.
+
+## F5 — registro de implementação
+
+Feito em 2026-10-05 com autorização do responsável para todas as fases
+restantes; aplica **D2** (parte final), **D6** e **D10**.
+
+- **Barra contextual por seleção:** em POLY, cada ferramenta só aparece no
+  domínio de seleção em que faz sentido (`poly-tool-visible` em `app.slint`):
+  objeto → Push/Pull e Subdivide; face → Extrude, Push/Pull, Inset,
+  Subdivide, Spin, Dissolve; aresta → Round Edge, Connect, Make Face,
+  Subdivide, Spin, Dissolve; ponto → Merge, Make Face, Dissolve. Poly Pen,
+  Knife, Loop Cut e Slice aparecem sempre. DRAW, PAINT e UV não mudam. Teste
+  `poly_context_bar_follows_the_selection_domain`.
+- **Vocabulário:** o botão da barra dizia "Bevel" (`sl.bevel`); agora diz
+  "Round Edge" em en e pt-BR, como pede o cap. 13.
+- **Ações rápidas (D2):** saíram do Inspector (seção e pílula removidas) e
+  moram na barra contextual, com rótulo. O botão de ajuste abre um cartão não
+  modal acima da barra para personalizar (mesmo `QuickActionsBody`).
+- **Lixeira (D10):** deixou de ser botão permanente da barra; excluir continua
+  pela tecla Delete, pelo menu do botão direito e pelo cabeçalho do Inspector.
+- **Modo "Mostrar nomes" (D6):** preferência `show_tool_labels`, desligada por
+  padrão, persistida em `preferences.toml` e exposta em Preferências. Ligada,
+  o trilho vai de 44 px para 148 px e `ToolButton`/`ViewportSvgButton` mostram
+  o nome ao lado do ícone (o plano previa ~168 px; 148 px já cabe "Lasso
+  Select" e "Asset Library"). Teste `show_tool_labels_preference_reaches_the_view_model`.
+- **Dica em repouso:** a frase fixa em inglês "Selection: Object · LMB
+  Select…" saiu; em repouso a dica fica vazia e os gestos aparecem como chips
+  traduzidos na status bar (teste do HUD atualizado).
+- **F5b — grupos com flyout:** novo `ToolGroup` (`components/controls.slint`)
+  recebe uma lista `[RailTool]` (id, rótulo, atalho, descrição, ícone,
+  ativo), mostra a variação ativa ou a última usada e abre o flyout pelo
+  botão direito ou pela marca de canto; Esc ou clique fora fecham. Em
+  DRAW/POLY, Seleção+Laço e Cursor 3D+Medir viraram dois grupos; Adicionar
+  Cubo/Esfera/Cilindro saíram do trilho de POLY (estão no menu Adicionar); as
+  cinco ferramentas de DRAW que se repetiam na barra contextual saíram dela.
+  O trilho de POLY passou de 14 para 9 controles. O resto do trilho continua
+  declarado à mão; a contagem total de controles é medida na F0.
+
+## F6 — registro de implementação
+
+Feito em 2026-10-05.
+
+- **Fonte única de ferramentas:** o trilho do PAINT é declarado por dados
+  (Seleção, grupo Pincel/Aerógrafo, Borracha, Conta-gotas, Balde, grupo
+  Formas Linha/Retângulo/Elipse, grupo Gradiente linear/radial, Seleção UV);
+  as 11 ferramentas repetidas na barra contextual saíram dela.
+- **Barra de pincel:** a barra contextual do PAINT mostra Isolar, a cor
+  atual, tamanho −/+, opacidade −/+ e simetria X/Y/Z.
+- **Inspector reordenado:** Camadas → Efeitos → Paleta → Pincel →
+  Preenchimento e projeção → Canvas → Preparar superfície (fechada) →
+  Camadas de textura (fechada; hoje é só um indicador fixo, ponto para a
+  conversa sobre o PAINT).
+- **Rótulos humanos:** `paint-label()` traduz os ids de escopo de
+  preenchimento, projeção, trava e efeitos (17 chaves `sl.paint_opt_*` em en e
+  pt-BR); o escopo de preenchimento virou coluna para "Pixels conectados" não
+  cortar.
+- **i18n do status:** "Ferramenta ativa: {tool}" e "Modo de seleção:
+  {domain}" vêm de `TextId` (`tools.active`, `selection.mode`,
+  `selection.domain_*`); antes eram frases fixas em português com id cru.
+- **Fora desta fase:** o canvas 2D continua como seção e painel flutuante; a
+  revisão profunda do PAINT fica para a conversa pedida pelo responsável.

@@ -680,3 +680,38 @@ fn inspector_never_shows_transform_values_without_a_selection() {
     shell.set_object_has_selection(true);
     assert!(transform_section(&shell), "com seleção, Transform volta");
 }
+
+#[test]
+fn poly_context_bar_follows_the_selection_domain() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1440.0, 900.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_modeling_mode("POLY".into());
+
+    let shows = |shell: &PetuniaSlintShell, label: &str| {
+        ElementHandle::find_by_accessible_label(shell, label)
+            .any(|element| element.accessible_role() == Some(AccessibleRole::Button))
+    };
+
+    shell.set_selection_domain("FACE".into());
+    assert!(shows(&shell, "Inset"), "face: Inset");
+    assert!(!shows(&shell, "Round Edge"), "face: sem Round Edge");
+    assert!(!shows(&shell, "Merge Center"), "face: sem Merge");
+
+    shell.set_selection_domain("EDGE".into());
+    assert!(shows(&shell, "Round Edge"), "aresta: Round Edge");
+    assert!(!shows(&shell, "Inset"), "aresta: sem Inset");
+
+    shell.set_selection_domain("POINT".into());
+    assert!(shows(&shell, "Merge Center"), "ponto: Merge");
+    assert!(!shows(&shell, "Round Edge"), "ponto: sem Round Edge");
+
+    // Desenho e corte agem pelo gesto: aparecem em qualquer domínio.
+    for domain in ["OBJECT", "FACE", "EDGE", "POINT"] {
+        shell.set_selection_domain(domain.into());
+        assert!(shows(&shell, "Knife"), "{domain}: Knife sempre visível");
+    }
+}
