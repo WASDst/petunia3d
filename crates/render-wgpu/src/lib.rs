@@ -942,7 +942,7 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 "#;
 
 /// Iluminação compartilhada pelos shaders de malha: estúdio (luz direcional
-/// + ambiente), matcap procedural (normal em espaço de vista, sem textura) e
+/// e ambiente), matcap procedural (normal em espaço de vista, sem textura) e
 /// oclusão ambiente amostrada da textura do passe de AO (meia resolução,
 /// interpolada). `frag` é a posição do fragmento em px físicos.
 const SHADE_WGSL: &str = r#"

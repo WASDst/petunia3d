@@ -222,8 +222,7 @@ fn path_polylines(commands: &str) -> Vec<(Vec<[f32; 2]>, bool)> {
     let mut numbers = Vec::new();
     let flush = |numbers: &mut Vec<f32>, paths: &mut Vec<(Vec<[f32; 2]>, bool)>| {
         if let Some(path) = paths.last_mut() {
-            path.0
-                .extend(numbers.chunks_exact(2).map(|pair| [pair[0], pair[1]]));
+            path.0.extend(numbers.as_chunks::<2>().0.iter().copied());
         }
         numbers.clear();
     };

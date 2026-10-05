@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1798**.
+Total de chaves de localização cadastradas: **1812**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -509,6 +509,10 @@ Total de chaves de localização cadastradas: **1798**.
 | `preferences.snap_radius` | Snap radius (px) | Raio do snap (px) |
 | `preferences.studio_light_follows_camera` | Studio light follows the camera | Luz de estúdio acompanha a câmera |
 | `preferences.studio_light_follows_camera_hint` | On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world. | Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo. |
+| `preferences.viewport_ambient_occlusion` | Ambient occlusion | Oclusão ambiente |
+| `preferences.viewport_ambient_occlusion_hint` | Darkens creases and contacts (GTAO, half resolution) in Solid and Material. | Escurece vincos e contatos (GTAO, meia resolução) no Solid e no Material. |
+| `preferences.viewport_matcap` | Matcap | Matcap |
+| `preferences.viewport_matcap_hint` | Solid shading with a clay studio look that follows the view; reads shape and curvature better. | Sombreamento Solid com aparência de argila de estúdio que acompanha a vista; lê melhor forma e curvatura. |
 | `preferences.workplane_from_selection` | Set Workplane from Selection (3 Points / Face) | Plano de Trabalho pela Seleção (3 Pontos / Face) |
 | `preferences.workplane_prefer_ground` | Automatic work plane favors the ground | Plano automático favorece o chão |
 | `preferences.workplane_prefer_ground_hint` | With no face under the cursor, drawing goes on the ground unless the camera is almost level. Off: the world plane that most faces the view (Modo/Cinema 4D style). | Sem face sob o cursor, o desenho vai para o chão, a menos que a câmera esteja quase na horizontal. Desligado: o plano do mundo mais de frente para a vista (estilo Modo/Cinema 4D). |
@@ -1376,6 +1380,7 @@ Total de chaves de localização cadastradas: **1798**.
 | `status.pivot` | Pivot: {0} | Pivô: {0} |
 | `status.point_added` | Point added | Ponto adicionado |
 | `status.point_selected` | Point {index} selected | Ponto {index} selecionado |
+| `status.poly_pen_painted` | Poly Pen: {count} polygon(s) painted | Poly Pen: {count} polígono(s) pintado(s) |
 | `status.press_the_new_shortcut_esc_cancels` | Press the new shortcut (Esc cancels) | Pressione o novo atalho (Esc cancela) |
 | `status.primitive_frozen_to_editable_mesh` | Primitive frozen to editable mesh | Primitiva convertida em malha editável |
 | `status.profile_closed_choose_generate_volume_or_revolve` | Profile closed: choose Generate Volume or Revolve | Perfil fechado: escolha Gerar volume ou Revolve |
@@ -1551,6 +1556,15 @@ Total de chaves de localização cadastradas: **1798**.
 | `tools.pivot` | Pivot | Pivô |
 | `tools.poly_pen` | Poly Pen | Poly Pen |
 | `tools.poly_pen_hint` | Drag a point, edge or face to move it; Ctrl-drag a border edge to extrude; click points to draw a polygon (Enter or first point closes); Ctrl-click a point to melt it | Arraste um ponto, aresta ou face para mover; Ctrl-arraste uma aresta de borda para extrudar; clique pontos para desenhar um polígono (Enter ou o primeiro ponto fecha); Ctrl-clique num ponto para derretê-lo |
+| `tools.poly_pen_mode` | Mode | Modo |
+| `tools.poly_pen_mode_auto` | Auto | Auto |
+| `tools.poly_pen_mode_auto_hint` | Edits the point, edge or polygon under the cursor. Click to draw a polygon; {alternate}-drag an edge to extrude it. | Edita o ponto, a aresta ou o polígono sob o cursor. Clique para desenhar um polígono; {alternate}-arrastar uma aresta a extruda. |
+| `tools.poly_pen_mode_edges` | Edges | Arestas |
+| `tools.poly_pen_mode_edges_hint` | Click an edge to add a point on it; drag to move it; {alternate}-drag a border edge to extrude it. | Clique numa aresta para inserir um ponto; arraste para movê-la; {alternate}-arrastar uma aresta de borda a extruda. |
+| `tools.poly_pen_mode_points` | Points | Pontos |
+| `tools.poly_pen_mode_points_hint` | Drag points to move them; clicks draw a polygon point by point; {alternate}-click melts a point. | Arraste pontos para movê-los; cliques desenham um polígono ponto a ponto; {alternate}-clique derrete o ponto. |
+| `tools.poly_pen_mode_polygons` | Polygons | Polígonos |
+| `tools.poly_pen_mode_polygons_hint` | Drag from a border edge to paint polygons; drag a polygon to move it; clicks draw a polygon. | Arraste a partir de uma aresta de borda para pintar polígonos; arraste um polígono para movê-lo; cliques desenham um polígono. |
 | `tools.primitives` | Add | Adicionar |
 | `tools.push_pull` | Push/Pull | Push/Pull |
 | `tools.pushpull` | Push/Pull | Push/Pull |
