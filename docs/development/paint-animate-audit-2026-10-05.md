@@ -82,3 +82,10 @@ hipóteses a confirmar. Cada linha aponta a causa no código.
    depois.
 
 Cada item fecha com testes e atualização desta matriz.
+
+## 6. Entregas
+
+| Item | Entrega | Estado após |
+|---|---|---|
+| S1 | Política escolhida pelo responsável (opção c, 05/10): seleção **parcial** de faces restringe sozinha; a opção do painel ("Sempre mascarar") mantém a máscara mesmo com tudo ou nada selecionado. `selection_masks_paint` em `module-paint/src/engine.rs`. Teste `partial_selection_restricts_painting_without_the_toggle`. | COMPLIANT |
+| S2 | `PaintRestriction::mask`: a sangria de 1 px só cai em calha (texel sem face dona); o pincel 3D passa a consultar a mesma máscara do 2D. Teste `restriction_mask_never_bleeds_into_unselected_neighbors`. | COMPLIANT |

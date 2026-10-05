@@ -2346,6 +2346,56 @@ mod tests {
     }
 
     #[test]
+    fn partial_selection_restricts_painting_without_the_toggle() {
+        let mut state = AppState::new("en");
+        assert!(!state.session.tools.paint_isolate_selection);
+        let (right, right_hit) = face_toward(&state, Vec3::X);
+        let (front, front_hit) = face_toward(&state, Vec3::Z);
+        state.project.active_mesh_mut().unwrap().faces[right].selected = true;
+        let settings = BrushSettings {
+            kind: BrushType::Pixel,
+            size_px: 10.0,
+            ..Default::default()
+        };
+        assert!(!PaintModule::paint_mesh_3d_with_settings(
+            &mut state, front, front_hit, settings, false
+        ));
+        PaintModule::reset_stroke_scratch(&mut state);
+        assert!(PaintModule::paint_mesh_3d_with_settings(
+            &mut state, right, right_hit, settings, false
+        ));
+        PaintModule::reset_stroke_scratch(&mut state);
+        // Tudo selecionado não é uma restrição: pinta em qualquer face.
+        for face in &mut state.project.active_mesh_mut().unwrap().faces {
+            face.selected = true;
+        }
+        assert!(PaintModule::paint_mesh_3d_with_settings(
+            &mut state, front, front_hit, settings, false
+        ));
+    }
+
+    #[test]
+    fn restriction_mask_never_bleeds_into_unselected_neighbors() {
+        let mut state = AppState::new("en");
+        let (right, _) = face_toward(&state, Vec3::X);
+        state.project.active_mesh_mut().unwrap().faces[right].selected = true;
+        PaintModule::ensure_stack(&mut state);
+        let (w, h) = PaintModule::active_canvas_dims(&state).unwrap();
+        let restriction = PaintModule::resolve_restriction(&mut state, None).expect("restrição");
+        let mesh = state.project.active_mesh().unwrap();
+        let mask = restriction.mask(mesh, w, h);
+        let others =
+            mesh.uv_coverage_mask((0..mesh.faces.len()).filter(|&i| i != right), w, h, 0.0);
+        let mine = mesh.uv_coverage_mask([right], w, h, 0.0);
+        for i in 0..mask.texels.len() {
+            if mask.texels[i] != 0 && others.texels[i] != 0 {
+                assert!(mine.texels[i] != 0, "texel {i} de outra face na máscara");
+            }
+        }
+        assert!(mask.covered() >= mine.covered());
+    }
+
+    #[test]
     fn overlapping_flow_does_not_darken_past_the_strength_cap() {
         let mut state = AppState::new("en");
         state.paint_color = [1.0, 1.0, 1.0];

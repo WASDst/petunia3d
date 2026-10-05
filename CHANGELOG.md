@@ -5,6 +5,12 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### PAINT — seleção e máscara (05/10/2026)
+
+- Auditoria PAINT/ANIMATE com matriz e plano: `docs/development/paint-animate-audit-2026-10-05.md`.
+- Seleção parcial de faces restringe a pintura sem precisar ligar a opção; "Sempre mascarar" mantém a máscara com tudo ou nada selecionado.
+- A sangria da costura não invade mais faces vizinhas não selecionadas (pincel 3D e canvas 2D usam a mesma máscara).
+
 ### HUD, Undo e pendências do POLY (04/10/2026)
 
 - HUD de operação, selo "MODO LIVRE"/"FREE MODE", menu da viewport e nomes de ferramenta passam por `TextId` (42 chaves `hud.*`, en/pt-BR).
