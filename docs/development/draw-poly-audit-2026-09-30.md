@@ -51,4 +51,4 @@ o que é estimativa está dito.
 
 ## Execução de 04/10/2026
 
-Os itens 1–4 desta ordem (índice espacial, render coalescido e dirty flags, buffer numérico único e migração para `ToolSession`, alças) foram tratados na rodada registrada em [`draw-poly-perf-tools-2026-10-04.md`](draw-poly-perf-tools-2026-10-04.md); alças ≥ 24 px e gizmo em passo GPU continuam pendentes.
+Os itens 1–4 desta ordem (índice espacial, render coalescido e dirty flags, buffer numérico único e migração para `ToolSession`, alças) foram tratados na rodada registrada em [`draw-poly-perf-tools-2026-10-04.md`](draw-poly-perf-tools-2026-10-04.md); alças ≥ 24 px e gizmo em passo GPU foram entregues em 04/10/2026.

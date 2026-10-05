@@ -322,6 +322,13 @@ struct CameraUniform {
     /// x = alpha do X-Ray, y/z = tamanho do alvo em px físicos, w = largura
     /// das arestas em px físicos.
     xray: [f32; 4],
+    /// xyz = direita da câmera (mundo), base da normal em espaço de vista do
+    /// matcap; w = livre.
+    view_right: [f32; 4],
+    /// xyz = cima da câmera (mundo); w = livre.
+    view_up: [f32; 4],
+    /// x = matcap (1/0), y = oclusão ambiente (1/0); z/w = livres.
+    shade: [f32; 4],
 }
 
 #[repr(C)]
@@ -390,6 +397,9 @@ struct Camera {
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 
@@ -461,6 +471,312 @@ fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     return vec4<f32>(color.rgb, color.a * alpha);
 }
 "#;
+
+/// Formato da oclusão ambiente (um canal, filtrável na interpolação).
+const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
+/// Profundidade do pré-passe de AO (amostrável, sem MSAA).
+const AO_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// Intensidade da oclusão (expoente sobre a visibilidade).
+const AO_INTENSITY: f32 = 1.5;
+/// Raio máximo da busca de horizontes em px lógicos.
+const AO_MAX_RADIUS_PX: f32 = 48.0;
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct AoUniform {
+    inv_proj: [[f32; 4]; 4],
+    /// x = proj\[1\]\[1\], y = ortográfica (1/0), z = raio em mundo, w = intensidade.
+    params: [f32; 4],
+    /// xy = tamanho do depth (px físicos), zw = tamanho do AO.
+    size: [f32; 4],
+    /// x = raio máximo em px físicos do depth.
+    limits: [f32; 4],
+}
+
+/// Funções comuns aos passes de AO e de blur (dependem de `depth_tex` e `ao`).
+const AO_COMMON_WGSL: &str = r#"
+struct Ao {
+    inv_proj: mat4x4<f32>,
+    params: vec4<f32>,
+    size: vec4<f32>,
+    limits: vec4<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let uv = vec2<f32>(f32((index << 1u) & 2u), f32(index & 2u));
+    return vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+}
+
+fn depth_at(px: vec2<f32>) -> f32 {
+    let dims = vec2<i32>(ao.size.xy);
+    let p = clamp(vec2<i32>(px), vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+    return textureLoad(depth_tex, p, 0);
+}
+
+fn view_pos(px: vec2<f32>, depth: f32) -> vec3<f32> {
+    let uv = px / ao.size.xy;
+    let v = ao.inv_proj * vec4<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
+    return v.xyz / v.w;
+}
+"#;
+
+/// Oclusão ambiente por horizontes (GTAO, Jimenez et al. 2016): para cada
+/// fatia de direção em tela, os dois horizontes mais altos limitados à
+/// normal integram a visibilidade com peso cosseno. Normal reconstruída do
+/// depth; 4 fatias × 6 passos com ruído intercalado, em meia resolução.
+const AO_WGSL: &str = r#"
+@group(0) @binding(0) var depth_tex: texture_depth_2d;
+@group(0) @binding(1) var<uniform> ao: Ao;
+AO_COMMON
+
+const PI: f32 = 3.14159265;
+const SLICES: i32 = 4;
+const STEPS: i32 = 6;
+
+fn noise(p: vec2<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(p, vec2<f32>(0.06711056, 0.00583715))));
+}
+
+@fragment
+fn fs_ao(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
+    let scale = ao.size.xy / ao.size.zw;
+    let center = (floor(frag.xy) + vec2<f32>(0.5, 0.5)) * scale;
+    let d = depth_at(center);
+    if (d >= 1.0) {
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    }
+    let pos = view_pos(center, d);
+    let ex = vec2<f32>(1.0, 0.0);
+    let ey = vec2<f32>(0.0, 1.0);
+    let right = view_pos(center + ex, depth_at(center + ex)) - pos;
+    let left = pos - view_pos(center - ex, depth_at(center - ex));
+    let down = view_pos(center + ey, depth_at(center + ey)) - pos;
+    let up = pos - view_pos(center - ey, depth_at(center - ey));
+    let dx = select(right, left, abs(left.z) < abs(right.z));
+    let dy = select(down, up, abs(up.z) < abs(down.z));
+    let ortho = ao.params.y > 0.5;
+    let view_dir = select(normalize(-pos), vec3<f32>(0.0, 0.0, 1.0), ortho);
+    var n = normalize(cross(dy, dx));
+    if (dot(n, view_dir) < 0.0) {
+        n = -n;
+    }
+    let radius = ao.params.z;
+    let depth_scale = select(max(-pos.z, 1.0e-4), 1.0, ortho);
+    let radius_px = min(radius * ao.params.x * 0.5 * ao.size.y / depth_scale, ao.limits.x);
+    if (radius_px < 1.5) {
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    }
+    let rotation = noise(frag.xy);
+    let jitter = fract(rotation * 7.31);
+    var visibility = 0.0;
+    for (var slice = 0; slice < SLICES; slice = slice + 1) {
+        let phi = (f32(slice) + rotation) * PI / f32(SLICES);
+        let dir2 = vec2<f32>(cos(phi), sin(phi));
+        let dir3 = vec3<f32>(dir2.x, -dir2.y, 0.0);
+        let slice_ortho = dir3 - dot(dir3, view_dir) * view_dir;
+        let axis = cross(dir3, view_dir);
+        let proj_n = n - axis * dot(n, axis);
+        let proj_len = length(proj_n);
+        if (proj_len < 1.0e-4) {
+            visibility = visibility + 1.0;
+            continue;
+        }
+        let cos_n = clamp(dot(proj_n, view_dir) / proj_len, -1.0, 1.0);
+        let n_angle = sign(dot(slice_ortho, proj_n)) * acos(cos_n);
+        var max_cos = vec2<f32>(-1.0, -1.0);
+        for (var step = 0; step < STEPS; step = step + 1) {
+            let t = (f32(step) + jitter + 0.5) / f32(STEPS);
+            for (var side = 0; side < 2; side = side + 1) {
+                let s = select(-1.0, 1.0, side == 1);
+                let sample_px = center + dir2 * (s * t * radius_px);
+                let sd = depth_at(sample_px);
+                if (sd >= 1.0) {
+                    continue;
+                }
+                let delta = view_pos(sample_px, sd) - pos;
+                let dist = length(delta);
+                if (dist < 1.0e-5) {
+                    continue;
+                }
+                let falloff = clamp(1.0 - dist * dist / (radius * radius), 0.0, 1.0);
+                let c = mix(-1.0, dot(delta / dist, view_dir), falloff);
+                if (side == 0) {
+                    max_cos.x = max(max_cos.x, c);
+                } else {
+                    max_cos.y = max(max_cos.y, c);
+                }
+            }
+        }
+        let h1 = n_angle + max(-acos(max_cos.x) - n_angle, -PI * 0.5);
+        let h2 = n_angle + min(acos(max_cos.y) - n_angle, PI * 0.5);
+        let sin_n = sin(n_angle);
+        let arc1 = -cos(2.0 * h1 - n_angle) + cos_n + 2.0 * h1 * sin_n;
+        let arc2 = -cos(2.0 * h2 - n_angle) + cos_n + 2.0 * h2 * sin_n;
+        visibility = visibility + proj_len * 0.25 * (arc1 + arc2);
+    }
+    let v = clamp(visibility / f32(SLICES), 0.0, 1.0);
+    return vec4<f32>(pow(v, ao.params.w), 0.0, 0.0, 1.0);
+}
+"#;
+
+/// Blur 5×5 que respeita a profundidade (não mistura AO entre objetos em
+/// distâncias diferentes).
+const AO_BLUR_WGSL: &str = r#"
+@group(0) @binding(0) var ao_raw: texture_2d<f32>;
+@group(0) @binding(1) var depth_tex: texture_depth_2d;
+@group(0) @binding(2) var<uniform> ao: Ao;
+AO_COMMON
+
+@fragment
+fn fs_blur(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
+    let dims = vec2<i32>(ao.size.zw);
+    let p = vec2<i32>(frag.xy);
+    let scale = ao.size.xy / ao.size.zw;
+    let dc = depth_at((vec2<f32>(p) + vec2<f32>(0.5, 0.5)) * scale);
+    if (dc >= 1.0) {
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    }
+    let zc = view_pos((vec2<f32>(p) + vec2<f32>(0.5, 0.5)) * scale, dc).z;
+    let tolerance = abs(zc) * 0.04 + 1.0e-4;
+    var sum = 0.0;
+    var weight = 0.0;
+    for (var dy = -2; dy <= 2; dy = dy + 1) {
+        for (var dx = -2; dx <= 2; dx = dx + 1) {
+            let q = clamp(p + vec2<i32>(dx, dy), vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+            let center = (vec2<f32>(q) + vec2<f32>(0.5, 0.5)) * scale;
+            let dq = depth_at(center);
+            if (dq >= 1.0) {
+                continue;
+            }
+            let w = exp(-abs(view_pos(center, dq).z - zc) / tolerance);
+            sum = sum + textureLoad(ao_raw, q, 0).r * w;
+            weight = weight + w;
+        }
+    }
+    return vec4<f32>(select(1.0, sum / weight, weight > 1.0e-5), 0.0, 0.0, 1.0);
+}
+"#;
+
+/// Overlay 2D em px físicos (gizmo de transformação): sem depth test,
+/// desenhado por último, tamanho constante em tela.
+const SCREEN_OVERLAY_WGSL: &str = r#"
+struct Camera {
+    view_proj: mat4x4<f32>,
+    light_dir: vec4<f32>,
+    light_params: vec4<f32>,
+    xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
+};
+@group(0) @binding(0) var<uniform> cam: Camera;
+
+struct In {
+    @location(0) pos: vec2<f32>,
+    @location(1) color: vec4<f32>,
+};
+struct Out {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) color: vec4<f32>,
+};
+
+@vertex
+fn vs_main(in: In) -> Out {
+    var out: Out;
+    let size = cam.xray.yz;
+    out.clip = vec4<f32>(in.pos.x / size.x * 2.0 - 1.0, 1.0 - in.pos.y / size.y * 2.0, 0.0, 1.0);
+    out.color = in.color;
+    return out;
+}
+
+@fragment
+fn fs_main(in: Out) -> @location(0) vec4<f32> {
+    return in.color;
+}
+"#;
+
+/// Forma do overlay de tela em px lógicos: polilinha (traço de largura
+/// constante) e/ou polígono convexo preenchido.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverlayShape {
+    pub points: Vec<[f32; 2]>,
+    /// Fecha o traço no primeiro ponto.
+    pub closed: bool,
+    /// Preenchimento (polígono convexo, leque a partir do primeiro ponto).
+    pub fill: Option<[f32; 4]>,
+    /// Traço: cor e largura em px lógicos.
+    pub stroke: Option<([f32; 4], f32)>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct OverlayVertex {
+    pos: [f32; 2],
+    color: [f32; 4],
+}
+
+/// Triângulos das formas do overlay em px físicos.
+fn tessellate_overlay(shapes: &[OverlayShape], ratio: f32) -> Vec<OverlayVertex> {
+    let mut out = Vec::new();
+    for shape in shapes {
+        let points: Vec<glam::Vec2> = shape
+            .points
+            .iter()
+            .filter(|p| p[0].is_finite() && p[1].is_finite())
+            .map(|p| glam::Vec2::from(*p) * ratio)
+            .collect();
+        if let Some(color) = shape.fill
+            && points.len() >= 3
+        {
+            for i in 1..points.len() - 1 {
+                for p in [points[0], points[i], points[i + 1]] {
+                    out.push(OverlayVertex {
+                        pos: p.to_array(),
+                        color,
+                    });
+                }
+            }
+        }
+        if let Some((color, width)) = shape.stroke
+            && points.len() >= 2
+        {
+            let half = (width * ratio * 0.5).max(0.5);
+            let count = if shape.closed {
+                points.len()
+            } else {
+                points.len() - 1
+            };
+            for i in 0..count {
+                let (a, b) = (points[i], points[(i + 1) % points.len()]);
+                let along = (b - a).normalize_or_zero();
+                if along == glam::Vec2::ZERO {
+                    continue;
+                }
+                // Pontas estendidas em meia largura: juntas sem frestas.
+                let (a, b) = (a - along * half, b + along * half);
+                let side = glam::Vec2::new(-along.y, along.x) * half;
+                for p in [a + side, a - side, b + side, b + side, a - side, b - side] {
+                    out.push(OverlayVertex {
+                        pos: p.to_array(),
+                        color,
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Alvos do passe de AO, recriados com o tamanho do viewport.
+struct AoTargets {
+    depth_view: wgpu::TextureView,
+    raw_view: wgpu::TextureView,
+    final_view: wgpu::TextureView,
+    ao_bind_group: wgpu::BindGroup,
+    blur_bind_group: wgpu::BindGroup,
+    size: (u32, u32),
+}
 
 pub struct Renderer {
     depth_format: wgpu::TextureFormat,
@@ -561,6 +877,31 @@ pub struct Renderer {
     texture_bytes_uploaded: u64,
     full_texture_uploads: u64,
     partial_texture_uploads: u64,
+    /// Bind group da câmera: uniform + textura de AO + sampler.
+    cam_layout: wgpu::BindGroupLayout,
+    /// Matcap procedural no Solid.
+    matcap: bool,
+    /// Oclusão ambiente pedida pelo usuário.
+    ambient_occlusion: bool,
+    /// AO vale neste quadro (Solid/Material, sem X-Ray).
+    ao_active: bool,
+    /// Os passes de AO deste quadro foram gravados.
+    ao_encoded: bool,
+    ao_targets: Option<AoTargets>,
+    ao_fallback_view: wgpu::TextureView,
+    ao_sampler: wgpu::Sampler,
+    ao_layout: wgpu::BindGroupLayout,
+    ao_blur_layout: wgpu::BindGroupLayout,
+    ao_uniform: wgpu::Buffer,
+    ao_depth_pipeline: wgpu::RenderPipeline,
+    ao_pipeline: wgpu::RenderPipeline,
+    ao_blur_pipeline: wgpu::RenderPipeline,
+    /// Overlay de tela (gizmo) em px lógicos e sua geometria na GPU.
+    screen_overlay: Vec<OverlayShape>,
+    screen_overlay_dirty: bool,
+    screen_overlay_vb: Option<wgpu::Buffer>,
+    screen_overlay_count: u32,
+    screen_overlay_pipeline: wgpu::RenderPipeline,
 }
 
 /// Seleção: cor chapada, sem iluminação, com alpha. A seleção precisa ser
@@ -571,6 +912,9 @@ struct Camera {
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 
@@ -597,12 +941,53 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 }
 "#;
 
+/// Iluminação compartilhada pelos shaders de malha: estúdio (luz direcional
+/// + ambiente), matcap procedural (normal em espaço de vista, sem textura) e
+/// oclusão ambiente amostrada da textura do passe de AO (meia resolução,
+/// interpolada). `frag` é a posição do fragmento em px físicos.
+const SHADE_WGSL: &str = r#"
+@group(0) @binding(1) var ao_tex: texture_2d<f32>;
+@group(0) @binding(2) var ao_smp: sampler;
+
+fn ambient_occlusion(frag: vec4<f32>) -> f32 {
+    if (cam.shade.y < 0.5) {
+        return 1.0;
+    }
+    return textureSampleLevel(ao_tex, ao_smp, frag.xy / cam.xray.yz, 0.0).r;
+}
+
+fn lit(base: vec3<f32>, normal: vec3<f32>, frag: vec4<f32>) -> vec3<f32> {
+    let ao = ambient_occlusion(frag);
+    if (length(normal) < 0.1) {
+        return base * ao;
+    }
+    let n = normalize(normal);
+    if (cam.shade.x > 0.5) {
+        let right = cam.view_right.xyz;
+        let up = cam.view_up.xyz;
+        let vn = vec3<f32>(dot(n, right), dot(n, up), dot(n, cross(right, up)));
+        let key_dir = normalize(vec3<f32>(-0.45, 0.6, 0.66));
+        let key = max(dot(vn, key_dir), 0.0);
+        let sky = 0.5 + 0.5 * vn.y;
+        let rim = pow(1.0 - clamp(abs(vn.z), 0.0, 1.0), 3.0);
+        let spec = pow(max(dot(reflect(vec3<f32>(0.0, 0.0, -1.0), vn), key_dir), 0.0), 32.0);
+        return (base * (0.16 + 0.58 * key + 0.24 * sky) + vec3<f32>(rim * 0.16 + spec * 0.22)) * ao;
+    }
+    let light = normalize(cam.light_dir.xyz);
+    let diff = max(dot(n, light), 0.0);
+    return base * (cam.light_params.x * ao + cam.light_params.y * diff * mix(1.0, ao, 0.5));
+}
+"#;
+
 const MESH_WGSL: &str = r#"
 struct Camera {
     view_proj: mat4x4<f32>,
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 
@@ -629,26 +1014,12 @@ fn vs_main(in: In) -> Out {
 
 @fragment
 fn fs_main(in: Out) -> @location(0) vec4<f32> {
-    if (length(in.normal) < 0.1) {
-        return vec4<f32>(in.color, 1.0);
-    }
-    let light = normalize(cam.light_dir.xyz);
-    let n = normalize(in.normal);
-    let diff = max(dot(n, light), 0.0);
-    let c = in.color * (cam.light_params.x + cam.light_params.y * diff);
-    return vec4<f32>(c, 1.0);
+    return vec4<f32>(lit(in.color, in.normal, in.clip), 1.0);
 }
 
 @fragment
 fn fs_xray(in: Out) -> @location(0) vec4<f32> {
-    if (length(in.normal) < 0.1) {
-        return vec4<f32>(in.color, cam.xray.x);
-    }
-    let light = normalize(cam.light_dir.xyz);
-    let n = normalize(in.normal);
-    let diff = max(dot(n, light), 0.0);
-    let c = in.color * (cam.light_params.x + cam.light_params.y * diff);
-    return vec4<f32>(c, cam.xray.x);
+    return vec4<f32>(lit(in.color, in.normal, in.clip), cam.xray.x);
 }
 "#;
 
@@ -661,6 +1032,9 @@ struct Camera {
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 @group(1) @binding(0) var tex: texture_2d<f32>;
@@ -697,32 +1071,16 @@ fn mesh_tex_wgsl() -> String {
 @fragment
 fn fs_tex(in: Out) -> @location(0) vec4<f32> {
     let t = textureSample(tex, smp, in.uv);
-    let base = in.color * t.rgb;
-    if (length(in.normal) < 0.1) {
-        return vec4<f32>(base, 1.0);
-    }
-    let light = normalize(cam.light_dir.xyz);
-    let n = normalize(in.normal);
-    let diff = max(dot(n, light), 0.0);
-    let c = base * (cam.light_params.x + cam.light_params.y * diff);
-    return vec4<f32>(c, 1.0);
+    return vec4<f32>(lit(in.color * t.rgb, in.normal, in.clip), 1.0);
 }
 
 @fragment
 fn fs_tex_xray(in: Out) -> @location(0) vec4<f32> {
     let t = textureSample(tex, smp, in.uv);
-    let base = in.color * t.rgb;
-    if (length(in.normal) < 0.1) {
-        return vec4<f32>(base, cam.xray.x);
-    }
-    let light = normalize(cam.light_dir.xyz);
-    let n = normalize(in.normal);
-    let diff = max(dot(n, light), 0.0);
-    let c = base * (cam.light_params.x + cam.light_params.y * diff);
-    return vec4<f32>(c, cam.xray.x);
+    return vec4<f32>(lit(in.color * t.rgb, in.normal, in.clip), cam.xray.x);
 }
 "#;
-    (MESH_TEX_WGSL.to_string() + FRAG)
+    (MESH_TEX_WGSL.to_string() + SHADE_WGSL + FRAG)
         .replace("LIGHT_X", &petunia_render::scene::LIGHT_DIR[0].to_string())
         .replace("LIGHT_Y", &petunia_render::scene::LIGHT_DIR[1].to_string())
         .replace("LIGHT_Z", &petunia_render::scene::LIGHT_DIR[2].to_string())
@@ -740,6 +1098,7 @@ fn fs_tex_xray(in: Out) -> @location(0) vec4<f32> {
 /// (`render::scene`), mantendo uma fonte só.
 fn mesh_wgsl() -> String {
     MESH_WGSL
+        .replace("@vertex", &format!("{SHADE_WGSL}\n@vertex"))
         .replace("LIGHT_X", &petunia_render::scene::LIGHT_DIR[0].to_string())
         .replace("LIGHT_Y", &petunia_render::scene::LIGHT_DIR[1].to_string())
         .replace("LIGHT_Z", &petunia_render::scene::LIGHT_DIR[2].to_string())
@@ -759,6 +1118,9 @@ struct Camera {
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 
@@ -794,6 +1156,9 @@ struct Camera {
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 
@@ -843,6 +1208,9 @@ struct Camera {
     light_dir: vec4<f32>,
     light_params: vec4<f32>,
     xray: vec4<f32>,
+    view_right: vec4<f32>,
+    view_up: vec4<f32>,
+    shade: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> cam: Camera;
 struct Params { opacity: f32, _p0: f32, _p1: f32, _p2: f32 };
@@ -953,26 +1321,68 @@ impl Renderer {
         });
         let cam_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("simple3d-cam-layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                // O fragment lê a luz e a opacidade de X-Ray deste uniform.
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    // O fragment lê a luz e a opacidade de X-Ray deste uniform.
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                // Oclusão ambiente (meia resolução) lida pelos shaders de malha.
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
-        let cam_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("simple3d-cam-bg"),
-            layout: &cam_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: cam_buffer.as_entire_binding(),
-            }],
+        // Sem AO no quadro o shader não amostra a textura (`shade.y = 0`):
+        // a reserva só mantém o bind group válido.
+        let ao_fallback_view = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("ao-fallback"),
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: AO_FORMAT,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default());
+        let ao_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("ao-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
         });
+        let cam_bind_group = Self::camera_bind_group(
+            device,
+            &cam_layout,
+            &cam_buffer,
+            &ao_fallback_view,
+            &ao_sampler,
+        );
 
         let mesh_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("simple3d-mesh"),
@@ -1586,6 +1996,174 @@ impl Renderer {
                 cache: None,
             });
 
+        // Oclusão ambiente: pré-passe de profundidade (sem MSAA, amostrável),
+        // horizontes em meia resolução e blur que respeita a profundidade.
+        let ao_depth_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("ao-depth-prepass"),
+            layout: Some(&mesh_layout),
+            vertex: wgpu::VertexState {
+                module: &outline_mask_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<MeshVertex>() as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                })],
+                compilation_options: Default::default(),
+            },
+            fragment: None,
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: AO_DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let depth_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Depth,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        };
+        let uniform_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let ao_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("ao-layout"),
+            entries: &[depth_entry(0), uniform_entry(1)],
+        });
+        let ao_blur_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("ao-blur-layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                depth_entry(1),
+                uniform_entry(2),
+            ],
+        });
+        let ao_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ao-uniform"),
+            size: std::mem::size_of::<AoUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let fullscreen = |label: &'static str,
+                          source: &str,
+                          entry: &'static str,
+                          layout: &wgpu::BindGroupLayout| {
+            let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(label),
+                source: wgpu::ShaderSource::Wgsl(
+                    source.replace("AO_COMMON", AO_COMMON_WGSL).into(),
+                ),
+            });
+            let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(label),
+                bind_group_layouts: &[Some(layout)],
+                immediate_size: 0,
+            });
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some(entry),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: AO_FORMAT,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let ao_pipeline = fullscreen("ao-gtao", AO_WGSL, "fs_ao", &ao_layout);
+        let ao_blur_pipeline = fullscreen("ao-blur", AO_BLUR_WGSL, "fs_blur", &ao_blur_layout);
+
+        let overlay_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("screen-overlay-shader"),
+            source: wgpu::ShaderSource::Wgsl(SCREEN_OVERLAY_WGSL.into()),
+        });
+        let screen_overlay_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("screen-overlay"),
+                layout: Some(&mesh_layout),
+                vertex: wgpu::VertexState {
+                    module: &overlay_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<OverlayVertex>() as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4],
+                    })],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &overlay_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Always),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: msaa,
+                multiview_mask: None,
+                cache: None,
+            });
+
         let grid = grid_lines();
         let grid_count = grid.len() as u32;
         let grid_vb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1674,7 +2252,260 @@ impl Renderer {
             texture_bytes_uploaded: 0,
             full_texture_uploads: 0,
             partial_texture_uploads: 0,
+            cam_layout,
+            matcap: false,
+            ambient_occlusion: false,
+            ao_active: false,
+            ao_encoded: false,
+            ao_targets: None,
+            ao_fallback_view,
+            ao_sampler,
+            ao_layout,
+            ao_blur_layout,
+            ao_uniform,
+            ao_depth_pipeline,
+            ao_pipeline,
+            ao_blur_pipeline,
+            screen_overlay: Vec::new(),
+            screen_overlay_dirty: false,
+            screen_overlay_vb: None,
+            screen_overlay_count: 0,
+            screen_overlay_pipeline,
         }
+    }
+
+    fn camera_bind_group(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        buffer: &wgpu::Buffer,
+        ao_view: &wgpu::TextureView,
+        sampler: &wgpu::Sampler,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("simple3d-cam-bg"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(ao_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        })
+    }
+
+    /// Matcap procedural no Solid (normal em espaço de vista).
+    pub fn set_matcap(&mut self, enabled: bool) {
+        self.matcap = enabled;
+    }
+
+    /// Oclusão ambiente por horizontes (GTAO) no Solid e no Material.
+    pub fn set_ambient_occlusion(&mut self, enabled: bool) {
+        self.ambient_occlusion = enabled;
+    }
+
+    /// AO calculado e aplicado neste quadro.
+    pub fn ambient_occlusion_active(&self) -> bool {
+        self.ao_active && self.ao_encoded
+    }
+
+    /// Overlay de tela em px lógicos (gizmo), desenhado por último sem
+    /// depth test. Lista vazia remove.
+    pub fn set_screen_overlay(&mut self, shapes: Vec<OverlayShape>) {
+        if self.screen_overlay != shapes {
+            self.screen_overlay = shapes;
+            self.screen_overlay_dirty = true;
+        }
+    }
+
+    /// Vértices do overlay de tela na GPU (diagnóstico e testes).
+    pub fn screen_overlay_vertex_count(&self) -> u32 {
+        self.screen_overlay_count
+    }
+
+    /// Grava os passes de AO antes do passe principal: profundidade da cena,
+    /// horizontes e blur. Sem esta chamada (ou com AO inativo), as malhas não
+    /// amostram a oclusão.
+    pub fn encode_ambient_occlusion(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        camera: &Camera,
+    ) {
+        puffin::profile_function!();
+        self.ao_encoded = false;
+        let (Some(targets), Some(vb)) = (&self.ao_targets, &self.mesh_vb) else {
+            return;
+        };
+        if !self.ao_active || self.mesh_count == 0 {
+            return;
+        }
+
+        let proj = camera.proj();
+        let ortho = camera.proj == petunia_core::Projection::Ortho;
+        let radius = (camera.visible_height() * 0.06).clamp(0.02, 2.0);
+        let uniform = AoUniform {
+            inv_proj: proj.inverse().to_cols_array_2d(),
+            params: [
+                proj.y_axis.y,
+                if ortho { 1.0 } else { 0.0 },
+                radius,
+                AO_INTENSITY,
+            ],
+            size: [
+                self.depth_size.0 as f32,
+                self.depth_size.1 as f32,
+                targets.size.0 as f32,
+                targets.size.1 as f32,
+            ],
+            limits: [AO_MAX_RADIUS_PX * self.pixel_ratio, 0.0, 0.0, 0.0],
+        };
+        queue.write_buffer(&self.ao_uniform, 0, bytemuck::bytes_of(&uniform));
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("ao-depth-prepass"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &targets.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.ao_depth_pipeline);
+            pass.set_bind_group(0, &self.cam_bind_group, &[]);
+            pass.set_vertex_buffer(0, vb.slice(..));
+            pass.draw(0..self.mesh_count, 0..1);
+        }
+        for (label, view, pipeline, bind_group) in [
+            (
+                "ao-gtao",
+                &targets.raw_view,
+                &self.ao_pipeline,
+                &targets.ao_bind_group,
+            ),
+            (
+                "ao-blur",
+                &targets.final_view,
+                &self.ao_blur_pipeline,
+                &targets.blur_bind_group,
+            ),
+        ] {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(label),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        // `shade.y = 1`: as malhas passam a amostrar a oclusão neste quadro.
+        queue.write_buffer(
+            &self.cam_buffer,
+            (std::mem::offset_of!(CameraUniform, shade) + std::mem::size_of::<f32>()) as u64,
+            bytemuck::bytes_of(&1.0_f32),
+        );
+        self.ao_encoded = true;
+    }
+
+    /// (Re)cria os alvos de AO no tamanho do viewport e liga o resultado ao
+    /// bind group da câmera.
+    fn recreate_ao_targets(&mut self, device: &wgpu::Device, width: u32, height: u32) {
+        let half = ((width / 2).max(1), (height / 2).max(1));
+        let texture = |label: &'static str, size: (u32, u32), format, usage| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d {
+                        width: size.0,
+                        height: size.1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        let attach = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+        let depth_view = texture("ao-depth", (width, height), AO_DEPTH_FORMAT, attach);
+        let raw_view = texture("ao-raw", half, AO_FORMAT, attach);
+        let final_view = texture("ao-final", half, AO_FORMAT, attach);
+        let ao_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ao-bind-group"),
+            layout: &self.ao_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&depth_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.ao_uniform.as_entire_binding(),
+                },
+            ],
+        });
+        let blur_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ao-blur-bind-group"),
+            layout: &self.ao_blur_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&raw_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&depth_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.ao_uniform.as_entire_binding(),
+                },
+            ],
+        });
+        self.cam_bind_group = Self::camera_bind_group(
+            device,
+            &self.cam_layout,
+            &self.cam_buffer,
+            &final_view,
+            &self.ao_sampler,
+        );
+        self.ao_targets = Some(AoTargets {
+            depth_view,
+            raw_view,
+            final_view,
+            ao_bind_group,
+            blur_bind_group,
+            size: half,
+        });
+        let _ = &self.ao_fallback_view;
     }
 
     /// Quantas vezes os buffers de geometria foram reconstruídos (telemetria Wave 1).
@@ -1931,6 +2762,7 @@ impl Renderer {
             ],
         }));
         self.outline_mask_view = Some(mask_view);
+        self.recreate_ao_targets(device, width, height);
     }
 
     /// Atualiza uniforms de câmera todo frame; reconstrói buffers de geometria
@@ -1955,6 +2787,11 @@ impl Renderer {
     ) {
         puffin::profile_function!();
         self.xray = xray;
+        // AO só nos modos com faces iluminadas e opacas; o uniform abaixo
+        // diz ao shader se amostra a textura.
+        self.ao_active = self.ambient_occlusion
+            && !xray
+            && matches!(shading, Shading::Solid | Shading::MaterialPreview);
         self.active_selection_rgb = scene
             .active()
             .and_then(|a| a.effective_selection_overlay_color())
@@ -2021,8 +2858,34 @@ impl Renderer {
                     self.depth_size.1.max(1) as f32,
                     self.line_width_px * self.pixel_ratio,
                 ],
+                view_right: camera.right().extend(0.0).to_array(),
+                view_up: camera.up().extend(0.0).to_array(),
+                shade: [
+                    if self.matcap && shading == Shading::Solid {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    // Ligado por `encode_ambient_occlusion` quando os passes
+                    // deste quadro forem gravados.
+                    0.0,
+                    0.0,
+                    0.0,
+                ],
             }]),
         );
+        if self.screen_overlay_dirty {
+            self.screen_overlay_dirty = false;
+            let vertices = tessellate_overlay(&self.screen_overlay, self.pixel_ratio);
+            self.screen_overlay_count = vertices.len() as u32;
+            self.screen_overlay_vb = (!vertices.is_empty()).then(|| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("screen-overlay"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                })
+            });
+        }
 
         let fp = fingerprint_scene(
             scene,
@@ -2881,6 +3744,14 @@ impl Renderer {
             pass.set_bind_group(0, bind_group, &[]);
             pass.draw(0..3, 0..1);
             pass.set_bind_group(0, &self.cam_bind_group, &[]);
+        }
+
+        // Overlay de tela (gizmo): passo próprio por último, sem depth test e
+        // em tamanho constante de pixels.
+        if let Some(vb) = &self.screen_overlay_vb {
+            pass.set_pipeline(&self.screen_overlay_pipeline);
+            pass.set_vertex_buffer(0, vb.slice(..));
+            pass.draw(0..self.screen_overlay_count, 0..1);
         }
     }
 

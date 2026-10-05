@@ -990,6 +990,10 @@ conflict_title = "Shortcut conflicts detected"
 conflict_shared = "shares the shortcut with"
 
 [preferences]
+viewport_ambient_occlusion_hint = "Darkens creases and contacts (GTAO, half resolution) in Solid and Material."
+viewport_ambient_occlusion = "Ambient occlusion"
+viewport_matcap_hint = "Solid shading with a clay studio look that follows the view; reads shape and curvature better."
+viewport_matcap = "Matcap"
 studio_light_follows_camera = "Studio light follows the camera"
 studio_light_follows_camera_hint = "On: the shape stays readable from any side while you orbit (Plasticity/Cinema 4D style). Off: the light stays fixed in the world."
 workplane_prefer_ground = "Automatic work plane favors the ground"

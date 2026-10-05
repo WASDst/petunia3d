@@ -4167,6 +4167,14 @@ export component PetuniaSlintShell inherits Window {
     in property <string> label-click-move-click-hint;
     in-out property <bool> workplane-prefer-ground: false;
     in-out property <bool> studio-light-follows-camera: true;
+    in-out property <bool> viewport-matcap: false;
+    in-out property <bool> viewport-ambient-occlusion: true;
+    in property <string> label-viewport-matcap;
+    in property <string> label-viewport-matcap-hint;
+    in property <string> label-viewport-ambient-occlusion;
+    in property <string> label-viewport-ambient-occlusion-hint;
+    /// O backend GPU desenha o gizmo; o shell só mostra rótulos e o tripé.
+    in-out property <bool> gizmo-gpu: false;
     in property <string> label-studio-light-follows-camera;
     in property <string> label-studio-light-follows-camera-hint;
     in property <string> label-workplane-prefer-ground;
@@ -4330,6 +4338,8 @@ export component PetuniaSlintShell inherits Window {
     callback click-move-click-set(bool);
     callback workplane-prefer-ground-set(bool);
     callback studio-light-follows-camera-set(bool);
+    callback viewport-matcap-set(bool);
+    callback viewport-ambient-occlusion-set(bool);
     callback double-tap-interval-released(int);
     callback multiselection-measure-tag-set(bool);
     callback asset-query-changed(string);
@@ -7776,7 +7786,7 @@ export component PetuniaSlintShell inherits Window {
                         Path { commands: root.gizmo-plane-xz-commands; fit: ImageFit.preserve; stroke: root.gizmo-handle-color(1, DesignTokens.axis-y); stroke-width: 1px; fill: root.gizmo-handle-color(1, DesignTokens.axis-y).transparentize(0.65); }
                         Path { commands: root.gizmo-plane-xy-commands; fit: ImageFit.preserve; stroke: root.gizmo-handle-color(2, DesignTokens.axis-z); stroke-width: 1px; fill: root.gizmo-handle-color(2, DesignTokens.axis-z).transparentize(0.65); }
                         Path { commands: root.gizmo-view-roll-commands; fit: ImageFit.preserve; stroke: root.gizmo-center-active || root.gizmo-center-hover ? DesignTokens.accent : DesignTokens.text-secondary.transparentize(0.4); stroke-width: 1.5px; fill: transparent; }
-                        Rectangle {
+                        if !root.gizmo-gpu: Rectangle {
                             x: gizmo-origin-x - 6px;
                             y: gizmo-origin-y - 6px;
                             width: 12px;
@@ -11208,6 +11218,49 @@ export component PetuniaSlintShell inherits Window {
                         text: Tr.t("sl.mode") + ": \{root.shading-mode}";
                         color: DesignTokens.text-muted;
                         font-size: DesignTokens.font-caption;
+                    }
+
+                    Rectangle { height: 1px; background: DesignTokens.border; }
+
+                    // Estilo do Solid: matcap procedural e oclusão ambiente (GTAO).
+                    for option in [
+                        { on: root.viewport-matcap, label: root.label-viewport-matcap, hint: root.label-viewport-matcap-hint, which: 0 },
+                        { on: root.viewport-ambient-occlusion, label: root.label-viewport-ambient-occlusion, hint: root.label-viewport-ambient-occlusion-hint, which: 1 },
+                    ]: Rectangle {
+                        height: 26px;
+                        border-radius: 4px;
+                        background: option.on ? DesignTokens.accent : DesignTokens.surface;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        accessible-role: checkbox;
+                        accessible-checkable: true;
+                        accessible-label: option.label;
+                        accessible-description: option.hint;
+                        accessible-checked: option.on;
+                        accessible-action-default => {
+                            if option.which == 0 { root.viewport-matcap-set(!option.on); } else { root.viewport-ambient-occlusion-set(!option.on); }
+                        }
+                        Text {
+                            text: option.label;
+                            color: option.on ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            font-size: DesignTokens.font-small;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => {
+                                if option.which == 0 { root.viewport-matcap-set(!option.on); } else { root.viewport-ambient-occlusion-set(!option.on); }
+                            }
+                            Tooltip {
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 2px;
+                                    Text { text: option.label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                                    Text { text: option.hint; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+                                }
+                            }
+                        }
                     }
 
                     Rectangle { height: 1px; background: DesignTokens.border; }

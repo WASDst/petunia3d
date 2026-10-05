@@ -2915,6 +2915,68 @@ fn parametric_handles_have_a_24px_target_and_drive_the_value() {
 }
 
 #[test]
+fn gpu_gizmo_shapes_follow_the_handle_geometry_and_state() {
+    let mut bridge = front_view_bridge_with_cube();
+    assert!(bridge.gizmo_overlay_shapes().is_empty(), "Select sem gizmo");
+    bridge.apply(UiIntent::SetActiveTool("move".into()));
+    let shapes = bridge.gizmo_overlay_shapes();
+    assert!(
+        shapes.len() >= 7,
+        "hastes, setas, planos e centro: {}",
+        shapes.len()
+    );
+    let center = shapes.last().unwrap();
+    assert!(center.closed && center.fill.is_some());
+    let gizmo = crate::compute_gizmo(
+        &bridge.state,
+        bridge.viewport_size[0],
+        bridge.viewport_size[1],
+    );
+    // O centro desenhado é o mesmo ponto do hit test.
+    let cx = center.points.iter().map(|p| p[0]).sum::<f32>() / center.points.len() as f32;
+    assert!((cx - gizmo.origin_x).abs() < 0.5);
+    // Hover no eixo X muda a cor/largura da haste X.
+    let rod_x = |shapes: &[petunia_render_wgpu::OverlayShape]| {
+        shapes
+            .iter()
+            .find(|s| {
+                !s.closed
+                    && s.stroke.is_some()
+                    && s.points.first() == Some(&[gizmo.origin_x, gizmo.origin_y])
+                    && s.points
+                        .last()
+                        .map(|p| (p[0] - gizmo.x_end[0]).abs() < 0.5)
+                        .unwrap_or(false)
+            })
+            .and_then(|s| s.stroke)
+            .unwrap()
+    };
+    let idle = rod_x(&shapes);
+    bridge.gizmo_hover = Some(crate::GizmoHandle::X);
+    let hovered = rod_x(&bridge.gizmo_overlay_shapes());
+    assert!(hovered.1 > idle.1 && hovered.0 != idle.0);
+    // Sem backend GPU o shell mantém o gizmo 2D.
+    assert!(!bridge.view_model().gizmo_gpu);
+    assert!(!bridge.view_model().gizmo.x_commands.is_empty());
+}
+
+#[test]
+fn matcap_and_ambient_occlusion_are_persisted_viewport_preferences() {
+    let mut bridge = front_view_bridge_with_cube();
+    let vm = bridge.view_model();
+    assert!(!vm.viewport_matcap && vm.viewport_ambient_occlusion);
+    assert!(
+        !vm.label_viewport_matcap.is_empty()
+            && !vm.label_viewport_ambient_occlusion_hint.is_empty()
+    );
+    assert!(bridge.set_viewport_matcap(true));
+    assert!(!bridge.set_viewport_matcap(true));
+    assert!(bridge.set_viewport_ambient_occlusion(false));
+    let state = bridge.viewport_render_state();
+    assert!(state.matcap && !state.ambient_occlusion);
+}
+
+#[test]
 fn snap_radius_is_an_accessibility_setting_with_real_effect() {
     let mut bridge = front_view_bridge_with_cube();
     let vm = bridge.view_model();

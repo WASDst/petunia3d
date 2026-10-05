@@ -931,6 +931,14 @@ pub mod text_id {
         TextId::new("tools.poly_pen_mode_polygons_hint");
     pub const STATUS_POLY_PEN_PAINTED: TextId = TextId::new("status.poly_pen_painted");
 
+    pub const PREFERENCES_VIEWPORT_MATCAP: TextId = TextId::new("preferences.viewport_matcap");
+    pub const PREFERENCES_VIEWPORT_MATCAP_HINT: TextId =
+        TextId::new("preferences.viewport_matcap_hint");
+    pub const PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION: TextId =
+        TextId::new("preferences.viewport_ambient_occlusion");
+    pub const PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION_HINT: TextId =
+        TextId::new("preferences.viewport_ambient_occlusion_hint");
+
     pub const ALL: &[TextId] = &[
         UI_OUTLINER,
         UI_PROPERTIES,
@@ -1554,6 +1562,10 @@ pub mod text_id {
         TOOLS_POLY_PEN_MODE_EDGES_HINT,
         TOOLS_POLY_PEN_MODE_POLYGONS_HINT,
         STATUS_POLY_PEN_PAINTED,
+        PREFERENCES_VIEWPORT_MATCAP,
+        PREFERENCES_VIEWPORT_MATCAP_HINT,
+        PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION,
+        PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION_HINT,
     ];
 }
 

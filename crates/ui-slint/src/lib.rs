@@ -84,6 +84,10 @@ pub struct ViewportRenderState {
     pub boolean_operand: Option<uuid::Uuid>,
     /// Luz de estúdio acompanha a câmera (preferência; padrão ligado).
     pub studio_light_follows_camera: bool,
+    /// Matcap procedural no Solid (preferência).
+    pub matcap: bool,
+    /// Oclusão ambiente (GTAO) no Solid/Material (preferência).
+    pub ambient_occlusion: bool,
     /// Aparência das arestas por modo (DRAW = forma, POLY = topologia).
     pub edge_mode: petunia_render_wgpu::EdgeMode,
     /// Plano de trabalho em destaque (DRAW, ferramenta de desenho).
@@ -108,6 +112,8 @@ impl Default for ViewportRenderState {
             hover: petunia_core::HoverTarget::None,
             boolean_operand: None,
             studio_light_follows_camera: true,
+            matcap: false,
+            ambient_occlusion: false,
             edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
             workplane: None,
         }
@@ -181,6 +187,86 @@ pub struct GizmoModel {
     /// Projeção em tela do 3D Cursor para o overlay da viewport.
     pub cursor_screen: [f32; 2],
     pub cursor_visible: bool,
+}
+
+impl GizmoModel {
+    /// Remove a geometria das alças (o backend GPU a desenha); rótulos,
+    /// tripé de navegação e cursor 3D continuam no shell.
+    pub fn clear_handle_geometry(&mut self) {
+        for commands in [
+            &mut self.x_commands,
+            &mut self.y_commands,
+            &mut self.z_commands,
+            &mut self.x_arrow_commands,
+            &mut self.y_arrow_commands,
+            &mut self.z_arrow_commands,
+            &mut self.x_scale_commands,
+            &mut self.y_scale_commands,
+            &mut self.z_scale_commands,
+            &mut self.x_rotate_commands,
+            &mut self.y_rotate_commands,
+            &mut self.z_rotate_commands,
+            &mut self.plane_yz_commands,
+            &mut self.plane_xz_commands,
+            &mut self.plane_xy_commands,
+            &mut self.view_roll_commands,
+        ] {
+            commands.clear();
+        }
+    }
+}
+
+/// Subcaminhos `M x y L x y … [Z]` de um comando de `Path`: pontos e se fecha.
+fn path_polylines(commands: &str) -> Vec<(Vec<[f32; 2]>, bool)> {
+    let mut paths: Vec<(Vec<[f32; 2]>, bool)> = Vec::new();
+    let mut numbers = Vec::new();
+    let flush = |numbers: &mut Vec<f32>, paths: &mut Vec<(Vec<[f32; 2]>, bool)>| {
+        if let Some(path) = paths.last_mut() {
+            path.0
+                .extend(numbers.chunks_exact(2).map(|pair| [pair[0], pair[1]]));
+        }
+        numbers.clear();
+    };
+    for token in commands.split_whitespace() {
+        match token {
+            "M" => {
+                flush(&mut numbers, &mut paths);
+                paths.push((Vec::new(), false));
+            }
+            "L" => flush(&mut numbers, &mut paths),
+            "Z" | "z" => {
+                flush(&mut numbers, &mut paths);
+                if let Some(path) = paths.last_mut() {
+                    path.1 = true;
+                }
+            }
+            other => {
+                if let Ok(value) = other.parse::<f32>() {
+                    numbers.push(value);
+                }
+            }
+        }
+    }
+    flush(&mut numbers, &mut paths);
+    paths.retain(|(points, _)| points.len() >= 2);
+    paths
+}
+
+/// Cores do gizmo desenhado na GPU: eixos dos tokens do shell
+/// (`DesignTokens.axis-*`, entregues em `connect_callbacks`); o resto vem do
+/// tema ativo no `ThemeRegistry`, a mesma fonte do `apply_theme`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GizmoAxisColors(pub [[f32; 4]; 3]);
+
+impl Default for GizmoAxisColors {
+    fn default() -> Self {
+        let rgba = |c: [f32; 3]| [c[0], c[1], c[2], 1.0];
+        Self([
+            rgba(petunia_render::scene::AXIS_X),
+            rgba(petunia_render::scene::AXIS_Y),
+            rgba(petunia_render::scene::AXIS_Z),
+        ])
+    }
 }
 
 /// Ferramenta paramétrica com preview modal e Tool Properties.
@@ -636,6 +722,14 @@ pub trait PetuniaViewport: Send {
     /// Objetos em transformação rígida neste quadro (modo objeto): o backend
     /// pode reaproveitar a geometria triangulada aplicando a matriz.
     fn set_rigid_previews(&mut self, _previews: &[(uuid::Uuid, glam::Mat4)]) {}
+    /// O backend desenha o gizmo de transformação num passo próprio (GPU,
+    /// tamanho constante em pixels, sem depth test); o shell então não o
+    /// desenha em 2D. O hit test continua no bridge, sobre a mesma geometria.
+    fn draws_gizmo(&self) -> bool {
+        false
+    }
+    /// Overlay de tela em px lógicos (gizmo) para backends que o desenham.
+    fn set_screen_overlay(&mut self, _shapes: Vec<petunia_render_wgpu::OverlayShape>) {}
     fn render_frame(
         &mut self,
         _project: &Project,
@@ -699,6 +793,22 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
 
     fn draws_component_guides(&self) -> bool {
         (**self).draws_component_guides()
+    }
+
+    fn uses_physical_pixels(&self) -> bool {
+        (**self).uses_physical_pixels()
+    }
+
+    fn set_pixel_ratio(&mut self, ratio: f32) {
+        (**self).set_pixel_ratio(ratio);
+    }
+
+    fn draws_gizmo(&self) -> bool {
+        (**self).draws_gizmo()
+    }
+
+    fn set_screen_overlay(&mut self, shapes: Vec<petunia_render_wgpu::OverlayShape>) {
+        (**self).set_screen_overlay(shapes);
     }
 
     fn set_pose_override(&mut self, pose: Option<std::sync::Arc<petunia_project::PoseOverride>>) {
@@ -798,6 +908,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub poly_pen_mode: PolyPenMode,
     /// Pintura de faces em andamento (modo Polygons).
     poly_pen_strip: Option<petunia_core::PenStrip>,
+    /// Cores dos eixos do gizmo GPU (tokens do shell).
+    pub gizmo_axis_colors: GizmoAxisColors,
     /// Cursor sobre a alça da ferramenta paramétrica (destaque).
     pub parametric_handle_hover: bool,
     /// O último press caiu na alça paramétrica (o clique não seleciona).
@@ -1194,6 +1306,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             poly_pen_points: Vec::new(),
             poly_pen_mode: PolyPenMode::default(),
             poly_pen_strip: None,
+            gizmo_axis_colors: GizmoAxisColors::default(),
             parametric_handle_hover: false,
             tool_press_parametric_handle: false,
             keyboard_tool_modal_active: false,
@@ -2151,6 +2264,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             hover: self.state.session.tools.hover,
             boolean_operand: self.state.session.tools.boolean_operand,
             studio_light_follows_camera: self.preferences.studio_light_follows_camera,
+            matcap: self.preferences.viewport_matcap,
+            ambient_occlusion: self.preferences.viewport_ambient_occlusion,
             edge_mode: self.edge_mode(),
             workplane: self.workplane_overlay(),
         }
@@ -2167,6 +2282,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.viewport.set_outlined_objects(&outlined, active);
         self.viewport
             .set_rigid_previews(self.state.rigid_preview_transforms());
+        if self.viewport.draws_gizmo() {
+            let shapes = self.gizmo_overlay_shapes();
+            self.viewport.set_screen_overlay(shapes);
+        }
         self.viewport.render_frame(
             &self.state.project,
             &self.state.project.refs,
@@ -11736,6 +11855,153 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
     }
 
+    /// Gizmo de transformação como formas de tela para o passo GPU. A
+    /// geometria é a mesma de [`compute_gizmo`] (que também serve ao hit
+    /// test), com a hierarquia de estados do shell: o eixo ativo/travado
+    /// domina, o eixo sob o cursor clareia e os demais esmaecem no arrasto.
+    pub(crate) fn gizmo_overlay_shapes(&self) -> Vec<petunia_render_wgpu::OverlayShape> {
+        use petunia_render_wgpu::OverlayShape;
+        let [width, height] = self.viewport_size;
+        let gizmo = compute_gizmo(&self.state, width, height);
+        if !gizmo.visible || self.state.workspace != Workspace::Model {
+            return Vec::new();
+        }
+        let theme_color = |token: petunia_config::ThemeToken| -> [f32; 4] {
+            let registry = petunia_config::ThemeRegistry::global();
+            let c = registry
+                .get_theme(&self.state.ui.active_theme_id)
+                .or_else(|| registry.get_theme("petunia-dark"))
+                .map_or(petunia_config::theme::ColorRgba::WHITE, |theme| {
+                    theme.colors.get_token_color(token)
+                });
+            c.0.map(|channel| channel as f32 / 255.0)
+        };
+        let accent = theme_color(petunia_config::ThemeToken::AccentBlue);
+        let center = theme_color(petunia_config::ThemeToken::TextPrimary);
+        let canvas = theme_color(petunia_config::ThemeToken::BgCanvas);
+        let muted = theme_color(petunia_config::ThemeToken::TextSecondary);
+        let hover = self.gizmo_hover.and_then(|h| h.axis()).map(|a| a as i32);
+        let active = self.gizmo_drag.and_then(|h| h.axis()).map(|a| a as i32);
+        let constraint = match self
+            .state
+            .session
+            .tools
+            .modal
+            .as_ref()
+            .map(|op| op.constraint)
+        {
+            Some(petunia_core::ModalConstraint::Axis(axis)) => [axis as i32, -1],
+            Some(petunia_core::ModalConstraint::Plane(excluded)) => {
+                [((excluded + 1) % 3) as i32, ((excluded + 2) % 3) as i32]
+            }
+            _ => [-1, -1],
+        };
+        let fade = |c: [f32; 4], amount: f32| [c[0], c[1], c[2], c[3] * (1.0 - amount)];
+        let color = |axis: i32| -> [f32; 4] {
+            let base = self.gizmo_axis_colors.0[axis as usize];
+            if constraint.contains(&axis) {
+                base
+            } else if constraint[0] >= 0 || active.is_some_and(|a| a != axis) {
+                fade(base, 0.72)
+            } else if active == Some(axis) {
+                base
+            } else if hover == Some(axis) {
+                let lift = |v: f32| v + (1.0 - v) * 0.35;
+                [lift(base[0]), lift(base[1]), lift(base[2]), base[3]]
+            } else {
+                base
+            }
+        };
+        let stroke_width = |axis: i32| -> f32 {
+            if constraint.contains(&axis) || active == Some(axis) {
+                4.0
+            } else if constraint[0] >= 0 {
+                2.0
+            } else if hover == Some(axis) {
+                3.5
+            } else {
+                2.5
+            }
+        };
+        let mut shapes = Vec::new();
+        let mut push = |commands: &str, fill: Option<[f32; 4]>, stroke: Option<([f32; 4], f32)>| {
+            for (points, closed) in path_polylines(commands) {
+                shapes.push(OverlayShape {
+                    points,
+                    closed,
+                    fill: fill.filter(|_| closed),
+                    stroke,
+                });
+            }
+        };
+        let axes = [
+            (
+                &gizmo.x_commands,
+                &gizmo.x_arrow_commands,
+                &gizmo.x_scale_commands,
+                &gizmo.x_rotate_commands,
+                &gizmo.plane_yz_commands,
+            ),
+            (
+                &gizmo.y_commands,
+                &gizmo.y_arrow_commands,
+                &gizmo.y_scale_commands,
+                &gizmo.y_rotate_commands,
+                &gizmo.plane_xz_commands,
+            ),
+            (
+                &gizmo.z_commands,
+                &gizmo.z_arrow_commands,
+                &gizmo.z_scale_commands,
+                &gizmo.z_rotate_commands,
+                &gizmo.plane_xy_commands,
+            ),
+        ];
+        // Planos primeiro (translúcidos, por baixo das hastes).
+        for (axis, (_, _, _, _, plane)) in axes.iter().enumerate() {
+            let c = color(axis as i32);
+            push(plane, Some(fade(c, 0.65)), Some((c, 1.0)));
+        }
+        for (axis, (rod, arrow, scale, rotate, _)) in axes.iter().enumerate() {
+            let c = color(axis as i32);
+            push(rotate, None, Some((fade(c, 0.32), 1.5)));
+            push(rod, None, Some((c, stroke_width(axis as i32))));
+            push(arrow, Some(c), None);
+            push(scale, Some(c), Some((canvas, 1.0)));
+        }
+        let center_on = matches!(self.gizmo_drag, Some(GizmoHandle::Center));
+        let center_hover = matches!(self.gizmo_hover, Some(GizmoHandle::Center));
+        let ring = if center_on || center_hover {
+            accent
+        } else {
+            fade(muted, 0.4)
+        };
+        push(&gizmo.view_roll_commands, None, Some((ring, 1.5)));
+        let dot = if center_on {
+            accent
+        } else if center_hover {
+            fade(accent, 0.2)
+        } else {
+            center
+        };
+        let circle: Vec<[f32; 2]> = (0..20)
+            .map(|i| {
+                let angle = i as f32 * std::f32::consts::TAU / 20.0;
+                [
+                    gizmo.origin_x + 6.0 * angle.cos(),
+                    gizmo.origin_y + 6.0 * angle.sin(),
+                ]
+            })
+            .collect();
+        shapes.push(OverlayShape {
+            points: circle,
+            closed: true,
+            fill: Some(dot),
+            stroke: Some((canvas, 1.5)),
+        });
+        shapes
+    }
+
     /// O ponto (px) está no alvo da alça paramétrica?
     pub(crate) fn parametric_handle_at(&self, pixel: [f32; 2]) -> bool {
         self.parametric_handle().is_some_and(|(_, handle)| {
@@ -13778,6 +14044,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Matcap procedural no Solid (preferência persistida).
+    pub fn set_viewport_matcap(&mut self, enabled: bool) -> bool {
+        if self.preferences.viewport_matcap == enabled {
+            return false;
+        }
+        self.preferences.viewport_matcap = enabled;
+        self.state.render.mark_dirty();
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Oclusão ambiente (GTAO) no Solid e no Material (preferência persistida).
+    pub fn set_viewport_ambient_occlusion(&mut self, enabled: bool) -> bool {
+        if self.preferences.viewport_ambient_occlusion == enabled {
+            return false;
+        }
+        self.preferences.viewport_ambient_occlusion = enabled;
+        self.state.render.mark_dirty();
+        self.state.mark_dirty();
+        true
+    }
+
     /// Plano automático do Draw: favorecer o chão (SketchUp) ou a vista (Modo/C4D).
     pub fn set_workplane_prefer_ground(&mut self, enabled: bool) -> bool {
         if self.preferences.workplane_prefer_ground == enabled {
@@ -14927,6 +15215,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.split_preset = self.split.preset_id().to_string();
         vm.prefab_items = self.prefab_item_models();
         vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        if self.viewport.draws_gizmo() {
+            vm.gizmo.clear_handle_geometry();
+        }
         vm.selection_overlay = compute_selection_overlay(
             &self.state,
             self.viewport_size[0],
@@ -15779,6 +16070,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.click_move_click = self.preferences.click_move_click;
         vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
         vm.studio_light_follows_camera = self.preferences.studio_light_follows_camera;
+        vm.viewport_matcap = self.preferences.viewport_matcap;
+        vm.viewport_ambient_occlusion = self.preferences.viewport_ambient_occlusion;
+        vm.label_viewport_matcap = translated(petunia_config::text_id::PREFERENCES_VIEWPORT_MATCAP);
+        vm.label_viewport_matcap_hint =
+            translated(petunia_config::text_id::PREFERENCES_VIEWPORT_MATCAP_HINT);
+        vm.label_viewport_ambient_occlusion =
+            translated(petunia_config::text_id::PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION);
+        vm.label_viewport_ambient_occlusion_hint =
+            translated(petunia_config::text_id::PREFERENCES_VIEWPORT_AMBIENT_OCCLUSION_HINT);
+        vm.gizmo_gpu = self.viewport.draws_gizmo();
         vm.label_studio_light_follows_camera =
             translated(petunia_config::text_id::PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA);
         vm.label_studio_light_follows_camera_hint =
@@ -16189,6 +16490,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
         hover: state.session.tools.hover,
         boolean_operand: state.session.tools.boolean_operand,
         studio_light_follows_camera: true,
+        matcap: preferences.viewport_matcap,
+        ambient_occlusion: preferences.viewport_ambient_occlusion,
         edge_mode: ModelingMode::default().edge_mode(),
         workplane: None,
     };

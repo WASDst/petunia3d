@@ -165,6 +165,12 @@ pub struct UserPreferences {
     /// fixa no mundo.
     #[serde(default = "default_true")]
     pub studio_light_follows_camera: bool,
+    /// Matcap procedural no Solid (aparência de argila que segue a vista).
+    #[serde(default)]
+    pub viewport_matcap: bool,
+    /// Oclusão ambiente (GTAO) no Solid e no Material.
+    #[serde(default = "default_true")]
+    pub viewport_ambient_occlusion: bool,
     /// Raio do snap em px lógicos (4–48). Maior ajuda quem tem tremor ou pouca
     /// precisão (Findlater et al., 2010: cursores de área).
     #[serde(default = "default_snap_radius_px")]
@@ -205,6 +211,8 @@ impl Default for UserPreferences {
             click_move_click: false,
             workplane_prefer_ground: false,
             studio_light_follows_camera: true,
+            viewport_matcap: false,
+            viewport_ambient_occlusion: true,
             snap_radius_px: default_snap_radius_px(),
             colorblind_axes: false,
             reduced_motion: false,
@@ -357,6 +365,8 @@ mod tests {
             click_move_click: true,
             workplane_prefer_ground: true,
             studio_light_follows_camera: false,
+            viewport_matcap: true,
+            viewport_ambient_occlusion: false,
             snap_radius_px: 20.0,
             section_layouts: BTreeMap::from([(
                 InspectorSectionId::Material.as_str().to_string(),

@@ -992,6 +992,10 @@ conflict_title = "Conflito de atalhos detectado"
 conflict_shared = "compartilha o atalho com"
 
 [preferences]
+viewport_ambient_occlusion_hint = "Escurece vincos e contatos (GTAO, meia resolução) no Solid e no Material."
+viewport_ambient_occlusion = "Oclusão ambiente"
+viewport_matcap_hint = "Sombreamento Solid com aparência de argila de estúdio que acompanha a vista; lê melhor forma e curvatura."
+viewport_matcap = "Matcap"
 studio_light_follows_camera = "Luz de estúdio acompanha a câmera"
 studio_light_follows_camera_hint = "Ligada: a forma continua legível de qualquer lado ao orbitar (estilo Plasticity/Cinema 4D). Desligada: a luz fica fixa no mundo."
 workplane_prefer_ground = "Plano automático favorece o chão"

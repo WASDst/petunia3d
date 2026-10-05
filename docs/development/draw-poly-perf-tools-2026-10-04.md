@@ -63,6 +63,8 @@ usuários continuam pendentes.
 - ~~Orçamento de bytes do histórico somando snapshots inteiros~~: resolvido em
   04/10/2026 (bytes únicos por bloco compartilhado, ADR 008).
 - Matriz por objeto persistida no arquivo: fora da V1 (ADR 008).
-- Poly Pen (modos Points/Edges/Polygons, pintar faces arrastando), alças
-  ≥ 24 px e gizmo em passo GPU, matcap/GTAO: seguem nas matrizes anteriores.
+- ~~Poly Pen (modos, pintar faces), alças ≥ 24 px, gizmo em passo GPU,
+  matcap/GTAO~~: entregues em 04/10/2026 (`poly-pen-gap-matrix.md`,
+  `draw-poly-audit-2026-09-30.md` U8, `wave6-visual-accessibility-gap-matrix.md`
+  parte 5).
 - Captura nativa e teste com usuários de todas as ferramentas.

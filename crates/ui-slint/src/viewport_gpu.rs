@@ -174,6 +174,8 @@ impl WgpuViewport {
         self.renderer
             .set_studio_light_follows_camera(state.studio_light_follows_camera);
         self.renderer.set_edge_mode(state.edge_mode);
+        self.renderer.set_matcap(state.matcap);
+        self.renderer.set_ambient_occlusion(state.ambient_occlusion);
         self.renderer.set_workplane(state.workplane);
         self.renderer
             .set_selection_style(state.selection_rgb, state.selection_thickness);
@@ -203,6 +205,8 @@ impl WgpuViewport {
             });
         self.renderer
             .encode_selection_outline_mask(&self.queue, &mut encoder);
+        self.renderer
+            .encode_ambient_occlusion(&self.queue, &mut encoder, camera);
 
         {
             let depth_view = self.renderer.depth_view();
@@ -296,6 +300,14 @@ impl PetuniaViewport for WgpuViewport {
 
     fn draws_component_guides(&self) -> bool {
         true
+    }
+
+    fn draws_gizmo(&self) -> bool {
+        true
+    }
+
+    fn set_screen_overlay(&mut self, shapes: Vec<petunia_render_wgpu::OverlayShape>) {
+        self.renderer.set_screen_overlay(shapes);
     }
 
     fn set_pose_override(&mut self, pose: Option<Arc<petunia_project::PoseOverride>>) {
@@ -644,6 +656,158 @@ mod tests {
         );
     }
 
+    /// Vale em V aberto para a câmera Front: a dobra (x = 0) é côncava.
+    fn valley() -> Project {
+        let mut mesh = petunia_core::Mesh::default();
+        for [x, y, z] in [
+            [-2.0f32, -2.0, 0.0],
+            [0.0, -2.0, -1.5],
+            [2.0, -2.0, 0.0],
+            [2.0, 2.0, 0.0],
+            [0.0, 2.0, -1.5],
+            [-2.0, 2.0, 0.0],
+        ] {
+            mesh.verts.push(petunia_mesh::Vertex::new(x, y, z));
+        }
+        mesh.faces.push(petunia_mesh::Face::new(vec![0, 1, 4, 5]));
+        mesh.faces.push(petunia_mesh::Face::new(vec![1, 2, 3, 4]));
+        let mut project = Project::default();
+        project.add("Valley", mesh);
+        project
+    }
+
+    fn valley_row(viewport: &mut WgpuViewport, ambient_occlusion: bool) -> Vec<f32> {
+        let mut camera = Camera::default();
+        camera.set_preset(petunia_core::ViewPreset::Front);
+        camera.target = glam::Vec3::new(0.0, 0.0, -0.75);
+        camera.set_projection(petunia_core::Projection::Ortho);
+        camera.ortho_half_h = 1.5;
+        camera.aspect = viewport.width as f32 / viewport.height as f32;
+        let state = ViewportRenderState {
+            show_grid: false,
+            show_wireframe_overlay: false,
+            ambient_occlusion,
+            ..ViewportRenderState::default()
+        };
+        viewport
+            .render_frame(&valley(), &[], &camera, state)
+            .unwrap();
+        let pixels = read_pixels(viewport);
+        let (w, y) = (viewport.width as usize, viewport.height as usize / 2);
+        (0..w)
+            .map(|x| {
+                let i = (y * w + x) * 4;
+                luminance([pixels[i], pixels[i + 1], pixels[i + 2], 255])
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ambient_occlusion_darkens_creases_but_not_open_faces() {
+        let _gpu = gpu_test_guard();
+        let Ok(mut viewport) = WgpuViewport::try_create_default(400, 240) else {
+            return;
+        };
+        let off = valley_row(&mut viewport, false);
+        assert!(!viewport.renderer.ambient_occlusion_active());
+        let on = valley_row(&mut viewport, true);
+        assert!(
+            viewport.renderer.ambient_occlusion_active(),
+            "passes de AO gravados"
+        );
+        let center = viewport.width as usize / 2;
+        let crease = (center - 1..=center + 1)
+            .map(|x| on[x] / off[x].max(1.0))
+            .fold(f32::MAX, f32::min);
+        assert!(crease < 0.95, "a dobra escurece: razão {crease:.3}");
+        // Longe da dobra (face aberta): praticamente igual.
+        for x in [center - 140, center + 140] {
+            let ratio = on[x] / off[x].max(1.0);
+            assert!(ratio > 0.96, "face aberta em x={x}: razão {ratio:.3}");
+        }
+    }
+
+    #[test]
+    fn matcap_changes_solid_shading_and_follows_the_view() {
+        let _gpu = gpu_test_guard();
+        let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
+            return;
+        };
+        let mut project = Project::new();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let mut sample = |matcap: bool, preset| {
+            let mut camera = Camera::default();
+            camera.set_preset(preset);
+            camera.target = glam::Vec3::ZERO;
+            let state = ViewportRenderState {
+                show_grid: false,
+                show_wireframe_overlay: false,
+                studio_light_follows_camera: false,
+                matcap,
+                ..ViewportRenderState::default()
+            };
+            viewport
+                .render_frame(&project, &[], &camera, state)
+                .unwrap();
+            luminance(center_pixel(&viewport))
+        };
+        let studio = sample(false, petunia_core::ViewPreset::Front);
+        let matcap_front = sample(true, petunia_core::ViewPreset::Front);
+        let matcap_back = sample(true, petunia_core::ViewPreset::Back);
+        assert!(
+            (studio - matcap_front).abs() > 3.0,
+            "{studio:.1} × {matcap_front:.1}"
+        );
+        assert!(
+            (matcap_front - matcap_back).abs() < 2.0,
+            "matcap em espaço de vista: {matcap_front:.1} × {matcap_back:.1}"
+        );
+    }
+
+    #[test]
+    fn screen_overlay_draws_on_top_without_depth_test() {
+        let _gpu = gpu_test_guard();
+        let Ok(mut viewport) = WgpuViewport::try_create_default(160, 120) else {
+            return;
+        };
+        assert!(viewport.draws_gizmo());
+        let mut project = Project::new();
+        project.add("Cube", petunia_core::Mesh::cube(2.0));
+        let mut camera = Camera::default();
+        camera.set_preset(petunia_core::ViewPreset::Front);
+        camera.target = glam::Vec3::ZERO;
+        let state = ViewportRenderState {
+            show_grid: false,
+            ..ViewportRenderState::default()
+        };
+        let square = petunia_render_wgpu::OverlayShape {
+            points: vec![[70.0, 50.0], [90.0, 50.0], [90.0, 70.0], [70.0, 70.0]],
+            closed: true,
+            fill: Some([1.0, 0.0, 0.0, 1.0]),
+            stroke: None,
+        };
+        viewport.set_screen_overlay(vec![square]);
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        assert!(viewport.renderer.screen_overlay_vertex_count() > 0);
+        let pixel = center_pixel(&viewport);
+        assert!(
+            pixel[0] > 240 && pixel[1] < 15 && pixel[2] < 15,
+            "{pixel:?}"
+        );
+        viewport.set_screen_overlay(Vec::new());
+        viewport
+            .render_frame(&project, &[], &camera, state)
+            .unwrap();
+        assert_eq!(viewport.renderer.screen_overlay_vertex_count(), 0);
+        let pixel = center_pixel(&viewport);
+        assert!(
+            !(pixel[0] > 240 && pixel[1] < 15),
+            "overlay removido: {pixel:?}"
+        );
+    }
+
     #[test]
     fn studio_light_following_the_camera_reads_the_same_from_any_side() {
         let _gpu = gpu_test_guard();
@@ -698,6 +862,8 @@ mod tests {
                         hover: petunia_core::HoverTarget::None,
                         boolean_operand: None,
                         studio_light_follows_camera: true,
+                        matcap: false,
+                        ambient_occlusion: false,
                         edge_mode: petunia_render_wgpu::EdgeMode::Overlay,
                         workplane: None,
                     },

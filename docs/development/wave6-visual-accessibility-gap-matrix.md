@@ -47,11 +47,19 @@ Autoridade: [capítulo 05](../bible/foundations/05-viewport-shading-modos-visual
 | --- | --- | --- | --- |
 | 10 | Seleção de objetos visível no viewport, com contorno de largura constante (cap. 46 §8.4, Rong & Tan) | Auditoria: no domínio Object o viewport GPU não destacava os objetos selecionados (`Selection.assets` nem chegava ao renderer; só componentes tinham camada). Delta: máscara dos selecionados (`Rg8Unorm`, R = selecionado, G = ativo) gravada antes do passe principal e composição em tela cheia que pinta os pixels a até N px da máscara, com a borda suavizada pela distância. N = espessura da seleção (1–4 px lógicos) × escala da tela; o ativo usa a cor de seleção e os demais a mesma cor mais escura. Busca direta no raio em vez de jump flooding: para 1–4 px é mais simples e barata; JFA só compensa para raios grandes. Só no domínio Object e no workspace de modelagem. Testes `object_outline_follows_the_object_selection_only_in_the_object_domain` e, por pixels, `selected_objects_get_a_constant_width_outline` (largura igual ao afastar a câmera; interior intacto). | PARTIALLY_COMPLIANT — o contorno aparece por cima de objetos que estejam na frente (sem teste de profundidade); não aparece no shading Wireframe (sem faces na máscara) nem no viewport por software. |
 
+## Parte 5 (2026-10-04)
+
+| # | Requisito | Evidência e delta | Estado após |
+| --- | --- | --- | --- |
+| 11 | Matcap | Matcap procedural no Solid (sem textura): normal em espaço de vista (direita/cima da câmera no uniform), luz-chave, céu, borda e brilho; segue a vista. Preferência persistida `viewport_matcap`, alternada no popover de shading. Teste por pixels `matcap_changes_solid_shading_and_follows_the_view`. | COMPLIANT — só no WGPU; viewport por software sem matcap. |
+| 12 | Oclusão ambiente (GTAO) | Pré-passe de profundidade (`Depth32Float`, sem MSAA), passe de horizontes (Jimenez et al. 2016: 4 fatias × 6 passos, ruído intercalado, normal do depth) em meia resolução, blur 5×5 que respeita a profundidade, e multiplicação no shader de malha (ambiente inteiro, difusa pela metade) por uma textura no bind group da câmera. Só no Solid/Material sem X-Ray; o shader só amostra quando os passes do quadro foram gravados. Preferência `viewport_ambient_occlusion` (padrão ligado). Teste por pixels `ambient_occlusion_darkens_creases_but_not_open_faces` (dobra escurece, face aberta igual). | COMPLIANT — só no WGPU. |
+| 13 | Gizmo em passo GPU (Onda 6) | `Renderer::set_screen_overlay` + passo próprio no fim do quadro: sem depth test, tamanho constante em px, traços de largura constante e polígonos convexos. O bridge monta as formas a partir da mesma geometria de `compute_gizmo` usada no hit test, com a hierarquia de estados (ativo/travado, hover, esmaecido) e as cores dos tokens; com o backend GPU o shell só mostra rótulos e o tripé. Testes `screen_overlay_draws_on_top_without_depth_test` (pixels) e `gpu_gizmo_shapes_follow_the_handle_geometry_and_state`. Correção junto: o `Box<dyn PetuniaViewport>` de produção não repassava `uses_physical_pixels`/`set_pixel_ratio`, então o WGPU ficava em px lógicos em telas HiDPI. | COMPLIANT |
+
 ## Pendências registradas
 
 - Contorno de seleção: esconder a parte encoberta por outros objetos; Wireframe
   e viewport por software.
-- Matcap; oclusão ambiente (GTAO).
+- ~~Matcap; oclusão ambiente (GTAO)~~ → implementados (2026-10-04, parte 5).
 - Guias de aresta do domínio Edge ainda em `LineList` de 1 px.
 - Aparência por modo e plano de trabalho no viewport por software.
 - Coalescer renders por quadro (pendência da Onda 1).
