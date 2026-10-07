@@ -1,21 +1,25 @@
 # UV — Face Corners
 
-> **Status: direção aprovada; migração será planejada antes da implementação.**
+> **Status: aprovado para implementação durante a refatoração de Geometry.**
 
-A representação atual guarda arrays paralelos de vertices e UVs por face:
+A representação atual usa arrays paralelos:
 
 ```rust
-Face {
-    verts: Vec<VertexIndex>,
-    uv: Vec<TextureCoordinates>,
+pub struct Face {
+    pub verts: Vec<VertexIndex>,
+    pub uv: Vec<TextureCoordinates>,
 }
 ```
 
-Isso representa seams corretamente, mas exige preservar manualmente a invariante de comprimento e sincronizar dois vetores em praticamente toda operação topológica.
+Embora correta para seams, ela exige a invariante manual:
 
-## Direção
+```text
+verts.len() == uv.len()
+```
 
-Migrar para um modelo explícito de face-corner quando a migração puder ser feita preservando comportamento e compatibilidade de arquivos:
+Essa invariante aparece repetidamente em Knife, Loop Cut, Bevel, Imprint, Boolean cleanup, UV tools, import/export, attachments e render extraction.
+
+## Modelo alvo
 
 ```rust
 pub struct FaceCorner {
@@ -29,16 +33,21 @@ pub struct Face {
 }
 ```
 
-## Benefícios esperados
+## Benefícios
 
-- UV e vertex index deixam de poder perder sincronização.
-- Inserir/remover/splitar corners vira uma única operação estrutural.
-- Knife, Loop Cut, Poly Pen, Dissolve, Bevel e Boolean cleanup ficam mais difíceis de implementar incorretamente.
-- Seams e edição UV ficam semanticamente mais claras.
-- A API fica mais legível para humanos e agentes.
+- vertex e UV de corner tornam-se atomicamente ligados;
+- inserir, remover, inverter e reorganizar uma face opera uma única coleção;
+- elimina uma classe inteira de bugs de arrays fora de sincronia;
+- simplifica operações topológicas que interpolam UV;
+- torna seams, attachments e triangulação mais explícitos;
+- melhora significativamente a auditabilidade por humanos e agentes.
 
-## Custo
+## Regras
 
-A migração é de custo médio-alto porque toca operações geométricas, import/export, serialização, UV e testes. Entretanto é uma mudança localizada dentro do domínio Geometry e faz mais sentido durante esta refatoração do que depois que novas ferramentas forem construídas sobre o formato atual.
+- UV continua sendo **por face-corner**, nunca por vertex global.
+- A migração não altera a capacidade de representar seams.
+- Não converteremos todas as APIs externas de uma vez; adaptadores temporários são aceitáveis durante a migração.
+- Compatibilidade de arquivos existentes é obrigatória.
+- Nenhuma operação geométrica será considerada migrada até seus testes de UV e topologia continuarem verdes.
 
-A migração deve ser incremental e acompanhada de compatibilidade do formato de projeto ou conversão explícita na camada de persistência.
+O roteiro transversal está em [Mapa de migração UV](uv-migration-map.md).
