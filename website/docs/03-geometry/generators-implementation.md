@@ -1,6 +1,6 @@
 # Generators — implementação detalhada
 
-> **Status: proposta recomendada; complementa o redesign já aprovado.**
+> **Status: aprovado; complementa o redesign já aprovado.**
 
 ## Diagnóstico real da implementação
 
@@ -613,3 +613,19 @@ Sweep
 ```
 
 Não adicionar Loft, Boolean history, Bevel generator, node graph ou modifier-generator híbrido antes desses quatro estarem sólidos.
+
+
+## Decisões fechadas
+
+1. Circle principal gera Spline/PlanarShape, não Mesh Primitive.
+2. Plane Mesh continua separado de Rectangle/Plane Shape.
+3. Primitive deixa de persistir Mesh + descriptor e passa a ser PrimitiveGenerator.
+4. Parâmetros inválidos retornam erro; não há clamp silencioso em evaluation.
+5. Extrude usa PlanarShape e suporta holes desde o primeiro vertical slice.
+6. Revolve usa Spline planar, inclusive aberta.
+7. Revolve possui eixo explícito.
+8. Sweep usa PlanarShape + Spline Path.
+9. Spacing/tolerance/budget pertencem à Evaluation Policy, não ao authoring state do usuário.
+10. Primitive, Extrude, Revolve e Sweep compartilham creation session, Preview/Final, Undo e Inspector.
+11. Component editing exige Make Editable explícito; freeze paramétrico silencioso será removido.
+12. Generators produzem UV determinística própria quando a parametrização é conhecida.
