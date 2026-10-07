@@ -22,7 +22,9 @@ pub enum ViewLayout {
     Single,
     /// Duas vistas lado a lado.
     Split2,
-    /// Quatro vistas em grade 2×2.
+    /// Quatro vistas em grade 2×2. **Não exposto** (decisão D7 do plano de UI):
+    /// o cap. 36 limita a 2 viewports, então `from_id` não aceita "4" e nenhum
+    /// controle ou preferência chega aqui. Fica para o modelo e os testes.
     Quad,
 }
 
@@ -57,7 +59,7 @@ impl ViewLayout {
         match id {
             "1" => Some(Self::Single),
             "2" => Some(Self::Split2),
-            "4" => Some(Self::Quad),
+            // "4" (Quad) não é aceito: cap. 36 limita a 2 viewports (D7).
             _ => None,
         }
     }
@@ -238,7 +240,8 @@ mod tests {
 
     #[test]
     fn ids_round_trip() {
-        for layout in [ViewLayout::Single, ViewLayout::Split2, ViewLayout::Quad] {
+        // Quad fica fora de propósito (D7); ver `quad_is_not_reachable_from_ids`.
+        for layout in [ViewLayout::Single, ViewLayout::Split2] {
             assert_eq!(ViewLayout::from_id(layout.id()), Some(layout));
         }
         assert_eq!(ViewLayout::from_id("3"), None);
@@ -277,5 +280,15 @@ mod tests {
         assert_eq!(s.next(&[true, false, false, false], None), None);
         assert_eq!(s.next(&[true, false, true, false], None), Some(2));
         assert_eq!(s.next(&[true], None), None);
+    }
+
+    #[test]
+    fn quad_is_not_reachable_from_ids() {
+        assert_eq!(
+            ViewLayout::from_id("4"),
+            None,
+            "cap. 36: no máximo 2 viewports"
+        );
+        assert_eq!(ViewLayout::from_id("2"), Some(ViewLayout::Split2));
     }
 }

@@ -5,6 +5,13 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 
 ## [Unreleased] — Frontend Declarativo Slint & Modern UI
 
+### Retomada unificada e correções POLY (07/10/2026)
+
+- Base Slint F2–F8 reconciliada com os PRs #32–34, preservando a gramática de ferramentas, caches, Poly Pen, canvas e decalques atuais.
+- Inspector recolhido mantém as quatro pílulas acessíveis durante a prévia de hover; clicar reabre a seção sem o flyout cobrir o alvo do clique, inclusive durante a transição (fade sem deslocamento sobre o trilho).
+- Loop Cut procura arestas compatíveis por proximidade na face e no fallback; sólidos fechados de booleanas/primitivas sem anel de quads recebem seção perpendicular à aresta escolhida, com prévia e um Undo, preservando UVs e materiais.
+- Os sete conjuntos locais foram preservados numa fila portátil com hashes em `docs/development/recovery/2026-10-07/`; materiais/PAINT/DRAW ainda pendentes seguem entregas graduais na mesma branch. Snapshots de recuperação não significam features ativas.
+
 ### PAINT — seleção e máscara (05/10/2026)
 
 - Auditoria PAINT/ANIMATE com matriz e plano: `docs/development/paint-animate-audit-2026-10-05.md`.
@@ -37,6 +44,48 @@ O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0
 - Gramática única para Knife, Loop Cut, Slice, Draw Profile e os modais por teclado; buffer numérico único.
 - DRAW: domínios Curve/Point/Region reais; Knife atravessa várias faces; imprint em várias faces, cruzando arestas e com furos; Inset métrico; plano médio entre faces paralelas; snap ligado por padrão entre todos os objetos, com centro de face, interseção, paralelo, perpendicular e 15°.
 - 176 mensagens de status passam a usar `TextId` (en/pt-BR). Medição opcional por `PETUNIA_PROFILE`/`PETUNIA_FRAME_TIMING` e benchmarks de consultas da viewport. Matriz: `docs/development/draw-poly-perf-tools-2026-10-04.md`.
+### UI Slint — F8 e F0: acessibilidade e métricas (05/10/2026)
+
+- Texto apagado dos temas escuro e claro passa a cumprir o contraste 4,5:1 da WCAG 2.2 AA; testes novos de contraste, nome acessível e tamanho mínimo de alvo (24 px).
+- `ui-lint` também barra animação com duração literal, que ignoraria a redução de movimento.
+- Novo `cargo run -p xtask -- ui-metrics`: conta os controles visíveis por workspace e falha se POLY passar de 45. Baseline: DRAW 45, POLY 45 (eram ~125), PAINT 40.
+- Para caber na meta: modos de sombreamento e X-Ray num só botão com popover; dividir viewport e redefinir vista só no menu View; Duplicar e Parts saem de barra e trilho (seguem no Inspector, menus e paleta); Knife e Slice viram grupo.
+- Abas de workspace e eixos do gizmo passam a 24 px (alvo mínimo WCAG 2.5.8).
+- Protocolo de teste com iniciantes ganha tarefas para a nova interface (Home, barra por seleção, pincel espelhado, grupos do trilho, cor de destaque).
+
+### UI Slint — F7: diálogos e Home (05/10/2026)
+
+- Nova **Home** ao abrir sem projeto: novo modelo, abrir, recuperar sessão, projetos recentes e ajustes; pode ser desligada.
+- Preferências: cor de destaque da interface separada da cor de seleção na viewport (cores parecidas demais são recusadas), escala de 175 %, busca na barra lateral e aba Sobre.
+- Imagens de referência em grade 3 × 2 com ajustes só da vista selecionada; "Limpar tudo" pede confirmação.
+- Fonte Inter embarcada; a vista com 4 viewports deixa de ser selecionável (cap. 36 limita a 2).
+
+### UI Slint — F6: PAINT sem duplicação (05/10/2026)
+
+- O trilho do PAINT vira a fonte única de ferramentas, com grupos (Pincel/Aerógrafo, Formas, Gradiente); a barra de baixo passa a ajustar o pincel: cor, tamanho, opacidade e simetria.
+- Inspector do PAINT começa por Camadas; Preparar superfície fica fechada por padrão.
+- Ids como `ConnectedPixels` e `BrightnessContrast` dão lugar a "Pixels conectados" e "Brilho e contraste"; os avisos de ferramenta ativa e modo de seleção passam a ser traduzidos.
+
+### UI Slint — F5: ferramentas e barra contextual (05/10/2026)
+
+- Barra contextual de POLY mostra só as ferramentas do domínio de seleção atual (objeto, face, aresta ou ponto); o botão "Bevel" passa a se chamar "Round Edge", como pede o vocabulário do caderno.
+- Ações rápidas saem do Inspector e vão para a barra contextual, com rótulo e cartão de personalização; a lixeira deixa de ser botão fixo (Delete, menu do botão direito e cabeçalho do Inspector continuam excluindo).
+- Nova preferência **Mostrar nomes no trilho de ferramentas** (desligada por padrão): trilho de 148 px com nome ao lado de cada ícone.
+- A dica em repouso em inglês ("Selection: Object · LMB Select…") deu lugar aos chips traduzidos da status bar.
+- Trilho com grupos: Seleção/Laço e Cursor 3D/Medir num botão cada, com flyout pelo botão direito; atalhos repetidos de primitivas e de DRAW saem do trilho e da barra.
+
+### UI Slint — F4: Inspector de superfície única (04/10/2026)
+
+- Inspector como um painel translúcido com seções planas (sem cartões nem sombras), cabeçalho de contexto com nome do objeto, Duplicar/Excluir e **Recolher Inspector**; pin aparece só no hover ou quando ligado.
+- Trilho de pílulas sobreposto à viewport e visível só com o Inspector recolhido (ADR 004 §3); a viewport ganha 50 px.
+- Modifiers vira subseção de Object; perfil de material em grade 2 colunas sem texto cortado.
+- Caderno: cap. 36 "Revisão de baseline — 2026-10-04"; emendas nos ADRs 004 e 005. Testes: `collapse_inspector_closes_and_unpins_every_section` e rail de 4 pílulas.
+
+### UI Slint — F2 e F3: componentes, galeria e shell (04/10/2026)
+
+- F2: `app.slint` dividido em `types.slint`, `components/`, `inspector/` e `dialogs/` sem mudança de comportamento; componentes base `IconButton`, `Segmented`, `DropdownButton`, `PropertyRow`, `EmptyState`, `KeyHint` e `CommandSearchField`; galeria `--example gallery` com textos en/pt-BR; `ui-lint` recursivo.
+- F3: top bar com busca de comandos visível no lugar de 5 ícones (Abrir/Salvar seguem em Arquivo; novos itens View → Imagens de referência e Window → Parts); as três ilhas da viewport viram uma barra única LEFT/CENTER/RIGHT; status bar com chips de tecla que somem por largura em vez de texto truncado; pílulas do Inspector sem roxo cheio e trilho de 50 px.
+- Testes novos: itens movidos para os menus e tradução da galeria.
 
 ### UI Slint — F1: tokens v2 e guarda de tokens (04/10/2026)
 

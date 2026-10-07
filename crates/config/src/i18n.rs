@@ -286,6 +286,11 @@ pub mod text_id {
     pub const UI_SEARCH_PARTS: TextId = TextId::new("ui.search_parts");
     pub const UI_INSPECTOR: TextId = TextId::new("ui.inspector");
     pub const UI_NUMERIC_FIELD_HINT: TextId = TextId::new("ui.numeric_field_hint");
+    pub const SELECTION_MODE: TextId = TextId::new("selection.mode");
+    pub const SELECTION_DOMAIN_OBJECT: TextId = TextId::new("selection.domain_object");
+    pub const SELECTION_DOMAIN_POINT: TextId = TextId::new("selection.domain_point");
+    pub const SELECTION_DOMAIN_EDGE: TextId = TextId::new("selection.domain_edge");
+    pub const SELECTION_DOMAIN_FACE: TextId = TextId::new("selection.domain_face");
     pub const TOOLS_SELECT: TextId = TextId::new("tools.select");
     pub const TOOLS_ROTATE: TextId = TextId::new("tools.rotate");
     pub const TOOLS_SCALE: TextId = TextId::new("tools.scale");
@@ -386,6 +391,18 @@ pub mod text_id {
     pub const UI_SELECTION_COLOR_INVALID: TextId = TextId::new("ui.selection_color_invalid");
     pub const UI_SELECTION_COLOR_LOW_CONTRAST: TextId =
         TextId::new("ui.selection_color_low_contrast");
+    pub const HOME_TITLE: TextId = TextId::new("home.title");
+    pub const HOME_SUBTITLE: TextId = TextId::new("home.subtitle");
+    pub const HOME_NEW: TextId = TextId::new("home.new");
+    pub const HOME_OPEN: TextId = TextId::new("home.open");
+    pub const HOME_RECOVER: TextId = TextId::new("home.recover");
+    pub const HOME_RECENT: TextId = TextId::new("home.recent");
+    pub const HOME_NO_RECENT: TextId = TextId::new("home.no_recent");
+    pub const HOME_SETTINGS: TextId = TextId::new("home.settings");
+    pub const HOME_SHOW_ON_START: TextId = TextId::new("home.show_on_start");
+    pub const UI_ACCENT_COLOR: TextId = TextId::new("ui.accent_color");
+    pub const UI_ACCENT_COLOR_HINT: TextId = TextId::new("ui.accent_color_hint");
+    pub const UI_COLORS_TOO_CLOSE: TextId = TextId::new("ui.colors_too_close");
     pub const UI_PREFERENCES_SAVE_FAILED: TextId = TextId::new("ui.preferences_save_failed");
     pub const PIVOT_MEDIAN: TextId = TextId::new("pivot.median");
     pub const PIVOT_BOUNDS: TextId = TextId::new("pivot.bounds");
@@ -416,6 +433,9 @@ pub mod text_id {
         TextId::new("preferences.workplane_prefer_ground_hint");
     pub const PREFERENCES_CLICK_MOVE_CLICK_HINT: TextId =
         TextId::new("preferences.click_move_click_hint");
+    pub const PREFERENCES_SHOW_TOOL_LABELS: TextId = TextId::new("preferences.show_tool_labels");
+    pub const PREFERENCES_SHOW_TOOL_LABELS_HINT: TextId =
+        TextId::new("preferences.show_tool_labels_hint");
     pub const TOOL_GRAMMAR_LAST_OPERATION: TextId = TextId::new("tool_grammar.last_operation");
     pub const TOOL_GRAMMAR_ADJUST_HINT: TextId = TextId::new("tool_grammar.adjust_hint");
     pub const TOOL_GRAMMAR_READY: TextId = TextId::new("tool_grammar.ready");
@@ -1185,6 +1205,26 @@ pub mod text_id {
         PREFERENCES_DRAG_THRESHOLD,
         PREFERENCES_CLICK_MOVE_CLICK,
         PREFERENCES_CLICK_MOVE_CLICK_HINT,
+        PREFERENCES_SHOW_TOOL_LABELS,
+        HOME_TITLE,
+        HOME_SUBTITLE,
+        HOME_NEW,
+        HOME_OPEN,
+        HOME_RECOVER,
+        HOME_RECENT,
+        HOME_NO_RECENT,
+        HOME_SETTINGS,
+        HOME_SHOW_ON_START,
+        UI_ACCENT_COLOR,
+        UI_ACCENT_COLOR_HINT,
+        UI_COLORS_TOO_CLOSE,
+        STATUS_ACTIVE_TOOL,
+        SELECTION_MODE,
+        SELECTION_DOMAIN_OBJECT,
+        SELECTION_DOMAIN_POINT,
+        SELECTION_DOMAIN_EDGE,
+        SELECTION_DOMAIN_FACE,
+        PREFERENCES_SHOW_TOOL_LABELS_HINT,
         PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA,
         PREFERENCES_STUDIO_LIGHT_FOLLOWS_CAMERA_HINT,
         PREFERENCES_WORKPLANE_PREFER_GROUND,

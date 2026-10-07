@@ -52,6 +52,21 @@ pub fn apply_theme(window: &PetuniaSlintShell, theme_id: &str) {
     tokens.set_hud_border(shell(ShellToken::HudBorder));
 }
 
+/// Sobrepõe a cor de destaque do tema pela escolhida pelo usuário (D5). O texto
+/// sobre o destaque fica escuro ou claro conforme a luminância da cor.
+pub fn apply_accent(window: &PetuniaSlintShell, rgb: [u8; 3]) {
+    let tokens = window.global::<DesignTokens>();
+    let [r, g, b] = rgb;
+    tokens.set_accent(slint::Color::from_rgb_u8(r, g, b));
+    let luminance = 0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b);
+    let on_accent = if luminance > 140.0 {
+        slint::Color::from_rgb_u8(16, 17, 20)
+    } else {
+        slint::Color::from_rgb_u8(255, 255, 255)
+    };
+    tokens.set_on_accent(on_accent);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

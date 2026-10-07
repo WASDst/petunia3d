@@ -412,10 +412,11 @@ fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
     shell.set_label_tool_options_collapse("Collapse tool options".into());
     shell.set_label_tool_options_expand("Expand tool options".into());
 
-    // Rail colapsado: 5 pílulas de ícone separadas, sem textos rotacionados.
+    // Rail colapsado: pílulas de ícone separadas, sem textos rotacionados.
+    // Modifiers virou subseção de Object (plano de UI F4, D2): sem pílula própria.
     shell.set_inspector_collapsed(true);
     let mut tops = Vec::new();
-    for label in ["Parts", "Transform", "Material", "Object", "Modifiers"] {
+    for label in ["Parts", "Transform", "Material", "Object"] {
         let pill = ElementHandle::find_by_accessible_label(&shell, label)
             .find(|element| {
                 element.accessible_role() == Some(AccessibleRole::Button)
@@ -425,6 +426,15 @@ fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
             .unwrap_or_else(|| panic!("pílula 36x36 {label} ausente no rail colapsado"));
         tops.push(pill.absolute_position().y + pill.size().height);
     }
+    assert!(
+        ElementHandle::find_by_accessible_label(&shell, "Modifiers").all(|element| (element
+            .size()
+            .width
+            - 36.0)
+            .abs()
+            >= 0.5),
+        "Modifiers não tem mais pílula no rail"
+    );
     for (i, pair) in tops.windows(2).enumerate() {
         assert!(
             pair[1] - pair[0] >= 8.0,
@@ -590,4 +600,227 @@ fn test_tooltip_hover() {
             println!("Found text: {}", text);
         }
     }
+}
+
+#[test]
+fn collapse_inspector_button_is_clickable_and_returns_to_the_rail() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_reduced_motion(true);
+    shell.global::<petunia_ui_slint::Motion>().set_reduced(true);
+    shell.set_label_tab_parts("Parts".into());
+    shell.set_label_tab_transform("Transform".into());
+    shell.set_label_tab_material("Material".into());
+    shell.set_label_tab_object("Object".into());
+    shell.set_model_material_open(true);
+    assert!(shell.get_inspector_flyout_open());
+
+    let requests = Rc::new(Cell::new(0));
+    let requests_callback = Rc::clone(&requests);
+    let weak = shell.as_weak();
+    shell.on_inspector_collapse_requested(move || {
+        requests_callback.set(requests_callback.get() + 1);
+        // O bridge real fecha todas as seções; aqui basta o efeito visível.
+        if let Some(shell) = weak.upgrade() {
+            shell.set_model_material_open(false);
+        }
+    });
+
+    let button = ElementHandle::find_by_accessible_label(&shell, "Collapse Inspector")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Button))
+        .expect("botão Recolher no cabeçalho de contexto");
+    let pos = button.absolute_position();
+    let size = button.size();
+    let (x, y) = (pos.x + size.width / 2.0, pos.y + size.height / 2.0);
+    move_pointer(&shell, x, y);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(x, y),
+        button: PointerEventButton::Left,
+    });
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(x, y),
+        button: PointerEventButton::Left,
+    });
+
+    assert_eq!(requests.get(), 1, "o clique chega ao callback de recolher");
+    assert!(
+        !shell.get_inspector_flyout_open(),
+        "recolher fecha o painel mesmo com o ponteiro ainda sobre ele"
+    );
+
+    let openings = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&openings);
+    let weak = shell.as_weak();
+    shell.on_section_pill_clicked(move |id| {
+        observed.borrow_mut().push(id.to_string());
+        if let Some(shell) = weak.upgrade() {
+            match id.as_str() {
+                "parts" => shell.set_model_parts_open(true),
+                "transform" => shell.set_model_transform_open(true),
+                "material" => shell.set_model_material_open(true),
+                "object" => shell.set_model_object_open(true),
+                _ => panic!("unexpected Inspector section"),
+            }
+        }
+    });
+    for reduced in [false, true] {
+        shell.set_reduced_motion(reduced);
+        shell
+            .global::<petunia_ui_slint::Motion>()
+            .set_reduced(reduced);
+        for width in [1280.0, 1024.0] {
+            shell.window().set_size(LogicalSize::new(width, 800.0));
+            for (label, id) in [
+                ("Parts", "parts"),
+                ("Transform", "transform"),
+                ("Material", "material"),
+                ("Object", "object"),
+            ] {
+                shell.set_model_parts_open(false);
+                shell.set_model_transform_open(false);
+                shell.set_model_material_open(false);
+                shell.set_model_object_open(false);
+                shell.set_hovered_inspector_section("".into());
+                shell.set_flyout_hovered(false);
+                shell.set_rail_hovered(false);
+                move_pointer(&shell, 600.0, 400.0);
+                i_slint_backend_testing::testing_backend::mock_elapsed_time(300);
+                let pill = ElementHandle::find_by_accessible_label(&shell, label)
+                    .find(|element| {
+                        element.accessible_role() == Some(AccessibleRole::Button)
+                            && (element.size().width - 36.0).abs() < 0.5
+                    })
+                    .expect("section pill must remain reachable after collapse");
+                let pos = pill.absolute_position();
+                let size = pill.size();
+                let point =
+                    LogicalPosition::new(pos.x + size.width / 2.0, pos.y + size.height / 2.0);
+                move_pointer(&shell, point.x, point.y);
+                assert!(
+                    pill.computed_opacity() > 0.95,
+                    "{label} remains visible during peek"
+                );
+                let flyout = ElementHandle::find_by_element_id(
+                    &shell,
+                    "PetuniaSlintShell::inspector-flyout",
+                )
+                .next()
+                .expect("Inspector flyout");
+                let _ = flyout.absolute_position();
+                i_slint_backend_testing::testing_backend::mock_elapsed_time(40);
+                assert!(
+                    flyout.absolute_position().x + flyout.size().width
+                        <= pill.absolute_position().x,
+                    "hover preview must not overlap {label}"
+                );
+                shell.window().dispatch_event(WindowEvent::PointerPressed {
+                    position: point,
+                    button: PointerEventButton::Left,
+                });
+                shell.window().dispatch_event(WindowEvent::PointerReleased {
+                    position: point,
+                    button: PointerEventButton::Left,
+                });
+                assert_eq!(
+                    openings.borrow().last().map(String::as_str),
+                    Some(id),
+                    "hover must not hide or cover {label} before its click"
+                );
+                assert!(shell.get_inspector_flyout_open());
+            }
+        }
+    }
+}
+
+#[test]
+fn inspector_never_shows_transform_values_without_a_selection() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_selection_domain("OBJECT".into());
+    shell.set_label_tab_transform("Transform".into());
+    shell.set_model_transform_open(true);
+
+    // O cabeçalho da seção é largo; a pílula homônima do trilho tem 36 px e
+    // continua na árvore (invisível sob o painel aberto).
+    let transform_section = |shell: &PetuniaSlintShell| {
+        ElementHandle::find_by_accessible_label(shell, "Transform").any(|element| {
+            element.accessible_role() == Some(AccessibleRole::Button)
+                && element.size().width > 100.0
+        })
+    };
+
+    shell.set_object_has_selection(false);
+    assert!(!transform_section(&shell), "sem seleção, Transform some");
+    assert!(
+        ElementHandle::find_by_accessible_label(&shell, "Nothing selected")
+            .next()
+            .is_some(),
+        "sem seleção, o painel explica o que fazer"
+    );
+
+    shell.set_object_has_selection(true);
+    assert!(transform_section(&shell), "com seleção, Transform volta");
+}
+
+#[test]
+fn poly_context_bar_follows_the_selection_domain() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1440.0, 900.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_modeling_mode("POLY".into());
+
+    let shows = |shell: &PetuniaSlintShell, label: &str| {
+        ElementHandle::find_by_accessible_label(shell, label)
+            .any(|element| element.accessible_role() == Some(AccessibleRole::Button))
+    };
+
+    shell.set_selection_domain("FACE".into());
+    assert!(shows(&shell, "Inset"), "face: Inset");
+    assert!(!shows(&shell, "Round Edge"), "face: sem Round Edge");
+    assert!(!shows(&shell, "Merge Center"), "face: sem Merge");
+
+    shell.set_selection_domain("EDGE".into());
+    assert!(shows(&shell, "Round Edge"), "aresta: Round Edge");
+    assert!(!shows(&shell, "Inset"), "aresta: sem Inset");
+
+    shell.set_selection_domain("POINT".into());
+    assert!(shows(&shell, "Merge Center"), "ponto: Merge");
+    assert!(!shows(&shell, "Round Edge"), "ponto: sem Round Edge");
+
+    // Desenho e corte agem pelo gesto: aparecem em qualquer domínio.
+    for domain in ["OBJECT", "FACE", "EDGE", "POINT"] {
+        shell.set_selection_domain(domain.into());
+        assert!(shows(&shell, "Knife"), "{domain}: Knife sempre visível");
+    }
+}
+
+#[test]
+fn escape_closes_the_home_screen() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_home_open(true);
+    let closed = Rc::new(Cell::new(false));
+    let closed_flag = Rc::clone(&closed);
+    shell.on_home_closed(move || closed_flag.set(true));
+    shell.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::Escape.into(),
+    });
+    shell.window().dispatch_event(WindowEvent::KeyReleased {
+        text: slint::platform::Key::Escape.into(),
+    });
+    assert!(closed.get(), "Esc fecha a Home");
 }

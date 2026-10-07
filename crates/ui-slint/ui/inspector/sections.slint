@@ -1,0 +1,1647 @@
+import { Icon, IconDisplay, IconSet } from "@lucide";
+import { ColorSwatch, NumericField, PetuniaSlider, TopAction, Vector3Field } from "../components/controls.slint";
+import { RichTooltip } from "../components/feedback.slint";
+import { ListView } from "std-widgets.slint";
+import { DesignTokens, Motion, Tr } from "../tokens.slint";
+import { ModifierEntry, QuickActionEntry, SceneItem } from "../types.slint";
+
+/// Linha compacta de busca, filtro e ordenação da lista Parts.
+export component PartsFilterRow inherits Rectangle {
+    in property <string> search-label;
+    in property <string> search-id: "";
+    in property <string> selected-only-label;
+    in property <string> sort-label;
+    in-out property <string> query: "";
+    in-out property <bool> selected-only: false;
+    in-out property <bool> sort-by-name: false;
+    in-out property <int> visible-count: 0;
+    in-out property <int> total-count: 0;
+    callback query-changed(string);
+    callback selected-only-changed(bool);
+    callback sort-changed(bool);
+
+    width: 100%;
+    height: 28px;
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        spacing: 6px;
+        alignment: center;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 28px;
+            border-radius: 4px;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: search;
+            accessible-label: root.search-label;
+            accessible-id: root.search-id;
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                spacing: 5px;
+                alignment: center;
+                IconDisplay { icon: IconSet.Search; size: 13px; stroke: DesignTokens.text-muted; }
+                TextInput {
+                    text <=> root.query;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    single-line: true;
+                    horizontal-stretch: 1;
+                    accessible-label: root.search-label;
+                    edited => { root.query-changed(self.text); }
+                }
+            }
+        }
+        TopAction {
+            icon: IconSet.MousePointer2;
+            semantic-label: root.selected-only-label;
+            active: root.selected-only;
+            toggle-button: true;
+            clicked => { root.selected-only-changed(!root.selected-only); }
+        }
+        TopAction {
+            icon: IconSet.ArrowDownAz;
+            semantic-label: root.sort-label;
+            active: root.sort-by-name;
+            toggle-button: true;
+            clicked => { root.sort-changed(!root.sort-by-name); }
+        }
+        Text {
+            text: "\{root.visible-count}/\{root.total-count}";
+            color: DesignTokens.text-muted;
+            font-size: DesignTokens.font-caption;
+            vertical-alignment: center;
+        }
+    }
+}
+
+/// Controle compartilhado de densidade das linhas de Parts.
+export component PartsRowSizeControl inherits Rectangle {
+    in property <string> semantic-label;
+    in property <string> accessibility-id;
+    in-out property <float> value: 28.0;
+    callback value-changed(float);
+
+    width: 100%;
+    height: 24px;
+    HorizontalLayout {
+        width: 100%;
+        height: 100%;
+        spacing: 6px;
+        alignment: center;
+        Text {
+            text: root.semantic-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            vertical-alignment: center;
+        }
+        PetuniaSlider {
+            horizontal-stretch: 1;
+            min-width: 100px;
+            minimum: 28;
+            maximum: 44;
+            step: 1;
+            accessible-role: slider;
+            value <=> root.value;
+            accessible-label: root.semantic-label;
+            accessible-id: root.accessibility-id;
+            accessible-value-minimum: 28;
+            accessible-value-maximum: 44;
+            accessible-value-step: 1;
+            accessible-value: "\{round(root.value)}";
+            changed(value) => { root.value-changed(round(value)); }
+        }
+        Text {
+            text: "\{round(root.value)}";
+            width: 24px;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+}
+
+export component InspectorSection inherits Rectangle {
+    in property <string> title;
+    in property <string> description: "";
+    in property <bool> open: true;
+    in property <string> section-id: "";
+    in property <bool> pin-open: false;
+    callback toggled;
+    callback toggle-all;
+    callback pin-toggled(string);
+    toggle-all => { root.toggled(); }
+
+    // Seção plana dentro da superfície única do Inspector (plano de UI F4,
+    // D3): sem cartão nem sombra; um fio no topo separa as seções.
+    width: 100%;
+    height: root.open ? section-layout.preferred-height : 36px;
+    animate height { duration: Motion.medium; easing: ease-in-out; }
+    clip: true;
+    vertical-stretch: 0;
+    background: transparent;
+
+    Rectangle {
+        y: 0;
+        height: 1px;
+        background: DesignTokens.border;
+    }
+
+    header-hover := TouchArea {
+        y: 0;
+        height: 36px;
+    }
+
+    section-layout := VerticalLayout {
+        padding-left: DesignTokens.space-md;
+        padding-right: DesignTokens.space-sm;
+        padding-top: 4px;
+        padding-bottom: DesignTokens.space-md;
+        spacing: DesignTokens.space-sm;
+
+        HorizontalLayout {
+            height: 28px;
+            spacing: DesignTokens.space-xs;
+
+            header-toggle := Rectangle {
+                horizontal-stretch: 1;
+                height: 28px;
+                border-width: section-focus.has-focus ? 2px : 0px;
+                border-color: DesignTokens.focus-ring;
+                border-radius: DesignTokens.radius-control;
+                accessible-role: button;
+                accessible-label: root.title;
+                accessible-expanded: root.open;
+                forward-focus: section-focus;
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    // Caixa fixa: sem ela o ícone esticava e empurrava o
+                    // título para o centro (achado da captura de 2026-10-04).
+                    Rectangle {
+                        width: DesignTokens.icon-small;
+                        horizontal-stretch: 0;
+                        IconDisplay {
+                            icon: root.open ? IconSet.ChevronDown : IconSet.ChevronRight;
+                            size: DesignTokens.icon-small;
+                            stroke: DesignTokens.text-muted;
+                        }
+                    }
+                    Text {
+                        text: root.title;
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-strong;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                }
+
+                section-focus := FocusScope {
+                    width: 100%;
+                    height: 100%;
+                    key-pressed(event) => {
+                        if event.text == Key.Return || event.text == " " { root.toggled(); return accept; }
+                        reject
+                    }
+                    toggle-touch := TouchArea {
+                        width: 100%;
+                        height: 100%;
+                        property <bool> alt-down: false;
+                        pointer-event(event) => {
+                            if event.kind == PointerEventKind.down {
+                                self.alt-down = event.modifiers.alt;
+                            }
+                        }
+                        clicked => {
+                            if self.alt-down { root.toggle-all(); } else { root.toggled(); }
+                            self.alt-down = false;
+                        }
+                        Tooltip {
+                            RichTooltip {
+                                title: root.title;
+                                description: root.description != "" ? root.description : (root.open ? Tr.t("sl.click_to_collapse_section") : Tr.t("sl.click_to_expand_section"));
+                                hint: Tr.t("sl.hold_alt_and_click_to_toggle_all_sections");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Pin: aparece no hover do cabeçalho, com foco ou quando ligado;
+            // ligado = ícone neutro, nunca fundo accent (princípio 2).
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: DesignTokens.radius-control;
+                opacity: root.pin-open || header-hover.has-hover || toggle-touch.has-hover || pin-touch.has-hover || pin-focus.has-focus ? 1.0 : 0.0;
+                animate opacity { duration: Motion.fast; }
+                background: pin-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                border-width: pin-focus.has-focus ? 2px : 0px;
+                border-color: DesignTokens.focus-ring;
+                accessible-role: button;
+                accessible-label: root.pin-open ? Tr.t("sl.unpin_section") : Tr.t("sl.pin_section");
+                accessible-checked: root.pin-open;
+                accessible-action-default => { root.pin-toggled(root.section-id); }
+                pin-focus := FocusScope {
+                    key-pressed(event) => {
+                        if event.text == Key.Return || event.text == " " { root.pin-toggled(root.section-id); return accept; }
+                        reject
+                    }
+                }
+                IconDisplay {
+                    icon: root.pin-open ? IconSet.Pin : IconSet.PinOff;
+                    size: DesignTokens.icon-small;
+                    stroke: root.pin-open ? DesignTokens.text-secondary : DesignTokens.text-muted;
+                }
+                pin-touch := TouchArea {
+                    clicked => { root.pin-toggled(root.section-id); }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 6px;
+                            Text { text: root.pin-open ? Tr.t("sl.pinned_open") : Tr.t("sl.pin_section_open"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; }
+                        }
+                    }
+                }
+            }
+        }
+
+        VerticalLayout {
+            visible: root.open;
+            @children
+        }
+    }
+}
+
+
+/// Pílula de ícone do rail colapsado do Inspector: 36px, separada das
+/// vizinhas, com hover visível e Tooltip com o nome da seção.
+export component InspectorPill inherits Rectangle {
+    in property <Icon> icon;
+    in property <image> icon-svg;
+    in property <string> semantic-label;
+    in property <string> description: "";
+    in property <bool> active: false;
+    in property <string> section-id: "";
+    out property <bool> has-hover: pill-touch.has-hover;
+    /// Incrementar move o foco de teclado para esta pílula (usado por F6).
+    in property <int> focus-token: 0;
+    callback clicked;
+    callback hovered(string);
+    changed focus-token => { pill-focus.focus(); }
+
+    accessible-role: button;
+    accessible-label: root.semantic-label;
+    accessible-checked: root.active;
+    accessible-action-default => { root.clicked(); }
+    // 36 px: contrato do rail (ADR 004) e alvo de clique confortável.
+    width: 36px;
+    height: 36px;
+    border-radius: DesignTokens.radius-control + 2px;
+    // Seção aberta = accent suave + marcador lateral, nunca roxo cheio
+    // (plano de UI F3, D1: accent preenchido fica para ferramenta/workspace).
+    background: root.active ? DesignTokens.accent-subtle : (pill-touch.has-hover ? DesignTokens.surface-hover : transparent);
+    border-width: pill-focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    if root.active: Rectangle {
+        x: -6px;
+        y: (parent.height - self.height) / 2;
+        width: 3px;
+        height: 16px;
+        border-radius: 1.5px;
+        background: DesignTokens.accent;
+    }
+
+    // Teclado: Tab foca a pílula (e abre o peek), Enter/Espaço fixa ou solta a seção.
+    pill-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        changed has-focus => {
+            if self.has-focus { root.hovered(root.section-id); }
+        }
+    }
+
+    if root.icon-svg.width > 0: Image {
+        source: root.icon-svg;
+        colorize: root.active ? DesignTokens.accent : DesignTokens.text-secondary;
+        width: DesignTokens.icon-rail - 2px;
+        height: DesignTokens.icon-rail - 2px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+    if root.icon-svg.width == 0: IconDisplay {
+        icon: root.icon;
+        size: DesignTokens.icon-rail - 3px;
+        stroke: root.active ? DesignTokens.accent : DesignTokens.text-secondary;
+    }
+
+    pill-touch := TouchArea {
+        clicked => { root.clicked(); }
+        changed has-hover => {
+            if self.has-hover {
+                root.hovered(root.section-id);
+            }
+        }
+        Tooltip {
+            RichTooltip {
+                title: root.semantic-label;
+                description: root.description;
+                hint: root.active ? Tr.t("sl.click_to_unpin_section") : Tr.t("sl.click_to_pin_section_open");
+            }
+        }
+    }
+}
+
+
+/// Floating Inspector section card: drag header to move, pin to keep open or
+/// to an asset, dock button returns it to the column. Body via @children so
+/// each section is defined once and instantiated docked + floating.
+/// Corpo da seção Transform: definido uma vez, instanciado ancorado + flutuante.
+/// Transform section body: defined once, instantiated docked + floating.
+export component TransformBody inherits VerticalLayout {
+    in property <string> field-hint;
+    in property <float> pos-x;
+    in property <float> pos-y;
+    in property <float> pos-z;
+    in property <float> rot-x;
+    in property <float> rot-y;
+    in property <float> rot-z;
+    in property <float> scale-x;
+    in property <float> scale-y;
+    in property <float> scale-z;
+    callback scrubbed(string, int, float, bool);
+    callback scrub-started(string);
+    callback scrub-finished;
+    callback text-committed(string, int, string) -> bool;
+    callback scrub-cancelled;
+
+    spacing: 6px;
+    padding-top: 4px;
+    Vector3Field {
+        row-label: Tr.t("sl.position");
+        field-hint: root.field-hint;
+        x-value: root.pos-x;
+        y-value: root.pos-y;
+        z-value: root.pos-z;
+        scrubbed(axis, delta, fine) => { root.scrubbed("pos", axis, delta, fine); }
+        scrub-started => { root.scrub-started("pos"); }
+        scrub-finished => { root.scrub-finished(); }
+        text-committed(axis, text) => { root.text-committed("pos", axis, text) }
+        scrub-cancelled => { root.scrub-cancelled(); }
+    }
+    Vector3Field {
+        row-label: Tr.t("sl.rotation");
+        field-hint: root.field-hint;
+        step: 1;
+        x-value: root.rot-x;
+        y-value: root.rot-y;
+        z-value: root.rot-z;
+        scrubbed(axis, delta, fine) => { root.scrubbed("rot", axis, delta, fine); }
+        scrub-started => { root.scrub-started("rot"); }
+        scrub-finished => { root.scrub-finished(); }
+        text-committed(axis, text) => { root.text-committed("rot", axis, text) }
+        scrub-cancelled => { root.scrub-cancelled(); }
+    }
+    Vector3Field {
+        row-label: Tr.t("sl.scale");
+        field-hint: root.field-hint;
+        x-value: root.scale-x;
+        y-value: root.scale-y;
+        z-value: root.scale-z;
+        scrubbed(axis, delta, fine) => { root.scrubbed("scale", axis, delta, fine); }
+        scrub-started => { root.scrub-started("scale"); }
+        scrub-finished => { root.scrub-finished(); }
+        text-committed(axis, text) => { root.text-committed("scale", axis, text) }
+        scrub-cancelled => { root.scrub-cancelled(); }
+    }
+}
+
+/// Corpo da seção Quick Actions: definido uma vez, instanciado ancorado + flutuante.
+/// Quick Actions section body: defined once, instantiated docked + floating.
+export component QuickActionsBody inherits VerticalLayout {
+    in property <string> title-label;
+    in-out property <bool> customize-open: false;
+    in property <[QuickActionEntry]> actions;
+    in property <[QuickActionEntry]> candidates;
+    in property <string> customize-label;
+    in property <string> remove-label;
+    in property <string> add-label;
+    in property <string> reset-label;
+    in property <string> done-label;
+    callback action-executed(string);
+    callback action-toggled(string);
+    callback actions-reset;
+
+    spacing: 6px;
+    vertical-stretch: 0;
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text {
+            text: root.title-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            font-weight: 700;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            width: 28px;
+            height: 24px;
+            border-radius: 4px;
+            background: root.customize-open ? DesignTokens.accent : DesignTokens.surface-raised;
+            IconDisplay {
+                icon: IconSet.Settings2;
+                size: 12px;
+                stroke: root.customize-open ? DesignTokens.on-accent : DesignTokens.text-primary;
+            }
+            TouchArea { clicked => { root.customize-open = !root.customize-open; } }
+        }
+    }
+    for action in root.actions: Rectangle {
+        width: 100%;
+        height: 28px;
+        border-radius: 4px;
+        background: action.enabled ? DesignTokens.surface-raised : DesignTokens.surface;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        Text {
+            text: action.label;
+            color: action.enabled ? DesignTokens.text-primary : DesignTokens.text-muted;
+            font-size: DesignTokens.font-caption;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        TouchArea { clicked => { root.action-executed(action.id); } }
+    }
+    if root.customize-open: Rectangle {
+        background: DesignTokens.surface;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        VerticalLayout {
+            spacing: 4px;
+            padding: 6px;
+            Text {
+                text: root.customize-label;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+                font-weight: 700;
+            }
+            for candidate in root.candidates: Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: candidate.pinned ? DesignTokens.surface-hover : transparent;
+                Text {
+                    text: candidate.label;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: candidate.pinned ? root.remove-label : root.add-label;
+                    color: DesignTokens.accent;
+                    font-size: DesignTokens.font-caption;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.action-toggled(candidate.id); } }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: root.reset-label; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.actions-reset(); } }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.accent;
+                    Text { text: root.done-label; color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.customize-open = false; } }
+                }
+            }
+        }
+    }
+}
+
+/// Corpo da seção Parts: definido uma vez, instanciado ancorado + flutuante.
+/// Parts section body: defined once, instantiated docked + floating.
+export component PartsBody inherits VerticalLayout {
+    in property <string> search-label;
+    in property <string> selected-only-label;
+    in property <string> sort-label;
+    in-out property <string> query;
+    in-out property <bool> selected-only: false;
+    in-out property <bool> sort-by-name: false;
+    in property <[SceneItem]> items;
+    in property <int> total-count;
+    in property <string> row-size-label;
+    in-out property <float> row-height: 28.0;
+    in property <string> list-label;
+    in property <string> hide-label;
+    in property <string> show-label;
+    in property <string> lock-label;
+    in property <string> unlock-label;
+    in property <bool> rename-active: false;
+    in property <string> rename-value;
+    callback query-changed(string);
+    callback selected-only-changed(bool);
+    callback sort-changed(bool);
+    callback row-height-changed(float);
+    callback scene-select(string, bool);
+    callback scene-toggle-visibility(string);
+    callback scene-toggle-lock(string);
+    callback scene-context-requested(string, float, float);
+    callback part-color-picker-open(string);
+    callback separate-selection-requested;
+    callback rename-edited(string);
+    callback rename-committed(string);
+    spacing: 6px;
+    PartsFilterRow {
+        horizontal-stretch: 1;
+        search-label: root.search-label;
+        selected-only-label: root.selected-only-label;
+        sort-label: root.sort-label;
+        query <=> root.query;
+        selected-only <=> root.selected-only;
+        sort-by-name <=> root.sort-by-name;
+        visible-count: root.items.length;
+        total-count: root.total-count;
+        query-changed(query) => { root.query-changed(query); }
+        selected-only-changed(enabled) => { root.selected-only-changed(enabled); }
+        sort-changed(enabled) => { root.sort-changed(enabled); }
+    }
+    PartsRowSizeControl {
+        horizontal-stretch: 1;
+        semantic-label: root.row-size-label;
+        accessibility-id: "model-inspector-parts-row-height";
+        value <=> root.row-height;
+        value-changed(value) => { root.row-height-changed(value); }
+    }
+    ListView {
+        height: min(184px, max(32px, root.items.length * root.row-height * 1px));
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: as-needed;
+        accessible-role: list;
+        accessible-label: root.list-label;
+        accessible-id: "model-inspector-parts-list";
+        accessible-item-count: root.items.length;
+        for item in root.items: Rectangle {
+            height: root.row-height * 1px;
+            accessible-role: list-item;
+            accessible-label: item.name;
+            accessible-item-selectable: true;
+            accessible-item-selected: item.selected;
+            background: item.selected ? DesignTokens.surface-hover : transparent;
+            border-width: item.active ? 1px : 0px;
+            border-color: item.active ? DesignTokens.selection-active : DesignTokens.selection;
+            border-radius: 4px;
+            HorizontalLayout {
+                padding-left: 6px;
+                padding-right: 4px;
+                spacing: 4px;
+                alignment: center;
+                TouchArea {
+                    property <bool> extend: false;
+                    horizontal-stretch: 1;
+                    pointer-event(event) => {
+                        self.extend = event.modifiers.shift;
+                        if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                            root.scene-context-requested(item.id, (self.absolute-position.x + self.mouse-x) / 1px, (self.absolute-position.y + self.mouse-y) / 1px);
+                        }
+                    }
+                    clicked => { root.scene-select(item.id, self.extend); }
+                    HorizontalLayout {
+                        spacing: 5px;
+                        alignment: center;
+                        IconDisplay { icon: item.tris == 0 ? IconSet.Spline : IconSet.Box; size: 12px; stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted; }
+                        if root.rename-active && item.selected: TextInput {
+                            text: root.rename-value;
+                            horizontal-stretch: 1;
+                            font-size: DesignTokens.font-small;
+                            color: DesignTokens.text-primary;
+                            single-line: true;
+                            init => { self.focus(); }
+                            edited => { root.rename-edited(self.text); }
+                            accepted => { root.rename-committed(self.text); }
+                        }
+                        if !(root.rename-active && item.selected): Text {
+                            text: item.name;
+                            color: item.selected ? DesignTokens.text-primary : DesignTokens.text-secondary;
+                            font-size: DesignTokens.font-small;
+                            font-weight: item.selected ? 600 : 400;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
+                }
+                Rectangle {
+                    width: 22px; height: 22px;
+                    accessible-role: button;
+                    accessible-label: item.visible ? root.hide-label : root.show-label;
+                    IconDisplay { icon: item.visible ? IconSet.Eye : IconSet.EyeOff; size: 13px; stroke: item.visible ? DesignTokens.text-secondary : DesignTokens.text-muted; }
+                    TouchArea { clicked => { root.scene-toggle-visibility(item.id); } }
+                }
+                Rectangle {
+                    width: 22px; height: 22px;
+                    accessible-role: button;
+                    accessible-label: item.locked ? root.unlock-label : root.lock-label;
+                    IconDisplay { icon: item.locked ? IconSet.Lock : IconSet.LockOpen; size: 13px; stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted; }
+                    TouchArea { clicked => { root.scene-toggle-lock(item.id); } }
+                }
+                Rectangle {
+                    width: 22px; height: 22px;
+                    accessible-role: button;
+                    accessible-label: Tr.t("sl.part_selection_color");
+                    Rectangle {
+                        width: 13px; height: 13px;
+                        border-radius: 3px;
+                        background: item.has-custom-color ? item.custom-color : DesignTokens.selection;
+                        border-width: 1px;
+                        border-color: item.has-custom-color ? DesignTokens.text-primary : DesignTokens.border;
+                    }
+                    TouchArea {
+                        clicked => {
+                            root.part-color-picker-open(item.id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Rectangle {
+        height: 24px;
+        border-radius: 4px;
+        background: sep-btn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        accessible-role: button;
+        accessible-label: Tr.t("sl.separate_selection");
+        HorizontalLayout {
+            alignment: center;
+            spacing: 5px;
+            IconDisplay {
+                icon: IconSet.Copy;
+                size: 11px;
+                stroke: DesignTokens.text-primary;
+            }
+            Text {
+                text: Tr.t("sl.separate_selection");
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-caption;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+        sep-btn-touch := TouchArea {
+            clicked => { root.separate-selection-requested(); }
+        }
+    }
+}
+
+/// Opção de perfil de material (grade do MaterialBody).
+component ProfileChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
+    horizontal-stretch: 1;
+    height: 26px;
+    border-radius: DesignTokens.radius-control;
+    background: root.selected ? DesignTokens.accent : (touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+    border-width: 1px;
+    border-color: root.selected ? DesignTokens.accent : DesignTokens.border;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    Text {
+        text: root.label;
+        color: root.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: DesignTokens.font-small;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+/// Corpo da seção Material: definido uma vez, instanciado ancorado + flutuante.
+/// Material section body: defined once, instantiated docked + floating.
+export component MaterialBody inherits VerticalLayout {
+    in property <string> active-name;
+    in-out property <int> active-slot: 0;
+    in property <[string]> slots;
+    in property <string> profile;
+    in property <color> base-color;
+    in property <[color]> palette;
+    in property <float> roughness;
+    in property <float> metallic;
+    in property <float> emission-strength;
+    in-out property <bool> advanced-open: false;
+    in property <float> normal-scale;
+    in property <string> alpha-mode;
+    in property <float> alpha-cutoff;
+    in property <bool> has-albedo;
+    in property <string> albedo-text-label;
+    in property <string> assign-label;
+    in property <string> new-label;
+    in property <string> duplicate-label;
+    in property <string> remove-label;
+    in property <string> profile-label;
+    in property <string> profile-pbr-label;
+    in property <string> profile-unlit-label;
+    in property <string> profile-toon-label;
+    in property <string> profile-glass-label;
+    in property <string> profile-emissive-label;
+    in property <string> base-color-label;
+    in property <string> roughness-label;
+    in property <string> metallic-label;
+    in property <string> emission-label;
+    in property <string> advanced-label;
+    in property <string> normal-scale-label;
+    in property <string> alpha-mode-label;
+    in property <string> alpha-opaque-label;
+    in property <string> alpha-mask-label;
+    in property <string> alpha-blend-label;
+    in property <string> alpha-cutoff-label;
+    in property <string> albedo-label;
+    in property <string> create-texture-label;
+    in property <string> clear-texture-label;
+    in property <string> no-texture-label;
+    callback assign-material-slot(int);
+    callback create-material;
+    callback duplicate-material(int);
+    callback remove-material(int);
+    callback material-slot-selected(int);
+    callback material-base-color-changed(float, float, float);
+    callback material-scalar-committed(string, int, string) -> bool;
+    callback material-profile-changed(int);
+    callback material-alpha-mode-changed(int);
+    callback material-albedo-create;
+    callback material-albedo-clear;
+
+    spacing: 8px;
+    padding-top: 4px;
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: center;
+
+        Rectangle {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            background: root.base-color;
+            border-width: 1px;
+            border-color: DesignTokens.border-strong;
+        }
+
+        Text {
+            text: root.slots.length > 0 && root.active-slot < root.slots.length
+            ? root.slots[root.active-slot]
+            : root.active-name;
+            color: DesignTokens.text-primary;
+            font-size: DesignTokens.font-small;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            background: DesignTokens.surface-raised;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: button;
+            accessible-label: root.new-label;
+            IconDisplay { icon: IconSet.Plus; size: 13px; stroke: DesignTokens.text-primary; }
+            TouchArea {
+                clicked => { root.create-material(); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 8px; spacing: 2px;
+                        Text { text: root.new-label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            background: DesignTokens.surface-raised;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: button;
+            accessible-label: root.duplicate-label;
+            IconDisplay { icon: IconSet.Copy; size: 13px; stroke: DesignTokens.text-primary; }
+            TouchArea {
+                clicked => { root.duplicate-material(root.active-slot); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 8px; spacing: 2px;
+                        Text { text: root.duplicate-label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            background: DesignTokens.surface-raised;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: button;
+            accessible-label: root.remove-label;
+            IconDisplay { icon: IconSet.Trash2; size: 13px; stroke: DesignTokens.danger; }
+            TouchArea {
+                clicked => { root.remove-material(root.active-slot); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 8px; spacing: 2px;
+                        Text { text: root.remove-label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                    }
+                }
+            }
+        }
+    }
+
+    // Material slot selector list
+    if root.slots.length > 1: VerticalLayout {
+        spacing: 4px;
+        for slot[index] in root.slots: Rectangle {
+            height: 24px;
+            border-radius: 4px;
+            background: index == root.active-slot ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+            border-width: 1px;
+            border-color: index == root.active-slot ? DesignTokens.accent : DesignTokens.border;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                alignment: center;
+                spacing: 6px;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 2px;
+                    background: index == root.active-slot ? DesignTokens.accent : DesignTokens.text-muted;
+                }
+                Text {
+                    text: slot;
+                    color: index == root.active-slot ? DesignTokens.text-primary : DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+            }
+            TouchArea {
+                clicked => {
+                    root.active-slot = index;
+                    root.material-slot-selected(index);
+                }
+            }
+        }
+    }
+
+    // Assign primeiro: fluxo slot → atribuir → editar.
+    Rectangle {
+        height: 28px;
+        border-radius: 5px;
+        background: DesignTokens.accent;
+        accessible-role: button;
+        accessible-label: root.assign-label;
+        HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+            IconDisplay {
+                icon: IconSet.Check;
+                size: 12px;
+                stroke: DesignTokens.on-accent;
+            }
+            Text {
+                text: root.assign-label;
+                color: DesignTokens.on-accent;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+        TouchArea {
+            clicked => { root.assign-material-slot(root.active-slot); }
+        }
+    }
+
+    // Perfil em grade 2 colunas com o rótulo acima: os cinco nomes cabem
+    // inteiros em 280 px (plano de UI F4, princípio 5 — nunca truncar).
+    VerticalLayout {
+        spacing: DesignTokens.space-xs;
+        Text {
+            text: root.profile-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-small;
+        }
+        HorizontalLayout {
+            spacing: DesignTokens.space-xs;
+            ProfileChip { label: root.profile-pbr-label; selected: root.profile == "pbr"; clicked => { root.material-profile-changed(0); } }
+            ProfileChip { label: root.profile-unlit-label; selected: root.profile == "unlit"; clicked => { root.material-profile-changed(1); } }
+        }
+        HorizontalLayout {
+            spacing: DesignTokens.space-xs;
+            ProfileChip { label: root.profile-toon-label; selected: root.profile == "toon"; clicked => { root.material-profile-changed(2); } }
+            ProfileChip { label: root.profile-glass-label; selected: root.profile == "glass"; clicked => { root.material-profile-changed(3); } }
+        }
+        HorizontalLayout {
+            spacing: DesignTokens.space-xs;
+            ProfileChip { label: root.profile-emissive-label; selected: root.profile == "emissive"; clicked => { root.material-profile-changed(4); } }
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text {
+            text: root.base-color-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            width: 64px;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            background: root.base-color;
+            border-width: 1px;
+            border-color: DesignTokens.border-strong;
+        }
+        for swatch[index] in root.palette: ColorSwatch {
+            swatch-color: swatch;
+            selected: swatch == root.base-color;
+            clicked => {
+                root.material-base-color-changed(swatch.red, swatch.green, swatch.blue);
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text {
+            text: root.roughness-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            width: 64px;
+            vertical-alignment: center;
+        }
+        NumericField {
+            label: "";
+            value: root.roughness;
+            step: 0.01;
+            horizontal-stretch: 1;
+            text-committed(text) => { root.material-scalar-committed("roughness", root.active-slot, text); }
+        }
+        Text {
+            text: root.metallic-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            width: 64px;
+            vertical-alignment: center;
+        }
+        NumericField {
+            label: "";
+            value: root.metallic;
+            step: 0.01;
+            horizontal-stretch: 1;
+            text-committed(text) => { root.material-scalar-committed("metallic", root.active-slot, text); }
+        }
+    }
+
+    if root.profile == "emissive" || root.profile == "pbr": HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text {
+            text: root.emission-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            width: 64px;
+            vertical-alignment: center;
+        }
+        NumericField {
+            label: "";
+            value: root.emission-strength;
+            step: 0.05;
+            horizontal-stretch: 1;
+            text-committed(text) => { root.material-scalar-committed("emission-strength", root.active-slot, text); }
+        }
+    }
+
+
+    // Avançado: Normal, Alfa e Cutoff.
+    Rectangle {
+        height: 24px;
+        border-radius: 4px;
+        background: DesignTokens.surface;
+        Text {
+            text: root.advanced-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea { clicked => { root.advanced-open = !root.advanced-open; } }
+    }
+    if root.advanced-open: VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 6px;
+            height: 28px;
+            Text {
+                text: root.normal-scale-label;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+                width: 64px;
+                vertical-alignment: center;
+            }
+            NumericField {
+                label: "";
+                value: root.normal-scale;
+                step: 0.01;
+                horizontal-stretch: 1;
+                text-committed(text) => { root.material-scalar-committed("normal-scale", root.active-slot, text); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            height: 28px;
+            Text {
+                text: root.alpha-mode-label;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+                width: 64px;
+                vertical-alignment: center;
+            }
+            for alpha[index] in [
+            { id: "opaque", label: root.alpha-opaque-label },
+            { id: "mask", label: root.alpha-mask-label },
+            { id: "blend", label: root.alpha-blend-label },
+            ]: Rectangle {
+                horizontal-stretch: 1;
+                height: 26px;
+                border-radius: 4px;
+                background: root.alpha-mode == alpha.id ? DesignTokens.accent : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: root.alpha-mode == alpha.id ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: alpha.label;
+                    color: root.alpha-mode == alpha.id ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                TouchArea { clicked => { root.material-alpha-mode-changed(index); } }
+            }
+        }
+        if root.alpha-mode == "mask": HorizontalLayout {
+            spacing: 6px;
+            height: 28px;
+            Text {
+                text: root.alpha-cutoff-label;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+                width: 64px;
+                vertical-alignment: center;
+            }
+            NumericField {
+                label: "";
+                value: root.alpha-cutoff;
+                step: 0.01;
+                horizontal-stretch: 1;
+                text-committed(text) => { root.material-scalar-committed("alpha-cutoff", root.active-slot, text); }
+            }
+        }
+    }
+
+    Rectangle {
+        height: 26px;
+        border-radius: 4px;
+        background: DesignTokens.surface;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 6px;
+            alignment: center;
+            Text {
+                text: root.albedo-label;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.has-albedo ? root.albedo-text-label : root.no-texture-label;
+                color: root.has-albedo ? DesignTokens.text-primary : DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                width: 74px;
+                height: 22px;
+                border-radius: 4px;
+                background: root.has-albedo ? DesignTokens.surface-raised : DesignTokens.accent;
+                Text {
+                    text: root.has-albedo ? root.clear-texture-label : root.create-texture-label;
+                    color: root.has-albedo ? DesignTokens.text-primary : DesignTokens.on-accent;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    clicked => {
+                        if root.has-albedo { root.material-albedo-clear(); } else { root.material-albedo-create(); }
+                    }
+                }
+            }
+        }
+    }
+
+
+}
+
+/// Corpo da seção Object: definido uma vez, instanciado ancorado + flutuante.
+/// Object section body: defined once, instantiated docked + floating.
+export component ObjectBody inherits VerticalLayout {
+    in property <bool> has-selection: false;
+    in property <string> object-name;
+    in property <string> object-id;
+    in property <bool> object-visible: true;
+    in property <bool> object-locked: false;
+    in property <int> object-verts: 0;
+    in property <int> object-faces: 0;
+    in property <int> object-tris: 0;
+    in property <string> no-selection-label;
+    in property <string> verts-label;
+    in property <string> faces-label;
+    in property <string> tris-label;
+    in property <string> duplicate-label;
+    in property <string> delete-label;
+    in property <bool> is-parametric: false;
+    in property <string> primitive-kind: "";
+    in property <float> primitive-radius: 1.0;
+    in property <float> primitive-radius-b: 1.0;
+    in property <float> primitive-height: 2.0;
+    in property <float> primitive-depth: 1.0;
+    in property <float> primitive-width: 1.0;
+    in property <int> primitive-sides: 8;
+    in property <int> primitive-rings: 6;
+    in property <int> primitive-subdiv: 1;
+    in property <bool> primitive-cap-top: true;
+    in property <bool> primitive-cap-bottom: true;
+    in property <bool> primitive-fill-disc: true;
+    in property <string> label-parametric-primitive: "Parametric Primitive";
+    in property <string> label-freeze-primitive: "Convert to Editable Mesh";
+    in property <string> label-freeze-primitive-hint: "Destructive edits auto-convert to mesh";
+    callback scene-toggle-visibility(string);
+    callback scene-toggle-lock(string);
+    callback duplicate-requested;
+    callback delete-requested;
+    callback primitive-param-float(string, float);
+    callback primitive-param-bool(string, bool);
+    callback freeze-primitive-requested;
+
+    spacing: 6px;
+    vertical-stretch: 0;
+    if !root.has-selection: Text {
+        text: root.no-selection-label;
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-caption;
+        wrap: word-wrap;
+    }
+    if root.has-selection: VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 6px;
+            height: 28px;
+            Text {
+                text: root.object-name;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-default;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Rectangle {
+                width: 26px;
+                height: 26px;
+                border-radius: 4px;
+                background: root.object-visible ? DesignTokens.surface-raised : DesignTokens.surface;
+                border-width: 1px;
+                border-color: root.object-visible ? DesignTokens.border : DesignTokens.disabled;
+                accessible-role: button;
+                IconDisplay {
+                    icon: root.object-visible ? IconSet.Eye : IconSet.EyeOff;
+                    size: 13px;
+                    stroke: root.object-visible ? DesignTokens.text-primary : DesignTokens.text-muted;
+                }
+                TouchArea { clicked => { root.scene-toggle-visibility(root.object-id); } }
+            }
+            Rectangle {
+                width: 26px;
+                height: 26px;
+                border-radius: 4px;
+                background: root.object-locked ? DesignTokens.accent : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: root.object-locked ? DesignTokens.accent : DesignTokens.border;
+                accessible-role: button;
+                IconDisplay {
+                    icon: root.object-locked ? IconSet.Lock : IconSet.LockOpen;
+                    size: 13px;
+                    stroke: root.object-locked ? DesignTokens.on-accent : DesignTokens.text-primary;
+                }
+                TouchArea { clicked => { root.scene-toggle-lock(root.object-id); } }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "\{root.verts-label}: \{root.object-verts}   \{root.faces-label}: \{root.object-faces}   \{root.tris-label}: \{root.object-tris}";
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+                horizontal-stretch: 1;
+                wrap: word-wrap;
+            }
+        }
+        if root.is-parametric: VerticalLayout {
+            spacing: 6px;
+            Rectangle {
+                height: 1px;
+                background: DesignTokens.border;
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                Text {
+                    text: root.label-parametric-primitive;
+                    color: DesignTokens.accent;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    border-radius: 3px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.accent;
+                    height: 18px;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        Text {
+                            text: root.primitive-kind;
+                            color: DesignTokens.accent;
+                            font-size: DesignTokens.font-caption;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+            if root.primitive-kind == "box" || root.primitive-kind == "wedge": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.width"); value: root.primitive-width; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("width", root.primitive-width + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("width", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.height"); value: root.primitive-height; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("height", root.primitive-height + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("height", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.depth"); value: root.primitive-depth; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("depth", root.primitive-depth + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("depth", t.to-float()); true } }
+            }
+            if root.primitive-kind == "plane": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.width"); value: root.primitive-width; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("width", root.primitive-width + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("width", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.height"); value: root.primitive-height; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("height", root.primitive-height + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("height", t.to-float()); true } }
+            }
+            if root.primitive-kind == "cylinder": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.height"); value: root.primitive-height; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("height", root.primitive-height + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("height", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.sides"); value: root.primitive-sides; step: 1; scrubbed(d, f) => { root.primitive-param-float("sides", root.primitive-sides + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("sides", t.to-float()); true } }
+                HorizontalLayout {
+                    spacing: 4px; height: 26px;
+                    Rectangle {
+                        horizontal-stretch: 1; border-radius: 4px;
+                        background: root.primitive-cap-top ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 1px; border-color: root.primitive-cap-top ? DesignTokens.accent : DesignTokens.border;
+                        Text { text: root.primitive-cap-top ? Tr.t("sl.top_cap_on") : Tr.t("sl.top_cap_off"); color: root.primitive-cap-top ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { clicked => { root.primitive-param-bool("cap_top", !root.primitive-cap-top); } }
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1; border-radius: 4px;
+                        background: root.primitive-cap-bottom ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 1px; border-color: root.primitive-cap-bottom ? DesignTokens.accent : DesignTokens.border;
+                        Text { text: root.primitive-cap-bottom ? Tr.t("sl.bottom_cap_on") : Tr.t("sl.bottom_cap_off"); color: root.primitive-cap-bottom ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { clicked => { root.primitive-param-bool("cap_bottom", !root.primitive-cap-bottom); } }
+                    }
+                }
+            }
+            if root.primitive-kind == "cone": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.bottom_radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.top_radius"); value: root.primitive-radius-b; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius_b", root.primitive-radius-b + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius_b", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.height"); value: root.primitive-height; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("height", root.primitive-height + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("height", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.sides"); value: root.primitive-sides; step: 1; scrubbed(d, f) => { root.primitive-param-float("sides", root.primitive-sides + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("sides", t.to-float()); true } }
+                HorizontalLayout {
+                    spacing: 4px; height: 26px;
+                    Rectangle {
+                        horizontal-stretch: 1; border-radius: 4px;
+                        background: root.primitive-cap-bottom ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 1px; border-color: root.primitive-cap-bottom ? DesignTokens.accent : DesignTokens.border;
+                        Text { text: root.primitive-cap-bottom ? Tr.t("sl.base_cap_on") : Tr.t("sl.base_cap_off"); color: root.primitive-cap-bottom ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { clicked => { root.primitive-param-bool("cap_bottom", !root.primitive-cap-bottom); } }
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1; border-radius: 4px;
+                        background: root.primitive-cap-top ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 1px; border-color: root.primitive-cap-top ? DesignTokens.accent : DesignTokens.border;
+                        Text { text: root.primitive-cap-top ? Tr.t("sl.top_cap_on") : Tr.t("sl.top_cap_off"); color: root.primitive-cap-top ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { clicked => { root.primitive-param-bool("cap_top", !root.primitive-cap-top); } }
+                    }
+                }
+            }
+            if root.primitive-kind == "sphere": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.segments"); value: root.primitive-sides; step: 1; scrubbed(d, f) => { root.primitive-param-float("sides", root.primitive-sides + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("sides", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.rings"); value: root.primitive-rings; step: 1; scrubbed(d, f) => { root.primitive-param-float("rings", root.primitive-rings + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("rings", t.to-float()); true } }
+            }
+            if root.primitive-kind == "icosphere": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.subdivisions"); value: root.primitive-subdiv; step: 1; scrubbed(d, f) => { root.primitive-param-float("subdiv", root.primitive-subdiv + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("subdiv", t.to-float()); true } }
+            }
+            if root.primitive-kind == "torus": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.ring_radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.pipe_radius"); value: root.primitive-radius-b; step: 0.05; scrubbed(d, f) => { root.primitive-param-float("radius_b", root.primitive-radius-b + d * (f ? 0.005 : 0.05)); } text-committed(t) => { root.primitive-param-float("radius_b", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.ring_segments"); value: root.primitive-sides; step: 1; scrubbed(d, f) => { root.primitive-param-float("sides", root.primitive-sides + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("sides", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.pipe_segments"); value: root.primitive-rings; step: 1; scrubbed(d, f) => { root.primitive-param-float("rings", root.primitive-rings + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("rings", t.to-float()); true } }
+            }
+            if root.primitive-kind == "capsule": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.height"); value: root.primitive-height; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("height", root.primitive-height + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("height", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.sides"); value: root.primitive-sides; step: 1; scrubbed(d, f) => { root.primitive-param-float("sides", root.primitive-sides + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("sides", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.cap_rings"); value: root.primitive-rings; step: 1; scrubbed(d, f) => { root.primitive-param-float("rings", root.primitive-rings + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("rings", t.to-float()); true } }
+            }
+            if root.primitive-kind == "circle": VerticalLayout {
+                spacing: 6px;
+                NumericField { label: Tr.t("sl.radius"); value: root.primitive-radius; step: 0.1; scrubbed(d, f) => { root.primitive-param-float("radius", root.primitive-radius + d * (f ? 0.01 : 0.1)); } text-committed(t) => { root.primitive-param-float("radius", t.to-float()); true } }
+                NumericField { label: Tr.t("sl.vertices"); value: root.primitive-sides; step: 1; scrubbed(d, f) => { root.primitive-param-float("sides", root.primitive-sides + (d > 0 ? 1 : -1)); } text-committed(t) => { root.primitive-param-float("sides", t.to-float()); true } }
+                Rectangle {
+                    height: 26px; border-radius: 4px;
+                    background: root.primitive-fill-disc ? DesignTokens.accent : DesignTokens.surface-raised;
+                    border-width: 1px; border-color: root.primitive-fill-disc ? DesignTokens.accent : DesignTokens.border;
+                    Text { text: root.primitive-fill-disc ? Tr.t("sl.fill_disc") : Tr.t("sl.fill_open_loop"); color: root.primitive-fill-disc ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.primitive-param-bool("fill_disc", !root.primitive-fill-disc); } }
+                }
+            }
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    IconDisplay {
+                        icon: IconSet.Box;
+                        size: 13px;
+                        stroke: DesignTokens.accent;
+                    }
+                    Text {
+                        text: root.label-freeze-primitive;
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-small;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+                TouchArea {
+                    clicked => { root.freeze-primitive-requested(); }
+                }
+            }
+            Text {
+                text: root.label-freeze-primitive-hint;
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+                wrap: word-wrap;
+            }
+        }
+    }
+    // Duplicar/Excluir moraram aqui até a F4; agora ficam no cabeçalho de
+    // contexto do Inspector (um lugar só para as ações do objeto).
+}
+
+/// Corpo da seção Modifiers: definido uma vez, instanciado ancorado + flutuante.
+/// Modifiers section body: defined once, instantiated docked + floating.
+export component ModifiersBody inherits VerticalLayout {
+    in property <[ModifierEntry]> rows;
+    in property <string> add-mirror-label;
+    in property <string> add-symmetry-label;
+    in property <string> apply-label;
+    in property <string> direction-label;
+    in property <string> neg-to-pos-label;
+    in property <string> pos-to-neg-label;
+    in property <string> empty-label;
+    callback modifier-add(string);
+    callback modifier-toggle(string, bool);
+    callback modifier-remove(string);
+    callback modifier-move(string, int);
+    callback modifier-apply(string);
+    callback modifier-axis-changed(string, int);
+    callback modifier-direction-changed(string, bool);
+
+    spacing: 6px;
+    vertical-stretch: 0;
+    HorizontalLayout {
+        spacing: 4px;
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 26px;
+            border-radius: 4px;
+            background: DesignTokens.surface-raised;
+            Text { text: root.add-mirror-label; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.modifier-add("mirror"); } }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 26px;
+            border-radius: 4px;
+            background: DesignTokens.surface-raised;
+            Text { text: root.add-symmetry-label; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.modifier-add("symmetry"); } }
+        }
+    }
+
+    if root.rows.length == 0: Text {
+        text: root.empty-label;
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-caption;
+    }
+    for modifier in root.rows: Rectangle {
+        width: 100%;
+        height: modifier.kind == "symmetry" ? 74px : 58px;
+        border-radius: 5px;
+        background: DesignTokens.surface;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        VerticalLayout {
+            padding: 6px;
+            spacing: 4px;
+            HorizontalLayout {
+                spacing: 4px;
+                height: 22px;
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 4px;
+                    background: modifier.enabled ? DesignTokens.accent : DesignTokens.surface-raised;
+                    IconDisplay {
+                        icon: IconSet.Monitor;
+                        size: 12px;
+                        stroke: modifier.enabled ? DesignTokens.on-accent : DesignTokens.text-muted;
+                    }
+                    TouchArea { clicked => { root.modifier-toggle(modifier.id, !modifier.enabled); } }
+                }
+                Text {
+                    text: modifier.title;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 700;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+                    IconDisplay {
+                        icon: IconSet.ChevronUp;
+                        size: 13px;
+                        stroke: modifier.can-move-up ? DesignTokens.text-secondary : DesignTokens.disabled;
+                    }
+                    TouchArea { clicked => { if modifier.can-move-up { root.modifier-move(modifier.id, -1); } } }
+                }
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+                    IconDisplay {
+                        icon: IconSet.ChevronDown;
+                        size: 13px;
+                        stroke: modifier.can-move-down ? DesignTokens.text-secondary : DesignTokens.disabled;
+                    }
+                    TouchArea { clicked => { if modifier.can-move-down { root.modifier-move(modifier.id, 1); } } }
+                }
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+                    IconDisplay {
+                        icon: IconSet.X;
+                        size: 13px;
+                        stroke: DesignTokens.danger;
+                    }
+                    TouchArea { clicked => { root.modifier-remove(modifier.id); } }
+                }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 22px;
+                Text {
+                    text: modifier.subtitle;
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-caption;
+                    width: 42px;
+                    vertical-alignment: center;
+                }
+                for axis[index] in ["X", "Y", "Z"]: Rectangle {
+                    width: 24px;
+                    height: 22px;
+                    border-radius: 3px;
+                    background: modifier.axis == index ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+                    Text {
+                        text: axis;
+                        color: modifier.axis == index ? DesignTokens.accent : DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea { clicked => { root.modifier-axis-changed(modifier.id, index); } }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 22px;
+                    border-radius: 3px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: root.apply-label; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.modifier-apply(modifier.id); } }
+                }
+            }
+            if modifier.kind == "symmetry": HorizontalLayout {
+                spacing: 4px;
+                height: 22px;
+                Text {
+                    text: root.direction-label;
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-caption;
+                    width: 42px;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 22px;
+                    border-radius: 3px;
+                    background: modifier.positive-to-negative ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+                    Text { text: root.pos-to-neg-label; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                    TouchArea { clicked => { if !modifier.positive-to-negative { root.modifier-direction-changed(modifier.id, true); } } }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 22px;
+                    border-radius: 3px;
+                    background: !modifier.positive-to-negative ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+                    Text { text: root.neg-to-pos-label; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                    TouchArea { clicked => { if modifier.positive-to-negative { root.modifier-direction-changed(modifier.id, false); } } }
+                }
+            }
+        }
+    }
+}

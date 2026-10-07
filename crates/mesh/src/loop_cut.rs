@@ -1,4 +1,4 @@
-//! Quad-ring discovery and shared-vertex loop cuts. All edits are transactional:
+//! Quad rings and planar sections on closed boolean surfaces. All edits are transactional:
 //! failure returns an error and never mutates the supplied mesh.
 
 #![forbid(unsafe_code)]
@@ -23,7 +23,7 @@ pub enum LoopCutError {
 impl std::fmt::Display for LoopCutError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::InvalidEdge => "Choose an edge belonging to a quad",
+            Self::InvalidEdge => "Choose an edge belonging to a surface",
             Self::InvalidMesh => "Loop cut requires valid finite geometry and UVs",
             Self::NonQuad => "Loop cut stopped: the ring contains a triangle or ngon",
             Self::NonManifold => "Loop cut requires manifold edges",
@@ -50,6 +50,7 @@ pub struct LoopRing {
     /// Each edge is directed consistently across the ring for shared slide values.
     edges: Vec<Edge>,
     closed: bool,
+    planar: Option<(Edge, u64)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +70,78 @@ fn key((a, b): Edge) -> Edge {
 
 impl LoopRing {
     pub fn discover(mesh: &Mesh, seed: Edge) -> Result<Self, LoopCutError> {
+        match Self::discover_quads(mesh, seed) {
+            Err(LoopCutError::NonQuad) => Self::discover_planar(mesh, seed),
+            result => result,
+        }
+    }
+
+    fn discover_planar(mesh: &Mesh, seed: Edge) -> Result<Self, LoopCutError> {
+        // A boolean surface may have no quad ring. A geometric section is
+        // unambiguous on a closed connected solid, normal to the chosen edge.
+        // Open patches keep the existing quad-ring contract.
+        if mesh.faces.len() < 4 {
+            return Err(LoopCutError::NonQuad);
+        }
+        let mut adjacency: HashMap<Edge, usize> = HashMap::new();
+        for face in &mesh.faces {
+            if face.verts.len() < 3
+                || face.verts.len() != face.uv.len()
+                || face.uv.iter().flatten().any(|v| !v.is_finite())
+                || face.verts.iter().any(|&v| {
+                    !mesh
+                        .verts
+                        .get(v as usize)
+                        .is_some_and(|v| v.vec().is_finite())
+                })
+            {
+                return Err(LoopCutError::InvalidMesh);
+            }
+            for i in 0..face.verts.len() {
+                *adjacency
+                    .entry(key((face.verts[i], face.verts[(i + 1) % face.verts.len()])))
+                    .or_default() += 1;
+            }
+        }
+        if adjacency.values().any(|&count| count > 2) {
+            return Err(LoopCutError::NonManifold);
+        }
+        if adjacency.values().any(|&count| count != 2) {
+            return Err(LoopCutError::NonQuad);
+        }
+        let mut connected = HashSet::from([seed.0]);
+        loop {
+            let before = connected.len();
+            for &(a, b) in adjacency.keys() {
+                if connected.contains(&a) || connected.contains(&b) {
+                    connected.insert(a);
+                    connected.insert(b);
+                }
+            }
+            if connected.len() == before {
+                break;
+            }
+        }
+        if adjacency
+            .keys()
+            .any(|(a, b)| !connected.contains(a) || !connected.contains(b))
+        {
+            return Err(LoopCutError::NonQuad);
+        }
+        if (mesh.verts[seed.1 as usize].vec() - mesh.verts[seed.0 as usize].vec()).length_squared()
+            < 1e-12
+        {
+            return Err(LoopCutError::InvalidEdge);
+        }
+        Ok(Self {
+            faces: Vec::new(),
+            edges: vec![seed],
+            closed: true,
+            planar: Some((seed, mesh.topology_fingerprint())),
+        })
+    }
+
+    fn discover_quads(mesh: &Mesh, seed: Edge) -> Result<Self, LoopCutError> {
         if seed.0 == seed.1
             || seed.0 as usize >= mesh.verts.len()
             || seed.1 as usize >= mesh.verts.len()
@@ -162,6 +235,7 @@ impl LoopRing {
             faces,
             edges,
             closed,
+            planar: None,
         })
     }
 
@@ -179,6 +253,23 @@ impl LoopRing {
     }
 
     fn validate(&self, mesh: &Mesh) -> Result<(), LoopCutError> {
+        if let Some((_, fingerprint)) = self.planar {
+            if mesh.topology_fingerprint() != fingerprint {
+                return Err(LoopCutError::StaleRing);
+            }
+            if mesh.faces.iter().any(|face| {
+                face.uv.len() != face.verts.len()
+                    || face.uv.iter().flatten().any(|v| !v.is_finite())
+                    || face.verts.iter().any(|&v| {
+                        !mesh
+                            .verts
+                            .get(v as usize)
+                            .is_some_and(|v| v.vec().is_finite())
+                    })
+            }) {
+                return Err(LoopCutError::InvalidMesh);
+            }
+        }
         for face in &self.faces {
             let current = mesh.faces.get(face.index).ok_or(LoopCutError::StaleRing)?;
             if current.verts != face.original || current.uv.len() != 4 {
@@ -231,6 +322,9 @@ impl LoopRing {
     ) -> Result<Vec<[Vec3; 2]>, LoopCutError> {
         self.validate(mesh)?;
         let fractions = fractions_distribution(cuts, slide, mode)?;
+        if let Some((seed, _)) = self.planar {
+            return self.planar_segments(mesh, seed, &fractions);
+        }
         let oriented: HashMap<_, _> = self.edges.iter().map(|&edge| (key(edge), edge)).collect();
         let mut lines = Vec::with_capacity(self.faces.len() * cuts);
         for face in &self.faces {
@@ -244,6 +338,45 @@ impl LoopRing {
             }
         }
         Ok(lines)
+    }
+
+    fn planar_segments(
+        &self,
+        mesh: &Mesh,
+        seed: Edge,
+        fractions: &[f32],
+    ) -> Result<Vec<[Vec3; 2]>, LoopCutError> {
+        let a = mesh.verts[seed.0 as usize].vec();
+        let b = mesh.verts[seed.1 as usize].vec();
+        let normal = (b - a).normalize();
+        let eps = (b - a).length().max(1.0) * 1e-6;
+        let mut segments = Vec::new();
+        for &fraction in fractions {
+            let origin = a.lerp(b, fraction);
+            for (fi, face) in mesh.faces.iter().enumerate() {
+                for corners in mesh.face_triangle_corners(fi) {
+                    let verts = corners.map(|corner| mesh.verts[face.verts[corner] as usize].vec());
+                    let d = verts.map(|p| (p - origin).dot(normal));
+                    if d.iter().all(|v| v.abs() <= eps) {
+                        continue;
+                    }
+                    let mut points: Vec<Vec3> = Vec::new();
+                    for i in 0..3 {
+                        let j = (i + 1) % 3;
+                        if d[i].abs() <= eps && points.iter().all(|p| p.distance(verts[i]) > eps) {
+                            points.push(verts[i]);
+                        }
+                        if (d[i] > eps && d[j] < -eps) || (d[i] < -eps && d[j] > eps) {
+                            points.push(verts[i].lerp(verts[j], d[i] / (d[i] - d[j])));
+                        }
+                    }
+                    if points.len() == 2 {
+                        segments.push([points[0], points[1]]);
+                    }
+                }
+            }
+        }
+        Ok(segments)
     }
 
     /// Splits each ring quad into strips, sharing every new boundary vertex.
@@ -288,6 +421,32 @@ impl LoopRing {
     ) -> Result<Mesh, LoopCutError> {
         self.validate(mesh)?;
         let fractions = fractions_distribution(cuts, slide, mode)?;
+        if let Some((seed, _)) = self.planar {
+            let a = mesh.verts[seed.0 as usize].vec();
+            let b = mesh.verts[seed.1 as usize].vec();
+            let normal = (b - a).normalize();
+            let mut result = mesh.clone();
+            result.deselect_all();
+            // Triangulate only the section fallback: slice_plane can then
+            // split concave boolean polygons without joining disjoint spans.
+            result.select_all();
+            result.triangulate();
+            result.deselect_all();
+            for fraction in &fractions {
+                result.slice_plane(a.lerp(b, *fraction), normal, false);
+            }
+            let eps = (b - a).length().max(1.0) * 1e-5;
+            for (i, j) in result.edges_unique() {
+                if fractions.iter().any(|t| {
+                    let origin = a.lerp(b, *t);
+                    (result.verts[i as usize].vec() - origin).dot(normal).abs() <= eps
+                        && (result.verts[j as usize].vec() - origin).dot(normal).abs() <= eps
+                }) {
+                    result.selected_edges.insert(key((i, j)));
+                }
+            }
+            return Ok(result);
+        }
         let mut result = mesh.clone();
         result.deselect_all();
         let mut splits = HashMap::new();
@@ -339,6 +498,7 @@ impl LoopRing {
                     ],
                 );
                 face.selected = false;
+                face.material_slot = original.material_slot;
                 faces.push(face);
                 if strip > 0 {
                     result
@@ -501,6 +661,38 @@ mod tests {
                 assert_eq!(result.faces.len(), 6 + 4 * cuts);
                 assert_eq!(result.selected_edges.len(), 4 * cuts);
                 assert_closed(&result);
+            }
+        }
+    }
+
+    #[test]
+    fn perpendicular_loop_cuts_remain_available_after_the_first_cut() {
+        for (first_axis, second_axis) in [(0, 1), (1, 0)] {
+            let mut mesh = Mesh::cube(2.0);
+            let edge_along = |mesh: &Mesh, axis: usize| {
+                mesh.edges_unique()
+                    .into_iter()
+                    .find(|&(a, b)| {
+                        let delta = mesh.verts[b as usize].vec() - mesh.verts[a as usize].vec();
+                        delta[axis].abs() > 1.9
+                    })
+                    .expect("cube edge in the requested direction")
+            };
+            let first = edge_along(&mesh, first_axis);
+            mesh.loop_cut(first, 1, 0.0).unwrap();
+            let before = mesh.topology_fingerprint();
+            let second = edge_along(&mesh, second_axis);
+            let ring = LoopRing::discover(&mesh, second)
+                .expect("the first cut must not block the perpendicular cut");
+            let preview = ring.preview(&mesh, 1, 0.0).unwrap();
+            assert!(!preview.is_empty());
+            assert_eq!(mesh.topology_fingerprint(), before);
+            let result = ring.apply(&mesh, 1, 0.0).unwrap();
+            assert_closed(&result);
+            assert!(!result.selected_edges.is_empty());
+            for &(a, b) in &result.selected_edges {
+                assert!(result.verts[a as usize].vec()[second_axis].abs() < 1e-5);
+                assert!(result.verts[b as usize].vec()[second_axis].abs() < 1e-5);
             }
         }
     }
@@ -689,5 +881,99 @@ mod tests {
         let ring = LoopRing::discover(&Mesh::cube(2.0), seed).unwrap();
         let lines = ring.preview_balanced(&Mesh::cube(2.0), 2, 0.5).unwrap();
         assert_eq!(lines.len(), 8); // 4 faces * 2 cuts
+    }
+}
+
+#[cfg(test)]
+mod boolean_regressions {
+    use super::*;
+    use crate::boolean::{BooleanOp, boolean_meshes};
+
+    #[test]
+    fn closed_primitives_and_triangulated_meshes_support_both_edge_directions() {
+        let mut triangles = Mesh::cube(2.0);
+        triangles.select_all();
+        triangles.triangulate();
+        for source in [triangles, Mesh::cylinder(12, 1.0, 2.0)] {
+            for vertical in [false, true] {
+                let seed = source
+                    .edges_unique()
+                    .into_iter()
+                    .find(|&(a, b)| {
+                        let delta = source.verts[b as usize].vec() - source.verts[a as usize].vec();
+                        if vertical {
+                            delta.y.abs() > 1.9
+                        } else {
+                            delta.y.abs() < 1e-5
+                        }
+                    })
+                    .unwrap();
+                let ring = LoopRing::discover(&source, seed).unwrap();
+                assert!(!ring.preview(&source, 1, 0.0).unwrap().is_empty());
+                let result = ring.apply(&source, 1, 0.0).unwrap();
+                let report = result.validate_topology();
+                assert!(report.is_closed && report.is_manifold, "{report:?}");
+                assert!(!result.selected_edges.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn boolean_sections_preview_and_cut_closed_surfaces_without_losing_materials() {
+        for op in [
+            BooleanOp::Union,
+            BooleanOp::Difference,
+            BooleanOp::Intersection,
+        ] {
+            let mut a = Mesh::cube(2.0);
+            let mut b = Mesh::cube(1.5);
+            for vertex in &mut b.verts {
+                vertex.pos[0] += 0.8;
+                vertex.pos[1] += 0.2;
+            }
+            a.triangulate();
+            b.triangulate();
+            let mut source = boolean_meshes(&a, &b, op).unwrap();
+            for face in &mut source.faces {
+                face.material_slot = Some(2);
+            }
+            let before = source.topology_fingerprint();
+            let ring = LoopRing::discover(&source, source.edges_unique()[0]).unwrap();
+            assert!(ring.is_closed());
+            assert!(!ring.preview(&source, 2, 0.0).unwrap().is_empty());
+            for slide in [-0.4, 0.0, 0.4] {
+                let result = ring.apply(&source, 2, slide).unwrap();
+                assert!(result.faces.len() > source.faces.len());
+                assert!(
+                    result
+                        .faces
+                        .iter()
+                        .all(|face| face.material_slot == Some(2))
+                );
+                assert!(!result.selected_edges.is_empty());
+                let report = result.validate_topology();
+                assert!(report.is_closed && report.is_manifold, "{op:?}: {report:?}");
+                let mut degree = HashMap::new();
+                for &(a, b) in &result.selected_edges {
+                    *degree.entry(a).or_insert(0) += 1;
+                    *degree.entry(b).or_insert(0) += 1;
+                }
+                assert!(
+                    degree.values().all(|&d| d == 2),
+                    "each cut must be a closed loop"
+                );
+            }
+            assert_eq!(
+                source.topology_fingerprint(),
+                before,
+                "preview must not mutate source"
+            );
+            let mut stale = source.clone();
+            stale.faces.pop();
+            assert!(matches!(
+                ring.apply(&stale, 1, 0.0),
+                Err(LoopCutError::StaleRing)
+            ));
+        }
     }
 }

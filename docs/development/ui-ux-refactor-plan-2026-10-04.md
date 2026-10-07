@@ -37,7 +37,14 @@
 | Fase | Estado | Registro |
 |---|---|---|
 | F1 — Tokens v2 + lint | Concluída em 2026-10-04 (testes, clippy e captura POLY/PAINT) | ver [§F1](#f1--registro-de-implementação) |
-| Demais fases | Não iniciadas | aguardam §12 onde indicado |
+| F2 — Componentes + galeria | Concluída em 2026-10-04 | ver [§F2](#f2--registro-de-implementação) |
+| F3 — Shell | Concluída em 2026-10-04, com D1 parcial | ver [§F3](#f3--registro-de-implementação) |
+| F4 — Inspector | Concluída em 2026-10-04 (Quick Actions movida na F5) | ver [§F4](#f4--registro-de-implementação) |
+| F5 — Ferramentas | Concluída em 2026-10-05 (F5b: grupos com flyout) | ver [§F5](#f5--registro-de-implementação) |
+| F6 — PAINT | Concluída em 2026-10-05 | ver [§F6](#f6--registro-de-implementação) |
+| F7 — Diálogos | Concluída em 2026-10-05, com JetBrains Mono e linhas das Preferências pendentes | ver [§F7](#f7--registro-de-implementação) |
+| F8 — Acessibilidade | Concluída em 2026-10-05; sessões com participantes pendentes | ver [§F8](#f8--registro-de-implementação) |
+| F0 — Métricas | Concluída em 2026-10-05 | ver [§F0](#f0--registro-de-implementação) |
 
 ---
 
@@ -486,3 +493,246 @@ Feito em 2026-10-04, sem depender das decisões da §12.
   `(Insert)` no aviso de edição de pivô e as letras de eixo `X/Y/Z`, `UV`,
   `U →`, `V ↑` (F6, i18n); presets de seleção ainda comparados por string hex
   (F7, junto da D5).
+
+## F2 — registro de implementação
+
+Feito em 2026-10-04. Nenhum comportamento muda.
+
+- `app.slint` dividido (13 560 → ~10 100 linhas): `types.slint` (structs
+  públicas, reexportadas para o Rust), `components/feedback.slint`
+  (`RichTooltip`), `components/controls.slint` (botões, campos, menus),
+  `components/paint_canvas.slint`, `inspector/sections.slint` (seções e corpos
+  do Inspector) e `dialogs/references.slint`. Os imports foram calculados por
+  uso; o shell ficou em `app.slint` porque depende de ~700 propriedades da
+  janela (globals por domínio são a etapa seguinte, §8.2).
+- Componentes novos em `components/base.slint`: `IconButton` (ghost / toggle /
+  tool), `Segmented` (setas ←/→), `DropdownButton` (só o gatilho; a lista é
+  `MenuDropdown` via `OverlayStack`), `PropertyRow`, `EmptyState`, `KeyHint` e
+  `CommandSearchField`. Tokens novos: `accent-subtle`, `icon-small/control/rail`.
+- Galeria: `gallery.slint` + `cargo run -p petunia_ui_slint --example gallery`
+  (`PETUNIA_LANG=pt-BR` para português). Textos em `[gallery]` nos dois
+  catálogos; teste `gallery_receives_translations`.
+- `ui-lint` passa a varrer subpastas de `ui/`.
+
+## F3 — registro de implementação
+
+Feito em 2026-10-04 por pedido do responsável ("prossiga com F2 e F3"), o que
+aplica as recomendações de **D1** e **D9**.
+
+- **Top bar:** saem os ícones Parts, Abrir, Salvar, Busca e Referências. Entra
+  o `CommandSearchField` ("Buscar comandos…", abre a palette). Ficam Desfazer,
+  Refazer e Preferências. Abrir/Salvar continuam em Arquivo e nos atalhos;
+  **View → Imagens de referência (F4)** e **Window → Parts** são itens novos
+  (teste `top_bar_actions_moved_to_menus_stay_reachable`).
+- **View bar única:** as três ilhas (câmera, sombreamento/auxiliares, domínio)
+  viram uma barra centrada na área livre da viewport, com LEFT = domínio de
+  seleção, CENTER = pivô/snap/proporcional, RIGHT = projeção (rótulo
+  Persp/Ortho), enquadrar, redefinir, dividir, 4 modos de sombreamento, raio-X
+  e opções. Toggles usam `IconButton` "toggle" (fundo suave); o botão de
+  referências sai da barra (menu + F4).
+- **Status bar:** a mensagem neutra fica discreta (destaque só para
+  aviso/erro/sucesso); as dicas viram chips `KeyHint` (LMB, MMB, Shift+MMB,
+  Roda) que somem da direita para a esquerda abaixo de 1240/1100 px, em vez
+  do texto truncado.
+- **D1 (parcial):** pílula de seção aberta = `accent-subtle` + marcador lateral
+  de 3 px, ícone em accent; trilho de 56 → 50 px (pílula mantém 36 px, contrato do ADR 004 coberto por teste de gestos). **Pendente para a F4:** o
+  trilho é hoje o único controle que abre/fecha o painel (hover e pílulas);
+  escondê-lo com o painel aberto exige antes o botão de recolher no cabeçalho
+  de contexto do Inspector.
+- **Resíduos registrados:** nome do projeto na top bar (o view-model não expõe
+  o nome; F7); popovers de Câmera/Overlays (precisam de entrada no
+  `OverlayStack`; F5); textos fixos em português no HUD da ferramenta ativa
+  (`"Arraste o corte…"`, `"Mova o mouse…"`) e o padrão `"Ready"` (F6, i18n).
+- **Achados da captura (2026-10-04):** (1) o Rust sempre publica uma dica de
+  contexto ("Selection: Object · LMB Select · …"), então os chips `KeyHint`
+  quase nunca aparecem; o texto agora cabe sem truncar, mas a dica estruturada
+  (lista de pares tecla/ação no view-model) fica para a F5. (2) O diálogo
+  "Recover unsaved work?" não bloqueia cliques na viewport: um clique atrás
+  dele desmarcou o objeto. Bug preexistente, fora do escopo da F3.
+
+## F4 — registro de implementação
+
+Feito em 2026-10-04 por pedido do responsável ("prossiga"), aplicando as
+recomendações de **D2** e **D3** e completando a **D1**. Registrado no cap. 36
+("Revisão de baseline — 2026-10-04") e nas emendas dos ADRs 004 e 005.
+
+- **Superfície única (D3):** o painel do Inspector é um retângulo translúcido
+  (alfa 0,9) com elevação 2; `InspectorSection` ficou plana (fio no topo, sem
+  cartão/sombra), título 13 px alinhado à esquerda — corrigido o bug em que o
+  chevron esticava e empurrava o título para o centro.
+- **Pin sob demanda:** aparece no hover do cabeçalho, com foco ou ligado;
+  ligado = ícone neutro.
+- **Cabeçalho de contexto:** ícone + nome do objeto (ou "Nada selecionado"),
+  Duplicar e Excluir (saíram do corpo de Objeto) e **Recolher Inspector**.
+- **D1 completa:** o trilho de pílulas virou sobreposição na borda direita da
+  viewport (a viewport ganha 50 px) e só aparece com o painel recolhido; o
+  painel aberto o cobre. Gizmo XYZ, view bar e transporte do Animate usam a
+  nova folga `right-clearance`. "Recolher" fecha e solta o pin de todas as
+  seções (`collapse_inspector`, teste `collapse_inspector_closes_and_unpins_every_section`).
+- **D2:** Modifiers virou subseção de Object (sem pílula; teste de gestos
+  atualizado para 4 pílulas). Quick Actions continua no Inspector até a barra
+  contextual da F5 recebê-la — nada é removido sem destino.
+- **Material:** o perfil virou grade 2 colunas com rótulo acima; os cinco
+  nomes cabem inteiros.
+- **Sem seleção, nada contraditório:** Transform só aparece com objeto
+  selecionado; sem seleção, um `EmptyState` explica o que fazer (teste
+  `inspector_never_shows_transform_values_without_a_selection`). O clique real
+  no botão Recolher é coberto por `collapse_inspector_button_is_clickable_and_returns_to_the_rail`.
+- **Correção da F3:** os chips da status bar dependiam de `root.width`, o que
+  criava *binding loop* com o layout (aviso do Slint, risco de pânico); agora o
+  grupo recorta à direita sem consultar a largura.
+- **Resíduos para a F5+:** grade rótulo/campo (`PropertyRow`) nas seções
+  Transform/Material, barra de eixo no lugar da letra colorida, opções raras de
+  Parts (tamanho de linha, ordenação) num menu "⋯", Quick Actions na barra
+  contextual.
+
+## F5 — registro de implementação
+
+Feito em 2026-10-05 com autorização do responsável para todas as fases
+restantes; aplica **D2** (parte final), **D6** e **D10**.
+
+- **Barra contextual por seleção:** em POLY, cada ferramenta só aparece no
+  domínio de seleção em que faz sentido (`poly-tool-visible` em `app.slint`):
+  objeto → Push/Pull e Subdivide; face → Extrude, Push/Pull, Inset,
+  Subdivide, Spin, Dissolve; aresta → Round Edge, Connect, Make Face,
+  Subdivide, Spin, Dissolve; ponto → Merge, Make Face, Dissolve. Poly Pen,
+  Knife, Loop Cut e Slice aparecem sempre. DRAW, PAINT e UV não mudam. Teste
+  `poly_context_bar_follows_the_selection_domain`.
+- **Vocabulário:** o botão da barra dizia "Bevel" (`sl.bevel`); agora diz
+  "Round Edge" em en e pt-BR, como pede o cap. 13.
+- **Ações rápidas (D2):** saíram do Inspector (seção e pílula removidas) e
+  moram na barra contextual, com rótulo. O botão de ajuste abre um cartão não
+  modal acima da barra para personalizar (mesmo `QuickActionsBody`).
+- **Lixeira (D10):** deixou de ser botão permanente da barra; excluir continua
+  pela tecla Delete, pelo menu do botão direito e pelo cabeçalho do Inspector.
+- **Modo "Mostrar nomes" (D6):** preferência `show_tool_labels`, desligada por
+  padrão, persistida em `preferences.toml` e exposta em Preferências. Ligada,
+  o trilho vai de 44 px para 148 px e `ToolButton`/`ViewportSvgButton` mostram
+  o nome ao lado do ícone (o plano previa ~168 px; 148 px já cabe "Lasso
+  Select" e "Asset Library"). Teste `show_tool_labels_preference_reaches_the_view_model`.
+- **Dica em repouso:** a frase fixa em inglês "Selection: Object · LMB
+  Select…" saiu; em repouso a dica fica vazia e os gestos aparecem como chips
+  traduzidos na status bar (teste do HUD atualizado).
+- **F5b — grupos com flyout:** novo `ToolGroup` (`components/controls.slint`)
+  recebe uma lista `[RailTool]` (id, rótulo, atalho, descrição, ícone,
+  ativo), mostra a variação ativa ou a última usada e abre o flyout pelo
+  botão direito ou pela marca de canto; Esc ou clique fora fecham. Em
+  DRAW/POLY, Seleção+Laço e Cursor 3D+Medir viraram dois grupos; Adicionar
+  Cubo/Esfera/Cilindro saíram do trilho de POLY (estão no menu Adicionar); as
+  cinco ferramentas de DRAW que se repetiam na barra contextual saíram dela.
+  O trilho de POLY passou de 14 para 9 controles. O resto do trilho continua
+  declarado à mão; a contagem total de controles é medida na F0.
+
+## F6 — registro de implementação
+
+Feito em 2026-10-05.
+
+- **Fonte única de ferramentas:** o trilho do PAINT é declarado por dados
+  (Seleção, grupo Pincel/Aerógrafo, Borracha, Conta-gotas, Balde, grupo
+  Formas Linha/Retângulo/Elipse, grupo Gradiente linear/radial, Seleção UV);
+  as 11 ferramentas repetidas na barra contextual saíram dela.
+- **Barra de pincel:** a barra contextual do PAINT mostra Isolar, a cor
+  atual, tamanho −/+, opacidade −/+ e simetria X/Y/Z.
+- **Inspector reordenado:** Camadas → Efeitos → Paleta → Pincel →
+  Preenchimento e projeção → Canvas → Preparar superfície (fechada) →
+  Camadas de textura (fechada; hoje é só um indicador fixo, ponto para a
+  conversa sobre o PAINT).
+- **Rótulos humanos:** `paint-label()` traduz os ids de escopo de
+  preenchimento, projeção, trava e efeitos (17 chaves `sl.paint_opt_*` em en e
+  pt-BR); o escopo de preenchimento virou coluna para "Pixels conectados" não
+  cortar.
+- **i18n do status:** "Ferramenta ativa: {tool}" e "Modo de seleção:
+  {domain}" vêm de `TextId` (`tools.active`, `selection.mode`,
+  `selection.domain_*`); antes eram frases fixas em português com id cru.
+- **Fora desta fase:** o canvas 2D continua como seção e painel flutuante; a
+  revisão profunda do PAINT fica para a conversa pedida pelo responsável.
+
+## F7 — registro de implementação
+
+Feito em 2026-10-05; aplica **D4** (parcial), **D5**, **D7** e **D8**.
+
+- **D5 — destaque ≠ seleção:** a seção das Preferências chamava a cor de
+  seleção de "Cor de Destaque / Seleção" sem mudar o destaque. Agora há duas:
+  **Cor de destaque da interface** (preferência `accent_rgb`, vazia = do tema;
+  violeta, azul, verde-água, rosa e "Padrão do tema"), aplicada depois do tema
+  com texto claro/escuro conforme a luminância; e **Cor da seleção na
+  viewport**, sem o preset violeta. O bridge recusa uma cor a menos de 90 de
+  distância RGB da outra (`UI_COLORS_TOO_CLOSE`). Teste
+  `accent_and_selection_colors_must_stay_distinguishable`.
+- **D8 — 175 %:** escala 100 / 125 / 150 / **175** / 200 %.
+- **Referências:** grade 3 × 2 de blocos compactos (`ReferenceTile`: rótulo,
+  miniatura clicável, alinhar, mostrar, travar, remover) + `ReferenceDetails`
+  só para a vista selecionada; uma frase de ajuda no topo em vez de seis;
+  "Limpar tudo" pede confirmação na própria barra. O painel nasce com a altura
+  do conteúdo (600 px de largura), sem rolagem em 1280 × 800.
+- **Preferências:** busca na barra lateral filtra as abas por nome e
+  palavras-chave (`text-matches`, comparação no Rust); o rodapé técnico virou
+  a aba **Sobre**. Linhas "rótulo + descrição à esquerda, controle à direita"
+  em todas as abas ficam pendentes.
+- **Home (cap. 23):** Novo modelo, Abrir projeto, Recuperar sessão (quando há
+  snapshot; o diálogo de recuperação espera a Home fechar), Projetos recentes
+  (até 8, atualizados ao abrir/salvar, `recent_projects`), Ajustes e "Mostrar
+  esta tela ao abrir" (`show_home_on_start`, ligado). Abre só no arranque sem
+  projeto; Esc fecha. Teste `recent_projects_keep_newest_first_without_duplicates`.
+- **Palette:** teste `everything_removed_from_the_rail_and_bar_stays_in_the_palette`
+  garante que primitivas, Excluir e as ações rápidas padrão continuam nela.
+- **D7:** `ViewLayout::from_id("4")` não aceita mais a vista quádrupla; ela
+  fica só no modelo e nos testes (teste `quad_is_not_reachable_from_ids`).
+- **D4:** Inter (`InterVariable.ttf`, OFL, cópia do pacote do sistema) é a
+  fonte padrão do shell e da galeria. JetBrains Mono oficial não está na
+  máquina (só a variante Nerd Font) e depende de download autorizado.
+
+## F8 — registro de implementação
+
+Feito em 2026-10-05. Auditoria WCAG 2.2 AA convertida em testes, para não
+voltar a quebrar:
+
+- **1.4.3 Contraste mínimo:** `text_muted` ficava abaixo de 4,5:1 no tema
+  escuro (3,94 sobre o hover) e no claro (4,05 sobre a tela). Ajuste mínimo:
+  escuro `#8a919e` → `#969daa`, claro `#626772` → `#5a5f6a` (também nos
+  valores de fallback de `theme.rs` e no valor inicial de `tokens.slint`).
+  Teste `official_themes_meet_wcag_text_contrast` cobre texto primário,
+  secundário e apagado em quatro fundos e o texto sobre o destaque, nos três
+  temas oficiais.
+- **4.1.2 Nome, função, valor:** `every_visible_control_has_an_accessible_name`
+  varre os controles visíveis de DRAW, POLY e PAINT.
+- **2.5.8 Tamanho do alvo (AA):** `visible_controls_meet_the_minimum_target_size`
+  exige 24 × 24 px lógicos.
+- **2.3.3 Animação por interação:** todas as animações já usam `Motion.*`,
+  que zera com "Redução de movimento"; o `ui-lint` agora falha com
+  `duration:` literal.
+- **Teste do iniciante:** `user-test-protocol.md` ganhou a seção 7 (T8–T12)
+  para a nova interface. As sessões com participantes dependem de pessoas e
+  ficam pendentes; o resultado agregado entra aqui.
+
+## F0 — registro de implementação
+
+Feito em 2026-10-05 (fora da ordem do roteiro: a medição só faz sentido com
+o shell novo).
+
+- `cargo run -p xtask -- ui-metrics` roda o `ui-lint` (zero cor, fonte,
+  sombra ou duração literal fora de `tokens.slint`) e o teste
+  `tests/ui_metrics.rs`, que abre o shell headless em 1800 × 1012 e conta os
+  controles interativos visíveis por workspace (papel acessível de controle,
+  tamanho > 0, opacidade efetiva visível, dentro da janela). Falha se POLY
+  passar de 45 (meta da §11). `PETUNIA_UI_METRICS_VERBOSE=1` lista os rótulos.
+  O mesmo teste aplica a auditoria da F8 (nome acessível e alvo ≥ 24 px) com
+  os rótulos reais do bridge (`sync_shell_for_tests`).
+- **Baseline (2026-10-05):**
+
+  | Workspace | Controles visíveis | Antes (captura de 2026-10-04) |
+  |---|---|---|
+  | DRAW | 45 | — |
+  | POLY | 45 | ~125 |
+  | PAINT | 40 | — |
+
+- **Reduções para chegar à meta** (POLY estava em 56 depois da F7):
+  sombreamento num só botão (os 4 modos e o X-Ray foram para o popover, que
+  também deixou de mostrar o id cru `solid`); "Dividir viewport" e "Redefinir
+  vista" só no menu View; Duplicar fora da barra contextual (cabeçalho do
+  Inspector, Ctrl+D, paleta); Parts fora do trilho esquerdo (pílula do
+  Inspector e menu Window); Subdivide de ferramenta fora do domínio Objeto (a
+  ação rápida Subdivide fica); Knife e Slice num grupo com flyout. O flyout
+  agora abre junto do botão de origem e dentro da viewport.
+- **Auditoria corrigida:** abas de workspace de 22 para 24 px de altura e
+  eixos do gizmo de 20 para 24 px.

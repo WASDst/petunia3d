@@ -1028,6 +1028,9 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_snap_radius_px(vm.snap_radius_px);
     window.set_label_snap_radius(vm.label_snap_radius.as_str().into());
     window.set_click_move_click(vm.click_move_click);
+    window.set_show_tool_labels(vm.show_tool_labels);
+    window.set_label_show_tool_labels(vm.label_show_tool_labels.as_str().into());
+    window.set_label_show_tool_labels_hint(vm.label_show_tool_labels_hint.as_str().into());
     window.set_workplane_prefer_ground(vm.workplane_prefer_ground);
     window.set_studio_light_follows_camera(vm.studio_light_follows_camera);
     window.set_viewport_matcap(vm.viewport_matcap);
@@ -1304,6 +1307,45 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_active_keymap_id(vm.active_keymap_id.as_str().into());
 
     theme::apply_theme(window, &vm.current_theme);
+    if let Some(rgb) = vm.accent_rgb {
+        theme::apply_accent(window, rgb);
+    }
+    window.set_accent_color_hex(vm.accent_color_hex.as_str().into());
+    window.set_home_open(vm.home_open);
+    window.set_show_home_on_start(vm.show_home_on_start);
+    let recents: Vec<crate::RecentProject> = vm
+        .recent_projects
+        .iter()
+        .map(|(name, path)| crate::RecentProject {
+            name: name.as_str().into(),
+            path: path.as_str().into(),
+        })
+        .collect();
+    window.set_recent_projects(std::rc::Rc::new(slint::VecModel::from(recents)).into());
+    let [
+        title,
+        subtitle,
+        new,
+        open,
+        recover,
+        recent,
+        no_recent,
+        settings,
+        show_on_start,
+    ] = vm.home_texts.clone();
+    window.set_home_texts(crate::HomeTexts {
+        title: title.into(),
+        subtitle: subtitle.into(),
+        new: new.into(),
+        open: open.into(),
+        recover: recover.into(),
+        recent: recent.into(),
+        no_recent: no_recent.into(),
+        settings: settings.into(),
+        show_on_start: show_on_start.into(),
+    });
+    window.set_label_accent_color(vm.label_accent_color.as_str().into());
+    window.set_label_accent_color_hint(vm.label_accent_color_hint.as_str().into());
 }
 
 pub(crate) fn persist_user_preferences<V: PetuniaViewport>(bridge: &mut SlintUiBridge<V>) {
@@ -1487,6 +1529,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             };
             if let Ok(mut bridge) = bridge.lock() {
                 bridge.apply(UiIntent::OpenProjectFrom(path));
+                persist_user_preferences(&mut bridge);
                 let vm = bridge.view_model();
                 let new_frame = bridge.render_viewport();
                 if let Some(window) = window_weak.upgrade() {
@@ -1546,7 +1589,13 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                         | "paint.import_decal"
                         | "paint.add_decal_variant"
                 );
+                let touches_recents =
+                    matches!(id.as_str(), "file.open" | "file.save" | "file.save_as");
                 bridge.apply(intent);
+                if touches_recents {
+                    // Home: abrir e salvar atualizam a lista de recentes.
+                    persist_user_preferences(&mut bridge);
+                }
                 bridge.command_search_visible = false;
                 bridge.overlays.remove(OverlayId::CommandPalette);
                 let vm = bridge.view_model();
@@ -2429,6 +2478,67 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 
     let selection_color_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
+    window.on_text_matches(|text, query| {
+        let query = query.trim().to_lowercase();
+        query.is_empty() || text.to_lowercase().contains(&query)
+    });
+
+    let home_close_bridge = Arc::clone(&bridge);
+    let home_window_weak = window.as_weak();
+    window.on_home_closed(move || {
+        if let Ok(mut bridge) = home_close_bridge.lock() {
+            bridge.home_open = false;
+            if let Some(window) = home_window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let home_recent_bridge = Arc::clone(&bridge);
+    let home_recent_weak = window.as_weak();
+    window.on_home_recent_opened(move |path| {
+        if let Ok(mut bridge) = home_recent_bridge.lock() {
+            bridge.apply(UiIntent::OpenProjectFrom(std::path::PathBuf::from(
+                path.as_str(),
+            )));
+            persist_user_preferences(&mut bridge);
+            let vm = bridge.view_model();
+            let frame = bridge.render_viewport();
+            if let Some(window) = home_recent_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let home_pref_bridge = Arc::clone(&bridge);
+    let home_pref_weak = window.as_weak();
+    window.on_show_home_on_start_set(move |enabled| {
+        if let Ok(mut bridge) = home_pref_bridge.lock()
+            && bridge.set_show_home_on_start(enabled)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = home_pref_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let accent_color_bridge = Arc::clone(&bridge);
+    let accent_window_weak = window.as_weak();
+    window.on_accent_color_set(move |hex| {
+        if let Ok(mut bridge) = accent_color_bridge.lock() {
+            if bridge.set_accent_color_hex(hex.as_str()) {
+                persist_user_preferences(&mut bridge);
+            }
+            if let Some(window) = accent_window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
     window.on_selection_color_set(move |hex| {
         if let Ok(mut bridge) = selection_color_bridge.lock() {
             if bridge.set_selection_color_hex(hex.as_str()) {
@@ -2819,6 +2929,18 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             id.as_str(),
             "file.open" | "file.save" | "file.save_as" | "file.import_obj"
         );
+        // "Parts" abre a seção no Inspector (ou a gaveta no shell compacto):
+        // é o mesmo caminho do antigo botão da top bar.
+        if id == "window.parts" {
+            if let Ok(mut bridge) = menu_item_bridge.lock() {
+                bridge.close_menu();
+            }
+            if let Some(window) = window_weak.upgrade() {
+                window.set_menu_open("".into());
+                window.invoke_scene_requested();
+            }
+            return;
+        }
         if let Ok(mut bridge) = menu_item_bridge.lock() {
             bridge.close_menu();
             if opens_dialog {
@@ -3018,6 +3140,19 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window.on_click_move_click_set(move |enabled| {
         if let Ok(mut bridge) = click_move_click_bridge.lock()
             && bridge.set_click_move_click(enabled)
+        {
+            persist_user_preferences(&mut bridge);
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &bridge.view_model());
+            }
+        }
+    });
+
+    let show_tool_labels_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_show_tool_labels_set(move |enabled| {
+        if let Ok(mut bridge) = show_tool_labels_bridge.lock()
+            && bridge.set_show_tool_labels(enabled)
         {
             persist_user_preferences(&mut bridge);
             if let Some(window) = window_weak.upgrade() {
@@ -5604,6 +5739,15 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
                 bridge.toggle_section_open(section);
             }
+            sync_window_properties(&window, &bridge.view_model());
+        }
+    });
+
+    let collapse_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_inspector_collapse_requested(move || {
+        if let (Ok(mut bridge), Some(window)) = (collapse_bridge.lock(), window_weak.upgrade()) {
+            bridge.collapse_inspector();
             sync_window_properties(&window, &bridge.view_model());
         }
     });
