@@ -1,6 +1,6 @@
 # Modifiers e Geometry Evaluation
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado. Expansão da lista inicial de modifiers em avaliação.**
 
 ## Diagnóstico atual
 
@@ -366,3 +366,22 @@ Ela não é o centro do modelador e não deve absorver:
 - animation.
 
 Esses continuam em seus domínios naturais.
+
+
+## Decisões aprovadas
+
+1. Modifier Stack permanece pequena e explícita.
+2. Mirror e Symmetry são preservados.
+3. Modifiers recebem uma Mesh avaliada e não conhecem a origem da Geometry Source.
+4. Pipeline: Geometry Source → Modifiers → Skin/Pose → Render/Export.
+5. Geometry Evaluation Service é a porta única de avaliação.
+6. Cache sai do documento e usa revisions.
+7. Component editing atua na EditableMesh autoral; resultado de modifier é preview.
+8. Generator + Modifier Stack é convertido integralmente por Make Editable.
+9. A primeira operação de bake é Apply All Modifiers.
+10. Mirror/Symmetry preservam FaceCorner/UV/material de forma determinística.
+11. Skin exige aplicar modifiers que alteram topologia antes do binding.
+12. SurfaceAttachment persistente ancora inicialmente apenas em EditableMesh autoral.
+13. Shape Builder, Boolean, Knife, Bevel e demais direct modeling não viram modifiers automaticamente.
+
+A lista de modifiers adicionais deve priorizar algoritmos existentes e baixo custo de manutenção.
