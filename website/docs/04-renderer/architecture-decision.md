@@ -1,6 +1,6 @@
 # Renderer e Viewport Pipeline
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Decisão já fechada
 
@@ -709,3 +709,23 @@ Não criar:
 - abstração de GPU hipotética.
 
 O renderer deve ser simples de rastrear no código e previsível para humanos e agentes.
+
+## Decisões fechadas
+
+1. Um único renderer final: OpenGL 3.3 Core via glow.
+2. `petunia-render` vira o renderer concreto; `render-gl` e `render-wgpu` desaparecem ao final da migração.
+3. WGPU permanece temporariamente apenas como referência de paridade visual.
+4. Renderer não recebe `AppState`, Project ou EditorSession.
+5. Application produz `RenderFrameInput` neutro.
+6. Geometry/Application produz `RenderMesh` já triangulada com UV e corner normals resolvidas.
+7. GPU cache é por ObjectId/revision, não fingerprint global da cena.
+8. Selection/hover usam overlay buffers separados e não invalidam RenderMesh.
+9. DesktopHost possui Window/glutin/context/present; renderer possui GPU resources/passes.
+10. Viewport e egui compartilham um único contexto OpenGL.
+11. Constant-pixel lines, EdgeMode, outlines, workplane, gizmos, Matcap, AO, MSAA, X-Ray e dirty texture updates são portados do comportamento WGPU.
+12. MSAA permanece, preferencialmente com FBO próprio.
+13. Matcap permanece.
+14. AO permanece opcional e controlado por performance tier.
+15. Low/Balanced/High alteram qualidade, não arquitetura.
+16. Não haverá RenderGraph genérico, multi-backend trait ou abstração GPU hipotética.
+17. WGPU só é removido após parity gates explícitos.
