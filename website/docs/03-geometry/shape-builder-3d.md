@@ -309,7 +309,7 @@ Expansões futuras só entram após medição de uso real. Multi-object combinat
 
 # Implementação detalhada do Solid Shape Builder
 
-> **Status: proposta técnica recomendada; as seis regras V1 anteriores continuam aprovadas.**
+> **Status: aprovado; complementa as seis regras V1 anteriores.**
 
 ## Resultado booleano vazio
 
@@ -570,3 +570,18 @@ Component selection antiga nunca sobrevive a topology substituída.
 - semantic feature recognition.
 
 O diferencial deve vir da interação e previsibilidade, não do acúmulo de subsistemas.
+
+
+## Decisões detalhadas aprovadas
+
+1. Boolean distingue resultado vazio de erro.
+2. Solid Shape Builder usa decomposição dedicada que prepara os operandos uma única vez.
+3. Connected face components vira query reutilizável de Geometry.
+4. SolidRegion carrega proveniência mínima First / Second / Generated.
+5. UV e material são preservados por face sempre que houver proveniência; não há relayout global obrigatório.
+6. RegionPlan transitório preserva ownership e ObjectId de objetos não tocados.
+7. Geometry Source paramétrica intocada permanece paramétrica; apenas outputs efetivamente alterados são materializados.
+8. O espaço local do primeiro operand é o session space.
+9. Picking pode percorrer múltiplos hits para regiões internas, com cycling e X-Ray Regions.
+10. Hover/drag executam somente picking; booleans pesados acontecem na preparação ou commit.
+11. Shape Builder usa budget interno e falha explicitamente sem remesh automático.
