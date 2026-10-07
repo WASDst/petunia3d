@@ -1,6 +1,6 @@
 # Normals, Shading e Sharp Edges
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -335,3 +335,22 @@ Persistir somente decisões de authoring:
 Normals, smoothing islands e RenderVertices permanecem derivados.
 
 Sem custom split normals, subdivision crease weights ou normal-editing tools na V1.
+
+
+## Decisões fechadas
+
+1. Flat/Smooth vira `SurfaceShading` persistido diretamente no SceneObject.
+2. `Project::smooth_shaded_assets` será removido.
+3. EditableMesh mantém Sharp Edge flags por `EdgeKey`.
+4. Sharp, UV Seam e Feature Edge são conceitos independentes.
+5. Normals permanecem totalmente derivadas.
+6. Smooth usa corner normals, não uma única normal por VertexIndex.
+7. Render e Export usam o mesmo cálculo canônico de corner normals.
+8. Corner-angle weighting é o baseline de Smooth.
+9. Mark Sharp / Clear Sharp entram como commands.
+10. Smooth by Angle grava Sharp flags explicitamente; não há Auto Smooth mágico permanente.
+11. Generators podem definir defaults inteligentes de Flat/Smooth/Sharp.
+12. Modifiers e topology operations remapeiam Sharp flags explicitamente.
+13. Flip Normals evolui semanticamente para Flip Faces/Orientation.
+14. Recalculate Normals se separa em Orient Consistently e Orient Outward.
+15. Custom split normals e subdivision crease weights ficam fora da V1.
