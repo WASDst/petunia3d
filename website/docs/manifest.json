@@ -85,6 +85,10 @@
         {
           "path": "03-geometry/object-geometry-source.md",
           "title": "Object e Geometry Source — proposta"
+        },
+        {
+          "path": "03-geometry/scene-hierarchy-transforms.md",
+          "title": "Scene Hierarchy e Transforms — proposta"
         }
       ]
     }
