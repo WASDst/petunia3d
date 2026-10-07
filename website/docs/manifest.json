@@ -97,6 +97,10 @@
         {
           "path": "03-geometry/snapping-inference-attachments.md",
           "title": "Snapping, Inference e Surface Attachments — proposta"
+        },
+        {
+          "path": "03-geometry/validation-repair-cleanup.md",
+          "title": "Validation, Repair e Cleanup — proposta"
         }
       ]
     }
