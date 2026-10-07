@@ -105,6 +105,10 @@
         {
           "path": "03-geometry/generators-implementation.md",
           "title": "Generators — implementação detalhada"
+        },
+        {
+          "path": "03-geometry/normals-shading-sharp-edges.md",
+          "title": "Normals, Shading e Sharp Edges — proposta"
         }
       ]
     }
