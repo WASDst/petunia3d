@@ -1,14 +1,14 @@
 # Current Project State
 
 - Project: **Petunia3D**
-- Current phase: **Fundação do produto sobre as ADRs 006/007** (workspaces DRAW/POLY/PAINT, Animate F2, Paint/UV, atalhos). **Wave 11 — Extensibility, Plugins & Automation permanece planejada**: o host Lua (`petunia_plugins`) e o servidor MCP existem, mas não há ponte para o shell Slint.
+- Current phase: **Retomada unificada e estabilização de POLY** no branch `codex/unified-gradual-recovery`: Loop Cut horizontal/vertical e Inspector recolhível/restaurável primeiro; UI commitada reconciliada com a main; sete snapshots locais reunidos numa fila portátil, com aplicação gradual por delta. [Matriz e processo](docs/development/unified-recovery-gap-matrix-2026-10-07.md), [fila preservada](docs/development/recovery/2026-10-07/README.md). Materiais W1, PAINT avançado e demais waves permanecem pendentes até validação própria. **Wave 11 — Extensibility, Plugins & Automation permanece planejada**: host Lua e servidor MCP existem, sem ponte para o shell Slint.
 - Canonical Specification & SSOT: [`docs/bible/`](docs/bible/index.md) (174 P3D specs, 17 capítulos constitucionais, 15 seções, 3 adendos e 46 capítulos de fundação)
 - Referência de UI e interação (ADR 007, 2026-09-29): o próprio sistema Petunia ([cap. 23](docs/bible/foundations/23-macroarquitetura-interface.md), [24](docs/bible/foundations/24-design-system-tokens-estados.md), [36](docs/bible/foundations/36-ui-baseline-temas-plugin-panels.md)) e a pesquisa de interação do [cap. 46](docs/bible/foundations/46-pesquisa-interacao-modelagem-referencias.md). `docs/image-references/Blender.svg` deixou de ser referência canônica e permanece apenas como material histórico.
 - Decisão de produto 2026-09-29 ([ADR 007](docs/architecture/adr/007-workspaces-draw-poly-e-gramatica-unica.md)): workspaces **DRAW + POLY** no lugar de MODEL e gramática única de ferramenta (persistente, arrastar, valor digitado, clicar-mover-clicar, RMB = menu). Implementação em ondas no branch `design/draw-poly-interaction`: Onda 1 (viewport em pixels físicos + MSAA 4× e bugs comprovados) e Onda 2 (`ToolSession` no core; ferramentas persistentes; "Última operação"; RMB = menu; navegação nunca suspensa) com testes, clippy e gates verdes em 2026-09-30; Onda 3 (snapping em pixels de tela com uma passada por gesto, tipos nomeados com rótulo e guias de eixo; pré-seleção no Draw; plano de trabalho automático/travado sem mover a câmera) e Onda 4 parte 1 (regiões por arranjo planar com hover, Push/Pull de região com imprint na face ou sólido novo, 1 Undo) Onda 4 parte 2 (seletor DRAW · POLY · PAINT · UV com trilho por modo) Onda 5 parte 1 (Poly Pen: mover sem selecionar, extrudar aresta, desenhar polígono, derreter ponto) e Onda 6 parte 1 (luz de estúdio presa à câmera, raio do snap ajustável, testes de aparência por pixels, roteiro de teste com usuários) e Onda 6 parte 2 (arestas de largura constante com AA, aparência DRAW = forma / POLY = topologia) e Onda 6 parte 3 (plano de trabalho em destaque no DRAW) e Onda 6 parte 4 (contorno de seleção de objetos em largura constante) em 2026-09-30; seleção Shape/Curve/Point/Region e aparência por modo, captura nativa e teste com usuários pendentes ([matriz Onda 1](docs/development/viewport-crispness-gap-matrix.md), [matriz Onda 2](docs/development/tool-session-gap-matrix.md), [matriz Onda 3](docs/development/snap-inference-gap-matrix.md), [matriz Onda 4](docs/development/draw-regions-gap-matrix.md), [matriz Onda 5](docs/development/poly-pen-gap-matrix.md), [matriz Onda 6](docs/development/wave6-visual-accessibility-gap-matrix.md)).
 - Current implementation status: **Conformidade em revisão**. A alegação histórica de Waves 0–10 totalmente concluídas não certifica o frontend Slint. Ver [plano de paridade](docs/development/viewport-parity-plan.md) e [matriz de gaps](docs/development/viewport-gap-matrix.md). Em rodada histórica anterior, 169 testes Slint, 22 Paint e 4 UV passaram; a paridade visual e a reprodução manual seguem pendentes.
 - **Frontend de produção**: `petunia_ui_slint` (Slint 1.18) — shell declarativo, testes unitários, bridge de intents, viewport WGPU/software fallback. UI egui (`crates/ui/`) arquivada como legado de transição (`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`).
 - Context methodology: **Lean Progressive Context (LPC)**
-- Last updated: `2026-10-03`
+- Last updated: `2026-10-07`
 - Historical planning focus (23/09/2026): revisar o [PR #26](https://github.com/wasd-lat/petunia3d/pull/26) com a integração PAINT/DRAW MVP publicada; gates e aceite manual aguardam instrução. [Plano anterior de viewport](docs/development/workspace-inspector-implementation-plan.md) permanece proposta, sem reabrir decisões de Paint/UV.
 
 ### Retomada DRAW/POLY/PAINT — 03/10/2026
@@ -290,6 +290,25 @@ The twenty-second implementation round delivers Wave 10 (Animation & Rigging —
 Evidence is preserved in `docs/audits/premium-evidence/`, [`docs/GAUNTLET.md`](docs/GAUNTLET.md), [`docs/GAUNTLET_HANDOFF.md`](docs/GAUNTLET_HANDOFF.md), [`docs/audits/stack-modernization/`](docs/audits/stack-modernization/) and [`docs/bible/`](docs/bible/index.md).
 
 ## Next action
+
+**Prioridade de 07/10/2026:** trabalhar somente na worktree de integração
+`codex/unified-gradual-recovery`. Loop Cut em ambas as direções e
+recolher/restaurar o Inspector do POLY têm regressões automatizadas aprovadas;
+QA visual nativo permanece pendente. Próxima implementação: reconciliar PAINT,
+canais W1, deltas DRAW/Parts e contratos da fila preservada.
+Cada etapa exige matriz de gaps, regressões, gates, commit/push e verificação do
+SHA remoto. Snapshots não são features integradas; itens já recuperados na main
+não são reaplicados. As prioridades abaixo são registros anteriores.
+
+**Decisão de 05/10/2026:** antes do Animate, executar o
+[pacote de 5 waves de modelagem e superfície](docs/development/surface-modeling-waves-2026-10-05.md),
+uma wave por vez, com bateria completa de testes e aceite ao fim de cada uma.
+Ordem: W1 materiais e canais → W2 modificadores → W3 curvas e geradores →
+W4 superfície procedural e node system → W5 UV, atlas, decalques e variantes.
+Decisões pendentes antes do código: D1 (camadas × canais), D2 (forma do editor de
+nós), D3 (propriedades paramétricas já animáveis). A pesquisa para o Animate está em
+[`docs/development/research/animate-2026-10-05/`](docs/development/research/animate-2026-10-05/README.md).
+
 
 **Rodada de 04/10/2026 (branch `claude/draw-poly-perf-tools`):** itens 1–9 da
 análise de DRAW/POLY implementados — desempenho por evento, cache por objeto na

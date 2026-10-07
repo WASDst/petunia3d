@@ -1,0 +1,1215 @@
+import { Icon, IconDisplay, IconSet } from "@lucide";
+import { RichTooltip } from "feedback.slint";
+import { DesignTokens, Motion, Tr } from "../tokens.slint";
+import { MenuEntry } from "../types.slint";
+
+/// Divisor horizontal: arrasta na vertical e devolve a altura desejada.
+export component SplitterHorizontal inherits Rectangle {
+    in property <length> value;
+    in property <float> direction: 1.0;
+    callback moved(length);
+
+    width: 100%;
+    height: 6px;
+    background: touch-area.has-hover || touch-area.pressed ? DesignTokens.accent : DesignTokens.border;
+    accessible-role: slider;
+    accessible-label: Tr.t("sl.resize_panel_height");
+    accessible-value: 50;
+
+    touch-area := TouchArea {
+        property <length> start-value;
+        property <length> start-y;
+
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                self.start-value = root.value;
+                self.start-y = self.mouse-y;
+            }
+        }
+        moved => {
+            if self.pressed {
+                root.moved(self.start-value + root.direction * (self.mouse-y - self.start-y));
+            }
+        }
+    }
+}
+
+/// Botão compacto da barra da viewport (visão e domínio de seleção).
+export component ViewportBarButton inherits Rectangle {
+    in property <Icon> icon;
+    in property <image> icon-svg;
+    in property <string> label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <string> hint: "";
+    in property <bool> active;
+    in property <bool> emphasized: false;
+    callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+    forward-focus: bar-focus;
+    width: root.emphasized ? 32px : max(26px, 12px + 14px + 12px);
+    height: root.emphasized ? 28px : 26px;
+    border-radius: 5px;
+    background: root.active
+        ? DesignTokens.accent
+        : (bar-touch.pressed ? DesignTokens.surface-pressed : (bar-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    border-width: bar-focus.has-focus || (root.emphasized && root.active) ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: bar-touch.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
+
+    if root.icon-svg.width > 0: Image {
+        source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        width: 16px;
+        height: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+    if root.icon-svg.width == 0: bar-icon := IconDisplay {
+        icon: root.icon;
+        size: 14px;
+        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
+    }
+    bar-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        bar-touch := TouchArea {
+            clicked => { root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: root.label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
+    }
+}
+
+/// Ícone vetorial específico do modo de shading (16–18 px legíveis).
+export component ViewportSvgButton inherits Rectangle {
+    in property <image> glyph;
+    in property <string> label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <string> hint: "";
+    in property <bool> active;
+    in property <bool> live-mode: false;
+    /// Modo com nome ao lado do ícone (preferência "Mostrar nomes", D6).
+    in property <bool> show-label: false;
+    callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+    forward-focus: svg-focus;
+    width: root.show-label ? 132px : 32px;
+    height: 28px;
+    border-radius: 5px;
+    background: root.live-mode ? DesignTokens.live-mode : (root.active ? DesignTokens.accent : (touch.pressed ? DesignTokens.surface-pressed : (touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0))));
+    border-width: svg-focus.has-focus ? 2px : ((root.active || root.live-mode) ? 1px : 0px);
+    border-color: root.live-mode ? DesignTokens.live-mode-ring : DesignTokens.focus-ring;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: touch.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
+    Image {
+        source: root.glyph;
+        colorize: (root.active || root.live-mode) ? DesignTokens.on-accent : DesignTokens.text-primary;
+        width: 20px;
+        height: 20px;
+        x: root.show-label ? 6px : (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+    if root.show-label: Text {
+        x: 32px;
+        width: parent.width - 38px;
+        height: parent.height;
+        text: root.label;
+        color: (root.active || root.live-mode) ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: DesignTokens.font-small;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    svg-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch := TouchArea {
+            clicked => { root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: root.label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
+    }
+}
+
+/// Botão da barra de menus do topo.
+export component MenuButton inherits Rectangle {
+    in property <string> label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <bool> open;
+    callback clicked;
+    callback hovered;
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-expanded: root.open;
+    height: 26px;
+    width: max(46px, menu-label.preferred-width + 20px);
+    border-radius: 4px;
+    background: root.open
+        ? DesignTokens.accent
+        : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+
+    menu-label := Text {
+        text: root.label;
+        color: root.open ? DesignTokens.on-accent : DesignTokens.text-secondary;
+        font-size: DesignTokens.font-small;
+        font-weight: root.open ? 700 : 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch-area := TouchArea {
+        clicked => { root.clicked(); }
+        changed has-hover => {
+            if self.has-hover {
+                root.hovered();
+            }
+        }
+        if !root.open: Tooltip {
+            RichTooltip {
+                title: root.label;
+                shortcut: root.shortcut;
+                description: root.description;
+            }
+        }
+    }
+}
+
+/// Slider Petunia: trilho fino, preenchimento no accent, alça com feedback e teclado.
+export component PetuniaSlider inherits Rectangle {
+    in-out property <float> value;
+    in property <float> minimum: 0.0;
+    in property <float> maximum: 100.0;
+    in property <float> step: 0.0;
+    in property <bool> enabled: true;
+    /// `true` quando `value` vem de um binding de uma via (`value: expr`): escrever
+    /// em `value` desfaria o binding e o slider deixaria de seguir o modelo
+    /// (Undo, recarregar preferências, troca de linha). Nesse modo o slider só
+    /// emite `changed` e mostra o valor arrastado enquanto o ponteiro está preso.
+    in property <bool> controlled: false;
+    callback changed(float);
+    callback released(float);
+
+    property <float> span: max(root.maximum - root.minimum, 0.0001);
+    property <float> drag-value: root.value;
+    property <float> shown: (root.controlled && slider-touch.pressed) ? root.drag-value : root.value;
+    property <float> ratio: clamp((root.shown - root.minimum) / root.span, 0.0, 1.0);
+
+    accessible-role: slider;
+    accessible-value: root.value;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: root.step > 0.0 ? root.step : root.span / 20.0;
+    accessible-enabled: root.enabled;
+    forward-focus: slider-focus;
+    min-width: 60px;
+    height: 18px;
+
+    function apply(v: float) {
+        let snapped = root.step > 0.0 ? root.minimum + round((v - root.minimum) / root.step) * root.step : v;
+        let next = clamp(snapped, root.minimum, root.maximum);
+        if next != root.shown {
+            if root.controlled {
+                root.drag-value = next;
+            } else {
+                root.value = next;
+            }
+            root.changed(next);
+        }
+    }
+
+    Rectangle {
+        y: (parent.height - self.height) / 2;
+        height: 4px;
+        border-radius: 2px;
+        background: DesignTokens.border-strong.with-alpha(0.55);
+        Rectangle {
+            x: 0px;
+            width: max(parent.width * root.ratio, 0px);
+            border-radius: 2px;
+            background: root.enabled ? DesignTokens.accent : DesignTokens.disabled;
+        }
+    }
+
+    handle := Rectangle {
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        x: (root.width - self.width) * root.ratio;
+        y: (root.height - self.height) / 2;
+        background: DesignTokens.text-primary;
+        border-width: (slider-focus.has-focus || slider-touch.pressed) ? 3px : 2px;
+        border-color: root.enabled ? DesignTokens.accent : DesignTokens.disabled;
+        animate border-width { duration: Motion.fast; easing: ease-out; }
+        transform-scale: slider-touch.pressed ? 1.15 : (slider-touch.has-hover ? 1.08 : 1.0);
+        animate transform-scale { duration: Motion.fast; easing: ease-out; }
+        drop-shadow-blur: DesignTokens.elevation-1-blur;
+        drop-shadow-color: DesignTokens.elevation-1-color;
+        drop-shadow-offset-y: DesignTokens.elevation-1-offset;
+    }
+
+    slider-focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            let delta = root.step > 0.0 ? root.step : root.span / 20.0;
+            if event.text == Key.LeftArrow || event.text == Key.DownArrow { root.apply(root.value - delta); return accept; }
+            if event.text == Key.RightArrow || event.text == Key.UpArrow { root.apply(root.value + delta); return accept; }
+            if event.text == Key.Home { root.apply(root.minimum); return accept; }
+            if event.text == Key.End { root.apply(root.maximum); return accept; }
+            reject
+        }
+        slider-touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: MouseCursor.pointer;
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    root.apply(root.minimum + root.span * clamp((self.mouse-x - 7px) / max(root.width - 14px, 1px), 0.0, 1.0));
+                }
+                if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left) || event.kind == PointerEventKind.cancel {
+                    root.released(root.controlled ? root.drag-value : root.value);
+                }
+            }
+            moved => {
+                if self.pressed {
+                    root.apply(root.minimum + root.span * clamp((self.mouse-x - 7px) / max(root.width - 14px, 1px), 0.0, 1.0));
+                }
+            }
+        }
+    }
+}
+
+/// Linha "rótulo: valor  [-] [+]" do painel de pincel.
+export component BrushStepper inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value-text;
+    callback minus();
+    callback plus();
+    alignment: center;
+    Text {
+        text: root.label + ": " + root.value-text;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-small;
+        horizontal-stretch: 1;
+        overflow: elide;
+    }
+    Rectangle {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        background: minus-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+        accessible-role: button;
+        accessible-label: root.label + " −";
+        Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+        minus-touch := TouchArea { clicked => { root.minus(); } }
+    }
+    Rectangle { width: 4px; }
+    Rectangle {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        background: plus-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+        accessible-role: button;
+        accessible-label: root.label + " +";
+        Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+        plus-touch := TouchArea { clicked => { root.plus(); } }
+    }
+}
+
+/// Chip de escolha (tipo de pincel, ponta, mistura, preset).
+export component BrushChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked();
+    height: 24px;
+    horizontal-stretch: 1;
+    border-radius: 4px;
+    background: root.active ? DesignTokens.accent : (chip-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+    Text {
+        text: root.label;
+        color: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: DesignTokens.font-caption;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    chip-touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+/// Alça de arraste de painéis flutuantes não modais (cap. 36, revisão 2026-09-30).
+/// O pai guarda a posição; duplo clique recentraliza (posição negativa = centro).
+export component PanelDragHandle inherits TouchArea {
+    in property <length> panel-x;
+    in property <length> panel-y;
+    in property <length> max-x;
+    in property <length> max-y;
+    callback moved-to(length, length);
+    mouse-cursor: MouseCursor.move;
+    // `mouse-x`/`pressed-x` são relativos a este próprio elemento, que anda junto
+    // com o painel. Somar o deslocamento à posição ATUAL (e não à posição do
+    // clique) mantém o ponto pressionado sob o cursor; partir da posição do
+    // clique oscilava a cada quadro e o painel "travava".
+    moved => {
+        root.moved-to(
+            clamp(root.panel-x + (self.mouse-x - self.pressed-x), 0px, max(root.max-x, 0px)),
+            clamp(root.panel-y + (self.mouse-y - self.pressed-y), 0px, max(root.max-y, 0px)));
+    }
+    double-clicked => { root.moved-to(-1px, -1px); }
+}
+
+/// Alça de redimensionamento no canto inferior direito de um painel flutuante.
+/// Duplo clique volta ao tamanho padrão (largura e altura 0).
+export component PanelResizeGrip inherits TouchArea {
+    in property <length> panel-w;
+    in property <length> panel-h;
+    in property <length> min-w: 340px;
+    in property <length> min-h: 260px;
+    in property <length> max-w: 4000px;
+    in property <length> max-h: 4000px;
+    callback resized-to(length, length);
+    width: 20px;
+    height: 20px;
+    mouse-cursor: MouseCursor.nwse-resize;
+    accessible-role: none;
+    moved => {
+        root.resized-to(
+            clamp(root.panel-w + (self.mouse-x - self.pressed-x), root.min-w, max(root.max-w, root.min-w)),
+            clamp(root.panel-h + (self.mouse-y - self.pressed-y), root.min-h, max(root.max-h, root.min-h)));
+    }
+    double-clicked => { root.resized-to(0px, 0px); }
+    Path {
+        width: 12px;
+        height: 12px;
+        x: parent.width - self.width - 3px;
+        y: parent.height - self.height - 3px;
+        commands: "M 11 1 L 1 11 M 11 5 L 5 11 M 11 9 L 9 11";
+        stroke: DesignTokens.text-muted;
+        stroke-width: 1.2px;
+    }
+}
+
+/// Item de menu: rótulo, atalho, check opcional, estado desativado e realce de teclado.
+export component ContextMenuItem inherits Rectangle {
+    in property <string> label;
+    in property <string> shortcut;
+    in property <bool> danger: false;
+    in property <bool> disabled: false;
+    in property <bool> checked: false;
+    in property <bool> highlighted: false;
+    callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-enabled: !root.disabled;
+    accessible-checkable: root.checked;
+    accessible-checked: root.checked;
+    height: 26px;
+    border-radius: 4px;
+    background: root.disabled ? DesignTokens.surface-hover.with-alpha(0)
+        : (touch-area.pressed ? DesignTokens.surface-pressed
+        : ((touch-area.has-hover || root.highlighted) ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    animate background { duration: Motion.fast; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 8px;
+        spacing: 6px;
+        alignment: stretch;
+
+        Rectangle {
+            width: 14px;
+            if root.checked: IconDisplay {
+                icon: IconSet.Check;
+                size: 12px;
+                stroke: DesignTokens.accent;
+            }
+        }
+        Text {
+            text: root.label;
+            color: root.disabled ? DesignTokens.disabled : (root.danger ? DesignTokens.danger : DesignTokens.text-primary);
+            font-size: DesignTokens.font-small;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: root.shortcut;
+            color: root.disabled ? DesignTokens.disabled : DesignTokens.text-muted;
+            font-size: DesignTokens.font-caption;
+            vertical-alignment: center;
+        }
+    }
+
+    touch-area := TouchArea {
+        enabled: !root.disabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// Dropdown de um menu da barra superior.
+export component MenuDropdown inherits Rectangle {
+    in property <[MenuEntry]> entries;
+    in property <int> highlight: -1;
+    callback invoked(string);
+
+    width: 216px;
+    height: menu-items.preferred-height;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    border-radius: 6px;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+    menu-items := VerticalLayout {
+        padding: 4px;
+        spacing: 1px;
+
+        for entry[index] in root.entries: VerticalLayout {
+            if entry.separator: Rectangle {
+                height: 9px;
+                Rectangle {
+                    y: 4px;
+                    height: 1px;
+                    background: DesignTokens.border;
+                }
+            }
+            if !entry.separator: ContextMenuItem {
+                label: entry.label;
+                shortcut: entry.shortcut;
+                disabled: entry.disabled;
+                checked: entry.checked;
+                highlighted: index == root.highlight;
+                clicked => { root.invoked(entry.id); }
+            }
+        }
+    }
+}
+
+export component TopAction inherits Rectangle {
+    in property <Icon> icon;
+    in property <image> icon-svg;
+    in property <string> semantic-label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <string> hint: "";
+    in property <bool> active: false;
+    in property <bool> toggle-button: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.semantic-label;
+    accessible-checkable: root.toggle-button;
+    accessible-checked: root.active;
+    forward-focus: top-focus;
+    width: 32px;
+    height: 28px;
+    border-radius: 5px;
+    background: root.active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    border-width: top-focus.has-focus ? 2px : (touch-area.has-hover ? 1px : 0px);
+    border-color: top-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: touch-area.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
+
+    if root.icon-svg.width > 0: Image {
+        source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        width: 18px;
+        height: 18px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+    if root.icon-svg.width == 0: IconDisplay {
+        icon: root.icon;
+        size: 16px;
+        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
+    }
+    top-focus := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") && root.enabled {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch-area := TouchArea {
+            enabled: root.enabled;
+            clicked => {
+                if root.enabled {
+                    root.clicked();
+                }
+            }
+            Tooltip {
+                RichTooltip {
+                    title: root.semantic-label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
+    }
+}
+
+/// Segmented control para a seleção de workspaces com pill deslizante.
+export component WorkspaceSegment inherits Rectangle {
+    /// "DRAW", "POLY", "PAINT" ou "UV".
+    in property <string> active: "POLY";
+    in property <bool> reduced-motion: false;
+    in property <string> draw-title: "Draw";
+    in property <string> draw-description: "";
+    in property <string> poly-title: "Poly";
+    in property <string> poly-description: "";
+    // Pós-V1 (ADR 006): a pill ANIMATE só existe quando o workspace está
+    // implementado (feature `animation-workspace`); nunca aparece desabilitada.
+    in property <bool> animate-available: false;
+    in property <string> animate-label: "ANIMATE";
+    in property <string> animate-tip: "";
+    callback changed(string);
+
+    accessible-role: tab-list;
+    accessible-label: Tr.t("sl.workspaces");
+    width: root.animate-available ? 327px : 246px;
+    height: 30px;
+    border-radius: 6px;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    // Sliding pill
+    Rectangle {
+        x: root.active == "DRAW" ? 2px : (root.active == "POLY" ? 83px : (root.active == "PAINT" ? 164px : 245px));
+        y: 2px;
+        width: 80px;
+        height: 24px;
+        border-radius: 4px;
+        background: DesignTokens.accent;
+        animate x { duration: root.reduced-motion ? 0ms : 160ms; easing: ease-out-quad; }
+    }
+
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 1px;
+        Rectangle {
+            width: 80px;
+            height: 24px;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: root.draw-title;
+            accessible-description: root.draw-description;
+            accessible-checked: root.active == "DRAW";
+            Text {
+                text: Tr.t("sl.draw");
+                color: root.active == "DRAW" ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.changed("DRAW"); }
+                Tooltip {
+                    RichTooltip {
+                        title: root.draw-title;
+                        shortcut: "F1";
+                        description: root.draw-description;
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 80px;
+            height: 24px;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: root.poly-title;
+            accessible-description: root.poly-description;
+            accessible-checked: root.active == "POLY";
+            Text {
+                text: Tr.t("sl.poly");
+                color: root.active == "POLY" ? DesignTokens.canvas : DesignTokens.text-secondary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.changed("POLY"); }
+                Tooltip {
+                    RichTooltip {
+                        title: root.poly-title;
+                        shortcut: "F1";
+                        description: root.poly-description;
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 80px;
+            height: 24px;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: Tr.t("sl.paint_workspace");
+            accessible-checked: root.active == "PAINT";
+            Text {
+                text: Tr.t("sl.paint");
+                color: root.active == "PAINT" ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.changed("PAINT"); }
+                Tooltip {
+                    RichTooltip {
+                        title: Tr.t("sl.paint_workspace");
+                        shortcut: "F2";
+                        description: Tr.t("sl.texture_painting_layer_management_and_brush_");
+                    }
+                }
+            }
+        }
+        if root.animate-available: Rectangle {
+            width: 80px;
+            height: 24px;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: root.animate-label;
+            accessible-description: root.animate-tip;
+            accessible-checked: root.active == "ANIMATE";
+            Text {
+                text: root.animate-label;
+                color: root.active == "ANIMATE" ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { root.changed("ANIMATE"); }
+                Tooltip {
+                    RichTooltip {
+                        title: root.animate-label;
+                        shortcut: "Ctrl+PgDn";
+                        description: root.animate-tip;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Card flutuante de propriedades de ferramenta com animação de colapso.
+export component ToolCard inherits Rectangle {
+    in property <string> title;
+    in-out property <bool> collapsed: false;
+    callback collapse-toggled;
+
+    width: 264px;
+    height: card-layout.preferred-height;
+    border-radius: 8px;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+    card-layout := VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+        alignment: start;
+
+        HorizontalLayout {
+            height: 20px;
+            Text {
+                text: root.title;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-default;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Rectangle {
+                width: 20px;
+                height: 20px;
+                accessible-role: button;
+                accessible-label: root.collapsed ? Tr.t("sl.expand") : Tr.t("sl.collapse");
+                IconDisplay {
+                    icon: root.collapsed ? IconSet.ChevronDown : IconSet.ChevronUp;
+                    size: 13px;
+                    stroke: DesignTokens.text-secondary;
+                }
+                TouchArea { clicked => { root.collapse-toggled(); } }
+            }
+        }
+
+        VerticalLayout {
+            visible: !root.collapsed;
+            spacing: 8px;
+            alignment: start;
+            @children
+        }
+    }
+}
+
+
+export component ToolButton inherits Rectangle {
+    in property <Icon> icon;
+    in property <image> icon-svg;
+    in property <string> semantic-label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <string> hint: "";
+    in property <bool> active;
+    in property <bool> double-tap-armed: false;
+    /// Modo com nome ao lado do ícone (preferência "Mostrar nomes", D6).
+    in property <bool> show-label: false;
+    /// Marca de canto: o botão é um grupo com mais variações (flyout).
+    in property <bool> has-more: false;
+    callback clicked;
+    /// Botão direito: abre as variações de um grupo.
+    callback secondary-clicked;
+
+    accessible-role: button;
+    accessible-label: root.semantic-label;
+    forward-focus: tool-focus;
+    width: root.show-label ? 132px : 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    animate background { duration: Motion.fast; easing: ease-out; }
+    animate border-color { duration: Motion.fast; easing: ease-out; }
+    transform-scale: touch-area.pressed ? 0.94 : 1.0;
+    animate transform-scale { duration: Motion.fast; easing: ease-out; }
+    border-width: tool-focus.has-focus ? 2px : (root.double-tap-armed ? 2px : ((!active && touch-area.has-hover) ? 1px : 0px));
+    border-color: root.double-tap-armed ? DesignTokens.armed-ring : DesignTokens.focus-ring;
+
+    if root.icon-svg.width > 0: Image {
+        source: root.icon-svg;
+        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        width: 18px;
+        height: 18px;
+        x: root.show-label ? 7px : (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+    if root.icon-svg.width == 0: IconDisplay {
+        x: root.show-label ? 8px : (parent.width - self.width) / 2;
+        icon: root.icon;
+        size: 16px;
+        stroke: active ? DesignTokens.on-accent : DesignTokens.text-primary;
+    }
+    if root.show-label: Text {
+        x: 32px;
+        width: parent.width - 38px;
+        height: parent.height;
+        text: root.semantic-label;
+        color: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: DesignTokens.font-small;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    if root.has-more: Path {
+        x: parent.width - 8px;
+        y: parent.height - 8px;
+        width: 5px;
+        height: 5px;
+        commands: "M 5 0 L 5 5 L 0 5 Z";
+        fill: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
+        stroke-width: 0px;
+    }
+    tool-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch-area := TouchArea {
+            clicked => { root.clicked(); }
+            pointer-event(event) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.up {
+                    root.secondary-clicked();
+                }
+            }
+            Tooltip {
+                RichTooltip {
+                    title: root.semantic-label;
+                    shortcut: root.shortcut;
+                    description: root.description;
+                    hint: root.hint;
+                }
+            }
+        }
+    }
+}
+
+
+/// Uma ferramenta do trilho descrita por dados (plano de UI F5b).
+export struct RailTool {
+    id: string,
+    label: string,
+    shortcut: string,
+    description: string,
+    icon: Icon,
+    active: bool,
+}
+
+/// Grupo de ferramentas parecidas num só botão do trilho. Mostra a variação
+/// ativa (ou a última usada); clique ativa, botão direito ou a marca de canto
+/// pedem o flyout com todas as variações. Suporta até 4 variações.
+export component ToolGroup inherits Rectangle {
+    in property <[RailTool]> tools;
+    in property <bool> show-label: false;
+    in property <string> more-hint;
+    in-out property <int> current: 0;
+    callback activated(string);
+    /// Pede o flyout; `x`/`y` são a posição absoluta do botão.
+    callback more-requested(length, length);
+
+    property <int> shown: root.tools[0].active ? 0 : (root.tools[1].active ? 1 : (root.tools[2].active ? 2 : (root.tools[3].active ? 3 : root.current)));
+    width: button.width;
+    height: button.height;
+
+    button := ToolButton {
+        icon: root.tools[root.shown].icon;
+        semantic-label: root.tools[root.shown].label;
+        shortcut: root.tools[root.shown].shortcut;
+        description: root.tools[root.shown].description;
+        hint: root.more-hint;
+        active: root.tools[root.shown].active;
+        show-label: root.show-label;
+        has-more: root.tools.length > 1;
+        clicked => {
+            root.current = root.shown;
+            root.activated(root.tools[root.shown].id);
+        }
+        secondary-clicked => { root.more-requested(root.absolute-position.x, root.absolute-position.y); }
+    }
+    // Área da marca de canto: clique abre as variações.
+    if root.tools.length > 1: TouchArea {
+        x: parent.width - 12px;
+        y: parent.height - 12px;
+        width: 12px;
+        height: 12px;
+        clicked => { root.more-requested(root.absolute-position.x, root.absolute-position.y); }
+    }
+}
+
+export component ColorSwatch inherits Rectangle {
+    in property <color> swatch-color;
+    in property <bool> selected;
+    callback clicked;
+
+    accessible-role: button;
+    accessible-label: Tr.t("sl.color_swatch");
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: root.swatch-color;
+    border-width: selected ? 2px : 1px;
+    border-color: selected ? DesignTokens.accent : DesignTokens.border;
+
+    TouchArea {
+        clicked => { root.clicked(); }
+        Tooltip {
+            RichTooltip {
+                title: Tr.t("sl.color_swatch");
+                description: Tr.t("sl.click_to_select_or_modify_active_color");
+            }
+        }
+    }
+}
+
+export component NumericField inherits Rectangle {
+    in property <string> label: "X";
+    in property <string> full-label: root.label;
+    in property <string> shortcut: "";
+    in property <string> description: "";
+    in property <string> hint: Tr.t("sl.click_to_enter_value_drag_to_adjust_shift_fo");
+    in property <float> value: 0.0;
+    in property <float> step: 0.1;
+    in property <color> label-color: DesignTokens.axis-x;
+    callback scrubbed(float, bool);
+    callback scrub-started;
+    callback scrub-finished;
+    callback scrub-cancelled(float);
+    callback text-committed(string) -> bool;
+    property <bool> editing: false;
+    property <bool> invalid: false;
+    property <string> draft;
+
+    min-height: 28px;
+    max-height: 28px;
+
+    accessible-role: spinbox;
+    accessible-label: root.full-label;
+    accessible-value: Math.round(root.value * 100) / 100;
+    forward-focus: field-focus;
+    border-radius: 4px;
+    background: touch.pressed ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+    border-width: field-focus.has-focus ? 2px : 1px;
+    border-color: root.invalid ? DesignTokens.danger : (field-focus.has-focus ? DesignTokens.focus-ring : (root.editing || touch.is-scrubbing ? DesignTokens.accent : DesignTokens.border));
+
+    field-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape && touch.is-scrubbing {
+                touch.cancel-gesture();
+                return accept;
+            }
+            if !root.editing && (event.text == Key.Return || event.text == Key.UpArrow || event.text == Key.DownArrow) {
+                root.draft = root.value;
+                root.invalid = false;
+                root.editing = true;
+                return accept;
+            }
+            reject
+        }
+        // Preenchimento do virtual slider durante o scrubbing (estilo Cinema 4D / Blender)
+        if touch.is-scrubbing: Rectangle {
+            x: 0;
+            y: 0;
+            width: Math.clamp(touch.mouse-x, 4px, parent.width);
+            height: 100%;
+            border-radius: 3px;
+            background: (root.label-color != transparent && root.label-color != DesignTokens.text-primary ? root.label-color : DesignTokens.accent).transparentize(0.78);
+        }
+
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-right: 6px;
+            spacing: 4px;
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.label-color;
+                font-size: DesignTokens.font-caption;
+                font-weight: 700;
+                vertical-alignment: center;
+                width: root.label == "" ? 0px : 10px;
+            }
+            if !root.editing: Text {
+                text: Math.round(root.value * 100) / 100;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                vertical-alignment: center;
+                horizontal-alignment: right;
+                horizontal-stretch: 1;
+            }
+            if root.editing: TextInput {
+                text <=> root.draft;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                init => { self.focus(); self.select-all(); }
+                edited => { root.invalid = false; }
+                changed has-focus => {
+                    if !self.has-focus && root.editing {
+                        root.editing = false;
+                        root.invalid = !root.text-committed(self.text);
+                    }
+                }
+                key-pressed(event) => {
+                    if event.text == Key.Escape {
+                        root.editing = false;
+                        root.invalid = false;
+                        field-focus.focus();
+                        return accept;
+                    }
+                    if event.text == Key.UpArrow || event.text == Key.DownArrow {
+                        // Arrow edits stay in the draft until Enter or focus loss.
+                        self.text = self.text.to-float() + (event.text == Key.UpArrow ? 1 : -1) * root.step * (event.modifiers.shift ? 0.1 : 1);
+                        return accept;
+                    }
+                    reject
+                }
+                accepted => {
+                    root.invalid = !root.text-committed(self.text);
+                    if !root.invalid { root.editing = false; field-focus.focus(); }
+                }
+            }
+        }
+        touch := TouchArea {
+            enabled: !root.editing;
+            mouse-cursor: ew-resize;
+            Tooltip {
+                RichTooltip {
+                    title: root.full-label != "" ? root.full-label : root.label;
+                    shortcut: root.shortcut;
+                    description: root.description != "" ? root.description : Tr.t("sl.numeric_property_field");
+                    hint: root.hint;
+                }
+            }
+            property <length> start-x;
+            property <length> last-x;
+            property <float> original-value;
+            property <bool> is-fine: false;
+            property <bool> is-scrubbing: false;
+            property <bool> was-drag: false;
+            property <bool> cancelled: false;
+            function cancel-gesture() {
+                if is-scrubbing { root.scrub-cancelled(original-value); }
+                is-scrubbing = false;
+                cancelled = true;
+                was-drag = true;
+            }
+            pointer-event(event) => {
+                is-fine = event.modifiers.shift;
+                if event.kind == PointerEventKind.cancel || (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                    self.cancel-gesture();
+                } else if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                    field-focus.focus();
+                    start-x = self.mouse-x;
+                    last-x = self.mouse-x;
+                    original-value = root.value;
+                    was-drag = false;
+                    cancelled = false;
+                    root.invalid = false;
+                } else if event.button == PointerEventButton.left && event.kind == PointerEventKind.up {
+                    if is-scrubbing { root.scrub-finished(); }
+                    is-scrubbing = false;
+                }
+            }
+            moved => {
+                if self.pressed && !cancelled {
+                    if !is-scrubbing && Math.abs(self.mouse-x - start-x) > 3px {
+                        is-scrubbing = true;
+                        was-drag = true;
+                        root.scrub-started();
+                    }
+                    if is-scrubbing {
+                        root.scrubbed((self.mouse-x - last-x) / 1px, is-fine);
+                        last-x = self.mouse-x;
+                    }
+                }
+            }
+            clicked => {
+                if !was-drag {
+                    root.draft = root.value;
+                    root.editing = true;
+                }
+            }
+        }
+    }
+}
+
+export component Vector3Field inherits HorizontalLayout {
+    in property <string> row-label: Tr.t("sl.position");
+    in property <string> field-hint: "";
+    in property <float> x-value: 0.0;
+    in property <float> y-value: 0.0;
+    in property <float> z-value: 0.0;
+    callback scrubbed(int, float, bool);
+    callback scrub-started;
+    callback scrub-finished;
+    callback text-committed(int, string) -> bool;
+    callback scrub-cancelled;
+    in property <float> step: 0.1;
+
+    spacing: 6px;
+    alignment: center;
+    height: 28px;
+
+    Text {
+        text: root.row-label;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-small;
+        min-width: 52px;
+        max-width: 52px;
+        vertical-alignment: center;
+    }
+
+    NumericField {
+        label: "X";
+        full-label: "\{root.row-label} X";
+        description: root.field-hint;
+        value: root.x-value;
+        label-color: DesignTokens.axis-x;
+        horizontal-stretch: 1;
+        scrubbed(delta, fine) => { root.scrubbed(0, delta, fine); }
+        scrub-started => { root.scrub-started(); }
+        scrub-finished => { root.scrub-finished(); }
+        text-committed(text) => { root.text-committed(0, text) }
+        scrub-cancelled(_value) => { root.scrub-cancelled(); }
+        step: root.step;
+    }
+    NumericField {
+        label: "Y";
+        full-label: "\{root.row-label} Y";
+        description: root.field-hint;
+        value: root.y-value;
+        label-color: DesignTokens.axis-y;
+        horizontal-stretch: 1;
+        scrubbed(delta, fine) => { root.scrubbed(1, delta, fine); }
+        scrub-started => { root.scrub-started(); }
+        scrub-finished => { root.scrub-finished(); }
+        text-committed(text) => { root.text-committed(1, text) }
+        scrub-cancelled(_value) => { root.scrub-cancelled(); }
+        step: root.step;
+    }
+    NumericField {
+        label: "Z";
+        full-label: "\{root.row-label} Z";
+        description: root.field-hint;
+        value: root.z-value;
+        label-color: DesignTokens.axis-z;
+        horizontal-stretch: 1;
+        scrubbed(delta, fine) => { root.scrubbed(2, delta, fine); }
+        scrub-started => { root.scrub-started(); }
+        scrub-finished => { root.scrub-finished(); }
+        text-committed(text) => { root.text-committed(2, text) }
+        scrub-cancelled(_value) => { root.scrub-cancelled(); }
+        step: root.step;
+    }
+}

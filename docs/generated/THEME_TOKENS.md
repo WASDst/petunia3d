@@ -29,7 +29,7 @@ description: Catálogo canônico de tokens visuais ThemeToken e paletas do Desig
 | `ThemeToken::BgSurfaceActive` | Superfície de widgets em estado ativo/pressionado | `#3A3F48` | `#D6D3CA` | `#3D3D3D` |
 | `ThemeToken::TextPrimary` | Texto de máxima ênfase (títulos, etiquetas principais) | `#EDF0F4` | `#24262B` | `#FFFFFF` |
 | `ThemeToken::TextSecondary` | Texto de média ênfase (descrições, valores numéricos) | `#AEB5C0` | `#4C515B` | `#E6E6E6` |
-| `ThemeToken::TextMuted` | Texto atenuado e atalhos secundários | `#8A919E` | `#626772` | `#B8B8B8` |
+| `ThemeToken::TextMuted` | Texto atenuado e atalhos secundários | `#969DAA` | `#5A5F6A` | `#B8B8B8` |
 | `ThemeToken::TextActive` | Texto sobre fundo de destaque (seleção ativa) | `#101114` | `#FFFFFF` | `#000000` |
 | `ThemeToken::AccentBlue` | Cor de destaque principal (seleção de objetos e foco) | `#B58CFF` | `#7C4DD6` | `#00B0FF` |
 | `ThemeToken::AccentOrange` | Cor de destaque secundária (transformações e alertas) | `#E96A00` | `#D45A00` | `#FFB000` |

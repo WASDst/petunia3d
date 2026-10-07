@@ -1606,6 +1606,34 @@ fn every_menu_item_publishes_a_real_translated_label_and_command_id() {
 }
 
 #[test]
+fn top_bar_actions_moved_to_menus_stay_reachable() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let vm = bridge.view_model();
+    let reference = vm
+        .menu_view_items
+        .iter()
+        .find(|i| i.id == "view.reference_images")
+        .expect("View publica Imagens de referência");
+    assert_eq!(reference.shortcut, "F4");
+    assert!(!reference.checked);
+    assert!(
+        vm.menu_window_items.iter().any(|i| i.id == "window.parts"),
+        "Window publica Parts"
+    );
+
+    assert!(bridge.menu_item_invoked("view.reference_images"));
+    let vm = bridge.view_model();
+    assert!(vm.reference_manager_open);
+    assert!(
+        vm.menu_view_items
+            .iter()
+            .any(|i| i.id == "view.reference_images" && i.checked)
+    );
+    assert!(bridge.menu_item_invoked("view.reference_images"));
+    assert!(!bridge.view_model().reference_manager_open);
+}
+
+#[test]
 fn menus_group_items_with_separators_and_reflect_undo_state() {
     let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let vm = bridge.view_model();
@@ -5649,15 +5677,11 @@ fn the_operation_hud_reports_the_real_value_and_the_axis() {
     bridge.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
     bridge.state.sync_selection();
 
-    // Em repouso o HUD some e a barra informa domínio e navegação.
+    // Em repouso o HUD some e não há dica de ferramenta: os gestos ficam nos
+    // chips traduzidos da status bar (plano de UI F5).
     let vm = bridge.view_model();
     assert!(!vm.operation_hud_active);
-    assert!(
-        vm.context_hint.contains("Selection:"),
-        "veio: {}",
-        vm.context_hint
-    );
-    assert!(vm.context_hint.contains("Orbit"));
+    assert!(vm.context_hint.is_empty(), "veio: {}", vm.context_hint);
 
     // Com ferramenta aberta o HUD mostra título, valor e como confirmar.
     bridge.execute_core_command("model.extrude").unwrap();
@@ -9395,6 +9419,220 @@ fn test_loop_cut_2d_scrubbing_and_candidate_detection() {
 }
 
 #[test]
+fn loop_cut_hover_selects_horizontal_and_vertical_rings_on_a_wide_face() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.resize_viewport(1000, 700);
+    *bridge.state.project.active_mesh_mut().unwrap() = petunia_core::Mesh::cube(2.0);
+    for vertex in &mut bridge.state.project.active_mesh_mut().unwrap().verts {
+        vertex.pos[0] *= 2.0;
+    }
+    bridge.apply(UiIntent::SetActiveTool("loop_cut".into()));
+    let original = bridge.state.project.active_mesh().unwrap().clone();
+    for (position, plane_axis) in [
+        (glam::Vec3::new(-1.95, 0.0, 1.0), 1),
+        (glam::Vec3::new(0.0, 0.95, 1.0), 0),
+    ] {
+        bridge.apply(UiIntent::SetActiveTool("loop_cut".into()));
+        let ndc = bridge.state.session.camera.project_ndc(position);
+        bridge.update_loop_cut_hover(
+            (ndc.x + 1.0) * 0.5 * bridge.viewport_size[0],
+            (1.0 - ndc.y) * 0.5 * bridge.viewport_size[1],
+        );
+        let ring = bridge.loop_cut_hover_ring.as_ref().unwrap_or_else(|| {
+            panic!(
+                "hover preview: ndc={ndc:?}, workspace={:?}, tool={}, session={}, faces={}",
+                bridge.state.workspace,
+                bridge.state.session.tools.active_tool,
+                bridge.loop_cut.is_some(),
+                bridge.state.project.active_mesh().unwrap().faces.len()
+            )
+        });
+        for [a, b] in ring.preview(&original, 1, 0.0).unwrap() {
+            assert!(
+                a[plane_axis].abs() < 1e-5,
+                "incorrect hover direction: {a:?}"
+            );
+            assert!(
+                b[plane_axis].abs() < 1e-5,
+                "incorrect hover direction: {b:?}"
+            );
+        }
+        assert_eq!(bridge.state.project.undo.depth(), (0, 0));
+        assert!(bridge.place_loop_cut_hover());
+        assert!(bridge.scrub_loop_cut_2d(8.0, 11.0, false));
+        assert!(bridge.cancel_loop_cut());
+        assert_eq!(
+            bridge
+                .state
+                .project
+                .active_mesh()
+                .unwrap()
+                .topology_fingerprint(),
+            original.topology_fingerprint()
+        );
+    }
+}
+
+#[test]
+fn loop_cut_hover_skips_an_incompatible_edge_near_a_valid_ring() {
+    for (points, axis) in [
+        ([[-0.96, -0.2, 1.5], [-0.96, 0.2, 1.5], [-0.8, 0.0, 1.5]], 1),
+        ([[-0.2, 0.96, 1.5], [0.2, 0.96, 1.5], [0.0, 0.8, 1.5]], 0),
+    ] {
+        let mut bridge = front_view_bridge_with_cube();
+        bridge.resize_viewport(1000, 700);
+        let mesh = bridge.state.project.active_mesh_mut().unwrap();
+        let first = mesh.verts.len() as u32;
+        for pos in points {
+            mesh.verts.push(petunia_mesh::Vertex {
+                pos,
+                color: [1.0; 3],
+                selected: false,
+            });
+        }
+        mesh.faces.push(petunia_mesh::Face::with_uv(
+            vec![first, first + 1, first + 2],
+            vec![[0.0, 0.0]; 3],
+        ));
+        bridge.state.emit_mesh_changed();
+        bridge.apply(UiIntent::SetActiveTool("loop_cut".into()));
+        let cursor = (glam::Vec3::from_array(points[0]) + glam::Vec3::from_array(points[1])) * 0.5;
+        let ndc = bridge.state.session.camera.project_ndc(cursor);
+        bridge.update_loop_cut_hover((ndc.x + 1.0) * 500.0, (1.0 - ndc.y) * 350.0);
+        let ring = bridge
+            .loop_cut_hover_ring
+            .as_ref()
+            .expect("invalid nearest edge must not hide a valid quad ring");
+        let source = bridge.state.project.active_mesh().unwrap();
+        for [a, b] in ring.preview(source, 1, 0.0).unwrap() {
+            assert!(
+                a[axis].abs() < 1e-5 && b[axis].abs() < 1e-5,
+                "hover must keep the requested direction"
+            );
+        }
+        assert_eq!(bridge.state.project.undo.depth(), (0, 0));
+    }
+}
+
+#[test]
+fn loop_cut_pointer_events_keep_the_hover_direction_through_confirmation() {
+    use i_slint_backend_testing::ElementHandle;
+    use slint::platform::{PointerEventButton, WindowEvent};
+    use slint::{ComponentHandle, LogicalPosition, LogicalSize};
+
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().unwrap();
+    tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    let mut editor = front_view_bridge_with_cube();
+    editor.state.ui.reduced_motion = true;
+    editor.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    editor.apply(UiIntent::SetActiveTool("loop_cut".into()));
+    let source = editor.state.project.active_mesh().unwrap().clone();
+    // Os callbacks de produção exigem Arc<Mutex<Bridge>>; como no host Slint,
+    // ele permanece nesta única thread (a imagem do viewport não é Send).
+    #[allow(clippy::arc_with_non_send_sync)]
+    let bridge = Arc::new(Mutex::new(editor));
+    callbacks::connect_callbacks(&shell, Arc::clone(&bridge));
+    let vm = bridge.lock().unwrap().view_model();
+    callbacks::sync_window_properties(&shell, &vm);
+    shell.show().unwrap();
+    let viewport = ElementHandle::find_by_element_id(&shell, "PetuniaSlintShell::viewport-region")
+        .next()
+        .expect("production viewport");
+    let origin = viewport.absolute_position();
+    let viewport_size = viewport.size();
+    bridge.lock().unwrap().resize_viewport(
+        viewport_size.width.round() as u32,
+        viewport_size.height.round() as u32,
+    );
+    for (along, plane_axis) in [(glam::Vec3::X, 1), (glam::Vec3::Y, 0)] {
+        bridge
+            .lock()
+            .unwrap()
+            .apply(UiIntent::SetActiveTool("loop_cut".into()));
+        let vm = bridge.lock().unwrap().view_model();
+        callbacks::sync_window_properties(&shell, &vm);
+        let position = {
+            let editor = bridge.lock().unwrap();
+            let face = editor
+                .state
+                .project
+                .active_mesh()
+                .unwrap()
+                .faces
+                .iter()
+                .find(|face| {
+                    face.verts
+                        .iter()
+                        .all(|&i| source.verts[i as usize].vec().z > 0.0)
+                })
+                .expect("front cube face");
+            let center = face
+                .verts
+                .iter()
+                .map(|&i| source.verts[i as usize].vec())
+                .sum::<glam::Vec3>()
+                / face.verts.len() as f32;
+            let extent = face
+                .verts
+                .iter()
+                .map(|&i| (source.verts[i as usize].vec() - center).dot(along).abs())
+                .fold(0.0_f32, f32::max);
+            let ndc = editor
+                .state
+                .session
+                .camera
+                .project_ndc(center + along * extent * 0.9);
+            LogicalPosition::new(
+                origin.x + (ndc.x + 1.0) * 0.5 * viewport_size.width,
+                origin.y + (1.0 - ndc.y) * 0.5 * viewport_size.height,
+            )
+        };
+        shell
+            .window()
+            .dispatch_event(WindowEvent::PointerMoved { position });
+        {
+            let editor = bridge.lock().unwrap();
+            let ring = editor
+                .loop_cut_hover_ring
+                .as_ref()
+                .expect("pointer hover selects a ring");
+            for [a, b] in ring.preview(&source, 1, 0.0).unwrap() {
+                assert!(a[plane_axis].abs() < 1e-5 && b[plane_axis].abs() < 1e-5);
+            }
+        }
+        for event in [
+            WindowEvent::PointerPressed {
+                position,
+                button: PointerEventButton::Left,
+            },
+            WindowEvent::PointerReleased {
+                position,
+                button: PointerEventButton::Left,
+            },
+        ] {
+            shell.window().dispatch_event(event);
+        }
+        {
+            let mut editor = bridge.lock().unwrap();
+            let session = editor
+                .loop_cut
+                .as_ref()
+                .expect("click starts the hovered cut");
+            for [a, b] in session.ring.preview(&source, 1, 0.0).unwrap() {
+                assert!(a[plane_axis].abs() < 1e-5 && b[plane_axis].abs() < 1e-5);
+            }
+            assert!(editor.commit_loop_cut());
+            assert_eq!(editor.state.project.undo.depth(), (1, 0));
+            editor.apply(UiIntent::Undo);
+        }
+        let vm = bridge.lock().unwrap().view_model();
+        callbacks::sync_window_properties(&shell, &vm);
+    }
+}
+
+#[test]
 fn test_profile_point_and_handle_interactive_manipulation() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     // Pré-condição explícita: este teste mede o caminho sem snap (o padrão
@@ -9846,6 +10084,31 @@ fn test_slider_and_preference_responsiveness() {
     assert!((bridge.state.project.refs[0].opacity - 0.65).abs() < 1e-4);
     assert!(bridge.set_reference_param("front", "size", 7.5));
     assert!((bridge.state.project.refs[0].size - 7.5).abs() < 1e-4);
+}
+
+#[test]
+fn collapse_inspector_closes_and_unpins_every_section() {
+    use petunia_config::InspectorSectionId;
+
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    // Pílula clicada = seção aberta e fixada (ADR 005).
+    for id in [InspectorSectionId::Parts, InspectorSectionId::Material] {
+        bridge.set_section_pin_open(id, true);
+        bridge.set_section_open(id, true);
+    }
+    bridge.collapse_inspector();
+    for id in InspectorSectionId::all() {
+        let layout = &bridge.section_layouts[crate::section_layout::section_index(id)];
+        assert!(!layout.open, "{id:?} deveria fechar");
+        assert!(!layout.pin_open, "{id:?} deveria soltar o pin");
+    }
+    assert!(
+        bridge
+            .view_model()
+            .section_states
+            .iter()
+            .all(|state| !state.open && !state.pin_open)
+    );
 }
 
 #[test]
@@ -11313,4 +11576,134 @@ fn draw_scale_and_rotation_keep_parametric_profile_reeditable() {
     assert!(bridge.view_model().profile_width < width * 2.0);
     assert!(bridge.cancel_profile_transform());
     assert!((bridge.view_model().profile_width - width).abs() < 1e-4);
+}
+
+#[test]
+fn show_tool_labels_preference_reaches_the_view_model() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(
+        !bridge.view_model().show_tool_labels,
+        "padrão: trilho estreito"
+    );
+    assert!(bridge.set_show_tool_labels(true));
+    assert!(!bridge.set_show_tool_labels(true), "repetir não muda nada");
+    let vm = bridge.view_model();
+    assert!(vm.show_tool_labels);
+    assert!(
+        bridge.preferences.show_tool_labels,
+        "vai para o arquivo de preferências"
+    );
+    assert!(!vm.label_show_tool_labels.is_empty());
+}
+
+#[test]
+fn everything_removed_from_the_rail_and_bar_stays_in_the_palette() {
+    // Plano de UI §13: a barra contextual pode esconder ações porque a palette
+    // e o botão direito sempre têm tudo. F5/F5b tiraram estes do trilho/barra.
+    let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let ids: Vec<String> = bridge
+        .search_commands("")
+        .into_iter()
+        .map(|item| item.id.to_string())
+        .collect();
+    for id in [
+        "model.add_cube",
+        "model.add_sphere",
+        "model.add_cylinder",
+        "model.delete",
+        "model.subdivide",
+        "model.fuse",
+        "model.cut",
+        "model.join",
+    ] {
+        assert!(ids.iter().any(|known| known == id), "{id} sumiu da palette");
+    }
+}
+
+#[test]
+fn accent_and_selection_colors_must_stay_distinguishable() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let selection = bridge.state.ui.selection_rgb;
+    let hex = format!(
+        "#{:02X}{:02X}{:02X}",
+        selection[0], selection[1], selection[2]
+    );
+    assert!(
+        !bridge.set_accent_color_hex(&hex),
+        "destaque igual à seleção é recusado"
+    );
+    assert!(bridge.set_accent_color_hex("#5B8CFF"));
+    assert_eq!(bridge.effective_accent_rgb(), [0x5B, 0x8C, 0xFF]);
+    assert!(
+        !bridge.set_selection_color_hex("#5E8FFF"),
+        "seleção parecida com o destaque é recusada"
+    );
+    assert!(bridge.set_accent_color_hex(""), "vazio volta ao tema");
+    assert!(bridge.preferences.accent_rgb.is_none());
+    assert_eq!(bridge.view_model().accent_rgb, None);
+}
+
+#[test]
+fn recent_projects_keep_newest_first_without_duplicates() {
+    let mut preferences = petunia_config::UserPreferences::default();
+    for index in 0..10 {
+        preferences.push_recent_project(&format!("/p/{index}.petunia"));
+    }
+    preferences.push_recent_project("/p/5.petunia");
+    assert_eq!(
+        preferences.recent_projects.len(),
+        petunia_config::RECENT_PROJECTS_LIMIT
+    );
+    assert_eq!(preferences.recent_projects[0], "/p/5.petunia");
+    assert_eq!(
+        preferences
+            .recent_projects
+            .iter()
+            .filter(|p| *p == "/p/5.petunia")
+            .count(),
+        1
+    );
+    let bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(
+        !bridge.home_open,
+        "fora do arranque a Home não abre sozinha"
+    );
+}
+
+#[test]
+fn official_themes_meet_wcag_text_contrast() {
+    // WCAG 2.2 — 1.4.3 (contraste mínimo, AA): 4,5:1 para texto normal, em
+    // todo fundo onde o texto aparece (plano de UI F8).
+    use petunia_config::{ThemeRegistry, ThemeToken as T};
+    fn luminance(rgb: [u8; 4]) -> f32 {
+        let channel = |c: u8| {
+            let v = f32::from(c) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+    }
+    fn ratio(a: [u8; 4], b: [u8; 4]) -> f32 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+    let registry = ThemeRegistry::global();
+    for id in ["petunia-dark", "petunia-light", "petunia-high-contrast"] {
+        let theme = registry.get_theme(id).cloned().expect("tema oficial");
+        let color = |token| theme.colors.get_token_color(token).0;
+        for text in [T::TextPrimary, T::TextSecondary, T::TextMuted] {
+            for ground in [T::BgCanvas, T::BgPanel, T::BgSurface, T::BgSurfaceHover] {
+                let value = ratio(color(text), color(ground));
+                assert!(value >= 4.5, "{id}: {text:?} sobre {ground:?} = {value:.2}");
+            }
+        }
+        let on_accent = ratio(color(T::TextActive), color(T::AccentBlue));
+        assert!(
+            on_accent >= 4.5,
+            "{id}: texto sobre o destaque = {on_accent:.2}"
+        );
+    }
 }

@@ -75,3 +75,22 @@ Este documento é um roteiro de sessão; não cria requisito novo.
 - Q5/Q6: decidir pela opção com menos pedidos de ajuda; empate mantém o atual.
 - Toda decisão volta ao caderno (capítulo 36 ou 45) e à matriz da onda, com os
   dados agregados; dados individuais não entram no repositório.
+
+## 7. Extensão — refatoração de UI (plano 2026-10-04, F8)
+
+Mesmo formato das seções 4–6, aplicado ao shell depois das fases F1–F7. Mede
+a meta do plano (§11): **criar forma, extrudar e pintar sem ajuda em ≥ 4 de 5
+participantes**.
+
+| # | Tarefa | Mede | Sucesso |
+| --- | --- | --- | --- |
+| T8 | "Comece um modelo novo." (a partir da Home) | primeira impressão, caminho até a viewport | chega à viewport em < 30 s sem ajuda |
+| T9 | "Crie uma caixa e puxe uma das faces para fora." | descoberta da barra contextual por seleção (Extrude só aparece com face) | sem pedido de ajuda |
+| T10 | "Pinte uma faixa num lado da caixa, espelhada do outro lado." | barra de pincel (cor, tamanho, simetria) e trilho do PAINT | faixa espelhada sem abrir o Inspector |
+| T11 | "Troque a ferramenta de seleção pelo laço." | grupos com flyout no trilho (botão direito / marca de canto) | encontra em < 60 s |
+| T12 | "Mude a cor dos botões ativos para azul." | Preferências: busca e cor de destaque | encontra a opção pela busca ou pela aba |
+
+- **Registro:** além das métricas da seção 5, anotar quem usou a busca de
+  comandos, o botão direito e o modo "Mostrar nomes no trilho".
+- **Decisão:** T9–T11 com sucesso em < 4 de 5 reabrem a decisão correspondente
+  (D2, D6/F5b) no plano de UI; resultado agregado vai para o registro da F8.

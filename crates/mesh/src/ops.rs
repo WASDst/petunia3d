@@ -2197,12 +2197,18 @@ impl Mesh {
             if pos_poly.len() >= 3 {
                 let verts = pos_poly.iter().map(|(v, _)| *v).collect();
                 let uvs = pos_poly.iter().map(|(_, uv)| *uv).collect();
-                new_faces.push(Face::with_uv(verts, uvs));
+                let mut split = Face::with_uv(verts, uvs);
+                split.material_slot = face.material_slot;
+                split.selected = face.selected;
+                new_faces.push(split);
             }
             if !fill_cap && neg_poly.len() >= 3 {
                 let verts = neg_poly.iter().map(|(v, _)| *v).collect();
                 let uvs = neg_poly.iter().map(|(_, uv)| *uv).collect();
-                new_faces.push(Face::with_uv(verts, uvs));
+                let mut split = Face::with_uv(verts, uvs);
+                split.material_slot = face.material_slot;
+                split.selected = face.selected;
+                new_faces.push(split);
             }
         }
 

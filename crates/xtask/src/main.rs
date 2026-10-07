@@ -32,6 +32,7 @@ fn main() -> Result<()> {
         "ui-check" => task_ui_check()?,
         "icons-check" => icons_check::run(&root_dir())?,
         "ui-lint" => slint_lint::run(&root_dir())?,
+        "ui-metrics" => task_ui_metrics()?,
         "ui-guard" => {
             let rest: Vec<String> = args.collect();
             let strict = rest.iter().any(|a| a == "--strict");
@@ -73,6 +74,8 @@ COMANDOS:
     verify        Gate backend read-only (fmt, check, tests, clippy, arch-check)
     ui-check      Valida o mapa de componentes UI (docs/public/ui-map.json) contra o código
     ui-lint       Falha se o markup Slint usar cor #hex, font-size ou sombra literal fora de tokens.slint
+    ui-metrics    Mede o shell (plano de UI §11): controles visíveis por workspace em 1800 × 1012
+                  e literais de cor/fonte (ui-lint). Falha se POLY passar da meta.
     ui-guard      Guarda de arquitetura da UI (§36/§37 da diretiva Egui Ecosystem Final Push)
                   Reporta, por regra, ocorrências em product code versus foundation/adapter.
                   --strict    falha se um tipo de biblioteca auxiliar escapar do adapter
@@ -1345,5 +1348,28 @@ fn task_verify() -> Result<()> {
     )?;
     task_arch_check()?;
     println!("✅ verify: backend gate concluído (read-only).");
+    Ok(())
+}
+
+/// Métricas do shell (plano de UI F0): literais de estilo e controles visíveis.
+fn task_ui_metrics() -> Result<()> {
+    slint_lint::run(&root_dir())?;
+    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .current_dir(root_dir())
+        .args([
+            "test",
+            "-q",
+            "-p",
+            "petunia_ui_slint",
+            "--test",
+            "ui_metrics",
+            "--",
+            "--nocapture",
+        ])
+        .status()
+        .context("falha ao rodar o teste ui_metrics")?;
+    if !status.success() {
+        bail!("ui-metrics: a contagem de controles passou da meta (ver tabela acima)");
+    }
     Ok(())
 }

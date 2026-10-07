@@ -1,12 +1,13 @@
 //! Guarda de tokens do shell Slint (`crates/ui-slint/ui/*.slint`).
 //!
 //! Regras (AGENTS.md §3, cap. 24/36 e plano de UI 2026-10-04 §8.5): fora de
-//! `tokens.slint`, nenhum markup usa cor `#hex`, `font-size` em px literal ou
-//! `drop-shadow-blur` em px literal. Valores dentro de strings (ex.: o hex de
-//! um preset enviado ao Rust) e comentários não contam.
+//! `tokens.slint`, nenhum markup usa cor `#hex`, `font-size` ou
+//! `drop-shadow-blur` em px literal, nem `duration` literal (que ignoraria o
+//! movimento reduzido). Valores dentro de strings (ex.: o hex de um preset
+//! enviado ao Rust) e comentários não contam.
 
 use anyhow::{Result, bail};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Arquivo onde os valores literais são permitidos.
 const TOKENS_FILE: &str = "tokens.slint";
@@ -63,6 +64,17 @@ fn has_hex_color(code: &str) -> bool {
 
 /// `prop: <número>px` com valor literal.
 fn has_literal_px(code: &str, prop: &str) -> bool {
+    has_literal_unit(code, prop, "px")
+}
+
+/// `duration: <número>ms|s` literal: animação que ignora `Motion.reduced`
+/// (WCAG 2.3.3; plano de UI F8).
+fn has_literal_duration(code: &str) -> bool {
+    has_literal_unit(code, "duration", "ms") || has_literal_unit(code, "duration", "s")
+}
+
+/// `prop: <número><unidade>` com valor literal.
+fn has_literal_unit(code: &str, prop: &str, unit: &str) -> bool {
     let Some(pos) = code.find(prop) else {
         return false;
     };
@@ -75,7 +87,7 @@ fn has_literal_px(code: &str, prop: &str) -> bool {
         .chars()
         .take_while(|c| c.is_ascii_digit() || *c == '.')
         .count();
-    digits > 0 && rest[digits..].starts_with("px")
+    digits > 0 && rest[digits..].starts_with(unit)
 }
 
 fn check_source(source: &str) -> Vec<Violation> {
@@ -98,19 +110,32 @@ fn check_source(source: &str) -> Vec<Violation> {
         if has_literal_px(&code, "drop-shadow-blur") {
             push("drop-shadow-blur literal (use DesignTokens.elevation-*)");
         }
+        if has_literal_duration(&code) {
+            push("duration literal (use Motion.*, que respeita movimento reduzido)");
+        }
     }
     found
 }
 
+/// Todos os `.slint` sob `dir`, inclusive subpastas (`components/`, `inspector/`…).
+fn slint_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        if path.is_dir() {
+            slint_files(&path, out);
+        } else if path.extension().is_some_and(|e| e == "slint") {
+            out.push(path);
+        }
+    }
+}
+
 pub fn run(root: &Path) -> Result<()> {
     println!("🎨 Validando tokens do shell Slint...");
-    let ui_dir = root.join("crates/ui-slint/ui");
-    let mut files: Vec<_> = std::fs::read_dir(&ui_dir)?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "slint"))
-        .filter(|p| p.file_name().is_some_and(|n| n != TOKENS_FILE))
-        .collect();
+    let mut files = Vec::new();
+    slint_files(&root.join("crates/ui-slint/ui"), &mut files);
+    files.retain(|p| p.file_name().is_some_and(|n| n != TOKENS_FILE));
     files.sort();
 
     let mut total = 0;
@@ -146,6 +171,7 @@ mod tests {
         assert_eq!(rules("color: #fff;").len(), 1);
         assert_eq!(rules("font-size: 9px;").len(), 1);
         assert_eq!(rules("drop-shadow-blur: 12px;").len(), 1);
+        assert_eq!(rules("animate x { duration: 150ms; }").len(), 1);
     }
 
     #[test]
@@ -153,6 +179,7 @@ mod tests {
         assert!(rules("background: DesignTokens.hud-surface;").is_empty());
         assert!(rules("font-size: DesignTokens.font-small;").is_empty());
         assert!(rules("drop-shadow-blur: DesignTokens.elevation-1-blur;").is_empty());
+        assert!(rules("animate x { duration: Motion.fast; }").is_empty());
         assert!(rules(r##"clicked => { root.set("#E96A00"); }"##).is_empty());
         assert!(rules("// laranja #E96A00").is_empty());
         assert!(rules(r##"text: "\"#abc\" ok";"##).is_empty());

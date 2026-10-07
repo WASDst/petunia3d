@@ -1,0 +1,180 @@
+{
+  "version": 1,
+  "captured_on": "2026-10-07",
+  "integration_branch": "codex/unified-gradual-recovery",
+  "integration_base": "ae81c9a8a51f98d54db734428d6da87d1b8b13dc",
+  "snapshots": [
+    {
+      "id": "draw-gestures",
+      "state": "partially-incorporated",
+      "base_commit": "09273b34e3041d8bf6192bacf24ff2f8a1b77a1f",
+      "untracked_files": [
+        "assets/image-1791231891440.png",
+        "assets/image-1791231931529.png",
+        "assets/image-1791231946597.png",
+        "crates/ui-slint/src/draw_creation.rs",
+        "docs/development/draw-interaction-regressions-gap-matrix.md"
+      ],
+      "files": [
+        {
+          "path": "draw-gestures.patch.gz",
+          "sha256": "654a98d076b665b333067769a07e783489b7077f924515e7e70be2e574f55cae",
+          "size_bytes": 24089,
+          "original_path": "draw-gestures.patch",
+          "sha256_uncompressed": "66d4c354cd92f6a9e890604a7cd9306fdb1c0bbfa6c6a4f5f63291abd969633c",
+          "size_uncompressed": 101417
+        },
+        {
+          "path": "draw-gestures-untracked.tar.gz",
+          "sha256": "a61a6797ddeddce2326ee52c244498580ec2c382cbe44ca7aee1dd13230255b1",
+          "size_bytes": 563232
+        }
+      ],
+      "incorporated_delta": "Loop Cut only: compatible closed sections, face/edge candidate selection and material preservation; other DRAW deltas remain pending."
+    },
+    {
+      "id": "profile-parts",
+      "state": "reconcile-delta",
+      "base_commit": "5a5168c6def1440cbbe3ae4eb88c63e9f5f5d9a3",
+      "untracked_files": [
+        "crates/ui-slint/src/profile_object.rs",
+        "docs/development/planar-profile-parts-gap-matrix.md"
+      ],
+      "files": [
+        {
+          "path": "profile-parts.patch.gz",
+          "sha256": "69c16cfc394a36d5bced9cd768311e98df003e5c6ed9e81dd18a7c900a14b946",
+          "size_bytes": 11495,
+          "original_path": "profile-parts.patch",
+          "sha256_uncompressed": "bd45a91c21f07db711eed537bff05980efcafb307d4fa097fc6a8444d7993102",
+          "size_uncompressed": 50319
+        },
+        {
+          "path": "profile-parts-untracked.tar.gz",
+          "sha256": "bf5706af4698d24fc82828dc9e7b1195295f1528b64638a17ce77379968058f5",
+          "size_bytes": 4665
+        }
+      ]
+    },
+    {
+      "id": "material-channels",
+      "state": "reconcile-delta",
+      "base_commit": "d8aeb0ba8d2a4de3168c216dc7912b3fd13c996e",
+      "untracked_files": [
+        "crates/render/src/material.rs",
+        "docs/development/wave-1-materials-gap-matrix.md"
+      ],
+      "files": [
+        {
+          "path": "material-channels.patch.gz",
+          "sha256": "8e5246dd5bb7441dd652f21c0045234e70816ea5275555efcc685ced05a54f69",
+          "size_bytes": 23058,
+          "original_path": "material-channels.patch",
+          "sha256_uncompressed": "7790bb592f5cf20f814297644b791ee30a71b1b583443bbe3fcdceb449371021",
+          "size_uncompressed": 97809
+        },
+        {
+          "path": "material-channels-untracked.tar.gz",
+          "sha256": "eb65461afb22d88c43e901de476c85ef19d437db90943778012ae76b03ca9d6e",
+          "size_bytes": 5217
+        }
+      ]
+    },
+    {
+      "id": "paint-ui",
+      "state": "reconcile-delta",
+      "base_commit": "2a047d987c6427f6d92ad97aa790ee3bea8e6953",
+      "untracked_files": [
+        "crates/module-paint/src/brush_preview.rs",
+        "crates/project/src/brush_tips.rs",
+        "crates/ui-slint/ui/dialogs/brushes.slint",
+        "crates/ui-slint/ui/inspector/paint_layers.slint",
+        "docs/architecture/adr/008-paint-camadas-mascaras-biblioteca-pinceis.md"
+      ],
+      "files": [
+        {
+          "path": "paint-ui.patch.gz",
+          "sha256": "d1ecaaef468b60373f03c1270ddc9939b1465968c22769d8cd598c9ae2f52bd5",
+          "size_bytes": 41220,
+          "original_path": "paint-ui.patch",
+          "sha256_uncompressed": "e4f814885ec82b8c402b5fd9294908bc4537a886a40c040fa170f3c4bea95e4d",
+          "size_uncompressed": 220647
+        },
+        {
+          "path": "paint-ui-untracked.tar.gz",
+          "sha256": "9ec3fe48fa9c00af3b1f1e9516c7ba87418d79092864d599b17db5ee0d8941bd",
+          "size_bytes": 19535
+        }
+      ]
+    },
+    {
+      "id": "ui-contracts",
+      "state": "adapt-to-current-shell",
+      "base_commit": "21755eaa26ce028bbc6006ac957f01ceaa936a5e",
+      "untracked_files": [
+        "crates/ui-slint/src/contract_tests.rs",
+        "crates/ui-slint/tests/golden/a11y_contract.txt",
+        "docs/architecture/adr/008-modularizacao-ui-slint.md"
+      ],
+      "files": [
+        {
+          "path": "ui-contracts.patch.gz",
+          "sha256": "6aa54fe1089bcbadf1c3316ec6364fc83eb4dff24ef3b9b3a4c6ec441794c7c1",
+          "size_bytes": 1007,
+          "original_path": "ui-contracts.patch",
+          "sha256_uncompressed": "724f5d5a399c63a2397ac0a9a6081f117c06ace1293f2a61ba6e16b042f534b0",
+          "size_uncompressed": 1987
+        },
+        {
+          "path": "ui-contracts-untracked.tar.gz",
+          "sha256": "1d7e7e94de8ac2361dc002e5999938ba19d77ccd2dc00e91138d9a7d4a5fb470",
+          "size_bytes": 5648
+        }
+      ]
+    },
+    {
+      "id": "svg-hardening",
+      "state": "equivalent-in-main",
+      "base_commit": "0e1c83ef4063ebfad68b209252a457b7ac6e926c",
+      "untracked_files": [],
+      "files": [
+        {
+          "path": "svg-hardening.patch.gz",
+          "sha256": "102bf1e6ec8c3c7adcf473dcacbf45301aff5d2bdafbd292245fc7ab66b8be00",
+          "size_bytes": 4153,
+          "original_path": "svg-hardening.patch",
+          "sha256_uncompressed": "3772887a098b2f4783c0ac27e44039ceba2357c816c7776d22f514c6b49c0c23",
+          "size_uncompressed": 11778
+        },
+        {
+          "path": "svg-hardening-untracked.tar.gz",
+          "sha256": "1eb73f9976257f992187ee63030c9d375506fde4a9d118284df5d69e1b00cc99",
+          "size_bytes": 86
+        }
+      ]
+    },
+    {
+      "id": "projection-stencil",
+      "state": "equivalent-in-main",
+      "base_commit": "a7e3de2a9a7df71af8b0e0fcae82e565d8f2df16",
+      "untracked_files": [
+        "crates/module-paint/src/projection.rs"
+      ],
+      "files": [
+        {
+          "path": "projection-stencil.patch.gz",
+          "sha256": "ae015ca767d14c6c849d6c4e61b02fed4009fcc9b6468b1e1fa87fbf274ed55a",
+          "size_bytes": 2976,
+          "original_path": "projection-stencil.patch",
+          "sha256_uncompressed": "4c358eb19381d24e05d25f6550381f745ceac23166b31a9770066186141d4003",
+          "size_uncompressed": 9558
+        },
+        {
+          "path": "projection-stencil-untracked.tar.gz",
+          "sha256": "c4eed4b832b17740a8b602ea217da8d8eb02058e20f0c595cf0cf8f601d5bdc5",
+          "size_bytes": 16714
+        }
+      ]
+    }
+  ]
+}

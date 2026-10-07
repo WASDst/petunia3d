@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use petunia_config::I18n;
 use slint::ComponentHandle;
 
-use crate::{PetuniaSlintShell, Tr};
+use crate::{ComponentGallery, PetuniaSlintShell, Tr};
 
 thread_local! {
     static CATALOG: RefCell<Option<I18n>> = const { RefCell::new(None) };
@@ -52,6 +52,21 @@ pub fn install(window: &PetuniaSlintShell, lang: &str) {
         tr.on_lookup(|key| lookup(key.as_str()).into());
         tr.set_revision(tr.get_revision().wrapping_add(1).max(0));
     }
+}
+
+/// Liga `Tr.lookup` na galeria de componentes. Cada janela tem a própria
+/// instância do global, então a ligação é sempre refeita (sem o atalho
+/// idempotente de [`install`]).
+pub fn install_gallery(window: &ComponentGallery, lang: &str) {
+    CATALOG.with(|c| {
+        let mut slot = c.borrow_mut();
+        if slot.as_ref().is_none_or(|current| current.lang != lang) {
+            *slot = Some(I18n::load(lang));
+        }
+    });
+    let tr = window.global::<Tr>();
+    tr.on_lookup(|key| lookup(key.as_str()).into());
+    tr.set_revision(tr.get_revision().wrapping_add(1).max(0));
 }
 
 #[cfg(test)]
@@ -108,6 +123,17 @@ mod tests {
                 "pt-BR sem {key}"
             );
         }
+    }
+
+    #[test]
+    fn gallery_receives_translations() {
+        let Ok(gallery) = ComponentGallery::new() else {
+            // Ambiente headless sem backend de janela.
+            return;
+        };
+        install_gallery(&gallery, "pt-BR");
+        let tr = gallery.global::<Tr>();
+        assert_eq!(tr.invoke_t("gallery.solid".into()), "Sólido");
     }
 
     #[test]

@@ -707,6 +707,14 @@ pub mod section_layout;
 pub mod view_model;
 pub use view_model::*;
 
+/// Copia um view-model para o shell, como o bridge faz a cada quadro. Público
+/// só para testes headless que precisam dos rótulos reais (auditoria de
+/// acessibilidade em `tests/ui_metrics.rs`).
+#[doc(hidden)]
+pub fn sync_shell_for_tests(window: &PetuniaSlintShell, vm: &ShellViewModel) {
+    callbacks::sync_window_properties(window, vm);
+}
+
 pub mod projection;
 pub use decal_tool::{DecalHandles, DecalMode, DecalParam};
 pub use projection::*;
@@ -1001,6 +1009,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// Override de teste do caminho do arquivo de preferências (testes herméticos).
     /// Produção mantém `None` e usa o caminho da plataforma.
     pub preferences_path_override: Option<std::path::PathBuf>,
+    /// Home (cap. 23) aberta: só no arranque sem projeto, se a preferência pedir.
+    pub home_open: bool,
     /// Rastreamento de duplo toque em atalhos de ferramenta: (nome da ferramenta, instante).
     pub last_tool_press: Option<(String, std::time::Instant)>,
     pub slice_trim: bool,
@@ -1161,6 +1171,10 @@ pub enum MenuKind {
     Window,
 }
 
+/// Rótulo do item "Imagens de referência" (chave existente do catálogo `[sl]`).
+const MENU_REFERENCE_IMAGES: petunia_config::TextId =
+    petunia_config::TextId::new("sl.reference_images");
+
 impl MenuKind {
     pub const ALL: [MenuKind; 4] = [Self::File, Self::Edit, Self::View, Self::Window];
 
@@ -1213,8 +1227,13 @@ impl MenuKind {
                 ("view.toggle_projection", T::VIEW_TOGGLE_PROJECTION, "O"),
                 ("view.toggle_wireframe", T::VIEW_TOGGLE_WIREFRAME, "Z"),
                 ("view.toggle_split", T::VIEW_TOGGLE_SPLIT, ""),
+                (MENU_SEPARATOR, T::UI_CLOSE, ""),
+                // Saiu da top bar (plano de UI 2026-10-04, F3): o menu é o
+                // caminho visível; F4 continua sendo o atalho.
+                ("view.reference_images", MENU_REFERENCE_IMAGES, "F4"),
             ],
             Self::Window => &[
+                ("window.parts", T::UI_PARTS, ""),
                 ("window.command_palette", T::MENU_COMMAND_PALETTE, "Ctrl+P"),
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("window.settings", T::MENU_PREFERENCES, ""),
@@ -1373,6 +1392,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             decal_playing: false,
             section_layouts: section_layout::default_section_layouts(),
             preferences: petunia_config::UserPreferences::default(),
+            home_open: false,
             preferences_path_override: None,
             last_tool_press: None,
             slice_trim: false,
@@ -1543,6 +1563,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     ));
                 } else {
                     self.state.project.project_path = Some(path.display().to_string());
+                    self.preferences
+                        .push_recent_project(&path.display().to_string());
                     self.state.mark_document_clean();
                     self.state.set_status(crate::tr::fill(
                         &self
@@ -1558,6 +1580,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.state.project.project = project;
                     self.state.project.undo.clear();
                     self.state.project.project_path = Some(path.display().to_string());
+                    self.preferences
+                        .push_recent_project(&path.display().to_string());
+                    self.home_open = false;
                     self.state.mark_document_clean();
                     self.state.set_status(crate::tr::fill(
                         &self
@@ -1750,22 +1775,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::SetSelectionDomain(domain) => {
                 self.state.set_selection_domain(domain);
-                self.state.set_status(crate::tr::fill(
-                    &self
-                        .state
-                        .t_id(petunia_config::text_id::STATUS_SELECTION_MODE),
-                    &[("0", format!("{:?}", domain))],
-                ));
+                self.report_selection_domain();
             }
             UiIntent::CycleSelectionDomain => {
                 self.state.cycle_selection_domain();
-                let domain = self.state.selection_domain();
-                self.state.set_status(crate::tr::fill(
-                    &self
-                        .state
-                        .t_id(petunia_config::text_id::STATUS_SELECTION_MODE),
-                    &[("0", format!("{:?}", domain))],
-                ));
+                self.report_selection_domain();
             }
             UiIntent::AddPrimitive(kind) => {
                 self.state.set_selection_domain(SelectionDomain::Object);
@@ -1878,10 +1892,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     self.profile_edit_gesture = None;
                 }
                 self.state.session.tools.active_tool = tool.clone();
-                self.state.set_status(crate::tr::fill(
-                    &self.state.t_id(petunia_config::text_id::STATUS_ACTIVE_TOOL),
-                    &[("tool", tool.to_string())],
-                ));
+                // Nome traduzido em `tools.<id>`; sem tradução, o id fica.
+                let key = format!("tools.{tool}");
+                let name = match self.state.t(&key) {
+                    translated if translated == key => tool.clone(),
+                    translated => translated,
+                };
+                let message = self
+                    .state
+                    .t_id(petunia_config::text_id::STATUS_ACTIVE_TOOL)
+                    .replace("{tool}", &name);
+                self.state.set_status(message);
                 match tool.as_str() {
                     // Transformações são transacionais por arrasto: a sessão
                     // modal abre no pointer-down da viewport, não ao escolher a
@@ -3032,14 +3053,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return;
         }
 
-        // Em repouso: a barra informa o domínio e a navegação.
+        // Em repouso não há dica de ferramenta: a status bar mostra os gestos
+        // como chips traduzidos (plano de UI F5) e o domínio já aparece na
+        // view bar. Antes era uma frase fixa em inglês.
         vm.operation_hud_active = false;
-        vm.context_hint = tr(match self.state.selection_domain() {
-            petunia_core::SelectionDomain::Object => t::HUD_IDLE_OBJECT,
-            petunia_core::SelectionDomain::Vertex => t::HUD_IDLE_POINT,
-            petunia_core::SelectionDomain::Edge => t::HUD_IDLE_EDGE,
-            petunia_core::SelectionDomain::Face => t::HUD_IDLE_FACE,
-        });
+        vm.context_hint = String::new();
+    }
+
+    /// Status traduzido do domínio de seleção atual.
+    fn report_selection_domain(&mut self) {
+        let domain = match self.state.selection_domain() {
+            SelectionDomain::Object => petunia_config::text_id::SELECTION_DOMAIN_OBJECT,
+            SelectionDomain::Vertex => petunia_config::text_id::SELECTION_DOMAIN_POINT,
+            SelectionDomain::Edge => petunia_config::text_id::SELECTION_DOMAIN_EDGE,
+            SelectionDomain::Face => petunia_config::text_id::SELECTION_DOMAIN_FACE,
+        };
+        let message = self
+            .state
+            .t_id(petunia_config::text_id::SELECTION_MODE)
+            .replace("{domain}", &self.state.t_id(domain));
+        self.state.set_status(message);
     }
 
     /// Orbita a câmera, usando a seleção como pivô quando existe.
@@ -3376,7 +3409,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .unwrap_or_default();
             let changed = self.refresh_loop_cut_hover_preview();
             if let Some(ring) = &self.loop_cut_hover_ring {
-                if ring.face_count() > 0 {
+                if ring.edge_count() > 0 {
                     self.state.set_status(
                         self.state.t_id(
                             petunia_config::text_id::STATUS_LOOP_CUT_CLICK_TO_PLACE_SCROLL_TO,
@@ -3494,49 +3527,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             (dx * dx + dy * dy).sqrt()
         };
 
-        // 1. Testa se o cursor está sobre uma Face (Blender Quad Selection)
+        // Any face under the cursor provides a seed; boolean n-gons do not
+        // require the user to be within the edge-only fallback tolerance.
         if let petunia_core::HoverTarget::Face(face_idx) =
             self.pick_target_for_domain(SelectionDomain::Face, normalized_x, normalized_y)
             && let Some(face) = mesh.faces.get(face_idx)
-            && face.verts.len() == 4
         {
-            let v_indices = [face.verts[0], face.verts[1], face.verts[2], face.verts[3]];
-            let mut proj_verts = [None; 4];
-            for i in 0..4 {
-                if let Some(v) = mesh.verts.get(v_indices[i] as usize) {
-                    proj_verts[i] = project_pos(v.vec());
-                }
-            }
-            if proj_verts.iter().all(|p| p.is_some()) {
-                let p = [
-                    proj_verts[0].unwrap(),
-                    proj_verts[1].unwrap(),
-                    proj_verts[2].unwrap(),
-                    proj_verts[3].unwrap(),
-                ];
-                let d0 = dist_to_segment(cursor_px, p[0], p[1]);
-                let d1 = dist_to_segment(cursor_px, p[1], p[2]);
-                let d2 = dist_to_segment(cursor_px, p[2], p[3]);
-                let d3 = dist_to_segment(cursor_px, p[3], p[0]);
-
-                let mut candidates = [
-                    (d0, (v_indices[0], v_indices[1])),
-                    (d1, (v_indices[1], v_indices[2])),
-                    (d2, (v_indices[2], v_indices[3])),
-                    (d3, (v_indices[3], v_indices[0])),
-                ];
-                candidates
-                    .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-                for (_, seed) in candidates {
-                    if let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed) {
-                        return Some((mesh.clone(), ring, seed));
-                    }
+            let mut candidates: Vec<_> = (0..face.verts.len())
+                .filter_map(|i| {
+                    let seed = (face.verts[i], face.verts[(i + 1) % face.verts.len()]);
+                    let pa = project_pos(mesh.verts.get(seed.0 as usize)?.vec())?;
+                    let pb = project_pos(mesh.verts.get(seed.1 as usize)?.vec())?;
+                    Some((dist_to_segment(cursor_px, pa, pb), seed))
+                })
+                .collect();
+            candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for (_, seed) in candidates {
+                if let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed) {
+                    return Some((mesh.clone(), ring, seed));
                 }
             }
         }
 
         // 2. Fallback de proximidade de aresta (24px de tolerância)
-        let mut best_candidate: Option<(f32, (u32, u32))> = None;
+        let mut candidates = Vec::new();
         for (a, b) in mesh.edges_unique() {
             let (Some(va), Some(vb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize))
             else {
@@ -3546,19 +3560,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 continue;
             };
             let dist = dist_to_segment(cursor_px, pa, pb);
-            if dist < 24.0
-                && best_candidate
-                    .as_ref()
-                    .is_none_or(|(best_d, _)| dist < *best_d)
-            {
-                best_candidate = Some((dist, (a, b)));
+            if dist < 24.0 {
+                candidates.push((dist, (a, b)));
             }
         }
-
-        if let Some((_, seed)) = best_candidate
-            && let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed)
-        {
-            return Some((mesh.clone(), ring, seed));
+        candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, seed) in candidates {
+            if let Ok(ring) = petunia_core::LoopRing::discover(mesh, seed) {
+                return Some((mesh.clone(), ring, seed));
+            }
         }
 
         None
@@ -7456,10 +7466,71 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(message);
             return false;
         }
+        if colors_too_close(rgb, self.effective_accent_rgb()) {
+            let message = self
+                .state
+                .t_id(petunia_config::text_id::UI_COLORS_TOO_CLOSE);
+            self.state.set_status(message);
+            return false;
+        }
         if self.state.ui.selection_rgb == rgb {
             return false;
         }
         self.state.ui.selection_rgb = rgb;
+        true
+    }
+
+    /// Cor de destaque do tema ativo, sem a preferência do usuário.
+    fn theme_accent_rgb(&self) -> [u8; 3] {
+        let theme = petunia_config::ThemeRegistry::global()
+            .get_theme(&self.state.ui.active_theme_id)
+            .cloned()
+            .unwrap_or_default();
+        let [r, g, b, _] = theme
+            .colors
+            .get_token_color(petunia_config::ThemeToken::AccentBlue)
+            .0;
+        [r, g, b]
+    }
+
+    /// Cor de destaque em uso: a do usuário ou a do tema.
+    pub fn effective_accent_rgb(&self) -> [u8; 3] {
+        self.preferences
+            .accent_rgb
+            .unwrap_or_else(|| self.theme_accent_rgb())
+    }
+
+    /// Define a cor de destaque da interface (`#RRGGBB`); vazio volta ao tema.
+    /// Recusa uma cor parecida demais com a da seleção na viewport (D5).
+    pub fn set_accent_color_hex(&mut self, value: &str) -> bool {
+        let value = value.trim();
+        if value.is_empty() {
+            if self.preferences.accent_rgb.is_none() {
+                return false;
+            }
+            self.preferences.accent_rgb = None;
+            self.state.mark_dirty();
+            return true;
+        }
+        let Some(rgb) = parse_hex_rgb(value) else {
+            let message = self
+                .state
+                .t_id(petunia_config::text_id::UI_SELECTION_COLOR_INVALID);
+            self.state.set_status(message);
+            return false;
+        };
+        if colors_too_close(rgb, self.state.ui.selection_rgb) {
+            let message = self
+                .state
+                .t_id(petunia_config::text_id::UI_COLORS_TOO_CLOSE);
+            self.state.set_status(message);
+            return false;
+        }
+        if self.preferences.accent_rgb == Some(rgb) {
+            return false;
+        }
+        self.preferences.accent_rgb = Some(rgb);
+        self.state.mark_dirty();
         true
     }
 
@@ -7863,6 +7934,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 true
             }
             "view.toggle_split" => self.toggle_split_view(),
+            "view.reference_images" => self.toggle_reference_manager(),
             "window.command_palette" => {
                 self.apply(UiIntent::OpenCommandSearch);
                 true
@@ -8742,6 +8814,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         section_layout::set_open(&mut self.section_layouts, section, open);
         self.persist_section_layouts();
         self.state.mark_dirty();
+    }
+
+    /// "Recolher Inspector" (plano de UI F4, D1): fecha e solta o pin de todas
+    /// as seções, devolvendo o shell ao trilho de pílulas. É um comando
+    /// explícito do usuário, por isso ignora o pin — diferente do recolhimento
+    /// automático do peek, que o pin protege (ADR 005 §5).
+    pub fn collapse_inspector(&mut self) {
+        for id in petunia_config::InspectorSectionId::all() {
+            section_layout::set_open(&mut self.section_layouts, id, false);
+            section_layout::set_pin_open(&mut self.section_layouts, id, false);
+        }
+        self.persist_section_layouts();
     }
 
     /// Alterna estado aberto/fechado de uma seção do Inspector (persistido).
@@ -14179,6 +14263,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Mostrar a Home ao abrir o programa sem projeto.
+    pub fn set_show_home_on_start(&mut self, enabled: bool) -> bool {
+        if self.preferences.show_home_on_start == enabled {
+            return false;
+        }
+        self.preferences.show_home_on_start = enabled;
+        true
+    }
+
+    /// Trilho de ferramentas com nomes ao lado dos ícones (plano de UI, D6).
+    pub fn set_show_tool_labels(&mut self, enabled: bool) -> bool {
+        if self.preferences.show_tool_labels == enabled {
+            return false;
+        }
+        self.preferences.show_tool_labels = enabled;
+        self.state.mark_dirty();
+        true
+    }
+
     /// Luz de estúdio presa à câmera (padrão) ou fixa no mundo.
     pub fn set_studio_light_follows_camera(&mut self, follows: bool) -> bool {
         if self.preferences.studio_light_follows_camera == follows {
@@ -15887,6 +15990,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         "view.toggle_wireframe" => vm.shading_mode == "wireframe",
                         "view.toggle_projection" => vm.is_orthographic,
                         "view.toggle_split" => self.split.enabled,
+                        "view.reference_images" => self.reference_manager_open,
                         _ => false,
                     },
                 })
@@ -16281,6 +16385,45 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.snap_radius_px = self.preferences.snap_radius_px;
         vm.label_snap_radius = translated(petunia_config::text_id::PREFERENCES_SNAP_RADIUS);
         vm.click_move_click = self.preferences.click_move_click;
+        vm.show_tool_labels = self.preferences.show_tool_labels;
+        vm.home_open = self.home_open;
+        vm.show_home_on_start = self.preferences.show_home_on_start;
+        vm.recent_projects = self
+            .preferences
+            .recent_projects
+            .iter()
+            .map(|path| {
+                let name = std::path::Path::new(path)
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone());
+                (name, path.clone())
+            })
+            .collect();
+        {
+            use petunia_config::text_id as T;
+            vm.home_texts = [
+                T::HOME_TITLE,
+                T::HOME_SUBTITLE,
+                T::HOME_NEW,
+                T::HOME_OPEN,
+                T::HOME_RECOVER,
+                T::HOME_RECENT,
+                T::HOME_NO_RECENT,
+                T::HOME_SETTINGS,
+                T::HOME_SHOW_ON_START,
+            ]
+            .map(translated);
+        }
+        vm.accent_rgb = self.preferences.accent_rgb;
+        let [r, g, b] = self.effective_accent_rgb();
+        vm.accent_color_hex = format!("#{r:02X}{g:02X}{b:02X}");
+        vm.label_accent_color = translated(petunia_config::text_id::UI_ACCENT_COLOR);
+        vm.label_accent_color_hint = translated(petunia_config::text_id::UI_ACCENT_COLOR_HINT);
+        vm.label_show_tool_labels =
+            translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS);
+        vm.label_show_tool_labels_hint =
+            translated(petunia_config::text_id::PREFERENCES_SHOW_TOOL_LABELS_HINT);
         vm.workplane_prefer_ground = self.preferences.workplane_prefer_ground;
         vm.studio_light_follows_camera = self.preferences.studio_light_follows_camera;
         vm.viewport_matcap = self.preferences.viewport_matcap;
@@ -16740,6 +16883,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
     // Layouts de seção persistem por módulo: restaura no estado runtime e
     // semeia o cache para mutações futuras persistirem tudo.
     startup_bridge.restore_section_layouts(&preferences);
+    startup_bridge.home_open =
+        preferences.show_home_on_start && startup_bridge.state.project.project_path.is_none();
     #[allow(clippy::arc_with_non_send_sync)]
     let bridge = Arc::new(Mutex::new(startup_bridge));
 
@@ -16889,6 +17034,30 @@ pub fn run() -> Result<(), slint::PlatformError> {
 
 // Unit and integration test suite for Slint UI bridge and shell interactions.
 // Suíte de testes unitários e de integração para o bridge Slint UI e interações do shell.
+/// `#RRGGBB` (com ou sem `#`) para RGB.
+fn parse_hex_rgb(value: &str) -> Option<[u8; 3]> {
+    let hex = value.trim().strip_prefix('#').unwrap_or(value.trim());
+    if hex.len() != 6 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut rgb = [0u8; 3];
+    for (index, channel) in rgb.iter_mut().enumerate() {
+        *channel = u8::from_str_radix(hex.get(index * 2..index * 2 + 2)?, 16).ok()?;
+    }
+    Some(rgb)
+}
+
+/// Destaque e seleção precisam ser distinguíveis à primeira vista (D5).
+/// Distância euclidiana em RGB; 90 separa o violeta padrão de um lilás.
+fn colors_too_close(a: [u8; 3], b: [u8; 3]) -> bool {
+    let distance_sq: i32 = a
+        .iter()
+        .zip(b)
+        .map(|(&x, y)| (x as i32 - y as i32).pow(2))
+        .sum();
+    distance_sq < 90 * 90
+}
+
 #[cfg(test)]
 mod tests;
 

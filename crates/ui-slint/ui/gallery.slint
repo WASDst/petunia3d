@@ -1,0 +1,131 @@
+import "fonts/InterVariable.ttf";
+// Galeria dos componentes base (plano de UI 2026-10-04, F2).
+// `cargo run -p petunia_ui_slint --example gallery` abre esta janela para
+// revisar estados e temas sem subir o shell inteiro.
+
+import { IconSet } from "@lucide";
+import { ScrollView } from "std-widgets.slint";
+import { DesignTokens, Motion, Tr } from "tokens.slint";
+import {
+    CommandSearchField,
+    DropdownButton,
+    EmptyState,
+    IconButton,
+    KeyHint,
+    PropertyRow,
+    Segmented,
+} from "components/base.slint";
+import { NumericField } from "components/controls.slint";
+
+component GallerySection inherits VerticalLayout {
+    in property <string> title;
+    spacing: DesignTokens.space-sm;
+    Text {
+        text: root.title;
+        color: DesignTokens.text-primary;
+        font-size: DesignTokens.font-strong;
+        font-weight: 600;
+    }
+    Rectangle {
+        background: DesignTokens.surface;
+        border-radius: DesignTokens.radius-panel;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        VerticalLayout {
+            padding: DesignTokens.space-md;
+            spacing: DesignTokens.space-sm;
+            @children
+        }
+    }
+}
+
+export component ComponentGallery inherits Window {
+    default-font-family: "Inter Variable";
+    title: Tr.t("gallery.title");
+    preferred-width: 760px;
+    preferred-height: 720px;
+    background: DesignTokens.canvas;
+
+    in-out property <int> shading: 1;
+    in-out property <int> domain: 0;
+    in-out property <bool> snap-on: true;
+    in-out property <bool> dropdown-open: false;
+
+    ScrollView {
+        VerticalLayout {
+            padding: DesignTokens.space-md + 4px;
+            spacing: DesignTokens.space-md + 4px;
+
+            GallerySection {
+                title: Tr.t("gallery.icon_button");
+                HorizontalLayout {
+                    spacing: DesignTokens.space-sm;
+                    alignment: start;
+                    IconButton { icon: IconSet.Undo2; semantic-label: Tr.t("gallery.ghost"); shortcut: Tr.t("gallery.key_undo"); }
+                    IconButton { icon: IconSet.Magnet; variant: "toggle"; active: root.snap-on; semantic-label: Tr.t("gallery.toggle_on"); clicked => { root.snap-on = !root.snap-on; } }
+                    IconButton { icon: IconSet.Magnet; variant: "toggle"; active: false; semantic-label: Tr.t("gallery.toggle_off"); }
+                    IconButton { icon: IconSet.Move3d; variant: "tool"; active: true; semantic-label: Tr.t("gallery.tool_active"); }
+                    IconButton { icon: IconSet.Move3d; variant: "tool"; semantic-label: Tr.t("gallery.tool_idle"); }
+                    IconButton { icon: IconSet.Trash2; enabled: false; semantic-label: Tr.t("gallery.disabled"); }
+                    IconButton { icon: IconSet.ArrowUpFromLine; label: Tr.t("gallery.labelled"); semantic-label: Tr.t("gallery.labelled"); }
+                }
+            }
+
+            GallerySection {
+                title: Tr.t("gallery.segmented");
+                Segmented {
+                    semantic-label: Tr.t("gallery.segmented");
+                    options: [Tr.t("gallery.wireframe"), Tr.t("gallery.solid"), Tr.t("gallery.textured"), Tr.t("gallery.silhouette")];
+                    selected <=> root.shading;
+                }
+                Segmented {
+                    semantic-label: Tr.t("gallery.segmented");
+                    options: [Tr.t("gallery.object"), Tr.t("gallery.face"), Tr.t("gallery.edge"), Tr.t("gallery.point")];
+                    selected <=> root.domain;
+                }
+            }
+
+            GallerySection {
+                title: Tr.t("gallery.properties");
+                PropertyRow {
+                    label: Tr.t("gallery.profile");
+                    DropdownButton {
+                        value: Tr.t("gallery.pbr_standard");
+                        semantic-label: Tr.t("gallery.profile");
+                        open: root.dropdown-open;
+                        open-requested => { root.dropdown-open = !root.dropdown-open; }
+                    }
+                }
+                PropertyRow {
+                    label: Tr.t("gallery.roughness");
+                    NumericField { label: Tr.t("gallery.value_short"); label-color: DesignTokens.text-muted; value: 0.5; step: 0.01; }
+                }
+                PropertyRow {
+                    label: Tr.t("gallery.disabled");
+                    DropdownButton { value: Tr.t("gallery.pbr_standard"); semantic-label: Tr.t("gallery.disabled"); enabled: false; }
+                }
+            }
+
+            GallerySection {
+                title: Tr.t("gallery.search_and_hints");
+                CommandSearchField { placeholder: Tr.t("gallery.search_placeholder"); shortcut: Tr.t("gallery.key_palette"); }
+                HorizontalLayout {
+                    spacing: DesignTokens.space-md;
+                    alignment: start;
+                    KeyHint { key: Tr.t("gallery.key_lmb"); action: Tr.t("gallery.hint_select"); }
+                    KeyHint { key: Tr.t("gallery.key_mmb"); action: Tr.t("gallery.hint_orbit"); }
+                    KeyHint { key: Tr.t("gallery.key_shift_mmb"); action: Tr.t("gallery.hint_pan"); }
+                }
+            }
+
+            GallerySection {
+                title: Tr.t("gallery.empty_state");
+                EmptyState {
+                    title: Tr.t("gallery.empty_title");
+                    message: Tr.t("gallery.empty_message");
+                    action-label: Tr.t("gallery.empty_action");
+                }
+            }
+        }
+    }
+}

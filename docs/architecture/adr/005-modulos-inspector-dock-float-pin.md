@@ -75,3 +75,30 @@ em várias ferramentas é exatamente uma janela OS — o que a V1 proíbe.
   matriz de gaps, não escondido.
 - Ações de criação de modifier passam a poder nascer em um asset diferente do
   ativo; o Undo continua transacional por comando.
+
+## Emenda 2026-10-04 — refatoração de UI (F4)
+
+Aprovada pelo responsável do produto ao autorizar as fases F3 e F4 do
+[plano de UI](../../development/ui-ux-refactor-plan-2026-10-04.md)
+(decisões D1, D2 e D3, §12). Registrada no cap. 36, "Revisão de baseline —
+2026-10-04".
+
+1. **Modifiers vira subseção de Object (D2).** A seção deixa de ter pílula e
+   cartão próprios; o corpo `ModifiersBody` é o mesmo, instanciado dentro de
+   Object quando há objeto selecionado. O `SectionLayout` de `modifiers`
+   continua persistido por compatibilidade, sem efeito visual.
+2. **Quick Actions sai do Inspector (D2), em duas etapas.** Nesta emenda a
+   seção permanece no lugar até a barra contextual da F5 recebê-la; nada é
+   removido antes de ter destino.
+3. **Superfície única (D3).** O painel ancorado é um só retângulo translúcido
+   (alfa 0,9, ADR 004 §1) com elevação 2; as seções são planas, separadas por
+   fio, sem cartão nem sombra. O card flutuante de uma seção desancorada
+   continua com elevação própria.
+4. **Pin visível sob demanda.** O botão de pin aparece no hover do cabeçalho,
+   com foco ou quando ligado; ligado é um ícone neutro, não um fundo accent.
+5. **Recolher Inspector (D1).** O cabeçalho de contexto ganha "Recolher", que
+   fecha **e solta o pin** de todas as seções. Divergência registrada em
+   relação ao §5 deste ADR: o pin continua protegendo a seção contra o
+   recolhimento automático (fim do peek) e contra "recolher tudo" (Alt+clique),
+   mas não contra este comando explícito — sem isso, como o clique na pílula
+   já fixa a seção, o painel nunca recolheria.
