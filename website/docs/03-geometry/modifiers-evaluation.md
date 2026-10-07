@@ -388,7 +388,7 @@ A lista de modifiers adicionais deve priorizar algoritmos existentes e baixo cus
 
 ## Roadmap recomendado de modifiers adicionais
 
-> **Status: recomendação técnica em discussão; a arquitetura da stack já está aprovada.**
+> **Status: aprovado.**
 
 A expansão deve priorizar valor alto, implementação pequena e capacidade de preservar atributos.
 
@@ -469,3 +469,28 @@ Usar subdivisão geométrica simples baseada na infraestrutura existente:
 `Simple Deform → Array → Thickness → Simple Subdivide`
 
 Simple Deform deve vir primeiro porque não muda topologia e valida o novo Geometry Evaluation Service com risco mínimo.
+
+
+## Modifiers aprovados para a stack enxuta
+
+A expansão inicial fica fechada em:
+
+- Mirror;
+- Symmetry;
+- Array, com modos Linear e Radial;
+- Simple Deform, com Bend, Twist, Taper e Stretch;
+- Thickness;
+- Simple Subdivide.
+
+Weld permanece preparado como operação reutilizável e pode ser exposto futuramente se houver necessidade real.
+
+Ordem de implementação aprovada:
+
+```text
+Simple Deform
+→ Array
+→ Thickness
+→ Simple Subdivide
+```
+
+A distinção entre modifiers que preservam topologia e modifiers que alteram topologia deve ser mantida nas regras de compatibilidade com Skin, SurfaceAttachment, Paint e UV.
