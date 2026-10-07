@@ -1,6 +1,6 @@
 # Validation, Repair, Cleanup e Import Boundaries
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Problema atual
 
@@ -429,3 +429,21 @@ Cleanup é operação explícita.
 Validation não muda dados.
 
 Nenhum sistema tenta transformar automaticamente qualquer malha ruim em malha perfeita.
+
+## Decisões fechadas
+
+1. Validation não modifica dados.
+2. Repair fica restrito a fronteiras externas, legacy e recovery.
+3. Todo Repair produz report explícito.
+4. Cleanup é operação geométrica explícita.
+5. O `Mesh::validate()` mutante atual será removido.
+6. Weld será reutilizado e passará a retornar `TopologyResult / ElementRemap`.
+7. Limited Dissolve será implementado de forma conservadora.
+8. Degenerate cleanup e orphan cleanup são operações separadas.
+9. Boolean Cleanup existente é preservado como algoritmo especializado.
+10. Não haverá remesh/retopology automática como consequência genérica de cleanup.
+11. Contour cleanup ocorre preferencialmente antes da geração de Mesh.
+12. OBJ mantém postura strict.
+13. glTF pode operar de forma tolerante quando necessário, mas toda sanitização relevante gera warning/report.
+14. Arquivos .petunia atuais inválidos falham explicitamente; versões antigas usam migrations conhecidas.
+15. Commands internos terminam em strict validation, nunca em auto-repair.
