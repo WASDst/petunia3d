@@ -1,6 +1,6 @@
 # Scene Hierarchy, Parts, Collections e Transforms
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -319,3 +319,21 @@ Não criar:
 - scene graph com múltiplos parents.
 
 A cena começa como uma árvore simples de parenting + collections planas independentes.
+
+
+## Decisões fechadas
+
+1. Collections são organização e nunca afetam transforms.
+2. Parenting é uma relação espacial explícita e independente de Collection.
+3. `SceneObject` possui `parent: Option<ObjectId>`; children são derivados.
+4. Geometry permanece em espaço local; world transform deriva da cadeia de parents.
+5. Parent/Unparent preservam world transform.
+6. Self-parent e ciclos são proibidos antes do commit.
+7. Collections usam `CollectionId`, não Strings.
+8. Collections permanecem planas inicialmente.
+9. Ordem visual do Outliner deixa de depender da posição do objeto no `Vec`.
+10. Multi-selection opera em world space e converte o resultado para o local de cada parent.
+11. SurfaceAttachment aponta para `ObjectId`.
+12. Prefabs preservam objetos, transforms e parenting; não deslocam vertices diretamente.
+13. Não criar `GroupObject`, ECS ou component system genérico nesta etapa.
+14. glTF preserva hierarchy/transforms; OBJ resolve transforms para geometria exportada.
