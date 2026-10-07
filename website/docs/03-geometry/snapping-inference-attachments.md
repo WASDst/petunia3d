@@ -1,6 +1,6 @@
 # Snapping, Inference, Workplane e Surface Attachments
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -325,3 +325,23 @@ Quando um target visual-only não puder executar uma ação persistente, explica
 Um engine de inferência, um sistema de spatial queries e um contrato de attachment.
 
 Não criar engines separados por workspace ou por ferramenta.
+
+
+## Decisões fechadas
+
+1. `inference.rs` é o engine canônico de snapping/inference.
+2. `snap.rs` deixa de ser engine; apenas helpers matemáticos úteis sobrevivem.
+3. `SplineSnapSettings` e `snap_spline_position` serão aposentados.
+4. Smart Snap é modo explícito, separado de Grid.
+5. `SnapHit` carrega proveniência semântica.
+6. Candidatos distinguem stable authoring targets de visual-only evaluated targets.
+7. Workplane é a autoridade para Grid/Axis/Angle inference planar.
+8. Spline participa do mesmo Inference Engine.
+9. `SnapAccel` é preservado e evolui para carregar identidade.
+10. BVH/picking/snap/surface raycast compartilham uma fundação espacial pequena.
+11. `TriangleBvh` pertence conceitualmente a Geometry.
+12. SurfaceAttachment usa `ObjectId`.
+13. Attachment deixa de depender de `triangle_index` derivado e passa a referenciar o triângulo autoral explicitamente.
+14. EditableMesh distingue revision geral de `topology_revision`.
+15. `TopologyResult` também atualiza attachments quando o remap for inequívoco.
+16. Alterações ambíguas levam a `NeedsReattach`; não há reprojeção silenciosa.
