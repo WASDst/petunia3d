@@ -49,6 +49,24 @@
           "title": "Commands, eventos e serviços"
         }
       ]
+    },
+    {
+      "id": "geometry",
+      "title": "Geometry",
+      "files": [
+        {
+          "path": "03-geometry/architecture-decision.md",
+          "title": "Decisão arquitetural"
+        },
+        {
+          "path": "03-geometry/uv-face-corners.md",
+          "title": "UV e Face Corners"
+        },
+        {
+          "path": "03-geometry/draw-unification-proposal.md",
+          "title": "Unificação DRAW/POLY — proposta"
+        }
+      ]
     }
   ]
 }
