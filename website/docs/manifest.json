@@ -81,6 +81,10 @@
         {
           "path": "03-geometry/generators-redesign.md",
           "title": "Redesign de Generators"
+        },
+        {
+          "path": "03-geometry/object-geometry-source.md",
+          "title": "Object e Geometry Source — proposta"
         }
       ]
     }
