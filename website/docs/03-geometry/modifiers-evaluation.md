@@ -385,3 +385,87 @@ Esses continuam em seus domínios naturais.
 13. Shape Builder, Boolean, Knife, Bevel e demais direct modeling não viram modifiers automaticamente.
 
 A lista de modifiers adicionais deve priorizar algoritmos existentes e baixo custo de manutenção.
+
+## Roadmap recomendado de modifiers adicionais
+
+> **Status: recomendação técnica em discussão; a arquitetura da stack já está aprovada.**
+
+A expansão deve priorizar valor alto, implementação pequena e capacidade de preservar atributos.
+
+| Modifier | Prioridade | Custo estimado | Topologia | Observação |
+| --- | --- | --- | --- | --- |
+| Array | alta | baixo–médio | muda | Linear e Radial no mesmo modifier; requer utilitário robusto de concatenação/remap de meshes |
+| Simple Deform | alta | baixo | preserva | Um modifier com Bend, Twist, Taper e Stretch; mesma infraestrutura de eixo/bounds/cage |
+| Thickness | alta | médio | muda | Muito útil para shape-first; implementar versão simples e previsível antes de casos patológicos |
+| Simple Subdivide | média | baixo–médio | muda | Reaproveitar subdivide existente, mas sem Catmull-Clark inicialmente |
+| Weld | baixa/média | baixo | muda | Algoritmo já existe; preferir opção de weld em Mirror/Array antes de expor modifier separado |
+
+### Array
+
+Um único `ArrayModifier` com:
+- Linear;
+- Radial.
+
+Linear:
+- count;
+- offset;
+- optional weld.
+
+Radial:
+- count;
+- axis;
+- angle;
+- radius/offset conforme interação definida.
+
+Radial deve reutilizar a mesma infraestrutura de duplicação/remap de Linear, não ser outro subsistema.
+
+### Simple Deform
+
+Um único modifier com `Bend`, `Twist`, `Taper` e `Stretch`.
+
+Todos compartilham:
+- axis;
+- origin/pivot;
+- normalized position ao longo dos bounds;
+- optional lower/upper limits;
+- visual cage.
+
+São prioritários porque preservam a conectividade e os índices dos componentes.
+
+### Thickness
+
+Versão inicial:
+- thickness;
+- direction/offset;
+- keep/open rim quando aplicável.
+
+Não tentar resolver todas as autointerseções de shells arbitrários.
+Non-manifold ou casos não suportados devem gerar diagnóstico explícito.
+O `offset_polygon` 2D existente pode ser reutilizado para PlanarShape, mas não substitui um Solidify de Mesh 3D.
+
+### Simple Subdivide
+
+Não implementar Catmull-Clark nesta primeira etapa.
+Usar subdivisão geométrica simples baseada na infraestrutura existente:
+- whole-object;
+- cuts/levels pequenos;
+- UV FaceCorner interpolada;
+- orçamento explícito de vertices/faces.
+
+### Não adicionar como modifier agora
+
+- Triangulate: triangulação já é representação derivada de render/export.
+- Recalculate/Weighted Normals: tratar como shading/normal policy, não modifier inicialmente.
+- Bevel: já existe como direct modeling; modifier não traz benefício suficiente para o custo agora.
+- Boolean: Shape Builder já cobre a experiência de composição; boolean não destrutivo adicionaria dependency/provenance complexa.
+- Decimate: robustez custa muito mais que parece.
+- Shrinkwrap/Surface Conform: requer queries espaciais e políticas de projeção; posterior.
+- Lattice: exige cage editing e UX própria.
+- Remesh: fora do escopo enxuto.
+- Transform: redundante com SceneObject Transform.
+
+## Ordem sugerida
+
+`Simple Deform → Array → Thickness → Simple Subdivide`
+
+Simple Deform deve vir primeiro porque não muda topologia e valida o novo Geometry Evaluation Service com risco mínimo.
