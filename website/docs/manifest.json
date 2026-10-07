@@ -111,6 +111,16 @@
           "title": "Normals, Shading e Sharp Edges — proposta"
         }
       ]
+    },
+    {
+      "id": "renderer",
+      "title": "Renderer",
+      "files": [
+        {
+          "path": "04-renderer/architecture-decision.md",
+          "title": "Arquitetura do Renderer — proposta"
+        }
+      ]
     }
   ]
 }
