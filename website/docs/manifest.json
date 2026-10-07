@@ -101,6 +101,10 @@
         {
           "path": "03-geometry/validation-repair-cleanup.md",
           "title": "Validation, Repair e Cleanup — proposta"
+        },
+        {
+          "path": "03-geometry/generators-implementation.md",
+          "title": "Generators — implementação detalhada"
         }
       ]
     }
