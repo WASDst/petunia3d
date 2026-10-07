@@ -306,3 +306,267 @@ As seguintes regras são normativas:
 6. A linguagem pública inicial possui somente **Unite, Remove e Extract**.
 
 Expansões futuras só entram após medição de uso real. Multi-object combinatório, novos kernels, B-Rep e remeshing global permanecem explicitamente fora do escopo inicial.
+
+# Implementação detalhada do Solid Shape Builder
+
+> **Status: proposta técnica recomendada; as seis regras V1 anteriores continuam aprovadas.**
+
+## Resultado booleano vazio
+
+O wrapper boolean atual trata Mesh vazia como erro. Isso precisa mudar porque `A ∩ B = ∅` e `A − A = ∅` são resultados válidos.
+
+Direção:
+
+```rust
+pub enum BooleanSolid {
+    Empty,
+    Mesh(Mesh),
+}
+```
+
+Kernel error continua separado de resultado vazio.
+
+## Pré-condição de Solid
+
+Cada operand precisa resolver para surface Mesh finita, estruturalmente válida, manifold, fechada e dentro do budget. Não executar repair automático. Objetos skinned/rigged ficam fora do Solid Shape Builder V1.
+
+## Session space
+
+Usar o espaço local do primeiro operand como espaço de cálculo.
+
+```text
+A local → session space
+B local → B world → inverse(A world) → session space
+```
+
+Transform singular é erro. Determinant negativo exige correção de winding ao materializar a Mesh.
+
+## Broad phase
+
+Se os bounds não se sobrepõem:
+
+```text
+A_ONLY = A
+INTERSECTION = Empty
+B_ONLY = B
+```
+
+Sem chamar o kernel.
+
+## Decomposição dedicada
+
+Criar uma operação Geometry de alto nível que prepare/triangule/converta os dois operands uma única vez e derive:
+
+```text
+first_only   = A − B
+intersection = A ∩ B
+second_only  = B − A
+```
+
+Evitar repetir conversão Petunia → provider três vezes.
+
+## BooleanPartition
+
+Direção conceitual:
+
+```rust
+pub struct BooleanPartition {
+    pub first_only: Vec<SolidRegion>,
+    pub intersection: Vec<SolidRegion>,
+    pub second_only: Vec<SolidRegion>,
+}
+```
+
+Cada resultado é validado, recebe boolean cleanup, é separado em componentes edge-connected e compactado.
+
+## Connected face components
+
+Adicionar `connected_face_components(mesh)` com edge → incident faces + BFS/DFS. Componentes que apenas tocam por um vertex continuam separados. Essa query também serve a Separate Loose Parts, imports e diagnostics.
+
+## SolidRegion
+
+Região transitória:
+
+```rust
+pub struct SolidRegion {
+    pub id: SolidRegionId,
+    pub class: SolidRegionClass,
+    pub mesh: Mesh,
+    pub bounds: Bounds3,
+    pub provenance: RegionProvenance,
+}
+```
+
+IDs existem somente durante ToolSession.
+
+## Proveniência mínima
+
+Não criar provenance graph CAD. Por face avaliada basta algo equivalente a:
+
+```rust
+pub enum SurfaceOrigin {
+    First(FaceIndex),
+    Second(FaceIndex),
+    Generated,
+}
+```
+
+`SourceIndex` e `surface_sources` atuais são uma boa fundação para isso.
+
+## UV
+
+Não relayoutar toda a Mesh só porque o resultado mistura faces de A e B.
+
+- face com origem conhecida → preservar/interpolar UV da face-fonte para FaceCorner;
+- face sem origem confiável → UV planar determinística apenas para aquela ilha;
+- xatlas permanece fallback explícito, não efeito colateral obrigatório.
+
+Preservar material + UV de cada origem é preferível a destruir os dois layouts.
+
+## Materials
+
+Faces herdadas preservam material do source object/face. Ao consolidar objetos, construir a material table do resultado e remapear slots de A/B deterministicamente. Surface `Generated` usa política explícita do resultado primário; não criar material novo automaticamente.
+
+## RegionPlan — ownership transitório
+
+O keep/remove mask decide volume, mas não identidade de SceneObject. Para preservar objetos intocados, usar um plano transitório de ownership.
+
+No início:
+
+```text
+Group A owns: A_ONLY + INTERSECTION
+Group B owns: B_ONLY + INTERSECTION
+```
+
+A interseção pode pertencer aos dois grupos somente dentro da ToolSession para reproduzir os dois objetos originais sobrepostos.
+
+### Remove
+
+Remove as referências das regiões tocadas de todos os grupos.
+
+### Extract
+
+Remove as regiões tocadas dos source groups e cria output group(s) novos.
+
+### Unite
+
+Remove as regiões tocadas dos grupos existentes e cria um único output group contendo-as.
+
+Regiões não tocadas preservam identidade e comportamento dos operands.
+
+## Preservação de Geometry Source
+
+Se o output group de um operand não mudou, não tocar no SceneObject: preservar ObjectId, Generator, modifiers e transform.
+
+Se mudou, materializar apenas esse resultado como EditableMesh. Isso é uma operação destrutiva explícita do Shape Builder, não o freeze paramétrico silencioso proibido anteriormente.
+
+## Output objects
+
+Objetos existentes modificados voltam para seu próprio local space. Objetos novos de Unite/Extract usam inicialmente o session-space transform do primeiro operand.
+
+## Commit de grupos
+
+- uma região → usar Mesh compacta cached;
+- várias regiões disjuntas num mesmo grupo → podem permanecer como loose parts de um único objeto;
+- regiões que compartilham boundary e foram `Unite` → executar union final uma única vez no commit para remover surfaces internas.
+
+Nenhum reboolean acontece durante hover.
+
+## Fast paths
+
+Quando o group corresponde exatamente a uma expressão conhecida:
+
+```text
+A_ONLY + INTERSECTION = original A
+B_ONLY + INTERSECTION = original B
+A_ONLY                = cached A−B
+B_ONLY                = cached B−A
+INTERSECTION          = cached A∩B
+```
+
+`Unite` dos três calcula `A ∪ B` uma única vez no commit.
+
+## Hover e picking
+
+Cada SolidRegion recebe bounds + triangle BVH. Pointer query testa bounds, depois triangles, ordena hits por depth e destaca a região inteira.
+
+## Regiões internas
+
+Para `B` completamente dentro de `A`, o overlap pode estar oculto. O picking deve coletar todos os region hits do ray.
+
+V1:
+- nearest hit é o hover padrão;
+- Tab/atalho acessível percorre regiões sob o cursor;
+- X-Ray Regions temporário revela regiões ocultas.
+
+Não exigir section plane apenas para selecionar volumes internos.
+
+## Feedback visual
+
+Não depender somente de cor. Combinar outline, fill translúcido e label/icon contextual: `+ Unite`, `− Remove`, `↗ Extract`. Reduced Motion remove animação, não informação.
+
+## Gesture sampling
+
+Drag usa spacing em screen space e deduplica `SolidRegionId`. Mouse move só faz picking; nenhuma evaluation geométrica ocorre durante o gesto.
+
+## Session key
+
+Capturar ObjectIds, Geometry Source revisions, Modifier revisions, transforms/world revisions e Evaluation Quality. Se dependency mudar externamente, rebuild seguro ou cancel com diagnóstico.
+
+## Budget
+
+Usar `ShapeBuilderBudget` interno com limites de input triangles, decomposed triangles, components e custo de final union. Não expor esses knobs na UI comum. Excedeu → diagnóstico; nunca remesh automático.
+
+## Undo
+
+Hover e gestures não criam checkpoints. Commit cria uma única transaction com objects alterados/removidos/criados e seleção final. Cancel descarta partition + RegionPlan.
+
+## Selection pós-commit
+
+- Unite novo → selecionar resultado;
+- Extract → selecionar extraídos;
+- Remove → preservar o primeiro objeto sobrevivente relevante;
+- múltiplos outputs explícitos podem ficar multi-selected.
+
+Component selection antiga nunca sobrevive a topology substituída.
+
+## Fixtures obrigatórias
+
+1. cubes parcialmente sobrepostos;
+2. disjuntos;
+3. idênticos;
+4. B contido em A;
+5. A contido em B;
+6. contato apenas por face;
+7. contato apenas por edge;
+8. contato apenas por vertex;
+9. operand com loose parts fechadas;
+10. solid côncavo;
+11. non-manifold recusado;
+12. open mesh recusada;
+13. transforms/parenting;
+14. negative scale;
+15. materiais diferentes;
+16. UVs diferentes;
+17. múltiplos connected components.
+
+## Testes de intenção
+
+- Remove overlap remove a região compartilhada de todos os grupos;
+- Extract overlap cria novo SceneObject e retira overlap dos source groups;
+- Unite all equivale geometricamente a `A ∪ B`;
+- Cancel mantém Document semanticamente idêntico;
+- operand paramétrico intocado permanece Generator.
+
+## Não objetivos adicionais
+
+- persistent face IDs do kernel;
+- CSG history;
+- N-solid partition arbitrária;
+- reboolean em pointer move;
+- voxel/remesh;
+- B-Rep;
+- automatic retopology;
+- semantic feature recognition.
+
+O diferencial deve vir da interação e previsibilidade, não do acúmulo de subsistemas.
