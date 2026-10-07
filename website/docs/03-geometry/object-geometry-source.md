@@ -1,6 +1,6 @@
 # Object e Geometry Source
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -234,3 +234,17 @@ Nunca fazer Modifier virar outro Geometry Source.
 Não criar store/graph genérico universal para todos os tipos de recurso antes de haver necessidade concreta.
 
 O objetivo é uma fonte geométrica explícita por objeto e uma única porta de avaliação, não um ECS nem um scene graph abstrato.
+
+
+## Decisões fechadas
+
+1. `Asset` evolui conceitualmente para `SceneObject`; a UI pode continuar usando **Part**.
+2. `ObjectId` representa identidade de objeto da cena; **Asset** fica reservado para biblioteca/reuso.
+3. Cada `SceneObject` possui exatamente uma `ObjectGeometry`: Mesh, Spline, PlanarShape ou Generator.
+4. Mesh continua diretamente no objeto como `EditableMesh + revision`; não haverá `MeshStore` genérico nesta etapa.
+5. `parametric: Option<PrimitiveDescriptor>` é substituído por `GeometryGenerator::Primitive`.
+6. Evaluation cache sai do documento e usa IDs/revisions, não hash integral da geometria.
+7. Generator vivo suporta Material, Auto UV, Render e Export; Paint topológico, UV manual, Rig/Skin e component editing exigem `Make Editable` inicialmente.
+8. `Project.active` e selection não pertencem ao Document; ficam em `EditorSession`.
+9. Geometria autoral é local; `SceneObject.transform` é a autoridade local → world.
+10. Generators referenciam objetos fonte por `ObjectId`, resolvendo transforms e dependencies explicitamente.
