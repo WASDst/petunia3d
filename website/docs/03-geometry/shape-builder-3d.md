@@ -1,6 +1,6 @@
 # Shape Builder 3D
 
-> **Status: direção estratégica aprovada. Design sólido detalhado abaixo ainda em discussão.**
+> **Status: aprovado. Direção estratégica e arquitetura sólida inicial fechadas.**
 
 O Shape Builder 3D deve ser uma feature diferenciadora do Petunia3D por transformar composição geométrica em interação direta, sem introduzir um segundo kernel CAD.
 
@@ -33,7 +33,7 @@ Usa o kernel boolean existente e apresenta suas partes de forma visual.
 
 # Proposta detalhada para Solid Shape Builder
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado para a primeira implementação sólida.**
 
 ## 1. Dois operandos por sessão
 
@@ -292,3 +292,17 @@ A uniformidade é de interação, não de algoritmo.
 ## Critério de sucesso
 
 O usuário deve conseguir combinar formas complexas sem pensar em “Union/Difference/Intersection” na maior parte do tempo, enquanto a implementação continua sendo uma camada pequena e testável sobre os kernels existentes.
+
+
+## Decisões fechadas — Solid Shape Builder V1
+
+As seguintes regras são normativas:
+
+1. A primeira versão sólida trabalha com **dois operandos por sessão**.
+2. A decomposição fundamental é **A_ONLY / INTERSECTION / B_ONLY**.
+3. Componentes desconectados de cada resultado são tratados como regiões distintas.
+4. Regiões sólidas são **transitórias da Tool Session** e nunca persistem no documento.
+5. Booleans e cleanup são recalculados quando os operandos/revisões mudarem; **movimento do mouse faz apenas picking/seleção de região**.
+6. A linguagem pública inicial possui somente **Unite, Remove e Extract**.
+
+Expansões futuras só entram após medição de uso real. Multi-object combinatório, novos kernels, B-Rep e remeshing global permanecem explicitamente fora do escopo inicial.
