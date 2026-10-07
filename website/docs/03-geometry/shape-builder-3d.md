@@ -1,126 +1,294 @@
 # Shape Builder 3D
 
-> **Status: direção estratégica aprovada. Feature potencialmente diferenciadora do Petunia3D.**
+> **Status: direção estratégica aprovada. Design sólido detalhado abaixo ainda em discussão.**
 
-O Shape Builder 3D deve tornar composição de formas significativamente mais direta sem introduzir um segundo kernel geométrico ou um sistema procedural excessivamente amplo.
+O Shape Builder 3D deve ser uma feature diferenciadora do Petunia3D por transformar composição geométrica em interação direta, sem introduzir um segundo kernel CAD.
 
-## Objetivo
+## Princípio
 
-Permitir que o usuário construa, combine, recorte e reorganize formas por interação direta sobre regiões visuais, usando os kernels existentes.
+A ferramenta não inventa uma nova matemática booleana.
 
-A experiência deve ser:
+Ela cria uma camada de interação sobre capacidades existentes:
 
-```text
-hover → entender região
-click/drag → escolher intenção
-preview → confirmar
-```
-
-em vez de exigir configuração manual de várias operações booleanas.
+- planar arrangement;
+- regions;
+- imprint;
+- Push/Pull;
+- Boolean Union;
+- Boolean Difference;
+- Boolean Intersection;
+- Boolean cleanup.
 
 ## Dois caminhos internos, uma experiência
 
-### 1. Planar / Surface Shape Builder
+### Planar / Surface Shape Builder
 
-Usa:
-- arrangements 2D;
-- regions;
-- imprint;
-- faces coplanares;
-- holes;
-- Push/Pull.
+Usa regiões coplanares, holes, imprint e Push/Pull.
 
-É adequado para:
-- formas desenhadas em workplane;
-- cortes em faces;
-- composição de regiões;
-- extração de shapes.
+### Solid Shape Builder
 
-### 2. Solid Shape Builder
+Usa o kernel boolean existente e apresenta suas partes de forma visual.
 
-Usa os kernels já existentes:
-- Boolean Union;
-- Difference;
-- Intersection;
-- Boolean cleanup.
+---
 
-Não cria novo kernel CSG.
+# Proposta detalhada para Solid Shape Builder
 
-A ferramenta apenas interpreta a região/volume sob o cursor e converte a intenção visual do usuário para uma sequência determinística de operações existentes.
+> **Status: proposta recomendada; aguarda aprovação.**
 
-## Intenções mínimas
+## 1. Dois operandos por sessão
 
-Começar pequeno:
+A primeira versão trabalha com exatamente dois objetos sólidos ativos:
 
-- **Unite** — manter a união das regiões escolhidas;
-- **Remove** — remover a região escolhida do resultado;
-- **Keep / Extract** — preservar uma região como parte independente quando semanticamente seguro.
+```text
+A + B
+```
 
-Não adicionar dezenas de modes inicialmente.
+Não tenta construir uma partição volumétrica arbitrária de N objetos ao mesmo tempo.
 
-## Interação
+Isso evita crescimento combinatório e mantém picking, preview, Undo e preservação de atributos compreensíveis.
 
-### Hover
-A região candidata deve ser destacada antes do clique.
+Um terceiro objeto pode ser incorporado em um gesto posterior.
 
-### Drag
-Arrastar através de regiões pode acumulá-las para Unite/Remove.
+## 2. Três regiões booleanas fundamentais
 
-### Modifier
-Um único modificador pode inverter a intenção principal quando isso for previsível.
+Para dois sólidos, derivar:
 
-### Preview
-Nenhuma operação destrutiva acontece durante hover.
-Preview usa geometria derivada/transitória.
+```text
+A_ONLY   = A \ B
+OVERLAP  = A ∩ B
+B_ONLY   = B \ A
+```
 
-### Commit
-Um gesto completo = um Undo.
+Essas três regiões formam o vocabulário sólido básico.
 
-## Regras de escopo
+Não é necessário criar um novo kernel de regiões volumétricas.
 
-Para evitar bloat:
+## 3. Componentes desconectados
 
-1. Reutilizar Boolean, arrangement, imprint e cleanup existentes.
-2. Não implementar B-Rep/CAD kernel.
-3. Não criar grafo procedural como pré-requisito.
-4. Não exigir remeshing global.
-5. Não prometer regiões volumétricas arbitrárias quando o kernel existente não puder classificá-las de forma robusta.
-6. Preferir recusar uma operação ambígua com feedback claro a produzir topologia ruim.
-7. Operações devem preservar materiais/UV/paint attachments quando os kernels atuais tiverem informação suficiente.
-8. Toda mutação retorna remap/changes explícitos.
+Cada resultado booleano pode conter múltiplos componentes desconectados.
 
-## Fases sugeridas
+A Geometry deverá oferecer uma query de componentes conectados por faces:
 
-### Fase A — planar robusto
-Consolidar o Shape Builder já existente:
-- regiões;
-- holes;
-- Unite;
-- Remove;
-- Extract;
-- imprint;
-- Push/Pull.
+```rust
+connected_face_components(mesh: &Mesh) -> Vec<MeshComponent>
+```
 
-### Fase B — sólidos simples
-Selecionar dois sólidos sobrepostos e oferecer regiões booleanas previsíveis via kernels existentes.
+Cada componente visualmente separado pode virar uma região interativa.
 
-### Fase C — multi-shape gesture
-Permitir gesto contínuo sobre múltiplas regiões/sólidos, mantendo um Undo e preview incremental.
+Isso é uma query derivada; não introduz identidade persistente de componente no documento.
 
-### Fase D — refinamento
-Somente após métricas e uso real:
-- heurísticas melhores de region picking;
-- preservação avançada de atributos;
-- operações compostas adicionais.
+## 4. Identidade transitória da região
 
-## Não objetivos iniciais
+Uma região de preview pertence somente à Tool Session.
 
-- CAD paramétrico completo;
+Exemplo conceitual:
+
+```rust
+pub struct SolidRegionCandidate {
+    pub source: SolidRegionSource,
+    pub component_index: ComponentIndex,
+    pub preview_mesh: Mesh,
+    pub bounds: Bounds3,
+}
+
+pub enum SolidRegionSource {
+    FirstOnly,
+    Intersection,
+    SecondOnly,
+}
+```
+
+Nada disso é persistido no arquivo .petunia.
+
+## 5. Picking
+
+Picking deve acontecer sobre as meshes de preview derivadas.
+
+Pipeline:
+
+```text
+pointer ray
+   ↓
+candidate bounds
+   ↓
+triangle hit
+   ↓
+nearest visible SolidRegionCandidate
+```
+
+O hover destaca a região inteira correspondente ao componente conectado, não somente o triângulo atingido.
+
+## 6. Preview
+
+Ao iniciar a sessão:
+
+1. capturar A e B;
+2. calcular A_ONLY, OVERLAP e B_ONLY;
+3. executar boolean cleanup;
+4. separar componentes conectados;
+5. construir cache de picking/bounds;
+6. renderizar como preview transitório.
+
+O documento não muda durante hover ou seleção de regiões.
+
+## 7. Estado da ferramenta
+
+```rust
+pub struct SolidShapeBuilderSession {
+    pub first_operand: AssetId,
+    pub second_operand: AssetId,
+    pub candidates: Vec<SolidRegionCandidate>,
+    pub selected_regions: HashSet<SolidRegionIndex>,
+    pub intent: ShapeBuilderIntent,
+}
+```
+
+O cache deve ser reconstruído somente quando os operandos/revisões mudarem.
+
+## 8. Intenções iniciais
+
+Manter somente três ações públicas:
+
+### Unite
+As regiões tocadas entram no resultado final como um único objeto quando a união for válida.
+
+### Remove
+As regiões tocadas deixam de fazer parte do resultado.
+
+### Extract
+As regiões tocadas tornam-se objeto(s) independentes.
+
+A UI não deve expor diretamente A_ONLY / OVERLAP / B_ONLY; isso é implementação.
+
+## 9. Modelo de seleção por máscara
+
+Internamente, a sessão mantém quais regiões sobreviverão.
+
+Exemplo:
+
+```text
+A_ONLY   keep
+OVERLAP  remove
+B_ONLY   keep
+```
+
+produz duas partes externas sem a interseção.
+
+Outro gesto:
+
+```text
+A_ONLY   keep
+OVERLAP  keep
+B_ONLY   keep
+```
+
+equivale visualmente a Union.
+
+Isso permite uma gramática única sem criar dezenas de operadores.
+
+## 10. Resultado
+
+No commit:
+
+- combinar apenas as regiões marcadas para manter;
+- aplicar cleanup;
+- reconstruir assets necessários;
+- produzir remap/changes explícitos;
+- transferir material/UV/paint quando possível;
+- registrar um único Undo.
+
+## 11. Atributos
+
+A origem da região é conhecida:
+
+- FirstOnly deriva principalmente de A;
+- SecondOnly deriva principalmente de B;
+- Intersection possui superfícies herdadas dos dois operandos e superfícies novas de corte.
+
+Reutilizar a infraestrutura atual de Boolean material/texture transfer em vez de duplicá-la.
+
+FaceCorner torna essa transferência mais segura porque vertex + UV de corner permanecem unidos estruturalmente.
+
+## 12. Ambiguidade e falha
+
+Recusar claramente quando:
+
+- operandos não forem sólidos adequados;
+- boolean kernel falhar;
+- resultado for vazio;
+- topologia resultante for inválida;
+- número de componentes ultrapassar orçamento seguro;
+- preview exceder orçamento configurado.
+
+Nunca tentar “consertar” silenciosamente com remesh global.
+
+## 13. Performance
+
+Não recalcular boolean a cada movimento do mouse.
+
+```text
+tool begin / operand changed
+        ↓
+calculate candidate regions once
+        ↓
+hover only performs picking
+        ↓
+gesture changes selection mask
+        ↓
+commit reuses cached result when valid
+```
+
+Essa separação é essencial para hardware low-end.
+
+## 14. Multi-object
+
+Não fazer partição combinatória de vários objetos na V1.
+
+Fluxo:
+
+```text
+A + B
+→ commit
+→ Result + C
+→ commit
+```
+
+A interação continua rápida e previsível.
+
+Multi-object verdadeiro só deve ser considerado se uso real demonstrar necessidade.
+
+## 15. Relação com Planar Shape Builder
+
+A experiência visual deve ser a mesma:
+
+```text
+hover region
+→ highlight
+→ drag/click
+→ preview
+→ commit
+```
+
+Mas o backend pode ser diferente:
+
+```text
+Planar → arrangement/regions
+Solid  → boolean decomposition
+```
+
+A uniformidade é de interação, não de algoritmo.
+
+## 16. Não objetivos
+
 - B-Rep;
-- solver de constraints;
-- procedural node graph obrigatório;
-- remesh automático pesado;
-- boolean history stack complexo;
-- dezenas de operadores especializados.
+- CAD constraint solver;
+- volumetric arrangement genérico;
+- histórico boolean procedural obrigatório;
+- remeshing global automático;
+- N-object boolean partition na primeira versão;
+- novo kernel CSG;
+- persistência de regiões transitórias.
 
-A feature deve ser poderosa porque combina capacidades existentes de forma intuitiva, não porque duplica todo o sistema de modelagem.
+## Critério de sucesso
+
+O usuário deve conseguir combinar formas complexas sem pensar em “Union/Difference/Intersection” na maior parte do tempo, enquanto a implementação continua sendo uma camada pequena e testável sobre os kernels existentes.
