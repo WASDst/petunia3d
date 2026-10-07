@@ -89,6 +89,10 @@
         {
           "path": "03-geometry/scene-hierarchy-transforms.md",
           "title": "Scene Hierarchy e Transforms — proposta"
+        },
+        {
+          "path": "03-geometry/modifiers-evaluation.md",
+          "title": "Modifiers e Geometry Evaluation — proposta"
         }
       ]
     }
