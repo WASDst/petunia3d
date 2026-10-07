@@ -73,6 +73,14 @@
         {
           "path": "03-geometry/shape-builder-3d.md",
           "title": "Shape Builder 3D"
+        },
+        {
+          "path": "03-geometry/splines-planar-shapes.md",
+          "title": "Splines e Planar Shapes"
+        },
+        {
+          "path": "03-geometry/generators-redesign.md",
+          "title": "Redesign de Generators"
         }
       ]
     }
