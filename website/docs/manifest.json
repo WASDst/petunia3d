@@ -4,17 +4,50 @@
       "id": "philosophy",
       "title": "Filosofia",
       "files": [
-        { "path": "00-philosophy/refactor-principles.md", "title": "Princípios da refatoração" },
-        { "path": "00-philosophy/code-quality.md", "title": "Qualidade e estilo de código" }
+        {
+          "path": "00-philosophy/refactor-principles.md",
+          "title": "Princípios da refatoração"
+        },
+        {
+          "path": "00-philosophy/code-quality.md",
+          "title": "Qualidade e estilo de código"
+        }
       ]
     },
     {
       "id": "core",
       "title": "Core",
       "files": [
-        { "path": "01-core/architecture-decision.md", "title": "Decisão arquitetural" },
-        { "path": "01-core/current-code-triage.md", "title": "Triagem do código atual" },
-        { "path": "01-core/camera-and-selection.md", "title": "Câmera e seleção" }
+        {
+          "path": "01-core/architecture-decision.md",
+          "title": "Decisão arquitetural"
+        },
+        {
+          "path": "01-core/current-code-triage.md",
+          "title": "Triagem do código atual"
+        },
+        {
+          "path": "01-core/camera-and-selection.md",
+          "title": "Câmera e seleção"
+        }
+      ]
+    },
+    {
+      "id": "application",
+      "title": "Application",
+      "files": [
+        {
+          "path": "02-application/architecture-decision.md",
+          "title": "Decisão arquitetural"
+        },
+        {
+          "path": "02-application/state-separation.md",
+          "title": "Separação de estado"
+        },
+        {
+          "path": "02-application/commands-events-services.md",
+          "title": "Commands, eventos e serviços"
+        }
       ]
     }
   ]
