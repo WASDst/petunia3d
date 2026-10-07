@@ -1,0 +1,21 @@
+{
+  "domains": [
+    {
+      "id": "philosophy",
+      "title": "Filosofia",
+      "files": [
+        { "path": "00-philosophy/refactor-principles.md", "title": "Princípios da refatoração" },
+        { "path": "00-philosophy/code-quality.md", "title": "Qualidade e estilo de código" }
+      ]
+    },
+    {
+      "id": "core",
+      "title": "Core",
+      "files": [
+        { "path": "01-core/architecture-decision.md", "title": "Decisão arquitetural" },
+        { "path": "01-core/current-code-triage.md", "title": "Triagem do código atual" },
+        { "path": "01-core/camera-and-selection.md", "title": "Câmera e seleção" }
+      ]
+    }
+  ]
+}
