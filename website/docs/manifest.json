@@ -93,6 +93,10 @@
         {
           "path": "03-geometry/modifiers-evaluation.md",
           "title": "Modifiers e Geometry Evaluation — proposta"
+        },
+        {
+          "path": "03-geometry/snapping-inference-attachments.md",
+          "title": "Snapping, Inference e Surface Attachments — proposta"
         }
       ]
     }
