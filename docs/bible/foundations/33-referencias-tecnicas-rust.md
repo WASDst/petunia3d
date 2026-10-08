@@ -3,7 +3,7 @@
 <aside>
 📚
 
-Biblioteca de referências técnicas usadas para fundamentar e implementar a working stack Rust do Petunia3D. Esta página é **fonte de pesquisa**, não substitui os contratos normativos dos capítulos 27–32, a arquitetura de código do capítulo 34 nem a arquitetura egui/Petunia Components do capítulo 35.
+Biblioteca de referências técnicas usadas para fundamentar e implementar a working stack Rust do Petunia3D. Esta página é **fonte de pesquisa**, não substitui os contratos normativos dos capítulos 27–32, a arquitetura de código do capítulo 34, a UI final do capítulo 36 nem o ADR 009. O capítulo 35 é referência histórica do fallback egui.
 
 </aside>
 
