@@ -1,0 +1,142 @@
+import { KeyHint } from "../components/base.slint";
+import { DesignTokens, Motion, Tr } from "../tokens.slint";
+
+/// Barra de estado persistente do shell.
+/// Toasts são transitórios; esta superfície preserva contexto contínuo.
+export component StatusBar inherits Rectangle {
+    in property <color> status-color: DesignTokens.info;
+    in property <string> status-message: "";
+    in property <int> status-severity: 0;
+    in property <string> context-hint: "";
+    in property <bool> precision-mode: false;
+    in property <bool> snap-mode: false;
+    in property <string> hover-label: "";
+    in property <string> selection-summary: "";
+    in property <string> scene-stats: "";
+    in property <bool> saved: true;
+
+    height: 30px;
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 12px;
+        alignment: center;
+
+        Rectangle {
+            width: 7px;
+            height: 7px;
+            border-radius: 3.5px;
+            background: root.status-color;
+            animate background { duration: Motion.medium; easing: ease-out; }
+        }
+
+        Text {
+            text: root.status-message;
+            color: root.status-severity > 0 ? DesignTokens.text-primary : DesignTokens.text-secondary;
+            font-size: DesignTokens.font-small;
+            font-weight: root.status-severity > 0 ? 600 : 400;
+            vertical-alignment: center;
+            overflow: elide;
+            max-width: 280px;
+        }
+
+        if root.context-hint != "": Text {
+            text: root.context-hint;
+            color: DesignTokens.text-muted;
+            font-size: DesignTokens.font-small;
+            vertical-alignment: center;
+            overflow: elide;
+            max-width: 420px;
+        }
+
+        if root.context-hint == "": Rectangle {
+            clip: true;
+            min-width: 0px;
+            horizontal-stretch: 1;
+            preferred-width: hints-row.preferred-width;
+
+            hints-row := HorizontalLayout {
+                spacing: DesignTokens.space-md;
+                alignment: start;
+                KeyHint { key: Tr.t("sl.key_lmb"); action: Tr.t("sl.hint_select"); }
+                KeyHint { key: Tr.t("sl.key_mmb"); action: Tr.t("sl.hint_orbit"); }
+                KeyHint { key: Tr.t("sl.key_shift_mmb"); action: Tr.t("sl.hint_pan"); }
+                KeyHint { key: Tr.t("sl.key_wheel"); action: Tr.t("sl.hint_zoom"); }
+            }
+        }
+
+        if root.precision-mode: Rectangle {
+            border-radius: 3px;
+            background: DesignTokens.badge-precision-bg;
+            border-width: 1px;
+            border-color: DesignTokens.badge-precision-border;
+            HorizontalLayout {
+                padding-left: 5px;
+                padding-right: 5px;
+                Text {
+                    text: Tr.t("sl.shift_precision_0_1");
+                    color: DesignTokens.badge-precision-text;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 700;
+                    font-family: "monospace";
+                }
+            }
+        }
+
+        if root.snap-mode: Rectangle {
+            border-radius: 3px;
+            background: DesignTokens.badge-snap-bg;
+            border-width: 1px;
+            border-color: DesignTokens.badge-snap-border;
+            HorizontalLayout {
+                padding-left: 5px;
+                padding-right: 5px;
+                Text {
+                    text: Tr.t("sl.ctrl_snap");
+                    color: DesignTokens.badge-snap-text;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 700;
+                    font-family: "monospace";
+                }
+            }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        if root.hover-label != "" || root.selection-summary != "": Text {
+            text: root.hover-label != "" ? root.hover-label : root.selection-summary;
+            color: root.hover-label != "" ? DesignTokens.hover : DesignTokens.text-primary;
+            font-size: DesignTokens.font-small;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+
+        if root.hover-label != "" || root.selection-summary != "": Rectangle {
+            width: 1px;
+            height: 14px;
+            background: DesignTokens.border;
+        }
+
+        Text {
+            text: root.scene-stats;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-small;
+            font-weight: 500;
+            vertical-alignment: center;
+        }
+
+        Rectangle { width: 1px; height: 14px; background: DesignTokens.border; }
+
+        Text {
+            text: root.saved ? Tr.t("sl.saved") : Tr.t("sl.unsaved");
+            color: root.saved ? DesignTokens.success : DesignTokens.warning;
+            font-size: DesignTokens.font-small;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+}
