@@ -5,7 +5,7 @@ import { DesignTokens, Motion } from "../tokens.slint";
 export component ViewBar inherits Rectangle {
     in property <length> right-clearance: 0px;
 
-    x: max(14px, (parent.width - root.right-clearance - self.width) / 2);
+    // x é definido pelo container de viewport que conhece sua largura.
     y: 14px;
     width: view-row.preferred-width + 12px;
     height: 38px;

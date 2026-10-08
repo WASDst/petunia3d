@@ -17,8 +17,7 @@ export component PetuniaViewportHost inherits Rectangle {
 
     x: 0px;
     y: 0px;
-    width: root.split-enabled ? (parent.width - 4px) / 2 : parent.width;
-    height: parent.height;
+    // width/height são dimensionados pelo componente pai (app.slint).
     clip: true;
     background: DesignTokens.canvas;
     border-width: 1px;

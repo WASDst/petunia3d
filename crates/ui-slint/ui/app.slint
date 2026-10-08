@@ -1604,6 +1604,8 @@ export component PetuniaSlintShell inherits Window {
                 Rectangle {
                     horizontal-stretch: 1;
                 viewport-region := PetuniaViewportHost {
+                    width: root.split-enabled ? (parent.width - 4px) / 2 : parent.width;
+                    height: parent.height;
                     split-enabled: root.split-enabled;
                     has-gpu-viewport: root.has-gpu-viewport;
                     viewport-image: root.viewport-image;
@@ -2186,6 +2188,7 @@ export component PetuniaSlintShell inherits Window {
                     // RIGHT = como estou vendo. Substitui as três ilhas soltas anteriores.
                     view-bar := ViewBar {
                         right-clearance: root.right-clearance;
+                        x: max(14px, (parent.width - root.right-clearance - self.width) / 2);
                             // LEFT — domínio de seleção do workspace.
                             if active-workspace == "MODEL" || active-workspace == "PAINT": HorizontalLayout {
                                 spacing: 3px;
