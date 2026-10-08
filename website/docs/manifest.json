@@ -120,7 +120,7 @@
         },
         {
           "path": "03-geometry/transforms-origin-pivot-gizmos.md",
-          "title": "Transforms, Origin, Pivot & Gizmos — proposta"
+          "title": "Transforms, Origin, Pivot & Gizmos — aprovado"
         }
       ]
     },
@@ -130,7 +130,7 @@
       "files": [
         {
           "path": "04-renderer/architecture-decision.md",
-          "title": "Arquitetura do Renderer — proposta"
+          "title": "Arquitetura do Renderer — aprovado"
         }
       ]
     },
@@ -184,7 +184,7 @@
       "files": [
         {
           "path": "09-ui/slint-reassessment.md",
-          "title": "Slint Reassessment & GUI Architecture — proposta"
+          "title": "Slint Reassessment & GUI Architecture — aprovado"
         }
       ]
     }
