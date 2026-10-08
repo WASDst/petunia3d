@@ -21,8 +21,7 @@ Em conflito entre páginas, vale esta ordem (capítulo 13 do caderno):
 
 1. `32` — ADR: Migração da Baseline Odin para Rust (stack vigente).
 2. `34` — Arquitetura Modular Explícita, Rust Safety e Representação em Código.
-3. `27–31` (stack/arquitetura/qualidade), `35` (ecossistema egui/Petunia Components)
-   e **`36`** (UI Baseline Final V1, temas e Plugin Panels).
+3. `27–31` (stack/arquitetura/qualidade) e **`36`** (UI Baseline Final V1, temas e Plugin Panels); para frontend, **ADR 009** supersede os trechos egui antigos. `35` é referência histórica do fallback egui e dos princípios toolkit-neutros de Petunia Components.
 4. `09` — Arquitetura, Princípios de Decisão e Governança Técnica.
 5. `21` — Baseline Funcional e UI V1 Congeladas, Stack Rust Final.
 6. `12` — Baseline Funcional, Roadmap e Contrato de Escopo.
