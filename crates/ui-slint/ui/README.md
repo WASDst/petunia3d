@@ -13,3 +13,9 @@ Definições de interface declarativa na linguagem Slint (`.slint`):
 - `gallery.slint`: galeria dos componentes base (`cargo run -p petunia_ui_slint --example gallery`).
 - `animate.slint`: componentes do workspace Animate. Só lê propriedades e emite `action(ação, argumento, valor)`; todo texto vem do Rust por `TextId`.
 - `petunia_icons.slint`: ícones próprios.
+
+- `shell/right_column.slint`: host transitório da coluna direita; controla chrome, rail, hover/peek, header e scroll via `@children`, preparando `Structure + Properties`.
+- `shell/workspace_drawer.slint`: container inferior reutilizável por workspace; posicionamento/splitter separados do conteúdo.
+- `shell/status_bar.slint`: barra de status persistente; contexto contínuo separado de toast.
+- `viewport/context_bar.slint`: moldura da Context Bar da viewport com conteúdo injetado por workspace.
+- `workspaces/model/asset_library.slint`: conteúdo da Asset Library/Prefabs desacoplado da geometria do drawer.
