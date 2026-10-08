@@ -137,7 +137,9 @@ Erros críticos continuam proibidos de depender apenas de toast.
 - `ViewportInputRouter` extraído: o antigo `TouchArea` de ~400 linhas saiu do monólito, mantendo apenas recognition state efêmero e callbacks semânticos;
 - `drag-threshold-px` agora controla a promoção click → drag/box/transform/lasso;
 - Orbit/Pan/Zoom convergem para `UiIntent::ViewportGesture`; Orbit preserva pivot por seleção/Cursor;
-- fases de tool pointer usam `ViewportPointerPhase::{Press,Move,Release,Cancel}` internamente no Rust.
+- fases de tool pointer usam `ViewportPointerPhase::{Press,Move,Release,Cancel}` internamente no Rust;
+- pointer semantics do keymap são projetadas para o router via masks, incluindo Maya `Alt+LMB → Orbit`;
+- `callbacks.rs` caiu de ~6.069 para ~5.487 linhas com navigation/selection/hover/transform/tool pointer/Split View delegados a `bridge/viewport.rs`.
 
 ### Próximas extrações desta fase
 
