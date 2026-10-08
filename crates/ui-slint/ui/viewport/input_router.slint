@@ -11,7 +11,6 @@ import { BrushCursor } from "../components/paint_canvas.slint";
 ///
 /// Não conhece Project, Mesh, SelectionState, ToolSession ou comandos de domínio.
 export component ViewportInputRouter inherits Rectangle {
-    in property <string> active-keymap-id: "petunia-default";
     in property <string> active-tool: "select";
     in property <string> active-workspace: "MODEL";
     in property <string> modeling-mode: "POLY";
@@ -41,6 +40,7 @@ export component ViewportInputRouter inherits Rectangle {
     in-out property <bool> snap-mode: false;
 
     callback focus-requested;
+    callback pointer-modifier-active(string, bool, bool, bool) -> bool;
     callback gizmo-drag-begin(float, float);
     callback gizmo-drag-end;
     callback gizmo-hover(float, float);
@@ -186,8 +186,17 @@ input-touch := TouchArea {
                         }
 
                         pointer-event(event) => {
-                            root.precision-mode = event.modifiers.shift;
-                            root.snap-mode = event.modifiers.control;
+                            let precision = root.pointer-modifier-active("pointer.precision", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let snap = root.pointer-modifier-active("pointer.snap", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let extend = root.pointer-modifier-active("pointer.extend", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let subtract = root.pointer-modifier-active("pointer.subtract", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let pan-mod = root.pointer-modifier-active("pointer.pan", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let cursor-place = root.pointer-modifier-active("pointer.cursor_place", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let adjust = root.pointer-modifier-active("pointer.adjust", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let loop-mod = root.pointer-modifier-active("pointer.loop", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let orbit-left = root.pointer-modifier-active("pointer.orbit_left", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            root.precision-mode = precision;
+                            root.snap-mode = snap;
                             if event.kind == PointerEventKind.down && event.button == PointerEventButton.right
                                 && (is-tool-gesture || root.tool-gesture-latched || is-transform || is-gizmo-drag
                                     || is-tool-drag || is-keyboard-transform-drag || root.transform-instant-active
@@ -198,7 +207,7 @@ input-touch := TouchArea {
                                     root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false, false);
                                 }
                                 self.clear-gesture();
-                                if event.kind == PointerEventKind.down && event.modifiers.shift {
+                                if event.kind == PointerEventKind.down && cursor-place {
                                     consume-click = true;
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
                                 } else {
@@ -211,8 +220,8 @@ input-touch := TouchArea {
                                 last-y = self.mouse-y;
                                 moved-since-down = false;
                                 consume-click = false;
-                                extend-selection = event.modifiers.shift;
-                                loop-selection = event.modifiers.alt;
+                                extend-selection = extend;
+                                loop-selection = loop-mod;
                                 is-transform = false;
                                 pending-transform = false;
                                 pending-box-select = false;
@@ -221,7 +230,7 @@ input-touch := TouchArea {
                                     && (root.tool-gesture-latched
                                         || (root.tool-grammar-active && !root.transform-instant-active
                                             && (!event.modifiers.alt || root.active-tool == "draw_profile")
-                                            && !(event.modifiers.alt && root.active-keymap-id == "maya"))) {
+                                            && !orbit-left)) {
                                     // Gramática única (constituição 11): todas as ferramentas
                                     // de operação — Move/Rotate/Scale, Extrude, Inset, Round
                                     // Edge, Push/Pull, Poly Pen, Shape Builder, Draw Profile,
@@ -236,23 +245,23 @@ input-touch := TouchArea {
                                     && abs(self.mouse-x - root.depth-handle-x) <= 20px
                                     && abs(self.mouse-y - root.depth-handle-y) <= 20px {
                                     is-profile-depth-drag = true;
-                                    tool-drag-fine = event.modifiers.shift;
+                                    tool-drag-fine = precision;
                                     consume-click = true;
                                 } else if event.button == PointerEventButton.middle {
-                                    if event.modifiers.shift {
+                                    if pan-mod {
                                         is-pan = true;
                                         is-orbit = false;
                                     } else {
                                         is-orbit = true;
                                         is-pan = false;
                                     }
-                                } else if event.button == PointerEventButton.left && event.modifiers.alt && root.active-keymap-id == "maya" {
+                                } else if event.button == PointerEventButton.left && orbit-left {
                                     is-orbit = true;
                                     is-pan = false;
-                                } else if event.button == PointerEventButton.left && root.active-tool == "lasso_select" && !event.modifiers.alt {
+                                } else if event.button == PointerEventButton.left && root.active-tool == "lasso_select" && !loop-mod && !orbit-left {
                                     pending-lasso-select = true;
                                     is-lasso-select = false;
-                                    subtract-selection = event.modifiers.control;
+                                    subtract-selection = subtract;
                                     lasso-last-x = self.mouse-x;
                                     lasso-last-y = self.mouse-y;
                                     lasso-count = 0;
@@ -263,7 +272,7 @@ input-touch := TouchArea {
                                     consume-click = true;
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
                                 } else if event.button == PointerEventButton.left
-                                    && (!event.modifiers.alt || root.active-keymap-id != "maya") {
+                                    && !orbit-left {
                                     if root.gizmo-has-hover {
                                         is-gizmo-drag = true;
                                         root.gizmo-drag-begin(self.mouse-x / 1px, self.mouse-y / 1px);
@@ -278,10 +287,10 @@ input-touch := TouchArea {
                                         root.viewport-paint-begin(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
                                     } else if root.loop-cut-active {
                                         is-loop-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
+                                        tool-drag-fine = precision;
                                     } else if root.tool-modal-active {
                                         is-tool-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
+                                        tool-drag-fine = precision;
                                     } else {
                                         local-kind = self.transform-tool();
                                         if local-kind != "" && !event.modifiers.alt {
@@ -358,7 +367,7 @@ input-touch := TouchArea {
                                     // Gramática única: o bridge decide clique × arrasto e aplica.
                                     moved-since-down = true;
                                     root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                                } else if event.modifiers.alt && root.active-keymap-id != "maya"
+                                                                } else if loop-mod && !orbit-left
                                     && (abs(self.mouse-x - last-x) > root.drag-threshold-px * 1px || abs(self.mouse-y - last-y) > root.drag-threshold-px * 1px) {
                                     moved-since-down = true;
                                 } else if root.transform-instant-active && (!self.pressed || is-keyboard-transform-drag) {
@@ -477,7 +486,7 @@ input-touch := TouchArea {
                         scroll-event(event) => {
                             // A roda sempre faz zoom (constituição 11). Ctrl+roda ajusta
                             // contagens (Loop Cut) e o raio da edição proporcional.
-                            if event.modifiers.control {
+                            if adjust {
                                 root.viewport-ctrl-scroll(event.delta-y / 1px);
                             } else {
                                 root.viewport-zoom(event.delta-y / 1px);
