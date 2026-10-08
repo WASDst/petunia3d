@@ -1,6 +1,6 @@
 # Direct Modeling — Push/Pull, Extrude, Inset e Bevel
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Objetivo
 
@@ -920,3 +920,26 @@ Bevel
 ```
 
 Se essas intenções continuarem claras, o Petunia ganha poder sem exigir que o iniciante entenda a implementação.
+
+## Decisões fechadas
+
+1. Push/Pull e Extrude não são sinônimos.
+2. Push/Pull é contextual e preserva a topologia mais simples.
+3. Extrude Faces é operação topológica explícita.
+4. Extrude Individual permanece separada.
+5. Extrude Shape é Generator paramétrico.
+6. Push/Pull de PlanarShape livre cria Extrude Generator por default.
+7. Push/Pull de região sobre Mesh usa imprint + extrusion/pocket.
+8. Face boundary Push/Pull move a superfície sem criar loop novo.
+9. Push/Pull para ao colidir; Cut Through é explícito e somente em caso inequívoco.
+10. Push/Pull participa do Inference Engine para alturas/alinhamentos.
+11. Negative Extrude nunca inverte a Mesh inteira.
+12. Inset default é Region; Individual continua disponível.
+13. Inset continua métrico.
+14. Bevel continua uma ferramenta; Segments=1 equivale a Chamfer.
+15. Bevel edge-set deve ser transacional.
+16. Bevel UI comum suporta 1–8 segments; profile custom fica fora da V1.
+17. Direct editing em Generator usa Make Editable & Continue, nunca bake silencioso.
+18. FaceCorner UV, MaterialSlot, vertex color e provenance fazem parte do contrato da operação.
+19. TopologyResult é enriquecido em vez de criar um history/geometry framework novo.
+20. Last Operation oferece reedição imediata sem transformar operações diretas em modifiers.
