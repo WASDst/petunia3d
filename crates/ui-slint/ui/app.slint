@@ -21,6 +21,7 @@ import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
 import { StatusBar } from "shell/status_bar.slint";
 import { ContextBar } from "viewport/context_bar.slint";
 import { ViewBar } from "viewport/view_bar.slint";
+import { ViewportPassiveOverlays } from "viewport/overlays.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
 import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
@@ -1629,119 +1630,35 @@ export component PetuniaSlintShell inherits Window {
                         vertical-alignment: center;
                     }
 
-                    // Coordenadas já projetadas em pixels da viewport. Não
-                    // normalizar os paths à caixa do item (fit padrão).
-                    if selection-overlay-visible: Path {
-                        fit: ImageFit.preserve;
-                        fill: transparent;
-                        stroke: DesignTokens.text-secondary;
-                        stroke-width: 1.25px;
-                        commands: root.selection-unselected-outline-commands;
-                    }
-                    if selection-overlay-visible: Path {
-                        fit: ImageFit.preserve;
-                        fill: transparent;
-                        // Modo componente usa o mesmo laranja da seleção
-                        // (Blender não pinta seleção de edit-mode de azul):
-                        // o accent virou vestígio e sai na próxima limpeza.
-                        stroke: root.selection-color;
-                        stroke-width: max(2px, root.selection-thickness * 1px);
-                        commands: root.selection-outline-commands;
-                    }
-                    if selection-overlay-visible: Path {
-                        fit: ImageFit.preserve;
-                        fill: transparent;
-                        stroke: root.active-selection-color;
-                        stroke-width: root.selection-thickness * 1.2 * 1px;
-                        commands: root.selection-active-outline-commands;
-                    }
-                    if selection-overlay-visible: Path {
-                        fit: ImageFit.preserve;
-                        fill: DesignTokens.text-muted;
-                        stroke: transparent;
-                        commands: root.selection-unselected-point-commands;
-                    }
-                    if selection-overlay-visible: Path {
-                        fit: ImageFit.preserve;
-                        fill: root.active-selection-color;
-                        stroke: transparent;
-                        commands: root.selection-point-commands;
+                    // Overlays passivos: seleção, animação e previews calculados fora da camada declarativa.
+                    ViewportPassiveOverlays {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: parent.height;
+                        selection-visible: root.selection-overlay-visible;
+                        selection-unselected-outline: root.selection-unselected-outline-commands;
+                        selection-outline: root.selection-outline-commands;
+                        selection-active-outline: root.selection-active-outline-commands;
+                        selection-unselected-points: root.selection-unselected-point-commands;
+                        selection-points: root.selection-point-commands;
+                        selection-color: root.selection-color;
+                        active-selection-color: root.active-selection-color;
+                        selection-thickness: root.selection-thickness;
+
+                        animate-bones-visible: root.active-workspace == "ANIMATE" && root.animate-show-bones;
+                        animate-bone-commands: root.animate-bone-commands;
+                        animate-joint-commands: root.animate-joint-commands;
+
+                        operation-preview: root.operation-preview-commands;
+                        loop-cut-preview: root.loop-cut-preview-commands;
+                        poly-pen-preview: root.poly-pen-preview-commands;
+                        region-shapes: root.region-shapes-commands;
+                        profile-outline: root.profile-outline-commands;
+                        profile-selection: root.profile-selection-commands;
+                        region-hover: root.region-hover-commands;
                     }
 
-                    // Animate: esqueleto posado (ossos + articulações) em pixels
-                    // da viewport, projetado pelo bridge — independe da GPU.
-                    if root.active-workspace == "ANIMATE" && root.animate-show-bones: Path {
-                        fit: ImageFit.preserve;
-                        commands: root.animate-bone-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.accent;
-                        stroke-width: 2.5px;
-                    }
-                    if root.active-workspace == "ANIMATE" && root.animate-show-bones: Path {
-                        fit: ImageFit.preserve;
-                        commands: root.animate-joint-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.text-primary;
-                        stroke-width: 1.5px;
-                    }
-
-                    Path {
-                        fit: ImageFit.preserve;
-                        commands: root.operation-preview-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.selection-active;
-                        stroke-width: 2.5px;
-                    }
-                    Path {
-                        fit: ImageFit.preserve;
-                        commands: root.loop-cut-preview-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.selection-active;
-                        stroke-width: 2px;
-                    }
-                    // Poly Pen: pontos coletados até o cursor.
-                    if root.poly-pen-preview-commands != "": Path {
-                        fit: ImageFit.preserve;
-                        commands: root.poly-pen-preview-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.selection-active;
-                        stroke-width: 2px;
-                    }
-
-                    // Formas do Draw sempre visíveis: tinta leve das regiões e contorno
-                    // dos perfis que não estão em edição.
-                    if root.region-shapes-commands != "": Path {
-                        fit: ImageFit.preserve;
-                        commands: root.region-shapes-commands;
-                        fill-rule: evenodd;
-                        fill: DesignTokens.selection.transparentize(0.9);
-                        stroke: DesignTokens.selection.transparentize(0.6);
-                        stroke-width: 1px;
-                    }
-                    if root.profile-outline-commands != "": Path {
-                        fit: ImageFit.preserve;
-                        commands: root.profile-outline-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.selection.transparentize(0.35);
-                        stroke-width: 1.5px;
-                    }
-                    // Segmento selecionado no domínio Curve (DRAW): traço largo.
-                    if root.profile-selection-commands != "": Path {
-                        fit: ImageFit.preserve;
-                        commands: root.profile-selection-commands;
-                        fill: transparent;
-                        stroke: DesignTokens.selection;
-                        stroke-width: 3px;
-                    }
-                    // Região fechada sob o cursor (Draw/Push-Pull): tinta translúcida.
-                    if root.region-hover-commands != "": Path {
-                        fit: ImageFit.preserve;
-                        commands: root.region-hover-commands;
-                        fill-rule: evenodd;
-                        fill: DesignTokens.selection.transparentize(0.78);
-                        stroke: DesignTokens.selection;
-                        stroke-width: 1.5px;
-                    }
                     if root.parametric-handle-visible && root.parametric-handle-commands != "": Path {
                         fit: ImageFit.preserve;
                         commands: root.parametric-handle-commands;
