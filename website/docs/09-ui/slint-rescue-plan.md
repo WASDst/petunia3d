@@ -122,7 +122,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 
 ### Resultado intermediário
 
-`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.717 linhas sem remover feature de domínio.
+`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.685 linhas sem remover feature de domínio.
 
 ### Extrações adicionais concluídas
 
@@ -132,14 +132,15 @@ Erros críticos continuam proibidos de depender apenas de toast.
 - Status Bar persistente;
 - Context Bar da viewport extraída como host com `@children`;
 - View Bar extraída como host com `@children`;
-- overlays passivos de seleção, Animate e previews de ferramenta extraídos para `viewport/overlays.slint`.
+- overlays passivos de seleção, Animate e previews de ferramenta extraídos para `viewport/overlays.slint`;
+- `PetuniaViewportHost` extraído com superfície, resize lógico/físico, HiDPI e composição da imagem GPU; input/picking/gizmos/tool sessions continuam deliberadamente no chamador.
 
 ### Próximas extrações desta fase
 
-1. View Bar e chrome da viewport;
-2. overlays puramente visuais;
-3. viewport host;
-4. somente depois, input/picking/tool sessions.
+1. validar compilação do shell extraído;
+2. extrair overlays/HUD restantes que não recebem input;
+3. definir `ViewportInputIntent`/boundary antes de mover pointer handling;
+4. somente depois, decompor picking/gizmos/tool sessions.
 
 A viewport é deliberadamente posterior porque concentra input, picking, overlays e tool sessions.
 
@@ -323,4 +324,4 @@ Concluído nesta execução:
 - `StatusToast`;
 - documentação do diretório atualizada.
 
-Próximo alvo: **Viewport shell**, começando por View Bar e overlays de apresentação; picking, input e tool sessions continuam no `PetuniaSlintShell` até a fronteira estar comprovada.
+Próximo alvo: **validação + boundary de input da viewport**. O chrome e a superfície já foram extraídos; picking, input, gizmos e tool sessions permanecem no `PetuniaSlintShell` até existir contrato explícito e compilação validada.
