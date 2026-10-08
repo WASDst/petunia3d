@@ -10,3 +10,10 @@ Este caderno separa explicitamente:
 - decisões aprovadas.
 
 Nenhuma proposta vira arquitetura final automaticamente.
+
+## Autoridade documental
+
+Este caderno contém decisões aprovadas e contratos alvo, mas **não substitui evidência de código/teste**. Consulte o [Registro de decisões](./00-philosophy/decision-register.md) para distinguir arquitetura fechada, migração em andamento, gates bloqueados e expansões intencionalmente adiadas.
+
+A documentação histórica de outras árvores do repositório pode mencionar egui/WGPU como stack canônica; essas referências **não prevalecem** sobre os contratos desta branch.
+

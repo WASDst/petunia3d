@@ -19,3 +19,12 @@ Este site é o **caderno vivo da refatoração**. Cada domínio só vira decisã
 ```bash
 python3 -m http.server 8080 -d website
 ```
+
+## Atualização e publicação
+
+Adicione novos arquivos em website/docs e registre cada página em website/docs/manifest.json. O site é zero-build e usa o manifesto para navegação e busca.
+
+**Atenção:** o workflow existente .github/workflows/docs.yml constrói docs/ (site legado VitePress); ele **não publica website/** automaticamente. Alterações nesta branch de refatoração atualizam a fonte do novo caderno, mas publicação de preview/produção depende de host configurado e não autoriza merge na main.
+
+Links relativos entre capítulos Markdown são convertidos pelo cliente em rotas internas, preservando a navegação do site.
+

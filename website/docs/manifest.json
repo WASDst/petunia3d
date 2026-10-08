@@ -11,6 +11,10 @@
         {
           "path": "00-philosophy/code-quality.md",
           "title": "Qualidade e estilo de código"
+        },
+        {
+          "path": "00-philosophy/decision-register.md",
+          "title": "Registro de decisões e escopo"
         }
       ]
     },
@@ -71,6 +75,10 @@
           "title": "Workspaces de modelagem"
         },
         {
+          "path": "03-geometry/draw-unification-proposal.md",
+          "title": "DRAW / POLY — unificação aprovada"
+        },
+        {
           "path": "03-geometry/shape-builder-3d.md",
           "title": "Shape Builder 3D"
         },
@@ -84,23 +92,23 @@
         },
         {
           "path": "03-geometry/object-geometry-source.md",
-          "title": "Object e Geometry Source — proposta"
+          "title": "Object e Geometry Source — aprovado"
         },
         {
           "path": "03-geometry/scene-hierarchy-transforms.md",
-          "title": "Scene Hierarchy e Transforms — proposta"
+          "title": "Scene Hierarchy e Transforms — aprovado"
         },
         {
           "path": "03-geometry/modifiers-evaluation.md",
-          "title": "Modifiers e Geometry Evaluation — proposta"
+          "title": "Modifiers e Geometry Evaluation — aprovado"
         },
         {
           "path": "03-geometry/snapping-inference-attachments.md",
-          "title": "Snapping, Inference e Surface Attachments — proposta"
+          "title": "Snapping, Inference e Surface Attachments — aprovado"
         },
         {
           "path": "03-geometry/validation-repair-cleanup.md",
-          "title": "Validation, Repair e Cleanup — proposta"
+          "title": "Validation, Repair e Cleanup — aprovado"
         },
         {
           "path": "03-geometry/generators-implementation.md",
@@ -108,15 +116,15 @@
         },
         {
           "path": "03-geometry/normals-shading-sharp-edges.md",
-          "title": "Normals, Shading e Sharp Edges — proposta"
+          "title": "Normals, Shading e Sharp Edges — aprovado"
         },
         {
           "path": "03-geometry/snapping-inference-workplane.md",
-          "title": "Snapping, Inference & Workplane — proposta"
+          "title": "Snapping, Inference e Workplane — aprovado"
         },
         {
           "path": "03-geometry/direct-modeling-semantics.md",
-          "title": "Direct Modeling — Push/Pull, Extrude, Inset e Bevel — proposta"
+          "title": "Direct Modeling — aprovado"
         },
         {
           "path": "03-geometry/transforms-origin-pivot-gizmos.md",
@@ -140,7 +148,7 @@
       "files": [
         {
           "path": "05-materials/architecture-decision.md",
-          "title": "Materials, Textures e Paint Binding — proposta"
+          "title": "Materials, Textures e Paint Binding — aprovado"
         }
       ]
     },
@@ -215,6 +223,68 @@
         {
           "path": "10-animation/workspace-ux.md",
           "title": "ANIMATE Workspace — UX e comportamento — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "title": "Project & Assets",
+      "files": [
+        {
+          "path": "11-project/project-persistence.md",
+          "title": "Project, Document, Save e Recovery — aprovado"
+        },
+        {
+          "path": "11-project/assets-resource-management.md",
+          "title": "Assets, Library e Recursos Compartilhados — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "interchange",
+      "title": "Import & Export",
+      "files": [
+        {
+          "path": "12-interchange/import-export-game-ready.md",
+          "title": "Import, Export e Game-Ready — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "extensions",
+      "title": "Plugins & Automation",
+      "files": [
+        {
+          "path": "13-extensions/lua-plugins-public-api.md",
+          "title": "Lua Plugins e Public API — aprovado"
+        },
+        {
+          "path": "13-extensions/mcp-automation-agents.md",
+          "title": "MCP, Automação e Agentes — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "quality",
+      "title": "Quality & Performance",
+      "files": [
+        {
+          "path": "14-quality/testing-ci-conformance.md",
+          "title": "Testing, CI e Conformance — aprovado"
+        },
+        {
+          "path": "14-quality/performance-jobs-budgets.md",
+          "title": "Performance, Jobs e Budgets — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "title": "Build & Distribution",
+      "files": [
+        {
+          "path": "15-platform/build-distribution-compatibility.md",
+          "title": "Build, Distribuição e Compatibilidade — aprovado"
         }
       ]
     }

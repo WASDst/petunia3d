@@ -416,6 +416,34 @@ function enhanceRenderedMarkdown() {
     }
   });
 
+  // Links Markdown locais devem navegar pela rota do caderno, não pelo diretório /docs do host.
+  // Somente páginas presentes no manifesto podem ser abertas dessa forma.
+  const knownPaths = new Set([
+    "home.md",
+    "about.md",
+    ...manifest.domains.flatMap(function (domain) {
+      return domain.files.map(function (file) { return file.path; });
+    })
+  ]);
+  content.querySelectorAll(".markdown-body a[href]").forEach(function (link) {
+    const href = link.getAttribute("href") || "";
+    if (!href || href.startsWith("#/docs/") || /^(https?:|mailto:|tel:|\/\/)/i.test(href)) return;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("/")) return;
+
+    // Anchors locais e links relativos para arquivos .md pertencem ao SPA.
+    const match = /^(.*?)(?:#([^#]*))?$/.exec(href);
+    if (!match) return;
+    const target = match[1];
+    if (target && !/\.md$/i.test(target)) return;
+
+    const resolved = target
+      ? new URL(target, new URL(currentPath, "https://petunia-docs.invalid/")).pathname.slice(1)
+      : currentPath;
+    if (!knownPaths.has(resolved)) return;
+    const anchor = match[2] ? "#" + encodeURIComponent(match[2]) : "";
+    link.href = "#/docs/" + resolved + anchor;
+  });
+
   content.querySelectorAll('.markdown-body a[href^="http"]').forEach(function (link) {
     link.target = "_blank";
     link.rel = "noreferrer";
