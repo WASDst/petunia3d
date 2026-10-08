@@ -352,8 +352,8 @@ Isso evita uma extração grande demais.
 
 ## 17. Próxima migração
 
-### Passo A
-Substituir thresholds literais 3/4 px por input configurável vindo de `drag-threshold-px`.
+### Passo A — concluído
+Os thresholds de promoção de click → drag/box/transform/lasso agora recebem `drag-threshold-px` da preferência de acessibilidade. O espaçamento interno de amostragem do caminho do lasso permanece separado, pois não representa intenção de drag.
 
 ### Passo B
 Separar modificadores físicos de significados de keymap onde ainda estão misturados no Slint.
