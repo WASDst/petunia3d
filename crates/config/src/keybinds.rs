@@ -1130,4 +1130,54 @@ mod tests {
         kb.remove_binding("model.extrude");
         assert_eq!(kb.shortcut_for("model.extrude"), None);
     }
+
+    #[test]
+    fn viewport_pointer_semantics_come_from_the_active_keymap() {
+        let defaults = Keybinds::load_profile("petunia-default");
+        let maya = Keybinds::load_profile("maya");
+
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_PRECISION),
+            Mods2 {
+                shift: true,
+                ..Mods2::default()
+            }
+        );
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_SNAP),
+            Mods2 {
+                ctrl: true,
+                ..Mods2::default()
+            }
+        );
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_LOOP),
+            Mods2 {
+                alt: true,
+                ..Mods2::default()
+            }
+        );
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_ORBIT_LEFT),
+            Mods2::default(),
+            "Petunia default must not turn Alt+LMB into orbit"
+        );
+        assert_eq!(
+            maya.pointer_modifier(POINTER_ORBIT_LEFT),
+            Mods2 {
+                alt: true,
+                ..Mods2::default()
+            },
+            "Maya-like navigation must be profile data, not a UI special case"
+        );
+        assert_eq!(
+            maya.pointer_modifier(POINTER_PAN),
+            Mods2 {
+                shift: true,
+                ..Mods2::default()
+            },
+            "profiles inherit canonical pointer actions unless they override them"
+        );
+    }
+
 }
