@@ -131,6 +131,16 @@
           "title": "Materials, Textures e Paint Binding — proposta"
         }
       ]
+    },
+    {
+      "id": "paint",
+      "title": "Paint",
+      "files": [
+        {
+          "path": "06-paint/architecture-decision.md",
+          "title": "Paint Architecture — proposta"
+        }
+      ]
     }
   ]
 }
