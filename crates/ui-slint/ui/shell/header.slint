@@ -1,5 +1,5 @@
 import { IconSet } from "@lucide";
-import { DesignTokens } from "../tokens.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
 import { CommandSearchField } from "../components/base.slint";
 import { MenuButton, TopAction, WorkspaceSegment } from "../components/controls.slint";
@@ -69,7 +69,7 @@ export component ShellHeader inherits Rectangle {
             MenuButton {
                 label: root.menu-file-label;
                 shortcut: "Alt+F";
-                description: "New, open, save, import and export";
+                description: Tr.t("sl.new_open_save_import_export_projects_and_sce");
                 open: root.menu-open == "file";
                 clicked => { root.menu-toggled("file", self.absolute-position.x); }
                 hovered => {
@@ -81,7 +81,7 @@ export component ShellHeader inherits Rectangle {
             MenuButton {
                 label: root.menu-edit-label;
                 shortcut: "Alt+E";
-                description: "Undo, redo, history and application preferences";
+                description: Tr.t("sl.undo_redo_history_and_global_application_pre");
                 open: root.menu-open == "edit";
                 clicked => { root.menu-toggled("edit", self.absolute-position.x); }
                 hovered => {
@@ -93,7 +93,7 @@ export component ShellHeader inherits Rectangle {
             MenuButton {
                 label: root.menu-view-label;
                 shortcut: "Alt+V";
-                description: "Camera, viewport overlays and rendering";
+                description: Tr.t("sl.camera_viewpoints_viewport_overlays_and_rend");
                 open: root.menu-open == "view";
                 clicked => { root.menu-toggled("view", self.absolute-position.x); }
                 hovered => {
@@ -105,7 +105,7 @@ export component ShellHeader inherits Rectangle {
             MenuButton {
                 label: root.menu-window-label;
                 shortcut: "Alt+W";
-                description: "Panels, layout, fullscreen and accessibility";
+                description: Tr.t("sl.toggle_panels_layouts_fullscreen_mode_and_ac");
                 open: root.menu-open == "window";
                 clicked => { root.menu-toggled("window", self.absolute-position.x); }
                 hovered => {
@@ -137,18 +137,18 @@ export component ShellHeader inherits Rectangle {
             TopAction {
                 icon: IconSet.Undo;
                 icon-svg: PetuniaIcons.undo;
-                semantic-label: "Undo";
+                semantic-label: Tr.t("sl.undo");
                 shortcut: root.shortcut-undo;
-                description: "Revert the most recent operation";
+                description: Tr.t("sl.revert_the_most_recent_modeling_or_editing_o");
                 enabled: root.can-undo;
                 clicked => { root.undo-requested(); }
             }
             TopAction {
                 icon: IconSet.Redo;
                 icon-svg: PetuniaIcons.redo;
-                semantic-label: "Redo";
+                semantic-label: Tr.t("sl.redo");
                 shortcut: root.shortcut-redo;
-                description: "Reapply the most recently undone operation";
+                description: Tr.t("sl.reapply_the_most_recently_undone_operation");
                 enabled: root.can-redo;
                 clicked => { root.redo-requested(); }
             }
@@ -156,7 +156,7 @@ export component ShellHeader inherits Rectangle {
             Rectangle { width: 1px; height: 16px; background: DesignTokens.border; }
 
             CommandSearchField {
-                placeholder: "Search commands";
+                placeholder: Tr.t("sl.search_command_placeholder");
                 shortcut: root.shortcut-search;
                 activated => { root.search-requested(); }
             }
@@ -164,9 +164,9 @@ export component ShellHeader inherits Rectangle {
             TopAction {
                 icon: IconSet.Settings;
                 icon-svg: PetuniaIcons.settings;
-                semantic-label: "Settings";
+                semantic-label: Tr.t("sl.settings");
                 shortcut: root.shortcut-settings;
-                description: "Open application preferences, keymaps and themes";
+                description: Tr.t("sl.open_application_preferences_keymaps_and_the");
                 clicked => { root.settings-requested(); }
             }
         }
