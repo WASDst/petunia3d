@@ -2118,7 +2118,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_viewport_orbit(move |dx, dy| {
         if let Ok(mut bridge) = orbit_bridge.lock() {
-            bridge.orbit_viewport(dx, dy);
+            bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit { dx, dy }));
             let new_frame = bridge.render_viewport();
             if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
                 sync_viewport_overlays(&window, &bridge);
