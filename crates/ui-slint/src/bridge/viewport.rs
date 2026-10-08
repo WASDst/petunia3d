@@ -7,7 +7,6 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
-use petunia_config::keybinds::Mods2;
 use petunia_core::{SelectionDomain, Workspace};
 
 use crate::{
@@ -25,19 +24,6 @@ pub(crate) fn connect_navigation_callbacks<V: PetuniaViewport + 'static>(
     window: &PetuniaSlintShell,
     bridge: Arc<Mutex<SlintUiBridge<V>>>,
 ) {
-    let pointer_mod_bridge = Arc::clone(&bridge);
-    window.on_pointer_modifier_active(move |action, shift, ctrl, alt| {
-        let Ok(bridge) = pointer_mod_bridge.lock() else {
-            return false;
-        };
-        bridge
-            .state
-            .ui
-            .keybinds
-            .pointer_modifier(action.as_str())
-            .held_in(Mods2 { ctrl, shift, alt })
-    });
-
     let orbit_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_viewport_orbit(move |dx, dy| {
