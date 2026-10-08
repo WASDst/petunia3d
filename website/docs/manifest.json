@@ -121,6 +121,16 @@
           "title": "Arquitetura do Renderer — proposta"
         }
       ]
+    },
+    {
+      "id": "materials",
+      "title": "Materials & Textures",
+      "files": [
+        {
+          "path": "05-materials/architecture-decision.md",
+          "title": "Materials, Textures e Paint Binding — proposta"
+        }
+      ]
     }
   ]
 }
