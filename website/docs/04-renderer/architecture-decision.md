@@ -7,8 +7,13 @@
 O alvo do Petunia3D é:
 
 ```text
-winit + glutin + glow/OpenGL + egui + egui_glow
+Slint 1.18
++ winit platform backend
++ FemtoVG/OpenGL composition
++ petunia-render / glow OpenGL 3.3 Core viewport
 ```
+
+A decisão anterior `egui + egui_glow` para o host visual fica superseded pela aprovação de **Slint + OpenGL** em 2026-10-08. O renderer 3D continua independente da UI; somente o adapter/host muda.
 
 Baseline:
 
@@ -220,35 +225,40 @@ Não hashear pixels inteiros por frame.
 
 ## Context ownership
 
-DesktopHost possui:
+O host desktop/Slint possui:
 
-- Window;
-- glutin context/surface;
+- Window/event loop através do backend de plataforma;
+- contexto OpenGL corrente usado pela composição Slint/FemtoVG;
 - swap/present;
 - resize;
 - DPI;
 - OpenGL capability detection;
-- egui integration.
+- lifecycle/notifiers necessários para renderização integrada.
 
-`petunia-render` recebe um contexto OpenGL válido e gerencia apenas recursos/passes gráficos.
+`petunia-render` recebe acesso a um contexto OpenGL válido/corrente e gerencia apenas recursos, FBOs e passes gráficos.
 
-O atual `render-gl/bootstrap.rs` deve migrar conceitualmente para DesktopHost.
+`glutin` pode continuar existindo como detalhe de implementação quando necessário à integração, mas **não é uma fronteira de produto** e não deve obrigar o renderer a conhecer o host.
+
+O bootstrap atual de `render-gl` serve como referência de criação/capability detection, mas ownership final deve respeitar a integração Slint aprovada.
 
 ## Um único contexto OpenGL
 
-Viewport 3D e egui usam o mesmo contexto.
+Viewport 3D e composição Slint/FemtoVG usam o mesmo contexto OpenGL corrente ou um caminho de compartilhamento equivalente validado pelo protótipo.
 
-Ordem:
+Ordem conceitual:
 
 ```text
-begin frame
-→ render viewport 3D
+Slint rendering notifier / current GL context
+→ render viewport 3D para FBO quando dirty
 → render viewport overlays GPU
-→ egui paint
+→ expor/usar a textura GL do viewport no Slint
+→ Slint/FemtoVG compõe o shell
 → present
 ```
 
-O renderer restaura apenas os estados GL que realmente compartilha com egui; evitar reset global caro e implícito.
+**Proibido no destino:** `glReadPixels` por frame para converter o viewport em imagem CPU.
+
+O renderer restaura apenas os estados GL realmente compartilhados com Slint/FemtoVG; evitar reset global caro e implícito. O protótipo deve provar state restoration, resize, HiDPI e ausência de readback síncrono no hot path.
 
 ## Render passes V1
 
@@ -720,8 +730,8 @@ O renderer deve ser simples de rastrear no código e previsível para humanos e 
 6. Geometry/Application produz `RenderMesh` já triangulada com UV e corner normals resolvidas.
 7. GPU cache é por ObjectId/revision, não fingerprint global da cena.
 8. Selection/hover usam overlay buffers separados e não invalidam RenderMesh.
-9. DesktopHost possui Window/glutin/context/present; renderer possui GPU resources/passes.
-10. Viewport e egui compartilham um único contexto OpenGL.
+9. O host Slint possui window/event loop/context/present; renderer possui GPU resources/FBOs/passes.
+10. Viewport e Slint/FemtoVG compartilham o contexto OpenGL (ou caminho equivalente sem readback CPU por frame).
 11. Constant-pixel lines, EdgeMode, outlines, workplane, gizmos, Matcap, AO, MSAA, X-Ray e dirty texture updates são portados do comportamento WGPU.
 12. MSAA permanece, preferencialmente com FBO próprio.
 13. Matcap permanece.
