@@ -336,4 +336,6 @@ No ponto de inspeção desta rodada, `app.slint` possuía cerca de **9.350 linha
 
 **Validação:** testes foram adicionados, mas sua aprovação depende de execução real do gate `ui-slint`. A existência dos testes não equivale a build validado.
 
+**Bugs estruturais detectados pelo gate:** o compilador Slint 1.18 não permite `@children` dentro de elementos condicionais e não permite acesso a `parent` em bindings do componente raiz. O Rescue mantém `RightColumnShell` e `WorkspaceDrawer` estruturalmente presentes com visibilidade controlada; posicionamento relativo ao parent de `ContextBar`, `ViewBar` e `PetuniaViewportHost` pertence ao `app.slint`. `ViewportInputRouter::clear-gesture` foi explicitado como função pública para o shell. O gate confirmou `cargo fmt --check` e `ui-lint` passando nas revisões recentes; Clippy/compilação e testes só serão marcados como aprovados quando a execução correspondente terminar sem erro.
+
 Próximo alvo: **dividir o registro da viewport em módulos coesos sem transformar `bridge/viewport.rs` em novo monólito**, preservar Rust para picking, ToolSession e gizmo geometry, e evoluir para DTOs/intents explícitos de select/hover/box/lasso. A gramática semântica específica de PAINT requer outra rodada para clone/decal/straight stroke.
