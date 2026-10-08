@@ -2361,27 +2361,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.sync_viewport_context();
     }
 
-    /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre
-    /// faz zoom (constituição 11). Contagens e raios usam `viewport_ctrl_scroll`.
-    pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
-        match gesture {
-            ViewportGesture::Orbit { dx, dy } => {
-                // Orbit possui semântica adicional: usa Cursor/selection pivot.
-                // Reutilizar a mesma implementação pública evita dois caminhos
-                // de câmera divergentes entre callback direto e UiIntent.
-                self.orbit_viewport(dx, dy);
-                return;
-            }
-            ViewportGesture::Pan { dx, dy } => {
-                self.state.session.camera.pan(dx, dy);
-            }
-            ViewportGesture::Zoom { delta } => {
-                self.state.session.camera.zoom(delta);
-            }
-        }
-        self.state.mark_dirty();
-    }
-
     /// Opções de render compartilhadas pela vista principal e pela secundária.
     fn viewport_render_state(&self) -> ViewportRenderState {
         ViewportRenderState {
@@ -2800,36 +2779,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         commands
     }
 
-    pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        self.resize_viewport_scaled(width, height, self.pixel_ratio);
-    }
-
-    /// Redimensiona a viewport. `width`/`height` são px lógicos (câmera, picking
-    /// e overlays); `pixel_ratio` é px físicos por px lógico (fator de escala da
-    /// janela, incluindo a preferência de UI scale).
-    pub fn resize_viewport_scaled(&mut self, width: u32, height: u32, pixel_ratio: f32) {
-        let width = width.max(1);
-        let height = height.max(1);
-        let ratio = if pixel_ratio.is_finite() && pixel_ratio > 0.0 {
-            pixel_ratio.clamp(0.5, 4.0)
-        } else {
-            1.0
-        };
-        self.pixel_ratio = ratio;
-        if self.viewport.uses_physical_pixels() {
-            self.viewport.set_pixel_ratio(ratio);
-            self.viewport.resize(
-                (width as f32 * ratio).round().max(1.0) as u32,
-                (height as f32 * ratio).round().max(1.0) as u32,
-            );
-        } else {
-            self.viewport.resize(width, height);
-        }
-        self.viewport_size = [width as f32, height as f32];
-        self.state.session.camera.aspect = width as f32 / height as f32;
-        self.state.mark_dirty();
-    }
-
     /// Preenche o HUD da operação e a barra de status contextual.
     ///
     /// O HUD diz *o que está acontecendo e com que valor*; a barra diz *como
@@ -3101,27 +3050,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .t_id(petunia_config::text_id::SELECTION_MODE)
             .replace("{domain}", &self.state.t_id(domain));
         self.state.set_status(message);
-    }
-
-    /// Orbita a câmera, usando a seleção como pivô quando existe.
-    ///
-    /// É o comportamento de Blender/C4D: o usuário orbita em torno do que
-    /// está trabalhando, não de um ponto fixo da cena.
-    pub fn orbit_viewport(&mut self, dx: f32, dy: f32) -> bool {
-        if !dx.is_finite() || !dy.is_finite() {
-            return false;
-        }
-        if self.state.session.tools.active_tool == "cursor"
-            || self.state.session.tools.active_tool == "cursor_3d"
-            || self.state.session.pivot_point == petunia_core::PivotPoint::Cursor3D
-        {
-            self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
-        } else if let Some(center) = self.selection_pivot() {
-            self.state.session.camera.target = center;
-        }
-        self.state.session.camera.orbit(dx, dy);
-        self.state.mark_dirty();
-        true
     }
 
     pub fn set_pivot_point(&mut self, id: &str) -> bool {
