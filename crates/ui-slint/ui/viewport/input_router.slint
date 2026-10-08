@@ -293,7 +293,7 @@ input-touch := TouchArea {
                                         tool-drag-fine = precision;
                                     } else {
                                         local-kind = self.transform-tool();
-                                        if local-kind != "" && !event.modifiers.alt {
+                                        if local-kind != "" && !loop-mod && !orbit-left {
                                             // A ferramenta só inicia uma operação após um
                                             // arrasto real; um clique continua selecionando.
                                             pending-transform = true;
@@ -303,12 +303,12 @@ input-touch := TouchArea {
                                             && !root.transform-instant-active
                                             && !root.tool-modal-active
                                             && !root.loop-cut-active
-                                            && !event.modifiers.alt {
+                                            && !loop-mod && !orbit-left {
                                             // Tweak / Box Select (Blender): arrastar
                                             // vira box select; o clique (sem
                                             // arrasto) cai no viewport-select.
                                             pending-box-select = true;
-                                            subtract-selection = event.modifiers.control;
+                                            subtract-selection = subtract;
                                         }
                                     }
                                 }
