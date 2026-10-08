@@ -1130,3 +1130,17 @@ A rodada foi aprovada com o seguinte pacote indivisível:
 - o próximo trabalho de arquitetura da GUI deve detalhar e executar o **Slint Rescue** por fases, preservando componentes, fluxos e testes existentes.
 
 Esta aprovação substitui o status de proposta registrado originalmente no commit `a1f1c0909a54dd75b52ff1204d6a888236ea244d`.
+
+
+---
+
+## Continuação da especificação de UI
+
+A aprovação deste capítulo é detalhada em:
+
+- [Workspaces, Feedback Visual e Acessibilidade](./workspaces-feedback-accessibility.md) — gramática espacial comum, comportamento de MODEL/DRAW/POLY/PAINT/UV/ANIMATE, estados visuais, overlays, feedback e hard gates de acessibilidade;
+- [PAINT Workspace — UX e Comportamento](../06-paint/workspace-ux.md);
+- [UV Workspace — UX e Comportamento](../07-uv/workspace-ux.md);
+- [ANIMATE Workspace — UX e Comportamento](../10-animation/workspace-ux.md).
+
+Esses capítulos são o contrato de produto a ser preservado durante o Slint Rescue. A refatoração do shell deve migrar progressivamente para eles sem remover funcionalidades existentes apenas para simplificar a implementação.
