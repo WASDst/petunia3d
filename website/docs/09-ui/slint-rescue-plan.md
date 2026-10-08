@@ -122,7 +122,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 
 ### Resultado intermediário
 
-`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.328 linhas sem remover feature de domínio.
+`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.330 linhas sem remover feature de domínio. A pequena variação após a extração veio da nova boundary semântica de modificadores; o roteador pesado continua fora do monólito.
 
 ### Extrações adicionais concluídas
 
@@ -328,4 +328,6 @@ Concluído nesta execução:
 - `StatusToast`;
 - documentação do diretório atualizada.
 
-Próximo alvo: **separar modificadores físicos de significados do keymap e modularizar os callbacks Rust da viewport**. Picking geométrico, gizmos e ToolSession continuam no Rust; o recognition layer Slint já está isolado.
+`callbacks.rs` caiu de aproximadamente 6.069 para 5.585 linhas; `lib.rs` caiu para aproximadamente 16.952 linhas após mover navegação, resize e render da viewport para `src/bridge/viewport.rs`.
+
+Próximo alvo: **continuar decompondo o bridge Rust por domínio sem transformar `bridge/viewport.rs` em novo monólito**. PAINT e DRAW já ganharam módulos próprios; picking geométrico e seleção complexa só migram após definição de query/service dedicada.
