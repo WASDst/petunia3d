@@ -113,6 +113,10 @@
         {
           "path": "03-geometry/snapping-inference-workplane.md",
           "title": "Snapping, Inference & Workplane — proposta"
+        },
+        {
+          "path": "03-geometry/direct-modeling-semantics.md",
+          "title": "Direct Modeling — Push/Pull, Extrude, Inset e Bevel — proposta"
         }
       ]
     },
