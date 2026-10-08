@@ -355,8 +355,12 @@ Isso evita uma extração grande demais.
 ### Passo A — concluído
 Os thresholds de promoção de click → drag/box/transform/lasso agora recebem `drag-threshold-px` da preferência de acessibilidade. O espaçamento interno de amostragem do caminho do lasso permanece separado, pois não representa intenção de drag.
 
-### Passo B
-Separar modificadores físicos de significados de keymap onde ainda estão misturados no Slint.
+### Passo B — concluído para a gramática global da viewport
+Ações globais de pointer agora usam `[pointer]` no keymap: `precision`, `snap`, `extend`, `subtract`, `pan`, `cursor_place`, `adjust`, `loop` e `orbit_left`.
+
+O perfil Maya declara `orbit_left = "Alt"`; o Slint não testa mais `active-keymap-id == "maya"`.
+
+Modificadores crus ainda atravessam a boundary para ToolSession e PAINT quando a interpretação pertence à própria ferramenta. A rodada específica de PAINT deve substituir Shift/Ctrl semânticos de clone/decal/straight stroke por ações de pointer próprias antes de considerar esse domínio totalmente migrado.
 
 ### Passo C
 Criar DTO/intent Rust mais explícito para:
@@ -419,3 +423,15 @@ Slint pode decidir se o usuário clicou, arrastou, orbitou ou iniciou um lasso.
 Slint não decide como modificar mesh, como resolver snapping geométrico, como aplicar uma ToolSession ou como registrar Undo.
 
 Essa boundary é a condição para continuar decompondo a viewport sem reconstruir o acoplamento em outro arquivo.
+
+
+## 21. Progresso da modularização Rust
+
+A boundary deixou de existir apenas no markup:
+
+- `src/bridge/viewport.rs` registra navegação, resize, seleção, Cursor 3D, hover, transform/gizmo e contexto;
+- `src/bridge/model.rs` recebe gestos de Profile/DRAW;
+- `src/bridge/paint.rs` recebe strokes 3D do PAINT;
+- `render_viewport`, `viewport_render_state`, `apply_viewport_gesture`, resize e orbit foram removidos do `lib.rs` raiz e vivem no módulo de viewport.
+
+Os algoritmos grandes de picking/seleção permanecem no Rust e serão extraídos apenas quando houver uma boundary de query/service clara; não serão movidos mecanicamente só para reduzir LOC.
