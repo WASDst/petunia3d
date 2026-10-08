@@ -14,7 +14,7 @@ use crate::{
     callbacks::{sync_viewport_overlays, sync_window_properties},
     projection::parse_lasso_path,
     refresh::{self, RefreshThrottle},
-    PetuniaSlintShell, PetuniaViewport, SlintUiBridge, UiIntent, ViewportGesture,
+    PetuniaSlintShell, PetuniaViewport, SlintUiBridge, TransformKind, UiIntent, ViewportGesture,
 };
 
 /// Conecta navegação de câmera e resize da viewport.
@@ -330,6 +330,99 @@ pub(crate) fn connect_hover_callbacks<V: PetuniaViewport + 'static>(
                 &mut *bridge,
                 &gizmo_hover_throttle,
             );
+        }
+    });
+}
+
+
+/// Conecta transformações interativas da viewport e drag de gizmos.
+///
+/// O reconhecimento de gesto acontece no Slint; a sessão e a matemática ficam no bridge/core.
+pub(crate) fn connect_transform_callbacks<V: PetuniaViewport + 'static>(
+    window: &PetuniaSlintShell,
+    bridge: Arc<Mutex<SlintUiBridge<V>>>,
+    throttle: Rc<RefreshThrottle>,
+) {
+    let transform_begin_bridge = Arc::clone(&bridge);
+    window.on_viewport_transform_begin(move |kind_str, x, y| {
+        let kind = match kind_str.as_str() {
+            "pos" => TransformKind::Position,
+            "rot" => TransformKind::Rotation,
+            "scale" => TransformKind::Scale,
+            "slice" => {
+                if let Ok(mut bridge) = transform_begin_bridge.lock() {
+                    bridge.begin_slice(x, y);
+                }
+                return;
+            }
+            _ => return,
+        };
+        if let Ok(mut bridge) = transform_begin_bridge.lock() {
+            bridge.begin_viewport_transform(kind, x, y);
+        }
+    });
+
+    let transform_drag_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    let transform_drag_throttle = Rc::clone(&throttle);
+    window.on_viewport_transform_update(move |x, y, fine, snap| {
+        if let Ok(mut bridge) = transform_drag_bridge.lock() {
+            bridge.pointer_position = [x, y];
+            if !bridge.update_viewport_slice_modified(x, y, snap) {
+                bridge.update_viewport_transform_modified(x, y, fine, snap);
+            }
+            if let Some(window) = window_weak.upgrade() {
+                refresh::refresh_interactive(
+                    &window,
+                    &transform_drag_bridge,
+                    &mut *bridge,
+                    &transform_drag_throttle,
+                );
+            }
+        }
+    });
+
+    let transform_end_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_transform_end(move || {
+        if let Ok(mut bridge) = transform_end_bridge.lock() {
+            bridge.end_viewport_transform();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
+
+    let gizmo_begin_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_gizmo_drag_begin(move |x, y| {
+        if let Ok(mut bridge) = gizmo_begin_bridge.lock() {
+            bridge.begin_gizmo_drag(x, y);
+            let vm = bridge.view_model();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+            }
+        }
+    });
+
+    let gizmo_end_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_gizmo_drag_end(move || {
+        if let Ok(mut bridge) = gizmo_end_bridge.lock() {
+            bridge.end_gizmo_drag();
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
         }
     });
 }
