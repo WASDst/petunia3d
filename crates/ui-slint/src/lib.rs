@@ -2361,54 +2361,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.sync_viewport_context();
     }
 
-    /// Opções de render compartilhadas pela vista principal e pela secundária.
-    fn viewport_render_state(&self) -> ViewportRenderState {
-        ViewportRenderState {
-            shading: self.state.session.shading,
-            xray: self.state.session.show_xray,
-            show_triangulation: self.state.session.show_triangulation,
-            textured: self.state.session.textured,
-            show_wireframe_overlay: self.state.session.show_wireframe_overlay,
-            show_face_orientation: self.state.session.show_face_orientation,
-            show_uv_checker: self.state.session.show_uv_checker,
-            selection_domain: self.state.selection_domain(),
-            xray_opacity: self.state.session.xray_opacity,
-            selection_rgb: self.state.ui.selection_rgb,
-            selection_thickness: self.state.ui.selection_thickness,
-            show_grid: self.state.session.show_grid,
-            hover: self.state.session.tools.hover,
-            boolean_operand: self.state.session.tools.boolean_operand,
-            studio_light_follows_camera: self.preferences.studio_light_follows_camera,
-            matcap: self.preferences.viewport_matcap,
-            ambient_occlusion: self.preferences.viewport_ambient_occlusion,
-            edge_mode: self.edge_mode(),
-            workplane: self.workplane_overlay(),
-        }
-    }
-
-    pub fn render_viewport(&mut self) -> Option<slint::Image> {
-        puffin::profile_function!();
-        let render_state = self.viewport_render_state();
-        self.viewport
-            .queue_texture_updates(self.state.render.take_texture_updates());
-        let pose = self.animate_pose_override();
-        self.viewport.set_pose_override(pose);
-        let (outlined, active) = self.outlined_objects();
-        self.viewport.set_outlined_objects(&outlined, active);
-        self.viewport
-            .set_rigid_previews(self.state.rigid_preview_transforms());
-        if self.viewport.draws_gizmo() {
-            let shapes = self.gizmo_overlay_shapes();
-            self.viewport.set_screen_overlay(shapes);
-        }
-        self.viewport.render_frame(
-            &self.state.project,
-            &self.state.project.refs,
-            &self.state.session.camera,
-            render_state,
-        )
-    }
-
     /// Cria uma camada de efeito com parâmetros padrão para o tipo pedido.
     pub fn add_paint_effect_layer(&mut self, kind: &str) -> bool {
         use petunia_project::paint_layers::{PaintEffect, PaintLayer};
