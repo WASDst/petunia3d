@@ -19,3 +19,5 @@ Definições de interface declarativa na linguagem Slint (`.slint`):
 - `shell/status_bar.slint`: barra de status persistente; contexto contínuo separado de toast.
 - `viewport/context_bar.slint`: moldura da Context Bar da viewport com conteúdo injetado por workspace.
 - `workspaces/model/asset_library.slint`: conteúdo da Asset Library/Prefabs desacoplado da geometria do drawer.
+- `viewport/view_bar.slint`: chrome da View Bar, com controles específicos ainda fornecidos por `@children`.
+- `viewport/overlays.slint`: overlays passivos de seleção, skeleton e previews; não recebe input nem altera domínio.
