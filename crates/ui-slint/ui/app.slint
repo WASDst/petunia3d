@@ -1481,159 +1481,42 @@ export component PetuniaSlintShell inherits Window {
         VerticalLayout {
             spacing: 0px;
 
-            Rectangle {
-                height: 42px;
-                background: DesignTokens.surface;
-                border-width: 1px;
-                border-color: DesignTokens.border;
+            ShellHeader {
+                menu-open: root.menu-open;
+                menu-file-label: root.menu-file-label;
+                menu-edit-label: root.menu-edit-label;
+                menu-view-label: root.menu-view-label;
+                menu-window-label: root.menu-window-label;
+                active-workspace: root.active-workspace;
+                modeling-mode: root.modeling-mode;
+                draw-title: root.label-workspace-draw-title;
+                draw-description: root.label-workspace-draw-description;
+                poly-title: root.label-workspace-poly-title;
+                poly-description: root.label-workspace-poly-description;
+                reduced-motion: root.reduced-motion;
+                animate-available: root.animate-available;
+                animate-label: root.animate-texts.workspace-label;
+                animate-tip: root.animate-texts.workspace-tip;
+                can-undo: root.can-undo;
+                can-redo: root.can-redo;
+                shortcut-undo: root.shortcuts.undo;
+                shortcut-redo: root.shortcuts.redo;
+                shortcut-search: root.shortcuts.search;
+                shortcut-settings: root.shortcuts.settings;
 
-                HorizontalLayout {
-                    width: parent.width;
-                    height: parent.height;
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    spacing: 0px;
-
-                    // 1. Esquerda: Logo + Barra de Menus (alinhados à extrema esquerda)
-                    HorizontalLayout {
-                        horizontal-stretch: 1;
-                        alignment: start;
-                        spacing: 6px;
-
-                        Image {
-                            source: @image-url("icons/logo.svg");
-                            width: 22px;
-                            height: 22px;
-                        }
-
-                        Rectangle { width: 4px; }
-
-                        MenuButton {
-                            label: root.menu-file-label;
-                            shortcut: "Alt+F";
-                            description: Tr.t("sl.new_open_save_import_export_projects_and_sce");
-                            open: root.menu-open == "file";
-                            clicked => {
-                                root.menu-anchor-x = self.absolute-position.x;
-                                root.menu-toggled("file");
-                            }
-                            hovered => {
-                                if root.menu-open != "" && root.menu-open != "file" {
-                                    root.menu-anchor-x = self.absolute-position.x;
-                                    root.menu-opened("file");
-                                }
-                            }
-                        }
-                        MenuButton {
-                            label: root.menu-edit-label;
-                            shortcut: "Alt+E";
-                            description: Tr.t("sl.undo_redo_history_and_global_application_pre");
-                            open: root.menu-open == "edit";
-                            clicked => {
-                                root.menu-anchor-x = self.absolute-position.x;
-                                root.menu-toggled("edit");
-                            }
-                            hovered => {
-                                if root.menu-open != "" && root.menu-open != "edit" {
-                                    root.menu-anchor-x = self.absolute-position.x;
-                                    root.menu-opened("edit");
-                                }
-                            }
-                        }
-                        MenuButton {
-                            label: root.menu-view-label;
-                            shortcut: "Alt+V";
-                            description: Tr.t("sl.camera_viewpoints_viewport_overlays_and_rend");
-                            open: root.menu-open == "view";
-                            clicked => {
-                                root.menu-anchor-x = self.absolute-position.x;
-                                root.menu-toggled("view");
-                            }
-                            hovered => {
-                                if root.menu-open != "" && root.menu-open != "view" {
-                                    root.menu-anchor-x = self.absolute-position.x;
-                                    root.menu-opened("view");
-                                }
-                            }
-                        }
-                        MenuButton {
-                            label: root.menu-window-label;
-                            shortcut: "Alt+W";
-                            description: Tr.t("sl.toggle_panels_layouts_fullscreen_mode_and_ac");
-                            open: root.menu-open == "window";
-                            clicked => {
-                                root.menu-anchor-x = self.absolute-position.x;
-                                root.menu-toggled("window");
-                            }
-                            hovered => {
-                                if root.menu-open != "" && root.menu-open != "window" {
-                                    root.menu-anchor-x = self.absolute-position.x;
-                                    root.menu-opened("window");
-                                }
-                            }
-                        }
-                    }
-
-                    // 2. Centro: Seletor de Workspace rigorosamente centralizado
-                    WorkspaceSegment {
-                        active: active-workspace == "MODEL" ? root.modeling-mode : active-workspace;
-                        draw-title: root.label-workspace-draw-title;
-                        draw-description: root.label-workspace-draw-description;
-                        poly-title: root.label-workspace-poly-title;
-                        poly-description: root.label-workspace-poly-description;
-                        reduced-motion: root.reduced-motion;
-                        animate-available: root.animate-available;
-                        animate-label: root.animate-texts.workspace-label;
-                        animate-tip: root.animate-texts.workspace-tip;
-                        changed(ws) => { root.workspace-changed(ws); }
-                    }
-
-                    // 3. Direita: Ações e Ferramentas (alinhadas à extrema direita)
-                    HorizontalLayout {
-                        horizontal-stretch: 1;
-                        alignment: end;
-                        spacing: 4px;
-
-                        TopAction {
-                            icon: IconSet.Undo;
-                            icon-svg: PetuniaIcons.undo;
-                            semantic-label: Tr.t("sl.undo");
-                            shortcut: root.shortcuts.undo;
-                            description: Tr.t("sl.revert_the_most_recent_modeling_or_editing_o");
-                            enabled: root.can-undo;
-                            clicked => { root.undo-requested(); }
-                        }
-                        TopAction {
-                            icon: IconSet.Redo;
-                            icon-svg: PetuniaIcons.redo;
-                            semantic-label: Tr.t("sl.redo");
-                            shortcut: root.shortcuts.redo;
-                            description: Tr.t("sl.reapply_the_most_recently_undone_operation");
-                            enabled: root.can-redo;
-                            clicked => { root.redo-requested(); }
-                        }
-
-                        Rectangle { width: 1px; height: 16px; background: DesignTokens.border; }
-
-                        // Busca de comandos visível (plano de UI F3, D9): porta de
-                        // entrada para o que saiu da top bar. Abrir/Salvar/Referências/
-                        // Parts vivem nos menus e atalhos.
-                        CommandSearchField {
-                            placeholder: Tr.t("sl.search_command_placeholder");
-                            shortcut: root.shortcuts.search;
-                            activated => { root.search-requested(); }
-                        }
-
-                        TopAction {
-                            icon: IconSet.Settings;
-                            icon-svg: PetuniaIcons.settings;
-                            semantic-label: Tr.t("sl.settings");
-                            shortcut: root.shortcuts.settings;
-                            description: Tr.t("sl.open_application_preferences_keymaps_and_the");
-                            clicked => { root.settings-requested(); }
-                        }
-                    }
+                menu-toggled(name, x) => {
+                    root.menu-anchor-x = x;
+                    root.menu-toggled(name);
                 }
+                menu-opened(name, x) => {
+                    root.menu-anchor-x = x;
+                    root.menu-opened(name);
+                }
+                workspace-changed(ws) => { root.workspace-changed(ws); }
+                undo-requested => { root.undo-requested(); }
+                redo-requested => { root.redo-requested(); }
+                search-requested => { root.search-requested(); }
+                settings-requested => { root.settings-requested(); }
             }
 
             HorizontalLayout {
@@ -9306,45 +9189,15 @@ export component PetuniaSlintShell inherits Window {
             }
         }
 
-        // Toast de status (sucesso, aviso, erro): não bloqueia entrada e some sozinho.
-        Rectangle {
-            width: min(root.width - 32px, max(220px, toast-text.preferred-width + 44px));
-            height: 34px;
+        // Toast de status: componente transversal do design system.
+        StatusToast {
+            shown: root.toast-visible;
+            message: root.status-message;
+            severity-color: root.status-color;
+            available-width: root.width - 32px;
             x: (root.width - self.width) / 2;
             y: root.toast-visible ? root.height - 30px - self.height - 20px : root.height - 30px - self.height - 6px;
-            opacity: root.toast-visible ? 1.0 : 0.0;
-            animate opacity { duration: Motion.medium; easing: ease-out; }
             animate y { duration: Motion.medium; easing: ease-out; }
-            border-radius: DesignTokens.radius-panel;
-            background: DesignTokens.surface-raised;
-            border-width: 1px;
-            border-color: root.status-color;
-            drop-shadow-blur: DesignTokens.elevation-2-blur;
-            drop-shadow-color: DesignTokens.elevation-2-color;
-            drop-shadow-offset-y: DesignTokens.elevation-2-offset;
-            accessible-role: text;
-            accessible-label: root.status-message;
-            HorizontalLayout {
-                padding-left: 12px;
-                padding-right: 12px;
-                spacing: 8px;
-                alignment: center;
-                Rectangle {
-                    width: 3px;
-                    height: 16px;
-                    border-radius: 1.5px;
-                    background: root.status-color;
-                    y: (parent.height - self.height) / 2;
-                }
-                toast-text := Text {
-                    text: root.status-message;
-                    color: DesignTokens.text-primary;
-                    font-size: DesignTokens.font-default;
-                    font-weight: 600;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-            }
         }
 
         // Painel flutuante: Paint Canvas 2D em escala maior, sincronizado com a viewport 3D.
