@@ -139,6 +139,10 @@
         {
           "path": "06-paint/architecture-decision.md",
           "title": "Paint Architecture — proposta"
+        },
+        {
+          "path": "06-paint/decals-animated-decals.md",
+          "title": "Decals e Animated Decals — proposta"
         }
       ]
     },
