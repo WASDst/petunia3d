@@ -1,0 +1,221 @@
+import { IconDisplay, IconSet } from "@lucide";
+import { IconButton } from "../components/base.slint";
+import { DesignTokens, Motion, Tr } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
+import { InspectorPill } from "../inspector/sections.slint";
+import { ScrollView } from "std-widgets.slint";
+
+/// Host transitório da coluna direita durante o Slint Rescue.
+///
+/// Nesta fase ele extrai chrome, rail, hover/peek, cabeçalho e scroll.
+/// O conteúdo específico de cada workspace continua injetado por @children
+/// e será migrado depois para Structure + Properties.
+export component RightColumnShell inherits Rectangle {
+    in property <bool> inspector-visible: true;
+    in property <bool> compact-shell: false;
+    in property <bool> inspector-expanded: false;
+    in property <bool> inspector-flyout-open: false;
+    in property <length> rail-clearance: 0px;
+
+    in-out property <string> hovered-section: "";
+    in-out property <bool> flyout-hovered: false;
+    in-out property <bool> rail-hovered: false;
+
+    in property <int> f6-rail-token: 0;
+
+    in property <bool> parts-open: false;
+    in property <bool> transform-open: false;
+    in property <bool> material-open: false;
+    in property <bool> object-open: false;
+
+    in property <string> label-parts: "";
+    in property <string> label-transform: "";
+    in property <string> label-material: "";
+    in property <string> label-object: "";
+
+    in property <string> active-workspace: "MODEL";
+    in property <bool> object-has-selection: false;
+    in property <string> object-name: "";
+    in property <string> label-duplicate: "";
+    in property <string> label-delete: "";
+
+    callback section-pill-clicked(string);
+    callback collapse-requested;
+    callback duplicate-requested;
+    callback delete-requested;
+
+    background: transparent;
+
+    // Rail recolhido: permanece previsível e separado do conteúdo.
+    if root.inspector-visible && !root.compact-shell: Rectangle {
+        x: parent.width - self.width - 6px;
+        y: 8px;
+        width: 50px;
+        height: rail-col.preferred-height;
+        visible: !root.inspector-expanded;
+        opacity: root.inspector-expanded ? 0.0 : 1.0;
+        animate opacity { duration: Motion.fast; }
+        background: DesignTokens.surface-raised.with-alpha(0.9);
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        border-radius: 8px;
+
+        rail-touch := TouchArea {
+            changed has-hover => {
+                root.rail-hovered = self.has-hover;
+                if !self.has-hover && !root.flyout-hovered {
+                    root.hovered-section = "";
+                }
+            }
+        }
+
+        rail-col := VerticalLayout {
+            padding: 7px;
+            spacing: 8px;
+            alignment: start;
+
+            InspectorPill {
+                focus-token: root.f6-rail-token;
+                section-id: "parts";
+                icon: IconSet.Layers3;
+                icon-svg: PetuniaIcons.parts;
+                semantic-label: root.label-parts;
+                description: Tr.t("sl.manage_scene_parts_groups_and_hierarchy");
+                active: root.parts-open;
+                clicked => { root.section-pill-clicked("parts"); }
+                hovered(id) => { root.hovered-section = id; }
+            }
+            InspectorPill {
+                section-id: "transform";
+                icon: IconSet.Move3d;
+                icon-svg: PetuniaIcons.transform;
+                semantic-label: root.label-transform;
+                description: Tr.t("sl.position_rotation_and_scale_coordinates");
+                active: root.transform-open;
+                clicked => { root.section-pill-clicked("transform"); }
+                hovered(id) => { root.hovered-section = id; }
+            }
+            InspectorPill {
+                section-id: "material";
+                icon: IconSet.Paintbrush;
+                icon-svg: PetuniaIcons.material;
+                semantic-label: root.label-material;
+                description: Tr.t("sl.surface_shaders_colors_and_textures");
+                active: root.material-open;
+                clicked => { root.section-pill-clicked("material"); }
+                hovered(id) => { root.hovered-section = id; }
+            }
+            InspectorPill {
+                section-id: "object";
+                icon: IconSet.Box;
+                icon-svg: PetuniaIcons.object-mesh;
+                semantic-label: root.label-object;
+                description: Tr.t("sl.object_metadata_visibility_and_display_optio");
+                active: root.object-open;
+                clicked => { root.section-pill-clicked("object"); }
+                hovered(id) => { root.hovered-section = id; }
+            }
+        }
+    }
+
+    // Superfície transitória do Inspector. O conteúdo específico entra via @children.
+    if root.inspector-visible && !root.compact-shell: inspector-flyout := Rectangle {
+        visible: root.inspector-flyout-open || self.opacity > 0.01;
+        x: parent.width - (root.inspector-flyout-open ? (self.width + 6px + root.rail-clearance) : 0px);
+        y: 8px;
+        width: min(320px, parent.width - 60px);
+        height: parent.height - 16px;
+        background: DesignTokens.surface-raised.with-alpha(0.9);
+        border-radius: DesignTokens.radius-panel;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        drop-shadow-blur: DesignTokens.elevation-2-blur;
+        drop-shadow-color: DesignTokens.elevation-2-color;
+        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+        clip: true;
+        opacity: root.inspector-flyout-open ? 1.0 : 0.0;
+        animate opacity { duration: Motion.fast; easing: ease-out; }
+
+        flyout-touch := TouchArea {
+            changed has-hover => {
+                root.flyout-hovered = self.has-hover;
+                if !self.has-hover && !root.rail-hovered {
+                    root.hovered-section = "";
+                }
+            }
+            pointer-event(_e) => { }
+        }
+
+        VerticalLayout {
+            Rectangle {
+                height: 44px;
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 8px;
+                    spacing: 6px;
+                    alignment: start;
+
+                    if root.active-workspace != "ANIMATE": IconButton {
+                        y: (parent.height - self.height) / 2;
+                        icon: IconSet.ChevronsRight;
+                        semantic-label: Tr.t("sl.collapse_inspector");
+                        description: Tr.t("sl.collapse_inspector_hint");
+                        clicked => {
+                            root.hovered-section = "";
+                            root.flyout-hovered = false;
+                            root.rail-hovered = false;
+                            root.collapse-requested();
+                        }
+                    }
+
+                    Rectangle {
+                        width: DesignTokens.icon-control;
+                        horizontal-stretch: 0;
+                        IconDisplay {
+                            icon: root.object-has-selection ? IconSet.Box : IconSet.MousePointerClick;
+                            size: DesignTokens.icon-control;
+                            stroke: DesignTokens.text-secondary;
+                        }
+                    }
+
+                    Text {
+                        text: root.object-has-selection ? root.object-name : Tr.t("sl.nothing_selected");
+                        color: root.object-has-selection ? DesignTokens.text-primary : DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-strong;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+
+                    if root.object-has-selection && root.active-workspace == "MODEL": IconButton {
+                        y: (parent.height - self.height) / 2;
+                        icon: IconSet.Copy;
+                        semantic-label: root.label-duplicate;
+                        clicked => { root.duplicate-requested(); }
+                    }
+
+                    if root.object-has-selection && root.active-workspace == "MODEL": IconButton {
+                        y: (parent.height - self.height) / 2;
+                        icon: IconSet.Trash2;
+                        semantic-label: root.label-delete;
+                        clicked => { root.delete-requested(); }
+                    }
+                }
+            }
+
+            ScrollView {
+                vertical-stretch: 1;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: as-needed;
+
+                VerticalLayout {
+                    spacing: 10px;
+                    width: parent.width;
+                    vertical-stretch: 0;
+                    @children
+                }
+            }
+        }
+    }
+}
