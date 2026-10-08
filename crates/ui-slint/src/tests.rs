@@ -8701,7 +8701,12 @@ fn test_settings_open_close_intents_and_view_model_sync() {
 fn test_keymap_profile_switching() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     assert_eq!(bridge.state.ui.active_keymap_id, "petunia-default");
-    assert_eq!(bridge.view_model().active_keymap_id, "petunia-default");
+    let default_vm = bridge.view_model();
+    assert_eq!(default_vm.active_keymap_id, "petunia-default");
+    assert_eq!(default_vm.pointer_precision_mask, 2); // Shift
+    assert_eq!(default_vm.pointer_snap_mask, 1); // Ctrl
+    assert_eq!(default_vm.pointer_pan_mask, 2); // Shift
+    assert_eq!(default_vm.pointer_orbit_left_mask, 0); // disabled
 
     // Switch to Blender profile
     assert!(bridge.set_keymap_profile("blender"));
@@ -8715,7 +8720,10 @@ fn test_keymap_profile_switching() {
     // Switch to Maya profile
     assert!(bridge.set_keymap_profile("maya"));
     assert_eq!(bridge.state.ui.active_keymap_id, "maya");
-    assert_eq!(bridge.view_model().active_keymap_id, "maya");
+    let maya_vm = bridge.view_model();
+    assert_eq!(maya_vm.active_keymap_id, "maya");
+    assert_eq!(maya_vm.pointer_orbit_left_mask, 4); // Alt
+    assert_eq!(maya_vm.pointer_pan_mask, 2); // Shift still pans MMB
 }
 
 #[test]
