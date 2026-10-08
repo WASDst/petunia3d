@@ -1424,12 +1424,32 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     }
     // Arrasto e hover: viewport a cada evento, janela completa limitada.
     let throttle = std::rc::Rc::new(crate::refresh::RefreshThrottle::default());
-    crate::bridge::viewport::connect_hover_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
-    crate::bridge::viewport::connect_transform_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
-    crate::bridge::viewport::connect_tool_pointer_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
+    crate::bridge::viewport::connect_hover_callbacks(
+        window,
+        Arc::clone(&bridge),
+        std::rc::Rc::clone(&throttle),
+    );
+    crate::bridge::viewport::connect_transform_callbacks(
+        window,
+        Arc::clone(&bridge),
+        std::rc::Rc::clone(&throttle),
+    );
+    crate::bridge::viewport::connect_tool_pointer_callbacks(
+        window,
+        Arc::clone(&bridge),
+        std::rc::Rc::clone(&throttle),
+    );
     crate::bridge::viewport::connect_split_view_callbacks(window, Arc::clone(&bridge));
-    crate::bridge::model::connect_profile_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
-    crate::bridge::paint::connect_viewport_paint_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
+    crate::bridge::model::connect_profile_callbacks(
+        window,
+        Arc::clone(&bridge),
+        std::rc::Rc::clone(&throttle),
+    );
+    crate::bridge::paint::connect_viewport_paint_callbacks(
+        window,
+        Arc::clone(&bridge),
+        std::rc::Rc::clone(&throttle),
+    );
     let shortcut_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_shortcut_requested(move |text, ctrl, shift, alt| {

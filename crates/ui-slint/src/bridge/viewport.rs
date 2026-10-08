@@ -6,14 +6,15 @@
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use slint::ComponentHandle;
 use petunia_core::{SelectionDomain, Workspace};
+use slint::ComponentHandle;
 
 use crate::{
+    PetuniaSlintShell, PetuniaViewport, SlintUiBridge, TransformKind, UiIntent, ViewportGesture,
+    ViewportRenderState,
     callbacks::{sync_viewport_overlays, sync_window_properties},
     projection::parse_lasso_path,
     refresh::{self, RefreshThrottle},
-    PetuniaSlintShell, PetuniaViewport, SlintUiBridge, TransformKind, UiIntent, ViewportGesture, ViewportRenderState,
 };
 
 /// Conecta navegação de câmera e resize da viewport.
@@ -86,7 +87,6 @@ pub(crate) fn connect_navigation_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 }
-
 
 /// Conecta seleção, Cursor 3D e ajuste contextual da roda.
 ///
@@ -232,7 +232,6 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
-
     let viewport_context_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_viewport_context_requested(move |x, y| {
@@ -249,8 +248,6 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 }
-
-
 
 /// Conecta hover de componente e gizmo.
 ///
@@ -337,7 +334,6 @@ pub(crate) fn connect_hover_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 }
-
 
 /// Conecta transformações interativas da viewport e drag de gizmos.
 ///
@@ -431,7 +427,6 @@ pub(crate) fn connect_transform_callbacks<V: PetuniaViewport + 'static>(
     });
 }
 
-
 /// Conecta a gramática principal de pointer das ferramentas.
 ///
 /// O Slint reconhece Press/Move/Release/Cancel; ToolSession e mutações
@@ -467,7 +462,6 @@ pub(crate) fn connect_tool_pointer_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 }
-
 
 /// Conecta a vista secundária compartilhada.
 /// A cena/GPU permanecem compartilhadas; aqui mudam apenas câmera, preset,
@@ -559,7 +553,6 @@ pub(crate) fn connect_split_view_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 }
-
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre faz zoom.
@@ -675,7 +668,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         )
     }
 
-
     /// Limpa a preselection quando o ponteiro sai da viewport.
     pub fn clear_hover(&mut self) -> bool {
         let had_preview =
@@ -727,5 +719,4 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
         true
     }
-
 }

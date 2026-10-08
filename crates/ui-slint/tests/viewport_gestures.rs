@@ -825,7 +825,6 @@ fn escape_closes_the_home_screen() {
     assert!(closed.get(), "Esc fecha a Home");
 }
 
-
 #[test]
 fn viewport_drag_threshold_controls_when_transform_drag_starts() {
     i_slint_backend_testing::init_no_event_loop();
@@ -884,9 +883,11 @@ fn viewport_drag_threshold_controls_when_transform_drag_starts() {
 
 fn pointer_button(shell: &PetuniaSlintShell, x: f32, y: f32, button: PointerEventButton) {
     let position = LogicalPosition::new(x, y);
-    shell.window()
+    shell
+        .window()
         .dispatch_event(WindowEvent::PointerPressed { position, button });
-    shell.window()
+    shell
+        .window()
         .dispatch_event(WindowEvent::PointerReleased { position, button });
 }
 
@@ -923,13 +924,21 @@ fn viewport_scroll_adjust_uses_scroll_event_modifiers_and_current_keymap() {
     modifier_key(&shell, slint::platform::Key::Control, true);
     scroll_pointer(&shell, 600.0, 400.0, 1.0);
     modifier_key(&shell, slint::platform::Key::Control, false);
-    assert_eq!(zooms.get(), 2, "Ctrl must not be hardcoded as pointer.adjust");
+    assert_eq!(
+        zooms.get(),
+        2,
+        "Ctrl must not be hardcoded as pointer.adjust"
+    );
     assert_eq!(adjusted.get(), 0);
 
     modifier_key(&shell, slint::platform::Key::Alt, true);
     scroll_pointer(&shell, 600.0, 400.0, 1.0);
     modifier_key(&shell, slint::platform::Key::Alt, false);
-    assert_eq!(adjusted.get(), 1, "scroll must resolve modifier in its own event");
+    assert_eq!(
+        adjusted.get(),
+        1,
+        "scroll must resolve modifier in its own event"
+    );
 
     shell.set_pointer_adjust_mask(0); // Unbound means no adjustment.
     modifier_key(&shell, slint::platform::Key::Alt, true);
@@ -1010,7 +1019,10 @@ fn viewport_maya_orbit_and_middle_pan_are_driven_by_pointer_masks() {
         button: PointerEventButton::Middle,
     });
     modifier_key(&shell, slint::platform::Key::Shift, false);
-    assert!(orbits.get() > prior_orbits, "unbound Shift+MMB must orbit, not pan");
+    assert!(
+        orbits.get() > prior_orbits,
+        "unbound Shift+MMB must orbit, not pan"
+    );
 }
 
 #[test]

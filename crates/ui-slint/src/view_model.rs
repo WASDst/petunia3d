@@ -1877,31 +1877,58 @@ impl ShellViewModel {
             scene_drawer_visible: false,
             active_keymap_id: state.ui.active_keymap_id.clone(),
             pointer_precision_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_PRECISION),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PRECISION),
             ),
             pointer_snap_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_SNAP),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SNAP),
             ),
             pointer_extend_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_EXTEND),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND),
             ),
             pointer_subtract_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_SUBTRACT),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SUBTRACT),
             ),
             pointer_pan_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_PAN),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PAN),
             ),
             pointer_cursor_place_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_CURSOR_PLACE),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_CURSOR_PLACE),
             ),
             pointer_adjust_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_ADJUST),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ADJUST),
             ),
             pointer_loop_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_LOOP),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_LOOP),
             ),
             pointer_orbit_left_mask: pointer_modifier_mask(
-                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_ORBIT_LEFT),
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ORBIT_LEFT),
             ),
             animate: crate::animate::AnimateViewModel::default(),
         }

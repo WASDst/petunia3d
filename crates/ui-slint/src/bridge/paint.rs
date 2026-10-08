@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use slint::ComponentHandle;
 
 use crate::{
+    PetuniaSlintShell, PetuniaViewport, SlintUiBridge,
     callbacks::sync_window_properties,
     refresh::{self, RefreshThrottle},
-    PetuniaSlintShell, PetuniaViewport, SlintUiBridge,
 };
 
 /// Conecta begin/update/end do traço 3D.
