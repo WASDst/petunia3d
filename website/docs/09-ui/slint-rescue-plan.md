@@ -122,7 +122,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 
 ### Resultado intermediário
 
-`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.685 linhas sem remover feature de domínio.
+`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.328 linhas sem remover feature de domínio.
 
 ### Extrações adicionais concluídas
 
@@ -133,7 +133,11 @@ Erros críticos continuam proibidos de depender apenas de toast.
 - Context Bar da viewport extraída como host com `@children`;
 - View Bar extraída como host com `@children`;
 - overlays passivos de seleção, Animate e previews de ferramenta extraídos para `viewport/overlays.slint`;
-- `PetuniaViewportHost` extraído com superfície, resize lógico/físico, HiDPI e composição da imagem GPU; input/picking/gizmos/tool sessions continuam deliberadamente no chamador.
+- `PetuniaViewportHost` extraído com superfície, resize lógico/físico, HiDPI e composição da imagem GPU;
+- `ViewportInputRouter` extraído: o antigo `TouchArea` de ~400 linhas saiu do monólito, mantendo apenas recognition state efêmero e callbacks semânticos;
+- `drag-threshold-px` agora controla a promoção click → drag/box/transform/lasso;
+- Orbit/Pan/Zoom convergem para `UiIntent::ViewportGesture`; Orbit preserva pivot por seleção/Cursor;
+- fases de tool pointer usam `ViewportPointerPhase::{Press,Move,Release,Cancel}` internamente no Rust.
 
 ### Próximas extrações desta fase
 
@@ -324,4 +328,4 @@ Concluído nesta execução:
 - `StatusToast`;
 - documentação do diretório atualizada.
 
-Próximo alvo: **validação + boundary de input da viewport**. O chrome e a superfície já foram extraídos; picking, input, gizmos e tool sessions permanecem no `PetuniaSlintShell` até existir contrato explícito e compilação validada.
+Próximo alvo: **separar modificadores físicos de significados do keymap e modularizar os callbacks Rust da viewport**. Picking geométrico, gizmos e ToolSession continuam no Rust; o recognition layer Slint já está isolado.
