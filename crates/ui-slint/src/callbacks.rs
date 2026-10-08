@@ -1426,6 +1426,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let throttle = std::rc::Rc::new(crate::refresh::RefreshThrottle::default());
     crate::bridge::viewport::connect_hover_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
     crate::bridge::viewport::connect_transform_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
+    crate::bridge::viewport::connect_tool_pointer_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
     crate::bridge::model::connect_profile_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
     crate::bridge::paint::connect_viewport_paint_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
     let shortcut_bridge = Arc::clone(&bridge);
@@ -2694,32 +2695,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     // Gramática única (constituição 11): o botão principal das ferramentas
     // persistentes chega aqui como pressionar (0), mover (1), soltar (2) ou
     // cancelar (3). Movimentos sem efeito não redesenham nada.
-    let tool_pointer_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    let tool_pointer_throttle = std::rc::Rc::clone(&throttle);
-    window.on_tool_pointer(move |phase, x, y, shift, ctrl, alt| {
-        if let Ok(mut bridge) = tool_pointer_bridge.lock() {
-            if !crate::perf::measure("tool_pointer", || {
-                bridge.tool_pointer_ex(phase, x, y, shift, ctrl, alt)
-            }) {
-                return;
-            }
-            if let Some(window) = window_weak.upgrade() {
-                // Pressionar e soltar mudam o documento/a seleção: janela inteira.
-                if phase == 1 {
-                    crate::refresh::refresh_interactive(
-                        &window,
-                        &tool_pointer_bridge,
-                        &mut *bridge,
-                        &tool_pointer_throttle,
-                    );
-                } else {
-                    crate::refresh::refresh_full(&window, &mut *bridge, &tool_pointer_throttle);
-                }
-            }
-        }
-    });
-
     let last_operation_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_last_operation_committed(move |text| {
