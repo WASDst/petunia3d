@@ -119,8 +119,11 @@ export component RightColumnShell inherits Rectangle {
     }
 
     // Superfície transitória do Inspector. O conteúdo específico entra via @children.
-    if root.inspector-visible && !root.compact-shell: inspector-flyout := Rectangle {
-        visible: root.inspector-flyout-open || self.opacity > 0.01;
+    inspector-flyout := Rectangle {
+        // @children precisa de um componente incondicional: a visibilidade
+        // continua obedecendo ao mesmo contrato do Inspector.
+        visible: root.inspector-visible && !root.compact-shell
+            && (root.inspector-flyout-open || self.opacity > 0.01);
         x: parent.width - (root.inspector-flyout-open ? (self.width + 6px + root.rail-clearance) : 0px);
         y: 8px;
         width: min(320px, parent.width - 60px);
