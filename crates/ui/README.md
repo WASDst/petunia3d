@@ -1,8 +1,8 @@
-# Crate `petunia_ui` (`crates/ui/`) — [ARQUIVADA / LEGACY]
+# Crate `petunia_ui` (`crates/ui/`) — [FALLBACK CONGELADO]
 
-> ⚠️ **Status: Interface legada arquivada.**  
-> A interface principal do Petunia3D foi promovida para o frontend declarativo moderno em Slint (`crates/ui-slint`).  
-> Esta crate permanece no repositório como implementação de referência histórica e fallback acessível via `--legacy-egui` ou variável de ambiente `PETUNIA_LEGACY_EGUI=1`.
+> ⚠️ **Status: snapshot de contingência; desenvolvimento de produto proibido.**  
+> Slint (`crates/ui-slint`) é o único frontend ativo. A decisão de 2026-10-08 determina que egui seja preservado fora da linha ativa em branch/tag recuperável, sem paridade contínua, novas features ou polish.  
+> Enquanto essa separação física ainda não tiver sido concluída, esta crate permanece temporariamente no workspace e pode ser iniciada por `--legacy-egui` ou `PETUNIA_LEGACY_EGUI=1`. Isso não a torna frontend suportado em paralelo. Ver [ADR 009](../../docs/architecture/adr/009-slint-producao-egui-fallback-congelado.md).
 
 Camada de apresentação e interface gráfica construída com `egui`:
 - Barra de cabeçalho superior com seleção de workspaces por pílulas (MODEL, PAINT, UV, EXPORT).
