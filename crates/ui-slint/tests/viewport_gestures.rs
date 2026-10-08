@@ -881,3 +881,185 @@ fn viewport_drag_threshold_controls_when_transform_drag_starts() {
         "drag acima da preferência deve iniciar transformação"
     );
 }
+
+fn pointer_button(shell: &PetuniaSlintShell, x: f32, y: f32, button: PointerEventButton) {
+    let position = LogicalPosition::new(x, y);
+    shell.window()
+        .dispatch_event(WindowEvent::PointerPressed { position, button });
+    shell.window()
+        .dispatch_event(WindowEvent::PointerReleased { position, button });
+}
+
+fn modifier_key(shell: &PetuniaSlintShell, key: slint::platform::Key, pressed: bool) {
+    let text = key.into();
+    shell.window().dispatch_event(if pressed {
+        WindowEvent::KeyPressed { text }
+    } else {
+        WindowEvent::KeyReleased { text }
+    });
+}
+
+#[test]
+fn viewport_scroll_adjust_uses_scroll_event_modifiers_and_current_keymap() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+
+    let zooms = Rc::new(Cell::new(0));
+    let adjusted = Rc::new(Cell::new(0));
+    let zoom_callback = Rc::clone(&zooms);
+    let adjust_callback = Rc::clone(&adjusted);
+    shell.on_viewport_zoom(move |_| zoom_callback.set(zoom_callback.get() + 1));
+    shell.on_viewport_ctrl_scroll(move |_| adjusted.set(adjust_callback.get() + 1));
+
+    shell.set_pointer_adjust_mask(4); // Test profile: Alt, not Ctrl.
+    scroll_pointer(&shell, 600.0, 400.0, 1.0);
+    assert_eq!(zooms.get(), 1);
+    assert_eq!(adjusted.get(), 0);
+
+    modifier_key(&shell, slint::platform::Key::Control, true);
+    scroll_pointer(&shell, 600.0, 400.0, 1.0);
+    modifier_key(&shell, slint::platform::Key::Control, false);
+    assert_eq!(zooms.get(), 2, "Ctrl must not be hardcoded as pointer.adjust");
+    assert_eq!(adjusted.get(), 0);
+
+    modifier_key(&shell, slint::platform::Key::Alt, true);
+    scroll_pointer(&shell, 600.0, 400.0, 1.0);
+    modifier_key(&shell, slint::platform::Key::Alt, false);
+    assert_eq!(adjusted.get(), 1, "scroll must resolve modifier in its own event");
+
+    shell.set_pointer_adjust_mask(0); // Unbound means no adjustment.
+    modifier_key(&shell, slint::platform::Key::Alt, true);
+    scroll_pointer(&shell, 600.0, 400.0, 1.0);
+    modifier_key(&shell, slint::platform::Key::Alt, false);
+    assert_eq!(zooms.get(), 3);
+    assert_eq!(adjusted.get(), 1);
+}
+
+#[test]
+fn viewport_maya_orbit_and_middle_pan_are_driven_by_pointer_masks() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_active_tool("select".into());
+
+    let orbits = Rc::new(Cell::new(0));
+    let pans = Rc::new(Cell::new(0));
+    let orbit_cb = Rc::clone(&orbits);
+    let pan_cb = Rc::clone(&pans);
+    shell.on_viewport_orbit(move |_, _| orbit_cb.set(orbit_cb.get() + 1));
+    shell.on_viewport_pan(move |_, _| pan_cb.set(pan_cb.get() + 1));
+
+    shell.set_pointer_orbit_left_mask(0); // Petunia default.
+    modifier_key(&shell, slint::platform::Key::Alt, true);
+    move_pointer(&shell, 580.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(580.0, 400.0),
+        button: PointerEventButton::Left,
+    });
+    move_pointer(&shell, 610.0, 410.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(610.0, 410.0),
+        button: PointerEventButton::Left,
+    });
+    assert_eq!(orbits.get(), 0, "Petunia default Alt+LMB must not orbit");
+
+    shell.set_pointer_orbit_left_mask(4); // Maya-like keymap.
+    move_pointer(&shell, 580.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(580.0, 400.0),
+        button: PointerEventButton::Left,
+    });
+    move_pointer(&shell, 620.0, 420.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(620.0, 420.0),
+        button: PointerEventButton::Left,
+    });
+    assert!(orbits.get() > 0, "Maya Alt+LMB must orbit via its mask");
+
+    shell.set_pointer_pan_mask(4); // Remap middle pan to Alt.
+    move_pointer(&shell, 580.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(580.0, 400.0),
+        button: PointerEventButton::Middle,
+    });
+    move_pointer(&shell, 620.0, 420.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(620.0, 420.0),
+        button: PointerEventButton::Middle,
+    });
+    modifier_key(&shell, slint::platform::Key::Alt, false);
+    assert!(pans.get() > 0, "middle-button pan must follow pointer.pan");
+
+    let prior_orbits = orbits.get();
+    modifier_key(&shell, slint::platform::Key::Shift, true);
+    move_pointer(&shell, 580.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(580.0, 400.0),
+        button: PointerEventButton::Middle,
+    });
+    move_pointer(&shell, 620.0, 420.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(620.0, 420.0),
+        button: PointerEventButton::Middle,
+    });
+    modifier_key(&shell, slint::platform::Key::Shift, false);
+    assert!(orbits.get() > prior_orbits, "unbound Shift+MMB must orbit, not pan");
+}
+
+#[test]
+fn viewport_precision_snap_selection_and_cursor_follow_remapped_masks() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_active_tool("select".into());
+
+    shell.set_pointer_precision_mask(4); // Alt.
+    shell.set_pointer_snap_mask(2); // Shift.
+    shell.set_pointer_extend_mask(4); // Alt.
+    shell.set_pointer_loop_mask(2); // Shift: Alt is no longer loop-select.
+    shell.set_pointer_cursor_place_mask(4); // Alt+RMB.
+
+    modifier_key(&shell, slint::platform::Key::Alt, true);
+    move_pointer(&shell, 600.0, 400.0);
+    assert!(shell.get_precision_mode(), "precision follows Alt keymap");
+    assert!(!shell.get_snap_mode(), "snap must not be hardcoded to Ctrl");
+
+    let extend = Rc::new(Cell::new(false));
+    let loop_select = Rc::new(Cell::new(false));
+    let extend_cb = Rc::clone(&extend);
+    let loop_cb = Rc::clone(&loop_select);
+    shell.on_viewport_select(move |_, _, add, loop_flag| {
+        extend_cb.set(add);
+        loop_cb.set(loop_flag);
+    });
+    pointer_button(&shell, 600.0, 400.0, PointerEventButton::Left);
+    assert!(extend.get(), "selection extend must follow remapped Alt");
+    assert!(!loop_select.get(), "Alt must not retain old loop meaning");
+
+    let places = Rc::new(Cell::new(0));
+    let menus = Rc::new(Cell::new(0));
+    let place_cb = Rc::clone(&places);
+    let menu_cb = Rc::clone(&menus);
+    shell.on_viewport_place_cursor(move |_, _| places.set(place_cb.get() + 1));
+    shell.on_viewport_context_requested(move |_, _| menus.set(menu_cb.get() + 1));
+    pointer_button(&shell, 600.0, 400.0, PointerEventButton::Right);
+    assert_eq!(places.get(), 1, "cursor place follows remapped Alt+RMB");
+    assert_eq!(menus.get(), 0, "cursor place must not open context menu");
+    modifier_key(&shell, slint::platform::Key::Alt, false);
+
+    modifier_key(&shell, slint::platform::Key::Shift, true);
+    move_pointer(&shell, 600.0, 400.0);
+    assert!(!shell.get_precision_mode());
+    assert!(shell.get_snap_mode(), "snap must follow remapped Shift");
+    modifier_key(&shell, slint::platform::Key::Shift, false);
+}
