@@ -867,6 +867,7 @@ pub struct ShellViewModel {
     pub pointer_subtract_mask: i32,
     pub pointer_pan_mask: i32,
     pub pointer_cursor_place_mask: i32,
+    pub pointer_adjust_mask: i32,
     pub pointer_loop_mask: i32,
     pub pointer_orbit_left_mask: i32,
     /// Painel do workspace Animate (cap. 45 F2).
@@ -1892,6 +1893,9 @@ impl ShellViewModel {
             ),
             pointer_cursor_place_mask: pointer_modifier_mask(
                 state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_CURSOR_PLACE),
+            ),
+            pointer_adjust_mask: pointer_modifier_mask(
+                state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_ADJUST),
             ),
             pointer_loop_mask: pointer_modifier_mask(
                 state.ui.keybinds.pointer_modifier(petunia_config::keybinds::POINTER_LOOP),
