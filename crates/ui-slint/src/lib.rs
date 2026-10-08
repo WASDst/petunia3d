@@ -5594,17 +5594,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
-    /// Limpa a preselection (ponteiro saiu da viewport).
-    pub fn clear_hover(&mut self) -> bool {
-        let had_preview =
-            self.profile_hover_snap.take().is_some() | self.region_hover.take().is_some();
-        if !self.state.session.tools.hover.is_some() {
-            return had_preview;
-        }
-        self.state.session.tools.hover = petunia_core::HoverTarget::None;
-        true
-    }
-
     /// Oclusão do segmento olho→ponto: a preselection respeita faces, salvo
     /// em X-Ray. `origin`/`direction` documentam o raio que gerou `position`;
     /// o teste usa a mesma cena canônica (`point_visible`) do picking.
@@ -5752,19 +5741,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         None
-    }
-
-    /// Atualiza o handle do gizmo sob o cursor (preselection).
-    pub fn hover_gizmo(&mut self, x: f32, y: f32) -> bool {
-        if self.gizmo_drag.is_some() {
-            return false;
-        }
-        let next = self.gizmo_handle_at(x, y);
-        if next == self.gizmo_hover {
-            return false;
-        }
-        self.gizmo_hover = next;
-        true
     }
 
     /// Inicia o arrasto no handle do gizmo, restringindo a transformação ao eixo ou plano.
@@ -12948,34 +12924,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .last_operation
                 .as_ref()
                 .is_some_and(|last| self.state.last_operation_is_current(last))
-    }
-
-    /// Roda com Ctrl: contagens e raios da ferramenta ativa. A roda sem
-    /// modificador sempre faz zoom (constituição 11).
-    pub fn viewport_ctrl_scroll(&mut self, delta: f32) -> bool {
-        if !delta.is_finite() {
-            return false;
-        }
-        if self.state.session.tools.active_tool == "loop_cut" || self.loop_cut.is_some() {
-            self.scroll_loop_cut_count(delta);
-        } else if self.state.session.tools.modal.is_some()
-            && self.state.session.proportional_editing
-        {
-            let step = if delta > 0.0 { 0.25 } else { -0.25 };
-            self.adjust_proportional_radius(step);
-            if let Some(drag) = self.drag {
-                self.update_viewport_transform_modified(
-                    drag.last_pointer[0],
-                    drag.last_pointer[1],
-                    false,
-                    false,
-                );
-            }
-        } else {
-            self.state.session.camera.zoom(delta);
-        }
-        self.state.mark_dirty();
-        true
     }
 
     /// Abre a sessão modal de uma ferramenta paramétrica com preview próprio.
