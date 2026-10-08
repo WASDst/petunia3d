@@ -1,6 +1,6 @@
 # Materials, Textures e Paint Binding
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -805,3 +805,18 @@ A riqueza visual deve vir primeiro de:
 - iluminação de viewport legível.
 
 Não da quantidade de knobs de shader.
+
+
+## Decisões fechadas
+
+1. Material referencia TextureResources em vez de armazenar Canvas diretamente.
+2. SceneObject usa MaterialBinding com slots locais.
+3. Face armazena MaterialSlotIndex local, não MaterialId.
+4. V1 canônica usa Standard + Unlit.
+5. Emission permanece propriedade do Standard; Glass/Toon saem da promessa central até terem implementação real.
+6. TextureResource possui identidade/revision próprias e pode ser compartilhada.
+7. Asset.texture e Asset.base_color deixam de competir com Material.
+8. Paint produz TextureResource; Material e Renderer não conhecem layers/brushes.
+9. SurfaceRecipe permanece authoring CPU de textura, não material node graph GPU.
+10. Normal/tangent continuam dados derivados no boundary de render/export.
+11. Material/Texture validation segue strict validation + explicit repair.
