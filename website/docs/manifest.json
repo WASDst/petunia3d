@@ -150,11 +150,15 @@
       "files": [
         {
           "path": "06-paint/architecture-decision.md",
-          "title": "Paint Architecture — proposta"
+          "title": "Paint Architecture — aprovado"
         },
         {
           "path": "06-paint/decals-animated-decals.md",
-          "title": "Decals e Animated Decals — proposta"
+          "title": "Decals e Animated Decals — aprovado"
+        },
+        {
+          "path": "06-paint/workspace-ux.md",
+          "title": "PAINT Workspace — UX e comportamento — aprovado"
         }
       ]
     },
@@ -164,7 +168,11 @@
       "files": [
         {
           "path": "07-uv/architecture-decision.md",
-          "title": "UV Workspace e Editor — proposta"
+          "title": "UV Workspace e Editor — aprovado"
+        },
+        {
+          "path": "07-uv/workspace-ux.md",
+          "title": "UV Workspace — UX e comportamento — aprovado"
         }
       ]
     },
@@ -174,7 +182,7 @@
       "files": [
         {
           "path": "08-reference-projection/architecture-decision.md",
-          "title": "Image Reference & Photo Projection — proposta"
+          "title": "Image Reference & Photo Projection — aprovado"
         }
       ]
     },
@@ -185,6 +193,20 @@
         {
           "path": "09-ui/slint-reassessment.md",
           "title": "Slint Reassessment & GUI Architecture — aprovado"
+        },
+        {
+          "path": "09-ui/workspaces-feedback-accessibility.md",
+          "title": "Workspaces, Feedback Visual e Acessibilidade — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "animation",
+      "title": "Animation",
+      "files": [
+        {
+          "path": "10-animation/workspace-ux.md",
+          "title": "ANIMATE Workspace — UX e comportamento — aprovado"
         }
       ]
     }
