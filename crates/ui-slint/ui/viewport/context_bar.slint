@@ -3,8 +3,7 @@ import { DesignTokens } from "../tokens.slint";
 /// Moldura da barra contextual da viewport.
 /// O conteúdo continua no workspace durante a migração e entra via @children.
 export component ContextBar inherits Rectangle {
-    x: (parent.width - self.width) / 2;
-    y: parent.height - self.height - 14px;
+    // A posição depende do parent no chamador, não existe parent no root do componente.
     width: bar-row.preferred-width + 16px;
     height: 40px;
     border-radius: 10px;
