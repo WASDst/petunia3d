@@ -16,6 +16,7 @@ import {
 } from "animate.slint";
 import { BrushChip, BrushStepper, ColorSwatch, ContextMenuItem, MenuDropdown, NumericField, PanelDragHandle, PanelResizeGrip, PetuniaSlider, SplitterHorizontal, RailTool, ToolButton, ToolCard, ToolGroup, TopAction, Vector3Field, ViewportBarButton, ViewportSvgButton } from "components/controls.slint";
 import { EmptyState, IconButton, KeyHint } from "components/base.slint";\nimport { StatusToast } from "components/feedback.slint";\nimport { ShellHeader } from "shell/header.slint";
+import { ToolRail } from "shell/tool_rail.slint";
 import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
 import { InspectorPill, InspectorSection, MaterialBody, ModifiersBody, ObjectBody, PartsBody, PartsFilterRow, PartsRowSizeControl, QuickActionsBody, TransformBody } from "inspector/sections.slint";
@@ -1524,354 +1525,58 @@ export component PetuniaSlintShell inherits Window {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
-                // Contextual Tool Tray. Workspaces live only in the header.
-                Rectangle {
-                    width: root.show-tool-labels ? 148px : 44px;
-                    background: DesignTokens.surface-raised;
-                    border-width: 1px;
-                    border-color: DesignTokens.border;
+                // Contextual Tool Rail: estado permanece no shell; o componente só projeta e emite intents.
+                ToolRail {
+                    active-workspace: root.active-workspace;
+                    modeling-mode: root.modeling-mode;
+                    active-tool: root.active-tool;
+                    transform-instant-active: root.transform-instant-active;
+                    show-tool-labels: root.show-tool-labels;
+                    add-menu-open: root.add-menu-open;
+                    asset-library-visible: root.asset-library-visible;
 
-                    VerticalLayout {
-                        padding-top: 8px;
-                        padding-bottom: 8px;
-                        padding-left: 6px;
-                        padding-right: 6px;
-                        spacing: 5px;
-                        alignment: start;
+                    select-tools: root.rail-select-tools;
+                    helper-tools: root.rail-helper-tools;
+                    paint-brush-tools: root.rail-paint-brush-tools;
+                    paint-shape-tools: root.rail-paint-shape-tools;
+                    paint-gradient-tools: root.rail-paint-gradient-tools;
+                    animate-catalog: root.animate-catalog;
+                    shortcuts: root.shortcuts;
 
-                        if active-workspace == "MODEL" && root.modeling-mode == "DRAW": VerticalLayout {
-                            spacing: 5px;
+                    label-model-position: root.label-model-position;
+                    label-model-rotate: root.label-model-rotate;
+                    label-model-scale: root.label-model-scale;
+                    label-model-transform: root.label-model-transform;
+                    label-model-push-pull: root.label-model-push-pull;
+                    label-asset-library: root.label-asset-library;
 
-                            // Grupos com flyout (F5b): Seleção/Laço e Cursor 3D/Medir.
-                            ToolGroup {
-                                tools: root.rail-select-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-select-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "select"; }
-                            }
-                            ToolGroup {
-                                tools: root.rail-helper-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-helper-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "helpers"; }
-                            }
-
-                            Rectangle {
-                                width: 28px;
-                                height: 1px;
-                                background: DesignTokens.border;
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-position;
-                                label: root.label-model-position;
-                                shortcut: root.shortcuts.model-move;
-                                description: Tr.t("sl.translate_active_selection_along_axes_or_vie");
-                                active: active-tool == "move";
-                                live-mode: active-tool == "move" && root.transform-instant-active;
-                                clicked => { root.active-tool-changed("move"); }
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-rotate;
-                                label: root.label-model-rotate;
-                                shortcut: root.shortcuts.model-rotate;
-                                description: Tr.t("sl.rotate_active_selection_around_the_active_pi");
-                                active: active-tool == "rotate";
-                                live-mode: active-tool == "rotate" && root.transform-instant-active;
-                                clicked => { root.active-tool-changed("rotate"); }
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-scale;
-                                label: root.label-model-scale;
-                                shortcut: root.shortcuts.model-scale;
-                                description: Tr.t("sl.resize_active_selection_proportionally_or_al");
-                                active: active-tool == "scale";
-                                live-mode: active-tool == "scale" && root.transform-instant-active;
-                                clicked => { root.active-tool-changed("scale"); }
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-transform;
-                                label: root.label-model-transform;
-                                shortcut: root.shortcuts.model-transform;
-                                description: Tr.t("sl.universal_3_in_1_gizmo_for_translate_rotate_");
-                                active: active-tool == "transform";
-                                live-mode: active-tool == "transform" && root.transform-instant-active;
-                                clicked => { root.command-executed("model.tool_transform"); }
-                            }
-
-                            Rectangle {
-                                width: 28px;
-                                height: 1px;
-                                background: DesignTokens.border;
-                            }
-
-                            // Ferramentas exclusivas de DRAW:
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon-svg: PetuniaIcons.tool-profile;
-                                semantic-label: Tr.t("sl.sketch_profile");
-                                shortcut: root.shortcuts.model-profile;
-                                description: Tr.t("sl.draw_2d_profile_curves_on_ground_face_or_vie");
-                                active: active-tool == "draw_profile";
-                                clicked => { root.active-tool-changed("draw_profile"); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon-svg: PetuniaIcons.boolean-fuse;
-                                semantic-label: Tr.t("sl.shape_builder");
-                                description: Tr.t("sl.shape_builder_description");
-                                active: active-tool == "shape_builder";
-                                clicked => { root.active-tool-changed("shape_builder"); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Square;
-                                semantic-label: Tr.t("sl.2d_rectangle");
-                                description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
-                                active: false;
-                                clicked => { root.add-profile-rectangle(2.0, 1.5); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Circle;
-                                semantic-label: Tr.t("sl.2d_circle");
-                                description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
-                                active: false;
-                                clicked => { root.add-profile-circle(1.0, 16); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon-svg: PetuniaIcons.tool-pushpull;
-                                active: active-tool == "push_pull";
-                                semantic-label: root.label-model-push-pull;
-                                shortcut: root.shortcuts.model-push-pull;
-                                description: Tr.t("sl.push_or_pull_faces_along_surface_normals_dir");
-                                clicked => { root.command-executed("model.push_pull"); }
-                            }
-                        }
-
-                        if active-workspace == "MODEL" && root.modeling-mode == "POLY": VerticalLayout {
-                            spacing: 5px;
-
-                            // Grupos com flyout (F5b): Seleção/Laço e Cursor 3D/Medir.
-                            ToolGroup {
-                                tools: root.rail-select-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-select-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "select"; }
-                            }
-                            ToolGroup {
-                                tools: root.rail-helper-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-helper-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "helpers"; }
-                            }
-
-                            Rectangle {
-                                width: 28px;
-                                height: 1px;
-                                background: DesignTokens.border;
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-position;
-                                label: root.label-model-position;
-                                shortcut: root.shortcuts.model-move;
-                                description: Tr.t("sl.translate_active_selection_along_axes_or_vie");
-                                active: active-tool == "move";
-                                live-mode: active-tool == "move" && root.transform-instant-active;
-                                clicked => { root.active-tool-changed("move"); }
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-rotate;
-                                label: root.label-model-rotate;
-                                shortcut: root.shortcuts.model-rotate;
-                                description: Tr.t("sl.rotate_active_selection_around_the_active_pi");
-                                active: active-tool == "rotate";
-                                live-mode: active-tool == "rotate" && root.transform-instant-active;
-                                clicked => { root.active-tool-changed("rotate"); }
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-scale;
-                                label: root.label-model-scale;
-                                shortcut: root.shortcuts.model-scale;
-                                description: Tr.t("sl.resize_active_selection_proportionally_or_al");
-                                active: active-tool == "scale";
-                                live-mode: active-tool == "scale" && root.transform-instant-active;
-                                clicked => { root.active-tool-changed("scale"); }
-                            }
-                            ViewportSvgButton {
-                                show-label: root.show-tool-labels;
-                                glyph: PetuniaIcons.tool-transform;
-                                label: root.label-model-transform;
-                                shortcut: root.shortcuts.model-transform;
-                                description: Tr.t("sl.universal_3_in_1_gizmo_for_translate_rotate_");
-                                active: active-tool == "transform";
-                                live-mode: active-tool == "transform" && root.transform-instant-active;
-                                clicked => { root.command-executed("model.tool_transform"); }
-                            }
-
-                            Rectangle {
-                                width: 28px;
-                                height: 1px;
-                                background: DesignTokens.border;
-                            }
-
-                            // Ferramentas exclusivas de POLY:
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Plus;
-                                semantic-label: Tr.t("sl.add_primitive");
-                                shortcut: root.shortcuts.model-add-primitive;
-                                description: Tr.t("sl.quick_menu_to_create_standard_3d_parametric_");
-                                active: root.add-menu-open;
-                                clicked => {
-                                    root.add-menu-open = !root.add-menu-open;
-                                    root.add-menu-changed(root.add-menu-open);
-                                }
-                            }
-                        }
-
-                        if active-workspace == "PAINT": VerticalLayout {
-                            // Fonte única das ferramentas de pintura (F6); a barra de baixo só
-                            // ajusta o pincel. Variações ficam em grupos com flyout (F5b).
-                            spacing: 6px;
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.MousePointer2;
-                                semantic-label: Tr.t("sl.select");
-                                shortcut: "";
-                                description: Tr.t("sl.select");
-                                active: active-tool == "select";
-                                clicked => { root.active-tool-changed("select"); }
-                            }
-                            ToolGroup {
-                                tools: root.rail-paint-brush-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-paint-brush-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "paint-brush"; }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Eraser;
-                                semantic-label: Tr.t("sl.eraser");
-                                shortcut: root.shortcuts.paint-eraser;
-                                description: Tr.t("sl.eraser");
-                                active: active-tool == "eraser";
-                                clicked => { root.active-tool-changed("eraser"); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Pipette;
-                                semantic-label: Tr.t("sl.color_picker");
-                                shortcut: root.shortcuts.paint-picker;
-                                description: Tr.t("sl.color_picker");
-                                active: active-tool == "picker";
-                                clicked => { root.active-tool-changed("picker"); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.PaintBucket;
-                                semantic-label: Tr.t("sl.fill_bucket");
-                                shortcut: root.shortcuts.paint-fill;
-                                description: Tr.t("sl.fill_bucket");
-                                active: active-tool == "fill";
-                                clicked => { root.active-tool-changed("fill"); }
-                            }
-                            ToolGroup {
-                                tools: root.rail-paint-shape-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-paint-shape-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "paint-shapes"; }
-                            }
-                            ToolGroup {
-                                tools: root.rail-paint-gradient-tools;
-                                show-label: root.show-tool-labels;
-                                more-hint: Tr.t("sl.rail_more_hint");
-                                activated(id) => { root.rail-activate(id); }
-                                more-requested(x, y) => { root.rail-flyout-tools = root.rail-paint-gradient-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "paint-gradients"; }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.MousePointerClick;
-                                semantic-label: Tr.t("sl.uv_select");
-                                shortcut: "";
-                                description: Tr.t("sl.uv_select");
-                                active: active-tool == "uv_select";
-                                clicked => { root.active-tool-changed("uv_select"); }
-                            }
-                        }
-
-                        if active-workspace == "UV": VerticalLayout {
-                            spacing: 6px;
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.MousePointer2;
-                                semantic-label: Tr.t("sl.uv_select");
-                                shortcut: root.shortcuts.uv-select;
-                                description: Tr.t("sl.select_uv_vertices_edges_and_polygon_islands");
-                                active: active-tool == "uv_select";
-                                clicked => { root.active-tool-changed("uv_select"); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Maximize2;
-                                semantic-label: Tr.t("sl.unwrap");
-                                shortcut: root.shortcuts.uv-unwrap;
-                                description: Tr.t("sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou");
-                                active: false;
-                                clicked => { root.command-executed("uv.unwrap"); }
-                            }
-                            ToolButton {
-                                show-label: root.show-tool-labels;
-                                icon: IconSet.Grid2x2;
-                                semantic-label: Tr.t("sl.pack_islands");
-                                shortcut: root.shortcuts.uv-pack;
-                                description: Tr.t("sl.pack_and_arrange_uv_islands_efficiently_with");
-                                active: false;
-                                clicked => { root.command-executed("uv.pack_islands"); }
-                            }
-                        }
-
-                        // Animate: um botão por Motion do catálogo (o rótulo e o
-                        // motivo de indisponibilidade vêm do Rust, por TextId).
-                        if active-workspace == "ANIMATE": VerticalLayout {
-                            spacing: 6px;
-                            for item in root.animate-catalog: AnimTile {
-                                entry: item;
-                                clicked => { root.animate-action("add-motion", item.id, 0); }
-                            }
-                        }
-
-                        Rectangle { vertical-stretch: 1; }
-
-                        // Navigation pills (Decision D4: Parts & Asset Library)
-                        Rectangle {
-                            width: 28px;
-                            height: 1px;
-                            background: DesignTokens.border;
-                        }
-                        ToolButton {
-                            show-label: root.show-tool-labels;
-                            icon: IconSet.FolderArchive;
-                            semantic-label: root.label-asset-library;
-                            shortcut: "Shift+F5";
-                            description: Tr.t("sl.open_or_collapse_the_bottom_project_asset_li");
-                            active: asset-library-visible;
-                            clicked => { root.asset-library-requested(); }
+                    activate-tool(id) => { root.active-tool-changed(id); }
+                    execute-command(id) => { root.command-executed(id); }
+                    rail-activate(id) => { root.rail-activate(id); }
+                    flyout-requested(group, x, y) => {
+                        root.rail-flyout-x = x;
+                        root.rail-flyout-y = y;
+                        root.rail-flyout = group;
+                        if group == "select" {
+                            root.rail-flyout-tools = root.rail-select-tools;
+                        } else if group == "helpers" {
+                            root.rail-flyout-tools = root.rail-helper-tools;
+                        } else if group == "paint-brush" {
+                            root.rail-flyout-tools = root.rail-paint-brush-tools;
+                        } else if group == "paint-shapes" {
+                            root.rail-flyout-tools = root.rail-paint-shape-tools;
+                        } else if group == "paint-gradients" {
+                            root.rail-flyout-tools = root.rail-paint-gradient-tools;
                         }
                     }
+                    add-profile-rectangle(w, h) => { root.add-profile-rectangle(w, h); }
+                    add-profile-circle(radius, segments) => { root.add-profile-circle(radius, segments); }
+                    add-menu-toggled(open) => {
+                        root.add-menu-open = open;
+                        root.add-menu-changed(open);
+                    }
+                    animate-action(action, arg, value) => { root.animate-action(action, arg, value); }
+                    asset-library-requested => { root.asset-library-requested(); }
                 }
 
                 // Contêiner da viewport: principal + (opcional) vista dividida, lado a lado.
