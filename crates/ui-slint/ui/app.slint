@@ -1789,7 +1789,6 @@ export component PetuniaSlintShell inherits Window {
                         width: parent.width;
                         height: parent.height;
 
-                        active-keymap-id: root.active-keymap-id;
                         active-tool: root.active-tool;
                         active-workspace: root.active-workspace;
                         modeling-mode: root.modeling-mode;
@@ -1819,6 +1818,7 @@ export component PetuniaSlintShell inherits Window {
                         snap-mode <=> root.snap-mode;
 
                         focus-requested => { root-focus.focus(); }
+                        pointer-modifier-active(action, shift, ctrl, alt) => { return root.pointer-modifier-active(action, shift, ctrl, alt); }
                         gizmo-drag-begin(x, y) => { root.gizmo-drag-begin(x, y); }
                         gizmo-drag-end => { root.gizmo-drag-end(); }
                         gizmo-hover(x, y) => { root.gizmo-hover(x, y); }
