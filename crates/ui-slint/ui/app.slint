@@ -22,6 +22,7 @@ import { StatusBar } from "shell/status_bar.slint";
 import { ContextBar } from "viewport/context_bar.slint";
 import { ViewBar } from "viewport/view_bar.slint";
 import { ViewportPassiveOverlays } from "viewport/overlays.slint";
+import { PetuniaViewportHost } from "viewport/viewport.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
 import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
@@ -1588,46 +1589,12 @@ export component PetuniaSlintShell inherits Window {
                 // Contêiner da viewport: principal + (opcional) vista dividida, lado a lado.
                 Rectangle {
                     horizontal-stretch: 1;
-                viewport-region := Rectangle {
-                    x: 0px;
-                    y: 0px;
-                    width: root.split-enabled ? (parent.width - 4px) / 2 : parent.width;
-                    height: parent.height;
-                    clip: true;
-                    background: DesignTokens.canvas;
-                    border-width: 1px;
-                    border-color: DesignTokens.border;
-
-                    // Em px físicos a medida muda também quando só o fator de escala
-                    // muda (UI scale, troca de monitor), o que recria o alvo nítido.
-                    property <float> physical-width: self.width / 1phx;
-                    property <float> physical-height: self.height / 1phx;
-                    changed width => {
-                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
-                    }
-                    changed height => {
-                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
-                    }
-                    changed physical-width => {
-                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
-                    }
-                    changed physical-height => {
-                        root.viewport-resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
-                    }
-
-                    if has-gpu-viewport: Image {
-                        width: 100%;
-                        height: 100%;
-                        image-fit: contain;
-                        source: root.viewport-image;
-                    }
-
-                    if !has-gpu-viewport: Text {
-                        text: Tr.t("sl.viewport_n_nslint_shell_bootstrap_ngpu_viewp");
-                        color: DesignTokens.text-muted;
-                        font-size: DesignTokens.font-exceptional;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                viewport-region := PetuniaViewportHost {
+                    split-enabled: root.split-enabled;
+                    has-gpu-viewport: root.has-gpu-viewport;
+                    viewport-image: root.viewport-image;
+                    resized(w, h, physical-w, physical-h) => {
+                        root.viewport-resized(w, h, physical-w, physical-h);
                     }
 
                     // Overlays passivos: seleção, animação e previews calculados fora da camada declarativa.
@@ -6810,7 +6777,8 @@ export component PetuniaSlintShell inherits Window {
                             }
                         }
                     }
-}
+
+                }
 
                     // Viewport dividida (opcional): segunda vista 3D só de navegação.
                     if root.split-enabled: Rectangle {
