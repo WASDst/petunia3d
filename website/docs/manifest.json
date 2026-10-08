@@ -109,6 +109,10 @@
         {
           "path": "03-geometry/normals-shading-sharp-edges.md",
           "title": "Normals, Shading e Sharp Edges — proposta"
+        },
+        {
+          "path": "03-geometry/snapping-inference-workplane.md",
+          "title": "Snapping, Inference & Workplane — proposta"
         }
       ]
     },
