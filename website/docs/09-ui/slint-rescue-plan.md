@@ -139,6 +139,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 - Orbit/Pan/Zoom convergem para `UiIntent::ViewportGesture`; Orbit preserva pivot por seleção/Cursor;
 - fases de tool pointer usam `ViewportPointerPhase::{Press,Move,Release,Cancel}` internamente no Rust;
 - pointer semantics do keymap são projetadas para o router via masks, incluindo Maya `Alt+LMB → Orbit`;
+- bug de escopo de `pointer.adjust` no scroll corrigido, exceção física de Alt removida da gramática de ferramentas e cancelamento do pointer desacoplado do menu contextual;
 - `callbacks.rs` caiu de ~6.069 para ~5.487 linhas com navigation/selection/hover/transform/tool pointer/Split View delegados a `bridge/viewport.rs`.
 
 ### Próximas extrações desta fase
@@ -324,12 +325,15 @@ Não misturar extração estrutural com redesign visual significativo no mesmo c
 
 ## 16. Estado atual
 
-Concluído nesta execução:
-- `ShellHeader`;
-- `ToolRail`;
-- `StatusToast`;
-- documentação do diretório atualizada.
+A branch já possui:
+- ShellHeader, ToolRail, StatusToast e regiões independentes da viewport;
+- `ViewportInputRouter` com thresholds configuráveis e masks oriundas do keymap;
+- `bridge/viewport.rs` para navigation, selection, hover, transform, tool pointer e Split View;
+- `bridge/model.rs` para DRAW/Profile e `bridge/paint.rs` para input de pintura;
+- testes declarativos de regressão do keymap no `viewport_gestures.rs`.
 
-`callbacks.rs` caiu de aproximadamente 6.069 para 5.585 linhas; `lib.rs` caiu para aproximadamente 16.952 linhas após mover navegação, resize e render da viewport para `src/bridge/viewport.rs`.
+No ponto de inspeção desta rodada, `app.slint` possuía cerca de **9.350 linhas**, `callbacks.rs` **5.487 linhas** e `bridge/viewport.rs` aproximadamente **731 linhas**. Os dois últimos módulos ainda pedem decomposição disciplinada por responsabilidade, não transferência indiscriminada de código.
 
-Próximo alvo: **continuar decompondo o bridge Rust por domínio sem transformar `bridge/viewport.rs` em novo monólito**. PAINT e DRAW já ganharam módulos próprios; picking geométrico e seleção complexa só migram após definição de query/service dedicada.
+**Validação:** testes foram adicionados, mas sua aprovação depende de execução real do gate `ui-slint`. A existência dos testes não equivale a build validado.
+
+Próximo alvo: **dividir o registro da viewport em módulos coesos sem transformar `bridge/viewport.rs` em novo monólito**, preservar Rust para picking, ToolSession e gizmo geometry, e evoluir para DTOs/intents explícitos de select/hover/box/lasso. A gramática semântica específica de PAINT requer outra rodada para clone/decal/straight stroke.
