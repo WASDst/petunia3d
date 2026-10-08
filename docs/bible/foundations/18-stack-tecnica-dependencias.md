@@ -3,7 +3,7 @@
 <aside>
 🛠️
 
-Esta página é o **índice normativo da stack atual**. A baseline Odin registrada anteriormente foi substituída pelo ADR do capítulo 32. A stack final vigente é **Rust 2024 + egui + eframe + egui-wgpu + wgpu + Geometry Core próprio em Rust**; detalhes completos ficam nos capítulos 27–36.
+Esta página é o **índice normativo da stack atual**. A baseline Odin registrada anteriormente foi substituída pelo ADR do capítulo 32. Desde a decisão de 2026-10-08, a stack de produto vigente é **Rust 2024 + Slint 1.18 + wgpu + Geometry Core próprio em Rust**. egui/eframe/egui-wgpu permanecem apenas no fallback congelado e não definem novas features. A política de frontend e reavaliação está no [ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md); detalhes funcionais seguem os capítulos 27–36.
 
 </aside>
 
@@ -15,11 +15,10 @@ Esta página é o **índice normativo da stack atual**. A baseline Odin registra
 
 ```
 Rust 2024
-├ egui 0.36.x
-├ eframe 0.36.x
-├ egui-wgpu 0.36.x
+├ Slint 1.18
 ├ wgpu 30.x
-├ egui_extras + selected UI adapters
+├ shell declarativo `petunia_ui_slint`
+├ viewport adapter toolkit-neutro + fallback software
 ├ WGSL
 ├ glam
 ├ slotmap
@@ -43,15 +42,15 @@ A meta é evitar a antiga combinação Odin + C/C++ providers + Go MCP quando ex
 
 # UI
 
-**egui + eframe são a toolkit baseline final V1.** A UI obedece aos capítulos 22–26 e à autoridade final do capítulo 36: Figma como evidência/verdade visual de referência; Notion como verdade comportamental; componentes reais e acessíveis; viewport-first; Parts/Context; workspaces MODEL/PAINT/UV; tokens, themes e Plugin Panels sobre Design System próprio.
+**Slint 1.18 é a toolkit ativa de produção V1.** A UI obedece aos capítulos 22–26, à autoridade final do capítulo 36 e ao ADR 009: componentes reais e acessíveis, viewport-first, workspaces e painéis contextuais, tokens, themes e Plugin Panels sobre Design System próprio.
 
-egui deve ficar isolado em `petunia-ui`. **UI de produto em workspaces deve usar Petunia Components e adapters próprios como fronteira obrigatória**; chamadas cruas de egui ficam restritas à implementação desses components/adapters e a devtools explicitamente delimitadas. Nenhum domínio interno pode depender de egui/eframe. O capítulo 35 define o ecossistema auxiliar e a política de wrappers.
+Slint deve ficar isolado em `petunia_ui_slint`. **UI de produto em workspaces usa Petunia Components/controles declarativos e adapters próprios como fronteira obrigatória**; callbacks emitem `UiIntent` e não carregam regras de domínio. Nenhum domínio interno depende de Slint nem de egui. O capítulo 35 permanece como referência histórica do frontend egui congelado, não como autoridade da UI ativa.
 
 # Renderer
 
 **wgpu 30.x** é a baseline do viewport. Não usar engine completa. `petunia-render` é um renderer pequeno próprio sobre wgpu + WGSL.
 
-A integração com a UI usa `egui-wgpu` da mesma linha compatível: egui aloca o retângulo de viewport e o adapter invoca custom wgpu rendering/RenderPass do `PetuniaRenderer`. Isso elimina a necessidade de um bridge de textura entre toolkits gráficos distintos.
+A integração com a UI passa pelo adapter de viewport do frontend Slint e pelo `PetuniaRenderer`, mantendo renderer e domínio toolkit-neutros. O caminho GPU é preferido; fallback software permanece disponível. Qualquer alegação de zero-copy ou ausência de readback deve ser comprovada pela implementação e profiling, conforme ADR 009.
 
 # Geometry
 
@@ -94,7 +93,7 @@ Dependências entram somente após avaliação de licença, manutenção, target
 
 # Documentos normativos da stack
 
-- [27 — Stack Rust Canônica: Rust + egui + wgpu](27-stack-rust-canonica.md) — stack e dependências.
+- [27 — Stack Rust Canônica](27-stack-rust-canonica.md) — stack Rust vigente; trechos egui são históricos e subordinados ao ADR 009.
 - [28 — Arquitetura Rust, Cargo Workspace e Fronteiras entre Crates](28-arquitetura-rust-cargo-crates.md) — crates e dependency boundaries.
 - [29 — Geometry Core, Renderer, UV e Painting na Stack Rust](29-geometry-renderer-uv-painting-rust.md) — geometry, rendering, UV e painting.
 - [30 — I/O, Projeto .petunia, Lua Plugins e MCP na Stack Rust](30-io-petunia-lua-mcp-rust.md) — I/O, plugins e MCP.
@@ -102,7 +101,7 @@ Dependências entram somente após avaliação de licença, manutenção, target
 - [32 — ADR: Migração da Baseline Odin para Rust](32-adr-odin-para-rust.md) — ADR Odin → Rust.
 - [33 — Biblioteca de Referências Técnicas da Stack Rust](33-referencias-tecnicas-rust.md) — biblioteca de referências oficiais e projetos/papers relacionados à stack.
 - [34 — Arquitetura Modular Explícita, Rust Safety e Representação em Código](34-arquitetura-modular-rust-safety.md) — **arquitetura de código Rust-safe**, representação de entidades/recursos/topologia, DOD/ECS seletivo, Tool→Command→Algorithm→Data, modularidade e regras para agentes.
-- [35 — egui, Petunia Components, UI Adapters e Tooling de Desenvolvimento](35-egui-components-adapters-tooling.md) — **egui/Petunia Components/ecossistema UI**, adapters, testing, tooling de IA e política de componentes auxiliares.
+- [35 — egui, Petunia Components, UI Adapters e Tooling de Desenvolvimento](35-egui-components-adapters-tooling.md) — **referência histórica do fallback egui**; os princípios toolkit-neutros de Petunia Components continuam úteis, mas a UI ativa é regida pelo capítulo 36 + ADR 009.
 
 # Regra contra bloat
 
