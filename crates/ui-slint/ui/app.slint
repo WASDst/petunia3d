@@ -23,6 +23,7 @@ import { ContextBar } from "viewport/context_bar.slint";
 import { ViewBar } from "viewport/view_bar.slint";
 import { ViewportPassiveOverlays } from "viewport/overlays.slint";
 import { PetuniaViewportHost } from "viewport/viewport.slint";
+import { ViewportInputRouter } from "viewport/input_router.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
 import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
@@ -1473,7 +1474,7 @@ export component PetuniaSlintShell inherits Window {
                     root.reference-manager-closed();
                     return accept;
                 }
-                viewport-touch.clear-gesture();
+                viewport-input.clear-gesture();
                 root.escape-requested();
                 return accept;
             }
@@ -1782,425 +1783,67 @@ export component PetuniaSlintShell inherits Window {
                         width: parent.width; height: parent.height;
                         source: root.stencil-image; image-fit: fill;
                     }
-                    viewport-touch := TouchArea {
-                        mouse-cursor: self.is-orbit || self.is-pan || self.is-gizmo-drag ? grabbing
-                            : (self.is-transform || self.is-keyboard-transform-drag) ? (root.active-tool == "scale" ? nesw-resize : (root.active-tool == "rotate" ? grabbing : move))
-                            : (root.active-workspace == "PAINT") ? (root.brush-stroke-tool(root.active-tool) ? none : crosshair)
-                            : (root.active-tool == "slice" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "measure" || root.active-tool == "draw_profile" || root.active-tool == "cursor" || root.active-tool == "cursor_3d" || self.is-box-select || self.is-lasso-select || root.active-tool == "lasso_select") ? crosshair
-                            : (root.active-tool == "extrude" || root.active-tool == "push_pull") ? ns-resize
-                            : root.active-tool == "bevel" ? nesw-resize
-                            : root.active-tool == "inset" ? nwse-resize
-                            : root.active-tool == "scale" ? nesw-resize
-                            : root.active-tool == "rotate" ? grabbing
-                            : root.active-tool == "move" ? move
-                            : root.gizmo-has-hover ? grab
-                            : default;
-                        // Anel do pincel: mesmo diâmetro (px) que o carimbo e o pincel 2D usam.
-                        // Cursor do pincel: mesmo diâmetro (px) que o carimbo e o canvas 2D;
-                        // núcleo pela dureza e preenchimento pela opacidade × fluxo.
-                        if root.active-workspace == "PAINT" && viewport-touch.has-hover && root.brush-stroke-tool(root.active-tool): BrushCursor {
-                            diameter: root.brush-size * 16px;
-                            hardness: root.brush-hardness;
-                            strength: root.brush-opacity * root.brush-flow;
-                            tint: root.paint-color;
-                            erase: root.active-tool == "eraser";
-                            hard-edge: root.active-tool == "pixel";
-                            squash: root.brush-cursor-squash;
-                            tilt: root.brush-cursor-tilt;
-                            x: viewport-touch.mouse-x - self.width / 2;
-                            y: viewport-touch.mouse-y - self.height / 2;
-                        }
-                        property <length> last-x;
-                        property <length> last-y;
-                        property <bool> is-box-select: false;
-                        property <bool> is-lasso-select: false;
-                        property <bool> pending-lasso-select: false;
-                        property <string> lasso-points: "";
-                        property <string> lasso-base-commands: "";
-                        property <string> lasso-commands: "";
-                        property <length> lasso-last-x;
-                        property <length> lasso-last-y;
-                        property <int> lasso-count: 0;
-                        property <bool> subtract-selection: false;
-                        property <bool> is-orbit: false;
-                        property <bool> is-pan: false;
-                        property <bool> moved-since-down: false;
-                        property <bool> extend-selection: false;
-                        property <bool> is-transform: false;
-                        property <bool> pending-transform: false;
-                        // Tweak do Blender: com a tool Select, o arrasto vira
-                        // box select; o clique (sem arrasto) só seleciona.
-                        property <bool> pending-box-select: false;
-                        property <bool> is-painting: false;
-                        property <bool> is-tool-drag: false;
-                        property <bool> is-loop-drag: false;
-                        property <bool> is-gizmo-drag: false;
-                        property <bool> is-keyboard-transform-drag: false;
-                        // Gesto da gramática única em andamento (botão pressionado).
-                        property <bool> is-tool-gesture: false;
-                        property <bool> is-profile-depth-drag: false;
-                        property <bool> consume-click: false;
-                        property <bool> tool-drag-fine: false;
-                        property <bool> loop-selection: false;
-                        property <string> local-kind: "";
+                    viewport-input := ViewportInputRouter {
+                        width: parent.width;
+                        height: parent.height;
 
-                        function clear-gesture() {
-                            self.is-box-select = false;
-                            self.is-lasso-select = false;
-                            self.pending-lasso-select = false;
-                            self.lasso-points = "";
-                            self.lasso-base-commands = "";
-                            self.lasso-commands = "";
-                            self.is-transform = false;
-                            self.pending-transform = false;
-                            self.pending-box-select = false;
-                            self.is-tool-drag = false;
-                            self.is-profile-depth-drag = false;
-                            self.is-loop-drag = false;
-                            self.is-gizmo-drag = false;
-                            self.is-keyboard-transform-drag = false;
-                            self.is-tool-gesture = false;
-                            self.consume-click = false;
-                            self.loop-selection = false;
-                            self.is-painting = false;
-                            self.is-orbit = false;
-                            self.is-pan = false;
-                            self.moved-since-down = true;
-                        }
+                        active-keymap-id: root.active-keymap-id;
+                        active-tool: root.active-tool;
+                        active-workspace: root.active-workspace;
+                        modeling-mode: root.modeling-mode;
 
-                        function transform-tool() -> string {
-                            if root.active-workspace != "MODEL" {
-                                return "";
-                            }
-                            if root.active-tool == "move" || root.active-tool == "transform" {
-                                return "pos";
-                            }
-                            if root.active-tool == "rotate" {
-                                return "rot";
-                            }
-                            if root.active-tool == "scale" {
-                                return "scale";
-                            }
-                            return "";
-                        }
+                        brush-cursor-squash: root.brush-cursor-squash;
+                        brush-cursor-tilt: root.brush-cursor-tilt;
+                        brush-flow: root.brush-flow;
+                        brush-hardness: root.brush-hardness;
+                        brush-opacity: root.brush-opacity;
+                        brush-size: root.brush-size;
+                        paint-color: root.paint-color;
 
-                        pointer-event(event) => {
-                            root.precision-mode = event.modifiers.shift;
-                            root.snap-mode = event.modifiers.control;
-                            if event.kind == PointerEventKind.down && event.button == PointerEventButton.right
-                                && (is-tool-gesture || root.tool-gesture-latched || is-transform || is-gizmo-drag
-                                    || is-tool-drag || is-keyboard-transform-drag || root.transform-instant-active
-                                    || is-loop-drag) {
-                                // RMB nunca cancela um gesto (constituição 11); cancelar é Esc.
-                            } else if event.kind == PointerEventKind.cancel || (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
-                                if event.kind == PointerEventKind.cancel && (is-tool-gesture || root.tool-gesture-latched) {
-                                    root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false, false);
-                                }
-                                self.clear-gesture();
-                                if event.kind == PointerEventKind.down && event.modifiers.shift {
-                                    consume-click = true;
-                                    root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
-                                } else {
-                                    // Sem gesto: abre o menu da viewport.
-                                    root.viewport-context-requested(self.mouse-x / 1px, self.mouse-y / 1px);
-                                }
-                            } else if event.kind == PointerEventKind.down {
-                                root-focus.focus();
-                                last-x = self.mouse-x;
-                                last-y = self.mouse-y;
-                                moved-since-down = false;
-                                consume-click = false;
-                                extend-selection = event.modifiers.shift;
-                                loop-selection = event.modifiers.alt;
-                                is-transform = false;
-                                pending-transform = false;
-                                pending-box-select = false;
-                                pending-lasso-select = false;
-                                if event.button == PointerEventButton.left
-                                    && (root.tool-gesture-latched
-                                        || (root.tool-grammar-active && !root.transform-instant-active
-                                            && (!event.modifiers.alt || root.active-tool == "draw_profile")
-                                            && !(event.modifiers.alt && root.active-keymap-id == "maya"))) {
-                                    // Gramática única (constituição 11): todas as ferramentas
-                                    // de operação — Move/Rotate/Scale, Extrude, Inset, Round
-                                    // Edge, Push/Pull, Poly Pen, Shape Builder, Draw Profile,
-                                    // Knife, Loop Cut e Slice — e os modais por atalho
-                                    // decidem clique × arrasto no bridge.
-                                    is-tool-gesture = true;
-                                    consume-click = true;
-                                    root.tool-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                                } else if event.button == PointerEventButton.left
-                                    && root.active-workspace == "MODEL" && root.modeling-mode == "DRAW"
-                                    && root.depth-handle-visible
-                                    && abs(self.mouse-x - root.depth-handle-x) <= 20px
-                                    && abs(self.mouse-y - root.depth-handle-y) <= 20px {
-                                    is-profile-depth-drag = true;
-                                    tool-drag-fine = event.modifiers.shift;
-                                    consume-click = true;
-                                } else if event.button == PointerEventButton.middle {
-                                    if event.modifiers.shift {
-                                        is-pan = true;
-                                        is-orbit = false;
-                                    } else {
-                                        is-orbit = true;
-                                        is-pan = false;
-                                    }
-                                } else if event.button == PointerEventButton.left && event.modifiers.alt && root.active-keymap-id == "maya" {
-                                    is-orbit = true;
-                                    is-pan = false;
-                                } else if event.button == PointerEventButton.left && root.active-tool == "lasso_select" && !event.modifiers.alt {
-                                    pending-lasso-select = true;
-                                    is-lasso-select = false;
-                                    subtract-selection = event.modifiers.control;
-                                    lasso-last-x = self.mouse-x;
-                                    lasso-last-y = self.mouse-y;
-                                    lasso-count = 0;
-                                    lasso-points = "";
-                                    lasso-base-commands = "";
-                                    lasso-commands = "";
-                                } else if event.button == PointerEventButton.left && (root.active-tool == "cursor" || root.active-tool == "cursor_3d") {
-                                    consume-click = true;
-                                    root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
-                                } else if event.button == PointerEventButton.left
-                                    && (!event.modifiers.alt || root.active-keymap-id != "maya") {
-                                    if root.gizmo-has-hover {
-                                        is-gizmo-drag = true;
-                                        root.gizmo-drag-begin(self.mouse-x / 1px, self.mouse-y / 1px);
-                                    } else if root.transform-instant-active {
-                                        // O atalho já abriu a operação modal. O mesmo
-                                        // clique pode confirmar ou iniciar um arrasto;
-                                        // não exigir um primeiro clique descartável.
-                                        is-keyboard-transform-drag = true;
-                                        consume-click = true;
-                                    } else if root.active-workspace == "PAINT" && root.active-tool != "select" {
-                                        is-painting = true;
-                                        root.viewport-paint-begin(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
-                                    } else if root.loop-cut-active {
-                                        is-loop-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
-                                    } else if root.tool-modal-active {
-                                        is-tool-drag = true;
-                                        tool-drag-fine = event.modifiers.shift;
-                                    } else {
-                                        local-kind = self.transform-tool();
-                                        if local-kind != "" && !event.modifiers.alt {
-                                            // A ferramenta só inicia uma operação após um
-                                            // arrasto real; um clique continua selecionando.
-                                            pending-transform = true;
-                                        } else if (root.active-tool == "select" || root.active-tool == "box_select")
-                                            && root.active-workspace == "MODEL"
-                                            && !root.gizmo-has-hover
-                                            && !root.transform-instant-active
-                                            && !root.tool-modal-active
-                                            && !root.loop-cut-active
-                                            && !event.modifiers.alt {
-                                            // Tweak / Box Select (Blender): arrastar
-                                            // vira box select; o clique (sem
-                                            // arrasto) cai no viewport-select.
-                                            pending-box-select = true;
-                                            subtract-selection = event.modifiers.control;
-                                        }
-                                    }
-                                }
-                            } else if event.kind == PointerEventKind.move {
-                                if !self.pressed {
-                                    // TouchArea.moved só dispara durante um grab. O
-                                    // pointer-event Move também cobre hover livre,
-                                    // necessário para operações iniciadas por atalho.
-                                    root.gizmo-hover(self.mouse-x / 1px, self.mouse-y / 1px);
-                                    if !root.gizmo-has-hover {
-                                        root.viewport-hover(self.mouse-x / self.width, self.mouse-y / self.height);
-                                    } else {
-                                        root.viewport-hover-clear();
-                                    }
-                                }
-                                if is-box-select {
-                                    if abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px { moved-since-down = true; }
-                                } else if pending-lasso-select && self.pressed
-                                    && (abs(self.mouse-x - lasso-last-x) > 3px || abs(self.mouse-y - lasso-last-y) > 3px) {
-                                    pending-lasso-select = false;
-                                    is-lasso-select = true;
-                                    moved-since-down = true;
-                                    lasso-count = 2;
-                                    lasso-points = "\{lasso-last-x / self.width},\{lasso-last-y / self.height};\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
-                                    lasso-base-commands = "M \{lasso-last-x / 1px} \{lasso-last-y / 1px} L \{self.mouse-x / 1px} \{self.mouse-y / 1px} ";
-                                    lasso-commands = lasso-base-commands + "Z";
-                                    lasso-last-x = self.mouse-x;
-                                    lasso-last-y = self.mouse-y;
-                                } else if is-lasso-select && self.pressed {
-                                    if lasso-count < 4096 && (abs(self.mouse-x - lasso-last-x) > 3px || abs(self.mouse-y - lasso-last-y) > 3px) {
-                                        lasso-last-x = self.mouse-x;
-                                        lasso-last-y = self.mouse-y;
-                                        lasso-count += 1;
-                                        lasso-points += "\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
-                                        lasso-base-commands += "L \{self.mouse-x / 1px} \{self.mouse-y / 1px} ";
-                                    }
-                                    lasso-commands = lasso-base-commands + "L \{self.mouse-x / 1px} \{self.mouse-y / 1px} Z";
-                                } else if pending-box-select && self.pressed
-                                    && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
-                                        || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
-                                    pending-box-select = false;
-                                    is-box-select = true;
-                                    moved-since-down = true;
-                                } else if is-orbit {
-                                    moved-since-down = true;
-                                    root.viewport-orbit((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                } else if is-pan {
-                                    moved-since-down = true;
-                                    root.viewport-pan((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                } else if (is-tool-gesture && self.pressed) || root.tool-gesture-latched {
-                                    // Gramática única: o bridge decide clique × arrasto e aplica.
-                                    moved-since-down = true;
-                                    root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                                } else if event.modifiers.alt && root.active-keymap-id != "maya"
-                                    && (abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px) {
-                                    moved-since-down = true;
-                                } else if root.transform-instant-active && (!self.pressed || is-keyboard-transform-drag) {
-                                    if is-keyboard-transform-drag { moved-since-down = true; }
-                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
-                                } else if is-gizmo-drag {
-                                    moved-since-down = true;
-                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
-                                } else if root.tool-modal-active && (root.tool-activation == "instant" || root.keyboard-tool-modal-active) && !self.pressed {
-                                    root.tool-modal-hovered((self.mouse-y - last-y) / 1px, self.mouse-x / 1px, self.mouse-y / 1px);
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                } else if is-transform {
-                                    moved-since-down = true;
-                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
-                                } else if pending-transform && self.pressed
-                                    && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
-                                        || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
-                                    pending-transform = false;
-                                    is-transform = true;
-                                    moved-since-down = true;
-                                    root.viewport-transform-begin(local-kind, last-x / 1px, last-y / 1px);
-                                    root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
-                                } else if is-painting {
-                                    moved-since-down = true;
-                                    root.viewport-paint-update(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
-                                } else if is-tool-drag {
-                                    moved-since-down = true;
-                                    root.tool-modal-scrubbed((self.mouse-y - last-y) / 1px, tool-drag-fine, self.mouse-x / 1px, self.mouse-y / 1px);
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                } else if is-profile-depth-drag {
-                                    moved-since-down = true;
-                                    let delta = (last-y - self.mouse-y) / 1px * (tool-drag-fine ? 0.005 : 0.02);
-                                    root.profile-depth-set("\{max(0.05, root.profile-depth + delta)}");
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                } else if is-loop-drag {
-                                    moved-since-down = true;
-                                    root.loop-cut-scrubbed((self.mouse-x - last-x) / 1px, (self.mouse-y - last-y) / 1px);
-                                    last-x = self.mouse-x;
-                                    last-y = self.mouse-y;
-                                }
-                            } else if event.kind == PointerEventKind.up {
-                                if is-tool-gesture {
-                                    root.tool-pointer(2, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                                    is-tool-gesture = false;
-                                }
-                                if is-box-select {
-                                    if moved-since-down {
-                                        root.viewport-box-select(last-x / self.width, last-y / self.height, self.mouse-x / self.width, self.mouse-y / self.height, extend-selection, subtract-selection);
-                                    }
-                                    is-box-select = false;
-                                }
-                                if is-lasso-select {
-                                    if abs(self.mouse-x - lasso-last-x) > 1px || abs(self.mouse-y - lasso-last-y) > 1px {
-                                        lasso-points += "\{self.mouse-x / self.width},\{self.mouse-y / self.height};";
-                                        lasso-count += 1;
-                                    }
-                                    if lasso-count >= 3 {
-                                        root.viewport-lasso-select(lasso-points, extend-selection, subtract-selection);
-                                    }
-                                    is-lasso-select = false;
-                                    pending-lasso-select = false;
-                                    lasso-points = "";
-                                    lasso-base-commands = "";
-                                    lasso-commands = "";
-                                }
-                                pending-lasso-select = false;
-                                is-orbit = false;
-                                is-pan = false;
-                                is-profile-depth-drag = false;
-                                if is-transform {
-                                    root.viewport-transform-end();
-                                    is-transform = false;
-                                }
-                                if is-keyboard-transform-drag {
-                                    // No modal por atalho, clique confirma e
-                                    // clique-arrasto edita sem clique preparatório.
-                                    root.viewport-transform-end();
-                                    is-keyboard-transform-drag = false;
-                                }
-                                pending-transform = false;
-                                pending-box-select = false;
-                                if is-painting {
-                                    root.viewport-paint-end(self.mouse-x / 1px, self.mouse-y / 1px);
-                                    is-painting = false;
-                                }
-                                if is-tool-drag {
-                                    if moved-since-down {
-                                        root.tool-modal-apply();
-                                    }
-                                    is-tool-drag = false;
-                                }
-                                if is-loop-drag {
-                                    root.loop-cut-apply();
-                                    is-loop-drag = false;
-                                }
+                        depth-handle-visible: root.depth-handle-visible;
+                        depth-handle-x: root.depth-handle-x;
+                        depth-handle-y: root.depth-handle-y;
+                        gizmo-has-hover: root.gizmo-has-hover;
+                        keyboard-tool-modal-active: root.keyboard-tool-modal-active;
+                        loop-cut-active: root.loop-cut-active;
+                        profile-depth: root.profile-depth;
+                        tool-activation: root.tool-activation;
+                        tool-gesture-latched: root.tool-gesture-latched;
+                        tool-grammar-active: root.tool-grammar-active;
+                        tool-modal-active: root.tool-modal-active;
+                        transform-instant-active: root.transform-instant-active;
 
-                                if is-gizmo-drag {
-                                    root.gizmo-drag-end();
-                                    is-gizmo-drag = false;
-                                }
-                                root.viewport-hover(self.mouse-x / self.width, self.mouse-y / self.height);
-                            }
-                        }
+                        precision-mode <=> root.precision-mode;
+                        snap-mode <=> root.snap-mode;
 
-                        clicked => {
-                            if !consume-click && !moved-since-down && !is-transform && !is-painting
-                                && (root.active-workspace != "PAINT" || root.active-tool == "select") {
-                                root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, extend-selection, loop-selection);
-                            }
-                            consume-click = false;
-                        }
-
-                        scroll-event(event) => {
-                            // A roda sempre faz zoom (constituição 11). Ctrl+roda ajusta
-                            // contagens (Loop Cut) e o raio da edição proporcional.
-                            if event.modifiers.control {
-                                root.viewport-ctrl-scroll(event.delta-y / 1px);
-                            } else {
-                                root.viewport-zoom(event.delta-y / 1px);
-                            }
-                            accept
-                        }
-                    }
-
-                    if viewport-touch.is-box-select: Rectangle {
-                        x: min(viewport-touch.last-x, viewport-touch.mouse-x);
-                        y: min(viewport-touch.last-y, viewport-touch.mouse-y);
-                        width: abs(viewport-touch.mouse-x - viewport-touch.last-x);
-                        height: abs(viewport-touch.mouse-y - viewport-touch.last-y);
-                        background: DesignTokens.selection.transparentize(0.9);
-                        border-color: DesignTokens.selection;
-                        border-width: 1px;
-                    }
-                    if viewport-touch.is-lasso-select: Path {
-                        width: 100%;
-                        height: 100%;
-                        fit: ImageFit.preserve;
-                        commands: viewport-touch.lasso-commands;
-                        fill: DesignTokens.selection.transparentize(0.85);
-                        stroke: DesignTokens.selection;
-                        stroke-width: 1.5px;
+                        focus-requested => { root-focus.focus(); }
+                        gizmo-drag-begin(x, y) => { root.gizmo-drag-begin(x, y); }
+                        gizmo-drag-end => { root.gizmo-drag-end(); }
+                        gizmo-hover(x, y) => { root.gizmo-hover(x, y); }
+                        loop-cut-apply => { root.loop-cut-apply(); }
+                        loop-cut-scrubbed(dx, dy) => { root.loop-cut-scrubbed(dx, dy); }
+                        profile-depth-set(text) => { return root.profile-depth-set(text); }
+                        tool-modal-apply => { root.tool-modal-apply(); }
+                        tool-modal-hovered(delta, x, y) => { root.tool-modal-hovered(delta, x, y); }
+                        tool-modal-scrubbed(delta, fine, x, y) => { root.tool-modal-scrubbed(delta, fine, x, y); }
+                        tool-pointer(phase, x, y, shift, ctrl, alt) => { root.tool-pointer(phase, x, y, shift, ctrl, alt); }
+                        viewport-box-select(x0, y0, x1, y1, extend, subtract) => { root.viewport-box-select(x0, y0, x1, y1, extend, subtract); }
+                        viewport-context-requested(x, y) => { root.viewport-context-requested(x, y); }
+                        viewport-ctrl-scroll(delta) => { root.viewport-ctrl-scroll(delta); }
+                        viewport-hover(x, y) => { root.viewport-hover(x, y); }
+                        viewport-hover-clear => { root.viewport-hover-clear(); }
+                        viewport-lasso-select(points, extend, subtract) => { root.viewport-lasso-select(points, extend, subtract); }
+                        viewport-orbit(dx, dy) => { root.viewport-orbit(dx, dy); }
+                        viewport-paint-begin(x, y, shift, ctrl) => { root.viewport-paint-begin(x, y, shift, ctrl); }
+                        viewport-paint-end(x, y) => { root.viewport-paint-end(x, y); }
+                        viewport-paint-update(x, y, shift, ctrl) => { root.viewport-paint-update(x, y, shift, ctrl); }
+                        viewport-pan(dx, dy) => { root.viewport-pan(dx, dy); }
+                        viewport-place-cursor(x, y) => { root.viewport-place-cursor(x, y); }
+                        viewport-select(x, y, extend, loop) => { root.viewport-select(x, y, extend, loop); }
+                        viewport-transform-begin(kind, x, y) => { root.viewport-transform-begin(kind, x, y); }
+                        viewport-transform-end => { root.viewport-transform-end(); }
+                        viewport-transform-update(x, y, fine, snap) => { root.viewport-transform-update(x, y, fine, snap); }
+                        viewport-zoom(delta) => { root.viewport-zoom(delta); }
                     }
 
                     // 3D Cursor overlay (âncora 3D para criação de primitivas e foco de câmera)
