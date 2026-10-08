@@ -1,6 +1,6 @@
 # Transforms, Origin, Pivot & Gizmos
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Objetivo
 
@@ -971,3 +971,26 @@ Qual constraint/snap?
 ```
 
 Origin, Workplane, hierarchy e gizmo alimentam essas quatro respostas; não precisam criar subsistemas concorrentes.
+
+## Decisões fechadas
+
+1. Object Mode modifica somente SceneObject.transform.
+2. Edit Mode modifica somente authoring geometry.
+3. Interações world-space são convertidas para local na Application.
+4. Orientations V1: World, Local, Workplane, Normal e View.
+5. Local usa SceneObject local axes; Normal usa orientação da seleção.
+6. Pivots V1: Median, Bounding Box, Active Element, 3D Cursor e Individual.
+7. 3D Cursor permanece estado do EditorSession.
+8. Object Origin e Transform Pivot são conceitos separados.
+9. Edit Pivot é renomeado para Edit Origin.
+10. Asset.origin desaparece do modelo final; local (0,0,0) é a origem.
+11. Origin operations compensam authoring geometry para preservar world appearance.
+12. Origin edit em Generator exige Make Editable na V1.
+13. Apply Scale/Rotation são operações explícitas.
+14. Operações métricas detectam non-uniform scale.
+15. Parent/child multi-selection usa desired world transforms.
+16. TRS não ganha shear; casos não representáveis são recusados.
+17. Petunia custom gizmo vira canônico.
+18. transform-gizmo-egui é removido no destino final.
+19. Gizmo recebe TransformFrame pronto.
+20. TransformSession captura somente estado necessário para preview/Undo.
