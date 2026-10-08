@@ -245,7 +245,25 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
             }
         }
     });
+
+
+    let viewport_context_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_viewport_context_requested(move |x, y| {
+        if let Ok(mut bridge) = viewport_context_bridge.lock() {
+            bridge.viewport_context_triage(x, y);
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+            }
+        }
+    });
 }
+
 
 
 /// Conecta hover de componente e gizmo.
