@@ -1,8 +1,8 @@
 # Slint Reassessment & GUI Architecture
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado em 2026-10-08 — estratégia de resgate Slint + OpenGL.**
 >
-> Este capítulo reabre **somente a escolha do toolkit/host da GUI**. As decisões já aprovadas de Application separada da UI e de renderer 3D OpenGL 3.3 permanecem válidas. Nenhuma alteração na arquitetura do renderer será feita antes da aprovação desta proposta.
+> Este capítulo fecha a reavaliação do toolkit/host da GUI nesta rodada de arquitetura. **Slint permanece o frontend principal durante o milestone de resgate/refatoração**, preservando o investimento existente. O renderer 3D continua **OpenGL 3.3 Core**; WGPU não retorna como arquitetura final. egui é congelado como fallback de emergência fora da linha ativa. A permanência de longo prazo no Slint será confirmada pelos gates objetivos definidos neste capítulo.
 
 ## Conclusão executiva
 
@@ -10,20 +10,26 @@ Vale a pena insistir no Slint.
 
 Mas não vale a pena continuar crescendo a implementação atual da mesma forma.
 
-A recomendação é:
+A decisão aprovada é:
 
 ```text
 SLINT
-→ manter como candidato principal
+→ frontend principal da refatoração
 → preservar o grande investimento já existente
-→ refatorar shell/bridge agressivamente
-→ migrar viewport 3D para OpenGL
-→ executar gates objetivos de UX/a11y/performance
+→ executar resgate arquitetural do shell/bridge
+→ substituir o adapter WGPU do viewport por OpenGL
+→ validar UX/a11y/performance com gates objetivos
+
+OPENGL
+→ OpenGL 3.3 Core permanece o renderer 3D final
+→ mesma cena/render cache atende Single e Split2
+→ integração Slint deve evitar readback CPU por frame
 
 EGUI
 → congelar
-→ manter como fallback arquivado fora do branch ativo
+→ preservar em branch/tag de arquivo como fallback de emergência
 → nenhuma feature nova
+→ nenhuma manutenção de paridade visual
 → documentação de restauração
 ```
 
@@ -980,7 +986,7 @@ A documentação guarda:
 
 # Go / No-Go do Slint
 
-Slint só se torna decisão definitiva depois de passar um milestone de resgate.
+A estratégia Slint está aprovada. A **confirmação de longo prazo do toolkit** depende de passar um milestone de resgate; os gates abaixo existem para impedir uma tentativa indefinida sem critérios objetivos.
 
 ## Gate 1 — OpenGL viewport
 
@@ -1064,10 +1070,10 @@ Trocar apenas se o milestone provar um bloqueador estrutural, por exemplo:
 
 ---
 
-# Decisões recomendadas
+# Decisões aprovadas
 
-1. Reabrir a antiga escolha egui como frontend final.
-2. Slint volta a ser o **candidato principal recomendado**.
+1. A escolha anterior de **egui como frontend final fica superseded nesta branch**.
+2. Slint volta a ser o **frontend principal da refatoração**, submetido ao milestone formal de resgate e aos gates Go/No-Go.
 3. OpenGL 3.3 continua sendo o renderer 3D final; WGPU não volta como requisito.
 4. Criar um adapter Slint + OpenGL em vez de manter o viewport WGPU.
 5. Fazer um milestone de resgate antes de declarar Slint definitivo.
@@ -1103,3 +1109,24 @@ e não:
 delete Slint
 → rebuild every panel in another toolkit
 ```
+
+
+---
+
+# Registro de aprovação — 2026-10-08
+
+A rodada foi aprovada com o seguinte pacote indivisível:
+
+- **Slint** continua como frontend principal;
+- o frontend atual entra em fase formal de **resgate/refatoração**, não expansão descontrolada;
+- **OpenGL 3.3 Core** permanece o renderer 3D de destino;
+- a integração alvo é **Slint + viewport OpenGL**, sem `glReadPixels`/cópia CPU por frame;
+- **egui** fica congelado em snapshot externo como fallback de emergência, não segundo frontend em desenvolvimento;
+- macro-layout aprovado: Header limpo + Tool Rail esquerdo + Viewport central + Contextual Bottom Bar + coluna direita com Outliner/Parts separado de Properties + Assets/Prefabs inferior;
+- Properties usa accordion e seções contextuais extensíveis via `PropertySectionRegistry`, sem ECS;
+- Split View oficial inicial limitado a **duas views** (`Single`, `Split Vertical`, `Split Horizontal`) compartilhando recursos de cena/GPU;
+- acessibilidade é **hard gate**, não promessa de conformidade antecipada;
+- a UI passa a depender de `UiIntent`/DTOs/Queries/Commands da Application, nunca de mutação direta de Mesh;
+- o próximo trabalho de arquitetura da GUI deve detalhar e executar o **Slint Rescue** por fases, preservando componentes, fluxos e testes existentes.
+
+Esta aprovação substitui o status de proposta registrado originalmente no commit `a1f1c0909a54dd75b52ff1204d6a888236ea244d`.
