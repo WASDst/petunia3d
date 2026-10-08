@@ -1,8 +1,11 @@
 # Crate `petunia_ui_slint` (`crates/ui-slint/`)
 
-**Frontend de produção** do Petunia3D, construído com [Slint](https://slint.dev/) 1.18.
-O binário `petunia3d` executa este shell por padrão; a UI egui (`crates/ui/`) é
-legado de transição acessível via `--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`.
+**Único frontend ativo de produção** do Petunia3D, construído com [Slint](https://slint.dev/) 1.18.
+A decisão de 2026-10-08 mantém Slint em consolidação incremental e transforma egui em
+fallback congelado. Enquanto a separação física do legado não for concluída,
+`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1` são apenas compatibilidade temporária.
+Novas features de UI pertencem exclusivamente a esta crate. Ver
+[ADR 009](../../docs/architecture/adr/009-slint-producao-egui-fallback-congelado.md).
 
 - **Shell declarativo (`ui/app.slint`)**: Top bar com navegação exclusiva dos workspaces (`MODEL`, `PAINT`, `UV` e, com a feature `animation-workspace`, `ANIMATE`), alternador de domínio de seleção (Object, Point, Edge, Face), Tool Tray contextual, painel Parts, gaveta inferior para Asset Library, e painéis de Context Inspector adaptados ao workspace ativo.
 - **Viewport central interativo**: composição direta da textura WGPU no Slint via WGPU 30, sem readback síncrono GPU→CPU por frame, com software viewport fallback resiliente (`viewport_soft.rs`).
