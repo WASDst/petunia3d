@@ -1,6 +1,6 @@
 # Paint Architecture
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -387,3 +387,21 @@ choose channel
 ```
 
 A arquitetura interna pode ser robusta sem expor complexidade de Photoshop/Substance para tarefas simples.
+
+
+## Decisões fechadas
+
+1. Paint usa PaintDocument autoral com output TextureResource.
+2. Não há cópias paralelas em SceneObject.texture ou Material.albedo_texture.
+3. PaintTarget identifica ObjectId, MaterialSlotIndex e PaintChannel explicitamente.
+4. BaseColor/Emission são canais de cor; Roughness/Metallic/Height/Opacity são escalares.
+5. Direct normal painting fica fora da V1.
+6. active_layer e stroke lifecycle pertencem a PaintSession, não ao documento persistente.
+7. Dirty tiles, partial composition e partial GPU upload são preservados.
+8. Undo de strokes deve evoluir para deltas por tile.
+9. UV é requisito explícito; não há auto-unwrap silencioso.
+10. Decal usa SurfaceAttachment/local frame.
+11. SVG source é preservado para rerasterização.
+12. Shared Material/Texture exige UX explícita de Paint Shared versus Make Unique.
+13. Vertex Paint permanece separado de Texture Paint.
+14. PaintModule deixa de depender de AppState diretamente.
