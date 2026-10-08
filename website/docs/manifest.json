@@ -287,6 +287,72 @@
           "title": "Build, Distribuição e Compatibilidade — aprovado"
         }
       ]
+    },
+    {
+      "id": "code-agents",
+      "title": "Code Agents & Prumo",
+      "files": [
+        {
+          "path": "16-code-agents/index.md",
+          "title": "Code Agents — Comece aqui"
+        },
+        {
+          "path": "16-code-agents/reading-navigation.md",
+          "title": "Leitura, autoridade e contexto progressivo"
+        },
+        {
+          "path": "16-code-agents/implementation-protocol.md",
+          "title": "Protocolo de implementação e gap matrix"
+        },
+        {
+          "path": "16-code-agents/domain-playbooks.md",
+          "title": "Playbooks por domínio Petunia3D"
+        },
+        {
+          "path": "16-code-agents/prompt-library.md",
+          "title": "Prompts de implementação e auditoria"
+        },
+        {
+          "path": "16-code-agents/agent-orchestration.md",
+          "title": "Orquestração, papéis e permissions"
+        },
+        {
+          "path": "16-code-agents/evidence-handoffs.md",
+          "title": "Evidências, status e handoffs"
+        },
+        {
+          "path": "16-code-agents/workforce-index.md",
+          "title": "Prumo Workforce — catálogo completo"
+        },
+        {
+          "path": "16-code-agents/agents-catalog.md",
+          "title": "Prumo — 39 Agents com links"
+        },
+        {
+          "path": "16-code-agents/skills-foundations.md",
+          "title": "Prumo Skills — Engenharia e Documentação"
+        },
+        {
+          "path": "16-code-agents/skills-experience.md",
+          "title": "Prumo Skills — Acessibilidade, Neurodivergência e UX"
+        },
+        {
+          "path": "16-code-agents/skills-engine-graphics.md",
+          "title": "Prumo Skills — Editor, Engine e Render"
+        },
+        {
+          "path": "16-code-agents/skills-security-delivery.md",
+          "title": "Prumo Skills — Segurança e Privacidade"
+        },
+        {
+          "path": "16-code-agents/skills-languages-specialized.md",
+          "title": "Prumo Skills — Linguagens e Especialidades"
+        },
+        {
+          "path": "16-code-agents/recipes-catalog.md",
+          "title": "Prumo — 20 Recipes com links"
+        }
+      ]
     }
   ]
 }

@@ -4,7 +4,7 @@
 
 ## Contrato de entrada mínimo
 
-\`\`\`yaml
+```yaml
 task:
   id: "<issue or task identifier>"
   goal: "<observable user value>"
@@ -17,7 +17,7 @@ task:
   acceptance: ["behavior", "regression", "integration", "a11y when relevant"]
   execution_gates: ["relevant cargo tests", "UI/GL/manual gates if changed"]
   permission_scope: "only explicitly authorized operations"
-\`\`\`
+```
 
 Não tratar placeholders como valores: preencher via Git/source antes de editar. Se branch divergir, parar commits à branch inesperada.
 
@@ -45,7 +45,7 @@ A arquitetura de cada mudança explicita:
 - acessibilidade e comunicação de feedback.
 
 Para nova ferramenta:
-\`\`\`text
+```text
 Physical input
 → Slint gesture router / keymap semantic action
 → UiIntent / typed DTO
@@ -54,9 +54,9 @@ Physical input
 → Document transaction (single writer)
 → events / invalidations / evaluated render state
 → Slint accessible feedback
-\`\`\`
+```
 
-O código não deve criar nova rota \`Slint callback → mesh.faces[..]\`.
+O código não deve criar nova rota `Slint callback → mesh.faces[..]`.
 
 ## Etapa C — Implementação
 
@@ -64,7 +64,7 @@ O código não deve criar nova rota \`Slint callback → mesh.faces[..]\`.
 - Alterar o menor conjunto coeso de arquivos; preservar API e contrato autoral.
 - Preferir refatoração com equivalência e testes, nunca big-bang.
 - Nomear conceitos para reduzir ambiguidade; newtypes e erros estruturados em boundaries.
-- Evitar \`unwrap\` em entrada externa, \`unsafe\` sem justificativa, hardcode de keymap na Geometry e duplicação de constantes sem tokens.
+- Evitar `unwrap` em entrada externa, `unsafe` sem justificativa, hardcode de keymap na Geometry e duplicação de constantes sem tokens.
 - Executar gate focado e corrigir causas; não apagar asserções, não silenciar diagnósticos para obter verde.
 - Alterações de projeto/formatos requerem migrations/fixtures e round-trip.
 - Fechar operações transacionais e previews com cancel e Undo coerentes.
@@ -84,13 +84,13 @@ O código não deve criar nova rota \`Slint callback → mesh.faces[..]\`.
 | Docs/site | manifest registration, routes, link validation, no legacy authority |
 | Release | Linux/Windows, low-end, smoke e independent reviewer evidence |
 
-**Campos não executados ficam \`not run\`**, não pass. Testes manuais são distintos de CI.
+**Campos não executados ficam `not run`**, não pass. Testes manuais são distintos de CI.
 
 ## Etapa E — Revisão independente
 
-Quando disponível, repassar diff/contextpack para \`tester\` e \`reviewer\`, anexando \`accessibility-reviewer\` para UI e \`security-reviewer\` para entradas externas/capabilities. Revisão verifica comportamentos e regressões, não só estilo.
+Quando disponível, repassar diff/contextpack para `tester` e `reviewer`, anexando `accessibility-reviewer` para UI e `security-reviewer` para entradas externas/capabilities. Revisão verifica comportamentos e regressões, não só estilo.
 
-Para PR/branch CI, investigar **o primeiro erro primário** e não repetir mudanças cosméticas para acalmar um lint. Se o check passar com stubs, considerar \`implemented, unverified\`.
+Para PR/branch CI, investigar **o primeiro erro primário** e não repetir mudanças cosméticas para acalmar um lint. Se o check passar com stubs, considerar `implemented, unverified`.
 
 ## Etapa F — Documentação e handoff
 
@@ -103,4 +103,4 @@ Para PR/branch CI, investigar **o primeiro erro primário** e não repetir mudan
 
 ## Anti-patterns proibidos
 
-Refactor que apaga funcionalidades; implementar tudo em \`callbacks.rs\`; solucionar bug com segunda fonte de verdade; acessar Geometry a partir de widget; fingir testes via mock único; duplicar engine de DRAW; criar UI "acessível" separada em vez de semântica comum; exagerar abstrações para futuro hipotético; rodar scripts externos sem revisão; alterar direitos/capabilities para "facilitar"; simular benchmarks.
+Refactor que apaga funcionalidades; implementar tudo em `callbacks.rs`; solucionar bug com segunda fonte de verdade; acessar Geometry a partir de widget; fingir testes via mock único; duplicar engine de DRAW; criar UI "acessível" separada em vez de semântica comum; exagerar abstrações para futuro hipotético; rodar scripts externos sem revisão; alterar direitos/capabilities para "facilitar"; simular benchmarks.

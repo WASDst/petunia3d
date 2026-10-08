@@ -21,7 +21,7 @@ Para cada linha, os **links dos arquivos das Skills e Agents** são fornecidos n
 
 ## Sobre padrões gerais e exceções
 
-\`game-engine-architecture\` contém material sobre ECS; isso **não autoriza introduzir ECS** no Petunia3D. Skills \`frontend-web\` ou \`playwright-ui\` podem ajudar o **site de documentação**, mas não são base da UI Slint. \`screen-reader\`, \`zoom-reflow\` e WCAG precisam de adaptações verificadas às APIs nativas Slint/Windows/Linux; não tratar guia de DOM/ARIA como implementação desktop automática.
+`game-engine-architecture` contém material sobre ECS; isso **não autoriza introduzir ECS** no Petunia3D. Skills `frontend-web` ou `playwright-ui` podem ajudar o **site de documentação**, mas não são base da UI Slint. `screen-reader`, `zoom-reflow` e WCAG precisam de adaptações verificadas às APIs nativas Slint/Windows/Linux; não tratar guia de DOM/ARIA como implementação desktop automática.
 
 ## Quando acrescentar especialista
 

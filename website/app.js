@@ -434,11 +434,18 @@ function enhanceRenderedMarkdown() {
     const match = /^(.*?)(?:#([^#]*))?$/.exec(href);
     if (!match) return;
     const target = match[1];
-    if (target && !/\.md$/i.test(target)) return;
+    if (target && !/\.(md|json)$/i.test(target)) return;
 
     const resolved = target
       ? new URL(target, new URL(currentPath, "https://petunia-docs.invalid/")).pathname.slice(1)
       : currentPath;
+    if (target && /\.json$/i.test(target)) {
+      // The verified machine-readable workforce catalog is a static file, not an SPA page.
+      if (resolved === "16-code-agents/workforce-catalog.json") {
+        link.href = "./docs/" + resolved;
+      }
+      return;
+    }
     if (!knownPaths.has(resolved)) return;
     const anchor = match[2] ? "#" + encodeURIComponent(match[2]) : "";
     link.href = "#/docs/" + resolved + anchor;

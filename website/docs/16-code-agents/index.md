@@ -25,14 +25,14 @@ Um agente deve **entender a decisão aprovada**, **inspecionar a implementação
 - **Não replique domínio na UI.** Tool → Intent/Command → Application → Geometry/Project/Paint/UV/Animation; renderer consome, não muta.
 - **Não faça big-bang rewrite.** Corrija menor delta testável, preserve projetos antigos.
 - **Não degrade acessibilidade para aumentar FPS.** Foco, teclado, labels, contraste, motion, escala e input alternativo são requisitos.
-- **Não execute habilidades externas às cegas.** Leia \`SKILL.md\` ou \`AGENT.md\` e examine scripts; manifest descreve sugestão de capacidades, não consentimento automático.
-- **Não declare testes não executados como aprovados.** \`not run\`, \`blocked\` e evidência são estados honestos.
+- **Não execute habilidades externas às cegas.** Leia `SKILL.md` ou `AGENT.md` e examine scripts; manifest descreve sugestão de capacidades, não consentimento automático.
+- **Não declare testes não executados como aprovados.** `not run`, `blocked` e evidência são estados honestos.
 
 ## Como usar esta seção
 
 **Para uma implementação:** [Navegar](./reading-navigation.md) → [Playbook](./domain-playbooks.md) → [Prompt](./prompt-library.md) → [Protocolo](./implementation-protocol.md) → [Entrega](./evidence-handoffs.md).
 
-**Para uma auditoria:** inspeção do código + [matriz de lacunas](./implementation-protocol.md) + roles \`explorer\`, \`reviewer\`, \`tester\` e especialistas pertinentes, sem escrever código no papel read-only.
+**Para uma auditoria:** inspeção do código + [matriz de lacunas](./implementation-protocol.md) + roles `explorer`, `reviewer`, `tester` e especialistas pertinentes, sem escrever código no papel read-only.
 
 **Para trabalho especializado:** [Índice do Prumo](./workforce-index.md). Abra **somente** os arquivos individuais pertinentes; catálogo não é autorização para executar todos os agentes.
 

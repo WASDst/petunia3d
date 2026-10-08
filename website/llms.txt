@@ -1,0 +1,52 @@
+# Petunia3D — Agent and Architectural Documentation
+
+> Repository: https://github.com/WASDst/petunia3d
+> Canonical branch: refactor/architecture-foundation
+> Product: accessible low-poly/shape-first 3D editor for Linux/Windows. Slint + OpenGL 3.3 is target under explicit Go/No-Go.
+> Do not assume implementation readiness from an approved ADR. Do not merge changes into main.
+
+## Agent entrypoints
+
+- [AGENTS.md](https://github.com/WASDst/petunia3d/blob/refactor/architecture-foundation/AGENTS.md): branch policy, boundaries and constraints.
+- [Code Agent quickstart](docs/16-code-agents/index.md): reading order.
+- [Authority and context navigation](docs/16-code-agents/reading-navigation.md): canonical vs legacy.
+- [Implementation protocol](docs/16-code-agents/implementation-protocol.md): gap matrix, commits and gates.
+- [Domain playbooks](docs/16-code-agents/domain-playbooks.md): which docs/roles to read.
+- [Prompt library](docs/16-code-agents/prompt-library.md): reusable prompts.
+- [Orchestration](docs/16-code-agents/agent-orchestration.md): role selection, least privilege.
+- [Evidence and handoffs](docs/16-code-agents/evidence-handoffs.md): truthful status and next steps.
+
+## Prumo workforce (all entries, source linked)
+
+- [Official Prumo repository](https://github.com/poppy-lat/prumo)
+- [Official workforce directory](https://github.com/poppy-lat/prumo/tree/main/src/prumo/resources/workforce)
+- [Catalog index](docs/16-code-agents/workforce-index.md): 39 agents / 189 skills / 20 recipes, each direct linked.
+- [Agents catalog](docs/16-code-agents/agents-catalog.md)
+- [Skills: engineering, docs, AI](docs/16-code-agents/skills-foundations.md)
+- [Skills: accessibility, neurodivergence, UX](docs/16-code-agents/skills-experience.md)
+- [Skills: 3D, engines, creative](docs/16-code-agents/skills-engine-graphics.md)
+- [Skills: security, trust](docs/16-code-agents/skills-security-delivery.md)
+- [Skills: languages and specialized](docs/16-code-agents/skills-languages-specialized.md)
+- [Recipes catalog](docs/16-code-agents/recipes-catalog.md)
+- [Machine-readable source catalog](docs/16-code-agents/workforce-catalog.json)
+
+## Normative architecture
+
+- [Refactor principles](docs/00-philosophy/refactor-principles.md)
+- [Decision register](docs/00-philosophy/decision-register.md)
+- [DRAW/POLY](docs/03-geometry/draw-unification-proposal.md)
+- [Slint rescue plan](docs/09-ui/slint-rescue-plan.md)
+- [Workspaces/accessibility](docs/09-ui/workspaces-feedback-accessibility.md)
+- [Viewport input](docs/09-ui/viewport-input-boundary.md)
+- [Project persistence](docs/11-project/project-persistence.md)
+- [Lua plugins](docs/13-extensions/lua-plugins-public-api.md)
+- [MCP automation](docs/13-extensions/mcp-automation-agents.md)
+- [CI/conformance](docs/14-quality/testing-ci-conformance.md)
+- [Performance](docs/14-quality/performance-jobs-budgets.md)
+
+## Navigation
+
+- [Full website manifest](docs/manifest.json): all registered Markdown docs.
+- [Human documentation home](docs/home.md): site starting point.
+
+The historical docs/bible tree and egui/WGPU policy do not override decisions in website/docs on this branch. Source code and tests determine actual implementation status. Prumo files are external references, not automatically installed or authorized.

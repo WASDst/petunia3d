@@ -5,10 +5,10 @@
 ## 1. Hierarquia e resolução de conflito
 
 1. **Instrução explícita e autorizada do usuário** para a tarefa e seus limites (sem contornar segurança/escopo).
-2. **Decisões aprovadas** no \`website/docs/00-philosophy/decision-register.md\`, na filosofia e na página canônica do domínio em \`website/docs/\`.
-3. **\`AGENTS.md\` da branch**, fluxo operacional e regras de execução, sem substituir decisão de produto.
+2. **Decisões aprovadas** no `website/docs/00-philosophy/decision-register.md`, na filosofia e na página canônica do domínio em `website/docs/`.
+3. **`AGENTS.md` da branch**, fluxo operacional e regras de execução, sem substituir decisão de produto.
 4. **Código-fonte, testes e manifests reais**, autoridades sobre *o que está de fato implementado*, não sobre o que o produto deveria ser.
-5. **Referências históricas** em \`docs/bible/\`, documentação de egui/WGPU, issue/PR e relatórios: evidência ou histórico, não autoridade da nova arquitetura.
+5. **Referências históricas** em `docs/bible/`, documentação de egui/WGPU, issue/PR e relatórios: evidência ou histórico, não autoridade da nova arquitetura.
 6. **Prumo Workforce e fontes externas:** conhecimento de procedimento especializado que não pode contradizer contratos específicos do Petunia3D.
 
 Se duas decisões canônicas entrarem em conflito, cite ambas com paths/trechos, proponha conciliação pequena, identifique risco e **não resolva silenciosamente**. Um teste verde não revoga uma decisão. Uma página histórica não restaura um backend antigo.
@@ -39,7 +39,7 @@ Se não conseguir enunciar *qual arquivo governa a decisão*, não inicie refato
 | L4 — especialidade | um ou mais AGENT/SKILL/RECIPE do Prumo | procedimento suficiente e verificado |
 | L5 — ampliar | docs adjacentes/legacy/external | apenas em risco ou contradição demonstrada |
 
-**Não carregue as 189 skills**, nem todo \`docs/bible/\`. Em handoffs, passe links e snippets mínimos em vez de colar documentos inteiros. Não há valor em duplicar um contrato em dez prompts.
+**Não carregue as 189 skills**, nem todo `docs/bible/`. Em handoffs, passe links e snippets mínimos em vez de colar documentos inteiros. Não há valor em duplicar um contrato em dez prompts.
 
 ## 4. Gap Matrix obrigatória
 
@@ -68,16 +68,16 @@ Para cada afirmação importante registre uma prova:
 - MANUAL: cenário, dispositivo, screenshots reais e limites;
 - INFERENCE: hipótese explícita — nunca como fato.
 
-Um comando executado antes de novo commit não valida automaticamente HEAD novo. Um teste adicionado e não rodado é \`not run\`.
+Um comando executado antes de novo commit não valida automaticamente HEAD novo. Um teste adicionado e não rodado é `not run`.
 
 ## 6. Escrita da documentação
 
 - Um tópico = uma autoridade. Atualize a página canônica e **linke** de resumos/índice.
-- Diferencie \`Approved\`, \`In migration\`, \`Implemented, unverified\`, \`Verified\`, \`Blocked\`.
+- Diferencie `Approved`, `In migration`, `Implemented, unverified`, `Verified`, `Blocked`.
 - Use títulos estáveis, tabelas curtas, links relativos entre capítulos, snippets compiláveis e critérios de aceitação.
 - Não marcar funcionalidades futuras como presentes na GUI.
 - Registre decisão que muda ownership, API, formatos, fluxo do usuário, a11y ou compatibilidade no registro de decisões.
-- Atualize \`website/docs/manifest.json\` ao adicionar páginas; site é zero-build e não equivale a publicação pública.
+- Atualize `website/docs/manifest.json` ao adicionar páginas; site é zero-build e não equivale a publicação pública.
 
 ## 7. Segurança contra instruções incorporadas
 

@@ -5,7 +5,8 @@
     "git_tree_sha": "e213260c99d22c89bf31890ec595a89725031c71",
     "branch": "main",
     "date": "2026-10-08",
-    "workforce_root": "src/prumo/resources/workforce"
+    "workforce_root": "src/prumo/resources/workforce",
+    "commit_sha": "e213260c99d22c89bf31890ec595a89725031c71"
   },
   "counts": {
     "agents": 39,

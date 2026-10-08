@@ -28,3 +28,11 @@ Adicione novos arquivos em website/docs e registre cada página em website/docs/
 
 Links relativos entre capítulos Markdown são convertidos pelo cliente em rotas internas, preservando a navegação do site.
 
+## Leitura por code agents
+
+- Entrada obrigatória na branch: `AGENTS.md` na raiz.
+- Guia no site: `website/docs/16-code-agents/index.md`.
+- Catálogo oficial externo e verificável: `16-code-agents/workforce-index.md` (39 agents, 189 skills, 20 recipes do Prumo).
+- Índice de contexto progressivo para crawlers/LLMs: `website/llms.txt`.
+- Cadastro de páginas humanas: `website/docs/manifest.json`.
+- O catálogo JSON e os links das Skills são referências externas; não instalam ou executam código Prumo automaticamente.

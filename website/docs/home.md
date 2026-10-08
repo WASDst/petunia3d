@@ -44,3 +44,15 @@ A etapa de decisões arquiteturais está fechada para a baseline descrita no [Re
 
 A decisão Slint + OpenGL permanece **aprovada como direção, não como gate final validado**. A GUI e os workspaces continuam seguindo os contratos já documentados.
 
+## Diretivas para Code Agents
+
+A [seção Code Agents & Prumo](./16-code-agents/index.md) orienta coding assistants e revisores a ler as decisões aprovadas, auditar a implementação real, executar alterações incrementais e entregar evidências.
+
+- [Como navegar na documentação](./16-code-agents/reading-navigation.md) e [protocolo de implementação](./16-code-agents/implementation-protocol.md).
+- [Prompts prontos para implementação e revisão](./16-code-agents/prompt-library.md).
+- [Orquestração de papéis](./16-code-agents/agent-orchestration.md) e [evidências/handoffs](./16-code-agents/evidence-handoffs.md).
+- [Catálogo completo do Prumo](./16-code-agents/workforce-index.md): **39 agents, 189 skills e 20 recipes**, cada um com link oficial.
+
+Os arquivos [AGENTS.md](https://github.com/WASDst/petunia3d/blob/refactor/architecture-foundation/AGENTS.md) e [llms.txt](https://github.com/WASDst/petunia3d/blob/refactor/architecture-foundation/website/llms.txt) são entradas rápidas para ferramentas automáticas.
+
+**Atenção:** instruções de agentes são procedimentos, não prova de que a funcionalidade está implementada ou de que testes foram executados.
