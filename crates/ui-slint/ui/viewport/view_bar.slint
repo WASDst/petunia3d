@@ -1,0 +1,28 @@
+import { DesignTokens, Motion } from "../tokens.slint";
+
+/// Chrome da barra superior da viewport.
+/// Controles específicos continuam no workspace e entram via @children.
+export component ViewBar inherits Rectangle {
+    in property <length> right-clearance: 0px;
+
+    x: max(14px, (parent.width - root.right-clearance - self.width) / 2);
+    y: 14px;
+    width: view-row.preferred-width + 12px;
+    height: 38px;
+    border-radius: DesignTokens.radius-panel;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-blur: DesignTokens.elevation-1-blur;
+    drop-shadow-color: DesignTokens.elevation-1-color;
+    drop-shadow-offset-y: DesignTokens.elevation-1-offset;
+    animate x { duration: Motion.slow; easing: ease-out; }
+
+    view-row := HorizontalLayout {
+        x: 6px;
+        y: 5px;
+        spacing: 3px;
+        alignment: center;
+        @children
+    }
+}
