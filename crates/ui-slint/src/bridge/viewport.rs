@@ -620,7 +620,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Opções de render compartilhadas pela vista principal e pela secundária.
-    fn viewport_render_state(&self) -> ViewportRenderState {
+    pub(crate) fn viewport_render_state(&self) -> ViewportRenderState {
         ViewportRenderState {
             shading: self.state.session.shading,
             xray: self.state.session.show_xray,
