@@ -214,7 +214,6 @@ input-touch := TouchArea {
                             let subtract = root.modifier-active(root.subtract-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                             let pan-mod = root.modifier-active(root.pan-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                             let cursor-place = root.modifier-active(root.cursor-place-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let adjust = root.modifier-active(root.adjust-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                             let loop-mod = root.modifier-active(root.loop-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                             let orbit-left = root.modifier-active(root.orbit-left-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                             root.precision-mode = precision;
@@ -224,16 +223,18 @@ input-touch := TouchArea {
                                     || is-tool-drag || is-keyboard-transform-drag || root.transform-instant-active
                                     || is-loop-drag) {
                                 // RMB nunca cancela um gesto (constituição 11); cancelar é Esc.
-                            } else if event.kind == PointerEventKind.cancel || (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
-                                if event.kind == PointerEventKind.cancel && (is-tool-gesture || root.tool-gesture-latched) {
+                            } else if event.kind == PointerEventKind.cancel {
+                                if is-tool-gesture || root.tool-gesture-latched {
                                     root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false, false);
                                 }
+                                // Cancelamento do sistema nunca deve abrir o menu contextual.
                                 self.clear-gesture();
-                                if event.kind == PointerEventKind.down && cursor-place {
+                            } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
+                                self.clear-gesture();
+                                if cursor-place {
                                     consume-click = true;
                                     root.viewport-place-cursor(self.mouse-x / self.width, self.mouse-y / self.height);
                                 } else {
-                                    // Sem gesto: abre o menu da viewport.
                                     root.viewport-context-requested(self.mouse-x / 1px, self.mouse-y / 1px);
                                 }
                             } else if event.kind == PointerEventKind.down {
@@ -249,9 +250,9 @@ input-touch := TouchArea {
                                 pending-box-select = false;
                                 pending-lasso-select = false;
                                 if event.button == PointerEventButton.left
-                                    && (root.tool-gesture-latched
+                                    && ((root.tool-gesture-latched && !orbit-left)
                                         || (root.tool-grammar-active && !root.transform-instant-active
-                                            && (!event.modifiers.alt || root.active-tool == "draw_profile")
+                                            && (!loop-mod || root.active-tool == "draw_profile")
                                             && !orbit-left)) {
                                     // Gramática única (constituição 11): todas as ferramentas
                                     // de operação — Move/Rotate/Scale, Extrude, Inset, Round
@@ -389,7 +390,7 @@ input-touch := TouchArea {
                                     // Gramática única: o bridge decide clique × arrasto e aplica.
                                     moved-since-down = true;
                                     root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                                                                } else if loop-mod && !orbit-left
+                                } else if loop-mod && !orbit-left
                                     && (abs(self.mouse-x - last-x) > root.drag-threshold-px * 1px || abs(self.mouse-y - last-y) > root.drag-threshold-px * 1px) {
                                     moved-since-down = true;
                                 } else if root.transform-instant-active && (!self.pressed || is-keyboard-transform-drag) {
@@ -506,8 +507,11 @@ input-touch := TouchArea {
                         }
 
                         scroll-event(event) => {
-                            // A roda sempre faz zoom (constituição 11). Ctrl+roda ajusta
-                            // contagens (Loop Cut) e o raio da edição proporcional.
+                            // Cada evento tem seus próprios modificadores: não compartilhar
+                            // variáveis locais do pointer-event com o scroll-event.
+                            let adjust = root.modifier-active(root.adjust-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            // A roda sempre faz zoom; pointer.adjust redireciona o scroll
+                            // para contagens (Loop Cut) e raio da edição proporcional.
                             if adjust {
                                 root.viewport-ctrl-scroll(event.delta-y / 1px);
                             } else {
