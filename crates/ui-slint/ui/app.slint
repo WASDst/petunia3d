@@ -205,6 +205,15 @@ export component PetuniaSlintShell inherits Window {
     in-out property <[ReferenceSlotData]> reference-slots: [];
     in-out property <int> reference-total-count: 0;
     in-out property <string> active-keymap-id: "petunia-default";
+    // Pointer semantics projected from the active keymap. Ctrl=1, Shift=2, Alt=4.
+    in-out property <int> pointer-precision-mask: 2;
+    in-out property <int> pointer-snap-mask: 1;
+    in-out property <int> pointer-extend-mask: 2;
+    in-out property <int> pointer-subtract-mask: 1;
+    in-out property <int> pointer-pan-mask: 2;
+    in-out property <int> pointer-cursor-place-mask: 2;
+    in-out property <int> pointer-loop-mask: 4;
+    in-out property <int> pointer-orbit-left-mask: 0;
     in-out property <[KeymapProfileEntry]> keymap-profiles;
     in-out property <[KeymapActionEntry]> keymap-rows;
     in-out property <int> keymap-revision: -1;
@@ -1041,7 +1050,6 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-pan(float, float);
     callback viewport-zoom(float);
     /// Resolve modificadores físicos pelo keymap ativo; evita semântica Shift/Ctrl/Alt hardcoded na UI.
-    callback pointer-modifier-active(string, bool, bool, bool) -> bool;
     /// px lógicos (largura, altura) e px físicos (largura, altura) da viewport.
     callback viewport-resized(float, float, float, float);
     callback split-toggle-requested;
@@ -1801,7 +1809,15 @@ export component PetuniaSlintShell inherits Window {
                         brush-size: root.brush-size;
                         paint-color: root.paint-color;
 
-                        drag-threshold-px: root.drag-threshold-px;\n                        depth-handle-visible: root.depth-handle-visible;
+                        drag-threshold-px: root.drag-threshold-px;
+                        precision-mask: root.pointer-precision-mask;
+                        snap-mask: root.pointer-snap-mask;
+                        extend-mask: root.pointer-extend-mask;
+                        subtract-mask: root.pointer-subtract-mask;
+                        pan-mask: root.pointer-pan-mask;
+                        cursor-place-mask: root.pointer-cursor-place-mask;
+                        loop-mask: root.pointer-loop-mask;
+                        orbit-left-mask: root.pointer-orbit-left-mask;\n                        depth-handle-visible: root.depth-handle-visible;
                         depth-handle-x: root.depth-handle-x;
                         depth-handle-y: root.depth-handle-y;
                         gizmo-has-hover: root.gizmo-has-hover;
@@ -1818,7 +1834,6 @@ export component PetuniaSlintShell inherits Window {
                         snap-mode <=> root.snap-mode;
 
                         focus-requested => { root-focus.focus(); }
-                        pointer-modifier-active(action, shift, ctrl, alt) => { return root.pointer-modifier-active(action, shift, ctrl, alt); }
                         gizmo-drag-begin(x, y) => { root.gizmo-drag-begin(x, y); }
                         gizmo-drag-end => { root.gizmo-drag-end(); }
                         gizmo-hover(x, y) => { root.gizmo-hover(x, y); }
