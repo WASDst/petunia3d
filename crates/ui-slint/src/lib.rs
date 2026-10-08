@@ -11348,6 +11348,35 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.pointer_position = [x, y];
         self.tool_pointer_alt = alt;
+
+        // Os booleans recebidos aqui descrevem teclas físicas pressionadas.
+        // O significado (precision/snap/extend/alternate) vem do keymap ativo.
+        let held = Mods2 { ctrl, shift, alt };
+        let precision = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_PRECISION)
+            .held_in(held);
+        let snap = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_SNAP)
+            .held_in(held);
+        let extend = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND)
+            .held_in(held);
+        let alternate = self
+            .state
+            .ui
+            .keybinds
+            .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
+            .held_in(held);
+
         let effect = match ViewportPointerPhase::from(phase) {
             ViewportPointerPhase::Press => {
                 self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
@@ -11364,15 +11393,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 } else {
                     petunia_core::PressTarget::Surface
                 };
-                // Modificadores de ponteiro vêm do keymap (`[pointer]`).
-                let held = Mods2 { ctrl, shift, alt };
-                let keys = &self.state.ui.keybinds;
-                self.tool_press_extend = keys
-                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND)
-                    .held_in(held);
-                self.tool_press_alternate = keys
-                    .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
-                    .held_in(held);
+                self.tool_press_extend = extend;
+                self.tool_press_alternate = alternate;
                 self.tool_session.press([x, y], target)
             }
             ViewportPointerPhase::Move => self.tool_session.move_to([x, y]),
@@ -11386,7 +11408,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 }
             }
         };
-        self.apply_tool_effect(effect, shift, ctrl)
+        self.apply_tool_effect(effect, precision, snap)
     }
 
     fn apply_tool_effect(
