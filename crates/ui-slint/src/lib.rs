@@ -2342,7 +2342,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
         match gesture {
             ViewportGesture::Orbit { dx, dy } => {
-                self.state.session.camera.orbit(dx, dy);
+                // Orbit possui semântica adicional: usa Cursor/selection pivot.
+                // Reutilizar a mesma implementação pública evita dois caminhos
+                // de câmera divergentes entre callback direto e UiIntent.
+                self.orbit_viewport(dx, dy);
+                return;
             }
             ViewportGesture::Pan { dx, dy } => {
                 self.state.session.camera.pan(dx, dy);
