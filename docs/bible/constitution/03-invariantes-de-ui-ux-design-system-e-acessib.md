@@ -22,7 +22,7 @@ Todo texto visível usa `TextId`; ícones usam `IconId`; cores/spacing/radius/st
 
 # Toolkit
 
-Slint é o **único frontend ativo de produção**; egui é fallback congelado, preservado somente como snapshot recuperável fora da linha ativa (capítulo 36 e ADR 009). Respeitar as capacidades do toolkit. Priorizar spacing, hierarchy, icons, grouping, responsive overflow e states. Não exigir blur/glass/CSS complexo. Caches evitam parse/rasterização por frame. Migração de toolkit só pode ser reaberta por limitação estrutural reproduzível e gates documentados, nunca por preferência visual subjetiva.
+Slint é o frontend de produção; egui é legado de transição (capítulo 36). Respeitar as capacidades do toolkit. Priorizar spacing, hierarchy, icons, grouping, responsive overflow e states. Não exigir blur/glass/CSS complexo. Caches evitam parse/rasterização por frame.
 
 # Acessibilidade
 

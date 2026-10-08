@@ -346,7 +346,7 @@ Normals são derivados do authoring mesh. Flat/Smooth/Sharp obedecem às regras 
 
 # Relação com a arquitetura de código
 
-A representação desta página deve obedecer [34 — Arquitetura Modular Explícita, Rust Safety e Representação em Código](34-arquitetura-modular-rust-safety.md). Em especial: algorithms geométricos não conhecem UI/Lua/MCP/Undo; Tools não chamam Tools; long-lived relationships usam IDs; e DOD é aplicado somente onde simplifica o fluxo de dados ou hot paths reais. A integração específica da UI/viewport ativa segue [36 — UI Baseline Final V1](36-ui-baseline-temas-plugin-panels.md) e [ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md). O [capítulo 35](35-egui-components-adapters-tooling.md) documenta apenas o fallback egui histórico.
+A representação desta página deve obedecer [34 — Arquitetura Modular Explícita, Rust Safety e Representação em Código](34-arquitetura-modular-rust-safety.md). Em especial: algorithms geométricos não conhecem UI/Lua/MCP/Undo; Tools não chamam Tools; long-lived relationships usam IDs; e DOD é aplicado somente onde simplifica o fluxo de dados ou hot paths reais. A integração específica da UI/viewport segue [35 — egui, Petunia Components, UI Adapters e Tooling de Desenvolvimento](35-egui-components-adapters-tooling.md).
 
 # Regra final
 

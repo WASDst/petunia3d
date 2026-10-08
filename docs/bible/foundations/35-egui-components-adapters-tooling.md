@@ -3,11 +3,11 @@
 <aside>
 🧩
 
-**Status desde 2026-10-08: HISTÓRICO / FALLBACK CONGELADO.** Este capítulo preserva a arquitetura e o rationale do frontend egui para recuperação e comparação, mas não governa novas features de produto. Slint é o único frontend ativo; [ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md) e o capítulo 36 prevalecem. Os princípios toolkit-neutros daqui — Petunia Components, adapters, separação de domínio, foco, acessibilidade e substituibilidade — continuam válidos.
+Este capítulo define **como o Petunia3D usa egui sem deixar o toolkit dominar a arquitetura ou o visual do produto**. egui fornece fundação de interação/layout/accessibility; Petunia Components define identidade; crates auxiliares entram atrás de adapters quando resolvem infraestrutura real. Esta página complementa os capítulos 24–28 e 31.
 
 </aside>
 
-# Princípio central histórico
+# Princípio central
 
 A cadeia normativa da UI é:
 
@@ -19,8 +19,6 @@ Petunia Components
 Petunia UI adapters
         ↓
 egui / eframe / egui-wgpu / selected ecosystem crates
-
-> Cadeia preservada apenas para o snapshot egui. A cadeia ativa é `Slint → UiIntent → CommandId/transação → view-model/adapter`.
 ```
 
 Não espalhar widgets de terceiros diretamente pelos workspaces. Um workspace deve depender do contrato `PetuniaButton`, `PetuniaTree`, `PetuniaNumberField`, `PetuniaPanel` etc., não de uma crate auxiliar específica.

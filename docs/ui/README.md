@@ -8,19 +8,11 @@ Documentação da **UI Baseline Final V1**, congelada no capítulo 36 do Livro V
 > toolkit, grafo do shell, docking irrestrito, acesso cru de plugins a UI/GPU e
 > invariantes de acessibilidade exigem decisão explícita/ADR.
 
-**Frontend de produção (2026-09-20; decisão refinada em 2026-10-08):**
-`petunia_ui_slint` (Slint 1.18) em `crates/ui-slint/` é a única superfície ativa
-de produto. A direção aprovada é **insistir na consolidação do Slint**, preservando o
-que já existe e corrigindo UI/UX, acessibilidade, foco/teclado, componentes e
-integração de viewport de forma incremental.
-
-egui não é mais tratado como frontend paralelo: é **fallback congelado** e deve ficar
-preservado fora da linha ativa em snapshot recuperável. A presença atual de
-`--legacy-egui` / `PETUNIA_LEGACY_EGUI=1` é transitória até essa separação física.
-Novas features não devem ser implementadas em egui. Os gates objetivos para
-permanência no Slint e eventual reabertura de toolkit estão no
-[ADR 009](../architecture/adr/009-slint-producao-egui-fallback-congelado.md).
-Os contratos de UX dos capítulos 23 e 36 continuam toolkit-neutros.
+**Frontend de produção (2026-09-20):** `petunia_ui_slint` (Slint 1.18) em
+`crates/ui-slint/`. O binário `petunia3d` executa o shell Slint por padrão; a
+UI egui (`crates/ui/`) é legado de transição acessível via `--legacy-egui` /
+`PETUNIA_LEGACY_EGUI=1`. Os contratos de UX dos capítulos 23 e 36 são
+toolkit-neutros — a migração para Slint os preserva.
 
 ## 1. Modelo mental do usuário
 

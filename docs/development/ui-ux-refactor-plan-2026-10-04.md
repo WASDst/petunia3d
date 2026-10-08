@@ -60,7 +60,7 @@ bridge.
   decididos no cap. 46 / ADR 007; este plano só muda **onde** e **como** os
   controles aparecem;
 - site de documentação (congelado, AGENTS.md §1);
-- egui como fallback congelado: sem features novas, sem paridade visual e fora da linha ativa após a separação física definida no ADR 009;
+- UI egui legada (sem features novas);
 - Animate (só herda os tokens e componentes novos).
 
 ## 2. Diagnóstico

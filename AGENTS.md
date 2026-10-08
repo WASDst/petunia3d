@@ -24,28 +24,21 @@ O caderno canônico vive em **`docs/bible/`** — 258 páginas: raiz `index.md`
 
 ## 0.1 Frontend de produção e legado
 
-**Decisão 2026-09-20, refinada em 2026-10-08: Slint é o único frontend ativo de
-produção.** A crate `petunia_ui_slint` (`crates/ui-slint/`) é a interface principal
-do Petunia3D. A decisão vigente é consolidar Slint incrementalmente, com UI/UX e
-acessibilidade como gates. egui é somente **fallback congelado**, conforme
-[ADR 009](docs/architecture/adr/009-slint-producao-egui-fallback-congelado.md): não
-recebe novas features e deve permanecer como snapshot recuperável fora da linha ativa
-de desenvolvimento. Até a extração física do legado da branch ativa, a flag
-`--legacy-egui` e `PETUNIA_LEGACY_EGUI=1` são compatibilidade temporária.
+**Decisão 2026-09-20: Slint é o frontend de produção.** A crate `petunia_ui_slint`
+(`crates/ui-slint/`) é a interface principal do Petunia3D. O binário `petunia3d`
+executa o shell Slint por padrão; a UI egui foi arquivada e permanece acessível
+somente para transição via flag `--legacy-egui` ou variável de ambiente
+`PETUNIA_LEGACY_EGUI=1`.
 
 Consequências operacionais:
 
 - **Slint é a superfície de produto**. Novos painéis, componentes e fluxos de UI
   devem ser implementados em `crates/ui-slint/` usando a linguagem declarativa
-  `.slint` e o bridge Rust. Callbacks só emitem intenção: regra de produto deve
-  seguir `UiIntent → CommandId/transação → AppEvent/revision/query DTO → ShellViewModel`.
-  Melhorias devem ser incrementais; não iniciar nova migração de toolkit sem cumprir
-  os critérios de reavaliação do ADR 009.
-- **egui é fallback congelado, não frontend de transição em paridade**. Não recebe
-  novas features, polish ou expansão de superfície. Correções só são aceitáveis
-  quando necessárias para preservar o snapshot recuperável durante a retirada da
-  linha ativa. A presença temporária de `crates/ui/` e `crates/app/` no workspace
-  não altera essa política.
+  `.slint` e o bridge Rust em `lib.rs`.
+- **egui é legado de transição**. A crate `crates/ui/` (`petunia_ui`) e o host
+  `crates/app/` (`petunia_app`) permanecem no workspace para retrocompatibilidade,
+  mas não recebem novas features de product UI. Correções críticas são permitidas;
+  expansão de superfície é proibida.
 - **Contratos de UX são toolkit-neutros**. Os capítulos 23 e 36 do caderno definem
   a UI Baseline Final V1 em termos de princípios, medidas, workspaces e
   acessibilidade — não de toolkit. A migração para Slint preserva esses contratos.

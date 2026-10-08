@@ -11,32 +11,18 @@ Este capítulo congela a **UI Baseline Final V1** do Petunia3D e define duas sup
 
 **UI BASELINE FINAL V1 — APPROVED.**
 
-**Decisão 2026-09-20, reafirmada e refinada em 2026-10-08:** Slint é o
-frontend de produção. A crate `petunia_ui_slint` (`crates/ui-slint/`) é a única
-superfície ativa de produto do Petunia3D. A rodada de 2026-10-08 decidiu preservar o
-investimento existente e realizar uma consolidação incremental de UI/UX,
-acessibilidade, componentes, foco/teclado e integração de viewport antes de considerar
-qualquer nova migração de toolkit.
-
-A UI egui deixa de ser tratada como frontend paralelo ou legado em evolução: passa a
-ser **fallback congelado**. Nenhuma feature nova deve ser implementada nela. Um
-snapshot recuperável deve permanecer fora da linha ativa de desenvolvimento
-(branch/tag dedicada); enquanto a extração física da crate egui da branch ativa não
-estiver concluída, `--legacy-egui` / `PETUNIA_LEGACY_EGUI=1` são compatibilidade
-temporária, não uma segunda superfície de produto. Critérios de reavaliação e o
-procedimento de fallback estão formalizados no
-[ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md).
+**Decisão 2026-09-20: Slint é o frontend de produção.** A crate `petunia_ui_slint`
+(`crates/ui-slint/`) é a interface principal do Petunia3D, construída com Slint 1.18.
+O binário `petunia3d` executa o shell Slint por padrão; a UI egui (`crates/ui/`) é
+legado de transição acessível via `--legacy-egui` / `PETUNIA_LEGACY_EGUI=1`.
 
 Os princípios, medidas, workspaces e contratos de acessibilidade deste capítulo são
-**toolkit-neutros**. O fluxo de referência permanece
-`Slint callback → UiIntent → CommandId/transação → AppEvent/revision/query DTO → ShellViewModel`;
-o domínio (`petunia_core`, `petunia_commands`, `petunia_project`,
-`petunia_config`) e o renderer não conhecem Slint nem egui.
+**toolkit-neutros** — aplicam-se independentemente do frontend. A migração para Slint
+preserva esses contratos; o domínio (`petunia_core`, `petunia_commands`, `petunia_project`,
+`petunia_config`) não conhece Slint nem egui.
 
 O vertical slice do capítulo 31 continua obrigatório como **teste de conformance e
-integração**. Reabertura da arquitetura exige limitação estrutural reproduzível do
-Slint, falha documentada nos gates do ADR 009 e novo ADR explícito — preferência
-subjetiva por outro toolkit não é gatilho.
+integração**. Reabertura da arquitetura exige bloqueador estrutural real + ADR explícito.
 
 # Princípios congelados
 

@@ -5,9 +5,8 @@ desenhe a silhueta sobre a referência, gere a malha, ajuste/transforme,
 prepare UV, pinte e exporte — sem exigir domínio prévio de um DCC generalista.
 
 A interface padrão é o shell Slint. O domínio geométrico permanece desacoplado
-da UI e é acionado por comandos transacionais com Undo/Redo. Desde a decisão de
-2026-10-08, egui é somente um **fallback congelado**: referência recuperável, sem
-evolução paralela de produto.
+da UI e é acionado por comandos transacionais com Undo/Redo. A UI egui existe
+apenas como legado de transição.
 
 ## Rodar
 
@@ -42,11 +41,9 @@ UUIDs persistentes.
 - **Produção:** shell declarativo em Slint 1.18 (`crates/ui-slint/`), com
   viewport WGPU compartilhado e fallback de software quando não há GPU
   compatível.
-- **Fallback congelado:** UI egui (`crates/ui/`) e host em `crates/app/` não
-  recebem novas features nem polish. A decisão aprovada é preservar um snapshot
-  recuperável fora da linha ativa. Enquanto essa separação física não estiver
-  concluída, `--legacy-egui` e `PETUNIA_LEGACY_EGUI=1` existem apenas como
-  compatibilidade temporária. Ver [ADR 009](docs/architecture/adr/009-slint-producao-egui-fallback-congelado.md).
+- **Legado:** UI egui (`crates/ui/`) e host em `crates/app/`, acessíveis apenas
+  por `--legacy-egui` ou `PETUNIA_LEGACY_EGUI=1`; não recebem novas
+  funcionalidades de produto.
 - **Contratos visuais toolkit-neutros:** viewport-first, Parts/Context/Asset
   Library, workspaces `MODEL / PAINT / UV`, tokens semânticos,
   keyboard/focus/accessibility. Detalhes em [`docs/ui/README.md`](docs/ui/README.md).
@@ -55,7 +52,7 @@ UUIDs persistentes.
 
 ```
 petunia3d/
-├── src/main.rs            # binário fino (Slint por padrão; egui temporário/fallback congelado)
+├── src/main.rs            # binário fino (Slint por padrão, egui legado opcional)
 ├── crates/
 │   ├── core/              # estado, câmera, comandos, undo/redo, módulos
 │   ├── mesh/              # malha, primitivas, operações, UV e topologia
@@ -70,8 +67,8 @@ petunia3d/
 │   ├── module-uv/         # projeções, ilhas e transformações UV
 │   ├── module-assets/     # biblioteca de assets
 │   ├── ui-slint/          # frontend de produção em Slint
-│   ├── ui/                # fallback egui congelado; remoção da linha ativa pendente
-│   ├── app/               # host do fallback egui; compatibilidade temporária
+│   ├── ui/                # frontend egui legado
+│   ├── app/               # host legado, backends e loop render-on-demand
 │   ├── cli/               # CLI headless para automação e pipelines
 │   ├── ffi/               # camada C-ABI e `include/petunia.h`
 │   ├── mcp/               # fronteira MCP para agentes

@@ -1,9 +1,9 @@
-# 27 — Stack Rust Canônica: Rust + Slint + wgpu
+# 27 — Stack Rust Canônica: Rust + egui + wgpu
 
 <aside>
 🦀
 
-Esta página define a **technical baseline Rust do Petunia3D**. A linguagem/core permanecem em **Rust 2024** e o viewport em **wgpu**. A decisão de frontend foi refinada em 2026-10-08: **Slint 1.18 é a única UI ativa de produção** e egui/eframe/egui-wgpu ficam preservados apenas no fallback congelado, conforme [ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md). O vertical slice técnico do capítulo 31 continua um **teste de conformance/integração**; reabrir toolkit exige falha estrutural reproduzível + novo ADR.
+Esta página define a **technical baseline final do Petunia3D** para implementação: **Rust 2024 + egui + eframe + egui-wgpu + wgpu + Geometry Core próprio em Rust**. A stack substitui a baseline anterior centrada em Odin e adota uma UI Rust-first permissiva, diretamente alinhada ao renderer wgpu. O vertical slice técnico do capítulo 31 é agora um **teste de conformance/integração**; reabrir a stack exige bloqueador estrutural comprovado + ADR explícito.
 
 </aside>
 
@@ -51,9 +51,9 @@ Licenças customizadas, copyleft forte, source-available ou restrições comerci
 | --- | --- | --- |
 | Linguagem | Rust 2024 Edition | Aplicação, core, geometry, renderer, I/O, plugins host, MCP. |
 | Build | Cargo workspace | Build, testes, dependências, tooling. |
-| UI | Slint 1.18 | Shell declarativo, input/layout, componentes Petunia, foco/semântica e superfície ativa de produto. |
-| Desktop host | backend de plataforma do Slint | Window/app integration e execução desktop; detalhes ficam confinados ao frontend. |
-| UI ↔ GPU | adapter de viewport do `petunia_ui_slint` | Isola Slint do `PetuniaRenderer`; caminho GPU preferido e fallback software medido. |
+| UI | egui 0.36.x | Immediate-mode UI, input, layout, painting, accessibility tree e shell desktop. |
+| Desktop host | eframe 0.36.x | Window/app integration e execução desktop. |
+| UI ↔ GPU | egui-wgpu 0.36.x | Integração oficial egui/wgpu e custom rendering dentro de regiões da UI. |
 | GPU | wgpu 30.x | Viewport, overlays, gizmos e uploads de textura. |
 | Shaders | WGSL | Shaders únicos cross-backend. |
 | Math | glam | Vec2/Vec3/Quat/Mat4 e matemática 2D/3D. |
@@ -79,9 +79,7 @@ Licenças customizadas, copyleft forte, source-available ou restrições comerci
 | Benchmarks | Criterion | Performance baseada em fixtures reais. |
 | Fuzzing | cargo-fuzz | Loaders, geometry boundaries e parsers. |
 
-# Por que egui foi escolhido originalmente — histórico
-
-> **SUPERSEDED em 2026-10-08 pelo ADR 009.** Esta seção preserva o rationale da escolha anterior para comparação e fallback; não define a UI ativa nem autoriza novas dependências egui.
+# Por que egui
 
 A UI do Petunia é uma ferramenta técnica/dcc-like com grande quantidade de controls contextuais, viewport próprio e forte integração com input. egui se encaixa nesse perfil porque:
 
@@ -102,14 +100,14 @@ A regra de dependência é:
 ```
 Petunia workspaces/screens
         ↓
-Petunia Components / Slint declarativo
+Petunia Components
         ↓
-UiIntent + UI adapters
+Petunia UI adapters
         ↓
-Slint 1.18 / platform backend
+egui / eframe / selected egui crates
 ```
 
-Não espalhar tipos ou regras específicas de toolkit pelo projeto. **A UI de produto deve passar por Petunia Components, view-models, `UiIntent` e adapters como regra arquitetural**; Slint fica restrito à camada de apresentação. O egui congelado não recebe novas superfícies. Componentes próprios incluem:
+Não espalhar chamadas cruas de egui por todo o projeto. **A UI de produto deve passar por Petunia Components/adapters como regra arquitetural**; egui cru fica restrito à implementação desses boundaries e a devtools explicitamente delimitadas. Componentes próprios incluem:
 
 ```
 PetuniaButton

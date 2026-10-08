@@ -387,7 +387,7 @@ Aplicar integralmente o capítulo 34: evitar `ctx/mgr/svc/cfg/doc/rev/obj/geom/t
 
 A página [34 — Arquitetura Modular Explícita, Rust Safety e Representação em Código](34-arquitetura-modular-rust-safety.md) complementa esta arquitetura física e tem precedência para decisões de representação interna, ownership, `struct/enum/trait`, DOD/ECS, Tool/Command/Algorithm, safety, modularidade de features e regras para agentes de IA.
 
-[36 — UI Baseline Final V1, Temas e Plugin Panels](36-ui-baseline-temas-plugin-panels.md) + [ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md) definem a UI ativa em Slint e suas fronteiras. O [capítulo 35](35-egui-components-adapters-tooling.md) fica como referência histórica do fallback egui e dos princípios toolkit-neutros de Petunia Components/adapters.
+[35 — egui, Petunia Components, UI Adapters e Tooling de Desenvolvimento](35-egui-components-adapters-tooling.md) define Petunia Components, adapters, crates auxiliares egui, testing/inspection e fronteiras específicas da UI.
 
 # Regra final
 
