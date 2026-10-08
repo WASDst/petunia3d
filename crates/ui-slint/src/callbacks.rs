@@ -1305,6 +1305,14 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_command_search_visible(vm.command_search_visible);
     window.set_scene_drawer_visible(vm.scene_drawer_visible);
     window.set_active_keymap_id(vm.active_keymap_id.as_str().into());
+    window.set_pointer_precision_mask(vm.pointer_precision_mask);
+    window.set_pointer_snap_mask(vm.pointer_snap_mask);
+    window.set_pointer_extend_mask(vm.pointer_extend_mask);
+    window.set_pointer_subtract_mask(vm.pointer_subtract_mask);
+    window.set_pointer_pan_mask(vm.pointer_pan_mask);
+    window.set_pointer_cursor_place_mask(vm.pointer_cursor_place_mask);
+    window.set_pointer_loop_mask(vm.pointer_loop_mask);
+    window.set_pointer_orbit_left_mask(vm.pointer_orbit_left_mask);
 
     theme::apply_theme(window, &vm.current_theme);
     if let Some(rgb) = vm.accent_rgb {
