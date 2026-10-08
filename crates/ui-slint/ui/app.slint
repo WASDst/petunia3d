@@ -18,6 +18,8 @@ import { EmptyState, IconButton, KeyHint } from "components/base.slint";\nimport
 import { ToolRail } from "shell/tool_rail.slint";
 import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
+import { StatusBar } from "shell/status_bar.slint";
+import { ContextBar } from "viewport/context_bar.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
 import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
@@ -4083,27 +4085,7 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     // Barra contextual flutuante na base da viewport.
-                    context-bar := Rectangle {
-                        x: (parent.width - self.width) / 2;
-                        y: parent.height - self.height - 14px;
-                        width: bar-row.preferred-width + 16px;
-                        height: 40px;
-                        border-radius: 10px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        drop-shadow-blur: DesignTokens.elevation-2-blur;
-                        drop-shadow-color: DesignTokens.elevation-2-color;
-                        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
-
-                        bar-row := HorizontalLayout {
-                            x: 8px;
-                            y: 4px;
-                            width: self.preferred-width;
-                            height: self.preferred-height;
-                            spacing: 4px;
-                            alignment: center;
-
+                    context-bar := ContextBar {
                             // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
 
 
@@ -4375,7 +4357,7 @@ export component PetuniaSlintShell inherits Window {
                                 active: root.shelf-overflow-open;
                                 clicked => { root.shelf-overflow-open = !root.shelf-overflow-open; }
                             }
-                        }
+                        
                     }
 
                     // Personalizar ações rápidas: cartão não modal acima da barra.
@@ -7038,107 +7020,17 @@ export component PetuniaSlintShell inherits Window {
 
             }
 
-            Rectangle {
-                height: 30px;
-                background: DesignTokens.surface;
-                border-width: 1px;
-                border-color: DesignTokens.border;
-                HorizontalLayout {
-                    padding-left: 14px;
-                    padding-right: 14px;
-                    spacing: 12px;
-                    alignment: center;
-
-                    // Status indicator dot
-                    Rectangle {
-                        width: 7px;
-                        height: 7px;
-                        border-radius: 3.5px;
-                        background: root.status-color;
-                        animate background { duration: Motion.medium; easing: ease-out; }
-                    }
-
-                    // Mensagem de status: destaque só quando é aviso/erro/sucesso;
-                    // feedback neutro (ex.: clique no vazio) fica discreto.
-                    Text {
-                        text: root.status-message;
-                        color: root.status-severity > 0 ? DesignTokens.text-primary : DesignTokens.text-secondary;
-                        font-size: DesignTokens.font-small;
-                        font-weight: root.status-severity > 0 ? 600 : 400;
-                        vertical-alignment: center;
-                        overflow: elide;
-                        max-width: 280px;
-                    }
-                    // Dica da ferramenta, ou os gestos básicos como chips de tecla.
-                    // Os chips somem da direita para a esquerda em janelas estreitas,
-                    // em vez de truncar o texto (plano de UI F3).
-                    if root.context-hint != "": Text { text: root.context-hint; color: DesignTokens.text-muted; font-size: DesignTokens.font-small; vertical-alignment: center; overflow: elide; max-width: 420px; }
-                    // Sem depender da largura da janela (isso cria binding loop
-                    // com o layout): o grupo recorta à direita quando falta espaço.
-                    if root.context-hint == "": Rectangle {
-                        clip: true;
-                        min-width: 0px;
-                        horizontal-stretch: 1;
-                        preferred-width: hints-row.preferred-width;
-                        hints-row := HorizontalLayout {
-                            spacing: DesignTokens.space-md;
-                            alignment: start;
-                            KeyHint { key: Tr.t("sl.key_lmb"); action: Tr.t("sl.hint_select"); }
-                            KeyHint { key: Tr.t("sl.key_mmb"); action: Tr.t("sl.hint_orbit"); }
-                            KeyHint { key: Tr.t("sl.key_shift_mmb"); action: Tr.t("sl.hint_pan"); }
-                            KeyHint { key: Tr.t("sl.key_wheel"); action: Tr.t("sl.hint_zoom"); }
-                        }
-                    }
-
-                    if root.precision-mode: Rectangle {
-                        border-radius: 3px;
-                        background: DesignTokens.badge-precision-bg;
-                        border-width: 1px;
-                        border-color: DesignTokens.badge-precision-border;
-                        HorizontalLayout {
-                            padding-left: 5px; padding-right: 5px;
-                            Text { text: Tr.t("sl.shift_precision_0_1"); color: DesignTokens.badge-precision-text; font-size: DesignTokens.font-caption; font-weight: 700; font-family: "monospace"; }
-                        }
-                    }
-                    if root.snap-mode: Rectangle {
-                        border-radius: 3px;
-                        background: DesignTokens.badge-snap-bg;
-                        border-width: 1px;
-                        border-color: DesignTokens.badge-snap-border;
-                        HorizontalLayout {
-                            padding-left: 5px; padding-right: 5px;
-                            Text { text: Tr.t("sl.ctrl_snap"); color: DesignTokens.badge-snap-text; font-size: DesignTokens.font-caption; font-weight: 700; font-family: "monospace"; }
-                        }
-                    }
-
-                    Rectangle { horizontal-stretch: 1; }
-
-                    if (root.hover-label != "" || root.selection-summary != ""): Text {
-                        text: root.hover-label != "" ? root.hover-label : root.selection-summary;
-                        color: root.hover-label != "" ? DesignTokens.hover : DesignTokens.text-primary;
-                        font-size: DesignTokens.font-small;
-                        font-weight: 500;
-                        vertical-alignment: center;
-                    }
-
-                    if (root.hover-label != "" || root.selection-summary != ""): Rectangle {
-                        width: 1px;
-                        height: 14px;
-                        background: DesignTokens.border;
-                    }
-
-                    Text { text: root.scene-stats; color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; font-weight: 500; vertical-alignment: center; }
-
-                    Rectangle { width: 1px; height: 14px; background: DesignTokens.border; }
-
-                    Text {
-                        text: saved ? Tr.t("sl.saved") : Tr.t("sl.unsaved");
-                        color: saved ? DesignTokens.success : DesignTokens.warning;
-                        font-size: DesignTokens.font-small;
-                        font-weight: 600;
-                        vertical-alignment: center;
-                    }
-                }
+            StatusBar {
+                status-color: root.status-color;
+                status-message: root.status-message;
+                status-severity: root.status-severity;
+                context-hint: root.context-hint;
+                precision-mode: root.precision-mode;
+                snap-mode: root.snap-mode;
+                hover-label: root.hover-label;
+                selection-summary: root.selection-summary;
+                scene-stats: root.scene-stats;
+                saved: root.saved;
             }
         }
 
