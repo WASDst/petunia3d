@@ -824,3 +824,60 @@ fn escape_closes_the_home_screen() {
     });
     assert!(closed.get(), "Esc fecha a Home");
 }
+
+
+#[test]
+fn viewport_drag_threshold_controls_when_transform_drag_starts() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().expect("Slint shell");
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().expect("headless window");
+    shell.set_active_workspace("MODEL".into());
+    shell.set_active_tool("move".into());
+    shell.set_transform_instant_active(false);
+    shell.set_gizmo_has_hover(false);
+
+    let begins = Rc::new(Cell::new(0));
+    let begin_callback = Rc::clone(&begins);
+    shell.on_viewport_transform_begin(move |_, _, _| {
+        begin_callback.set(begin_callback.get() + 1);
+    });
+
+    // Acessibilidade: um threshold alto mantém um deslocamento moderado como
+    // gesto ainda pendente e não promove Move para drag.
+    shell.set_drag_threshold_px(100.0);
+    move_pointer(&shell, 600.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(600.0, 400.0),
+        button: PointerEventButton::Left,
+    });
+    move_pointer(&shell, 630.0, 420.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(630.0, 420.0),
+        button: PointerEventButton::Left,
+    });
+    assert_eq!(
+        begins.get(),
+        0,
+        "drag menor que a preferência não deve iniciar transformação"
+    );
+
+    // Com o threshold padrão, o mesmo deslocamento inicia exatamente um drag.
+    shell.set_drag_threshold_px(4.0);
+    move_pointer(&shell, 600.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(600.0, 400.0),
+        button: PointerEventButton::Left,
+    });
+    move_pointer(&shell, 630.0, 420.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(630.0, 420.0),
+        button: PointerEventButton::Left,
+    });
+    assert_eq!(
+        begins.get(),
+        1,
+        "drag acima da preferência deve iniciar transformação"
+    );
+}
