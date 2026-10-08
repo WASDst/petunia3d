@@ -432,6 +432,43 @@ pub(crate) fn connect_transform_callbacks<V: PetuniaViewport + 'static>(
 }
 
 
+/// Conecta a gramática principal de pointer das ferramentas.
+///
+/// O Slint reconhece Press/Move/Release/Cancel; ToolSession e mutações
+/// permanecem no Rust/core. Movimentos de alta frequência usam refresh
+/// interativo; commit/cancel sincronizam a janela inteira.
+pub(crate) fn connect_tool_pointer_callbacks<V: PetuniaViewport + 'static>(
+    window: &PetuniaSlintShell,
+    bridge: Arc<Mutex<SlintUiBridge<V>>>,
+    throttle: Rc<RefreshThrottle>,
+) {
+    let tool_pointer_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    let tool_pointer_throttle = Rc::clone(&throttle);
+    window.on_tool_pointer(move |phase, x, y, shift, ctrl, alt| {
+        if let Ok(mut bridge) = tool_pointer_bridge.lock() {
+            if !crate::perf::measure("tool_pointer", || {
+                bridge.tool_pointer_ex(phase, x, y, shift, ctrl, alt)
+            }) {
+                return;
+            }
+            if let Some(window) = window_weak.upgrade() {
+                if phase == 1 {
+                    refresh::refresh_interactive(
+                        &window,
+                        &tool_pointer_bridge,
+                        &mut *bridge,
+                        &tool_pointer_throttle,
+                    );
+                } else {
+                    refresh::refresh_full(&window, &mut *bridge, &tool_pointer_throttle);
+                }
+            }
+        }
+    });
+}
+
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre faz zoom.
     pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
