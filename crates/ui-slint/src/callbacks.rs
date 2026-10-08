@@ -1416,6 +1416,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     // Arrasto e hover: viewport a cada evento, janela completa limitada.
     let throttle = std::rc::Rc::new(crate::refresh::RefreshThrottle::default());
     crate::bridge::viewport::connect_hover_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
+    crate::bridge::viewport::connect_transform_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
     let shortcut_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_shortcut_requested(move |text, ctrl, shift, alt| {
@@ -2075,63 +2076,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             let vm = bridge.view_model();
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &vm);
-            }
-        }
-    });
-
-    let transform_begin_bridge = Arc::clone(&bridge);
-    window.on_viewport_transform_begin(move |kind_str, x, y| {
-        let kind = match kind_str.as_str() {
-            "pos" => TransformKind::Position,
-            "rot" => TransformKind::Rotation,
-            "scale" => TransformKind::Scale,
-            // O plano de corte reusa o mesmo canal de arrasto, mas com a própria
-            // sessão: nada de transformar geometria.
-            "slice" => {
-                if let Ok(mut bridge) = transform_begin_bridge.lock() {
-                    bridge.begin_slice(x, y);
-                }
-                return;
-            }
-            _ => return,
-        };
-        if let Ok(mut bridge) = transform_begin_bridge.lock() {
-            bridge.begin_viewport_transform(kind, x, y);
-        }
-    });
-
-    let transform_drag_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    let transform_drag_throttle = std::rc::Rc::clone(&throttle);
-    window.on_viewport_transform_update(move |x, y, fine, snap| {
-        if let Ok(mut bridge) = transform_drag_bridge.lock() {
-            bridge.pointer_position = [x, y];
-            if !bridge.update_viewport_slice_modified(x, y, snap) {
-                bridge.update_viewport_transform_modified(x, y, fine, snap);
-            }
-            if let Some(window) = window_weak.upgrade() {
-                crate::refresh::refresh_interactive(
-                    &window,
-                    &transform_drag_bridge,
-                    &mut *bridge,
-                    &transform_drag_throttle,
-                );
-            }
-        }
-    });
-
-    let transform_end_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_viewport_transform_end(move || {
-        if let Ok(mut bridge) = transform_end_bridge.lock() {
-            bridge.end_viewport_transform();
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
             }
         }
     });
@@ -3025,34 +2969,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             persist_user_preferences(&mut bridge);
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
-            }
-        }
-    });
-
-    let gizmo_begin_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_gizmo_drag_begin(move |x, y| {
-        if let Ok(mut bridge) = gizmo_begin_bridge.lock() {
-            bridge.begin_gizmo_drag(x, y);
-            let vm = bridge.view_model();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-            }
-        }
-    });
-
-    let gizmo_end_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_gizmo_drag_end(move || {
-        if let Ok(mut bridge) = gizmo_end_bridge.lock() {
-            bridge.end_gizmo_drag();
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
             }
         }
     });
