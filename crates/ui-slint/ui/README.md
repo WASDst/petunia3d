@@ -22,3 +22,5 @@ Definições de interface declarativa na linguagem Slint (`.slint`):
 - `viewport/view_bar.slint`: chrome da View Bar, com controles específicos ainda fornecidos por `@children`.
 - `viewport/overlays.slint`: overlays passivos de seleção, skeleton e previews; não recebe input nem altera domínio.
 - `viewport/viewport.slint`: host da viewport principal; owns superfície, resize/HiDPI e imagem GPU, enquanto input/picking/tool sessions permanecem no chamador.
+- `viewport/input_router.slint`: recognition layer de pointer/gesture; mantém apenas estado efêmero e emite callbacks semânticos, sem acesso a Project/Mesh/ToolSession.
+- A preferência `drag-threshold-px` alimenta diretamente o recognition layer da viewport; click→drag não usa mais threshold fixo no shell.
