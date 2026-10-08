@@ -12,6 +12,15 @@
 - Last updated: `2026-10-03`
 - Historical planning focus (23/09/2026): revisar o [PR #26](https://github.com/wasd-lat/petunia3d/pull/26) com a integração PAINT/DRAW MVP publicada; gates e aceite manual aguardam instrução. [Plano anterior de viewport](docs/development/workspace-inspector-implementation-plan.md) permanece proposta, sem reabrir decisões de Paint/UV.
 
+### Correções do aceite DRAW/POLY — 03/10/2026
+
+O usuário reportou nove falhas funcionais/visuais após o PR #27. Os 1186
+resultados anteriores não certificavam os caminhos de eventos afetados.
+A [matriz de regressões](docs/development/draw-interaction-regressions-gap-matrix.md)
+registra causas, escopo e validação desta correção. Em validação: criação por
+arrasto, edição 2D sem volume, plano Face apontado na viewport, painel por
+forma, colapso e dica contextual, parede com furo e Loop Cut pós-booleana.
+
 ### Retomada DRAW/POLY/PAINT — 03/10/2026
 
 Continuação da sessão OpenCode `ses_f07df6f9affe5TRABtfa6GdBNf` sobre

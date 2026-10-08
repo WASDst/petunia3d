@@ -851,6 +851,12 @@ surface_box_tip = "Project the six box faces (fastest for hard-surface props)"
 surface_auto_unwrap_tip = "Cut the mesh into charts automatically (angle-based)"
 
 [profile]
+rectangle_hint = "Drag from one corner to the opposite corner. Select edits existing shapes."
+circle_hint = "Drag from the center to set the radius. Select edits existing shapes."
+edit_hint = "Drag nodes or the shape. Move, Rotate and Scale also work before generating volume."
+rectangle = "Rectangle"
+circle = "Circle"
+choose_face = "Click a face in the viewport to choose the drawing plane"
 points = "points"
 snap = "Snap 0.25"
 depth = "Depth"

@@ -377,15 +377,24 @@ pub fn profile_workplane_label(state: &AppState) -> &'static str {
 
 /// Constrói a malha 3D de extrusão a partir do ProfileState sem alterar o projeto ou descartar pontos.
 pub fn build_extrude_mesh(p: &ProfileState) -> Result<Mesh, String> {
-    let effective = p.effective_points();
+    let effective = p.tessellated_points();
     if effective.len() < 3 || !p.closed {
         return Err("profile requires at least 3 points and must be closed".to_string());
     }
-    if !p.holes.is_empty() {
+    let mut holes = p.holes.clone();
+    if p.wall_thickness > 0.0 {
+        holes.push(
+            p.inner_points()
+                .iter()
+                .map(|point| point.map(f64::from))
+                .collect(),
+        );
+    }
+    if !holes.is_empty() {
         let outer: Vec<_> = effective.iter().map(|p| p.map(f64::from)).collect();
         let mut mesh = petunia_mesh::imprint::region_sheet(
             &outer,
-            &p.holes,
+            &holes,
             glam::Vec3::from(p.origin),
             glam::Vec3::from(p.right),
             glam::Vec3::from(p.up),
@@ -954,5 +963,55 @@ mod compound_volume_tests {
                 .is_some()
         );
         assert!(build_revolve_mesh(&p).is_err());
+    }
+}
+
+#[cfg(test)]
+mod wall_regressions {
+    use super::*;
+
+    #[test]
+    fn rectangle_wall_extrusion_has_all_four_walls_and_is_closed() {
+        for clockwise in [false, true] {
+            let mut p = ProfileState {
+                points: vec![[-1.0, -0.75], [1.0, -0.75], [1.0, 0.75], [-1.0, 0.75]],
+                closed: true,
+                depth: 2.7,
+                wall_thickness: 0.15,
+                right: [1.0, 0.0, 0.0],
+                up: [0.0, 1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+                ..Default::default()
+            };
+            if clockwise {
+                p.points.reverse();
+            }
+            let mesh = build_extrude_mesh(&p).unwrap();
+            let mut counts = std::collections::HashMap::new();
+            for face in &mesh.faces {
+                for i in 0..face.verts.len() {
+                    let a = face.verts[i];
+                    let b = face.verts[(i + 1) % face.verts.len()];
+                    *counts.entry((a.min(b), a.max(b))).or_insert(0) += 1;
+                }
+            }
+            assert!(
+                counts.values().all(|&count| count == 2),
+                "wall must be closed without a missing side"
+            );
+            let side_faces = mesh
+                .faces
+                .iter()
+                .filter(|face| {
+                    let z: Vec<_> = face
+                        .verts
+                        .iter()
+                        .map(|&id| mesh.verts[id as usize].pos[2])
+                        .collect();
+                    z.iter().any(|v| v.abs() < 1e-4) && z.iter().any(|v| (v - 2.7).abs() < 1e-4)
+                })
+                .count();
+            assert_eq!(side_faces, 8, "four outer and four inner walls");
+        }
     }
 }

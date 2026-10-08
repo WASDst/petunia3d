@@ -853,6 +853,12 @@ surface_box_tip = "Projeta as seis faces da caixa (mais rápido para props de ha
 surface_auto_unwrap_tip = "Corta a malha em charts automaticamente (por ângulo)"
 
 [profile]
+rectangle_hint = "Arraste de um canto ao canto oposto. Select edita formas existentes."
+circle_hint = "Arraste do centro para definir o raio. Select edita formas existentes."
+edit_hint = "Arraste os nós ou a forma. Mover, Rotacionar e Escalar funcionam antes de gerar volume."
+rectangle = "Retângulo"
+circle = "Círculo"
+choose_face = "Clique em uma face na viewport para escolher o plano de desenho"
 points = "pontos"
 snap = "Snap 0.25"
 depth = "Profundidade"

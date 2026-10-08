@@ -1132,8 +1132,10 @@ component ToolCard inherits Rectangle {
     in-out property <bool> collapsed: false;
     callback collapse-toggled;
 
+    accessible-role: groupbox;
+    accessible-label: root.title;
     width: 264px;
-    height: card-layout.preferred-height;
+    height: root.collapsed ? 40px : card-layout.preferred-height;
     border-radius: 8px;
     background: DesignTokens.surface-raised;
     border-width: 1px;
@@ -3992,6 +3994,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> label-profile-plane-view: "";
     in-out property <string> label-profile-look-at-plane: "";
     in-out property <bool> profile-workplane-locked: false;
+    in-out property <bool> profile-pick-face: false;
     in-out property <string> label-profile-generate: "";
     in-out property <string> label-profile-revolve: "";
     in-out property <string> label-profile-sweep: "";
@@ -5003,15 +5006,15 @@ export component PetuniaSlintShell inherits Window {
                                 icon: IconSet.Square;
                                 semantic-label: Tr.t("sl.2d_rectangle");
                                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
-                                active: false;
-                                clicked => { root.add-profile-rectangle(2.0, 1.5); }
+                                active: active-tool == "draw_rectangle";
+                                clicked => { root.active-tool-changed("draw_rectangle"); }
                             }
                             ToolButton {
                                 icon: IconSet.Circle;
                                 semantic-label: Tr.t("sl.2d_circle");
                                 description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
-                                active: false;
-                                clicked => { root.add-profile-circle(1.0, 16); }
+                                active: active-tool == "draw_circle";
+                                clicked => { root.active-tool-changed("draw_circle"); }
                             }
                             ToolButton {
                                 icon-svg: PetuniaIcons.tool-pushpull;
@@ -5723,14 +5726,17 @@ export component PetuniaSlintShell inherits Window {
                                 pending-transform = false;
                                 pending-box-select = false;
                                 pending-lasso-select = false;
-                                 if event.button == PointerEventButton.left && (root.active-tool == "draw_profile" || (root.active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.depth-handle-visible)) {
+                                 if event.button == PointerEventButton.left && root.profile-pick-face {
+                                     consume-click = true;
+                                     root.viewport-select(self.mouse-x / self.width, self.mouse-y / self.height, false, false);
+                                 } else if event.button == PointerEventButton.left && (root.active-tool == "draw_profile" || (root.active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.profile-active && (root.active-tool == "select" || root.active-tool == "box_select"))) {
                                      let d-handle-dx = abs(self.mouse-x - root.depth-handle-x);
                                      let d-handle-dy = abs(self.mouse-y - root.depth-handle-y);
-                                     if root.depth-handle-visible && d-handle-dx <= 20px && d-handle-dy <= 20px {
+                                     if root.depth-handle-visible && d-handle-dx <= 10px && d-handle-dy <= 10px {
                                          is-profile-depth-drag = true;
                                          tool-drag-fine = event.modifiers.shift;
                                          consume-click = true;
-                                     } else if root.active-tool == "draw_profile" {
+                                     } else {
                                          if root.viewport-profile-pointer-down(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.alt, event.modifiers.control) {
                                              is-profile-point-drag = true;
                                              consume-click = true;
@@ -5738,8 +5744,9 @@ export component PetuniaSlintShell inherits Window {
                                              is-profile-volume-drag = true;
                                              tool-drag-fine = event.modifiers.shift;
                                          } else if root.profile-closed {
-                                             is-profile-depth-drag = true;
-                                             tool-drag-fine = event.modifiers.shift;
+                                             is-tool-gesture = true;
+                                             consume-click = true;
+                                             root.tool-pointer(0, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
                                          } else {
                                              consume-click = true;
                                              is-profile-draw-drag = true;
@@ -6313,7 +6320,7 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     // HUD Flutuante no Cursor (Fase 4: HUD Numérico em Tempo Real)
-                    if root.hud-pill-visible && active-workspace == "MODEL": Rectangle {
+                    if root.hud-pill-visible && viewport-touch.has-hover && active-workspace == "MODEL": Rectangle {
                         x: min(max(8px, root.hud-pill-x), parent.width - self.width - 8px);
                         y: min(max(8px, root.hud-pill-y), parent.height - self.height - 8px);
                         width: hud-pill-layout.preferred-width + 20px;
@@ -6982,7 +6989,7 @@ export component PetuniaSlintShell inherits Window {
                     if profile-active && !tool-modal-active && !loop-cut-active && !loop-cut-armed: ToolCard {
                         x: 14px;
                         y: 58px;
-                        title: root.label-model-profile;
+                        title: root.profile-parametric ? (root.profile-ellipse ? Tr.t("profile.circle") : Tr.t("profile.rectangle")) : (root.active-tool == "draw_rectangle" ? Tr.t("profile.rectangle") : (root.active-tool == "draw_circle" ? Tr.t("profile.circle") : root.label-model-profile));
                         collapsed: root.tool-properties-collapsed;
                         collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
 
@@ -7027,17 +7034,8 @@ export component PetuniaSlintShell inherits Window {
                             TouchArea { clicked => { root.profile-look-at-plane(); } }
                         }
 
-                        NumericField {label:Tr.t("extensions.threshold");value:root.trace-threshold;step:1;
-                            text-committed(text)=>{return root.extension-parameter-set("threshold",text);}
-                            scrubbed(delta,fine)=>{root.extension-parameter-set("threshold","\{root.trace-threshold+delta*(fine?0.1:1)}");}
-                        }
-                        NumericField { label: Tr.t("extensions.radius"); value: root.extension-radius; step: 0.01; scrubbed(delta,fine) => { root.extension-parameter-set("radius","\{root.extension-radius + delta * 0.01 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("radius",text); } }
-                        NumericField { label: Tr.t("extensions.length"); value: root.extension-length; step: 0.01; scrubbed(delta,fine) => { root.extension-parameter-set("length","\{root.extension-length + delta * 0.01 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("length",text); } }
-                        NumericField { label: Tr.t("extensions.angle"); value: root.extension-angle; step: 1; scrubbed(delta,fine) => { root.extension-parameter-set("angle","\{root.extension-angle + delta * 1 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("angle",text); } }
-                        NumericField { label: Tr.t("extensions.sides"); value: root.extension-sides; step: 1; scrubbed(delta,fine) => { root.extension-parameter-set("sides","\{root.extension-sides + delta * 1 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("sides",text); } }
-                        NumericField { label: Tr.t("extensions.tolerance"); value: root.extension-tolerance; step: 0.001; scrubbed(delta,fine) => { root.extension-parameter-set("tolerance","\{root.extension-tolerance + delta * 0.001 * (fine ? 0.1 : 1)}"); } text-committed(text) => { return root.extension-parameter-set("tolerance",text); } }
                         Text { text: "\{root.label-profile-points}: \{root.profile-point-count}"; color: DesignTokens.text-secondary; font-size: 10px; }
-                        if !root.profile-closed: Rectangle {
+                        if !root.profile-closed && root.active-tool == "draw_profile" && root.profile-point-count >= 3: Rectangle {
                             height: 26px; border-radius: 4px; background: DesignTokens.surface;
                             border-width: 1px; border-color: DesignTokens.border;
                             Text { text: root.label-profile-close; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
@@ -7164,20 +7162,7 @@ export component PetuniaSlintShell inherits Window {
                                 }
                             }
                         }
-                        HorizontalLayout {
-                            spacing: 5px; height: 26px;
-                            Rectangle {
-                                horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
-                                Text { text: root.label-profile-add-rect; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { clicked => { root.add-profile-rectangle(2.0, 1.0); } }
-                            }
-                            Rectangle {
-                                horizontal-stretch: 1; border-radius: 4px; background: DesignTokens.surface; border-width: 1px; border-color: DesignTokens.border;
-                                Text { text: root.label-profile-add-circle; color: DesignTokens.text-primary; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { clicked => { root.add-profile-circle(1.0, 16); } }
-                            }
-                        }
-                        Text { text: root.hint-model-profile; color: DesignTokens.text-muted; font-size: 9px; wrap: word-wrap; }
+                        Text { text: root.active-tool == "draw_rectangle" ? Tr.t("profile.rectangle_hint") : (root.active-tool == "draw_circle" ? Tr.t("profile.circle_hint") : (root.profile-closed ? Tr.t("profile.edit_hint") : root.hint-model-profile)); color: DesignTokens.text-muted; font-size: 9px; wrap: word-wrap; }
                     }
 
                     if operation-hud-active && !tool-modal-active && !loop-cut-active && !loop-cut-armed && !profile-active: ToolCard {
@@ -7972,13 +7957,15 @@ export component PetuniaSlintShell inherits Window {
                                 icon: IconSet.Square;
                                 semantic-label: Tr.t("sl.rect_2d");
                                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
-                                clicked => { root.add-profile-rectangle(2.0, 1.5); }
+                                active: active-tool == "draw_rectangle";
+                                clicked => { root.active-tool-changed("draw_rectangle"); }
                             }
                             if active-workspace == "MODEL" && root.modeling-mode == "DRAW" && root.viewport-region-width >= 760: ToolButton {
                                 icon: IconSet.Circle;
                                 semantic-label: Tr.t("sl.circle_2d");
                                 description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
-                                clicked => { root.add-profile-circle(1.0, 16); }
+                                active: active-tool == "draw_circle";
+                                clicked => { root.active-tool-changed("draw_circle"); }
                             }
 
                             if active-workspace == "MODEL" && root.modeling-mode == "DRAW": Rectangle {

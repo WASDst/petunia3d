@@ -285,7 +285,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
 
         let (bx, by) = (base_screen[0], base_screen[1]);
-        let (tx, ty) = (top_screen[0], top_screen[1]);
+        // When looking along the normal, the projected depth tip overlaps the
+        // body move target. Keep the handle visible and independently hittable.
+        let delta = glam::Vec2::from_array(top_screen) - glam::Vec2::from_array(base_screen);
+        let tip = if delta.length() < 32.0 {
+            glam::Vec2::from_array(base_screen)
+                + delta.try_normalize().unwrap_or(glam::Vec2::Y) * 32.0
+        } else {
+            glam::Vec2::from_array(top_screen)
+        };
+        let (tx, ty) = (tip.x, tip.y);
         let mut out = format!("M {bx:.1} {by:.1} L {tx:.1} {ty:.1} ");
         out.push_str(&format!(
             "M {bx:.1} {by:.1} m -4 0 a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0 "
@@ -299,7 +308,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         ));
 
         let label = format!("{:.2} m", depth);
-        (out, Some(top_screen), label)
+        (out, Some(tip.to_array()), label)
     }
 
     /// Perfil sob o cursor (px da viewport), com contorno acima do interior.

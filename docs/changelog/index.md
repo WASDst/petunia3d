@@ -1,5 +1,13 @@
 # Histórico de Versões (Changelog)
 
+## 2026-10-03 — Correções do aceite DRAW/POLY
+
+- Retângulo e círculo são ferramentas persistentes de criação por arrasto/clicar-mover-clicar na viewport, usando ToolSession, com prévia sem mutação e um Undo na confirmação.
+- Perfil selecionado continua editável sem volume: corpo para movimentar, ferramentas Move/Rotate/Scale e nós no Select. Painel mostra dimensões/segmentos aplicáveis à forma; parâmetros de outras operações foram removidos.
+- Plane Face permite apontar uma face na viewport para todas as ferramentas 2D, sem mover a câmera. A dica flutuante se oculta sobre painéis e cards recolhidos devolvem espaço à viewport.
+- Wall Thickness gera uma região com furo, preservando todas as paredes. Loop Cut atravessa superfícies booleanas fechadas por seção geométrica quando falta um anel de quads, mantendo prévia, slide, UVs e materiais.
+- Combinações Ctrl vindas como caracteres de controle chegam ao keymap; regressões de shell cobrem roteamento de atalhos e de arrasto.
+
 Todas as alterações notáveis deste projeto são documentadas neste arquivo.
 O formato baseia-se no [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/) e adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 

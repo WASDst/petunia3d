@@ -30,6 +30,24 @@ A Pen Tool inicial gera linhas poligonais. Bézier verdadeira fica para uma evol
 
 O desenho do Petunia é **planar 3D modeling**, não desenho 2D ambíguo: cada Profile está associado a um Work Plane conhecido no espaço 3D. O sistema conhece origem, eixos do plano, normal, posição e contexto de operação. Isso elimina a necessidade de inferir livremente onde um stroke existe no espaço.
 
+### Interação de perfis no DRAW — revisão de 2026-10-03
+
+Escolher Rectangle ou Circle arma uma ferramenta persistente, sem criar um
+perfil imediatamente. Rectangle usa primeiro canto → canto oposto; Circle usa
+centro → raio. Arrastar e clicar-mover-clicar seguem a gramática da constituição
+11, com prévia sem mutação do documento, confirmação transacional e Esc.
+
+Perfis são editáveis antes de qualquer volume: Select arrasta o corpo ou os
+pontos/alças; Move, Rotate e Scale operam no perfil selecionado. Opções refletem
+a forma selecionada (dimensões e segmentos quando aplicáveis). Editar livremente
+um nó pode descaracterizar uma primitiva e desativar sua regeneração dimensional.
+
+Auto, Ground, Face e View são compartilhados entre as ferramentas 2D. Face usa
+a face selecionada ou aguarda um clique na viewport; não substitui uma escolha
+sem face por Ground. Trocar explicitamente o plano de um perfil selecionado
+preserva sua identidade e geometria local e permite Undo. Iniciar/cancelar uma
+forma preserva o frame de um plano travado. A câmera só se alinha por comando.
+
 ## Profile → Volume
 
 Ao fechar uma forma válida, o software mostra preenchimento e uma **Depth Handle**. Arrastar a alça — ou arrastar em qualquer lugar com a ferramenta Push/Pull — gera a extrusão imediatamente, com valor digitável (constituição 11).

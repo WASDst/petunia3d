@@ -591,3 +591,93 @@ fn test_tooltip_hover() {
         }
     }
 }
+
+#[test]
+fn profile_card_collapse_releases_viewport_and_primitive_drag_reaches_grammar() {
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().unwrap();
+    petunia_ui_slint::tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().unwrap();
+    shell.set_active_workspace("MODEL".into());
+    shell.set_modeling_mode("DRAW".into());
+    shell.set_profile_active(true);
+    shell.set_active_tool("draw_rectangle".into());
+    shell.set_profile_parametric(true);
+    let card = ElementHandle::find_by_accessible_label(&shell, "Rectangle")
+        .find(|e| e.accessible_role() == Some(AccessibleRole::Groupbox))
+        .unwrap();
+    let expanded = card.size().height;
+    assert!(expanded > 100.0);
+    ElementHandle::find_by_accessible_label(&shell, "Collapse")
+        .find(|e| e.accessible_role() == Some(AccessibleRole::Button))
+        .unwrap()
+        .mock_single_click(PointerEventButton::Left);
+    assert!(
+        ElementHandle::find_by_accessible_label(&shell, "Expand")
+            .next()
+            .is_some()
+    );
+    assert!(
+        card.size().height <= 42.0,
+        "collapsed panel must give space back"
+    );
+    ElementHandle::find_by_accessible_label(&shell, "Expand")
+        .find(|e| e.accessible_role() == Some(AccessibleRole::Button))
+        .unwrap()
+        .mock_single_click(PointerEventButton::Left);
+    assert_eq!(card.size().height, expanded);
+    shell.set_tool_grammar_active(true);
+    let phases = Rc::new(RefCell::new(Vec::new()));
+    let log = Rc::clone(&phases);
+    shell.on_tool_pointer(move |phase, _, _, _, _| {
+        log.borrow_mut().push(phase);
+    });
+    move_pointer(&shell, 600.0, 400.0);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(600.0, 400.0),
+        button: PointerEventButton::Left,
+    });
+    move_pointer(&shell, 700.0, 450.0);
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(700.0, 450.0),
+        button: PointerEventButton::Left,
+    });
+    assert!(phases.borrow().contains(&0));
+    assert!(phases.borrow().contains(&1));
+    assert!(phases.borrow().contains(&2));
+    let shortcuts = Rc::new(RefCell::new(Vec::new()));
+    let log = Rc::clone(&shortcuts);
+    shell.on_shortcut_requested(move |key, ctrl, _, _| {
+        if ctrl {
+            log.borrow_mut().push(key.to_string());
+        }
+    });
+    shell.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::Control.into(),
+    });
+    shell
+        .window()
+        .dispatch_event(WindowEvent::KeyPressed { text: "r".into() });
+    shell
+        .window()
+        .dispatch_event(WindowEvent::KeyReleased { text: "r".into() });
+    shell.window().dispatch_event(WindowEvent::KeyReleased {
+        text: slint::platform::Key::Control.into(),
+    });
+    assert!(
+        shortcuts.borrow().iter().any(|key| key == "r"),
+        "Ctrl+R must reach shortcut routing"
+    );
+    let plain = Rc::new(Cell::new(false));
+    let flag = Rc::clone(&plain);
+    shell.on_shortcut_requested(move |key, ctrl, _, _| {
+        if key == "x" {
+            flag.set(!ctrl);
+        }
+    });
+    shell
+        .window()
+        .dispatch_event(WindowEvent::KeyPressed { text: "x".into() });
+    assert!(plain.get(), "releasing Ctrl must release its modifier");
+}

@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1572**.
+Total de chaves de localização cadastradas: **1578**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -523,16 +523,22 @@ Total de chaves de localização cadastradas: **1572**.
 | `prims.vertices` | Segments | Segmentos |
 | `prims.wedge` | Wedge | Cunha |
 | `prims.width` | Width | Largura |
+| `profile.choose_face` | Click a face in the viewport to choose the drawing plane | Clique em uma face na viewport para escolher o plano de desenho |
+| `profile.circle` | Circle | Círculo |
+| `profile.circle_hint` | Drag from the center to set the radius. Select edits existing shapes. | Arraste do centro para definir o raio. Select edita formas existentes. |
 | `profile.clear` | Clear | Limpar |
 | `profile.close` | Close | Fechar |
 | `profile.closed` | profile closed | perfil fechado |
 | `profile.depth` | Depth | Profundidade |
+| `profile.edit_hint` | Drag nodes or the shape. Move, Rotate and Scale also work before generating volume. | Arraste os nós ou a forma. Mover, Rotacionar e Escalar funcionam antes de gerar volume. |
 | `profile.gen_extrude` | Gen Extrude | Gerar Extrude |
 | `profile.gen_revolve` | Gen Revolve | Gerar Revolve |
 | `profile.generated` | profile mesh generated | malha do perfil gerada |
 | `profile.need_closed` | close the profile first (click near 1st point) | feche o perfil antes (clique perto do 1º ponto) |
 | `profile.need_points` | draw at least 2 points first | desenhe ao menos 2 pontos |
 | `profile.points` | points | pontos |
+| `profile.rectangle` | Rectangle | Retângulo |
+| `profile.rectangle_hint` | Drag from one corner to the opposite corner. Select edits existing shapes. | Arraste de um canto ao canto oposto. Select edita formas existentes. |
 | `profile.segments` | Revolve segs | Segs revolve |
 | `profile.snap` | Snap 0.25 | Snap 0.25 |
 | `profile.tris` | tris | tris |

@@ -245,7 +245,7 @@ pub(crate) fn sync_draw_camera_overlays<V: PetuniaViewport>(
     window.set_region_shapes_commands(bridge.region_shapes_commands().as_str().into());
     window.set_profile_outline_commands(bridge.profile_outline_commands().as_str().into());
     window.set_poly_pen_preview_commands(bridge.poly_pen_preview_commands().as_str().into());
-    if bridge.state.session.tools.active_tool == "draw_profile" {
+    if bridge.draw_shapes_visible() {
         window.set_profile_preview_commands(bridge.profile_preview_commands().as_str().into());
     }
     let (depth_commands, depth_pos, depth_label) = bridge.depth_handle_commands();
@@ -682,6 +682,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_label_profile_plane_view(vm.label_profile_plane_view.as_str().into());
     window.set_label_profile_look_at_plane(vm.label_profile_look_at_plane.as_str().into());
     window.set_profile_workplane_locked(vm.profile_workplane_locked);
+    window.set_profile_pick_face(vm.profile_pick_face);
     window.set_label_profile_generate(vm.label_profile_generate.as_str().into());
     window.set_label_profile_revolve(vm.label_profile_revolve.as_str().into());
     window.set_label_profile_sweep(vm.label_profile_sweep.as_str().into());

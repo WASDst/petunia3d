@@ -2159,6 +2159,73 @@ fn loop_cut_hover_previews_without_mutating_until_placed_and_scrolls_count() {
 }
 
 #[test]
+fn loop_cut_boolean_face_hover_reaches_preview_commit_and_undo() {
+    use petunia_mesh::boolean::{BooleanOp, boolean_meshes};
+    for operation in [
+        BooleanOp::Union,
+        BooleanOp::Difference,
+        BooleanOp::Intersection,
+    ] {
+        let mut bridge = front_view_bridge_with_cube();
+        bridge.resize_viewport(800, 600);
+        bridge.state.freeze_active_primitive();
+        let mut a = petunia_core::Mesh::cube(2.0);
+        let mut b = petunia_core::Mesh::cube(1.5);
+        for vertex in &mut b.verts {
+            vertex.pos[0] += 0.8;
+            vertex.pos[1] += 0.2;
+        }
+        a.triangulate();
+        b.triangulate();
+        let source = boolean_meshes(&a, &b, operation).unwrap();
+        let original = source.topology_fingerprint();
+        *bridge.state.project.active_mesh_mut().unwrap() = source;
+        bridge.state.emit_mesh_changed();
+        bridge.state.set_edit_mode(petunia_core::EditMode::Edit);
+        let depth = bridge.state.project.undo.depth().0;
+        bridge.apply(UiIntent::SetActiveTool("loop_cut".into()));
+        // The face interior supplies a seed even away from the edge tolerance.
+        assert!(bridge.hover_component(0.51, 0.49), "{operation:?}");
+        assert!(
+            !bridge.loop_cut_hover_preview_commands().is_empty(),
+            "{operation:?}"
+        );
+        assert_eq!(
+            bridge
+                .state
+                .project
+                .active_mesh()
+                .unwrap()
+                .topology_fingerprint(),
+            original
+        );
+        assert!(bridge.place_loop_cut_hover());
+        assert!(bridge.commit_loop_cut());
+        assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+        let report = bridge
+            .state
+            .project
+            .active_mesh()
+            .unwrap()
+            .validate_topology();
+        assert!(
+            report.is_closed && report.is_manifold,
+            "{operation:?}: {report:?}"
+        );
+        assert!(bridge.state.undo());
+        assert_eq!(
+            bridge
+                .state
+                .project
+                .active_mesh()
+                .unwrap()
+                .topology_fingerprint(),
+            original
+        );
+    }
+}
+
+#[test]
 fn pivot_selector_changes_transform_session_policy() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     assert!(bridge.set_pivot_point("cursor"));
@@ -9891,9 +9958,15 @@ fn draw_shapes_stay_visible_and_can_be_edited_after_closing() {
     bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
     bridge.apply(UiIntent::SetActiveTool("draw_profile".into()));
     assert!(bridge.add_profile_rectangle(2.0, 2.0));
-    // Mudar de ferramenta encerra a edição, mas a forma continua no documento e visível.
+    // Select preserves the profile so its body and nodes remain editable.
+    let selected = bridge.active_profile_id;
     bridge.apply(UiIntent::SetActiveTool("select".into()));
+    assert_eq!(bridge.active_profile_id, selected);
+    assert!(!bridge.profile_preview_commands().is_empty());
+    // Clicking empty space deselects the profile without hiding its contour.
+    bridge.select_viewport_ext(0.01, 0.99, false, false);
     assert!(bridge.active_profile_id.is_none());
+    assert!(bridge.profile_preview_commands().is_empty());
     assert!(
         !bridge.region_shapes_commands().is_empty(),
         "a região continua desenhada sem estar em edição"
@@ -10469,4 +10542,373 @@ fn draw_scale_and_rotation_keep_parametric_profile_reeditable() {
     assert!(bridge.view_model().profile_width < width * 2.0);
     assert!(bridge.cancel_profile_transform());
     assert!((bridge.view_model().profile_width - width).abs() < 1e-4);
+}
+
+#[test]
+fn draw_primitive_uses_shared_gesture_and_selected_profile_is_editable_without_volume() {
+    for tool in ["draw_rectangle", "draw_circle"] {
+        let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+        bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+        bridge.viewport_size = [1000.0, 700.0];
+        bridge
+            .state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Front);
+        bridge.apply(UiIntent::ProfileSetWorkplaneView);
+        let plane = bridge.draft_profile_workplane();
+        let initial = bridge.state.project.project.clone();
+        let depth = bridge.state.project.undo.depth().0;
+        bridge.apply(UiIntent::SetActiveTool(tool.into()));
+        assert!(ModelingMode::Draw.offers_tool(tool));
+        assert!(!ModelingMode::Poly.offers_tool(tool));
+        assert_eq!(bridge.draft_profile_workplane(), plane);
+        assert_eq!(
+            bridge.state.project.project.profiles.len(),
+            initial.profiles.len()
+        );
+        bridge.tool_pointer(0, 380.0, 250.0, false, false);
+        bridge.tool_pointer(1, 620.0, 450.0, false, false);
+        assert_eq!(
+            bridge.state.project.project.profiles.len(),
+            initial.profiles.len(),
+            "preview is not a document edit"
+        );
+        assert!(
+            !bridge.view_model().profile_preview_commands.is_empty(),
+            "{tool}: active={}, gesture={:?}, phase={:?}, points={:?}, plane={:?}, status={}",
+            bridge.view_model().profile_active,
+            bridge.tool_gesture,
+            bridge.tool_session.phase(),
+            bridge.state.profile.points,
+            bridge.draft_profile_workplane(),
+            bridge.state.ui.status,
+        );
+        bridge.tool_pointer(2, 620.0, 450.0, false, false);
+        assert_eq!(
+            bridge.state.project.project.profiles.len(),
+            initial.profiles.len() + 1
+        );
+        assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+        assert_eq!(bridge.state.session.tools.active_tool, tool);
+        assert!(bridge.profile_volume_mode.is_none());
+        let (profile, spline) = bridge.active_profile_resources().unwrap();
+        assert_eq!(profile.workplane, plane);
+        if tool == "draw_circle" {
+            assert_eq!(spline.points.len(), 16);
+        }
+        let id = profile.id;
+        let before = spline.clone();
+        bridge.apply(UiIntent::SetActiveTool("select".into()));
+        assert_eq!(bridge.active_profile_id, Some(id));
+        assert!(bridge.profile_pointer_down(500.0, 350.0, false));
+        assert!(bridge.profile_pointer_move(540.0, 380.0, false));
+        bridge.profile_pointer_up();
+        assert_ne!(
+            bridge.active_profile_resources().unwrap().1.points,
+            before.points
+        );
+        assert_eq!(bridge.state.project.undo.depth().0, depth + 2);
+        assert!(bridge.profile_volume_mode.is_none());
+        assert!(bridge.state.undo());
+        assert_eq!(
+            bridge.active_profile_resources().unwrap().1.points,
+            before.points
+        );
+        bridge.apply(UiIntent::SetActiveTool("scale".into()));
+        bridge.tool_pointer(0, 500.0, 350.0, false, false);
+        bridge.tool_pointer(1, 580.0, 390.0, false, false);
+        assert!(bridge.handle_escape());
+        assert_eq!(
+            bridge.active_profile_resources().unwrap().1.points,
+            before.points
+        );
+        bridge.apply(UiIntent::SetActiveTool(tool.into()));
+        bridge.tool_pointer(0, 700.0, 250.0, false, false);
+        bridge.tool_pointer(1, 800.0, 400.0, false, false);
+        assert!(bridge.handle_escape());
+        assert_eq!(
+            bridge.state.project.project.profiles.len(),
+            initial.profiles.len() + 1
+        );
+    }
+}
+
+#[test]
+fn draw_face_plane_can_be_picked_after_arming_any_2d_creation_tool() {
+    for tool in ["draw_profile", "draw_rectangle", "draw_circle"] {
+        let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+        bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+        bridge.viewport_size = [1000.0, 700.0];
+        bridge
+            .state
+            .session
+            .camera
+            .set_preset(petunia_core::ViewPreset::Front);
+        bridge.apply(UiIntent::SetActiveTool(tool.into()));
+        bridge
+            .state
+            .project
+            .active_mesh_mut()
+            .unwrap()
+            .deselect_all();
+        let camera = bridge.state.session.camera.view_proj();
+        assert!(bridge.hover_component(0.5, 0.5));
+        assert!(
+            bridge.view_model().snap_marker_visible,
+            "{tool}: shared plane preselection"
+        );
+        bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+        assert!(bridge.profile_pick_face);
+        bridge.select_viewport_ext(0.5, 0.5, false, false);
+        assert!(
+            !bridge.profile_pick_face,
+            "face under cursor must set the plane"
+        );
+        assert!(bridge.state.profile.workplane_locked);
+        assert_eq!(
+            bridge.state.profile.workplane_kind,
+            petunia_core::WorkplaneKind::Face
+        );
+        assert_eq!(bridge.state.session.camera.view_proj(), camera);
+        assert_eq!(bridge.state.session.tools.active_tool, tool);
+        assert!(bridge.state.project.project.profiles.is_empty());
+    }
+}
+
+#[test]
+fn control_character_shortcuts_reach_keymap_instead_of_numeric_or_snap() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    assert!(bridge.route_shortcut("\u{12}", true, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "loop_cut");
+    assert!(!bridge.state.session.snap_enabled);
+    assert!(bridge.handle_escape());
+    assert!(bridge.route_shortcut("b", true, false, false));
+    assert_eq!(bridge.state.session.tools.active_tool, "bevel");
+}
+
+#[test]
+fn draw_shell_creation_selection_move_scale_and_nodes_reach_document_commands() {
+    use i_slint_backend_testing::ElementHandle;
+    use slint::platform::{PointerEventButton, WindowEvent};
+    use slint::{ComponentHandle, LogicalPosition, LogicalSize};
+    i_slint_backend_testing::init_no_event_loop();
+    let shell = PetuniaSlintShell::new().unwrap();
+    tr::install(&shell, "en");
+    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
+    shell.show().unwrap();
+    let mut state = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    state.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    state
+        .state
+        .session
+        .camera
+        .set_preset(petunia_core::ViewPreset::Front);
+    state.apply(UiIntent::ProfileSetWorkplaneView);
+    // Same ownership as the production callback boundary, confined to the UI thread.
+    #[allow(clippy::arc_with_non_send_sync)]
+    let bridge = Arc::new(Mutex::new(state));
+    callbacks::connect_callbacks(&shell, Arc::clone(&bridge));
+    callbacks::sync_window_properties(&shell, &bridge.lock().unwrap().view_model());
+    let viewport = ElementHandle::find_by_element_id(&shell, "PetuniaSlintShell::viewport-region")
+        .next()
+        .unwrap();
+    let offset = viewport.absolute_position();
+    let size = viewport.size();
+    bridge.lock().unwrap().viewport_size = [size.width, size.height];
+    let rectangle_button = ElementHandle::find_by_accessible_label(&shell, "2D Rectangle")
+        .next()
+        .expect("Rectangle tool button");
+    rectangle_button.mock_single_click(PointerEventButton::Left);
+    assert_eq!(
+        bridge.lock().unwrap().state.session.tools.active_tool,
+        "draw_rectangle"
+    );
+    assert!(
+        bridge
+            .lock()
+            .unwrap()
+            .state
+            .project
+            .project
+            .profiles
+            .is_empty()
+    );
+    let move_to = |pixel: [f32; 2]| {
+        shell.window().dispatch_event(WindowEvent::PointerMoved {
+            position: LogicalPosition::new(offset.x + pixel[0], offset.y + pixel[1]),
+        })
+    };
+    let press = |pixel: [f32; 2]| {
+        shell.window().dispatch_event(WindowEvent::PointerPressed {
+            position: LogicalPosition::new(offset.x + pixel[0], offset.y + pixel[1]),
+            button: PointerEventButton::Left,
+        })
+    };
+    let release = |pixel: [f32; 2]| {
+        shell.window().dispatch_event(WindowEvent::PointerReleased {
+            position: LogicalPosition::new(offset.x + pixel[0], offset.y + pixel[1]),
+            button: PointerEventButton::Left,
+        })
+    };
+    let start = [size.width * 0.4, size.height * 0.35];
+    let end = [size.width * 0.6, size.height * 0.65];
+    move_to(start);
+    press(start);
+    move_to(end);
+    assert!(!shell.get_profile_preview_commands().is_empty());
+    assert!(
+        bridge
+            .lock()
+            .unwrap()
+            .state
+            .project
+            .project
+            .profiles
+            .is_empty()
+    );
+    release(end);
+    assert_eq!(
+        bridge.lock().unwrap().state.project.project.profiles.len(),
+        1
+    );
+    shell.invoke_active_tool_changed("select".into());
+    let center = [size.width * 0.5, size.height * 0.5];
+    let moved = [center[0] + 30.0, center[1] + 20.0];
+    let before = active_profile_spline(&bridge.lock().unwrap()).clone();
+    let depth = bridge.lock().unwrap().state.project.undo.depth().0;
+    move_to(center);
+    press(center);
+    move_to(moved);
+    release(moved);
+    assert_ne!(
+        active_profile_spline(&bridge.lock().unwrap()).points,
+        before.points
+    );
+    assert_eq!(
+        bridge.lock().unwrap().state.project.undo.depth().0,
+        depth + 1
+    );
+    assert!(bridge.lock().unwrap().profile_volume_mode.is_none());
+    shell.invoke_active_tool_changed("scale".into());
+    let before = active_profile_spline(&bridge.lock().unwrap()).clone();
+    move_to(moved);
+    press(moved);
+    move_to([moved[0] + 60.0, moved[1] + 20.0]);
+    release([moved[0] + 60.0, moved[1] + 20.0]);
+    assert_ne!(
+        active_profile_spline(&bridge.lock().unwrap()).points,
+        before.points
+    );
+    shell.invoke_active_tool_changed("select".into());
+    let (corner, point_id) = {
+        let bridge = bridge.lock().unwrap();
+        let (profile, spline) = bridge.active_profile_resources().unwrap();
+        let point = &spline.points[0];
+        let world = glam::DVec3::from_array(profile.workplane.origin).as_vec3()
+            + glam::DVec3::from_array(profile.workplane.right).as_vec3() * point.position[0] as f32
+            + glam::DVec3::from_array(profile.workplane.up).as_vec3() * point.position[1] as f32;
+        (
+            projection::project_world_point(
+                &bridge.state.session.camera,
+                bridge.viewport_size,
+                world,
+            )
+            .unwrap(),
+            point.id,
+        )
+    };
+    let before = active_profile_spline(&bridge.lock().unwrap())
+        .point(point_id)
+        .unwrap()
+        .position;
+    move_to(corner);
+    press(corner);
+    move_to([corner[0] + 20.0, corner[1] - 20.0]);
+    release([corner[0] + 20.0, corner[1] - 20.0]);
+    assert_ne!(
+        active_profile_spline(&bridge.lock().unwrap())
+            .point(point_id)
+            .unwrap()
+            .position,
+        before
+    );
+    let cancelled = active_profile_spline(&bridge.lock().unwrap())
+        .point(point_id)
+        .unwrap()
+        .clone();
+    let depth = bridge.lock().unwrap().state.project.undo.depth().0;
+    let node = [corner[0] + 20.0, corner[1] - 20.0];
+    move_to(node);
+    press(node);
+    move_to([node[0] + 20.0, node[1] + 10.0]);
+    shell.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::Escape.into(),
+    });
+    assert_eq!(
+        active_profile_spline(&bridge.lock().unwrap())
+            .point(point_id)
+            .unwrap(),
+        &cancelled
+    );
+    assert_eq!(bridge.lock().unwrap().state.project.undo.depth().0, depth);
+    release([node[0] + 20.0, node[1] + 10.0]);
+    // A frontal view keeps the depth handle away from the body move target;
+    // Select can still drag that explicit handle to generate a volume preview.
+    callbacks::sync_draw_camera_overlays(&shell, &bridge.lock().unwrap());
+    let tip = [shell.get_depth_handle_x(), shell.get_depth_handle_y()];
+    move_to(tip);
+    press(tip);
+    move_to([tip[0], tip[1] - 20.0]);
+    release([tip[0], tip[1] - 20.0]);
+    assert_eq!(
+        bridge.lock().unwrap().profile_volume_mode,
+        Some(petunia_module_model::ProfileVolumeMode::Extrude)
+    );
+    assert_eq!(bridge.lock().unwrap().state.project.undo.depth().0, depth);
+    shell.window().dispatch_event(WindowEvent::KeyPressed {
+        text: slint::platform::Key::Escape.into(),
+    });
+    assert!(bridge.lock().unwrap().profile_volume_mode.is_none());
+    assert_eq!(bridge.lock().unwrap().state.project.undo.depth().0, depth);
+}
+
+#[test]
+fn selected_profile_plane_changes_preserve_identity_and_are_undoable() {
+    let mut bridge = front_view_bridge_with_cube();
+    bridge.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    bridge.apply(UiIntent::ProfileSetWorkplaneView);
+    assert!(bridge.add_profile_rectangle(2.0, 1.5));
+    let (profile, spline) = bridge.active_profile_resources().unwrap();
+    let original = profile.clone();
+    let points = spline.points.clone();
+    let depth = bridge.state.project.undo.depth().0;
+    bridge.apply(UiIntent::ProfileSetWorkplaneGround);
+    assert_eq!(bridge.active_profile_id, Some(original.id));
+    assert_ne!(
+        bridge.active_profile_resources().unwrap().0.workplane,
+        original.workplane
+    );
+    assert_eq!(bridge.active_profile_resources().unwrap().1.points, points);
+    assert_eq!(bridge.state.project.undo.depth().0, depth + 1);
+    assert!(bridge.state.undo());
+    assert_eq!(
+        bridge.active_profile_resources().unwrap().0.workplane,
+        original.workplane
+    );
+    bridge
+        .state
+        .project
+        .active_mesh_mut()
+        .unwrap()
+        .deselect_all();
+    bridge.apply(UiIntent::ProfileSetWorkplaneFace);
+    assert!(bridge.profile_pick_face);
+    assert!(bridge.handle_escape());
+    assert_eq!(bridge.active_profile_id, Some(original.id));
+    assert_eq!(
+        bridge.active_profile_resources().unwrap().0.workplane,
+        original.workplane
+    );
 }

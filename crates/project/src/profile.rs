@@ -136,7 +136,7 @@ impl ProfileWorkplane {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq)]
 pub enum ProfilePrimitive {
     Rectangle,
     Ellipse,

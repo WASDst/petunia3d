@@ -575,6 +575,7 @@ pub struct ShellViewModel {
     pub label_profile_plane_view: String,
     pub label_profile_look_at_plane: String,
     pub profile_workplane_locked: bool,
+    pub profile_pick_face: bool,
     /// Região de perfil em hover (caminho SVG em px da viewport).
     pub region_hover_commands: String,
     /// Estilo do pincel (ponta, mistura, estabilizador, jitter, presets).
@@ -1539,6 +1540,7 @@ impl ShellViewModel {
             label_profile_plane_view: String::new(),
             label_profile_look_at_plane: String::new(),
             profile_workplane_locked: false,
+            profile_pick_face: false,
             region_hover_commands: String::new(),
             brush_panel: Default::default(),
             keymap_revision: -1,
