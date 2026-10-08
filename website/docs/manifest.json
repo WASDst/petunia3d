@@ -155,6 +155,16 @@
           "title": "UV Workspace e Editor — proposta"
         }
       ]
+    },
+    {
+      "id": "reference-projection",
+      "title": "Reference & Projection",
+      "files": [
+        {
+          "path": "08-reference-projection/architecture-decision.md",
+          "title": "Image Reference & Photo Projection — proposta"
+        }
+      ]
     }
   ]
 }
