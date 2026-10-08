@@ -1,6 +1,6 @@
 # Decals e Animated Decals
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Diagnóstico atual
 
@@ -797,3 +797,24 @@ Add Decal
 ```
 
 Animated Decals devem oferecer animação facial e detalhes vivos sem transformar Paint em After Effects ou o renderer em um sistema de deferred decals.
+
+## Decisões fechadas
+
+1. Static e Animated Decal compartilham o mesmo DecalLayer.
+2. Conteúdo reutilizável vira DecalSet.
+3. Variantes usam DecalVariantId + TextureId/TextureRegion, não Canvas embutido.
+4. DecalLayer deixa de duplicar a imagem da variante ativa.
+5. Placement é explícito: UV ou Surface.
+6. Surface Decal usa SurfaceAttachment, não DecalAnchor em world space.
+7. Variantes compartilham área/aspect lógico estável.
+8. Variant tracks usam IDs estáveis, não índices.
+9. Timeline/clip fornece o relógio; a track não mantém um segundo FPS autoral.
+10. Variant animation V1 usa Step.
+11. Timeline consome decal tracks por adapter sem generic property-animation framework.
+12. Facial animation é workflow/preset sobre DecalSet.
+13. Import Image Sequence entra como feature de baixo custo.
+14. Spritesheet/atlas é extensão natural usando TextureRegion.
+15. Playback preserva partial tile recomposition.
+16. Animated decal nunca é flattenado silenciosamente.
+17. Export mantém static fallback + metadata Petunia, com Sequence/Flipbook explícitos.
+18. Opacity animation pode vir na segunda etapa; moving SurfaceAttachment fica fora da V1.
