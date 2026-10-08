@@ -212,6 +212,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <int> pointer-subtract-mask: 1;
     in-out property <int> pointer-pan-mask: 2;
     in-out property <int> pointer-cursor-place-mask: 2;
+    in-out property <int> pointer-adjust-mask: 1;
     in-out property <int> pointer-loop-mask: 4;
     in-out property <int> pointer-orbit-left-mask: 0;
     in-out property <[KeymapProfileEntry]> keymap-profiles;
@@ -1816,6 +1817,7 @@ export component PetuniaSlintShell inherits Window {
                         subtract-mask: root.pointer-subtract-mask;
                         pan-mask: root.pointer-pan-mask;
                         cursor-place-mask: root.pointer-cursor-place-mask;
+                        adjust-mask: root.pointer-adjust-mask;
                         loop-mask: root.pointer-loop-mask;
                         orbit-left-mask: root.pointer-orbit-left-mask;\n                        depth-handle-visible: root.depth-handle-visible;
                         depth-handle-x: root.depth-handle-x;
