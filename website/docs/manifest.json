@@ -197,6 +197,10 @@
         {
           "path": "09-ui/workspaces-feedback-accessibility.md",
           "title": "Workspaces, Feedback Visual e Acessibilidade — aprovado"
+        },
+        {
+          "path": "09-ui/slint-rescue-plan.md",
+          "title": "Slint Rescue — plano incremental — em execução"
         }
       ]
     },
