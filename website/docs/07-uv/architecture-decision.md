@@ -1,6 +1,6 @@
 # UV Workspace e Editor
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Contexto já aprovado
 
@@ -466,3 +466,26 @@ Mark Seams
 ```
 
 Ferramentas extras existem para corrigir casos específicos, não para transformar UV em outro aplicativo dentro do Petunia.
+
+
+## Decisões fechadas
+
+1. UV continua per-face-corner; não existe UvMesh persistente paralelo.
+2. UV Selection suporta Corner, Edge, Face e Island.
+3. Sync Selection entre 3D e UV é opção explícita.
+4. UV Edge é distinta de EdgeKey topológica.
+5. UvIsland é derivada e não persistente.
+6. Pins são constraints de solver; direct transform explícito pode movê-los.
+7. Auto Unwrap/xatlas nunca altera topology autoral.
+8. Chart boundaries do Auto Unwrap atualizam seam intent de forma explícita.
+9. Relax atual será substituído/atualizado; não será apresentado como stretch minimization enquanto não o fizer.
+10. Stitch usa stationary/moving side; não média os dois lados por padrão.
+11. Split UV entra como operação explícita sem duplicar vertex 3D.
+12. Cylindrical e Spherical Projection entram como ferramentas de baixo custo.
+13. Pack usa padding em pixels e resultado determinístico.
+14. Texel Density vira ferramenta de primeira classe.
+15. UV Health consolida overlap/stretch/zero-area/out-of-range/density.
+16. UV fora de 0..1 é diagnostic, não erro.
+17. UV Editor mostra TextureResource/canal de Material ativo.
+18. Generator pode expor UV derivada e Paint, mas manual UV edit exige Make Editable.
+19. Undo é por gesto/comando, nunca por mouse move.
