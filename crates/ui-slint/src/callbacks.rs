@@ -1394,6 +1394,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
 ) {
     crate::animate::connect_animate_callbacks(window, Arc::clone(&bridge));
     connect_decal_callbacks(window, Arc::clone(&bridge));
+    crate::bridge::viewport::connect_navigation_callbacks(window, Arc::clone(&bridge));
     // Cores dos eixos do gizmo GPU: as mesmas dos tokens do shell.
     if let Ok(mut bridge) = bridge.lock() {
         let tokens = window.global::<crate::DesignTokens>();
@@ -2110,67 +2111,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 if let Some(frame) = bridge.render_viewport() {
                     window.set_viewport_image(frame);
                 }
-            }
-        }
-    });
-
-    let orbit_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_viewport_orbit(move |dx, dy| {
-        if let Ok(mut bridge) = orbit_bridge.lock() {
-            bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit { dx, dy }));
-            let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
-                sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
-            }
-        }
-    });
-
-    let pan_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_viewport_pan(move |dx, dy| {
-        if let Ok(mut bridge) = pan_bridge.lock() {
-            bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Pan { dx, dy }));
-            let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
-                sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
-            }
-        }
-    });
-
-    let zoom_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_viewport_zoom(move |delta| {
-        if let Ok(mut bridge) = zoom_bridge.lock() {
-            bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Zoom { delta }));
-            let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
-                sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
-            }
-        }
-    });
-
-    let resize_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_viewport_resized(move |width, height, physical_width, _physical_height| {
-        // A razão vem do próprio Slint (px físicos / px lógicos), então também
-        // acompanha troca de monitor e da preferência de UI scale.
-        let ratio = if width > 0.5 {
-            physical_width / width
-        } else {
-            1.0
-        };
-        let width = width.round().max(1.0) as u32;
-        let height = height.round().max(1.0) as u32;
-        if let Ok(mut bridge) = resize_bridge.lock() {
-            bridge.resize_viewport_scaled(width, height, ratio);
-            let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
-                sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
             }
         }
     });
