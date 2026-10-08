@@ -20,6 +20,7 @@ import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
 import { StatusBar } from "shell/status_bar.slint";
 import { ContextBar } from "viewport/context_bar.slint";
+import { ViewBar } from "viewport/view_bar.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
 import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
@@ -2634,26 +2635,8 @@ export component PetuniaSlintShell inherits Window {
                     // View bar única (plano de UI 2026-10-04, F3; cap. 23 "Viewport control bar"):
                     // LEFT = o que estou editando, CENTER = auxiliares da ferramenta,
                     // RIGHT = como estou vendo. Substitui as três ilhas soltas anteriores.
-                    view-bar := Rectangle {
-                        x: max(14px, (parent.width - root.right-clearance - self.width) / 2);
-                        y: 14px;
-                        width: view-row.preferred-width + 12px;
-                        height: 38px;
-                        border-radius: DesignTokens.radius-panel;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        drop-shadow-blur: DesignTokens.elevation-1-blur;
-                        drop-shadow-color: DesignTokens.elevation-1-color;
-                        drop-shadow-offset-y: DesignTokens.elevation-1-offset;
-                        animate x { duration: Motion.slow; easing: ease-out; }
-
-                        view-row := HorizontalLayout {
-                            x: 6px;
-                            y: 5px;
-                            spacing: 3px;
-                            alignment: center;
-
+                    view-bar := ViewBar {
+                        right-clearance: root.right-clearance;
                             // LEFT — domínio de seleção do workspace.
                             if active-workspace == "MODEL" || active-workspace == "PAINT": HorizontalLayout {
                                 spacing: 3px;
@@ -2742,7 +2725,7 @@ export component PetuniaSlintShell inherits Window {
                                 active: root.shading-popover-open || root.show-xray;
                                 clicked => { root.shading-popover-toggled(!root.shading-popover-open); }
                             }
-                        }
+                        
                     }
 
                     // Pílula de Ferramenta Ativa e Modo de Operação (Feedback visual contínuo)
