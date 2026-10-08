@@ -141,6 +141,16 @@
           "title": "Paint Architecture — proposta"
         }
       ]
+    },
+    {
+      "id": "uv",
+      "title": "UV Workspace",
+      "files": [
+        {
+          "path": "07-uv/architecture-decision.md",
+          "title": "UV Workspace e Editor — proposta"
+        }
+      ]
     }
   ]
 }
