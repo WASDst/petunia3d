@@ -360,6 +360,10 @@ Ações globais de pointer agora usam `[pointer]` no keymap: `precision`, `snap`
 
 O perfil Maya declara `orbit_left = "Alt"`; o Slint não testa mais `active-keymap-id == "maya"`.
 
+A regressão de scroll foi corrigida: `scroll-event` calcula `pointer.adjust` usando os modificadores **do próprio evento de scroll**, sem acessar a variável local de `pointer-event`. `Ctrl` não é mais fixo para o ajuste contextual; um perfil pode remapear a ação para `Alt`, `Shift`, combinações ou nenhuma tecla.
+
+Da mesma forma, a exceção da gramática de ferramentas que testava `event.modifiers.alt` agora consulta a ação semântica `pointer.loop`. `pointer.orbit_left` tem precedência sobre a sessão de ferramenta com gesto latched para preservar Alt+LMB no perfil Maya. Um cancelamento nativo não deve abrir menu contextual: somente RMB sem gesto tem essa responsabilidade.
+
 Modificadores crus ainda atravessam a boundary para ToolSession e PAINT quando a interpretação pertence à própria ferramenta. A rodada específica de PAINT deve substituir Shift/Ctrl semânticos de clone/decal/straight stroke por ações de pointer próprias antes de considerar esse domínio totalmente migrado.
 
 ### Passo C
@@ -410,7 +414,7 @@ O gate de viewport deve cobrir:
 - cursor placement;
 - High DPI coordinate mapping.
 
-Os testes existentes em `viewport_gestures.rs` continuam sendo a base de regressão.
+Os testes existentes em `viewport_gestures.rs` continuam sendo a base de regressão. Foram adicionados cenários declarativos para `pointer.adjust` remapeado por evento de scroll, Petunia versus Maya Alt+LMB, `pointer.pan` remapeado, `precision`, `snap`, `extend` e colocação de Cursor 3D. **Estes cenários foram registrados no código; o resultado de execução do gate CI deve ser consultado antes de declará-los aprovados.**
 
 ## 19. Acessibilidade
 
