@@ -14,7 +14,9 @@ import {
     AnimateTweakBody,
 } from "animate.slint";
 import { BrushChip, BrushStepper, ColorSwatch, ContextMenuItem, MenuDropdown, NumericField, PanelDragHandle, PanelResizeGrip, PetuniaSlider, RailTool, ToolButton, ToolCard, ToolGroup, TopAction, Vector3Field, ViewportBarButton, ViewportSvgButton } from "components/controls.slint";
-import { EmptyState, IconButton } from "components/base.slint";\nimport { StatusToast } from "components/feedback.slint";\nimport { ShellHeader } from "shell/header.slint";
+import { EmptyState, IconButton } from "components/base.slint";
+import { StatusToast } from "components/feedback.slint";
+import { ShellHeader } from "shell/header.slint";
 import { ToolRail } from "shell/tool_rail.slint";
 import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
@@ -1819,7 +1821,8 @@ export component PetuniaSlintShell inherits Window {
                         cursor-place-mask: root.pointer-cursor-place-mask;
                         adjust-mask: root.pointer-adjust-mask;
                         loop-mask: root.pointer-loop-mask;
-                        orbit-left-mask: root.pointer-orbit-left-mask;\n                        depth-handle-visible: root.depth-handle-visible;
+                        orbit-left-mask: root.pointer-orbit-left-mask;
+                        depth-handle-visible: root.depth-handle-visible;
                         depth-handle-x: root.depth-handle-x;
                         depth-handle-y: root.depth-handle-y;
                         gizmo-has-hover: root.gizmo-has-hover;
