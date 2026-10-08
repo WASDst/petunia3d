@@ -444,3 +444,70 @@ pub(crate) fn connect_transform_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 }
+
+
+impl<V: PetuniaViewport> SlintUiBridge<V> {
+    /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre faz zoom.
+    pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
+        match gesture {
+            ViewportGesture::Orbit { dx, dy } => {
+                self.orbit_viewport(dx, dy);
+                return;
+            }
+            ViewportGesture::Pan { dx, dy } => {
+                self.state.session.camera.pan(dx, dy);
+            }
+            ViewportGesture::Zoom { delta } => {
+                self.state.session.camera.zoom(delta);
+            }
+        }
+        self.state.mark_dirty();
+    }
+
+    pub fn resize_viewport(&mut self, width: u32, height: u32) {
+        self.resize_viewport_scaled(width, height, self.pixel_ratio);
+    }
+
+    /// Redimensiona a viewport em px lógicos e adapta o backend quando ele usa
+    /// pixels físicos. Picking e câmera continuam em coordenadas lógicas.
+    pub fn resize_viewport_scaled(&mut self, width: u32, height: u32, pixel_ratio: f32) {
+        let width = width.max(1);
+        let height = height.max(1);
+        let ratio = if pixel_ratio.is_finite() && pixel_ratio > 0.0 {
+            pixel_ratio.clamp(0.5, 4.0)
+        } else {
+            1.0
+        };
+        self.pixel_ratio = ratio;
+        if self.viewport.uses_physical_pixels() {
+            self.viewport.set_pixel_ratio(ratio);
+            self.viewport.resize(
+                (width as f32 * ratio).round().max(1.0) as u32,
+                (height as f32 * ratio).round().max(1.0) as u32,
+            );
+        } else {
+            self.viewport.resize(width, height);
+        }
+        self.viewport_size = [width as f32, height as f32];
+        self.state.session.camera.aspect = width as f32 / height as f32;
+        self.state.mark_dirty();
+    }
+
+    /// Orbita a câmera usando Cursor 3D ou seleção como pivô quando aplicável.
+    pub fn orbit_viewport(&mut self, dx: f32, dy: f32) -> bool {
+        if !dx.is_finite() || !dy.is_finite() {
+            return false;
+        }
+        if self.state.session.tools.active_tool == "cursor"
+            || self.state.session.tools.active_tool == "cursor_3d"
+            || self.state.session.pivot_point == petunia_core::PivotPoint::Cursor3D
+        {
+            self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
+        } else if let Some(center) = self.selection_pivot() {
+            self.state.session.camera.target = center;
+        }
+        self.state.session.camera.orbit(dx, dy);
+        self.state.mark_dirty();
+        true
+    }
+}
