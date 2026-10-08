@@ -1,6 +1,6 @@
 # Snapping, Inference & Workplane
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Objetivo
 
@@ -934,3 +934,27 @@ Se não houver consumidor real, remover.
 18. Preselection e Snap compartilham infraestrutura, mas permanecem conceitos distintos.
 19. SnapAccel é cacheado por revisão/gesture.
 20. Não introduzir GPU snap, constraint solver ou dependency graph sem necessidade medida.
+
+
+## Decisões fechadas
+
+1. core::inference é a base canônica do snapping interativo.
+2. core::snap deixa de competir como segundo motor interativo.
+3. Smart Snap permanece ligado por padrão.
+4. Smart Snap não implica hard grid quantization.
+5. Prioridade: points > edge > guides > angle > face > grid.
+6. FaceCenter e OnFace permanecem semanticamente distintos.
+7. Parallel, Perpendicular e Angle são inferências de primeira classe.
+8. Shift suporta hold lock e alternativa toggle acessível.
+9. Angle step default é 15°, configurável.
+10. Workplane vira tipo global reutilizável derivado do ProfileWorkplane atual.
+11. Active Workplane pertence ao EditorSession; shapes persistem sua própria cópia quando necessário.
+12. Workplane modes: Auto, Ground, View, Face, Selection, Custom e Reference.
+13. Workplane é congelado por gesture.
+14. Mudar Workplane nunca move a câmera implicitamente.
+15. ReferenceView ortográfica pode dirigir Workplane; Perspective Reference não.
+16. Scene-wide snap usa múltiplos SnapSources em world space.
+17. SnapHit inclui source ObjectId e component reference quando possível.
+18. Component edit usa base mesh do objeto ativo e geometria avaliada dos demais objetos.
+19. Preselection e Snap compartilham infraestrutura, mas permanecem conceitos distintos.
+20. SnapAccel é cacheado por revisão/gesture; não haverá GPU snap ou constraint solver sem necessidade medida.
