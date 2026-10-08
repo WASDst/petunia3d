@@ -913,7 +913,7 @@ fn viewport_scroll_adjust_uses_scroll_event_modifiers_and_current_keymap() {
     let zoom_callback = Rc::clone(&zooms);
     let adjust_callback = Rc::clone(&adjusted);
     shell.on_viewport_zoom(move |_| zoom_callback.set(zoom_callback.get() + 1));
-    shell.on_viewport_ctrl_scroll(move |_| adjusted.set(adjust_callback.get() + 1));
+    shell.on_viewport_ctrl_scroll(move |_| adjust_callback.set(adjust_callback.get() + 1));
 
     shell.set_pointer_adjust_mask(4); // Test profile: Alt, not Ctrl.
     scroll_pointer(&shell, 600.0, 400.0, 1.0);
@@ -1050,8 +1050,8 @@ fn viewport_precision_snap_selection_and_cursor_follow_remapped_masks() {
     let menus = Rc::new(Cell::new(0));
     let place_cb = Rc::clone(&places);
     let menu_cb = Rc::clone(&menus);
-    shell.on_viewport_place_cursor(move |_, _| places.set(place_cb.get() + 1));
-    shell.on_viewport_context_requested(move |_, _| menus.set(menu_cb.get() + 1));
+    shell.on_viewport_place_cursor(move |_, _| place_cb.set(place_cb.get() + 1));
+    shell.on_viewport_context_requested(move |_, _| menu_cb.set(menu_cb.get() + 1));
     pointer_button(&shell, 600.0, 400.0, PointerEventButton::Right);
     assert_eq!(places.get(), 1, "cursor place follows remapped Alt+RMB");
     assert_eq!(menus.get(), 0, "cursor place must not open context menu");
