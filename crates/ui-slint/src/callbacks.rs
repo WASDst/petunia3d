@@ -1415,6 +1415,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     }
     // Arrasto e hover: viewport a cada evento, janela completa limitada.
     let throttle = std::rc::Rc::new(crate::refresh::RefreshThrottle::default());
+    crate::bridge::viewport::connect_hover_callbacks(window, Arc::clone(&bridge), std::rc::Rc::clone(&throttle));
     let shortcut_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_shortcut_requested(move |text, ctrl, shift, alt| {
@@ -3025,82 +3026,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             if let Some(window) = window_weak.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
             }
-        }
-    });
-
-    let component_hover_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    let hover_throttle = std::rc::Rc::clone(&throttle);
-    window.on_viewport_hover(move |x, y| {
-        if let Ok(mut bridge) = component_hover_bridge.lock() {
-            // Pegada do pincel em superfície inclinada (B1): só o cursor muda.
-            if bridge.state.workspace == Workspace::Paint
-                && let Some(window) = window_weak.upgrade()
-            {
-                let [width, height] = bridge.viewport_size;
-                let (squash, tilt) = bridge
-                    .brush_footprint_at(x * width, y * height)
-                    .unwrap_or((1.0, 0.0));
-                window.set_brush_cursor_squash(squash);
-                window.set_brush_cursor_tilt(tilt);
-            }
-            let changed = if bridge.state.session.tools.active_tool == "loop_cut" {
-                let viewport_size = bridge.viewport_size;
-                bridge.update_loop_cut_hover(x * viewport_size[0], y * viewport_size[1])
-            } else {
-                crate::perf::measure("hover_component", || bridge.hover_component(x, y))
-            };
-            // Mouse parado sobre o mesmo alvo: nada a redesenhar. Evita o
-            // view model completo, a sincronização da janela e o frame GPU.
-            if !changed {
-                return;
-            }
-            if let Some(window) = window_weak.upgrade() {
-                crate::refresh::refresh_interactive(
-                    &window,
-                    &component_hover_bridge,
-                    &mut *bridge,
-                    &hover_throttle,
-                );
-            }
-        }
-    });
-
-    let hover_clear_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_viewport_hover_clear(move || {
-        if let Some(window) = window_weak.upgrade() {
-            window.set_brush_cursor_squash(1.0);
-            window.set_brush_cursor_tilt(0.0);
-        }
-        if let Ok(mut bridge) = hover_clear_bridge.lock()
-            && bridge.clear_hover()
-        {
-            let vm = bridge.view_model();
-            let new_frame = bridge.render_viewport();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
-            }
-        }
-    });
-
-    let gizmo_hover_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    let gizmo_hover_throttle = std::rc::Rc::clone(&throttle);
-    window.on_gizmo_hover(move |x, y| {
-        if let Ok(mut bridge) = gizmo_hover_bridge.lock()
-            && bridge.hover_gizmo(x, y)
-            && let Some(window) = window_weak.upgrade()
-        {
-            crate::refresh::refresh_interactive(
-                &window,
-                &gizmo_hover_bridge,
-                &mut *bridge,
-                &gizmo_hover_throttle,
-            );
         }
     });
 
