@@ -23,7 +23,16 @@ export component ViewportInputRouter inherits Rectangle {
     in property <float> brush-size: 0.8;
     in property <color> paint-color;
 
-    /// Distância mínima para promover click pendente a drag; preferência de acessibilidade.\n    in property <float> drag-threshold-px: 4.0;\n    in property <bool> depth-handle-visible: false;
+    /// Distância mínima para promover click pendente a drag; preferência de acessibilidade.\n    in property <float> drag-threshold-px: 4.0;
+    // Pointer modifier masks projected from the active keymap. Ctrl=1, Shift=2, Alt=4.
+    in property <int> precision-mask: 2;
+    in property <int> snap-mask: 1;
+    in property <int> extend-mask: 2;
+    in property <int> subtract-mask: 1;
+    in property <int> pan-mask: 2;
+    in property <int> cursor-place-mask: 2;
+    in property <int> loop-mask: 4;
+    in property <int> orbit-left-mask: 0;\n    in property <bool> depth-handle-visible: false;
     in property <length> depth-handle-x: 0px;
     in property <length> depth-handle-y: 0px;
     in property <bool> gizmo-has-hover: false;
@@ -40,7 +49,6 @@ export component ViewportInputRouter inherits Rectangle {
     in-out property <bool> snap-mode: false;
 
     callback focus-requested;
-    callback pointer-modifier-active(string, bool, bool, bool) -> bool;
     callback gizmo-drag-begin(float, float);
     callback gizmo-drag-end;
     callback gizmo-hover(float, float);
@@ -68,6 +76,14 @@ export component ViewportInputRouter inherits Rectangle {
     callback viewport-transform-end;
     callback viewport-transform-update(float, float, bool, bool);
     callback viewport-zoom(float);
+
+    pure function modifier-active(mask: int, shift: bool, ctrl: bool, alt: bool) -> bool {
+        if mask == 0 {
+            return false;
+        }
+        let held = (ctrl ? 1 : 0) + (shift ? 2 : 0) + (alt ? 4 : 0);
+        return (held & mask) == mask;
+    }
 
     pure function brush-stroke-tool(tool: string) -> bool {
         return tool == "brush" || tool == "eraser" || tool == "airbrush" || tool == "pixel"
@@ -186,15 +202,15 @@ input-touch := TouchArea {
                         }
 
                         pointer-event(event) => {
-                            let precision = root.pointer-modifier-active("pointer.precision", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let snap = root.pointer-modifier-active("pointer.snap", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let extend = root.pointer-modifier-active("pointer.extend", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let subtract = root.pointer-modifier-active("pointer.subtract", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let pan-mod = root.pointer-modifier-active("pointer.pan", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let cursor-place = root.pointer-modifier-active("pointer.cursor_place", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let adjust = root.pointer-modifier-active("pointer.adjust", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let loop-mod = root.pointer-modifier-active("pointer.loop", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
-                            let orbit-left = root.pointer-modifier-active("pointer.orbit_left", event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let precision = root.modifier-active(root.precision-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let snap = root.modifier-active(root.snap-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let extend = root.modifier-active(root.extend-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let subtract = root.modifier-active(root.subtract-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let pan-mod = root.modifier-active(root.pan-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let cursor-place = root.modifier-active(root.cursor-place-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let adjust = root.modifier-active(root.snap-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let loop-mod = root.modifier-active(root.loop-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
+                            let orbit-left = root.modifier-active(root.orbit-left-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                             root.precision-mode = precision;
                             root.snap-mode = snap;
                             if event.kind == PointerEventKind.down && event.button == PointerEventButton.right
