@@ -117,6 +117,10 @@
         {
           "path": "03-geometry/direct-modeling-semantics.md",
           "title": "Direct Modeling — Push/Pull, Extrude, Inset e Bevel — proposta"
+        },
+        {
+          "path": "03-geometry/transforms-origin-pivot-gizmos.md",
+          "title": "Transforms, Origin, Pivot & Gizmos — proposta"
         }
       ]
     },
