@@ -369,8 +369,17 @@ Criar DTO/intent Rust mais explícito para:
 - box/lasso;
 - pointer tool session.
 
-### Passo D
-Mover orchestration de callbacks para `bridge/viewport.rs`, reduzindo `callbacks.rs`.
+### Passo D — em execução
+
+`bridge/viewport.rs` já concentra:
+- navigation + resize;
+- selection / cursor / contextual wheel;
+- hover;
+- transforms + gizmo drag;
+- tool pointer;
+- Split View.
+
+`callbacks.rs` caiu de aproximadamente 6.069 para aproximadamente 5.487 linhas. Outros grupos devem migrar apenas quando houver fronteira temática clara.
 
 ### Passo E
 Somente depois considerar mover picking orchestration.
