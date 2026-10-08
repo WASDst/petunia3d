@@ -10,3 +10,12 @@ Módulos Rust do backend e integração do frontend Slint:
 - `theme.rs`: Adaptador dinâmico de tokens de design e registro de temas do Petunia3D.
 - `viewport_gpu.rs`: Conexão com pipeline gráfico WGPU e render off-screen exportado para imagem Slint.
 - `viewport_soft.rs`: Rasterizador e wireframe de fallback por software para compatibilidade em ambientes sem suporte WGPU/Vulkan.
+
+
+## Bridge modular em migração
+
+- `bridge/viewport.rs`: navegação, resize/HiDPI, render da viewport, seleção/cursor/context, hover e coordenação de transform/gizmo. Picking e matemática permanecem no bridge/core.
+- `bridge/model.rs`: callbacks de Profile/DRAW que acontecem sobre a viewport.
+- `bridge/paint.rs`: begin/update/end do traço PAINT sobre a viewport 3D.
+
+`callbacks.rs` continua sendo o agregador temporário, mas não deve receber novos blocos de viewport quando já existir um módulo de bridge responsável.
