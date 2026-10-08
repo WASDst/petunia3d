@@ -24,7 +24,7 @@ export component ViewportInputRouter inherits Rectangle {
     in property <float> brush-size: 0.8;
     in property <color> paint-color;
 
-    in property <bool> depth-handle-visible: false;
+    /// Distância mínima para promover click pendente a drag; preferência de acessibilidade.\n    in property <float> drag-threshold-px: 4.0;\n    in property <bool> depth-handle-visible: false;
     in property <length> depth-handle-x: 0px;
     in property <length> depth-handle-y: 0px;
     in property <bool> gizmo-has-hover: false;
@@ -316,9 +316,10 @@ input-touch := TouchArea {
                                     }
                                 }
                                 if is-box-select {
-                                    if abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px { moved-since-down = true; }
+                                    if abs(self.mouse-x - last-x) > root.drag-threshold-px * 1px || abs(self.mouse-y - last-y) > root.drag-threshold-px * 1px { moved-since-down = true; }
                                 } else if pending-lasso-select && self.pressed
-                                    && (abs(self.mouse-x - lasso-last-x) > 3px || abs(self.mouse-y - lasso-last-y) > 3px) {
+                                    && (abs(self.mouse-x - lasso-last-x) > root.drag-threshold-px * 1px
+                                        || abs(self.mouse-y - lasso-last-y) > root.drag-threshold-px * 1px) {
                                     pending-lasso-select = false;
                                     is-lasso-select = true;
                                     moved-since-down = true;
@@ -338,8 +339,8 @@ input-touch := TouchArea {
                                     }
                                     lasso-commands = lasso-base-commands + "L \{self.mouse-x / 1px} \{self.mouse-y / 1px} Z";
                                 } else if pending-box-select && self.pressed
-                                    && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
-                                        || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
+                                    && (self.mouse-x - last-x > root.drag-threshold-px * 1px || last-x - self.mouse-x > root.drag-threshold-px * 1px
+                                        || self.mouse-y - last-y > root.drag-threshold-px * 1px || last-y - self.mouse-y > root.drag-threshold-px * 1px) {
                                     pending-box-select = false;
                                     is-box-select = true;
                                     moved-since-down = true;
@@ -358,7 +359,7 @@ input-touch := TouchArea {
                                     moved-since-down = true;
                                     root.tool-pointer(1, self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control, event.modifiers.alt);
                                 } else if event.modifiers.alt && root.active-keymap-id != "maya"
-                                    && (abs(self.mouse-x - last-x) > 4px || abs(self.mouse-y - last-y) > 4px) {
+                                    && (abs(self.mouse-x - last-x) > root.drag-threshold-px * 1px || abs(self.mouse-y - last-y) > root.drag-threshold-px * 1px) {
                                     moved-since-down = true;
                                 } else if root.transform-instant-active && (!self.pressed || is-keyboard-transform-drag) {
                                     if is-keyboard-transform-drag { moved-since-down = true; }
@@ -374,8 +375,8 @@ input-touch := TouchArea {
                                     moved-since-down = true;
                                     root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
                                 } else if pending-transform && self.pressed
-                                    && (self.mouse-x - last-x > 4px || last-x - self.mouse-x > 4px
-                                        || self.mouse-y - last-y > 4px || last-y - self.mouse-y > 4px) {
+                                    && (self.mouse-x - last-x > root.drag-threshold-px * 1px || last-x - self.mouse-x > root.drag-threshold-px * 1px
+                                        || self.mouse-y - last-y > root.drag-threshold-px * 1px || last-y - self.mouse-y > root.drag-threshold-px * 1px) {
                                     pending-transform = false;
                                     is-transform = true;
                                     moved-since-down = true;
