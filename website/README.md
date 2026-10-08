@@ -36,3 +36,7 @@ Links relativos entre capítulos Markdown são convertidos pelo cliente em rotas
 - Índice de contexto progressivo para crawlers/LLMs: `website/llms.txt`.
 - Cadastro de páginas humanas: `website/docs/manifest.json`.
 - O catálogo JSON e os links das Skills são referências externas; não instalam ou executam código Prumo automaticamente.
+
+## Gate de documentação dos agentes
+
+Execute `python3 website/scripts/verify-agent-docs.py` para conferir o manifesto do site, links internos, cobertura integral do inventário Prumo (39/189/20), paths/manifests das fontes e ausência de duplicação. Execute `node --check website/app.js` para a sintaxe do SPA. O workflow `.github/workflows/agent-docs.yml` roda ambos os comandos quando o site ou `AGENTS.md` mudam; não compila a GUI nem altera a publicação do `docs/` legado.
