@@ -3,7 +3,7 @@
 <aside>
 🔒
 
-O **escopo de produto V1**, o **comportamento funcional/core** e a **UI Baseline Final V1** do Petunia3D estão congelados. A stack **Rust 2024 + egui + eframe + egui-wgpu + wgpu** é a baseline final de implementação; o vertical slice do capítulo 31 passa a ser teste obrigatório de conformance/integração, não gate para escolher novamente a stack. O capítulo 34 rege a arquitetura Rust, o 35 rege Petunia Components/ecossistema egui e o **capítulo 36 rege a UI final, temas e Plugin Panels**.
+O **escopo de produto V1**, o **comportamento funcional/core** e a **UI Baseline Final V1** do Petunia3D estão congelados. A linguagem/core continuam em **Rust 2024** e o viewport em **wgpu**. A decisão de frontend foi refinada em 2026-10-08: **Slint 1.18 é a única UI ativa de produção** e egui é fallback congelado, conforme [ADR 009](../../architecture/adr/009-slint-producao-egui-fallback-congelado.md). O vertical slice do capítulo 31 continua teste obrigatório de conformance/integração. O capítulo 34 rege a arquitetura Rust e o **capítulo 36 rege a UI final, temas e Plugin Panels**; o capítulo 35 é histórico para o fallback egui.
 
 </aside>
 
@@ -40,8 +40,8 @@ O **escopo de produto V1**, o **comportamento funcional/core** e a **UI Baseline
 Os itens abaixo formam a baseline final e devem ser comprovados pelo vertical slice de conformance:
 
 - **Rust 2024 como core language final**, substituindo Odin conforme ADR 32;
-- **egui 0.36.x + eframe 0.36.x como UI toolkit baseline final**;
-- **egui-wgpu 0.36.x + wgpu 30.x** como integração/render backend corrente;
+- **Slint 1.18 como UI toolkit ativa de produção; egui/eframe congelados apenas como fallback recuperável**;
+- **wgpu 30.x** como backend do viewport, acessado por adapter toolkit-neutro; integração específica do shell Slint fica confinada ao frontend;
 - Geometry Core próprio em Rust + `slotmap`;
 - `geo` para Profile/polygon 2D quando necessário;
 - `manifold-rust` para Fuse/Cut complexo;
@@ -56,7 +56,7 @@ Os itens abaixo formam a baseline final e devem ser comprovados pelo vertical sl
 
 # Estado atual da UI
 
-A fase de decisão de UI/UX foi **fechada como UI BASELINE FINAL V1**. Permanecem válidos viewport-first, painéis semi-flutuantes/retráteis, workspace pills reduzidas, `Parts`, `Context` selection-centric, toolbar contextual, segmented controls, overlays, Petunia Components, keyboard/focus/accessibility e integração direta egui-wgpu.
+A fase de decisão de UI/UX foi **fechada como UI BASELINE FINAL V1**. Permanecem válidos viewport-first, painéis semi-flutuantes/retráteis, workspace pills reduzidas, `Parts`, `Context` selection-centric, toolbar contextual, segmented controls, overlays, Petunia Components, keyboard/focus/accessibility e viewport atrás de adapter toolkit-neutro. A implementação ativa desses contratos é Slint; integração egui-wgpu pertence apenas ao fallback congelado.
 
 O capítulo 36 congela:
 
