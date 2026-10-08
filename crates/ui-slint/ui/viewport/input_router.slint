@@ -23,7 +23,8 @@ export component ViewportInputRouter inherits Rectangle {
     in property <float> brush-size: 0.8;
     in property <color> paint-color;
 
-    /// Distância mínima para promover click pendente a drag; preferência de acessibilidade.\n    in property <float> drag-threshold-px: 4.0;
+    /// Distância mínima para promover click pendente a drag; preferência de acessibilidade.
+    in property <float> drag-threshold-px: 4.0;
     // Pointer modifier masks projected from the active keymap. Ctrl=1, Shift=2, Alt=4.
     in property <int> precision-mask: 2;
     in property <int> snap-mask: 1;
@@ -33,7 +34,8 @@ export component ViewportInputRouter inherits Rectangle {
     in property <int> cursor-place-mask: 2;
     in property <int> adjust-mask: 1;
     in property <int> loop-mask: 4;
-    in property <int> orbit-left-mask: 0;\n    in property <bool> depth-handle-visible: false;
+    in property <int> orbit-left-mask: 0;
+    in property <bool> depth-handle-visible: false;
     in property <length> depth-handle-x: 0px;
     in property <length> depth-handle-y: 0px;
     in property <bool> gizmo-has-hover: false;
