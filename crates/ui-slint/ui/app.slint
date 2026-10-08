@@ -25,7 +25,7 @@ import { ViewportPassiveOverlays } from "viewport/overlays.slint";
 import { PetuniaViewportHost } from "viewport/viewport.slint";
 import { ViewportInputRouter } from "viewport/input_router.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
-import { BrushCursor, PaintCanvasSurface } from "components/paint_canvas.slint";
+import { PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
 import { InspectorSection, MaterialBody, ModifiersBody, ObjectBody, PartsBody, PartsFilterRow, PartsRowSizeControl, QuickActionsBody, TransformBody } from "inspector/sections.slint";
 import { CommandItem, KeymapActionEntry, KeymapProfileEntry, MeasureTag, MenuEntry, ModifierEntry, PaintEffectParamEntry, PaintLayerEntry, PrefabItem, QuickActionEntry, ReferenceSlotData, SceneItem, SectionState, ShortcutsEntry, ThemeEntry, WorldAxisTag, RecentProject, HomeTexts } from "types.slint";
@@ -2352,7 +2352,7 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     // Barra de transporte: interativa, então fica DEPOIS do
-                    // `viewport-touch` (irmãos posteriores recebem o clique antes).
+                    // o input router (irmãos posteriores recebem o clique antes).
                     if root.active-workspace == "ANIMATE" && root.animate-has-creature: AnimateTransport {
                         // Centrada na parte livre da viewport (fora do painel aberto)
                         // e ACIMA da barra contextual (40px + 14px de margem + respiro).
