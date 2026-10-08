@@ -201,6 +201,10 @@
         {
           "path": "09-ui/slint-rescue-plan.md",
           "title": "Slint Rescue — plano incremental — em execução"
+        },
+        {
+          "path": "09-ui/viewport-input-boundary.md",
+          "title": "Viewport Input Boundary — aprovado"
         }
       ]
     },
