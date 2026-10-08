@@ -5648,7 +5648,10 @@ fn orbiting_uses_the_selection_as_pivot() {
     bridge.state.sync_selection();
     assert_ne!(bridge.state.session.camera.target.x, 5.0);
 
-    assert!(bridge.orbit_viewport(10.0, 0.0));
+    bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit {
+        dx: 10.0,
+        dy: 0.0,
+    }));
     assert!(
         (bridge.state.session.camera.target.x - 5.0).abs() < 1.0e-3,
         "a órbita precisa pivotar na seleção, veio {:?}",
@@ -5664,7 +5667,10 @@ fn orbiting_uses_the_selection_as_pivot() {
         .deselect_all();
     bridge.state.sync_selection();
     let target = bridge.state.session.camera.target;
-    assert!(bridge.orbit_viewport(10.0, 0.0));
+    bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit {
+        dx: 10.0,
+        dy: 0.0,
+    }));
     assert_eq!(bridge.state.session.camera.target, target);
 }
 
@@ -6723,7 +6729,10 @@ fn cursor_focuses_camera_and_serves_as_orbit_pivot() {
     // When cursor tool is active, orbiting sets camera target to cursor_3d
     bridge.execute_command(CommandId::ToolCursor);
     bridge.state.session.camera.target = glam::Vec3::ZERO;
-    assert!(bridge.orbit_viewport(10.0, 10.0));
+    bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit {
+        dx: 10.0,
+        dy: 10.0,
+    }));
     assert_eq!(
         bridge.state.session.camera.target,
         glam::Vec3::new(10.0, 5.0, -8.0)
