@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub mod animate;
+mod bridge;
 mod brush_panel;
 pub mod color_wheel;
 pub mod commands;
