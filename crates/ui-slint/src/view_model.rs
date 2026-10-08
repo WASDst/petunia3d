@@ -859,6 +859,16 @@ pub struct ShellViewModel {
     pub command_search_visible: bool,
     pub scene_drawer_visible: bool,
     pub active_keymap_id: String,
+    /// Semântica dos modificadores de pointer do keymap ativo.
+    /// Bitmask: Ctrl=1, Shift=2, Alt=4.
+    pub pointer_precision_mask: i32,
+    pub pointer_snap_mask: i32,
+    pub pointer_extend_mask: i32,
+    pub pointer_subtract_mask: i32,
+    pub pointer_pan_mask: i32,
+    pub pointer_cursor_place_mask: i32,
+    pub pointer_loop_mask: i32,
+    pub pointer_orbit_left_mask: i32,
     /// Painel do workspace Animate (cap. 45 F2).
     pub animate: crate::animate::AnimateViewModel,
 }
