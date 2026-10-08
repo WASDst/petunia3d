@@ -64,6 +64,29 @@ pub enum ViewportGesture {
     Zoom { delta: f32 },
 }
 
+/// Fase semântica de um gesto primário na viewport.
+///
+/// O Slint ainda usa inteiros no callback público por compatibilidade com a
+/// API gerada, mas a lógica Rust não deve depender de números mágicos.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewportPointerPhase {
+    Press,
+    Move,
+    Release,
+    Cancel,
+}
+
+impl From<i32> for ViewportPointerPhase {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => Self::Press,
+            1 => Self::Move,
+            2 => Self::Release,
+            _ => Self::Cancel,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ViewportRenderState {
     pub shading: petunia_render::Shading,
@@ -11468,8 +11491,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.pointer_position = [x, y];
         self.tool_pointer_alt = alt;
-        let effect = match phase {
-            0 => {
+        let effect = match ViewportPointerPhase::from(phase) {
+            ViewportPointerPhase::Press => {
                 self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
                 let target = if self.grammar_tool() == Some(GrammarTool::Decal) {
                     self.decal_press_target(x, y)
@@ -11495,9 +11518,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .held_in(held);
                 self.tool_session.press([x, y], target)
             }
-            1 => self.tool_session.move_to([x, y]),
-            2 => self.tool_session.release([x, y]),
-            _ => {
+            ViewportPointerPhase::Move => self.tool_session.move_to([x, y]),
+            ViewportPointerPhase::Release => self.tool_session.release([x, y]),
+            ViewportPointerPhase::Cancel => {
                 if self.tool_session.is_gesture_active() {
                     self.tool_session.key(petunia_core::ToolKey::Cancel)
                 } else {
