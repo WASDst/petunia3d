@@ -122,7 +122,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 
 ### Resultado intermediário
 
-`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.817 linhas sem remover feature de domínio.
+`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.717 linhas sem remover feature de domínio.
 
 ### Extrações adicionais concluídas
 
@@ -130,7 +130,9 @@ Erros críticos continuam proibidos de depender apenas de toast.
 - Workspace Drawer genérico;
 - Asset Library/Prefabs extraída como conteúdo do drawer;
 - Status Bar persistente;
-- Context Bar da viewport extraída como host com `@children`.
+- Context Bar da viewport extraída como host com `@children`;
+- View Bar extraída como host com `@children`;
+- overlays passivos de seleção, Animate e previews de ferramenta extraídos para `viewport/overlays.slint`.
 
 ### Próximas extrações desta fase
 
