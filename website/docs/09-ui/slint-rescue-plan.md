@@ -122,15 +122,22 @@ Erros críticos continuam proibidos de depender apenas de toast.
 
 ### Resultado intermediário
 
-`app.slint` caiu de aproximadamente 10.774 para aproximadamente 10.332 linhas sem remover feature de domínio.
+`app.slint` caiu progressivamente de aproximadamente 10.774 para aproximadamente 9.817 linhas sem remover feature de domínio.
+
+### Extrações adicionais concluídas
+
+- Right Column shell com `@children`: chrome, rail, hover/peek, header e scroll fora do monólito; conteúdo de workspace ainda permanece no chamador;
+- Workspace Drawer genérico;
+- Asset Library/Prefabs extraída como conteúdo do drawer;
+- Status Bar persistente;
+- Context Bar da viewport extraída como host com `@children`.
 
 ### Próximas extrações desta fase
 
-1. Right Column shell;
-2. Workspace Drawer;
-3. status/context shell;
-4. overlays de alto nível;
-5. depois Viewport shell.
+1. View Bar e chrome da viewport;
+2. overlays puramente visuais;
+3. viewport host;
+4. somente depois, input/picking/tool sessions.
 
 A viewport é deliberadamente posterior porque concentra input, picking, overlays e tool sessions.
 
@@ -314,4 +321,4 @@ Concluído nesta execução:
 - `StatusToast`;
 - documentação do diretório atualizada.
 
-Próximo alvo: **Right Column / Structure + Properties**, começando pela extração do container sem mover ainda o conteúdo dos workspaces.
+Próximo alvo: **Viewport shell**, começando por View Bar e overlays de apresentação; picking, input e tool sessions continuam no `PetuniaSlintShell` até a fronteira estar comprovada.
