@@ -24,3 +24,5 @@ Definições de interface declarativa na linguagem Slint (`.slint`):
 - `viewport/viewport.slint`: host da viewport principal; owns superfície, resize/HiDPI e imagem GPU, enquanto input/picking/tool sessions permanecem no chamador.
 - `viewport/input_router.slint`: recognition layer de pointer/gesture; mantém apenas estado efêmero e emite callbacks semânticos, sem acesso a Project/Mesh/ToolSession.
 - A preferência `drag-threshold-px` alimenta diretamente o recognition layer da viewport; click→drag não usa mais threshold fixo no shell.
+- Pointer semantics do keymap são projetadas como masks (`Ctrl=1`, `Shift=2`, `Alt=4`) para o `ViewportInputRouter`; o router não chama Rust a cada movimento apenas para interpretar modificadores.
+- `src/bridge/viewport.rs` concentra registration/orchestration de navigation, selection, hover, transform, tool pointer e Split View; picking e mutações continuam no Rust/core.
