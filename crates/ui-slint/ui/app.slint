@@ -1040,6 +1040,8 @@ export component PetuniaSlintShell inherits Window {
     callback viewport-orbit(float, float);
     callback viewport-pan(float, float);
     callback viewport-zoom(float);
+    /// Resolve modificadores físicos pelo keymap ativo; evita semântica Shift/Ctrl/Alt hardcoded na UI.
+    callback pointer-modifier-active(string, bool, bool, bool) -> bool;
     /// px lógicos (largura, altura) e px físicos (largura, altura) da viewport.
     callback viewport-resized(float, float, float, float);
     callback split-toggle-requested;
