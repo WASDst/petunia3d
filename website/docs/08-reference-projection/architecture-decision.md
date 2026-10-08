@@ -1,6 +1,6 @@
 # Image Reference & Photo Projection
 
-> **Status: proposta recomendada; aguarda aprovação.**
+> **Status: aprovado.**
 
 ## Objetivo de produto
 
@@ -1108,3 +1108,29 @@ REFERENCE
 ```
 
 Não porque tenta virar um software de fotogrametria.
+
+## Decisões fechadas
+
+1. ReferenceImage deixa ProjectState.refs e vira recurso persistente do Document.
+2. Pixels de referência reutilizam TextureResource; ReferenceView não duplica RGBA.
+3. ReferenceSet + ReferenceView usam IDs estáveis.
+4. Front/Back/Left/Right/Top/Bottom permanecem presets de UX, não limites arquiteturais.
+5. ReferenceView suporta Orthographic e Perspective.
+6. Blueprint recebe Set Scale, Set Origin, Align Ground, Flip e Copy Scale.
+7. Perspective Photo começa com Match Photo guiado de dois pontos de fuga.
+8. A câmera calibrada pertence à ReferenceView, nunca à EditorSession.
+9. Trace Mode é contexto do workspace MODEL, não um workspace novo.
+10. A mesma ReferenceView dirige alinhamento, tracing, modelagem e projeção.
+11. Project Photo é operação de primeira classe e cria ReferenceProjectionLayer não destrutiva no PaintDocument.
+12. O motor existente de DepthBuffer/projection é preservado e extraído para serviço compartilhado.
+13. Project Photo opera por texel/surface e não depende de reescrever UV para representar perspectiva.
+14. Project UV From Reference permanece ferramenta técnica distinta.
+15. Project UV From Reference será corrigido para respeitar framing/crop reais da ReferenceView.
+16. Remove-se o fallback silencioso de Project From Reference para Project From View.
+17. Coverage V1: Visible Surface, Selected Faces e Facing Surface.
+18. Occlusion default considera apenas o target object.
+19. Project Photo pode criar Material + PaintDocument + TextureResource em uma única transaction quando necessário.
+20. Appearance oferece Keep Photo Lighting e Relight With Material.
+21. Multi-view manual sucede a projeção single-view.
+22. Auto Multi-View usa visibilidade + facing score como primeira estratégia.
+23. Feather automático fica posterior; fotogrametria pesada, depth neural e reconstrução automática ficam fora do escopo inicial.
