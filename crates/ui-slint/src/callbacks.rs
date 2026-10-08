@@ -1311,6 +1311,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_pointer_subtract_mask(vm.pointer_subtract_mask);
     window.set_pointer_pan_mask(vm.pointer_pan_mask);
     window.set_pointer_cursor_place_mask(vm.pointer_cursor_place_mask);
+    window.set_pointer_adjust_mask(vm.pointer_adjust_mask);
     window.set_pointer_loop_mask(vm.pointer_loop_mask);
     window.set_pointer_orbit_left_mask(vm.pointer_orbit_left_mask);
 
