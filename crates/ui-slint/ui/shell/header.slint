@@ -1,0 +1,174 @@
+import { IconSet } from "@lucide";
+import { DesignTokens } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
+import { CommandSearchField } from "../components/base.slint";
+import { MenuButton, TopAction, WorkspaceSegment } from "../components/controls.slint";
+
+/// Header global do Petunia.
+/// Responsabilidade: menus, seletor de workspace e ações globais.
+/// Não conhece documento, mesh ou módulos; apenas recebe estado de apresentação
+/// e emite intents semânticas para o shell.
+export component ShellHeader inherits Rectangle {
+    in property <string> menu-open: "";
+    in property <string> menu-file-label;
+    in property <string> menu-edit-label;
+    in property <string> menu-view-label;
+    in property <string> menu-window-label;
+
+    in property <string> active-workspace: "MODEL";
+    in property <string> modeling-mode: "POLY";
+    in property <string> draw-title: "";
+    in property <string> draw-description: "";
+    in property <string> poly-title: "";
+    in property <string> poly-description: "";
+    in property <bool> reduced-motion: false;
+    in property <bool> animate-available: false;
+    in property <string> animate-label: "";
+    in property <string> animate-tip: "";
+
+    in property <bool> can-undo: false;
+    in property <bool> can-redo: false;
+    in property <string> shortcut-undo: "";
+    in property <string> shortcut-redo: "";
+    in property <string> shortcut-search: "";
+    in property <string> shortcut-settings: "";
+
+    callback menu-toggled(string, length);
+    callback menu-opened(string, length);
+    callback workspace-changed(string);
+    callback undo-requested;
+    callback redo-requested;
+    callback search-requested;
+    callback settings-requested;
+
+    height: 42px;
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    HorizontalLayout {
+        width: parent.width;
+        height: parent.height;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 0px;
+
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            alignment: start;
+            spacing: 6px;
+
+            Image {
+                source: @image-url("../icons/logo.svg");
+                width: 22px;
+                height: 22px;
+            }
+
+            Rectangle { width: 4px; }
+
+            MenuButton {
+                label: root.menu-file-label;
+                shortcut: "Alt+F";
+                description: "New, open, save, import and export";
+                open: root.menu-open == "file";
+                clicked => { root.menu-toggled("file", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "file" {
+                        root.menu-opened("file", self.absolute-position.x);
+                    }
+                }
+            }
+            MenuButton {
+                label: root.menu-edit-label;
+                shortcut: "Alt+E";
+                description: "Undo, redo, history and application preferences";
+                open: root.menu-open == "edit";
+                clicked => { root.menu-toggled("edit", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "edit" {
+                        root.menu-opened("edit", self.absolute-position.x);
+                    }
+                }
+            }
+            MenuButton {
+                label: root.menu-view-label;
+                shortcut: "Alt+V";
+                description: "Camera, viewport overlays and rendering";
+                open: root.menu-open == "view";
+                clicked => { root.menu-toggled("view", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "view" {
+                        root.menu-opened("view", self.absolute-position.x);
+                    }
+                }
+            }
+            MenuButton {
+                label: root.menu-window-label;
+                shortcut: "Alt+W";
+                description: "Panels, layout, fullscreen and accessibility";
+                open: root.menu-open == "window";
+                clicked => { root.menu-toggled("window", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "window" {
+                        root.menu-opened("window", self.absolute-position.x);
+                    }
+                }
+            }
+        }
+
+        WorkspaceSegment {
+            active: root.active-workspace == "MODEL" ? root.modeling-mode : root.active-workspace;
+            draw-title: root.draw-title;
+            draw-description: root.draw-description;
+            poly-title: root.poly-title;
+            poly-description: root.poly-description;
+            reduced-motion: root.reduced-motion;
+            animate-available: root.animate-available;
+            animate-label: root.animate-label;
+            animate-tip: root.animate-tip;
+            changed(ws) => { root.workspace-changed(ws); }
+        }
+
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            alignment: end;
+            spacing: 4px;
+
+            TopAction {
+                icon: IconSet.Undo;
+                icon-svg: PetuniaIcons.undo;
+                semantic-label: "Undo";
+                shortcut: root.shortcut-undo;
+                description: "Revert the most recent operation";
+                enabled: root.can-undo;
+                clicked => { root.undo-requested(); }
+            }
+            TopAction {
+                icon: IconSet.Redo;
+                icon-svg: PetuniaIcons.redo;
+                semantic-label: "Redo";
+                shortcut: root.shortcut-redo;
+                description: "Reapply the most recently undone operation";
+                enabled: root.can-redo;
+                clicked => { root.redo-requested(); }
+            }
+
+            Rectangle { width: 1px; height: 16px; background: DesignTokens.border; }
+
+            CommandSearchField {
+                placeholder: "Search commands";
+                shortcut: root.shortcut-search;
+                activated => { root.search-requested(); }
+            }
+
+            TopAction {
+                icon: IconSet.Settings;
+                icon-svg: PetuniaIcons.settings;
+                semantic-label: "Settings";
+                shortcut: root.shortcut-settings;
+                description: "Open application preferences, keymaps and themes";
+                clicked => { root.settings-requested(); }
+            }
+        }
+    }
+}
