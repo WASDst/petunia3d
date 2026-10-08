@@ -177,6 +177,16 @@
           "title": "Image Reference & Photo Projection — proposta"
         }
       ]
+    },
+    {
+      "id": "ui",
+      "title": "UI / UX",
+      "files": [
+        {
+          "path": "09-ui/slint-reassessment.md",
+          "title": "Slint Reassessment & GUI Architecture — proposta"
+        }
+      ]
     }
   ]
 }
