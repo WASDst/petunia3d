@@ -22,7 +22,10 @@ export component WorkspaceDrawer inherits Rectangle {
         moved(height) => { root.height-changed(height); }
     }
 
-    if root.open: drawer := Rectangle {
+    drawer := Rectangle {
+        // A posição e o conteúdo permanecem estáveis; @children não pode
+        // viver em elemento condicional no Slint 1.18.
+        visible: root.open;
         x: root.left-offset;
         y: parent.height - root.bottom-offset - root.drawer-height;
         width: parent.width - root.left-offset - root.right-clearance;
