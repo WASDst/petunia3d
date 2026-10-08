@@ -3618,6 +3618,8 @@ export component PetuniaSlintShell inherits Window {
 
                     // Barra contextual flutuante na base da viewport.
                     context-bar := ContextBar {
+                            x: (parent.width - self.width) / 2;
+                            y: parent.height - self.height - 14px;
                             // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
 
 
