@@ -153,6 +153,8 @@ A viewport é deliberadamente posterior porque concentra input, picking, overlay
 
 ## 6. Fase 2 — Right Column
 
+**Status: em execução.**
+
 Separar:
 - Structure;
 - Properties;
@@ -161,7 +163,7 @@ Separar:
 
 O shell não deve saber o conteúdo detalhado de cada Property Section.
 
-Meta:
+Meta e componentes introduzidos:
 
 ```text
 RightColumn
@@ -169,7 +171,12 @@ RightColumn
 └ PropertiesHost
 ```
 
-Conteúdo por workspace é projetado por view-model/registry.
+- `StructureHost` e `PropertiesHost` exportados em `ui/shell/right_column.slint`.
+- Workspaces MODEL e ANIMATE reestruturados sob `StructureHost` e `PropertiesHost`.
+- `AnimateInspector` extraído para `ui/animate.slint`.
+- `UvInspector` extraído para `ui/workspaces/uv/inspector.slint`, composto pelo shell com as mesmas propriedades e callbacks. Os hosts são transitórios: operações UV ainda ocupam `StructureHost`; sua migração para Properties/Context Bar e a lista de Islands pertencem à fase de workspace.
+- O split vertical independente entre Structure e Properties ainda não foi implementado; a presença dos hosts não conclui a Fase 2.
+- Conteúdo recebe propriedades projetadas pelo shell; registry não foi introduzido.
 
 ## 7. Fase 3 — Workspace Drawer
 
@@ -325,17 +332,48 @@ Não misturar extração estrutural com redesign visual significativo no mesmo c
 
 ## 16. Estado atual
 
-A branch já possui:
+Os arquivos locais já possuem:
 - ShellHeader, ToolRail, StatusToast e regiões independentes da viewport;
 - `ViewportInputRouter` com thresholds configuráveis e masks oriundas do keymap;
 - `bridge/viewport.rs` para navigation, selection, hover, transform, tool pointer e Split View;
 - `bridge/model.rs` para DRAW/Profile e `bridge/paint.rs` para input de pintura;
 - testes declarativos de regressão do keymap no `viewport_gestures.rs`.
 
-No ponto de inspeção desta rodada, `app.slint` possuía cerca de **9.350 linhas**, `callbacks.rs` **5.487 linhas** e `bridge/viewport.rs` aproximadamente **731 linhas**. Os dois últimos módulos ainda pedem decomposição disciplinada por responsabilidade, não transferência indiscriminada de código.
+No ponto de inspeção desta rodada, `StructureHost` e `PropertiesHost` foram introduzidos em `right_column.slint`, `AnimateInspector` foi extraído para `animate.slint`, e as seções de MODEL e ANIMATE foram delimitadas semanticamente sob esses hosts. As propriedades `precision-mode` e `snap-mode` foram corrigidas para `in-out property` em `app.slint` para conformidade com a suite de testes.
 
-**Validação:** testes foram adicionados, mas sua aprovação depende de execução real do gate `ui-slint`. A existência dos testes não equivale a build validado.
+### Checkpoint UV — retomada de 2026-10-08
+
+**Intenção:** fechar a extração do inspetor UV iniciada na sessão OpenCode `ses_ee2102b0bffeRU05Hib0pMUoUH`, preservando comportamento antes de outra extração.
+
+**Fontes:** este plano (§6 e §15), [UV Workspace](../07-uv/workspace-ux.md) (§2, §7, §8 e §21), `ui/app.slint`, `ui/workspaces/uv/inspector.slint` e `src/callbacks.rs` do crate `petunia_ui_slint`.
+
+| Requisito | Gap observado | Estado |
+|---|---|---|
+| Conteúdo UV fora do shell | `UvInspector` recebe 16 propriedades / 12 callbacks; `app.slint` passou de 9.354 para 8.933 linhas | Verified nos testes headless abaixo; visual pendente |
+| Equivalência da extração | Referências a propriedades, callbacks, traduções e nomes acessíveis comparadas ao bloco original recuperado da sessão; alinhamento do botão Unwrap e espaçamento de 10px restaurados | Inspeção estática realizada |
+| Right Column completa | Hosts delimitam conteúdo, sem split independente; operações UV ainda não estão na região final | In migration |
+| UV como Work Surface | Canvas permanece 256×256 no Inspector | Pending, Fase 5 |
+| Isolamento de workspaces | A extração anterior aninhou PAINT na condição MODEL; limites MODEL/Properties, bloco PAINT e blocos posteriores restaurados a partir da baseline | Corrigido; teste de clique PAINT: pass |
+| Versionamento | Metadados Git recuperados do remoto autorizado; arquivos ocultos ausentes restaurados; baseline `ecbbcfeee59953ea3c69e3218b9b281abdc38271` na branch `refactor/architecture-foundation` | Branch e HEAD verificados |
+
+**Changed nesta retomada:** restauração de alinhamento/espaçamento em `ui/workspaces/uv/inspector.slint`, espaçamento ANIMATE e limites de MODEL/PAINT em `ui/app.slint`; regressões em `tests/uv_shell.rs` exercitam clique/arrasto no canvas, origem V inferior, término do arrasto, botões Move/Scale/Rotate após troca de workspace e resize, e acesso independente às operações PAINT. O seletor do flyout em `tests/viewport_gestures.rs` agora aponta para `RightColumnShell::inspector-flyout`, nome qualificado emitido pelo compilador após a extração; as asserções de interação permanecem.
+
+**Verification nesta retomada (Linux, Rust 1.98.1 / Slint 1.18.0, backend de testes headless):**
+
+| Comando realmente executado | Resultado |
+|---|---|
+| `cargo fmt -p petunia_ui_slint -- --check` | pass |
+| `target/debug/xtask ui-lint` | pass, 23 arquivos |
+| `git diff --check` | pass |
+| `CARGO_BUILD_JOBS=2 cargo test -p petunia_ui_slint --config profile.test.package.petunia_ui_slint.debug=0 --lib --test uv_shell --test viewport_gestures --test animate_shell` | pass: 508 biblioteca + 3 UV/PAINT + 15 gestos + 11 ANIMATE = 537 testes, zero falhas/ignorados |
+| `CARGO_BUILD_JOBS=2 cargo clippy -p petunia_ui_slint --profile test --config profile.test.package.petunia_ui_slint.debug=0 --all-targets -- -D warnings` | pass, 3m27s, zero warnings |
+
+O override de `debug=0` reduz símbolos de depuração Rust apenas no crate UI; não remove metadados de busca Slint nem asserções. A primeira tentativa de testes com o profile padrão foi interrompida para limitar artefatos; nenhum pass é atribuído a ela. Caches incrementais antigos fora do build ativo foram limpos, liberando aproximadamente 12 GB. Manifesto e presença dos links canônicos conferidos. A suíte com `--features animation-workspace`, aceitação visual, GL, Windows, screen reader e low-end permanecem **not run** neste checkpoint.
+
+**Risks:** testes headless não comprovam estética, integração GL, Windows, screen reader ou hardware modesto. Não houve alteração de algoritmo, formato de projeto ou caminho de Undo; os testes de domínio existentes continuam necessários. Git está restaurado, mas commit/push e SHA de entrega são informados somente após execução.
+
+**Next checkpoint:** extrair o conteúdo MODEL em um incremento separado, preservando callbacks e as regressões de gestos/seleção. A promoção UV para Work Surface continua na Fase 5; o gate completo Slint Rescue permanece aberto.
 
 **Bugs estruturais detectados pelo gate:** o compilador Slint 1.18 não permite `@children` dentro de elementos condicionais e não permite acesso a `parent` em bindings do componente raiz. O Rescue mantém `RightColumnShell` e `WorkspaceDrawer` estruturalmente presentes com visibilidade controlada; posicionamento relativo ao parent de `ContextBar`, `ViewBar` e `PetuniaViewportHost` pertence ao `app.slint`. `ViewportInputRouter::clear-gesture` foi explicitado como função pública para o shell. O gate confirmou `cargo fmt --check` e `ui-lint` passando nas revisões recentes; Clippy/compilação e testes só serão marcados como aprovados quando a execução correspondente terminar sem erro.
 
-Próximo alvo: **dividir o registro da viewport em módulos coesos sem transformar `bridge/viewport.rs` em novo monólito**, preservar Rust para picking, ToolSession e gizmo geometry, e evoluir para DTOs/intents explícitos de select/hover/box/lasso. A gramática semântica específica de PAINT requer outra rodada para clone/decal/straight stroke.
+Após os checkpoints da coluna direita: **dividir o registro da viewport em módulos coesos sem transformar `bridge/viewport.rs` em novo monólito**, preservar Rust para picking, ToolSession e gizmo geometry, e evoluir para DTOs/intents explícitos de select/hover/box/lasso. A gramática semântica específica de PAINT requer outra rodada para clone/decal/straight stroke.

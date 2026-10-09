@@ -10,6 +10,18 @@ import { ScrollView } from "std-widgets.slint";
 /// Nesta fase ele extrai chrome, rail, hover/peek, cabeçalho e scroll.
 /// O conteúdo específico de cada workspace continua injetado por @children
 /// e será migrado depois para Structure + Properties.
+export component StructureHost inherits VerticalLayout {
+    spacing: 0px;
+    vertical-stretch: 0;
+    @children
+}
+
+export component PropertiesHost inherits VerticalLayout {
+    spacing: 8px;
+    vertical-stretch: 0;
+    @children
+}
+
 export component RightColumnShell inherits Rectangle {
     in property <bool> inspector-visible: true;
     in property <bool> compact-shell: false;

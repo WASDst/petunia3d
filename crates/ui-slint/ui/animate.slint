@@ -10,6 +10,8 @@
 
 import { IconDisplay, IconSet } from "@lucide";
 import { DesignTokens } from "tokens.slint";
+import { InspectorSection } from "inspector/sections.slint";
+import { StructureHost, PropertiesHost } from "shell/right_column.slint";
 
 export struct AnimateRowEntry {
     id: string,
@@ -776,6 +778,91 @@ export component AnimateTransport inherits Rectangle {
             primary: true;
             enabled: root.has-motion;
             clicked => { root.action("apply-now", "convert", 0); }
+        }
+    }
+}
+
+export component AnimateInspector inherits VerticalLayout {
+    in property <AnimateTexts> texts;
+    in property <[AnimateRowEntry]> creatures;
+    in property <[AnimateRowEntry]> creature-presets;
+    in property <bool> has-creature;
+    in property <[AnimateRowEntry]> catalog;
+    in property <[AnimateRowEntry]> motions;
+    in property <bool> has-motion;
+    in property <bool> can-fit;
+    in property <string> fit-tip;
+    in property <string> linked-models;
+    in property <[AnimateRowEntry]> styles;
+    in property <[AnimateParamEntry]> params;
+    in property <bool> rig-error;
+    in property <bool> show-advanced;
+    in property <bool> show-bones;
+    in property <bool> stepped;
+    in property <bool> root-motion;
+    in property <bool> root-motion-supported;
+
+    callback action(string, string, float);
+
+    spacing: 10px;
+
+    StructureHost {
+        // Recolhe sozinha quando já existe uma criatura (divulgação
+        // progressiva: o espaço vai para os sliders); o usuário
+        // reabre com um clique.
+        InspectorSection {
+            title: root.texts.title-creature;
+            open: !root.has-creature;
+            toggled => { self.open = !self.open; }
+
+            AnimateCreatureBody {
+                texts: root.texts;
+                creatures: root.creatures;
+                presets: root.creature-presets;
+                has-creature: root.has-creature;
+                action(a, b, v) => { root.action(a, b, v); }
+            }
+        }
+    }
+
+    PropertiesHost {
+        spacing: 10px;
+        InspectorSection {
+            title: root.texts.title-picker;
+            open: true;
+            toggled => { self.open = !self.open; }
+
+            AnimateMotionBody {
+                texts: root.texts;
+                catalog: root.catalog;
+                motions: root.motions;
+                has-motion: root.has-motion;
+                has-creature: root.has-creature;
+                can-fit: root.can-fit;
+                fit-tip: root.fit-tip;
+                linked-models: root.linked-models;
+                action(a, b, v) => { root.action(a, b, v); }
+            }
+        }
+
+        if root.has-motion: InspectorSection {
+            title: root.texts.title-motion;
+            open: true;
+            toggled => { self.open = !self.open; }
+
+            AnimateTweakBody {
+                texts: root.texts;
+                styles: root.styles;
+                params: root.params;
+                has-motion: root.has-motion;
+                rig-error: root.rig-error;
+                show-advanced: root.show-advanced;
+                show-bones: root.show-bones;
+                stepped: root.stepped;
+                root-motion: root.root-motion;
+                root-motion-supported: root.root-motion-supported;
+                action(a, b, v) => { root.action(a, b, v); }
+            }
         }
     }
 }

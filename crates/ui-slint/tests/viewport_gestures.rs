@@ -704,12 +704,10 @@ fn collapse_inspector_button_is_clickable_and_returns_to_the_rail() {
                     pill.computed_opacity() > 0.95,
                     "{label} remains visible during peek"
                 );
-                let flyout = ElementHandle::find_by_element_id(
-                    &shell,
-                    "PetuniaSlintShell::inspector-flyout",
-                )
-                .next()
-                .expect("Inspector flyout");
+                let flyout =
+                    ElementHandle::find_by_element_id(&shell, "RightColumnShell::inspector-flyout")
+                        .next()
+                        .expect("Inspector flyout");
                 let _ = flyout.absolute_position();
                 i_slint_backend_testing::testing_backend::mock_elapsed_time(40);
                 assert!(
