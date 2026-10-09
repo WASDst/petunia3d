@@ -174,6 +174,7 @@ RightColumn
 - `StructureHost` e `PropertiesHost` exportados em `ui/shell/right_column.slint`.
 - Workspaces MODEL e ANIMATE reestruturados sob `StructureHost` e `PropertiesHost`.
 - `AnimateInspector` extraído para `ui/animate.slint`.
+- `ModelInspector` extraído para `ui/workspaces/model/inspector.slint`, mantendo Parts em Structure e Transform/Material/Object/Combine em Properties. A extração preserva os corpos existentes; não implementa o split independente nem muda ownership de seleção, materiais, primitivas ou Undo.
 - `UvInspector` extraído para `ui/workspaces/uv/inspector.slint`, composto pelo shell com as mesmas propriedades e callbacks. Os hosts são transitórios: operações UV ainda ocupam `StructureHost`; sua migração para Properties/Context Bar e a lista de Islands pertencem à fase de workspace.
 - O split vertical independente entre Structure e Properties ainda não foi implementado; a presença dos hosts não conclui a Fase 2.
 - Conteúdo recebe propriedades projetadas pelo shell; registry não foi introduzido.
@@ -377,3 +378,48 @@ O override de `debug=0` reduz símbolos de depuração Rust apenas no crate UI; 
 **Bugs estruturais detectados pelo gate:** o compilador Slint 1.18 não permite `@children` dentro de elementos condicionais e não permite acesso a `parent` em bindings do componente raiz. O Rescue mantém `RightColumnShell` e `WorkspaceDrawer` estruturalmente presentes com visibilidade controlada; posicionamento relativo ao parent de `ContextBar`, `ViewBar` e `PetuniaViewportHost` pertence ao `app.slint`. `ViewportInputRouter::clear-gesture` foi explicitado como função pública para o shell. O gate confirmou `cargo fmt --check` e `ui-lint` passando nas revisões recentes; Clippy/compilação e testes só serão marcados como aprovados quando a execução correspondente terminar sem erro.
 
 Após os checkpoints da coluna direita: **dividir o registro da viewport em módulos coesos sem transformar `bridge/viewport.rs` em novo monólito**, preservar Rust para picking, ToolSession e gizmo geometry, e evoluir para DTOs/intents explícitos de select/hover/box/lasso. A gramática semântica específica de PAINT requer outra rodada para clone/decal/straight stroke.
+
+### Checkpoint MODEL — 2026-10-09
+
+**Intent:** U01, extrair o conteúdo MODEL em um slice estrutural sobre `40ad949fb3b7a7d392d402bf4da55f5c28769621`, branch `refactor/architecture-foundation`. Preservar contratos públicos do shell, gestos, validação numérica e comportamento de outros workspaces.
+
+**Sources:** este plano §6/§15; [Workspaces, Feedback e Acessibilidade](./workspaces-feedback-accessibility.md); `ui/app.slint`, `ui/inspector/sections.slint`, `ui/shell/right_column.slint` e testes reais do crate Slint.
+
+| Requisito | Gap antes | Changed / limite |
+|---|---|---|
+| Conteúdo MODEL fora do shell | Bloco de 303 linhas em `app.slint`, com Parts/Transform/Material/Object/modifiers/Combine | Movido para `workspaces/model/inspector.slint`; mesmos componentes, traduções, tokens e condições |
+| Projeções e intents | Bindings/callbacks eram diretos no shell | `ModelInspector` recebe 119 propriedades, incluindo seis bindings de ida/volta, e encaminha 49 callbacks; `selection-domain` passa a ser explicitamente projetado |
+| Uma fonte de estado | Shell/Rust mantêm estado e execução | Não introduz seleção/material/primitive/modifier próprios no componente; contrato público do Window preservado |
+| Equivalência estrutural | Risco de perder callbacks/retornos ou aninhar outro workspace | Corpo transferido comparado à baseline, exceto whitespace e `root.selection-domain`; encaminhamento completo conferido; bloco PAINT e cauda do shell preservados |
+| Interações efetivas | Extração estrutural não era coberta por teste MODEL específico | `tests/model_shell.rs` exercita input físico, query two-way, ações Parts, valor/retorno de validação Transform, selection domain, Material e Combine |
+| CI do slice | Integração não executava `uv_shell` e ainda não tinha `model_shell`; push limitado a main | Q03: ambos incluídos na integração com animation-workspace; branch autorizada incluída no trigger. Execução remota continua distinta de alteração do YAML |
+
+**Changed:** `app.slint` passa de 8.933 para 8.802 linhas; `ModelInspector` tem 481 linhas incluindo a interface explícita. Imports de corpos exclusivamente MODEL saem do shell. Nenhum algoritmo, schema, renderer ou serviço de domínio foi alterado.
+
+**Verification:** Linux, Rust 1.98.1, Slint 1.18.0, backend de testes headless; fontes do slice sobre a baseline acima. Gates concluídos:
+
+| Comando realmente executado | Resultado |
+|---|---|
+| `cargo fmt -p petunia_ui_slint -- --check` | pass |
+| `target/debug/xtask ui-lint` | pass, 24 arquivos Slint |
+| `CARGO_BUILD_JOBS=1 cargo test -p petunia_ui_slint --config profile.test.package.petunia_ui_slint.debug=0 --test model_shell --test uv_shell --test viewport_gestures --test animate_shell --test ui_metrics` | pass: 4 MODEL + 11 ANIMATE + 3 UV/PAINT + 15 gestos + 1 métricas = 34, zero falhas/ignorados |
+| `CARGO_BUILD_JOBS=1 cargo test -p petunia_ui_slint --config profile.test.package.petunia_ui_slint.debug=0 --lib` | pass: 508, zero falhas/ignorados; build 6m46s |
+| `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_ui_slint --profile test --config profile.test.package.petunia_ui_slint.debug=0 --all-targets -- -D warnings` | pass, zero warnings; 7m38s |
+| `node website/scripts/verify-progress.cjs` e `node --test website/tests/progress.test.cjs` | pass: 66 processos / 66 documentos e 6 testes do acompanhamento |
+| `python3 website/scripts/verify-agent-docs.py` | pass: 66 rotas, 15 páginas de agentes, catálogo 39/189/20 |
+| `git diff --check` | pass |
+| Comparação estrutural e revisão do diff | pass: corpo MODEL igual, exceto indentação e `root.selection-domain`; todos os 119/49 encaminhamentos, seis bindings bidirecionais e retornos bool conferidos; API pública/markup pré-MODEL e PAINT/ANIMATE/UV/cauda iguais à baseline |
+
+**Total Rust executado: 542 testes**, zero falhas/ignorados. O primeiro build com dois jobs teve somente o compilador de testes de unidade interrompido por orçamento de memória; a biblioteca pôde terminar e foi reutilizada. Essa tentativa interrompida não recebe pass. Os testes de teclado usam os eventos públicos `WindowEvent`, sem habilitar APIs internas do backend. O override `debug=0` afeta símbolos Rust do crate UI, preservando metadados Slint do backend headless e asserções.
+
+Identidade das fontes testadas (SHA-256), conferida novamente antes do commit:
+
+- `ui/app.slint`: `6a186422169ae2ace489375a1efca52fb1627d1efd1e6e076179090d10304397`.
+- `ui/workspaces/model/inspector.slint`: `18b201b0cf0dbd8fffcc29afcb5be3f31b84d4d0b1ef09eb8c652dfdc8a8789d`.
+- `tests/model_shell.rs`: `d1d27b79eb9d7bc75036f6044ad2ca72705fc7bf90913c50bdea96975b0c9722`.
+
+**Acompanhamento:** U01 passa a **IN PROGRESS (050%)**, três de seis checkpoints; Q03 a **IN PROGRESS (025%)**, somente inclusão das suítes no workflow concluída. A cobertura de branch foi ampliada, mas auditoria completa de paths/toolchain, CI remota e demais gates de qualidade continuam pendentes. A suíte com `--features animation-workspace`, validação visual/manual, screen reader, GL, Windows e low-end permanecem **not run** neste slice. SHA do commit de entrega informado no handoff; não inferir push/CI a partir dos resultados locais.
+
+**Risks:** cabeçalhos acessíveis e controles existentes são preservados, mas testes headless não comprovam equivalência visual, screen reader, Windows, GL ou low-end. Esses gates permanecem abertos na aceitação final U01/Rescue; não presumir Go a partir da extração.
+
+**Next checkpoint:** conteúdo PAINT em slice separado, depois overlays/HUD restantes e aceitação final. A extração MODEL só aumenta o percentual U01 após os gates focados; U01 não vira DONE enquanto houver checkpoints abertos.

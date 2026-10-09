@@ -15,11 +15,11 @@ import {
     AnimateTweakBody,
 } from "animate.slint";
 import { BrushChip, BrushStepper, ColorSwatch, ContextMenuItem, MenuDropdown, NumericField, PanelDragHandle, PanelResizeGrip, PetuniaSlider, RailTool, ToolButton, ToolCard, ToolGroup, TopAction, Vector3Field, ViewportBarButton, ViewportSvgButton } from "components/controls.slint";
-import { EmptyState, IconButton } from "components/base.slint";
+import { IconButton } from "components/base.slint";
 import { StatusToast } from "components/feedback.slint";
 import { ShellHeader } from "shell/header.slint";
 import { ToolRail } from "shell/tool_rail.slint";
-import { RightColumnShell, StructureHost, PropertiesHost } from "shell/right_column.slint";
+import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
 import { StatusBar } from "shell/status_bar.slint";
 import { ContextBar } from "viewport/context_bar.slint";
@@ -27,11 +27,12 @@ import { ViewBar } from "viewport/view_bar.slint";
 import { ViewportPassiveOverlays } from "viewport/overlays.slint";
 import { PetuniaViewportHost } from "viewport/viewport.slint";
 import { ViewportInputRouter } from "viewport/input_router.slint";
+import { ModelInspector } from "workspaces/model/inspector.slint";
 import { AssetLibraryContent } from "workspaces/model/asset_library.slint";
 import { UvInspector } from "workspaces/uv/inspector.slint";
 import { PaintCanvasSurface } from "components/paint_canvas.slint";
 import { ReferenceDetails, ReferenceTile } from "dialogs/references.slint";
-import { InspectorSection, MaterialBody, ModifiersBody, ObjectBody, PartsBody, PartsFilterRow, PartsRowSizeControl, QuickActionsBody, TransformBody } from "inspector/sections.slint";
+import { InspectorSection, PartsBody, PartsFilterRow, PartsRowSizeControl, QuickActionsBody } from "inspector/sections.slint";
 import { CommandItem, KeymapActionEntry, KeymapProfileEntry, MeasureTag, MenuEntry, ModifierEntry, PaintEffectParamEntry, PaintLayerEntry, PrefabItem, QuickActionEntry, ReferenceSlotData, SceneItem, SectionState, ShortcutsEntry, ThemeEntry, WorldAxisTag, RecentProject, HomeTexts } from "types.slint";
 import { ComponentGallery } from "gallery.slint";
 export { DesignTokens, Motion, PetuniaIcons, Tr }
@@ -4314,307 +4315,175 @@ export component PetuniaSlintShell inherits Window {
                         duplicate-requested => { root.duplicate-requested(); }
                         delete-requested => { root.delete-requested(); }
 
-                            if active-workspace == "MODEL": VerticalLayout {
-                                spacing: 0px;
-                                vertical-stretch: 0;
-
-                                StructureHost {
-                                    if (root.model-parts-open || root.hovered-inspector-section == "parts"): InspectorSection {
-                                        title: root.label-parts;
-                                        section-id: "parts";
-                                        open: root.model-parts-open || root.hovered-inspector-section == "parts";
-                                        pin-open: root.section-states.length > 0 ? root.section-states[0].pin-open : false;
-                                        toggled => { root.section-open-toggled("parts"); }
-                                        toggle-all => { root.toggle-all-sections(); }
-                                        pin-toggled(id) => { root.section-pin-open-toggled(id); }
-
-                                        PartsBody {
-                                            search-label: root.label-search-parts;
-                                            selected-only-label: root.label-selected-parts-only;
-                                            sort-label: root.label-sort-parts;
-                                            query <=> root.parts-query;
-                                            selected-only <=> root.parts-selected-only;
-                                            sort-by-name <=> root.parts-sort-by-name;
-                                            items: root.parts-items;
-                                            total-count: root.scene-items.length;
-                                            row-size-label: root.label-parts-row-size;
-                                            row-height <=> root.parts-row-height;
-                                            list-label: root.label-parts;
-                                            hide-label: root.label-hide-part;
-                                            show-label: root.label-show-part;
-                                            lock-label: root.label-lock-part;
-                                            unlock-label: root.label-unlock-part;
-                                            rename-active: root.rename-active;
-                                            rename-value: root.rename-value;
-                                            query-changed(query) => { root.parts-query-changed(query); }
-                                            selected-only-changed(enabled) => { root.parts-selected-only-changed(enabled); }
-                                            sort-changed(enabled) => { root.parts-sort-changed(enabled); }
-                                            row-height-changed(value) => { root.parts-row-height-changed(value); }
-                                            scene-select(id, extend) => { root.scene-select(id, extend); }
-                                            scene-toggle-visibility(id) => { root.scene-toggle-visibility(id); }
-                                            scene-toggle-lock(id) => { root.scene-toggle-lock(id); }
-                                            scene-context-requested(id, x, y) => { root.scene-context-requested(id, x, y); }
-                                            part-color-picker-open(id) => { root.part-color-picker-open(id); }
-                                            separate-selection-requested => { root.separate-selection-requested(); }
-                                            rename-edited(text) => { root.rename-edited(text); }
-                                            rename-committed(text) => { root.rename-committed(text); }
-                                        }
-                                    }
-                                }
-
-                                PropertiesHost {
-                                    spacing: 0px;
-
-                                    // Sem seleção: um estado vazio no lugar de Transform, para o painel
-                                    // nunca mostrar valores de um objeto que o cabeçalho diz não estar
-                                    // selecionado (critério de aceite da F4).
-                                    if !root.object-has-selection: Rectangle {
-                                        height: empty-state.preferred-height;
-                                        Rectangle { y: 0; height: 1px; background: DesignTokens.border; }
-                                        empty-state := EmptyState {
-                                            width: parent.width;
-                                            title: Tr.t("sl.nothing_selected");
-                                            message: Tr.t("sl.nothing_selected_hint");
-                                        }
-                                    }
-
-                                    if (root.object-has-selection && selection-domain == "OBJECT" && (root.model-transform-open || root.hovered-inspector-section == "transform")): InspectorSection {
-                                        title: root.label-tab-transform;
-                                        section-id: "transform";
-                                        open: root.model-transform-open || root.hovered-inspector-section == "transform";
-                                        pin-open: root.section-states.length > 1 ? root.section-states[1].pin-open : false;
-                                        toggled => { root.section-open-toggled("transform"); }
-                                        toggle-all => { root.toggle-all-sections(); }
-                                        pin-toggled(id) => { root.section-pin-open-toggled(id); }
-
-                                            TransformBody {
-                                                field-hint: root.label-numeric-field-hint;
-                                                pos-x: root.pos-x;
-                                                pos-y: root.pos-y;
-                                                pos-z: root.pos-z;
-                                                rot-x: root.rot-x;
-                                                rot-y: root.rot-y;
-                                                rot-z: root.rot-z;
-                                                scale-x: root.scale-x;
-                                                scale-y: root.scale-y;
-                                                scale-z: root.scale-z;
-                                                scrubbed(kind, axis, delta, fine) => { root.transform-scrubbed(kind, axis, delta, fine); }
-                                                scrub-started(kind) => { root.transform-scrub-started(kind); }
-                                                scrub-finished => { root.transform-scrub-finished(); }
-                                                text-committed(kind, axis, text) => { root.transform-text-committed(kind, axis, text) }
-                                                scrub-cancelled => { root.transform-scrub-cancelled(); }
-                                            }
-                                    }
-                                    if (root.model-material-open || root.hovered-inspector-section == "material"): InspectorSection {
-                                        title: root.label-tab-material;
-                                        section-id: "material";
-                                        open: root.model-material-open || root.hovered-inspector-section == "material";
-                                        pin-open: root.section-states.length > 2 ? root.section-states[2].pin-open : false;
-                                        toggled => { root.section-open-toggled("material"); }
-                                        toggle-all => { root.toggle-all-sections(); }
-                                        pin-toggled(id) => { root.section-pin-open-toggled(id); }
-
-                                        MaterialBody {
-                                            active-name: root.active-material-name;
-                                            active-slot <=> root.active-material-slot;
-                                            slots: root.material-slots;
-                                            profile: root.material-profile;
-                                            base-color: root.material-base-color;
-                                            palette: root.material-palette;
-                                            roughness: root.material-roughness;
-                                            metallic: root.material-metallic;
-                                            emission-strength: root.material-emission-strength;
-                                            advanced-open <=> root.material-advanced-open;
-                                            normal-scale: root.material-normal-scale;
-                                            alpha-mode: root.material-alpha-mode;
-                                            alpha-cutoff: root.material-alpha-cutoff;
-                                            has-albedo: root.material-has-albedo;
-                                            albedo-text-label: root.material-albedo-label;
-                                            assign-label: root.label-material-assign;
-                                            new-label: root.label-material-new;
-                                            duplicate-label: root.label-material-duplicate;
-                                            remove-label: root.label-material-remove;
-                                            profile-label: root.label-material-profile;
-                                            profile-pbr-label: root.label-material-profile-pbr;
-                                            profile-unlit-label: root.label-material-profile-unlit;
-                                            profile-toon-label: root.label-material-profile-toon;
-                                            profile-glass-label: root.label-material-profile-glass;
-                                            profile-emissive-label: root.label-material-profile-emissive;
-                                            base-color-label: root.label-material-base-color;
-                                            roughness-label: root.label-material-roughness;
-                                            metallic-label: root.label-material-metallic;
-                                            emission-label: root.label-material-emission-strength;
-                                            advanced-label: root.label-material-advanced;
-                                            normal-scale-label: root.label-material-normal-scale;
-                                            alpha-mode-label: root.label-material-alpha-mode;
-                                            alpha-opaque-label: root.label-material-alpha-opaque;
-                                            alpha-mask-label: root.label-material-alpha-mask;
-                                            alpha-blend-label: root.label-material-alpha-blend;
-                                            alpha-cutoff-label: root.label-material-alpha-cutoff;
-                                            albedo-label: root.label-material-texture-albedo;
-                                            create-texture-label: root.label-material-create-texture;
-                                            clear-texture-label: root.label-material-clear-texture;
-                                            no-texture-label: root.label-material-no-texture;
-                                            assign-material-slot(slot) => { root.assign-material-slot(slot); }
-                                            create-material => { root.create-material(); }
-                                            duplicate-material(slot) => { root.duplicate-material(slot); }
-                                            remove-material(slot) => { root.remove-material(slot); }
-                                            material-slot-selected(index) => { root.material-slot-selected(index); }
-                                            material-base-color-changed(r, g, b) => { root.material-base-color-changed(r, g, b); }
-                                            material-scalar-committed(field, slot, text) => { root.material-scalar-committed(field, slot, text) }
-                                            material-profile-changed(index) => { root.material-profile-changed(index); }
-                                            material-alpha-mode-changed(index) => { root.material-alpha-mode-changed(index); }
-                                            material-albedo-create => { root.material-albedo-create(); }
-                                            material-albedo-clear => { root.material-albedo-clear(); }
-                                        }
-                                    }
-                                    if (root.model-object-open || root.hovered-inspector-section == "object"): InspectorSection {
-                                        title: root.label-tab-object;
-                                        section-id: "object";
-                                        open: root.model-object-open || root.hovered-inspector-section == "object";
-                                        pin-open: root.section-states.length > 3 ? root.section-states[3].pin-open : false;
-                                        toggled => { root.section-open-toggled("object"); }
-                                        toggle-all => { root.toggle-all-sections(); }
-                                        pin-toggled(id) => { root.section-pin-open-toggled(id); }
-                                        ObjectBody {
-                                            has-selection: root.object-has-selection;
-                                            object-name: root.object-name;
-                                            object-id: root.object-id;
-                                            object-visible: root.object-visible;
-                                            object-locked: root.object-locked;
-                                            object-verts: root.object-verts;
-                                            object-faces: root.object-faces;
-                                            object-tris: root.object-tris;
-                                            no-selection-label: root.label-object-no-selection;
-                                            verts-label: root.label-stats-verts;
-                                            faces-label: root.label-stats-faces;
-                                            tris-label: root.label-stats-tris;
-                                            duplicate-label: root.label-duplicate;
-                                            delete-label: root.label-delete;
-                                            is-parametric: root.active-asset-is-parametric;
-                                            primitive-kind: root.primitive-kind;
-                                            primitive-radius: root.primitive-radius;
-                                            primitive-radius-b: root.primitive-radius-b;
-                                            primitive-height: root.primitive-height;
-                                            primitive-depth: root.primitive-depth;
-                                            primitive-width: root.primitive-width;
-                                            primitive-sides: root.primitive-sides;
-                                            primitive-rings: root.primitive-rings;
-                                            primitive-subdiv: root.primitive-subdiv;
-                                            primitive-cap-top: root.primitive-cap-top;
-                                            primitive-cap-bottom: root.primitive-cap-bottom;
-                                            primitive-fill-disc: root.primitive-fill-disc;
-                                            label-parametric-primitive: root.label-parametric-primitive;
-                                            label-freeze-primitive: root.label-freeze-primitive;
-                                            label-freeze-primitive-hint: root.label-freeze-primitive-hint;
-                                            scene-toggle-visibility(id) => { root.scene-toggle-visibility(id); }
-                                            scene-toggle-lock(id) => { root.scene-toggle-lock(id); }
-                                            duplicate-requested => { root.duplicate-requested(); }
-                                            delete-requested => { root.delete-requested(); }
-                                            primitive-param-float(param, val) => { root.primitive-param-float(param, val); }
-                                            primitive-param-bool(param, val) => { root.primitive-param-bool(param, val); }
-                                            freeze-primitive-requested => { root.freeze-primitive-requested(); }
-                                        }
-                                        // Modificadores como subseção de Objeto (plano de UI F4, D2).
-                                        if root.object-has-selection: VerticalLayout {
-                                            spacing: DesignTokens.space-xs;
-                                            padding-top: DesignTokens.space-sm;
-                                            Text {
-                                                text: root.label-tab-modifiers;
-                                                color: DesignTokens.text-secondary;
-                                                font-size: DesignTokens.font-small;
-                                                font-weight: 600;
-                                            }
-                                            ModifiersBody {
-                                                rows: root.modifier-rows;
-                                                add-mirror-label: root.label-modifier-add-mirror;
-                                                add-symmetry-label: root.label-modifier-add-symmetry;
-                                                apply-label: root.label-modifier-apply;
-                                                direction-label: root.label-modifier-direction;
-                                                neg-to-pos-label: root.label-modifier-negative-to-positive;
-                                                pos-to-neg-label: root.label-modifier-positive-to-negative;
-                                                empty-label: root.label-modifiers-empty;
-                                                modifier-add(kind) => { root.modifier-add(kind); }
-                                                modifier-toggle(id, enabled) => { root.modifier-toggle(id, enabled); }
-                                                modifier-remove(id) => { root.modifier-remove(id); }
-                                                modifier-move(id, direction) => { root.modifier-move(id, direction); }
-                                                modifier-apply(id) => { root.modifier-apply(id); }
-                                                modifier-axis-changed(id, axis) => { root.modifier-axis-changed(id, axis); }
-                                                modifier-direction-changed(id, direction) => { root.modifier-direction-changed(id, direction); }
-                                            }
-                                        }
-                                    }
-                                     if root.scene-items.length > 1 || root.boolean-operand-name != "": InspectorSection {
-                                        title: Tr.t("sl.combine");
-                                        open: true;
-                                        toggled => { self.open = !self.open; }
-                                        VerticalLayout {
-                                            spacing: 6px;
-                                            if root.boolean-operand-name != "": VerticalLayout {
-                                                spacing: 6px;
-                                                Text { text: Tr.t("sl.operand") + ": \{root.boolean-operand-name}"; color: DesignTokens.accent; font-size: DesignTokens.font-caption; font-weight: 700; }
-                                                HorizontalLayout {
-                                                    spacing: 4px;
-                                                    ToolButton { icon-svg: PetuniaIcons.boolean-fuse; semantic-label: Tr.t("sl.fuse"); description: Tr.t("sl.combine_the_active_part_with_the_operand"); clicked => { root.command-executed("model.fuse"); } }
-                                                    ToolButton { icon-svg: PetuniaIcons.boolean-cut; semantic-label: Tr.t("sl.cut"); description: Tr.t("sl.subtract_the_operand_from_the_active_part"); clicked => { root.command-executed("model.cut"); } }
-                                                    ToolButton { icon-svg: PetuniaIcons.boolean-intersect; semantic-label: Tr.t("sl.intersect"); description: Tr.t("sl.keep_the_overlapping_volume"); clicked => { root.command-executed("model.intersect"); } }
-                                                    ToolButton { icon-svg: PetuniaIcons.boolean-join; semantic-label: Tr.t("sl.join"); description: Tr.t("sl.join_the_operand_into_the_active_part"); clicked => { root.join-requested(); } }
-                                                    Rectangle { horizontal-stretch: 1; }
-                                                }
-                                                HorizontalLayout {
-                                                    spacing: 4px;
-                                                    Rectangle {
-                                                        horizontal-stretch: 1; height: 26px;
-                                                        background: root.boolean-keep-parts ? DesignTokens.accent : DesignTokens.surface-raised;
-                                                        border-radius: 4px;
-                                                        accessible-role: checkbox;
-                                                        accessible-label: Tr.t("sl.keep_parts");
-                                                        accessible-checked: root.boolean-keep-parts;
-                                                        Text { text: root.boolean-keep-parts ? Tr.t("sl.keep_parts_on") : Tr.t("sl.keep_parts_off"); color: root.boolean-keep-parts ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                                                        TouchArea { clicked => { root.boolean-keep-parts-set(!root.boolean-keep-parts); } }
-                                                    }
-                                                    Rectangle {
-                                                        horizontal-stretch: 1; height: 26px;
-                                                        background: root.boolean-cleanup ? DesignTokens.accent : DesignTokens.surface-raised;
-                                                        border-radius: 4px;
-                                                        accessible-role: checkbox;
-                                                        accessible-label: Tr.t("sl.clean_quads");
-                                                        accessible-checked: root.boolean-cleanup;
-                                                        Text { text: root.boolean-cleanup ? Tr.t("sl.clean_quads_on") : Tr.t("sl.clean_quads_off"); color: root.boolean-cleanup ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                                                        TouchArea { clicked => { root.boolean-cleanup-set(!root.boolean-cleanup); } }
-                                                    }
-                                                    Rectangle {
-                                                        width: 92px; height: 26px;
-                                                        background: DesignTokens.surface-raised;
-                                                        border-radius: 4px;
-                                                        accessible-role: button;
-                                                        accessible-label: Tr.t("sl.clear_operand");
-                                                        Text { text: Tr.t("sl.clear"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                                                        TouchArea { clicked => { root.boolean-operand-cleared(); } }
-                                                    }
-                                                }
-                                            }
-                                            if root.boolean-operand-name == "": VerticalLayout {
-                                                spacing: 4px;
-                                                Text { text: Tr.t("sl.select_second_part_to_combine"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
-                                                for item in root.scene-items: Rectangle {
-                                                    visible: !item.active;
-                                                    height: !item.active ? 24px : 0px;
-                                                    background: DesignTokens.surface-raised;
-                                                    border-radius: 4px;
-                                                    if !item.active: HorizontalLayout {
-                                                        padding-left: 6px;
-                                                        padding-right: 6px;
-                                                        spacing: 4px;
-                                                        Text { text: item.name; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; vertical-alignment: center; horizontal-stretch: 1; }
-                                                        Text { text: Tr.t("sl.choose"); color: DesignTokens.accent; font-size: DesignTokens.font-caption; vertical-alignment: center; }
-                                                    }
-                                                    if !item.active: TouchArea { clicked => { root.boolean-operand-set(item.id); } }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                            if active-workspace == "MODEL": ModelInspector {
+                                model-parts-open : root.model-parts-open;
+                                hovered-inspector-section : root.hovered-inspector-section;
+                                label-parts : root.label-parts;
+                                section-states : root.section-states;
+                                section-open-toggled(arg1) => { root.section-open-toggled(arg1); }
+                                toggle-all-sections() => { root.toggle-all-sections(); }
+                                section-pin-open-toggled(arg1) => { root.section-pin-open-toggled(arg1); }
+                                label-search-parts : root.label-search-parts;
+                                label-selected-parts-only : root.label-selected-parts-only;
+                                label-sort-parts : root.label-sort-parts;
+                                parts-query <=> root.parts-query;
+                                parts-selected-only <=> root.parts-selected-only;
+                                parts-sort-by-name <=> root.parts-sort-by-name;
+                                parts-items : root.parts-items;
+                                scene-items : root.scene-items;
+                                label-parts-row-size : root.label-parts-row-size;
+                                parts-row-height <=> root.parts-row-height;
+                                label-hide-part : root.label-hide-part;
+                                label-show-part : root.label-show-part;
+                                label-lock-part : root.label-lock-part;
+                                label-unlock-part : root.label-unlock-part;
+                                rename-active : root.rename-active;
+                                rename-value : root.rename-value;
+                                parts-query-changed(arg1) => { root.parts-query-changed(arg1); }
+                                parts-selected-only-changed(arg1) => { root.parts-selected-only-changed(arg1); }
+                                parts-sort-changed(arg1) => { root.parts-sort-changed(arg1); }
+                                parts-row-height-changed(arg1) => { root.parts-row-height-changed(arg1); }
+                                scene-select(arg1, arg2) => { root.scene-select(arg1, arg2); }
+                                scene-toggle-visibility(arg1) => { root.scene-toggle-visibility(arg1); }
+                                scene-toggle-lock(arg1) => { root.scene-toggle-lock(arg1); }
+                                scene-context-requested(arg1, arg2, arg3) => { root.scene-context-requested(arg1, arg2, arg3); }
+                                part-color-picker-open(arg1) => { root.part-color-picker-open(arg1); }
+                                separate-selection-requested() => { root.separate-selection-requested(); }
+                                rename-edited(arg1) => { root.rename-edited(arg1); }
+                                rename-committed(arg1) => { root.rename-committed(arg1); }
+                                object-has-selection : root.object-has-selection;
+                                selection-domain : root.selection-domain;
+                                model-transform-open : root.model-transform-open;
+                                label-tab-transform : root.label-tab-transform;
+                                label-numeric-field-hint : root.label-numeric-field-hint;
+                                pos-x : root.pos-x;
+                                pos-y : root.pos-y;
+                                pos-z : root.pos-z;
+                                rot-x : root.rot-x;
+                                rot-y : root.rot-y;
+                                rot-z : root.rot-z;
+                                scale-x : root.scale-x;
+                                scale-y : root.scale-y;
+                                scale-z : root.scale-z;
+                                transform-scrubbed(arg1, arg2, arg3, arg4) => { root.transform-scrubbed(arg1, arg2, arg3, arg4); }
+                                transform-scrub-started(arg1) => { root.transform-scrub-started(arg1); }
+                                transform-scrub-finished() => { root.transform-scrub-finished(); }
+                                transform-text-committed(arg1, arg2, arg3) => { root.transform-text-committed(arg1, arg2, arg3) }
+                                transform-scrub-cancelled() => { root.transform-scrub-cancelled(); }
+                                model-material-open : root.model-material-open;
+                                label-tab-material : root.label-tab-material;
+                                active-material-name : root.active-material-name;
+                                active-material-slot <=> root.active-material-slot;
+                                material-slots : root.material-slots;
+                                material-profile : root.material-profile;
+                                material-base-color : root.material-base-color;
+                                material-palette : root.material-palette;
+                                material-roughness : root.material-roughness;
+                                material-metallic : root.material-metallic;
+                                material-emission-strength : root.material-emission-strength;
+                                material-advanced-open <=> root.material-advanced-open;
+                                material-normal-scale : root.material-normal-scale;
+                                material-alpha-mode : root.material-alpha-mode;
+                                material-alpha-cutoff : root.material-alpha-cutoff;
+                                material-has-albedo : root.material-has-albedo;
+                                material-albedo-label : root.material-albedo-label;
+                                label-material-assign : root.label-material-assign;
+                                label-material-new : root.label-material-new;
+                                label-material-duplicate : root.label-material-duplicate;
+                                label-material-remove : root.label-material-remove;
+                                label-material-profile : root.label-material-profile;
+                                label-material-profile-pbr : root.label-material-profile-pbr;
+                                label-material-profile-unlit : root.label-material-profile-unlit;
+                                label-material-profile-toon : root.label-material-profile-toon;
+                                label-material-profile-glass : root.label-material-profile-glass;
+                                label-material-profile-emissive : root.label-material-profile-emissive;
+                                label-material-base-color : root.label-material-base-color;
+                                label-material-roughness : root.label-material-roughness;
+                                label-material-metallic : root.label-material-metallic;
+                                label-material-emission-strength : root.label-material-emission-strength;
+                                label-material-advanced : root.label-material-advanced;
+                                label-material-normal-scale : root.label-material-normal-scale;
+                                label-material-alpha-mode : root.label-material-alpha-mode;
+                                label-material-alpha-opaque : root.label-material-alpha-opaque;
+                                label-material-alpha-mask : root.label-material-alpha-mask;
+                                label-material-alpha-blend : root.label-material-alpha-blend;
+                                label-material-alpha-cutoff : root.label-material-alpha-cutoff;
+                                label-material-texture-albedo : root.label-material-texture-albedo;
+                                label-material-create-texture : root.label-material-create-texture;
+                                label-material-clear-texture : root.label-material-clear-texture;
+                                label-material-no-texture : root.label-material-no-texture;
+                                assign-material-slot(arg1) => { root.assign-material-slot(arg1); }
+                                create-material() => { root.create-material(); }
+                                duplicate-material(arg1) => { root.duplicate-material(arg1); }
+                                remove-material(arg1) => { root.remove-material(arg1); }
+                                material-slot-selected(arg1) => { root.material-slot-selected(arg1); }
+                                material-base-color-changed(arg1, arg2, arg3) => { root.material-base-color-changed(arg1, arg2, arg3); }
+                                material-scalar-committed(arg1, arg2, arg3) => { root.material-scalar-committed(arg1, arg2, arg3) }
+                                material-profile-changed(arg1) => { root.material-profile-changed(arg1); }
+                                material-alpha-mode-changed(arg1) => { root.material-alpha-mode-changed(arg1); }
+                                material-albedo-create() => { root.material-albedo-create(); }
+                                material-albedo-clear() => { root.material-albedo-clear(); }
+                                model-object-open : root.model-object-open;
+                                label-tab-object : root.label-tab-object;
+                                object-name : root.object-name;
+                                object-id : root.object-id;
+                                object-visible : root.object-visible;
+                                object-locked : root.object-locked;
+                                object-verts : root.object-verts;
+                                object-faces : root.object-faces;
+                                object-tris : root.object-tris;
+                                label-object-no-selection : root.label-object-no-selection;
+                                label-stats-verts : root.label-stats-verts;
+                                label-stats-faces : root.label-stats-faces;
+                                label-stats-tris : root.label-stats-tris;
+                                label-duplicate : root.label-duplicate;
+                                label-delete : root.label-delete;
+                                active-asset-is-parametric : root.active-asset-is-parametric;
+                                primitive-kind : root.primitive-kind;
+                                primitive-radius : root.primitive-radius;
+                                primitive-radius-b : root.primitive-radius-b;
+                                primitive-height : root.primitive-height;
+                                primitive-depth : root.primitive-depth;
+                                primitive-width : root.primitive-width;
+                                primitive-sides : root.primitive-sides;
+                                primitive-rings : root.primitive-rings;
+                                primitive-subdiv : root.primitive-subdiv;
+                                primitive-cap-top : root.primitive-cap-top;
+                                primitive-cap-bottom : root.primitive-cap-bottom;
+                                primitive-fill-disc : root.primitive-fill-disc;
+                                label-parametric-primitive : root.label-parametric-primitive;
+                                label-freeze-primitive : root.label-freeze-primitive;
+                                label-freeze-primitive-hint : root.label-freeze-primitive-hint;
+                                duplicate-requested() => { root.duplicate-requested(); }
+                                delete-requested() => { root.delete-requested(); }
+                                primitive-param-float(arg1, arg2) => { root.primitive-param-float(arg1, arg2); }
+                                primitive-param-bool(arg1, arg2) => { root.primitive-param-bool(arg1, arg2); }
+                                freeze-primitive-requested() => { root.freeze-primitive-requested(); }
+                                label-tab-modifiers : root.label-tab-modifiers;
+                                modifier-rows : root.modifier-rows;
+                                label-modifier-add-mirror : root.label-modifier-add-mirror;
+                                label-modifier-add-symmetry : root.label-modifier-add-symmetry;
+                                label-modifier-apply : root.label-modifier-apply;
+                                label-modifier-direction : root.label-modifier-direction;
+                                label-modifier-negative-to-positive : root.label-modifier-negative-to-positive;
+                                label-modifier-positive-to-negative : root.label-modifier-positive-to-negative;
+                                label-modifiers-empty : root.label-modifiers-empty;
+                                modifier-add(arg1) => { root.modifier-add(arg1); }
+                                modifier-toggle(arg1, arg2) => { root.modifier-toggle(arg1, arg2); }
+                                modifier-remove(arg1) => { root.modifier-remove(arg1); }
+                                modifier-move(arg1, arg2) => { root.modifier-move(arg1, arg2); }
+                                modifier-apply(arg1) => { root.modifier-apply(arg1); }
+                                modifier-axis-changed(arg1, arg2) => { root.modifier-axis-changed(arg1, arg2); }
+                                modifier-direction-changed(arg1, arg2) => { root.modifier-direction-changed(arg1, arg2); }
+                                boolean-operand-name : root.boolean-operand-name;
+                                command-executed(arg1) => { root.command-executed(arg1); }
+                                join-requested() => { root.join-requested(); }
+                                boolean-keep-parts : root.boolean-keep-parts;
+                                boolean-keep-parts-set(arg1) => { root.boolean-keep-parts-set(arg1); }
+                                boolean-cleanup : root.boolean-cleanup;
+                                boolean-cleanup-set(arg1) => { root.boolean-cleanup-set(arg1); }
+                                boolean-operand-cleared() => { root.boolean-operand-cleared(); }
+                                boolean-operand-set(arg1) => { root.boolean-operand-set(arg1); }
                             }
 
                             if active-workspace == "PAINT": VerticalLayout {

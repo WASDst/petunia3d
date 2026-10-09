@@ -46,9 +46,11 @@ O workflow **UI Slint** existente verifica formatação do crate, tokens, Clippy
 - cargo run -p xtask -- ui-lint
 - cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
 - cargo test -p petunia_ui_slint --lib
-- cargo test -p petunia_ui_slint --features animation-workspace --lib --test animate_shell --test viewport_gestures
+- cargo test -p petunia_ui_slint --features animation-workspace --lib --test animate_shell --test viewport_gestures --test model_shell --test uv_shell
 
 Os nomes/flags devem acompanhar os manifests reais. O workflow atualmente cobre paths específicos e não constitui aprovação universal do workspace. Expandir gates gradualmente após modularizar para evitar bloqueios de memória mascararem problemas.
+
+**Checkpoint Q03 — 2026-10-09:** a extração MODEL adiciona `model_shell` e `uv_shell` ao comando de integração da CI Slint e inclui `refactor/architecture-foundation` no trigger de push. Evidência local e limites em [Slint Rescue — checkpoint MODEL](../09-ui/slint-rescue-plan.md#checkpoint-model-2026-10-09). YAML atualizado não equivale a execução de Actions: CI remota permanece `not run` até haver run/SHA. Cobertura ampla Core/Geometry/Project/security/GL/Windows e pinagem/toolchain permanecem checkpoints distintos.
 
 ### Slint Rescue Go/No-Go
 

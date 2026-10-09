@@ -55,6 +55,16 @@
       "revision": "Arquivos desta entrega, validados antes do commit sobre bafd02b15fcc006a32f783236e0c87ec74354f51",
       "document": "17-reimplementation/index.md",
       "summary": "T01: sintaxe, validador de 66 processos/66 docs, seis testes Node e guard documental pass; navegador local claro, filtros/links/teclado e viewport 390px pass. CI remota, screen reader formal, tema escuro e Windows: not run."
+    },
+    "model-checkpoint": {
+      "revision": "Slice validado sobre 40ad949fb3b7a7d392d402bf4da55f5c28769621; fontes SHA-256 registradas no capítulo canônico",
+      "document": "09-ui/slint-rescue-plan.md",
+      "summary": "Checkpoint MODEL 2026-10-09: 542 testes Rust headless, fmt, ui-lint (24 arquivos), Clippy -D warnings e guard documental pass; corpo/119 propriedades/49 callbacks e API/tail comparados à baseline. Visual, feature animation-workspace, GL, Windows, screen reader e low-end: not run."
+    },
+    "ci-shell-coverage": {
+      "revision": "Configuração do slice sobre 40ad949fb3b7a7d392d402bf4da55f5c28769621",
+      "document": "14-quality/testing-ci-conformance.md",
+      "summary": "Q03 inclui uv_shell/model_shell na integração Slint e trigger da branch autorizada; configuração revisada, permissões contents:read preservadas. Regressões locais/default: pass. CI remota e suíte animation-workspace: not run; paths/toolchain e baterias transversais ainda abertos."
     }
   },
   "tasks": [
@@ -127,7 +137,7 @@
       "document": "09-ui/slint-rescue-plan.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Parcial verificado. crates/ui-slint/ui/app.slint:4317. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "MODEL extraído para ModelInspector, sem mudar domínio ou API pública: 119 propriedades, 49 callbacks e seis bindings de ida/volta; 542 testes Rust e Clippy pass. Restam PAINT, overlays/HUD e aceitação visual/final.",
       "checkpoints": [
         {
           "title": "Extrair AnimateInspector e preservar a regressão ANIMATE no backend headless.",
@@ -141,8 +151,8 @@
         },
         {
           "title": "Extrair o conteúdo MODEL do shell.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "model-checkpoint"
         },
         {
           "title": "Extrair o conteúdo PAINT do shell.",
@@ -2120,14 +2130,14 @@
       "title": "CI e baterias",
       "description": "Incluir uv_shell no workflow Slint; conferir cobertura da branch e paths/toolchain; ampliar gates Core/Geometry/Project/security/GL/Windows, propriedade/fuzz e supply-chain, com prova por SHA.",
       "document": "14-quality/testing-ci-conformance.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Delta confirmado. .github/workflows/ui-slint.yml. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Workflow inclui uv_shell/model_shell e push na branch autorizada; suítes default passaram localmente. CI remota, auditoria completa de paths/toolchain e baterias transversais continuam pendentes.",
       "checkpoints": [
         {
           "title": "Incluir uv_shell no workflow Slint",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "ci-shell-coverage"
         },
         {
           "title": "conferir cobertura da branch e paths/toolchain",
