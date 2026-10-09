@@ -1598,12 +1598,6 @@ export component PetuniaSlintShell inherits Window {
                     root.rail-flyout = "";
                     return accept;
                 }
-                // O popover de criação integra a pilha: só é o alvo de Escape
-                // quando nenhuma camada bloqueante está acima dele.
-                if root.add-menu-open && !root.regional-focus-blocked {
-                    root.add-menu-changed(false);
-                    return accept;
-                }
                 if root.quick-actions-open {
                     root.quick-actions-open = false;
                     return accept;
@@ -1746,10 +1740,8 @@ export component PetuniaSlintShell inherits Window {
                     }
                     add-menu-step(delta) => { root.add-menu-step(delta); }
                     add-menu-invoke => { root.add-menu-invoke(); }
-                    add-menu-dismiss => { root.add-menu-changed(false); }
                     flyout-step(delta) => { root.rail-flyout-step(delta); }
                     flyout-invoke => { root.rail-flyout-invoke(); }
-                    flyout-dismiss => { root.rail-flyout = ""; }
                     animate-action(action, arg, value) => { root.animate-action(action, arg, value); }
                     asset-library-requested => { root.asset-library-requested(); }
                 }
@@ -3367,7 +3359,6 @@ export component PetuniaSlintShell inherits Window {
                                 more-requested(x, y) => { root.rail-flyout-tools = root.rail-cut-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "cut"; }
                                 flyout-step(delta) => { root.rail-flyout-step(delta); }
                                 flyout-invoke => { root.rail-flyout-invoke(); }
-                                flyout-dismiss => { root.rail-flyout = ""; }
                             }
                             if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("connect"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-connect;

@@ -886,7 +886,6 @@ export component ToolButton inherits Rectangle {
     callback secondary-clicked;
     callback popup-step(int);
     callback popup-invoke;
-    callback popup-dismiss;
 
     accessible-role: button;
     accessible-label: root.semantic-label;
@@ -938,11 +937,12 @@ export component ToolButton inherits Rectangle {
     }
     tool-focus := FocusScope {
         key-pressed(event) => {
+            // Escape não é interceptado aqui: superfícies da pilha fecham pelo
+            // topo em OverlayStack e o flyout da UI já é fechado pelo shell.
             if root.popup-open {
                 if event.text == Key.DownArrow { root.popup-step(1); return accept; }
                 if event.text == Key.UpArrow { root.popup-step(-1); return accept; }
                 if event.text == Key.Return || event.text == " " { root.popup-invoke(); return accept; }
-                if event.text == Key.Escape { root.popup-dismiss(); return accept; }
                 reject
             }
             if event.text == Key.Return || event.text == " " {
@@ -1002,7 +1002,6 @@ export component ToolGroup inherits Rectangle {
     callback more-requested(length, length);
     callback flyout-step(int);
     callback flyout-invoke;
-    callback flyout-dismiss;
 
     property <int> shown: root.tools[0].active ? 0 : (root.tools[1].active ? 1 : (root.tools[2].active ? 2 : (root.tools[3].active ? 3 : root.current)));
     width: button.width;
@@ -1020,7 +1019,6 @@ export component ToolGroup inherits Rectangle {
         popup-open: root.flyout-open && root.tools.length > 1;
         popup-step(delta) => { root.flyout-step(delta); }
         popup-invoke => { root.flyout-invoke(); }
-        popup-dismiss => { root.flyout-dismiss(); }
         clicked => {
             root.current = root.shown;
             root.activated(root.tools[root.shown].id);

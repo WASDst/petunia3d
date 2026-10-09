@@ -560,6 +560,14 @@ fn creation_popover_highlight_navigates_keeps_focus_and_escape_dismisses() {
     let created = Rc::new(RefCell::new(Vec::new()));
     let observed = Rc::clone(&created);
     shell.on_add_primitive_requested(move |id| observed.borrow_mut().push(id.to_string()));
+    // Emula o bridge: Escape fecha o topo dismissible pela pilha (OverlayStack).
+    let weak = shell.as_weak();
+    shell.on_escape_requested(move || {
+        let shell = weak.upgrade().unwrap();
+        if shell.get_add_menu_open() {
+            shell.set_add_menu_open(false);
+        }
+    });
 
     let add = i_slint_backend_testing::ElementHandle::find_by_accessible_label(
         &shell,
@@ -597,7 +605,7 @@ fn creation_popover_highlight_navigates_keeps_focus_and_escape_dismisses() {
     key(&shell, Key::Escape.into());
     assert!(
         !shell.get_add_menu_open(),
-        "Escape fecha o topo dismissible"
+        "Escape fecha o topo pela pilha do bridge"
     );
     assert_eq!(*created.borrow(), vec!["cube"], "Escape não cria");
     key(&shell, Key::Return.into());

@@ -50,11 +50,9 @@ export component ToolRail inherits Rectangle {
     /// Navegação highlight-based do popover de criação enquanto o foco fica no botão.
     callback add-menu-step(int);
     callback add-menu-invoke;
-    callback add-menu-dismiss;
     /// Navegação highlight-based do flyout de grupo enquanto o foco fica no botão.
     callback flyout-step(int);
     callback flyout-invoke;
-    callback flyout-dismiss;
     callback animate-action(string, string, float);
     callback asset-library-requested;
 
@@ -92,7 +90,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("select", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
             ToolGroup {
                 tools: root.helper-tools;
@@ -103,7 +100,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("helpers", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
 
             Rectangle { width: 28px; height: 1px; background: DesignTokens.border; }
@@ -207,7 +203,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("select", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
             ToolGroup {
                 tools: root.helper-tools;
@@ -218,7 +213,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("helpers", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
 
             Rectangle { width: 28px; height: 1px; background: DesignTokens.border; }
@@ -276,7 +270,6 @@ export component ToolRail inherits Rectangle {
                 popup-open: root.add-menu-open;
                 popup-step(delta) => { root.add-menu-step(delta); }
                 popup-invoke => { root.add-menu-invoke(); }
-                popup-dismiss => { root.add-menu-dismiss(); }
                 property <int> focus-token: root.add-focus-token;
                 changed focus-token => { if root.add-focus-token > 0 { add-action.focus(); } }
                 clicked => { root.add-menu-toggled(!root.add-menu-open); }
@@ -303,7 +296,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("paint-brush", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
             ToolButton {
                 show-label: root.show-tool-labels;
@@ -341,7 +333,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("paint-shapes", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
             ToolGroup {
                 tools: root.paint-gradient-tools;
@@ -352,7 +343,6 @@ export component ToolRail inherits Rectangle {
                 more-requested(x, y) => { root.flyout-requested("paint-gradients", x, y); }
                 flyout-step(delta) => { root.flyout-step(delta); }
                 flyout-invoke => { root.flyout-invoke(); }
-                flyout-dismiss => { root.flyout-dismiss(); }
             }
             ToolButton {
                 show-label: root.show-tool-labels;
