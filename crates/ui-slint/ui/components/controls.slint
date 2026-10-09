@@ -875,9 +875,18 @@ export component ToolButton inherits Rectangle {
     in property <bool> show-label: false;
     /// Marca de canto: o botão é um grupo com mais variações (flyout).
     in property <bool> has-more: false;
+    /// Item destacado por navegação de teclado num popover/flyout não modal.
+    /// O índice pertence ao shell; o controle só projeta o estado.
+    in property <bool> highlighted: false;
+    /// Popover associado aberto: o controle mantém o foco e opera o popup por
+    /// highlight (mesmo padrão da barra de menus), sem roubar foco.
+    in property <bool> popup-open: false;
     callback clicked;
-    /// Botão direito: abre as variações de um grupo.
+    /// Botão direito, Shift+F10 ou tecla Menu: abre as variações de um grupo.
     callback secondary-clicked;
+    callback popup-step(int);
+    callback popup-invoke;
+    callback popup-dismiss;
 
     accessible-role: button;
     accessible-label: root.semantic-label;
@@ -885,7 +894,7 @@ export component ToolButton inherits Rectangle {
     width: root.show-label ? 132px : 32px;
     height: 32px;
     border-radius: 6px;
-    background: active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    background: active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : ((touch-area.has-hover || root.highlighted) ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
     animate background { duration: Motion.fast; easing: ease-out; }
     animate border-color { duration: Motion.fast; easing: ease-out; }
     transform-scale: touch-area.pressed ? 0.94 : 1.0;
@@ -929,8 +938,20 @@ export component ToolButton inherits Rectangle {
     }
     tool-focus := FocusScope {
         key-pressed(event) => {
+            if root.popup-open {
+                if event.text == Key.DownArrow { root.popup-step(1); return accept; }
+                if event.text == Key.UpArrow { root.popup-step(-1); return accept; }
+                if event.text == Key.Return || event.text == " " { root.popup-invoke(); return accept; }
+                if event.text == Key.Escape { root.popup-dismiss(); return accept; }
+                reject
+            }
             if event.text == Key.Return || event.text == " " {
                 root.clicked();
+                return accept;
+            }
+            // Convenção desktop: Shift+F10 ou tecla Menu abrem o menu do controle.
+            if (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu {
+                root.secondary-clicked();
                 return accept;
             }
             reject
@@ -966,16 +987,22 @@ export struct RailTool {
 }
 
 /// Grupo de ferramentas parecidas num só botão do trilho. Mostra a variação
-/// ativa (ou a última usada); clique ativa, botão direito ou a marca de canto
-/// pedem o flyout com todas as variações. Suporta até 4 variações.
+/// ativa (ou a última usada); clique ativa, botão direito, Shift+F10, tecla
+/// Menu ou a marca de canto pedem o flyout com todas as variações. Suporta até
+/// 4 variações.
 export component ToolGroup inherits Rectangle {
     in property <[RailTool]> tools;
     in property <bool> show-label: false;
     in property <string> more-hint;
+    /// Flyout deste grupo está aberto (o shell é dono do índice de highlight).
+    in property <bool> flyout-open: false;
     in-out property <int> current: 0;
     callback activated(string);
     /// Pede o flyout; `x`/`y` são a posição absoluta do botão.
     callback more-requested(length, length);
+    callback flyout-step(int);
+    callback flyout-invoke;
+    callback flyout-dismiss;
 
     property <int> shown: root.tools[0].active ? 0 : (root.tools[1].active ? 1 : (root.tools[2].active ? 2 : (root.tools[3].active ? 3 : root.current)));
     width: button.width;
@@ -990,6 +1017,10 @@ export component ToolGroup inherits Rectangle {
         active: root.tools[root.shown].active;
         show-label: root.show-label;
         has-more: root.tools.length > 1;
+        popup-open: root.flyout-open && root.tools.length > 1;
+        popup-step(delta) => { root.flyout-step(delta); }
+        popup-invoke => { root.flyout-invoke(); }
+        popup-dismiss => { root.flyout-dismiss(); }
         clicked => {
             root.current = root.shown;
             root.activated(root.tools[root.shown].id);

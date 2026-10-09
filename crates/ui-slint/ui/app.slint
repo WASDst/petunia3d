@@ -164,6 +164,40 @@ export component PetuniaSlintShell inherits Window {
     in-out property <[RailTool]> rail-flyout-tools: [];
     in-out property <length> rail-flyout-x: 0px;
     in-out property <length> rail-flyout-y: 0px;
+    /// Decisão §16/§26: popovers não modais não roubam foco. Eles operam pelo
+    /// mesmo padrão highlight-based da barra de menus: o shell é dono do índice,
+    /// o foco permanece no invocador, setas movem o destaque e Enter invoca o
+    /// item destacado. -1 = nenhum destaque.
+    in-out property <int> add-menu-highlight: -1;
+    in-out property <int> rail-flyout-highlight: -1;
+    /// Primitivas do popover de criação, na mesma ordem dos botões visíveis.
+    private property <[string]> add-menu-ids: ["cube", "sphere", "cylinder", "plane", "cone", "capsule", "torus", "circle", "icosphere", "wedge"];
+    changed rail-flyout => { root.rail-flyout-highlight = -1; }
+
+    function add-menu-step(delta: int) {
+        let n = max(root.add-menu-ids.length, 1);
+        let start = root.add-menu-highlight < 0 ? (delta > 0 ? -1 : n) : root.add-menu-highlight;
+        root.add-menu-highlight = Math.mod(start + delta + n, n);
+    }
+    /// Sem destaque, Enter mantém o comportamento anterior (fecha o popover).
+    function add-menu-invoke() {
+        if root.add-menu-highlight >= 0 && root.add-menu-highlight < root.add-menu-ids.length {
+            root.add-primitive-requested(root.add-menu-ids[root.add-menu-highlight]);
+        }
+        root.add-menu-changed(false);
+    }
+    function rail-flyout-step(delta: int) {
+        let n = root.rail-flyout-tools.length;
+        if n <= 0 { return; }
+        let start = root.rail-flyout-highlight < 0 ? (delta > 0 ? -1 : n) : root.rail-flyout-highlight;
+        root.rail-flyout-highlight = Math.mod(start + delta + n, n);
+    }
+    /// Sem destaque, o flyout permanece aberto (padrão da barra de menus).
+    function rail-flyout-invoke() {
+        if root.rail-flyout-highlight >= 0 && root.rail-flyout-highlight < root.rail-flyout-tools.length {
+            root.rail-activate(root.rail-flyout-tools[root.rail-flyout-highlight].id);
+        }
+    }
 
     /// Despacha uma ferramenta do trilho pelo id.
     function rail-activate(id: string) {
@@ -1495,6 +1529,7 @@ export component PetuniaSlintShell inherits Window {
     // Fechamento do popover de criação devolve o foco ao controle que o abriu.
     // Sem invocador de controle, o foco permanece onde estava (popover não modal).
     changed add-menu-open => {
+        root.add-menu-highlight = -1;
         if !root.add-menu-open && root.add-menu-invoker == 1 {
             root.add-menu-invoker = 0;
             root.rail-add-focus-token += 1;
@@ -1561,6 +1596,12 @@ export component PetuniaSlintShell inherits Window {
                 }
                 if root.rail-flyout != "" {
                     root.rail-flyout = "";
+                    return accept;
+                }
+                // O popover de criação integra a pilha: só é o alvo de Escape
+                // quando nenhuma camada bloqueante está acima dele.
+                if root.add-menu-open && !root.regional-focus-blocked {
+                    root.add-menu-changed(false);
                     return accept;
                 }
                 if root.quick-actions-open {
@@ -1659,6 +1700,7 @@ export component PetuniaSlintShell inherits Window {
                     show-tool-labels: root.show-tool-labels;
                     add-menu-open: root.add-menu-open;
                     add-focus-token: root.rail-add-focus-token;
+                    flyout: root.rail-flyout;
                     asset-library-visible: root.asset-library-visible;
 
                     select-tools: root.rail-select-tools;
@@ -1702,6 +1744,12 @@ export component PetuniaSlintShell inherits Window {
                         root.add-menu-open = open;
                         root.add-menu-changed(open);
                     }
+                    add-menu-step(delta) => { root.add-menu-step(delta); }
+                    add-menu-invoke => { root.add-menu-invoke(); }
+                    add-menu-dismiss => { root.add-menu-changed(false); }
+                    flyout-step(delta) => { root.rail-flyout-step(delta); }
+                    flyout-invoke => { root.rail-flyout-invoke(); }
+                    flyout-dismiss => { root.rail-flyout = ""; }
                     animate-action(action, arg, value) => { root.animate-action(action, arg, value); }
                     asset-library-requested => { root.asset-library-requested(); }
                 }
@@ -3314,8 +3362,12 @@ export component PetuniaSlintShell inherits Window {
                                 y: (parent.height - self.height) / 2;
                                 tools: root.rail-cut-tools;
                                 more-hint: Tr.t("sl.rail_more_hint");
+                                flyout-open: root.rail-flyout == "cut";
                                 activated(id) => { root.rail-activate(id); }
                                 more-requested(x, y) => { root.rail-flyout-tools = root.rail-cut-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "cut"; }
+                                flyout-step(delta) => { root.rail-flyout-step(delta); }
+                                flyout-invoke => { root.rail-flyout-invoke(); }
+                                flyout-dismiss => { root.rail-flyout = ""; }
                             }
                             if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("connect"): ToolButton {
                                 icon-svg: PetuniaIcons.tool-connect;
@@ -3791,9 +3843,10 @@ export component PetuniaSlintShell inherits Window {
                         fly-col := VerticalLayout {
                             padding: 4px;
                             spacing: 2px;
-                            for tool in root.rail-flyout-tools: ContextMenuItem {
+                            for tool[index] in root.rail-flyout-tools: ContextMenuItem {
                                 label: tool.label;
                                 shortcut: tool.shortcut;
+                                highlighted: index == root.rail-flyout-highlight;
                                 clicked => { root.rail-activate(tool.id); }
                             }
                         }
@@ -3823,6 +3876,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.cube");
                                 shortcut: "1";
                                 description: Tr.t("sl.parametric_6_sided_hexahedral_box_with_width");
+                                highlighted: root.add-menu-highlight == 0;
                                 clicked => { root.add-primitive-requested("cube"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3830,6 +3884,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.sphere");
                                 shortcut: "2";
                                 description: Tr.t("sl.uv_sphere_parameterized_by_longitude_segment");
+                                highlighted: root.add-menu-highlight == 1;
                                 clicked => { root.add-primitive-requested("sphere"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3837,6 +3892,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.cylinder");
                                 shortcut: "3";
                                 description: Tr.t("sl.parametric_circular_cylinder_with_top_bottom");
+                                highlighted: root.add-menu-highlight == 2;
                                 clicked => { root.add-primitive-requested("cylinder"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3844,6 +3900,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.plane_2");
                                 shortcut: "4";
                                 description: Tr.t("sl.flat_2d_quad_rectangular_plane_surface_posit");
+                                highlighted: root.add-menu-highlight == 3;
                                 clicked => { root.add-primitive-requested("plane"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3851,6 +3908,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.cone");
                                 shortcut: "5";
                                 description: Tr.t("sl.conical_geometry_tapering_to_a_single_apex_v");
+                                highlighted: root.add-menu-highlight == 4;
                                 clicked => { root.add-primitive-requested("cone"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3858,6 +3916,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.capsule");
                                 shortcut: "6";
                                 description: Tr.t("sl.cylindrical_body_capped_by_two_hemispherical");
+                                highlighted: root.add-menu-highlight == 5;
                                 clicked => { root.add-primitive-requested("capsule"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3865,6 +3924,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.torus");
                                 shortcut: "7";
                                 description: Tr.t("sl.donut_shaped_revolution_ring_with_major_and_");
+                                highlighted: root.add-menu-highlight == 6;
                                 clicked => { root.add-primitive-requested("torus"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3872,6 +3932,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.circle");
                                 shortcut: "8";
                                 description: Tr.t("sl.2d_planar_boundary_circle_polygon_or_n_gon_d");
+                                highlighted: root.add-menu-highlight == 7;
                                 clicked => { root.add-primitive-requested("circle"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3879,6 +3940,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.icosphere");
                                 shortcut: "9";
                                 description: Tr.t("sl.polyhedral_geodesic_sphere_composed_of_equil");
+                                highlighted: root.add-menu-highlight == 8;
                                 clicked => { root.add-primitive-requested("icosphere"); root.add-menu-changed(false); }
                             }
                             ToolButton {
@@ -3886,6 +3948,7 @@ export component PetuniaSlintShell inherits Window {
                                 semantic-label: Tr.t("sl.wedge");
                                 shortcut: "0";
                                 description: Tr.t("sl.right_angled_triangular_prism_3d_ramp_mesh");
+                                highlighted: root.add-menu-highlight == 9;
                                 clicked => { root.add-primitive-requested("wedge"); root.add-menu-changed(false); }
                             }
                         }
@@ -4591,10 +4654,29 @@ export component PetuniaSlintShell inherits Window {
                             accessible-item-selected: item.selected;
                             border-radius: 4px;
                             background: item.selected ? DesignTokens.surface-hover : transparent;
-                            border-width: item.selected ? 1px : 0px;
+                            border-width: row-focus.has-focus ? 2px : (item.selected ? 1px : 0px);
                             // Ativo (amarelo) ≠ selecionado (laranja): a
                             // referência das operações sempre identificável.
-                            border-color: item.active ? DesignTokens.selection-active : DesignTokens.selection;
+                            border-color: row-focus.has-focus ? DesignTokens.focus-ring : (item.active ? DesignTokens.selection-active : DesignTokens.selection);
+                            // Linha operável por teclado: Enter/Espaço seleciona;
+                            // Shift+F10/Menu abrem o menu de contexto da linha.
+                            row-focus := FocusScope {
+                                x: 0px;
+                                y: 0px;
+                                width: parent.width;
+                                height: parent.height;
+                                key-pressed(event) => {
+                                    if event.text == Key.Return || event.text == " " {
+                                        root.scene-select(item.id, false);
+                                        return accept;
+                                    }
+                                    if (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu {
+                                        root.scene-context-requested(item.id, (self.absolute-position.x + 8px) / 1px, (self.absolute-position.y + self.height) / 1px);
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                            }
 
                             HorizontalLayout {
                                 padding-left: 8px;
@@ -4614,7 +4696,7 @@ export component PetuniaSlintShell inherits Window {
                                             );
                                         }
                                     }
-                                    clicked => { root.scene-select(item.id, self.extend); }
+                                    clicked => { row-focus.focus(); root.scene-select(item.id, self.extend); }
                                     horizontal-stretch: 1;
 
                                     HorizontalLayout {

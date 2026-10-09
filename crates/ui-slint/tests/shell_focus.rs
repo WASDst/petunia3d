@@ -1,8 +1,8 @@
 //! F6/Shift+F6 regionais. Código de regressão preparado; bateria adiada pelo usuário.
 //! Estes cenários não substituem Tab trap, reader ou aceite nativo.
-use petunia_ui_slint::PetuniaSlintShell;
-use slint::platform::{Key, WindowEvent};
-use slint::{ComponentHandle, LogicalSize};
+use petunia_ui_slint::{PetuniaSlintShell, SceneItem};
+use slint::platform::{Key, PointerEventButton, WindowEvent};
+use slint::{ComponentHandle, LogicalSize, ModelRc, VecModel};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -33,6 +33,16 @@ fn backward(shell: &PetuniaSlintShell) {
         text: Key::Shift.into(),
     });
     key(shell, Key::F6.into());
+    shell.window().dispatch_event(WindowEvent::KeyReleased {
+        text: Key::Shift.into(),
+    });
+}
+/// Shift+tecla: Shift+F10 abre o menu/flyout do controle focado.
+fn shift_key(shell: &PetuniaSlintShell, text: slint::SharedString) {
+    shell.window().dispatch_event(WindowEvent::KeyPressed {
+        text: Key::Shift.into(),
+    });
+    key(shell, text);
     shell.window().dispatch_event(WindowEvent::KeyReleased {
         text: Key::Shift.into(),
     });
@@ -533,4 +543,156 @@ fn home_escape_closes_once_through_its_modal_boundary() {
     i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
     key(&shell, Key::Escape.into());
     assert_eq!(*closed.borrow(), 1, "Escape closes Home exactly once");
+}
+
+#[test]
+fn creation_popover_highlight_navigates_keeps_focus_and_escape_dismisses() {
+    let shell = shell();
+    shell.set_modeling_mode("DRAW".into());
+    // Emulação do bridge: abrir/fechar pelo callback mantém a flag sincronizada.
+    let toggles = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&toggles);
+    let weak = shell.as_weak();
+    shell.on_add_menu_changed(move |open| {
+        observed.borrow_mut().push(open);
+        weak.upgrade().unwrap().set_add_menu_open(open);
+    });
+    let created = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&created);
+    shell.on_add_primitive_requested(move |id| observed.borrow_mut().push(id.to_string()));
+
+    let add = i_slint_backend_testing::ElementHandle::find_by_accessible_label(
+        &shell,
+        &petunia_ui_slint::tr::lookup("sl.add_primitive"),
+    )
+    .find(|item| {
+        item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::Button)
+            && item.absolute_position().x < 60.0
+    })
+    .expect("real rail invoker");
+    add.mock_single_click(PointerEventButton::Left);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    assert!(shell.get_add_menu_open());
+
+    // O foco fica no invocador; setas movem o highlight (padrão da barra de menus).
+    key(&shell, Key::DownArrow.into());
+    assert_eq!(shell.get_add_menu_highlight(), 0, "Down destaca a primeira");
+    key(&shell, Key::DownArrow.into());
+    assert_eq!(shell.get_add_menu_highlight(), 1);
+    key(&shell, Key::UpArrow.into());
+    assert_eq!(shell.get_add_menu_highlight(), 0, "Up recua o destaque");
+    key(&shell, Key::Return.into());
+    assert_eq!(
+        *created.borrow(),
+        vec!["cube"],
+        "Enter cria o item destacado"
+    );
+    assert!(!shell.get_add_menu_open(), "a criação fecha o popover");
+    assert_eq!(*toggles.borrow(), vec![true, false]);
+
+    // Foco permaneceu no invocador: Enter reabre pelo mesmo botão.
+    key(&shell, Key::Return.into());
+    assert!(shell.get_add_menu_open(), "o invocador continua com o foco");
+    key(&shell, Key::DownArrow.into());
+    key(&shell, Key::Escape.into());
+    assert!(
+        !shell.get_add_menu_open(),
+        "Escape fecha o topo dismissible"
+    );
+    assert_eq!(*created.borrow(), vec!["cube"], "Escape não cria");
+    key(&shell, Key::Return.into());
+    assert!(
+        shell.get_add_menu_open(),
+        "foco devolvido ao invocador após Escape"
+    );
+}
+
+#[test]
+fn tool_group_flyout_opens_by_keyboard_and_invokes_the_highlighted_variation() {
+    let shell = shell();
+    shell.set_modeling_mode("DRAW".into());
+    shell.set_label_model_select("Select".into());
+    let tools = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&tools);
+    shell.on_active_tool_changed(move |id| observed.borrow_mut().push(id.to_string()));
+    let commands = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&commands);
+    shell.on_command_executed(move |id| observed.borrow_mut().push(id.to_string()));
+
+    let group = i_slint_backend_testing::ElementHandle::find_by_accessible_label(&shell, "Select")
+        .find(|item| {
+            item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::Button)
+                && item.absolute_position().x < 60.0
+        })
+        .expect("real rail group button");
+    group.mock_single_click(PointerEventButton::Left);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    tools.borrow_mut().clear();
+
+    shift_key(&shell, Key::F10.into());
+    assert_eq!(shell.get_rail_flyout(), "select", "Shift+F10 abre o flyout");
+    key(&shell, Key::DownArrow.into());
+    assert_eq!(shell.get_rail_flyout_highlight(), 0);
+    key(&shell, Key::DownArrow.into());
+    assert_eq!(shell.get_rail_flyout_highlight(), 1, "segunda variação");
+    key(&shell, Key::Return.into());
+    assert_eq!(*commands.borrow(), vec!["model.tool_lasso"]);
+    assert_eq!(shell.get_rail_flyout(), "", "a ativação fecha o flyout");
+
+    // O foco nunca saiu do botão do grupo: Enter volta a ativar a variação mostrada.
+    key(&shell, Key::Return.into());
+    assert_eq!(tools.borrow().last().map(String::as_str), Some("select"));
+}
+
+#[test]
+fn outliner_row_opens_its_context_menu_from_the_keyboard() {
+    let shell = shell();
+    shell.set_model_parts_open(true);
+    shell.set_parts_items(ModelRc::new(VecModel::from(vec![SceneItem {
+        id: "part-a".into(),
+        name: "Part A".into(),
+        visible: true,
+        ..SceneItem::default()
+    }])));
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+
+    let context = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&context);
+    let weak = shell.as_weak();
+    shell.on_scene_context_requested(move |id, x, y| {
+        observed.borrow_mut().push((id.to_string(), x, y));
+        // Emula o bridge: o menu passa a existir sobre a linha.
+        weak.upgrade().unwrap().set_context_menu_open(true);
+    });
+    let selections = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&selections);
+    shell.on_scene_select(move |id, extend| observed.borrow_mut().push((id.to_string(), extend)));
+
+    let row = i_slint_backend_testing::ElementHandle::find_by_accessible_label(&shell, "Part A")
+        .find(|item| {
+            item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::ListItem)
+        })
+        .expect("real outliner row");
+    row.mock_single_click(PointerEventButton::Left);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    assert_eq!(selections.borrow().len(), 1, "clique seleciona a linha");
+
+    shift_key(&shell, Key::F10.into());
+    let menu = context.borrow();
+    assert_eq!(menu.len(), 1, "Shift+F10 pediu o menu de contexto");
+    assert_eq!(menu[0].0, "part-a");
+    assert!(menu[0].2 > 0.0, "o menu abre ancorado na linha");
+    drop(menu);
+
+    // O foco permanece na linha: Enter seleciona sem pointer.
+    key(&shell, Key::Return.into());
+    assert_eq!(selections.borrow().len(), 2);
+
+    // Escape fecha o topo dismissible (menu de contexto) sem decidir nada.
+    let click_aways = Rc::new(RefCell::new(0));
+    let observed = Rc::clone(&click_aways);
+    shell.on_click_away_requested(move || *observed.borrow_mut() += 1);
+    key(&shell, Key::Escape.into());
+    assert!(!shell.get_context_menu_open());
+    assert_eq!(*click_aways.borrow(), 1);
 }

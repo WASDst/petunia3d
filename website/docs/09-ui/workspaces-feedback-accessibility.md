@@ -429,7 +429,10 @@ Regras adicionais obrigatórias:
 4. Escape fecha apenas o topo dismissible;
 5. fechamento restaura foco ao invocador quando ainda válido;
 6. click-away nunca confirma operação destrutiva;
-7. painéis pinados não fecham por click-away.
+7. painéis pinados não fecham por click-away;
+8. **popover não modal não rouba foco** (decisão §26): enquanto está aberto, o shell é dono de um índice de highlight — o mesmo padrão da barra de menus —, as setas movem o destaque, Enter invoca o item destacado e o foco permanece no invocador.
+
+A regra 2 vale para superfícies modais (Modal) e para o foco inicial já existente em listas/segmented. Popovers e flyouts não modais adotam a regra 8: sem entrada automática de foco, sem contenção de Tab e sem bloquear F6/atalhos — é o que os mantém não modais.
 
 ## 17. Badges
 
@@ -647,3 +650,40 @@ Fontes desta etapa (SHA-256):
 **Risks / limites:** nenhum comportamento foi executado nem observado no app nativo. O popover de criação continua **não modal**: não entra em `regional-focus-blocked`, então F6 e os atalhos de ferramenta seguem ativos com ele aberto (os itens anunciam atalhos numéricos). Não há entrada automática de foco no popover, nem navegação por setas nem contenção de Tab; o padrão highlight-based da barra de menus não foi estendido. O menu de contexto da viewport/Outliner ainda só abre por pointer, então o ganho de teclado vale para menus cujo invocador já é focável. Memória de caret não é implementável nesta versão: `TextInput` expõe `cursor-position-byte-offset` apenas como `out property` interna, documentada somente para testes (`i-slint-compiler-1.18.0/builtin_elements.rs`, comentário "Internal, undocumented property, only exposed for tests"), sem setter; o draft de texto sobrevive por binding, mas a posição do cursor não é restaurável pelo app. Traversal de guards, árvore/role acessível, IME, high contrast, escala/resize, Windows/Linux assistivo e aceite nativo seguem pendentes. U07 continua IN PROGRESS; nenhum checkpoint é marcado como concluído.
 
 **Next checkpoint:** decidir a entrada de foco em popovers não modais (unificar com o padrão highlight-based dos menus) e dar caminho de teclado ao flyout de grupo e ao menu de contexto; depois executar shell_focus/lib/viewport_gestures/feature na fase autorizada e registrar aceitação nativa com teclado, pointer, tema/escala e AT-SPI/Windows.
+
+## 26. Slice U07 — popovers não modais por highlight e teclado no flyout e no menu de contexto (2026-10-09)
+
+**Intent / Sources:** fechar a decisão de entrada de foco em popovers não modais e dar caminho de teclado ao flyout de grupo e ao menu de contexto do Outliner. Fontes: §16 (nova regra 8), §18 (teclado/roles/foco visível), implementação em `ui/components/controls.slint`, `ui/shell/tool_rail.slint`, `ui/app.slint`, `ui/inspector/sections.slint`, `tests/shell_focus.rs`. Baseline `90254cd`, branch `refactor/architecture-foundation`. Testes seguem adiados pelo usuário.
+
+**Decisão:** popover não modal **não rouba foco**. Ele opera pelo mesmo padrão highlight-based da barra de menus: o shell é dono de um índice, setas movem o destaque, Enter invoca o item destacado, Escape fecha o topo dismissible e o foco permanece no controle invocador. Consequências pretendidas: F6 e atalhos continuam ativos (caráter não modal preservado), Tab ainda pode entrar nos itens focáveis e não há restauração artificial de foco porque ele nunca mudou de dono. Enquanto o popup está aberto, é o invocador focado que entrega setas/Enter/Espaço/Escape ao popup.
+
+**Gap matrix:**
+
+| Requisito | Realidade antes deste slice | Delta |
+|---|---|---|
+| Operar o popover de criação por teclado | Abria/fechava por Enter, sem navegação nem ação por destaque | Down/Up movem o highlight; Enter cria o destacado; Escape fecha; foco fica no botão |
+| Abrir o flyout de grupo por teclado | Só pointer (botão direito ou marca de canto) | Shift+F10/tecla Menu no botão focado abrem o flyout |
+| Operar o flyout por teclado | Itens focáveis apenas | Down/Up movem o highlight; Enter ativa a variação; Escape fecha |
+| Menu de contexto do Outliner por teclado | Só botão direito na linha | Linhas focáveis: Enter/Espaço seleciona; Shift+F10/Menu abrem o menu ancorado na linha |
+| Pintura do destaque | `highlighted` existia só em `ContextMenuItem` (menus) | `ToolButton` ganhou `highlighted`; popover e flyout projetam o índice do shell |
+| Foco/restauração | Invocador do popover já existia (§25) | Fluxo novo não muda o dono do foco; sem roubo nem restauração |
+
+**Changed:** `ToolButton` ganhou `highlighted`, `popup-open`, `popup-step(int)`, `popup-invoke` e `popup-dismiss`; no `tool-focus`, o ramo de popup entrega setas/Enter/Espaço/Escape ao chamador e o ramo normal aceita Shift+F10 ou `Key.Menu` chamando `secondary-clicked`. `ToolGroup` recebe `flyout-open` e os três callbacks do flyout e os repassa ao botão interno. O Tool Rail recebe `flyout` (id aberto) e seis callbacks (popover + flyout); as sete ToolGroups do trilho e o grupo `cut` do Context Bar passam `flyout-open: root.rail-flyout == "<id>"`.
+
+O shell guarda `add-menu-highlight` e `rail-flyout-highlight` (in-out), a lista `add-menu-ids` na ordem dos dez botões e as funções `add-menu-step/invoke` e `rail-flyout-step/invoke` (mesma matemática do `menu-step`, incluindo o pulo para o último item em Up a partir de -1). `changed rail-flyout` e `changed add-menu-open` resetam o destaque; Escape no shell fecha o popover quando nenhuma camada bloqueante está acima; os dez botões do popover e os itens do flyout projetam o índice. Nenhum callback novo no root: o estado continua de apresentação do shell.
+
+As linhas do Outliner do Inspector (`inspector/sections.slint`) e do drawer compacto (`app.slint`) ganharam um `FocusScope` cobrindo a linha, com anel de foco, Enter/Espaço selecionando e Shift+F10/Menu emitindo `scene-context-requested` ancorado na linha; o clique passa a focar a linha. Document/Undo, formatos, picking e renderer não mudam.
+
+**Verification:** `cargo check -p petunia_ui_slint --lib --tests` **pass**, exit 0 em 5m36s, sem warnings (`/tmp/petunia-u07-popovers-check.log`), depois de todas as edições de markup e dos testes. `cargo fmt -p petunia_ui_slint` aplicado; `cargo fmt -p petunia_ui_slint -- --check` **pass**. Ambiente Linux x86_64, Rust 1.98.1, features default, library e alvos de teste. Três regressões novas em `tests/shell_focus.rs`: `creation_popover_highlight_navigates_keeps_focus_and_escape_dismisses` (Down/Up, Enter cria e fecha, Escape fecha sem criar e o invocador reabre por Enter), `tool_group_flyout_opens_by_keyboard_and_invokes_the_highlighted_variation` (Shift+F10 abre, down até a segunda variação, Enter ativa e o foco continua no grupo) e `outliner_row_opens_its_context_menu_from_the_keyboard` (linha focada, Shift+F10 ancora o menu na linha, Enter segue selecionando e Escape fecha o topo). Todas **not run**, incluindo execução dos alvos de teste — a fase de testes segue adiada. Compilação verde não é prova de comportamento; regressões anteriores não recebem pass retroativo.
+
+Fontes desta etapa (SHA-256):
+
+- `crates/ui-slint/ui/components/controls.slint`: `d4ba6d04760c488c0a6498e5e866304b9c597753ce9973f6feaaf7b66c11ea22`
+- `crates/ui-slint/ui/shell/tool_rail.slint`: `ce5893221f5162421fadee9e625b7cb82cc39cb5ab189f50e20c6e2ab3948101`
+- `crates/ui-slint/ui/app.slint`: `03636a7612a0c01ff0872f8124b43ed8700bddfa6d04cfa6f12509253733fff4`
+- `crates/ui-slint/ui/inspector/sections.slint`: `6c5473400acb9aaf812d3fd3a6905a0fd8f7ba3a61f5a8ee3d9882c83fe7f3a0`
+- `crates/ui-slint/tests/shell_focus.rs`: `a34ab8e138711f933eea577fada4d54d110cf967fc6d6fa383cb8fd6dbb9ca3a`
+
+**Risks / limites:** nenhum comportamento foi executado nem observado no app nativo. A barra de menus não mudou; o menu de contexto ganhou apenas a abertura por teclado — setas dentro dele e navegação por setas entre linhas do Outliner continuam pendentes (os itens já são operáveis por Tab/Enter/Espaço desde §25). `add-menu-ids` duplica a ordem dos botões do popover; o refactor data-driven fica para o design system (U08). Enquanto o popup/flyout está aberto, o invocador focado consome setas/Enter/Espaço/Escape — é o mecanismo que substitui a entrada de foco. Popover e flyout continuam não modais (F6/atalhos ativos); menu de contexto e barra de menus continuam bloqueando a navegação regional. Memória de caret segue não restaurável (herdado de §25). Traversal de guards, árvore/role acessível, IME, high contrast, escala/resize, Windows/Linux assistivo e aceite nativo seguem pendentes. U07 continua IN PROGRESS; nenhum checkpoint é marcado como concluído.
+
+**Next checkpoint:** executar shell_focus/lib/viewport_gestures/feature na fase autorizada e registrar aceitação nativa com teclado, pointer, tema/escala e AT-SPI/Windows; depois avaliar setas dentro do menu de contexto (provável refactor data-driven) e navegação por setas entre linhas do Outliner.
