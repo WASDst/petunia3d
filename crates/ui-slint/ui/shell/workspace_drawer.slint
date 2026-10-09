@@ -10,8 +10,8 @@ export component WorkspaceDrawer inherits Rectangle {
     in property <length> right-clearance: 8px;
     in property <length> bottom-offset: 30px;
     callback height-changed(length);
-    property <length> maximum-height: max(132px, min(520px, root.height - root.bottom-offset - 120px));
-    property <length> effective-height: clamp(root.drawer-height, 132px, root.maximum-height);
+    property <length> drawer-height-limit: max(132px, min(520px, root.height - root.bottom-offset - 120px));
+    property <length> effective-height: clamp(root.drawer-height, 132px, root.drawer-height-limit);
 
     background: transparent;
 
@@ -21,7 +21,7 @@ export component WorkspaceDrawer inherits Rectangle {
         width: parent.width - root.left-offset - root.right-clearance;
         value: root.effective-height;
         minimum: 132px;
-        maximum: root.maximum-height;
+        maximum: root.drawer-height-limit;
         direction: -1.0;
         moved(height) => { root.height-changed(height); }
     }

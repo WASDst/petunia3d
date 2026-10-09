@@ -534,3 +534,19 @@ Regressões escritas, **não executadas**: três unitários de memória/validaç
 **Risks:** toda a wave é `implemented, unverified`; compilação pode revelar diagnósticos e regressões precisam confirmar a integração. A11y inclui melhorias locais, sem conformidade global presumida. O renderer efetivamente iniciado na baseline continua WGPU histórico; isso não implementa o OpenGL de destino.
 
 **Next checkpoint:** prosseguir nos slices de UI autorizados; quando iniciar a fase de testes, compilar e executar a bateria inteira das fontes finais, começando pelas três suítes novas, depois integrações existentes/lib/Clippy/ui-lint/guard do site. Aceite nativo/plataforma permanece evidência separada. Não fechar U01/U02/U03/U06/U08 apenas pela presença dos arquivos.
+
+### Correção de compilação Slint após retomada
+
+O `cargo run` iniciado pelo usuário durante a entrega encontrou **fail** no markup: `WorkspaceDrawer` redeclarava `maximum-height`, propriedade reservada do Slint. Renomeado para `drawer-height-limit` sobre o commit `9e8998adcd6626f380354def0f9dc102f24973b9`.
+
+O build script já compilado foi executado diretamente, com `OUT_DIR` isolado em `/tmp/petunia-u02-u03-slint`, `CARGO_MANIFEST_DIR` do crate, `PROFILE=debug` e `TARGET=x86_64-unknown-linux-gnu`. Resultado **pass** (exit 0) para compilação Slint/geração de Rust, sem warnings/errors no log `/tmp/petunia-u02-u03-slint.log`. Nenhum teste nem rustc da aplicação foi iniciado por essa verificação. Artefato temporário de geração pode ser removido após uso; o log permanece.
+
+```bash
+# Executado a partir de crates/ui-slint, usando o build script produzido pelo cargo run do usuário:
+OUT_DIR=/tmp/petunia-u02-u03-slint \
+CARGO_MANIFEST_DIR=/home/raillen/Documentos/petunia3d-refact/petunia3d-refact/crates/ui-slint \
+PROFILE=debug TARGET=x86_64-unknown-linux-gnu \
+../../target/debug/build/petunia_ui_slint-1c1dad84ce22d80d/build-script-build
+```
+
+Isso comprova somente que o compilador Slint aceita o markup corrigido. Compilação completa Rust, regressões, layout/foco e aceite nativo permanecem **not run** depois da correção, conforme o adiamento do usuário. A falha inicial do `cargo run` e a regressão anterior `shell_focus` não recebem pass retroativo.
