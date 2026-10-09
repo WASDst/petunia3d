@@ -20,6 +20,7 @@ import { IconButton } from "components/base.slint";
 import { StatusToast } from "components/feedback.slint";
 import { ShellHeader } from "shell/header.slint";
 import { ModalFocusBoundary } from "shell/modal_focus_boundary.slint";
+import { DialogActionButton } from "shell/dialog_action.slint";
 import { ToolRail } from "shell/tool_rail.slint";
 import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
@@ -4698,12 +4699,19 @@ export component PetuniaSlintShell inherits Window {
         // Overlay: recuperação de autosave (P3D-002 §Recuperação segura).
         // Home (cap. 23): Novo, Abrir, Recuperar, Recentes, Ajustes. Some ao
         // escolher qualquer caminho; Esc também fecha.
-        if home-open: Rectangle {
+        // Home é modal: Tab fica contido, Esc fecha e o foco inicial é seguro.
+        if home-open: home-focus := ModalFocusBoundary {
             x: 0;
             y: 0;
             width: parent.width;
             height: parent.height;
             background: DesignTokens.scrim;
+            accessible-role: groupbox;
+            accessible-label: root.home-texts.title;
+            initial-focus => { home-new.focus(); }
+            first-focus => { home-new.focus(); }
+            last-focus => { home-settings.focus(); }
+            dismiss-requested => { root.home-closed(); }
             TouchArea { }
 
             Rectangle {
@@ -4738,7 +4746,7 @@ export component PetuniaSlintShell inherits Window {
                     HorizontalLayout {
                         spacing: 8px;
                         alignment: start;
-                        IconButton {
+                        home-new := IconButton {
                             icon: IconSet.Plus;
                             label: root.home-texts.new;
                             semantic-label: root.home-texts.new;
@@ -4791,6 +4799,19 @@ export component PetuniaSlintShell inherits Window {
                         accessible-role: button;
                         accessible-label: recent.name;
                         accessible-description: recent.path;
+                        forward-focus: recent-key;
+                        border-width: recent-key.has-focus ? 2px : 0px;
+                        border-color: DesignTokens.focus-ring;
+                        recent-key := FocusScope {
+                            key-pressed(event) => {
+                                if event.text == Key.Return || event.text == " " {
+                                    if root.recovery-open { root.recovery-keep-requested(); }
+                                    root.home-recent-opened(recent.path);
+                                    return accept;
+                                }
+                                reject
+                            }
+                        }
                         accessible-action-default => {
                             if root.recovery-open { root.recovery-keep-requested(); }
                             root.home-recent-opened(recent.path);
@@ -4842,6 +4863,19 @@ export component PetuniaSlintShell inherits Window {
                             accessible-checked: root.show-home-on-start;
                             accessible-label: root.home-texts.show-on-start;
                             accessible-action-default => { root.show-home-on-start-set(!root.show-home-on-start); }
+                            forward-focus: start-key;
+                            border-width: start-key.has-focus ? 2px : 0px;
+                            border-color: DesignTokens.focus-ring;
+                            border-radius: 4px;
+                            start-key := FocusScope {
+                                key-pressed(event) => {
+                                    if event.text == Key.Return || event.text == " " {
+                                        root.show-home-on-start-set(!root.show-home-on-start);
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                            }
                             TouchArea { clicked => { root.show-home-on-start-set(!root.show-home-on-start); } }
                             home-start-row := HorizontalLayout {
                                 spacing: 8px;
@@ -4867,7 +4901,7 @@ export component PetuniaSlintShell inherits Window {
                                 }
                             }
                         }
-                        IconButton {
+                        home-settings := IconButton {
                             icon: IconSet.Settings;
                             label: root.home-texts.settings;
                             semantic-label: root.home-texts.settings;
@@ -4881,15 +4915,24 @@ export component PetuniaSlintShell inherits Window {
             }
         }
 
-        if recovery-open && !home-open: Rectangle {
+        // Recuperação: decisão explícita. Esc e click-away não descartam nem recuperam;
+        // o foco inicial é "Manter", a ação não destrutiva.
+        if recovery-open && !home-open: recovery-focus := ModalFocusBoundary {
             x: 0;
             y: 0;
             width: parent.width;
             height: parent.height;
             background: DesignTokens.scrim;
+            initial-focus => { recovery-keep.focus(); }
+            first-focus => { recovery-discard.focus(); }
+            last-focus => { recovery-recover.focus(); }
+            dismiss-requested => { }
+            TouchArea { }
 
             Rectangle {
                 width: 460px;
+                accessible-role: groupbox;
+                accessible-label: root.recovery-title;
                 height: recovery-layout.preferred-height;
                 x: (parent.width - self.width) / 2;
                 y: 96px;
@@ -4923,32 +4966,23 @@ export component PetuniaSlintShell inherits Window {
 
                     HorizontalLayout {
                         spacing: 8px;
-                        height: 30px;
 
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            border-radius: 4px;
-                            background: DesignTokens.surface;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-                            Text { text: root.recovery-discard; color: DesignTokens.danger; font-size: DesignTokens.font-small; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
-                            TouchArea { clicked => { root.recovery-discard-requested(); } }
+                        recovery-discard := DialogActionButton {
+                            label: root.recovery-discard;
+                            semantic-label: root.recovery-discard;
+                            danger: true;
+                            clicked => { root.recovery-discard-requested(); }
                         }
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            border-radius: 4px;
-                            background: DesignTokens.surface;
-                            border-width: 1px;
-                            border-color: DesignTokens.border;
-                            Text { text: root.recovery-keep; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
-                            TouchArea { clicked => { root.recovery-keep-requested(); } }
+                        recovery-keep := DialogActionButton {
+                            label: root.recovery-keep;
+                            semantic-label: root.recovery-keep;
+                            clicked => { root.recovery-keep-requested(); }
                         }
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            border-radius: 4px;
-                            background: DesignTokens.accent;
-                            Text { text: root.recovery-recover; color: DesignTokens.on-accent; font-size: DesignTokens.font-small; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                            TouchArea { clicked => { root.recovery-recover-requested(); } }
+                        recovery-recover := DialogActionButton {
+                            label: root.recovery-recover;
+                            semantic-label: root.recovery-recover;
+                            primary: true;
+                            clicked => { root.recovery-recover-requested(); }
                         }
                     }
                 }
