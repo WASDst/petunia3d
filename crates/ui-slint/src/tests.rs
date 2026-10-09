@@ -9356,11 +9356,18 @@ fn test_reference_manager_operations_and_f4_shortcut() {
     assert!(!bridge.view_model().reference_manager_open);
     assert!(bridge.open_reference_manager());
     assert!(bridge.view_model().reference_manager_open);
-    // Referências é painel flutuante, não modal (plano U07).
-    assert_eq!(
-        bridge.overlays.top().map(|entry| entry.kind),
-        Some(crate::overlay::OverlayKind::FloatingPanel)
+    // Referências é painel flutuante, não modal (plano U07):
+    // click-away não fecha; Esc e o botão de fechar seguem valendo.
+    let entry = bridge.overlays.top().expect("references on the stack");
+    assert_eq!(entry.kind, crate::overlay::OverlayKind::FloatingPanel);
+    assert!(entry.pinned);
+    assert!(entry.dismiss_on_escape);
+    assert!(!entry.dismiss_on_click_away);
+    assert!(
+        !bridge.handle_click_away(),
+        "click-away must not close the references panel"
     );
+    assert!(bridge.view_model().reference_manager_open);
 
     // Add a reference image to project.refs
     let dummy_rgba = vec![255u8; 16 * 16 * 4];

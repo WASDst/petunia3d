@@ -7534,27 +7534,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Abre o painel flutuante do Gerenciador de Referências (P3D-013).
     /// Não é modal: não prende foco nem bloqueia Esc além do topo da pilha.
+    /// Fica pinado porque se trabalha com ele aberto: click-away não fecha,
+    /// só Esc ou o botão de fechar.
     pub fn open_reference_manager(&mut self) -> bool {
         self.reference_manager_open = true;
         self.overlays.push(OverlayEntry {
             id: OverlayId::ReferenceManager,
             kind: OverlayKind::FloatingPanel,
-            pinned: false,
+            pinned: true,
             dismiss_on_escape: true,
-            dismiss_on_click_away: true,
+            dismiss_on_click_away: false,
         });
         self.state.set_status(self.state.t("sl.reference_images"));
         true
     }
 
-    /// Fecha a modal do Gerenciador de Referências.
+    /// Fecha o painel do Gerenciador de Referências.
     pub fn close_reference_manager(&mut self) -> bool {
         self.reference_manager_open = false;
         self.overlays.remove(OverlayId::ReferenceManager);
         true
     }
 
-    /// Alterna a visibilidade da modal do Gerenciador de Referências.
+    /// Alterna a visibilidade do painel do Gerenciador de Referências.
     pub fn toggle_reference_manager(&mut self) -> bool {
         if self.reference_manager_open {
             self.close_reference_manager()
