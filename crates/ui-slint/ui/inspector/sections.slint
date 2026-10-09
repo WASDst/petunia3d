@@ -294,6 +294,7 @@ export component InspectorPill inherits Rectangle {
     out property <bool> has-hover: pill-touch.has-hover;
     /// Incrementar move o foco de teclado para esta pílula (usado por F6).
     in property <int> focus-token: 0;
+    in property <bool> focus-enabled: true;
     callback clicked;
     callback hovered(string);
     changed focus-token => { if root.focus-token > 0 { pill-focus.focus(); } }
@@ -301,7 +302,8 @@ export component InspectorPill inherits Rectangle {
     accessible-role: button;
     accessible-label: root.semantic-label;
     accessible-checked: root.active;
-    accessible-action-default => { root.clicked(); }
+    accessible-enabled: root.focus-enabled;
+    accessible-action-default => { if root.focus-enabled { root.clicked(); } }
     // 36 px: contrato do rail (ADR 004) e alvo de clique confortável.
     width: 36px;
     height: 36px;
@@ -324,6 +326,7 @@ export component InspectorPill inherits Rectangle {
 
     // Teclado: Tab foca a pílula (e abre o peek), Enter/Espaço fixa ou solta a seção.
     pill-focus := FocusScope {
+        enabled: root.focus-enabled;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
             reject
@@ -349,6 +352,7 @@ export component InspectorPill inherits Rectangle {
     }
 
     pill-touch := TouchArea {
+        enabled: root.focus-enabled;
         clicked => { root.clicked(); }
         changed has-hover => {
             if self.has-hover {

@@ -80,6 +80,11 @@
       "revision": "Slice compilado (default library) sobre fbe5aa79cc2f573b6e5c7f8ba4e7df6608f28b10; hashes registrados em §22",
       "document": "09-ui/viewport-input-boundary.md",
       "summary": "§22: layout/sections em shell_layout; DTOs/execução em viewport_actions; API antiga, picking/keymap/ToolSession preservados. cargo check default --lib pass, exit 0, 3m20s, sem warnings. Quatro regressões escritas, not run; feature/runtime/reader/GL/Windows pendentes. Não conclui checkpoints comportamentais."
+    },
+    "regional-focus": {
+      "revision": "Slice compilado (default library) sobre 36266107236163f63b4c584bc0cd28b8ae95afca; hashes registrados em Workspaces §23",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "summary": "§23: F6/Shift+F6 com sete IDs regionais, skip do Context Bar vazio em ANIMATE, recuperação de região, captura F6/setas e proteção de overlays. cargo check default --lib pass, exit 0 em 2m04s, sem warnings, Linux x86_64/Rust 1.98.1. Quatro regressões escritas, not run. Tab trap/memória por controle/reader pendentes; não conclui checkpoints."
     }
   },
   "tasks": [
@@ -428,7 +433,7 @@
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Correção limitada escrita: F6 aponta para Structure visível no painel expandido e pill no rail recolhido; token zero não força foco. Regressão anterior 1 pass / 1 fail; pós-correção not run por adiamento do usuário. Navegação completa/reader Windows-Linux pendentes. §20 Slint Rescue.",
+      "baseline": "Slice escrito e cargo check default --lib pass sobre 3626610: entradas F6/Shift+F6 por sete IDs com disponibilidade/retorno (Context Bar omitida em ANIMATE), proteção de overlays/roteador global e captura F6/setas. Quatro regressões not run por adiamento do usuário. Tab trap, invocador por controle, IME/reader e aceite nativo pendentes (§23 Workspaces).",
       "checkpoints": [
         {
           "title": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer",
@@ -460,9 +465,9 @@
       "title": "Foco e overlays",
       "description": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro; validar menus, diálogos e painéis pinados.",
       "document": "09-ui/workspaces-feedback-accessibility.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "A auditar. crates/ui-slint/src/overlay.rs, crates/ui-slint/ui/dialogs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Slice escrito e cargo check default --lib pass sobre 3626610: entradas F6/Shift+F6 por sete IDs com disponibilidade/retorno (Context Bar omitida em ANIMATE), proteção de overlays/roteador global e captura F6/setas. Quatro regressões not run por adiamento do usuário. Tab trap, invocador por controle, IME/reader e aceite nativo pendentes (§23 Workspaces).",
       "checkpoints": [
         {
           "title": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro",

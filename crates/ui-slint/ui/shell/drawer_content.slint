@@ -7,6 +7,9 @@ import { ScrollView } from "std-widgets.slint";
 export component WorkspaceDrawerContent inherits Rectangle {
     in property <[string]> tabs;
     in property <int> selected-tab: 0;
+    in property <int> region-focus-token: 0;
+    in property <bool> region-focus-enabled: true;
+    changed region-focus-token => { if root.region-focus-token > 0 { root.select-tab(root.selected-tab); } }
     callback tab-selected(int);
     callback close-requested();
     private property <int> navigation-token: 0;
@@ -51,6 +54,7 @@ export component WorkspaceDrawerContent inherits Rectangle {
                             vertical-alignment: center;
                         }
                         tab-focus := FocusScope {
+                            enabled: root.region-focus-enabled;
                             key-pressed(event) => {
                                 if event.text == Key.Return || event.text == " " { root.select-tab(index); return accept; }
                                 if event.text == Key.LeftArrow { root.select-tab(max(0, index - 1)); return accept; }

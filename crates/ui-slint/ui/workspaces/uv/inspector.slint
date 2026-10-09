@@ -39,6 +39,8 @@ export component UvInspector inherits Rectangle {
     in property <bool> structure-collapsed: false;
     in property <bool> properties-collapsed: false;
     in property <int> structure-focus-token: 0;
+    in property <int> properties-focus-token: 0;
+    in property <bool> regional-focus-enabled: true;
     callback split-ratio-changed(float);
     callback pane-collapsed-set(int, bool);
 
@@ -55,6 +57,7 @@ export component UvInspector inherits Rectangle {
             title: Tr.t("sl.uv_operations");
             collapsed: root.structure-collapsed;
             focus-token: root.structure-focus-token;
+            focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
             InspectorSection {
                 title: Tr.t("sl.uv_operations");
@@ -99,6 +102,8 @@ export component UvInspector inherits Rectangle {
             y: split.properties-y;
             height: split.properties-height;
             collapsed: root.properties-collapsed;
+            focus-token: root.properties-focus-token;
+            focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
             // Preserva o espaçamento entre seções do bloco anterior no shell.
             spacing: 10px;

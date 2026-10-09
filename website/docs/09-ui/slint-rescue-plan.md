@@ -557,3 +557,9 @@ Layout/sections extraídos para `bridge/shell_layout.rs`; select/box/lasso segue
 
 
 Check de compilação do conjunto U02/U03/U04: `CARGO_BUILD_JOBS=1 cargo check -p petunia_ui_slint --lib` **pass**, exit 0 em 3m20s, sem warnings (`/tmp/petunia-u04-check.log`). O check default inclui o markup corrigido; não é execução dos testes, feature animation-workspace, link/startup, aceite visual/reader/GL/Windows. U02/U03/U04/U06/U08 continuam em andamento, sem novos checkpoints comportamentais concluídos.
+
+## 22. Slice U06/U07 — navegação regional (2026-10-09)
+
+Ciclo F6/Shift+F6 com sete entradas, skip de regiões indisponíveis (incluindo Context Bar vazio em ANIMATE), captura de binding antes da navegação, bloqueio de overlays e retorno regional escrito. Header/Tools/Work Surface/Context usam anchors sem TouchArea; Structure/Properties/Drawer reutilizam entradas existentes. Estado de apresentação no shell; nenhum novo owner autoral. Detalhes e limites: [Workspaces §23](./workspaces-feedback-accessibility.md#23-slice-u06u07--entradas-regionais-e-retorno-de-foco-2026-10-09). Tab confinado, focus trap completo, memória por controle e reader ainda pendentes. U06/U07 IN PROGRESS (000%); testes adiados pelo usuário.
+
+Compilação das fontes finais: `CARGO_BUILD_JOBS=1 cargo check -p petunia_ui_slint --lib` **pass**, exit 0 em 2m04s, sem warnings (`/tmp/petunia-u06-check-final.log`). Linux x86_64, Rust 1.98.1, default library. Quatro regressões preparadas, **not run**; feature/runtime/aceite nativo/reader/Windows pendentes. Identidade das fontes e limites em Workspaces §23.

@@ -354,7 +354,13 @@ export component PetuniaSlintShell inherits Window {
     pure callback text-matches(string, string) -> bool;
     // F6 alterna o foco de teclado entre a viewport e a régua do Inspector.
     in-out property <int> f6-rail-token: 0;
-    in-out property <bool> f6-in-rail: false;
+    // 0 Header, 1 Tools, 2 Surface, 3 Structure, 4 Properties, 5 Drawer, 6 Context.
+    in-out property <int> focus-region: 2;
+    private property <int> region-focus-epoch: 0;
+    in-out property <bool> f6-in-rail: root.focus-region == 3 || root.focus-region == 4;
+    property <bool> regional-focus-blocked: root.home-open || root.recovery-open
+        || root.command-search-visible || root.settings-visible || root.reference-manager-visible
+        || root.menu-open != "" || root.context-menu-open;
     in-out property <float> ui-scale: 1.0;
     in-out property <string> icon-theme: "outline";
     in-out property <string> active-language: "pt-BR";
@@ -1421,6 +1427,54 @@ export component PetuniaSlintShell inherits Window {
         }
     }
 
+    function region-available(region: int) -> bool {
+        if region == 3 { return root.inspector-visible && !root.compact-shell; }
+        if region == 4 { return root.inspector-visible && !root.compact-shell && root.inspector-expanded; }
+        if region == 5 { return root.asset-library-visible; }
+        if region == 6 { return root.active-workspace != "ANIMATE"; }
+        return region >= 0 && region <= 6;
+    }
+    function next-focus-region(reverse: bool) -> int {
+        let step = reverse ? -1 : 1;
+        // Seven fixed regions, no speculative registry or traversal of authoring data.
+        let candidate1 = mod(root.focus-region + 1 * step + 7, 7);
+        if root.region-available(candidate1) { return candidate1; }
+        let candidate2 = mod(root.focus-region + 2 * step + 7, 7);
+        if root.region-available(candidate2) { return candidate2; }
+        let candidate3 = mod(root.focus-region + 3 * step + 7, 7);
+        if root.region-available(candidate3) { return candidate3; }
+        let candidate4 = mod(root.focus-region + 4 * step + 7, 7);
+        if root.region-available(candidate4) { return candidate4; }
+        let candidate5 = mod(root.focus-region + 5 * step + 7, 7);
+        if root.region-available(candidate5) { return candidate5; }
+        let candidate6 = mod(root.focus-region + 6 * step + 7, 7);
+        if root.region-available(candidate6) { return candidate6; }
+        let candidate7 = mod(root.focus-region + 7 * step + 7, 7);
+        if root.region-available(candidate7) { return candidate7; }
+        return 2;
+    }
+    function enter-focus-region(region: int) {
+        if root.focus-region == 3 && region != 3 && !root.inspector-expanded && !root.rail-hovered && !root.flyout-hovered {
+            root.hovered-inspector-section = "";
+        }
+        root.focus-region = root.region-available(region) ? region : 2;
+        root.region-focus-epoch += 1;
+        if root.focus-region == 3 && !root.inspector-expanded { root.f6-rail-token += 1; }
+    }
+    function reconcile-focus-region() {
+        if root.region-focus-epoch > 0 && !root.regional-focus-blocked && !root.region-available(root.focus-region) {
+            root.enter-focus-region(2);
+        }
+    }
+    changed regional-focus-blocked => {
+        if !root.regional-focus-blocked && root.region-focus-epoch > 0 { root.enter-focus-region(root.focus-region); }
+    }
+    changed inspector-visible => { root.reconcile-focus-region(); }
+    changed inspector-expanded => { root.reconcile-focus-region(); }
+    changed compact-shell => { root.reconcile-focus-region(); }
+    changed asset-library-visible => { root.reconcile-focus-region(); }
+    changed active-workspace => { root.reconcile-focus-region(); }
+
     root-focus := FocusScope {
         init => { self.focus(); }
         key-released(event) => {
@@ -1431,22 +1485,6 @@ export component PetuniaSlintShell inherits Window {
         key-pressed(event) => {
             root.precision-mode = event.modifiers.shift;
             root.snap-mode = event.modifiers.control;
-            if root.settings-visible && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
-                root.settings-tab = event.text == Key.DownArrow ? min(root.settings-tab + 1, 8) : max(root.settings-tab - 1, 0);
-                return accept;
-            }
-            if event.text == Key.F6 {
-                if root.f6-in-rail && !root-focus.has-focus && root.inspector-visible && !root.compact-shell {
-                    root.f6-in-rail = false;
-                    root-focus.focus();
-                } else if root.inspector-visible && !root.compact-shell {
-                    root.f6-in-rail = true;
-                    root.f6-rail-token += 1;
-                } else {
-                    root-focus.focus();
-                }
-                return accept;
-            }
             // Captura de atalho (Configurações → Teclado): a próxima combinação vai
             // para a ação pendente; Esc cancela sem fechar o painel.
             if root.keymap-capture-action != "" {
@@ -1455,6 +1493,14 @@ export component PetuniaSlintShell inherits Window {
                 } else {
                     root.keymap-capture-key(root.shortcut-key-name(event.text), event.modifiers.control, event.modifiers.shift, event.modifiers.alt);
                 }
+                return accept;
+            }
+            if root.settings-visible && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
+                root.settings-tab = event.text == Key.DownArrow ? min(root.settings-tab + 1, 8) : max(root.settings-tab - 1, 0);
+                return accept;
+            }
+            if event.text == Key.F6 {
+                if !root.regional-focus-blocked { root.enter-focus-region(root.next-focus-region(event.modifiers.shift)); }
                 return accept;
             }
             if root.menu-open != "" {
@@ -1515,7 +1561,7 @@ export component PetuniaSlintShell inherits Window {
                 root.escape-requested();
                 return accept;
             }
-            if !root.command-search-visible && !root.settings-visible {
+            if !root.regional-focus-blocked {
                 root.shortcut-requested(
                     root.shortcut-key-name(event.text),
                     event.modifiers.control, event.modifiers.shift, event.modifiers.alt);
@@ -1528,6 +1574,8 @@ export component PetuniaSlintShell inherits Window {
             spacing: 0px;
 
             ShellHeader {
+                region-focus-token: root.focus-region == 0 && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                region-focus-enabled: !root.regional-focus-blocked;
                 menu-open: root.menu-open;
                 menu-file-label: root.menu-file-label;
                 menu-edit-label: root.menu-edit-label;
@@ -1572,6 +1620,8 @@ export component PetuniaSlintShell inherits Window {
 
                 // Contextual Tool Rail: estado permanece no shell; o componente só projeta e emite intents.
                 ToolRail {
+                    region-focus-token: root.focus-region == 1 && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                    region-focus-enabled: !root.regional-focus-blocked;
                     active-workspace: root.active-workspace;
                     modeling-mode: root.modeling-mode;
                     active-tool: root.active-tool;
@@ -1628,6 +1678,8 @@ export component PetuniaSlintShell inherits Window {
                 Rectangle {
                     horizontal-stretch: 1;
                 viewport-region := PetuniaViewportHost {
+                    region-focus-token: root.focus-region == 2 && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                    region-focus-enabled: !root.regional-focus-blocked;
                     width: root.split-enabled ? (parent.width - 4px) / 2 : parent.width;
                     height: parent.height;
                     split-enabled: root.split-enabled;
@@ -3151,6 +3203,9 @@ export component PetuniaSlintShell inherits Window {
 
                     // Barra contextual flutuante na base da viewport.
                     context-bar := ContextBar {
+                            visible: root.region-available(6);
+                            region-focus-token: root.focus-region == 6 && root.region-available(6) && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                            region-focus-enabled: !root.regional-focus-blocked;
                             x: (parent.width - self.width) / 2;
                             y: parent.height - self.height - 14px;
                             // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
@@ -3819,7 +3874,8 @@ export component PetuniaSlintShell inherits Window {
                         hovered-section <=> root.hovered-inspector-section;
                         flyout-hovered <=> root.flyout-hovered;
                         rail-hovered <=> root.rail-hovered;
-                        f6-rail-token: root.f6-rail-token;
+                        regional-focus-enabled: !root.regional-focus-blocked;
+                        f6-rail-token: root.focus-region == 3 && !root.regional-focus-blocked ? root.f6-rail-token : 0;
 
                         parts-open: root.model-parts-open;
                         transform-open: root.model-transform-open;
@@ -3849,7 +3905,9 @@ export component PetuniaSlintShell inherits Window {
                                 structure-collapsed: root.inspector-structure-collapsed;
                                 properties-collapsed: root.inspector-properties-collapsed;
                                 // F6 must target a visible header when the rail is hidden by an open panel.
-                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                regional-focus-enabled: !root.regional-focus-blocked;
+                                structure-focus-token: root.focus-region == 3 && root.region-available(3) && root.inspector-expanded && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                                properties-focus-token: root.focus-region == 4 && root.region-available(4) && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
                                 split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
                                 pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 model-parts-open : root.model-parts-open;
@@ -4029,7 +4087,9 @@ export component PetuniaSlintShell inherits Window {
                                 structure-collapsed: root.inspector-structure-collapsed;
                                 properties-collapsed: root.inspector-properties-collapsed;
                                 // F6 must target a visible header when the rail is hidden by an open panel.
-                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                regional-focus-enabled: !root.regional-focus-blocked;
+                                structure-focus-token: root.focus-region == 3 && root.region-available(3) && root.inspector-expanded && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                                properties-focus-token: root.focus-region == 4 && root.region-available(4) && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
                                 split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
                                 pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 active-layer-is-decal: root.active-layer-is-decal;
@@ -4163,7 +4223,9 @@ export component PetuniaSlintShell inherits Window {
                                 structure-collapsed: root.inspector-structure-collapsed;
                                 properties-collapsed: root.inspector-properties-collapsed;
                                 // F6 must target a visible header when the rail is hidden by an open panel.
-                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                regional-focus-enabled: !root.regional-focus-blocked;
+                                structure-focus-token: root.focus-region == 3 && root.region-available(3) && root.inspector-expanded && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                                properties-focus-token: root.focus-region == 4 && root.region-available(4) && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
                                 split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
                                 pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 texts: root.animate-texts;
@@ -4194,7 +4256,9 @@ export component PetuniaSlintShell inherits Window {
                                 structure-collapsed: root.inspector-structure-collapsed;
                                 properties-collapsed: root.inspector-properties-collapsed;
                                 // F6 must target a visible header when the rail is hidden by an open panel.
-                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                regional-focus-enabled: !root.regional-focus-blocked;
+                                structure-focus-token: root.focus-region == 3 && root.region-available(3) && root.inspector-expanded && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                                properties-focus-token: root.focus-region == 4 && root.region-available(4) && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
                                 split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
                                 pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 label-unwrap-mesh: root.label-unwrap-mesh;
@@ -5609,6 +5673,8 @@ export component PetuniaSlintShell inherits Window {
             height-changed(height) => { root.asset-library-height-changed(height / 1px); }
 
             WorkspaceDrawerContent {
+                region-focus-token: root.focus-region == 5 && root.region-available(5) && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
+                region-focus-enabled: !root.regional-focus-blocked;
                 width: parent.width;
                 height: parent.height;
                 tabs: root.active-workspace == "PAINT" ? [root.label-project-asset-library, Tr.t("sl.brush_presets"), Tr.t("sl.color_palette")]

@@ -28,6 +28,7 @@ export component RightColumnShell inherits Rectangle {
     in-out property <bool> rail-hovered: false;
 
     in property <int> f6-rail-token: 0;
+    in property <bool> regional-focus-enabled: true;
 
     in property <bool> parts-open: false;
     in property <bool> transform-open: false;
@@ -81,6 +82,7 @@ export component RightColumnShell inherits Rectangle {
             alignment: start;
 
             InspectorPill {
+                focus-enabled: root.regional-focus-enabled;
                 focus-token: root.inspector-expanded ? 0 : root.f6-rail-token;
                 section-id: "parts";
                 icon: IconSet.Layers3;
@@ -92,6 +94,7 @@ export component RightColumnShell inherits Rectangle {
                 hovered(id) => { root.hovered-section = id; }
             }
             InspectorPill {
+                focus-enabled: root.regional-focus-enabled;
                 section-id: "transform";
                 icon: IconSet.Move3d;
                 icon-svg: PetuniaIcons.transform;
@@ -102,6 +105,7 @@ export component RightColumnShell inherits Rectangle {
                 hovered(id) => { root.hovered-section = id; }
             }
             InspectorPill {
+                focus-enabled: root.regional-focus-enabled;
                 section-id: "material";
                 icon: IconSet.Paintbrush;
                 icon-svg: PetuniaIcons.material;
@@ -112,6 +116,7 @@ export component RightColumnShell inherits Rectangle {
                 hovered(id) => { root.hovered-section = id; }
             }
             InspectorPill {
+                focus-enabled: root.regional-focus-enabled;
                 section-id: "object";
                 icon: IconSet.Box;
                 icon-svg: PetuniaIcons.object-mesh;

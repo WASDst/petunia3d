@@ -808,6 +808,8 @@ export component AnimateInspector inherits Rectangle {
     in property <bool> structure-collapsed: false;
     in property <bool> properties-collapsed: false;
     in property <int> structure-focus-token: 0;
+    in property <int> properties-focus-token: 0;
+    in property <bool> regional-focus-enabled: true;
     callback split-ratio-changed(float);
     callback pane-collapsed-set(int, bool);
 
@@ -824,6 +826,7 @@ export component AnimateInspector inherits Rectangle {
             title: root.texts.title-creature;
             collapsed: root.structure-collapsed;
             focus-token: root.structure-focus-token;
+            focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
             // Recolhe sozinha quando já existe uma criatura; a lista de motions permanece acessível.
             InspectorSection {
@@ -862,6 +865,8 @@ export component AnimateInspector inherits Rectangle {
             y: split.properties-y;
             height: split.properties-height;
             collapsed: root.properties-collapsed;
+            focus-token: root.properties-focus-token;
+            focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
             spacing: 10px;
 

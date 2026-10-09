@@ -133,6 +133,8 @@ export component PaintInspector inherits Rectangle {
     in property <bool> structure-collapsed: false;
     in property <bool> properties-collapsed: false;
     in property <int> structure-focus-token: 0;
+    in property <int> properties-focus-token: 0;
+    in property <bool> regional-focus-enabled: true;
     callback split-ratio-changed(float);
     callback pane-collapsed-set(int, bool);
 
@@ -149,6 +151,7 @@ export component PaintInspector inherits Rectangle {
             title: Tr.t("sl.layers");
             collapsed: root.structure-collapsed;
             focus-token: root.structure-focus-token;
+            focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
             VerticalLayout {
                 spacing: 4px;
@@ -352,6 +355,8 @@ export component PaintInspector inherits Rectangle {
             y: split.properties-y;
             height: split.properties-height;
             collapsed: root.properties-collapsed;
+            focus-token: root.properties-focus-token;
+            focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
             // Preparar superfície (UV): desembrulhar e empacotar ilhas dentro do fluxo de pintura.
                 InspectorSection {

@@ -505,7 +505,7 @@ Tokens atuais ainda incluem 10/11 px.
 Texto funcional normal deve começar em **12 logical px**. Tamanhos menores ficam restritos a informação realmente auxiliar e precisam passar verificação de legibilidade/escala.
 
 ### Navegação F6
-O key parser reconhece F6, porém a navegação regional completa ainda não é considerada implementada.
+O slice U06/U07 (§23) escreve o ciclo de entrada F6/Shift+F6 por sete regiões com disponibilidade e proteção de overlays. Tab confinado, memória exata por controle e validação assistiva permanecem pendentes; não considerar navegação completa verificada.
 
 ### Focus management
 `OverlayStack` já controla LIFO e dismiss, porém a restauração/trap de foco precisa entrar no contrato e nos testes.
@@ -537,8 +537,43 @@ A GUI não é MODEL com painéis trocados, nem quatro aplicativos independentes.
 
 A especialização ocorre no conteúdo de Tool Rail, Work Surface, Structure, Properties e Workspace Drawer; interação, feedback e acessibilidade permanecem compartilhados e previsíveis.
 
-## 21. Implementação da wave U02/U03 (2026-10-09)
+## 22. Implementação da wave U02/U03 (2026-10-09)
 
 O split Structure/Properties e o drawer por workspace estão escritos sobre `1edfb24`, com estado efêmero de layout no bridge e abas locais no shell. MODEL conserva Parts/propriedades; PAINT separa Layers/decal e migra presets/paleta para o drawer; ANIMATE separa Creature/Motion Stack dos parâmetros; UV mantém seu conteúdo transitório até a promoção da Work Surface.
 
 Scrolls independentes, resize/collapse, teclado das alças/abas/chips/swatches e destino F6 para a região visível foram escritos. **Compilação, testes e aceite nativo adiados pelo usuário: not run.** Não declarar conformidade assistiva, fechamento da navegação regional nem DONE a partir deste registro. Gap, arquivos, regressão inicial fail e próximo checkpoint: [Slint Rescue §20](./slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).
+
+## 23. Slice U06/U07 — entradas regionais e retorno de foco (2026-10-09)
+
+**Intent / Sources:** executar a ordem regional de §18 e corrigir o roteamento de foco/teclado com overlays, sobre `36266107236163f63b4c584bc0cd28b8ae95afca`, branch `refactor/architecture-foundation`. Testes de comportamento continuam adiados pelo usuário.
+
+**Gap:** F6 alternava somente viewport/Inspector, ignorava Shift+F6, processava F6 antes de capturar bindings e podia entregar foco a entradas de fundo em overlays. Painéis que sumiam por resize/close não tinham recuperação regional explícita. U02 disponibilizou cabeçalhos independentes, reaproveitados aqui.
+
+**Changed:**
+
+| Região / responsabilidade | Implementação escrita |
+|---|---|
+| Ordem | Header → Tool Rail → Work Surface → Structure → Properties → Drawer → Context Bar, com ciclo inverso Shift+F6. Estado inicial Work Surface; primeiro F6 avança para a próxima região disponível |
+| Disponibilidade | Structure usa a pill no rail fechado ou o header no painel aberto; Properties somente no painel expandido; ambos omitidos em compact/hidden. Drawer somente quando aberto; Context Bar omitida em ANIMATE, onde ainda não tem ações |
+| Entradas | `RegionFocusAnchor` com nome traduzido, papel groupbox, ring e FocusScope; sem TouchArea. Header Enter abre File; Tools Enter seleciona Select; Work Surface preserva atalhos/confirm de ferramenta. Pane headers e aba selecionada do drawer reaproveitados |
+| Segurança de foco | F6 bloqueado em Home/Recovery, Settings, Command Palette, References, menu e contexto. Captura de binding tem precedência, permitindo gravar F6 e setas antes da navegação de Settings. Entradas novas, pills e pane headers são desabilitados durante overlays; global shortcut routing também respeita o bloqueio |
+| Retorno | Fechar o conjunto de overlays restaura a região lembrada; se indisponível, Work Surface. Resize compact/ocultar inspector/fechar drawer/trocar para workspace sem a região recupera Work Surface. Sair de Structure fecha o peek aberto pelo teclado, preservando hover/pin |
+| Estado | Apenas apresentação efêmera no shell; sem novo owner de Document/Undo, sem persistir IDs de foco no projeto, sem novo toolkit ou renderer |
+
+Os sete IDs de apresentação (0–6) são documentados no shell, sem registry especulativo. `f6-rail-token`/`f6-in-rail` permanecem como projeções de compatibilidade. Foco de viewport fica acima da imagem e abaixo dos overlays/conteúdo, preservando ordem visual existente.
+
+**Limites explícitos:** esta etapa implementa **entradas regionais**, não uma conclusão de todo U06/U07. A navegação nativa de Tab continua existente: confinamento por região/modal ainda não foi implementado. A memória registra a última região de navegação, não o controle exato nem todas as transições de foco por mouse. Focus trap completo, restauração de draft/caret, IME, nomes/disabled reasons globais, leitores de tela e audit Linux/Windows continuam pendentes. Bloquear o roteador global e as entradas regionais não equivale a desabilitar todos os controles de fundo de todos os overlays.
+
+**Verification:** compilação intermediária do markup pelo build script isolado: pass, exit 0 (`/tmp/petunia-u06-slint.log`), antes dos últimos ajustes de bloqueio/ring. `CARGO_BUILD_JOBS=1 cargo check -p petunia_ui_slint --lib` nas fontes finais **pass**, exit 0 em 2m04s, sem warnings (`/tmp/petunia-u06-check-final.log`), Linux x86_64, toolchain Rust 1.98.1, features default. Esse check não compila os alvos de teste nem confirma link/startup/feature animation-workspace. `cargo fmt -p petunia_ui_slint` aplicado e revisão `git diff --check` pass. Nenhum teste executado nesta etapa.
+
+`tests/shell_focus.rs` foi atualizado para o contrato novo de sete regiões (o antigo ciclo de duas regiões foi substituído pela decisão documentada, preservando prova física de Enter/callback). Quatro cenários preparados: ciclo direto/inverso em quatro workspaces/três temas e rotas reais; skip/resize/close; bloqueio/retorno de overlays; captura de F6/setas em bindings. O cenário de disponibilidade também cobre o Context Bar vazio em ANIMATE. Todos **not run**. O fail histórico de U01/F6 permanece histórico, sem pass retroativo. Suíte já está incluída na CI configurada; execução remota não inferida.
+
+Fontes finais desta etapa (SHA-256):
+
+- `crates/ui-slint/ui/app.slint`: `7ca8d2b8e090816d138c7f3dbefcbcd833cb763c9c43c04745f593a82e2f4b61`
+- `crates/ui-slint/ui/shell/focus_anchor.slint`: `bd8924d10ef2ebb8e9cdd728edd67cb2d30433c592eb86201fcb93d9e9e25746`
+- `crates/ui-slint/tests/shell_focus.rs`: `61e2fc9de9c05674512a4496e82c2662909c3d1d108699d8c5c6e381e87a087a`
+
+**Risks:** check de compilação não comprova ordem nativa de Tab, foco visual, bubbling sob controles, reader, GL ou low-end. Widgets de overlay existentes ainda precisam do focus trap próprio. U06/U07 permanecem IN PROGRESS (000%), sem mudar o denominador ou alegar conformidade WCAG.
+
+**Next checkpoint:** implementar Tab regional/trap de overlays e memória de foco por controle em slice próprio. Na fase de testes posterior, executar shell_focus, viewport_gestures, shell suites/lib/feature e validar foco/teclado/temas/escala/AT-SPI no app nativo.

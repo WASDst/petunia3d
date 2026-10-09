@@ -1,3 +1,4 @@
+import { RegionFocusAnchor } from "focus_anchor.slint";
 import { IconSet } from "@lucide";
 import { AnimateRowEntry, AnimTile } from "../animate.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
@@ -8,6 +9,8 @@ import { ShortcutsEntry } from "../types.slint";
 /// Tool Rail contextual.
 /// Não possui estado de documento: recebe projeções do shell e emite ações.
 export component ToolRail inherits Rectangle {
+    in property <int> region-focus-token: 0;
+    in property <bool> region-focus-enabled: true;
     in property <string> active-workspace: "MODEL";
     in property <string> modeling-mode: "POLY";
     in property <string> active-tool: "";
@@ -45,6 +48,15 @@ export component ToolRail inherits Rectangle {
     background: DesignTokens.surface-raised;
     border-width: 1px;
     border-color: DesignTokens.border;
+
+    RegionFocusAnchor {
+        width: root.width;
+        height: root.height;
+        label: Tr.t("sl.region_tools");
+        focus-token: root.region-focus-token;
+        enabled: root.region-focus-enabled;
+        activated => { root.rail-activate("select"); }
+    }
 
     VerticalLayout {
         padding-top: 8px;

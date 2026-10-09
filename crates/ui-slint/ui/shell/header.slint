@@ -1,3 +1,4 @@
+import { RegionFocusAnchor } from "focus_anchor.slint";
 import { IconSet } from "@lucide";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
@@ -9,6 +10,8 @@ import { MenuButton, TopAction, WorkspaceSegment } from "../components/controls.
 /// Não conhece documento, mesh ou módulos; apenas recebe estado de apresentação
 /// e emite intents semânticas para o shell.
 export component ShellHeader inherits Rectangle {
+    in property <int> region-focus-token: 0;
+    in property <bool> region-focus-enabled: true;
     in property <string> menu-open: "";
     in property <string> menu-file-label;
     in property <string> menu-edit-label;
@@ -46,6 +49,15 @@ export component ShellHeader inherits Rectangle {
     border-width: 1px;
     border-color: DesignTokens.border;
 
+    RegionFocusAnchor {
+        width: root.width;
+        height: root.height;
+        label: Tr.t("sl.region_header");
+        focus-token: root.region-focus-token;
+        enabled: root.region-focus-enabled;
+        activated => { root.menu-toggled("file", file-menu.absolute-position.x); }
+    }
+
     HorizontalLayout {
         width: parent.width;
         height: parent.height;
@@ -66,7 +78,7 @@ export component ShellHeader inherits Rectangle {
 
             Rectangle { width: 4px; }
 
-            MenuButton {
+            file-menu := MenuButton {
                 label: root.menu-file-label;
                 shortcut: "Alt+F";
                 description: Tr.t("sl.new_open_save_import_export_projects_and_sce");
