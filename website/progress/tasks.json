@@ -1,0 +1,2306 @@
+{
+  "schemaVersion": 1,
+  "branch": "refactor/architecture-foundation",
+  "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
+  "updated": "2026-10-09",
+  "phases": [
+    {
+      "id": "integrity",
+      "title": "0 · Integridade",
+      "description": "Correções propostas a partir de divergências confirmadas no código."
+    },
+    {
+      "id": "slint-gl",
+      "title": "1 · Slint e OpenGL",
+      "description": "Rescue da interface, limites de input e viewport."
+    },
+    {
+      "id": "foundations",
+      "title": "2 · Application, Document e Assets",
+      "description": "Ownership, sessões, persistência e recursos."
+    },
+    {
+      "id": "geometry",
+      "title": "3 · Geometry",
+      "description": "Modelagem, topologia, avaliação e transforms."
+    },
+    {
+      "id": "workflows",
+      "title": "4 · Workspaces",
+      "description": "Materials, PAINT, UV, References e ANIMATE."
+    },
+    {
+      "id": "adapters",
+      "title": "5 · Import/export e extensões",
+      "description": "Interchange, Lua e MCP sobre o domínio único."
+    },
+    {
+      "id": "quality",
+      "title": "6 · Qualidade e distribuição",
+      "description": "Jobs, métricas e gates de aceitação."
+    },
+    {
+      "id": "governance",
+      "title": "Contínuo · Documentação e processo",
+      "description": "Coerência canônica e checkpoints de entrega."
+    }
+  ],
+  "evidence": {
+    "ui-checkpoint": {
+      "revision": "bafd02b15fcc006a32f783236e0c87ec74354f51",
+      "document": "09-ui/slint-rescue-plan.md",
+      "summary": "Checkpoint §16: 537 testes headless, fmt, ui-lint e Clippy pass. Visual, Windows, GL, screen reader, low-end e feature animation-workspace: not run."
+    },
+    "tracker-delivery": {
+      "revision": "Arquivos desta entrega, validados antes do commit sobre bafd02b15fcc006a32f783236e0c87ec74354f51",
+      "document": "17-reimplementation/index.md",
+      "summary": "T01: sintaxe, validador de 66 processos/66 docs, seis testes Node e guard documental pass; navegador local claro, filtros/links/teclado e viewport 390px pass. CI remota, screen reader formal, tema escuro e Windows: not run."
+    }
+  },
+  "tasks": [
+    {
+      "id": "G01",
+      "phase": "integrity",
+      "title": "Auto Unwrap",
+      "description": "Avaliar xatlas em triangulação derivada e devolver UV por corner sem alterar quads/n-gons; garantir rollback em erro e atualizar seams.",
+      "document": "07-uv/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Confirmado no código. crates/mesh/src/uv_xatlas.rs:41. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Avaliar xatlas em triangulação derivada e devolver UV por corner sem alterar quads/n-gons",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "garantir rollback em erro e atualizar seams",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "07-uv/architecture-decision.md",
+        "03-geometry/uv-migration-map.md"
+      ]
+    },
+    {
+      "id": "G02",
+      "phase": "integrity",
+      "title": "Validation/Repair",
+      "description": "Separar validação estrita sem mutação, repair externo com relatório e cleanup explícito; remover auto-repair de comandos internos.",
+      "document": "03-geometry/validation-repair-cleanup.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Confirmado no código. crates/mesh/src/lib.rs:103, crates/core/src/command.rs:2062. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Separar validação estrita sem mutação, repair externo com relatório e cleanup explícito",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "remover auto-repair de comandos internos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/validation-repair-cleanup.md"
+      ]
+    },
+    {
+      "id": "U01",
+      "phase": "slint-gl",
+      "title": "Shell e inspetores",
+      "description": "Concluir a extração dos inspetores e overlays/HUD do shell, preservando controles, bindings e gestos.",
+      "document": "09-ui/slint-rescue-plan.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-09",
+      "baseline": "Parcial verificado. crates/ui-slint/ui/app.slint:4317. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Extrair AnimateInspector e preservar a regressão ANIMATE no backend headless.",
+          "completed": true,
+          "evidence": "ui-checkpoint"
+        },
+        {
+          "title": "Extrair UvInspector, restaurar isolamento PAINT e executar regressões UV/PAINT.",
+          "completed": true,
+          "evidence": "ui-checkpoint"
+        },
+        {
+          "title": "Extrair o conteúdo MODEL do shell.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Extrair o conteúdo PAINT do shell.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Modularizar overlays/HUD remanescentes sem regressões.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar gates após as extrações restantes e registrar equivalência visual, foco e teclado.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/slint-rescue-plan.md",
+        "09-ui/slint-reassessment.md"
+      ]
+    },
+    {
+      "id": "U02",
+      "phase": "slint-gl",
+      "title": "Structure/Properties",
+      "description": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário.",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/ui-slint/ui/shell/right_column.slint:13. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/workspaces-feedback-accessibility.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "U03",
+      "phase": "slint-gl",
+      "title": "Workspace Drawer",
+      "description": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack; preservar Assets/Prefabs, filtros e teclado.",
+      "document": "09-ui/slint-rescue-plan.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/ui-slint/ui/shell/workspace_drawer.slint. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "preservar Assets/Prefabs, filtros e teclado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/slint-rescue-plan.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/workspace-ux.md",
+        "09-ui/slint-reassessment.md"
+      ]
+    },
+    {
+      "id": "U04",
+      "phase": "slint-gl",
+      "title": "Bridge e intents",
+      "description": "Decompor lib.rs/callbacks.rs por responsabilidade; tornar select/hover/box/lasso/tool pointer DTOs explícitos; manter picking/Geometry em Rust.",
+      "document": "09-ui/viewport-input-boundary.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/ui-slint/src/lib.rs, crates/ui-slint/src/callbacks.rs, crates/ui-slint/src/bridge/viewport.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Decompor lib.rs/callbacks.rs por responsabilidade",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "tornar select/hover/box/lasso/tool pointer DTOs explícitos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "manter picking/Geometry em Rust",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/viewport-input-boundary.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "U05",
+      "phase": "slint-gl",
+      "title": "Input PAINT",
+      "description": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas; fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split.",
+      "document": "09-ui/viewport-input-boundary.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/ui-slint/src/bridge/paint.rs:25. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/viewport-input-boundary.md",
+        "06-paint/workspace-ux.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "R01",
+      "phase": "slint-gl",
+      "title": "Renderer neutro",
+      "description": "Application/Geometry devem produzir RenderFrameInput/RenderMesh/RenderObjects; renderer deixa de consumir AppState; consolidar GL concreto em petunia-render.",
+      "document": "04-renderer/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/render-gl/src/lib.rs:322, crates/render/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Application/Geometry devem produzir RenderFrameInput/RenderMesh/RenderObjects",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "renderer deixa de consumir AppState",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "consolidar GL concreto em petunia-render",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "04-renderer/architecture-decision.md",
+        "08-reference-projection/architecture-decision.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "R02",
+      "phase": "slint-gl",
+      "title": "Slint + OpenGL",
+      "description": "Substituir startup WGPU por GL 3.3/glow/FBO compartilhado com Slint/FemtoVG; textura GPU sem readback/frame, ownership/thread/context/state restore, resize/HiDPI/picking.",
+      "document": "04-renderer/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/ui-slint/src/lib.rs:16675. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Substituir startup WGPU por GL 3.3/glow/FBO compartilhado com Slint/FemtoVG",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "textura GPU sem readback/frame, ownership/thread/context/state restore, resize/HiDPI/picking",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "04-renderer/architecture-decision.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "R03",
+      "phase": "slint-gl",
+      "title": "Paridade visual",
+      "description": "Portar Flat/Smooth/Sharp, edges em pixels, EdgeMode, seleção/outline, grid/workplane, gizmos, X-Ray, face orientation, MSAA, Matcap, AO opcional e dirty uploads. Remover backends legados somente depois dos gates.",
+      "document": "04-renderer/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial; validar paridade. crates/render-gl/src/lib.rs, crates/render-wgpu/src. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Portar Flat/Smooth/Sharp, edges em pixels, EdgeMode, seleção/outline, grid/workplane, gizmos, X-Ray, face orientation, MSAA, Matcap, AO opcional e dirty uploads. Remover backends legados somente depois dos gates",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "04-renderer/architecture-decision.md",
+        "03-geometry/normals-shading-sharp-edges.md",
+        "05-materials/architecture-decision.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "U06",
+      "phase": "slint-gl",
+      "title": "Acessibilidade",
+      "description": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer; auditar screen reader Linux/Windows.",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Cobertura parcial. crates/ui-slint/tests/viewport_gestures.rs, crates/ui-slint/ui/components. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "auditar screen reader Linux/Windows",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/workspaces-feedback-accessibility.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/workspace-ux.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "U07",
+      "phase": "slint-gl",
+      "title": "Foco e overlays",
+      "description": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro; validar menus, diálogos e painéis pinados.",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "A auditar. crates/ui-slint/src/overlay.rs, crates/ui-slint/ui/dialogs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "validar menus, diálogos e painéis pinados",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/workspaces-feedback-accessibility.md",
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "U08",
+      "phase": "slint-gl",
+      "title": "Design system e legibilidade",
+      "description": "Substituir controles ad-hoc gradualmente; fechar todos os estados, texto operacional >=12 logical px, alvos >=28px, escala 100–200%, temas/contraste/motion, overflow, listas virtualizadas e NumericField sem wheel incidental.",
+      "document": "09-ui/slint-reassessment.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "A auditar. crates/ui-slint/ui/tokens.slint, crates/ui-slint/ui/components/controls.slint. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Substituir controles ad-hoc gradualmente",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "fechar todos os estados, texto operacional >=12 logical px, alvos >=28px, escala 100–200%, temas/contraste/motion, overflow, listas virtualizadas e NumericField sem wheel incidental",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/slint-reassessment.md",
+        "09-ui/slint-rescue-plan.md",
+        "09-ui/workspaces-feedback-accessibility.md"
+      ]
+    },
+    {
+      "id": "U09",
+      "phase": "slint-gl",
+      "title": "Slint Go/No-Go",
+      "description": "Comprovar fluxo create/select/transform/DRAW/Push-Pull/Undo/save/material/reference/project-photo; Split2 ativo/passivo, low-end, a11y e Windows/Linux. Não retirar fallback antes da aceitação.",
+      "document": "09-ui/slint-reassessment.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Gates pendentes. website/docs/09-ui/slint-rescue-plan.md:344. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Comprovar fluxo create/select/transform/DRAW/Push-Pull/Undo/save/material/reference/project-photo",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Split2 ativo/passivo, low-end, a11y e Windows/Linux. Não retirar fallback antes da aceitação",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/slint-reassessment.md",
+        "04-renderer/architecture-decision.md",
+        "09-ui/slint-rescue-plan.md",
+        "14-quality/testing-ci-conformance.md",
+        "15-platform/build-distribution-compatibility.md"
+      ]
+    },
+    {
+      "id": "A01",
+      "phase": "foundations",
+      "title": "Core mínimo",
+      "description": "Mover UiState, câmera, comandos, tool state e coordenação para Application; preservar handles, matemática neutra e algoritmos corretos.",
+      "document": "01-core/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/core/src/state.rs:1741, crates/core/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Mover UiState, câmera, comandos, tool state e coordenação para Application",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "preservar handles, matemática neutra e algoritmos corretos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "01-core/architecture-decision.md",
+        "01-core/current-code-triage.md"
+      ]
+    },
+    {
+      "id": "A02",
+      "phase": "foundations",
+      "title": "Application/DesktopHost",
+      "description": "Substituir app::Core por Application neutra e DesktopHost; injetar relógio/filesystem/watchers/locks, retirar efeitos de construtores e aposentar ModuleRegistry interno gradualmente.",
+      "document": "02-application/commands-events-services.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/app/src/lib.rs:29, crates/app/src/lib.rs:54. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Substituir app::Core por Application neutra e DesktopHost",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "injetar relógio/filesystem/watchers/locks, retirar efeitos de construtores e aposentar ModuleRegistry interno gradualmente",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/commands-events-services.md",
+        "01-core/architecture-decision.md",
+        "01-core/current-code-triage.md",
+        "02-application/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "A03",
+      "phase": "foundations",
+      "title": "Document/EditorSession",
+      "description": "Separar DocumentSession, SelectionState, ViewportSession e ToolSessionManager; retirar seleção/câmera/recentes/export/UI do documento; mover referências autorais para Document.",
+      "document": "02-application/state-separation.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/state.rs:322, crates/core/src/state.rs:836, crates/project/src/lib.rs:948. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Separar DocumentSession, SelectionState, ViewportSession e ToolSessionManager",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "retirar seleção/câmera/recentes/export/UI do documento",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "mover referências autorais para Document",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/state-separation.md",
+        "01-core/architecture-decision.md",
+        "02-application/architecture-decision.md",
+        "11-project/project-persistence.md"
+      ]
+    },
+    {
+      "id": "A04",
+      "phase": "foundations",
+      "title": "Commands/Queries/Events",
+      "description": "Restringir contextos hoje baseados em AppState; centralizar mutations single-writer; separar intents de fatos; devolver DTOs, diagnostics e invalidações pós-commit.",
+      "document": "02-application/commands-events-services.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/command.rs, crates/core/src/events.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Restringir contextos hoje baseados em AppState",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "centralizar mutations single-writer",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "separar intents de fatos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "devolver DTOs, diagnostics e invalidações pós-commit",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/commands-events-services.md",
+        "01-core/architecture-decision.md",
+        "01-core/current-code-triage.md",
+        "02-application/architecture-decision.md",
+        "09-ui/viewport-input-boundary.md",
+        "13-extensions/mcp-automation-agents.md"
+      ]
+    },
+    {
+      "id": "A05",
+      "phase": "foundations",
+      "title": "Selection única",
+      "description": "Eleger SelectionDomain, migrar consumidores de SelectMode e tirar seleção de Vertex/Face/Mesh para Application; manter remapping topológico e IDs tipados.",
+      "document": "01-core/camera-and-selection.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/core/src/selection.rs:7, crates/mesh/src/lib.rs:20. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Eleger SelectionDomain, migrar consumidores de SelectMode e tirar seleção de Vertex/Face/Mesh para Application",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "manter remapping topológico e IDs tipados",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "01-core/camera-and-selection.md",
+        "01-core/architecture-decision.md",
+        "01-core/current-code-triage.md",
+        "02-application/state-separation.md",
+        "03-geometry/architecture-decision.md",
+        "03-geometry/modeling-workspaces.md"
+      ]
+    },
+    {
+      "id": "A06",
+      "phase": "foundations",
+      "title": "ToolSession/Undo/dirty",
+      "description": "Separar settings persistentes de sessão ativa; padronizar preview/commit/cancel, uma operação = uma entrada de Undo; eliminar dirty boolean concorrente com histórico/revisão.",
+      "document": "02-application/state-separation.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/state.rs:570, crates/core/src/state.rs:326. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Separar settings persistentes de sessão ativa",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "padronizar preview/commit/cancel, uma operação = uma entrada de Undo",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "eliminar dirty boolean concorrente com histórico/revisão",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/state-separation.md",
+        "01-core/architecture-decision.md",
+        "01-core/current-code-triage.md",
+        "02-application/commands-events-services.md",
+        "09-ui/viewport-input-boundary.md",
+        "11-project/project-persistence.md"
+      ]
+    },
+    {
+      "id": "A07",
+      "phase": "foundations",
+      "title": "Câmera",
+      "description": "Mover ownership para EditorSession/Application; adicionar preset pseudo-isométrico 2:1 ortográfico, 26,565°, preservando framing; manter presets e navegação existentes.",
+      "document": "01-core/camera-and-selection.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Implementar delta. crates/core/src/camera.rs:16. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Mover ownership para EditorSession/Application",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "adicionar preset pseudo-isométrico 2:1 ortográfico, 26,565°, preservando framing",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "manter presets e navegação existentes",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "01-core/camera-and-selection.md"
+      ]
+    },
+    {
+      "id": "P01",
+      "phase": "foundations",
+      "title": "SceneObject/ObjectGeometry",
+      "description": "Distinguir instância de Library Asset; adotar ObjectId e uma fonte Mesh/Spline/PlanarShape/Generator; tirar parametric+mesh e evaluation cache do Asset legado; active fica na sessão.",
+      "document": "03-geometry/object-geometry-source.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/lib.rs:420. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Distinguir instância de Library Asset",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "adotar ObjectId e uma fonte Mesh/Spline/PlanarShape/Generator",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "tirar parametric+mesh e evaluation cache do Asset legado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "active fica na sessão",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/object-geometry-source.md",
+        "02-application/state-separation.md",
+        "03-geometry/generators-redesign.md",
+        "03-geometry/scene-hierarchy-transforms.md",
+        "11-project/assets-resource-management.md"
+      ]
+    },
+    {
+      "id": "P02",
+      "phase": "foundations",
+      "title": "Persistência",
+      "description": "Preservar codec/atomic writer existentes; migrar snapshots autorais, schema/IDs/refs e staged load; saved revision fiel durante edição, limites/corrupt input, migrations e round-trip completo.",
+      "document": "11-project/project-persistence.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial; validar contrato. crates/project/src/format.rs, crates/project/src/io_atomic.rs:33, crates/core/src/project_service.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Preservar codec/atomic writer existentes",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "migrar snapshots autorais, schema/IDs/refs e staged load",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "saved revision fiel durante edição, limites/corrupt input, migrations e round-trip completo",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "11-project/project-persistence.md",
+        "02-application/state-separation.md",
+        "08-reference-projection/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "P03",
+      "phase": "foundations",
+      "title": "Recovery/autosave",
+      "description": "Separar política de infraestrutura, recentes e locks; coalescer por project/revision, cinco gerações/configuração; Recover/Inspect/Discard, preservar original e tratar falhas/crashes.",
+      "document": "11-project/project-persistence.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial; validar contrato. crates/project/src/autosave.rs, crates/app/src/lib.rs:35. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Separar política de infraestrutura, recentes e locks",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "coalescer por project/revision, cinco gerações/configuração",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Recover/Inspect/Discard, preservar original e tratar falhas/crashes",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "11-project/project-persistence.md",
+        "02-application/commands-events-services.md",
+        "02-application/state-separation.md"
+      ]
+    },
+    {
+      "id": "P04",
+      "phase": "foundations",
+      "title": "Assets e recursos",
+      "description": "Stores tipadas, Embedded/ProjectRelative/ExternalExplicit, Relink, Missing Dependencies, shared edit/Make Unique, Library metadata e Package Project portátil; evitar cópias e resolução silenciosa.",
+      "document": "11-project/assets-resource-management.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/model_library.rs, crates/project/src/package.rs, crates/module-assets/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Stores tipadas, Embedded/ProjectRelative/ExternalExplicit, Relink, Missing Dependencies, shared edit/Make Unique, Library metadata e Package Project portátil",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "evitar cópias e resolução silenciosa",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "11-project/assets-resource-management.md",
+        "12-interchange/import-export-game-ready.md"
+      ]
+    },
+    {
+      "id": "G03",
+      "phase": "geometry",
+      "title": "FaceCorner transversal",
+      "description": "Substituir verts+uv paralelos por corners, índices/pins/material slots tipados; migrar queries/triangulação/HalfEdge, operações, UV, loader, IO, attachments, Paint, render, MCP/FFI mantendo projetos antigos.",
+      "document": "03-geometry/uv-migration-map.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/mesh/src/lib.rs:40. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Substituir verts+uv paralelos por corners, índices/pins/material slots tipados",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "migrar queries/triangulação/HalfEdge, operações, UV, loader, IO, attachments, Paint, render, MCP/FFI mantendo projetos antigos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/uv-migration-map.md",
+        "03-geometry/architecture-decision.md",
+        "03-geometry/uv-face-corners.md",
+        "07-uv/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "G04",
+      "phase": "geometry",
+      "title": "Geometry e topologia",
+      "description": "Manter Mesh indexada autoral, HalfEdge derivado, n-gons e triangulação compartilhada; fortalecer TopologyResult/ElementRemap, UV/material/color/sharp/provenance, seleção e attachments.",
+      "document": "03-geometry/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/mesh/src/lib.rs, crates/mesh/src/topology.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Manter Mesh indexada autoral, HalfEdge derivado, n-gons e triangulação compartilhada",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "fortalecer TopologyResult/ElementRemap, UV/material/color/sharp/provenance, seleção e attachments",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/architecture-decision.md",
+        "03-geometry/uv-face-corners.md"
+      ]
+    },
+    {
+      "id": "G05",
+      "phase": "geometry",
+      "title": "DRAW/POLY",
+      "description": "Um Modeling Engine, commands/Undo/selection/snap/sessions comuns; aposentar ProfileState transitório duplicado; DRAW planar sem mover Workplane/objeto ao trocar câmera.",
+      "document": "03-geometry/draw-unification-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/core/src/state.rs:168, crates/core/src/poly_pen.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Um Modeling Engine, commands/Undo/selection/snap/sessions comuns",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "aposentar ProfileState transitório duplicado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "DRAW planar sem mover Workplane/objeto ao trocar câmera",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/draw-unification-proposal.md",
+        "03-geometry/modeling-workspaces.md",
+        "03-geometry/splines-planar-shapes.md"
+      ]
+    },
+    {
+      "id": "G06",
+      "phase": "geometry",
+      "title": "Spline/PlanarShape",
+      "description": "Bezier Pen deve editar SplineResource direto; aposentar BezierPath autoral; ProfileResource→PlanarShape, outer e holes via SplineId; thickness explícito, shapes persistentes e Bezier on Surface.",
+      "document": "03-geometry/splines-planar-shapes.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/project/src/spline.rs:148, crates/project/src/profile.rs:146. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Bezier Pen deve editar SplineResource direto",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "aposentar BezierPath autoral",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "ProfileResource→PlanarShape, outer e holes via SplineId",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "thickness explícito, shapes persistentes e Bezier on Surface",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/splines-planar-shapes.md",
+        "03-geometry/draw-unification-proposal.md",
+        "03-geometry/modeling-workspaces.md",
+        "03-geometry/object-geometry-source.md"
+      ]
+    },
+    {
+      "id": "G07",
+      "phase": "geometry",
+      "title": "Workplane e inference",
+      "description": "Workplane global/session congelado por gesto, modos Auto/Ground/View/Face/Selection/Custom/Reference; unificar inference/snap/spline snap e flags; integrar scene-wide IDs/transforms, HUD/locks/midplane e caches por revisão.",
+      "document": "03-geometry/snapping-inference-workplane.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/inference.rs, crates/core/src/snap.rs, crates/project/src/spline.rs:868. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Workplane global/session congelado por gesto, modos Auto/Ground/View/Face/Selection/Custom/Reference",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "unificar inference/snap/spline snap e flags",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "integrar scene-wide IDs/transforms, HUD/locks/midplane e caches por revisão",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/snapping-inference-workplane.md",
+        "03-geometry/draw-unification-proposal.md",
+        "03-geometry/modeling-workspaces.md",
+        "03-geometry/snapping-inference-attachments.md"
+      ]
+    },
+    {
+      "id": "G08",
+      "phase": "geometry",
+      "title": "Spatial queries/attachments",
+      "description": "Compartilhar BVH/picking/snap/raycast; targets estáveis versus visual-only; SurfaceAttachment com ObjectId, triângulo autoral/corners e topology revision; remap inequívoco ou NeedsReattach.",
+      "document": "03-geometry/snapping-inference-attachments.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/project/src/surface_attachment.rs:15. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Compartilhar BVH/picking/snap/raycast",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "targets estáveis versus visual-only",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "SurfaceAttachment com ObjectId, triângulo autoral/corners e topology revision",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "remap inequívoco ou NeedsReattach",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/snapping-inference-attachments.md",
+        "03-geometry/snapping-inference-workplane.md",
+        "06-paint/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "G09",
+      "phase": "geometry",
+      "title": "Hierarchy/Collections/Prefabs",
+      "description": "ObjectId/CollectionId, parent/unparent preservando world, prevenção de ciclo/shear, ordem visual independente, parent+child sem dupla transformação e prefab/glTF round-trip.",
+      "document": "03-geometry/scene-hierarchy-transforms.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/lib.rs:420, crates/project/src/lib.rs:962, crates/project/src/prefab.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "ObjectId/CollectionId, parent/unparent preservando world, prevenção de ciclo/shear, ordem visual independente, parent+child sem dupla transformação e prefab/glTF round-trip",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/scene-hierarchy-transforms.md",
+        "03-geometry/transforms-origin-pivot-gizmos.md"
+      ]
+    },
+    {
+      "id": "G10",
+      "phase": "geometry",
+      "title": "Transforms/origin/pivot",
+      "description": "Object Mode altera Transform; Edit Mode altera geometria local. Converter world/local, separar Origin/Pivot, Apply Transform, scale negativo/não uniforme/shear e Undo enxuto.",
+      "document": "03-geometry/transforms-origin-pivot-gizmos.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/core/src/state.rs:748, crates/project/src/lib.rs:449. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Object Mode altera Transform",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Edit Mode altera geometria local. Converter world/local, separar Origin/Pivot, Apply Transform, scale negativo/não uniforme/shear e Undo enxuto",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/transforms-origin-pivot-gizmos.md",
+        "03-geometry/scene-hierarchy-transforms.md"
+      ]
+    },
+    {
+      "id": "G11",
+      "phase": "geometry",
+      "title": "Orientations/gizmos",
+      "description": "World/Local/Workplane/Normal/View, Pivot Active/Individual; consolidar gizmo Petunia, tirar autoridade Local inferida por face, oferecer numeric inputs e snapping único.",
+      "document": "03-geometry/transforms-origin-pivot-gizmos.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/state.rs:748, crates/core/src/state.rs:776. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "World/Local/Workplane/Normal/View, Pivot Active/Individual",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "consolidar gizmo Petunia, tirar autoridade Local inferida por face, oferecer numeric inputs e snapping único",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/transforms-origin-pivot-gizmos.md",
+        "03-geometry/snapping-inference-workplane.md"
+      ]
+    },
+    {
+      "id": "G12",
+      "phase": "geometry",
+      "title": "Generators",
+      "description": "Contrato único Primitive/Extrude/Revolve/Sweep: source IDs, Preview/Final, diagnostics, cache/dependencies/revisions, UV/materials e criação/Inspector/Undo; Make Editable explícito. Reutilizar kernels, não reescrever todos.",
+      "document": "03-geometry/generators-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/path_generator.rs:87, crates/project/src/lib.rs:452. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Contrato único Primitive/Extrude/Revolve/Sweep: source IDs, Preview/Final, diagnostics, cache/dependencies/revisions, UV/materials e criação/Inspector/Undo",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Make Editable explícito. Reutilizar kernels, não reescrever todos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/generators-implementation.md",
+        "03-geometry/generators-redesign.md",
+        "03-geometry/object-geometry-source.md",
+        "03-geometry/splines-planar-shapes.md"
+      ]
+    },
+    {
+      "id": "G13",
+      "phase": "geometry",
+      "title": "Geometry evaluation/modifiers",
+      "description": "Serviço único Base→Modified→Deformed para render/picking/export; caches fora do objeto por revision; integrar Generator, Mirror/Symmetry, Apply, skin/pose e attachments. Stack extra é expansão condicionada.",
+      "document": "03-geometry/modifiers-evaluation.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/lib.rs:441, crates/project/src/lib.rs:477. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Serviço único Base→Modified→Deformed para render/picking/export",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "caches fora do objeto por revision",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "integrar Generator, Mirror/Symmetry, Apply, skin/pose e attachments. Stack extra é expansão condicionada",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/modifiers-evaluation.md",
+        "03-geometry/generators-implementation.md",
+        "03-geometry/generators-redesign.md",
+        "03-geometry/object-geometry-source.md"
+      ]
+    },
+    {
+      "id": "G14",
+      "phase": "geometry",
+      "title": "Shape Builder",
+      "description": "Preservar planar/surface; Solid V1 com dois operandos, A_ONLY/INTERSECTION/B_ONLY, connected regions e Unite/Remove/Extract; cache por operand revision, hover só picking, commit/Cancel/Undo e atributos.",
+      "document": "03-geometry/shape-builder-3d.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/shape_builder.rs, crates/mesh/src/boolean.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Preservar planar/surface",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Solid V1 com dois operandos, A_ONLY/INTERSECTION/B_ONLY, connected regions e Unite/Remove/Extract",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "cache por operand revision, hover só picking, commit/Cancel/Undo e atributos",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/shape-builder-3d.md"
+      ]
+    },
+    {
+      "id": "G15",
+      "phase": "geometry",
+      "title": "Push/Pull/Extrude",
+      "description": "Distinguir mover boundary, imprint/pocket e Extrude Generator de PlanarShape; holes, collision limit/Cut Through explícito, materiais laterais e negative extrude sem flip global.",
+      "document": "03-geometry/direct-modeling-semantics.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Delta semântico pendente. crates/mesh/src/ops.rs:550, crates/core/src/region_push.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Distinguir mover boundary, imprint/pocket e Extrude Generator de PlanarShape",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "holes, collision limit/Cut Through explícito, materiais laterais e negative extrude sem flip global",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/direct-modeling-semantics.md"
+      ]
+    },
+    {
+      "id": "G16",
+      "phase": "geometry",
+      "title": "Inset/Bevel",
+      "description": "Inset Region como default coplanar com holes/islands; manter Individual; Bevel edge-set transacional, feedback para unsupported topology/clamp, UV/material/provenance e Last Operation.",
+      "document": "03-geometry/direct-modeling-semantics.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Delta semântico pendente. crates/mesh/src/ops.rs:574, crates/mesh/src/ops.rs:1066. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Inset Region como default coplanar com holes/islands",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "manter Individual",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Bevel edge-set transacional, feedback para unsupported topology/clamp, UV/material/provenance e Last Operation",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/direct-modeling-semantics.md"
+      ]
+    },
+    {
+      "id": "G17",
+      "phase": "geometry",
+      "title": "Cleanup/simplificação",
+      "description": "Weld com remap, Limited Dissolve conservador, separar degenerate/orphan e contour cleanup; consolidar adaptive resample, preservar Boolean cleanup e Douglas–Peucker.",
+      "document": "03-geometry/validation-repair-cleanup.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/mesh/src/ops.rs, crates/mesh/src/topology.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Weld com remap, Limited Dissolve conservador, separar degenerate/orphan e contour cleanup",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "consolidar adaptive resample, preservar Boolean cleanup e Douglas–Peucker",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/validation-repair-cleanup.md"
+      ]
+    },
+    {
+      "id": "G18",
+      "phase": "geometry",
+      "title": "Normals/Sharp",
+      "description": "SurfaceShading por objeto e Sharp Edge autoral; corner normals canônicas compartilhadas render/export; Mark/Clear Sharp, Smooth by Angle, Flip/Orient, remap e eliminar cálculos duplicados.",
+      "document": "03-geometry/normals-shading-sharp-edges.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/lib.rs, crates/project/src/export.rs, crates/render-gl/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "SurfaceShading por objeto e Sharp Edge autoral",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "corner normals canônicas compartilhadas render/export",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Mark/Clear Sharp, Smooth by Angle, Flip/Orient, remap e eliminar cálculos duplicados",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/normals-shading-sharp-edges.md"
+      ]
+    },
+    {
+      "id": "M01",
+      "phase": "workflows",
+      "title": "Materials/Textures",
+      "description": "MaterialId/TextureId/MaterialSlotIndex, TextureResource/Binding e slots locais por objeto; remover Canvas embutidos e cópias Asset.texture/base_color; Standard/Unlit, color space/sampler/tangents e shared-edit explícito.",
+      "document": "05-materials/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/material.rs:73, crates/project/src/lib.rs:431. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "MaterialId/TextureId/MaterialSlotIndex, TextureResource/Binding e slots locais por objeto",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "remover Canvas embutidos e cópias Asset.texture/base_color",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Standard/Unlit, color space/sampler/tangents e shared-edit explícito",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "05-materials/architecture-decision.md",
+        "06-paint/architecture-decision.md",
+        "11-project/assets-resource-management.md"
+      ]
+    },
+    {
+      "id": "M02",
+      "phase": "workflows",
+      "title": "Paint domain",
+      "description": "PaintDocument/PaintTarget/Channel, active layer na sessão, output TextureResource; tirar AppState do PaintModule, stroke em ToolSession, delta Undo por tile, raycast compartilhado e canais color/scalar.",
+      "document": "06-paint/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/project/src/paint_layers.rs:826, crates/module-paint/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "PaintDocument/PaintTarget/Channel, active layer na sessão, output TextureResource",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "tirar AppState do PaintModule, stroke em ToolSession, delta Undo por tile, raycast compartilhado e canais color/scalar",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "06-paint/architecture-decision.md",
+        "05-materials/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "M03",
+      "phase": "workflows",
+      "title": "PAINT UX",
+      "description": "Layers em Structure, Canvas em Work Surface, 3D/2D/Split/PiP com estado único; ContextBar/Basic+Advanced/Channel/Target, presets/paleta, shared/locked/missing-UV feedback, reorder por teclado.",
+      "document": "06-paint/workspace-ux.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/ui-slint/ui/app.slint, crates/ui-slint/ui/components/paint_canvas.slint. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Layers em Structure, Canvas em Work Surface, 3D/2D/Split/PiP com estado único",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "ContextBar/Basic+Advanced/Channel/Target, presets/paleta, shared/locked/missing-UV feedback, reorder por teclado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "06-paint/workspace-ux.md",
+        "09-ui/workspaces-feedback-accessibility.md"
+      ]
+    },
+    {
+      "id": "M04",
+      "phase": "workflows",
+      "title": "Decals estáticos/animados",
+      "description": "DecalSet/Variant IDs e TextureRegion compartilhados; remover imagem duplicada, placement UV/SurfaceAttachment, tracks ID-based e relógio da timeline; manter SVG e dirty tiles.",
+      "document": "06-paint/decals-animated-decals.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/project/src/paint_layers.rs:162, crates/project/src/paint_layers.rs:233. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "DecalSet/Variant IDs e TextureRegion compartilhados",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "remover imagem duplicada, placement UV/SurfaceAttachment, tracks ID-based e relógio da timeline",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "manter SVG e dirty tiles",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "06-paint/decals-animated-decals.md"
+      ]
+    },
+    {
+      "id": "M05",
+      "phase": "workflows",
+      "title": "Decal IO/playback",
+      "description": "Import Image Sequence, Sequence/Flipbook explícitos, metadata + fallback GLB, Make Unique, rerasterização, reordenação/deleção de variantes sem quebrar keys e bake sem perda silenciosa.",
+      "document": "06-paint/decals-animated-decals.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Conformidade a auditar. crates/project/src/paint_layers.rs, crates/project/src/export.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Import Image Sequence, Sequence/Flipbook explícitos, metadata + fallback GLB, Make Unique, rerasterização, reordenação/deleção de variantes sem quebrar keys e bake sem perda silenciosa",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "06-paint/decals-animated-decals.md"
+      ]
+    },
+    {
+      "id": "V01",
+      "phase": "workflows",
+      "title": "UV selection/transform",
+      "description": "Corner/Edge/Face/Island e Sync explícito on/off; pins tipados, solver constraints, transform modal preview/Enter/Esc/Undo único, Stitch stationary/moving e Split sem duplicar vértice 3D.",
+      "document": "07-uv/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/mesh/src/lib.rs:87, crates/ui-slint/src/lib.rs:8072. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Corner/Edge/Face/Island e Sync explícito on/off",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "pins tipados, solver constraints, transform modal preview/Enter/Esc/Undo único, Stitch stationary/moving e Split sem duplicar vértice 3D",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "07-uv/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "V02",
+      "phase": "workflows",
+      "title": "UV operações/health",
+      "description": "Pack determinístico com padding em pixels, Relax correto/renomeado, Cylindrical/Spherical, density/overlap/stretch/zero-area/out-of-range e integração Paint/canal.",
+      "document": "07-uv/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Conformidade a auditar. crates/mesh/src/uv_tools.rs, crates/mesh/src/uv_layout.rs, crates/module-uv/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Pack determinístico com padding em pixels, Relax correto/renomeado, Cylindrical/Spherical, density/overlap/stretch/zero-area/out-of-range e integração Paint/canal",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "07-uv/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "V03",
+      "phase": "workflows",
+      "title": "UV Work Surface",
+      "description": "Promover editor 256×256 do Inspector; split 3D/UV persistente/maximização, pan/zoom/frame/grid, Structure islands, Properties/ContextBar e F6 entre superfícies.",
+      "document": "07-uv/workspace-ux.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/ui-slint/ui/workspaces/uv/inspector.slint:96. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Promover editor 256×256 do Inspector",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "split 3D/UV persistente/maximização, pan/zoom/frame/grid, Structure islands, Properties/ContextBar e F6 entre superfícies",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "07-uv/workspace-ux.md",
+        "09-ui/workspaces-feedback-accessibility.md"
+      ]
+    },
+    {
+      "id": "F01",
+      "phase": "workflows",
+      "title": "References persistentes",
+      "description": "ReferenceSet/View IDs no Document, TextureId em vez de RGBA no Core, frame ortho/crop/scale/origin/ground/flip e seis presets como UX; save/load/autosave portátil.",
+      "document": "08-reference-projection/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Migração pendente. crates/core/src/state.rs:104, crates/core/src/state.rs:327. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "ReferenceSet/View IDs no Document, TextureId em vez de RGBA no Core, frame ortho/crop/scale/origin/ground/flip e seis presets como UX",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "save/load/autosave portátil",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "08-reference-projection/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "F02",
+      "phase": "workflows",
+      "title": "Trace/Project Photo",
+      "description": "Serviço projection compartilhado; Project UV From Reference com framing exato e sem fallback silencioso; Trace Workplane; Project Photo como layer não destrutiva por texel, coverage/occlusion/Undo.",
+      "document": "08-reference-projection/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial; confirmar deltas. crates/module-paint/src/projection.rs, crates/ui-slint/src/projection.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Serviço projection compartilhado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Project UV From Reference com framing exato e sem fallback silencioso",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Trace Workplane",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Project Photo como layer não destrutiva por texel, coverage/occlusion/Undo",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "08-reference-projection/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "F03",
+      "phase": "workflows",
+      "title": "Perspective/multi-view",
+      "description": "PerspectiveReference com câmera calibrada persistente, Match Photo guiado por dois pontos de fuga, photo projection independente da editor camera e multi-view manual/auto winner-takes-all. Feather fica posterior.",
+      "document": "08-reference-projection/architecture-decision.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Conformidade a auditar. crates/ui-slint/src/projection.rs, crates/core/src/state.rs:104. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "PerspectiveReference com câmera calibrada persistente, Match Photo guiado por dois pontos de fuga, photo projection independente da editor camera e multi-view manual/auto winner-takes-all. Feather fica posterior",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "08-reference-projection/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "N01",
+      "phase": "workflows",
+      "title": "ANIMATE procedural",
+      "description": "Preservar AnimateIntent, rigs/motions/preview/fit/styles/transport/Keep Live/Bake; separar Creature/Motion Structure de Properties, evitar picker duplicado, drawer mínimo e precisão numérica/F6.",
+      "document": "10-animation/workspace-ux.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial verificado. crates/ui-slint/ui/animate.slint, crates/ui-slint/src/animate.rs, crates/ui-slint/tests/animate_shell.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Preservar AnimateIntent, rigs/motions/preview/fit/styles/transport/Keep Live/Bake",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "separar Creature/Motion Structure de Properties, evitar picker duplicado, drawer mínimo e precisão numérica/F6",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "10-animation/workspace-ux.md",
+        "09-ui/workspaces-feedback-accessibility.md"
+      ]
+    },
+    {
+      "id": "N02",
+      "phase": "workflows",
+      "title": "ANIMATE production feature",
+      "description": "Executar suíte com animation-workspace e fluxo real da callback de produção; manual de preview/bake/foco/contraste. Os 11 testes anteriores foram na configuração padrão.",
+      "document": "10-animation/workspace-ux.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Validação pendente. crates/ui-slint/tests/animate_shell.rs:448. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Executar suíte com animation-workspace e fluxo real da callback de produção",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "manual de preview/bake/foco/contraste. Os 11 testes anteriores foram na configuração padrão",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "10-animation/workspace-ux.md",
+        "09-ui/slint-rescue-plan.md",
+        "14-quality/testing-ci-conformance.md"
+      ]
+    },
+    {
+      "id": "I01",
+      "phase": "adapters",
+      "title": "Import/export",
+      "description": "Consolidar snapshot avaliado/ExportModel e pipeline único single/multiple/batch GLB/OBJ; regras de bake/loss, authoring intacto, axis/units/tangents, corners/materials/rig/references e atomic output.",
+      "document": "12-interchange/import-export-game-ready.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/project/src/pipeline.rs:91, crates/project/src/pipeline.rs:760, crates/project/src/export.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Consolidar snapshot avaliado/ExportModel e pipeline único single/multiple/batch GLB/OBJ",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "regras de bake/loss, authoring intacto, axis/units/tangents, corners/materials/rig/references e atomic output",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "12-interchange/import-export-game-ready.md",
+        "03-geometry/normals-shading-sharp-edges.md",
+        "05-materials/architecture-decision.md",
+        "08-reference-projection/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "I02",
+      "phase": "adapters",
+      "title": "Game-ready e IO seguro",
+      "description": "Validator Error/Warning/Info acionável; staging/limites/paths/refs externos, malicious input, cancelled/stale jobs; GLB Khronos + engines, fixtures OBJ/GLB e sem overwrite inesperado.",
+      "document": "12-interchange/import-export-game-ready.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Conformidade a auditar. crates/project/src/import_obj.rs, crates/project/src/import_gltf.rs, crates/project/tests/pipeline_tests.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Validator Error/Warning/Info acionável",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "staging/limites/paths/refs externos, malicious input, cancelled/stale jobs",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "GLB Khronos + engines, fixtures OBJ/GLB e sem overwrite inesperado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "12-interchange/import-export-game-ready.md",
+        "03-geometry/validation-repair-cleanup.md"
+      ]
+    },
+    {
+      "id": "E01",
+      "phase": "adapters",
+      "title": "Lua runtime/public API",
+      "description": "Preservar Lua 5.4, budgets/memória, sandbox e intents existentes; completar manifest/lifecycle/versionamento/revogação, callbacks/events, rollback/batch, stale IDs e dados autorais namespaced.",
+      "document": "13-extensions/lua-plugins-public-api.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/plugins/src/host.rs:205, crates/plugins/src/dispatch.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Preservar Lua 5.4, budgets/memória, sandbox e intents existentes",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "completar manifest/lifecycle/versionamento/revogação, callbacks/events, rollback/batch, stale IDs e dados autorais namespaced",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "13-extensions/lua-plugins-public-api.md"
+      ]
+    },
+    {
+      "id": "E02",
+      "phase": "adapters",
+      "title": "Plugin Slint panels/overlays",
+      "description": "Descriptors host-owned para left/right/bottom; DTO/action IDs, tokens/F6/semantics; overlays passivos sem GL/shader injection, unload limpando handles, focus e subscriptions.",
+      "document": "13-extensions/lua-plugins-public-api.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Conformidade a auditar. crates/plugins/src/lib.rs, crates/ui-slint/ui. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Descriptors host-owned para left/right/bottom",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "DTO/action IDs, tokens/F6/semantics",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "overlays passivos sem GL/shader injection, unload limpando handles, focus e subscriptions",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "13-extensions/lua-plugins-public-api.md"
+      ]
+    },
+    {
+      "id": "E03",
+      "phase": "adapters",
+      "title": "MCP",
+      "description": "Consolidar adapter Application; aprovações/capabilities por sessão, ObjectIds/revision preconditions, atomic batch/dry-run/cancel/logs redacted; UI de sessões/revogação e plugin opt-in duplo.",
+      "document": "13-extensions/mcp-automation-agents.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/mcp/src/server.rs:95. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Consolidar adapter Application",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "aprovações/capabilities por sessão, ObjectIds/revision preconditions, atomic batch/dry-run/cancel/logs redacted",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "UI de sessões/revogação e plugin opt-in duplo",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "13-extensions/mcp-automation-agents.md"
+      ]
+    },
+    {
+      "id": "Q01",
+      "phase": "quality",
+      "title": "Jobs/cache/performance",
+      "description": "Snapshots + revision/cancel/progress/stale para operações caras; single writer, coalescing, invalidation por ID/revision, GPU cache descartável, dirty rects, render-on-demand e Split2 compartilhado.",
+      "document": "14-quality/performance-jobs-budgets.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Parcial. crates/core/src/jobs.rs, crates/ui-slint/src/viewport_gpu.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Snapshots + revision/cancel/progress/stale para operações caras",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "single writer, coalescing, invalidation por ID/revision, GPU cache descartável, dirty rects, render-on-demand e Split2 compartilhado",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "14-quality/performance-jobs-budgets.md",
+        "04-renderer/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "Q02",
+      "phase": "quality",
+      "title": "Low-end medido",
+      "description": "Definir hardware/driver/corpus e medir latência/frame times/idle CPU-GPU/picos de memória/save/autosave/paint/Undo/resize. Fixar thresholds somente após medição; a11y permanece.",
+      "document": "14-quality/performance-jobs-budgets.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Validação pendente. crates/core/benches, crates/mesh/benches, website/docs/14-quality. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Definir hardware/driver/corpus e medir latência/frame times/idle CPU-GPU/picos de memória/save/autosave/paint/Undo/resize. Fixar thresholds somente após medição",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "a11y permanece",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "14-quality/performance-jobs-budgets.md",
+        "04-renderer/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "Q03",
+      "phase": "quality",
+      "title": "CI e baterias",
+      "description": "Incluir uv_shell no workflow Slint; conferir cobertura da branch e paths/toolchain; ampliar gates Core/Geometry/Project/security/GL/Windows, propriedade/fuzz e supply-chain, com prova por SHA.",
+      "document": "14-quality/testing-ci-conformance.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Delta confirmado. .github/workflows/ui-slint.yml. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Incluir uv_shell no workflow Slint",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "conferir cobertura da branch e paths/toolchain",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "ampliar gates Core/Geometry/Project/security/GL/Windows, propriedade/fuzz e supply-chain, com prova por SHA",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "14-quality/testing-ci-conformance.md",
+        "09-ui/slint-rescue-plan.md"
+      ]
+    },
+    {
+      "id": "Q04",
+      "phase": "quality",
+      "title": "Release/packaging",
+      "description": "Build release e offline startup em Linux/Windows sem dev tools; GL capability/context loss/minimize/DPI; instaladores/assets/notices/checksums, documento legado/portátil, smoke integrado e compatibilidade formal.",
+      "document": "15-platform/build-distribution-compatibility.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Gates pendentes. .github/workflows, rust-toolchain.toml, website/docs/15-platform. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Build release e offline startup em Linux/Windows sem dev tools",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "GL capability/context loss/minimize/DPI",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "instaladores/assets/notices/checksums, documento legado/portátil, smoke integrado e compatibilidade formal",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "15-platform/build-distribution-compatibility.md"
+      ]
+    },
+    {
+      "id": "D01",
+      "phase": "governance",
+      "title": "Coerência canônica",
+      "description": "Corrigir duas instruções de portar para egui; alinhar ordem inicial de home.md ao decision register; reconciliar expansão modifiers e Paint em Generator; atualizar estados e navegação com evidências.",
+      "document": "00-philosophy/decision-register.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Drift confirmado. website/docs/06-paint/decals-animated-decals.md, website/docs/07-uv/architecture-decision.md, website/docs/home.md. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Corrigir duas instruções de portar para egui",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "alinhar ordem inicial de home.md ao decision register",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "reconciliar expansão modifiers e Paint em Generator",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "atualizar estados e navegação com evidências",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "00-philosophy/decision-register.md",
+        "03-geometry/object-geometry-source.md",
+        "06-paint/decals-animated-decals.md",
+        "07-uv/architecture-decision.md",
+        "home.md"
+      ]
+    },
+    {
+      "id": "D02",
+      "phase": "governance",
+      "title": "Agentes/qualidade do código",
+      "description": "Aplicar ContextPack/gap matrix/Reuse→Refactor→Move→Rewrite, naming/newtypes/Rustdoc/contextos pequenos, revisão independente quando possível, segurança/a11y/perf por domínio e handoff por SHA. Catálogo não é lista de features a implementar.",
+      "document": "16-code-agents/implementation-protocol.md",
+      "status": "TODO",
+      "updated": "2026-10-09",
+      "baseline": "Base existente; manter. website/docs/00-philosophy/code-quality.md, website/docs/16-code-agents. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "checkpoints": [
+        {
+          "title": "Aplicar ContextPack/gap matrix/Reuse→Refactor→Move→Rewrite, naming/newtypes/Rustdoc/contextos pequenos, revisão independente quando possível, segurança/a11y/perf por domínio e handoff por SHA. Catálogo não é lista de features a implementar",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "16-code-agents/implementation-protocol.md",
+        "00-philosophy/code-quality.md",
+        "00-philosophy/decision-register.md",
+        "00-philosophy/refactor-principles.md",
+        "16-code-agents/agent-orchestration.md",
+        "16-code-agents/agents-catalog.md",
+        "16-code-agents/domain-playbooks.md",
+        "16-code-agents/evidence-handoffs.md",
+        "16-code-agents/index.md",
+        "16-code-agents/prompt-library.md",
+        "16-code-agents/reading-navigation.md",
+        "16-code-agents/recipes-catalog.md",
+        "16-code-agents/skills-engine-graphics.md",
+        "16-code-agents/skills-experience.md",
+        "16-code-agents/skills-foundations.md",
+        "16-code-agents/skills-languages-specialized.md",
+        "16-code-agents/skills-security-delivery.md",
+        "16-code-agents/workforce-index.md",
+        "about.md"
+      ]
+    },
+    {
+      "id": "T01",
+      "phase": "governance",
+      "title": "Painel de acompanhamento da reimplementação",
+      "description": "Tabela única versionada, documentos vinculados, três estados, percentual por checkpoints e protocolo de atualização a cada entrega.",
+      "document": "17-reimplementation/index.md",
+      "status": "DONE",
+      "updated": "2026-10-09",
+      "baseline": "Novo módulo solicitado nesta entrega; dados de migração conservadores.",
+      "checkpoints": [
+        {
+          "title": "Integrar tabela, filtros e links ao site zero-build.",
+          "completed": true,
+          "evidence": "tracker-delivery"
+        },
+        {
+          "title": "Registrar atualização obrigatória no AGENTS.md e protocolo.",
+          "completed": true,
+          "evidence": "tracker-delivery"
+        },
+        {
+          "title": "Validar dados, transições, rotas, interação e layout no navegador.",
+          "completed": true,
+          "evidence": "tracker-delivery"
+        }
+      ],
+      "documents": [
+        "17-reimplementation/index.md"
+      ]
+    }
+  ]
+}

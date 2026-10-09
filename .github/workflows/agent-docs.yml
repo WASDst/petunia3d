@@ -27,4 +27,10 @@ jobs:
       - name: Check agent-facing documentation and Prumo inventory
         run: python3 website/scripts/verify-agent-docs.py
       - name: Check documentation SPA syntax
-        run: node --check website/app.js
+        run: |
+          node --check website/app.js
+          node --check website/progress/progress.js
+      - name: Check reimplementation processes and document coverage
+        run: node website/scripts/verify-progress.cjs
+      - name: Test progress calculations, states and filters
+        run: node --test website/tests/progress.test.cjs

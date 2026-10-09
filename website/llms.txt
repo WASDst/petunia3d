@@ -46,6 +46,9 @@
 
 ## Navigation
 
+- [Implementation tracking protocol](docs/17-reimplementation/index.md): mandatory status/checkpoint updates with each implementation.
+- [Versioned tasks](progress/tasks.json): single source for TODO / IN PROGRESS / DONE; percentages derive from evidenced checkpoints.
+
 - [Full website manifest](docs/manifest.json): all registered Markdown docs.
 - [Human documentation home](docs/home.md): site starting point.
 

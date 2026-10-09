@@ -28,6 +28,8 @@ Do not preload 50 documentation pages or 189 skills. Follow source links and exp
 
 ## Routine protocol
 
+**Living implementation tracker:** `website/progress/tasks.json` is the single versioned task/status source, shown at `#/progress`. Read `website/docs/17-reimplementation/index.md`. At the start of each implementation, mark affected IDs IN PROGRESS; at every delivery update checkpoints, evidence and dates in the same change as the implementation. Use only TODO / IN PROGRESS / DONE; percentage is derived from completed checkpoints. DONE requires all applicable gates for that task's bounded scope. Mention IDs/status in handoffs. Existing legacy code alone never closes a migration task.
+
 ```text
 TASK / GOAL
 → evidence-grounded gap matrix (compliant, partial, broken, absent, obsolete)

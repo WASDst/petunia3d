@@ -18,6 +18,7 @@ let searchDocuments = [];
 let currentPath = null;
 let tocObserver = null;
 let keyboardResultIndex = -1;
+let routeRequest = 0;
 
 const domainIcons = {
   architecture: "ph-compass",
@@ -107,7 +108,7 @@ function sourceHeadings(markdown) {
 async function loadText(path) {
   if (cache.has(path)) return cache.get(path);
 
-  const response = await fetch("./docs/" + path);
+  const response = await fetch("./docs/" + path, { cache: "no-cache" });
   if (!response.ok) {
     throw new Error("Falha ao carregar " + path + " (" + response.status + ")");
   }
@@ -427,7 +428,7 @@ function enhanceRenderedMarkdown() {
   ]);
   content.querySelectorAll(".markdown-body a[href]").forEach(function (link) {
     const href = link.getAttribute("href") || "";
-    if (!href || href.startsWith("#/docs/") || /^(https?:|mailto:|tel:|\/\/)/i.test(href)) return;
+    if (!href || href.startsWith("#/docs/") || href.startsWith("#/progress") || /^(https?:|mailto:|tel:|\/\/)/i.test(href)) return;
     if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("/")) return;
 
     // Anchors locais e links relativos para arquivos .md pertencem ao SPA.
@@ -492,10 +493,11 @@ function enhanceRenderedMarkdown() {
   });
 }
 
-async function openDoc(path, anchor) {
+async function openDoc(path, anchor, request) {
   try {
     currentPath = path;
     const markdown = await loadText(path);
+    if (request !== routeRequest) return;
     const meta = fileMeta(path);
 
     if (!window.marked) {
@@ -531,6 +533,7 @@ async function openDoc(path, anchor) {
     content.focus({ preventScroll: true });
     closeMobileNavigation();
   } catch (error) {
+    if (request !== routeRequest) return;
     content.innerHTML =
       '<div class="error-card">' +
         "<strong>Não foi possível carregar a página.</strong>" +
@@ -551,6 +554,13 @@ async function buildNavigation() {
     '<i class="ph ph-house" aria-hidden="true"></i>' +
     '<span>Início</span>';
   nav.append(homeLink);
+
+  const progressLink = document.createElement("a");
+  progressLink.className = "nav-home file-overview";
+  progressLink.href = "#/progress";
+  progressLink.dataset.path = "progress";
+  progressLink.innerHTML = '<i class="ph ph-check-square" aria-hidden="true"></i><span>Reimplementação</span>';
+  nav.append(progressLink);
 
   for (const domain of manifest.domains) {
     const domainDetails = document.createElement("details");
@@ -623,20 +633,43 @@ async function preloadDocumentation() {
 }
 
 function route() {
+  if (!manifest) return;
+  const request = ++routeRequest;
   const raw = location.hash || "#/docs/home.md";
+  const progressMatch = /^#\/progress(?:\/([A-Z]\d{2}))?$/.exec(raw);
+  document.querySelector(".app-shell").classList.toggle("progress-mode", Boolean(progressMatch));
+  document.querySelectorAll(".topnav a").forEach(function (link) {
+    const active = progressMatch ? link.hash === "#/progress" : link.hash === raw.split("#").slice(0, 2).join("#");
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  if (progressMatch) {
+    if (tocObserver) tocObserver.disconnect();
+    pageToc.innerHTML = "";
+    currentPath = "progress";
+    setActiveFile("progress");
+    document.title = "Reimplementação — Petunia3D";
+    content.innerHTML = '<div class="loading-card" role="status">Carregando processos…</div>';
+    closeMobileNavigation();
+    PetuniaProgress.mount(content, manifest, () => request === routeRequest, progressMatch[1]).catch(function (error) {
+      if (request !== routeRequest) return;
+      content.innerHTML = '<div class="error-card" role="alert"><strong>Não foi possível carregar os processos.</strong><p>' + escapeHtml(error.message) + '</p><a href="#/docs/17-reimplementation/index.md">Abrir o protocolo de acompanhamento</a></div>';
+    });
+    return;
+  }
   const match = /^#\/docs\/([^#]+)(?:#(.+))?$/.exec(raw);
 
   if (!match) {
-    openDoc("home.md");
+    openDoc("home.md", null, request);
     return;
   }
 
-  openDoc(match[1], match[2]);
+  openDoc(match[1], match[2], request);
 }
 
 async function initialize() {
   try {
-    const response = await fetch(MANIFEST_URL);
+    const response = await fetch(MANIFEST_URL, { cache: "no-cache" });
     if (!response.ok) {
       throw new Error("Manifesto da documentação indisponível.");
     }

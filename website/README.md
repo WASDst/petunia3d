@@ -8,7 +8,7 @@ A pasta replica deliberadamente a stack, o design e a filosofia do website do no
 
 HTML5, CSS nativo, Web Awesome 3.14.0, Phosphor Icons Web 2.1.2, Alpine.js 3.17.4, Marked 18.0.14, Fuse.js 7.5.0 e Markdown.
 
-Não há Node.js, bundler, package manager, node_modules ou etapa de build.
+Node.js não é necessário para servir o site; é usado apenas pelos gates de sintaxe e acompanhamento. Não há bundler, package manager, node_modules ou etapa de build.
 
 ## Filosofia
 
@@ -21,6 +21,8 @@ python3 -m http.server 8080 -d website
 ```
 
 ## Atualização e publicação
+
+O módulo **Reimplementação** (`#/progress`) exibe `website/progress/tasks.json`: tarefas vinculadas aos documentos, filtros, checkpoints e TODO / IN PROGRESS (000%) / DONE. Atualizar o JSON em cada implementação é obrigatório; veja `website/docs/17-reimplementation/index.md`. Percentuais são derivados dos checkpoints, sem storage privado no navegador.
 
 Adicione novos arquivos em website/docs e registre cada página em website/docs/manifest.json. O site é zero-build e usa o manifesto para navegação e busca.
 
@@ -40,3 +42,5 @@ Links relativos entre capítulos Markdown são convertidos pelo cliente em rotas
 ## Gate de documentação dos agentes
 
 Execute `python3 website/scripts/verify-agent-docs.py` para conferir o manifesto do site, links internos, cobertura integral do inventário Prumo (39/189/20), paths/manifests das fontes e ausência de duplicação. Execute `node --check website/app.js` para a sintaxe do SPA. O workflow `.github/workflows/agent-docs.yml` roda ambos os comandos quando o site ou `AGENTS.md` mudam; não compila a GUI nem altera a publicação do `docs/` legado.
+
+Para o acompanhamento, execute também `node --check website/progress/progress.js`, `node website/scripts/verify-progress.cjs` e `node --test website/tests/progress.test.cjs`. A mesma CI verifica os três estados, evidências e cobertura documental. Não confundir validade do JSON com conformidade funcional do editor.

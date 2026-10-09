@@ -60,6 +60,7 @@ O código não deve criar nova rota `Slint callback → mesh.faces[..]`.
 
 ## Etapa C — Implementação
 
+- Localizar IDs em `website/progress/tasks.json`, marcar IN PROGRESS ao iniciar e seguir o [contrato de acompanhamento](../17-reimplementation/index.md). Atualizar checkpoints/evidências/datas em cada entrega, no mesmo diff da implementação; percentual é derivado e DONE exige todos os gates do escopo.
 - Criar teste de regressão que caracterize o bug sempre que possível.
 - Alterar o menor conjunto coeso de arquivos; preservar API e contrato autoral.
 - Preferir refatoração com equivalência e testes, nunca big-bang.
@@ -94,6 +95,7 @@ Para PR/branch CI, investigar **o primeiro erro primário** e não repetir mudan
 
 ## Etapa F — Documentação e handoff
 
+- Atualizar a tabela de reimplementação e citar IDs/status no handoff; mudança de código sem atualização dos processos afetados não fecha a entrega.
 - Atualizar capítulo canônico quando decisões, UX, contrato público ou expectativas mudarem.
 - Registrar status real da implementação (Approved/In migration/Verified).
 - Garantir links do site e catálogo.

@@ -1,6 +1,16 @@
 {
   "domains": [
     {
+      "id": "reimplementation",
+      "title": "Reimplementação",
+      "files": [
+        {
+          "path": "17-reimplementation/index.md",
+          "title": "Acompanhamento e atualização de status"
+        }
+      ]
+    },
+    {
       "id": "philosophy",
       "title": "Filosofia",
       "files": [

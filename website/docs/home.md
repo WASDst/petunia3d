@@ -6,6 +6,8 @@ A meta não é reescrever por reescrever. A meta é recuperar uma arquitetura pe
 
 ## Prioridades
 
+[Acompanhar todos os processos da reimplementação](#/progress) · [Regras de atualização dos estados](17-reimplementation/index.md).
+
 - Windows e Linux primeiro.
 - Hardware low-end como requisito real.
 - Menos dependências e menos backends simultâneos.
