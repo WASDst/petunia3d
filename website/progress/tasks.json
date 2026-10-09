@@ -65,6 +65,11 @@
       "revision": "Configuração do slice sobre 40ad949fb3b7a7d392d402bf4da55f5c28769621",
       "document": "14-quality/testing-ci-conformance.md",
       "summary": "Q03 inclui uv_shell/model_shell na integração Slint e trigger da branch autorizada; configuração revisada, permissões contents:read preservadas. Regressões locais/default: pass. CI remota e suíte animation-workspace: not run; paths/toolchain e baterias transversais ainda abertos."
+    },
+    "wave-u01": {
+      "revision": "Wave sobre 0883bfbedc2b1c81ed692da5d455fed2dcb19e0a; fontes SHA-256 registradas no Slint Rescue §19",
+      "document": "09-ui/slint-rescue-plan.md",
+      "summary": "Wave PAINT/overlays/HUD completa: 547 testes Rust default/headless (508 unitários + 39 integração, incluindo cinco novos), fmt, ui-lint (29 arquivos), Clippy -D warnings, seis testes Node e guard documental pass. Feature animation-workspace, CI remota e aceitação visual/nativa: not run."
     }
   },
   "tasks": [
@@ -137,7 +142,7 @@
       "document": "09-ui/slint-rescue-plan.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "MODEL extraído para ModelInspector, sem mudar domínio ou API pública: 119 propriedades, 49 callbacks e seis bindings de ida/volta; 542 testes Rust e Clippy pass. Restam PAINT, overlays/HUD e aceitação visual/final.",
+      "baseline": "Implementação estrutural da wave completa: PAINT + guias/HUD extraídos; 547 testes Rust, Clippy e gates de fonte/site pass. Aceitação visual/nativa final pendente; cinco de seis checkpoints concluídos.",
       "checkpoints": [
         {
           "title": "Extrair AnimateInspector e preservar a regressão ANIMATE no backend headless.",
@@ -156,13 +161,13 @@
         },
         {
           "title": "Extrair o conteúdo PAINT do shell.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "wave-u01"
         },
         {
           "title": "Modularizar overlays/HUD remanescentes sem regressões.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "wave-u01"
         },
         {
           "title": "Executar gates após as extrações restantes e registrar equivalência visual, foco e teclado.",
@@ -2132,7 +2137,7 @@
       "document": "14-quality/testing-ci-conformance.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Workflow inclui uv_shell/model_shell e push na branch autorizada; suítes default passaram localmente. CI remota, auditoria completa de paths/toolchain e baterias transversais continuam pendentes.",
+      "baseline": "Workflow inclui MODEL/UV/PAINT/ANIMATE/HUD/gestures e push na branch autorizada; 547 testes Rust default e Clippy pass localmente. CI remota, suíte animation-workspace, auditoria paths/toolchain e baterias transversais ainda pendentes.",
       "checkpoints": [
         {
           "title": "Incluir uv_shell no workflow Slint",

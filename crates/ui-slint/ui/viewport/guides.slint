@@ -1,0 +1,194 @@
+import { DesignTokens } from "../tokens.slint";
+
+/// Projeta estado do shell; não cria outro owner de domínio.
+export component ViewportGuideOverlays inherits Rectangle {
+    in property <bool> active-layer-is-decal;
+    in property <string> active-workspace;
+    in property <color> axis-guide-color;
+    in property <string> axis-guide-commands;
+    in property <string> axis-guide-label;
+    in property <length> axis-guide-label-x;
+    in property <length> axis-guide-label-y;
+    in property <bool> axis-guide-visible;
+    in property <string> decal-preview-commands;
+    in property <string> depth-handle-commands;
+    in property <string> depth-handle-label;
+    in property <bool> depth-handle-visible;
+    in property <length> depth-handle-x;
+    in property <length> depth-handle-y;
+    in property <string> dimension-commands;
+    in property <bool> dimension-visible;
+    in property <string> drag-link-commands;
+    in property <string> measure-commands;
+    in property <bool> measure-visible;
+    in property <string> parametric-handle-commands;
+    in property <bool> parametric-handle-hover;
+    in property <bool> parametric-handle-visible;
+    in property <length> parametric-handle-x;
+    in property <length> parametric-handle-y;
+    in property <string> profile-preview-commands;
+    in property <string> proportional-circle-commands;
+    in property <string> protractor-ticks-commands;
+    in property <bool> protractor-visible;
+    in property <string> protractor-wedge-commands;
+    in property <image> stencil-image;
+    in property <bool> stencil-visible;
+    background: transparent;
+
+    if root.parametric-handle-visible && root.parametric-handle-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.parametric-handle-commands;
+        fill: DesignTokens.accent;
+        stroke: DesignTokens.accent;
+        stroke-width: 2px;
+    }
+    if root.parametric-handle-visible: Rectangle {
+        x: root.parametric-handle-x - 12px;
+        y: root.parametric-handle-y - 12px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: root.parametric-handle-hover ? DesignTokens.accent : DesignTokens.surface-raised;
+        border-width: 2px;
+        border-color: DesignTokens.accent;
+        Rectangle {
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: root.parametric-handle-hover ? DesignTokens.on-accent : DesignTokens.accent;
+        }
+    }
+    // Depth Handle da forma ativa em DRAW: haste com diamante + cota
+    if root.depth-handle-visible && root.depth-handle-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.depth-handle-commands;
+        fill: DesignTokens.accent;
+        stroke: DesignTokens.accent;
+        stroke-width: 2px;
+    }
+    if root.depth-handle-visible: Rectangle {
+        x: root.depth-handle-x + 10px;
+        y: root.depth-handle-y - 12px;
+        width: depth-text.preferred-width + 8px;
+        height: 18px;
+        border-radius: 4px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.accent;
+        depth-text := Text {
+            text: root.depth-handle-label;
+            color: DesignTokens.text-primary;
+            font-size: DesignTokens.font-caption;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    Path {
+        fit: ImageFit.preserve;
+        commands: root.profile-preview-commands;
+        fill: transparent;
+        stroke: DesignTokens.selection;
+        stroke-width: 2px;
+    }
+
+    // Cordão da ferramenta ativa: tracejado amarelo da base da
+    // seleção até o mouse. Cresce/encolhe com a distância.
+    if root.drag-link-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.drag-link-commands;
+        fill: transparent;
+        stroke: DesignTokens.selection-active;
+        stroke-width: 1.5px;
+    }
+
+    // Círculo pontilhado do raio de influência para Proportional Editing
+    if root.proportional-circle-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.proportional-circle-commands;
+        fill: transparent;
+        stroke: DesignTokens.guide-neutral;
+        stroke-width: 1.5px;
+    }
+
+    // Infinite Axis Guide Line (Fase 4: Linhas de Guia Infinitas)
+    if root.axis-guide-visible && root.axis-guide-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.axis-guide-commands;
+        fill: transparent;
+        stroke: root.axis-guide-color;
+        stroke-width: 1.5px;
+    }
+
+    // Rótulo discreto do eixo na linha de guia infinita
+    if root.axis-guide-visible && root.axis-guide-label != "" && root.active-workspace == "MODEL": Rectangle {
+        x: root.axis-guide-label-x - 9px;
+        y: root.axis-guide-label-y - 9px;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: DesignTokens.hud-surface;
+        border-width: 1.5px;
+        border-color: root.axis-guide-color;
+        drop-shadow-blur: DesignTokens.elevation-1-blur;
+        drop-shadow-color: DesignTokens.elevation-1-color;
+        Text {
+            text: root.axis-guide-label;
+            color: root.axis-guide-color;
+            font-size: DesignTokens.font-caption;
+            font-weight: 700;
+            font-family: "monospace";
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Dimension Line (Fase 4: Cotas Blueprint)
+    if root.dimension-visible && root.dimension-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.dimension-commands;
+        fill: transparent;
+        stroke: DesignTokens.badge-precision-border;
+        stroke-width: 1.5px;
+    }
+
+    // Quick Measure Line (Fase 6: Fita Métrica 3D)
+    if root.measure-visible && root.measure-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.measure-commands;
+        fill: transparent;
+        stroke: DesignTokens.measure.with-alpha(0.67);
+        stroke-width: 1.2px;
+    }
+
+    // Protractor (Transferidor Visual de Ângulo para Rotação Modal)
+    if root.protractor-visible && root.protractor-wedge-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.protractor-wedge-commands;
+        fill: DesignTokens.accent.transparentize(0.85);
+        stroke: DesignTokens.accent;
+        stroke-width: 1.5px;
+    }
+    if root.protractor-visible && root.protractor-ticks-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.protractor-ticks-commands;
+        fill: transparent;
+        stroke: DesignTokens.accent.transparentize(0.4);
+        stroke-width: 1px;
+    }
+
+    // 3D Decal Live Projection Manipulator (Sprint C: P3D-133 / P3D-160)
+    if root.active-workspace == "PAINT" && root.active-layer-is-decal && root.decal-preview-commands != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.decal-preview-commands;
+        fill: DesignTokens.accent.transparentize(0.90);
+        stroke: DesignTokens.accent;
+        stroke-width: 1.5px;
+    }
+
+    if root.stencil-visible: Image {
+        width: parent.width; height: parent.height;
+        source: root.stencil-image; image-fit: fill;
+    }
+}

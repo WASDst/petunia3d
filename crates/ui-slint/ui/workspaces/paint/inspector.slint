@@ -1,0 +1,1419 @@
+import { IconDisplay, IconSet } from "@lucide";
+import { DesignTokens, ColorPresets, Motion, Tr } from "../../tokens.slint";
+import { BrushChip, BrushStepper, ColorSwatch, NumericField, PetuniaSlider } from "../../components/controls.slint";
+import { PaintCanvasSurface } from "../../components/paint_canvas.slint";
+import { InspectorSection } from "../../inspector/sections.slint";
+import { PaintEffectParamEntry, PaintLayerEntry } from "../../types.slint";
+
+/// Projeta estado do shell; não cria outro owner de domínio.
+export component PaintInspector inherits VerticalLayout {
+    in property <bool> active-layer-is-decal;
+    in property <string> active-tool;
+    callback active-tool-changed(string);
+    callback bake-active-decal();
+    in property <float> brush-angle;
+    in property <string> brush-blend;
+    callback brush-blend-changed(string);
+    in property <float> brush-flow;
+    in property <float> brush-hardness;
+    callback brush-hardness-changed(float);
+    in property <float> brush-opacity;
+    callback brush-opacity-changed(float);
+    in property <float> brush-opacity-jitter;
+    callback brush-param-changed(string, float);
+    callback brush-preset-applied(int);
+    callback brush-preset-deleted(int);
+    in property <int> brush-preset-index;
+    callback brush-preset-saved();
+    in property <[string]> brush-presets;
+    in property <float> brush-roundness;
+    in property <float> brush-scatter;
+    in property <float> brush-size;
+    callback brush-size-changed(float);
+    in property <float> brush-size-jitter;
+    in property <float> brush-smoothing;
+    in property <float> brush-spacing;
+    in property <float> brush-spray-density;
+    in property <string> brush-tip;
+    callback brush-tip-changed(string);
+    in property <bool> clone-source-set;
+    callback command-executed(string);
+    callback command-file-action(string);
+    in-out property <float> decal-center-u;
+    in-out property <float> decal-center-v;
+    callback decal-fps-changed(float);
+    in property <int> decal-frame;
+    callback decal-frame-changed(int);
+    in property <bool> decal-frame-keyed;
+    in property <bool> decal-has-keys;
+    callback decal-key-remove-requested();
+    callback decal-key-set-requested();
+    in property <string> decal-keys-text;
+    callback decal-length-changed(int);
+    callback decal-play-toggled();
+    in property <bool> decal-playing;
+    in-out property <float> decal-rotation-deg;
+    in-out property <float> decal-scale-u;
+    in-out property <float> decal-scale-v;
+    in property <bool> decal-surface;
+    in property <float> decal-track-fps;
+    in property <int> decal-track-length;
+    callback decal-transform-changed(string, float, float, float, float, float);
+    in property <int> decal-variant-index;
+    in property <[string]> decal-variant-names;
+    callback decal-variant-remove-requested();
+    callback decal-variant-selected(int);
+    in property <string> label-active-brush-color;
+    in property <string> label-albedo-base-color;
+    in property <string> label-decal-bake;
+    in property <string> label-decal-hint;
+    in property <string> label-decal-position;
+    in property <string> label-decal-rotation;
+    in property <string> label-decal-scale;
+    in property <string> label-decal-transform;
+    in property <string> label-decal-width;
+    in property <string> label-pack-islands;
+    in property <string> label-unwrap-mesh;
+    callback paint-2d-select(float, float, float, float, bool, bool, bool);
+    callback paint-2d-stroke(float, float, int, bool, float);
+    in property <string> paint-canvas-grid-commands;
+    in property <image> paint-canvas-image;
+    in-out property <bool> paint-canvas-panel-visible;
+    in property <string> paint-canvas-size;
+    in property <int> paint-canvas-zoom;
+    in property <color> paint-color;
+    callback paint-color-changed(float, float, float);
+    callback paint-decal-layer-added();
+    in property <string> paint-effect-kind;
+    callback paint-effect-layer-added(string);
+    callback paint-effect-param-set(string, float);
+    in property <[PaintEffectParamEntry]> paint-effect-params;
+    in property <string> paint-fill-scope;
+    callback paint-fill-scope-set(string);
+    callback paint-layer-activated(string);
+    callback paint-layer-added();
+    in property <string> paint-layer-count;
+    callback paint-layer-group-added();
+    callback paint-layer-lock-toggled(string);
+    callback paint-layer-merged-down(string);
+    callback paint-layer-moved(string, int);
+    callback paint-layer-opacity-set(string, float);
+    callback paint-layer-removed(string);
+    callback paint-layer-visibility-toggled(string);
+    in property <[PaintLayerEntry]> paint-layers;
+    in property <string> paint-lock;
+    callback paint-lock-set(string);
+    in property <bool> paint-mask-selection;
+    callback paint-mask-selection-toggled();
+    in property <bool> paint-pip;
+    callback paint-pip-toggle-requested();
+    in property <bool> paint-pixel-grid;
+    in property <string> paint-projection;
+    callback paint-projection-set(string);
+    in property <bool> paint-show-uv;
+    in property <bool> paint-symmetry-x;
+    callback paint-symmetry-x-toggled();
+    in property <bool> paint-symmetry-y;
+    callback paint-symmetry-y-toggled();
+    in property <bool> paint-symmetry-z;
+    callback paint-symmetry-z-toggled();
+    in property <bool> paint-target-vertex;
+    callback paint-target-vertex-changed(bool);
+    in property <int> paint-texture-side;
+    callback paint-texture-side-selected(int);
+    callback set-paint-canvas-zoom(int);
+    in property <bool> show-brush;
+    callback toggle-paint-pixel-grid();
+    callback toggle-paint-show-uv();
+    in property <string> uv-layout-commands;
+    in property <string> uv-selected-commands;
+
+    spacing: 10px;
+
+    // Preparar superfície (UV): desembrulhar e empacotar ilhas dentro do fluxo de pintura.
+    InspectorSection {
+        title: Tr.t("sl.prepare_surface");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        HorizontalLayout {
+            spacing: 6px;
+            padding-top: 4px;
+            Rectangle {
+                height: 28px;
+                horizontal-stretch: 1;
+                border-radius: DesignTokens.radius-control;
+                background: unwrap-touch.pressed ? DesignTokens.accent.darker(0.15) : (unwrap-touch.has-hover ? DesignTokens.accent.brighter(0.1) : DesignTokens.accent);
+                animate background { duration: Motion.fast; easing: ease-out; }
+                accessible-role: button;
+                accessible-label: root.label-unwrap-mesh;
+                Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                unwrap-touch := TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
+            }
+            Rectangle {
+                height: 28px;
+                horizontal-stretch: 1;
+                border-radius: DesignTokens.radius-control;
+                background: pack-touch.pressed ? DesignTokens.surface-pressed : (pack-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                animate background { duration: Motion.fast; easing: ease-out; }
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                accessible-role: button;
+                accessible-label: root.label-pack-islands;
+                Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                pack-touch := TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.effects");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 6px;
+            padding-top: 4px;
+
+            Text {
+                text: Tr.t("sl.add_an_effect_layer");
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 26px;
+
+                for effect in ["Pixelate", "Posterize", "Invert"]: Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    accessible-role: button;
+                    accessible-label: effect;
+                    Text { text: effect; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                    TouchArea { clicked => { root.paint-effect-layer-added(effect); } }
+                }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 26px;
+
+                for effect in ["Grain", "Levels", "BrightnessContrast", "HueSaturation"]: Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    accessible-role: button;
+                    accessible-label: effect;
+                    Text { text: effect; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; overflow: elide; }
+                    TouchArea { clicked => { root.paint-effect-layer-added(effect); } }
+                }
+            }
+
+            if paint-effect-kind != "": Text {
+                text: Tr.t("sl.active_effect") + ": \{root.paint-effect-kind}";
+                color: DesignTokens.accent;
+                font-size: DesignTokens.font-caption;
+                font-weight: 600;
+            }
+            if paint-effect-kind != "" && paint-effect-params.length == 0: Text {
+                text: Tr.t("sl.this_effect_has_no_parameters");
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+            }
+
+            for param in root.paint-effect-params: HorizontalLayout {
+                spacing: 6px;
+                height: 24px;
+
+                Text {
+                    text: param.label;
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    width: 78px;
+                    vertical-alignment: center;
+                }
+                effect-param := PetuniaSlider {
+                    horizontal-stretch: 1;
+                    minimum: param.minimum;
+                    maximum: param.maximum;
+                    value: param.value;
+                    controlled: true;
+                    changed(value) => { root.paint-effect-param-set(param.key, value); }
+                }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.canvas");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 6px;
+            padding-top: 4px;
+
+            // Resolução da textura de pintura (reamostra todas as camadas).
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: Tr.t("paint.canvas_size");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    for side in [256, 512, 1024, 2048]: BrushChip {
+                        label: side;
+                        active: root.paint-texture-side == side;
+                        clicked => { root.paint-texture-side-selected(side); }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: space-between;
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: root.paint-canvas-size;
+                        color: DesignTokens.text-muted;
+                        font-size: DesignTokens.font-caption;
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 3px;
+                        background: root.paint-pip ? DesignTokens.accent : (pipbtn-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                        animate background { duration: Motion.fast; easing: ease-out; }
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        accessible-role: button;
+                        accessible-checked: root.paint-pip;
+                        accessible-label: Tr.t("sl.paint_pip");
+                        IconDisplay { icon: IconSet.PictureInPicture2; size: 11px; stroke: root.paint-pip ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                        pipbtn-touch := TouchArea {
+                            clicked => { root.paint-pip-toggle-requested(); }
+                            Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_pip"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; } } }
+                        }
+                    }
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 3px;
+                        background: root.paint-canvas-panel-visible ? DesignTokens.accent : (expand-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+                        animate background { duration: Motion.fast; easing: ease-out; }
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        accessible-role: button;
+                        accessible-label: Tr.t("sl.paint_canvas_open");
+                        IconDisplay { icon: IconSet.Maximize2; size: 11px; stroke: root.paint-canvas-panel-visible ? DesignTokens.on-accent : DesignTokens.text-primary; }
+                        expand-touch := TouchArea {
+                            clicked => { root.paint-canvas-panel-visible = !root.paint-canvas-panel-visible; }
+                            Tooltip { VerticalLayout { padding: 6px; Text { text: Tr.t("sl.paint_canvas_open"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; } } }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    // Pixel Grid toggle button
+                    Rectangle {
+                        width: 42px;
+                        height: 20px;
+                        border-radius: 3px;
+                        background: root.paint-pixel-grid ? DesignTokens.accent : DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        Text {
+                            text: Tr.t("sl.grid");
+                            color: root.paint-pixel-grid ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                            font-size: DesignTokens.font-caption;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => { root.toggle-paint-pixel-grid(); }
+                        }
+                    }
+                    // Zoom In / Out
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 3px;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        Text {
+                            text: "-";
+                            color: DesignTokens.text-primary;
+                            font-size: DesignTokens.font-small;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => {
+                                if root.paint-canvas-zoom > 1 {
+                                    root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2);
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        text: root.paint-canvas-zoom + "x";
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-caption;
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 3px;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        Text {
+                            text: "+";
+                            color: DesignTokens.text-primary;
+                            font-size: DesignTokens.font-small;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            clicked => {
+                                if root.paint-canvas-zoom < 16 {
+                                    root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            paint-canvas := PaintCanvasSurface {
+                width: 256px;
+                height: 256px;
+                horizontal-stretch: 0;
+                canvas-image: root.paint-canvas-image;
+                zoom: root.paint-canvas-zoom;
+                show-brush: root.show-brush;
+                brush-diameter: root.brush-size * 16px;
+                brush-hardness: root.brush-hardness;
+                brush-strength: root.brush-opacity * root.brush-flow;
+                brush-tint: root.paint-color;
+                brush-erase: root.active-tool == "eraser";
+                brush-hard-edge: root.active-tool == "pixel";
+                show-uv: root.paint-show-uv;
+                uv-commands: root.uv-layout-commands;
+                show-grid: root.paint-pixel-grid;
+                grid-commands: root.paint-canvas-grid-commands;
+                select-mode: root.active-tool == "select";
+                selected-commands: root.uv-selected-commands;
+                select-region(x0, y0, x1, y1, extend, subtract, island) => { root.paint-2d-select(x0, y0, x1, y1, extend, subtract, island); }
+                stroke(x, y, phase, shift, raster) => { root.paint-2d-stroke(x, y, phase, shift, raster); }
+                zoom-step(direction) => {
+                    if direction > 0 && root.paint-canvas-zoom < 16 { root.set-paint-canvas-zoom(root.paint-canvas-zoom * 2); }
+                    if direction < 0 && root.paint-canvas-zoom > 1 { root.set-paint-canvas-zoom(root.paint-canvas-zoom / 2); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                height: 26px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: root.paint-show-uv ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.border;
+                    Text {
+                        text: root.paint-show-uv ? Tr.t("sl.uv_wireframe_overlay") : Tr.t("sl.uv_wireframe_overlay_2");
+                        color: root.paint-show-uv ? DesignTokens.accent : DesignTokens.text-primary;
+                        font-size: DesignTokens.font-caption;
+                        font-weight: root.paint-show-uv ? 700 : 400;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea { clicked => { root.toggle-paint-show-uv(); } }
+                }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.fill_projection");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 6px;
+            padding-top: 4px;
+
+            Text {
+                text: Tr.t("sl.fill_scope");
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 26px;
+
+                for scope in ["ConnectedPixels", "Face", "SelectedFaces", "UvIsland", "Object"]: Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: root.paint-fill-scope == scope ? DesignTokens.accent : DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    accessible-role: radio-button;
+                    accessible-label: scope;
+                    accessible-checked: root.paint-fill-scope == scope;
+                    Text {
+                        text: scope;
+                        color: root.paint-fill-scope == scope ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    TouchArea { clicked => { root.paint-fill-scope-set(scope); } }
+                }
+            }
+
+            Text {
+                text: Tr.t("sl.projection");
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 26px;
+
+                for projection in ["Surface", "ScreenSpace"]: Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: root.paint-projection == projection ? DesignTokens.accent : DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    accessible-role: radio-button;
+                    accessible-label: projection;
+                    accessible-checked: root.paint-projection == projection;
+                    Text {
+                        text: projection;
+                        color: root.paint-projection == projection ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea { clicked => { root.paint-projection-set(projection); } }
+                }
+            }
+
+            // Ação: Bake Reference to Texture
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    IconDisplay {
+                        icon: IconSet.Camera;
+                        size: 13px;
+                        stroke: DesignTokens.accent;
+                    }
+                    Text {
+                        text: Tr.t("sl.bake_reference_to_texture");
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-caption;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+                TouchArea {
+                    clicked => { root.command-executed("paint.bake_reference"); }
+                }
+            }
+
+            Text {
+                text: Tr.t("sl.brush_lock");
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 26px;
+
+                for lock in ["None", "FirstObject", "FirstFace"]: Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: root.paint-lock == lock ? DesignTokens.accent : DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    accessible-role: radio-button;
+                    accessible-label: lock;
+                    accessible-checked: root.paint-lock == lock;
+                    Text {
+                        text: lock;
+                        color: root.paint-lock == lock ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                    TouchArea { clicked => { root.paint-lock-set(lock); } }
+                }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.layers");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 4px;
+            padding-top: 4px;
+
+            HorizontalLayout {
+                spacing: 4px;
+                height: 24px;
+
+                Text {
+                    text: root.paint-layer-count;
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-caption;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 3px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    IconDisplay { icon: IconSet.Plus; size: 12px; stroke: DesignTokens.text-secondary; }
+                    accessible-role: button;
+                    accessible-label: Tr.t("sl.add_layer");
+                    TouchArea { clicked => { root.paint-layer-added(); } }
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 3px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    IconDisplay { icon: IconSet.FolderOpen; size: 12px; stroke: DesignTokens.text-secondary; }
+                    accessible-role: button;
+                    accessible-label: Tr.t("sl.add_group");
+                    TouchArea { clicked => { root.paint-layer-group-added(); } }
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 3px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    IconDisplay { icon: IconSet.Square; size: 12px; stroke: DesignTokens.text-secondary; }
+                    accessible-role: button;
+                    accessible-label: Tr.t("sl.add_decal_layer");
+                    TouchArea { clicked => { root.paint-decal-layer-added(); } }
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 3px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    IconDisplay { icon: IconSet.Image; size: 12px; stroke: DesignTokens.text-secondary; }
+                    accessible-role: button;
+                    accessible-label: Tr.t("sl.import_decal_image");
+                    TouchArea { clicked => { root.command-file-action("paint.import_decal"); } }
+                }
+            }
+
+            for layer in root.paint-layers: Rectangle {
+                height: 30px;
+                border-radius: 4px;
+                background: layer.active ? DesignTokens.surface-hover : transparent;
+                border-width: layer.active ? 1px : 0px;
+                border-color: DesignTokens.accent;
+
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    spacing: 4px;
+                    alignment: center;
+
+                    TouchArea {
+                        horizontal-stretch: 1;
+                        clicked => { root.paint-layer-activated(layer.id); }
+
+                        HorizontalLayout {
+                            spacing: 6px;
+                            alignment: center;
+
+                            IconDisplay {
+                                icon: layer.is-group ? IconSet.FolderOpen : IconSet.Square;
+                                size: 12px;
+                                stroke: layer.active ? DesignTokens.accent : DesignTokens.text-muted;
+                            }
+                            Text {
+                                text: layer.name;
+                                color: layer.active ? DesignTokens.text-primary : DesignTokens.text-secondary;
+                                font-size: DesignTokens.font-small;
+                                font-weight: layer.active ? 600 : 400;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: layer.kind-label;
+                                color: DesignTokens.text-muted;
+                                font-size: DesignTokens.font-caption;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        IconDisplay { icon: IconSet.ChevronUp; size: 11px; stroke: DesignTokens.text-muted; }
+                        accessible-role: button;
+                        accessible-label: Tr.t("sl.move_layer_up");
+                        TouchArea { clicked => { root.paint-layer-moved(layer.id, 1); } }
+                    }
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        IconDisplay { icon: IconSet.ChevronDown; size: 11px; stroke: DesignTokens.text-muted; }
+                        accessible-role: button;
+                        accessible-label: Tr.t("sl.move_layer_down");
+                        TouchArea { clicked => { root.paint-layer-moved(layer.id, -1); } }
+                    }
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        IconDisplay {
+                            icon: layer.visible ? IconSet.Eye : IconSet.EyeOff;
+                            size: 12px;
+                            stroke: layer.visible ? DesignTokens.text-secondary : DesignTokens.text-muted;
+                        }
+                        accessible-role: checkbox;
+                        accessible-label: Tr.t("sl.layer_visible");
+                        accessible-checked: layer.visible;
+                        TouchArea { clicked => { root.paint-layer-visibility-toggled(layer.id); } }
+                    }
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        IconDisplay {
+                            icon: layer.locked ? IconSet.Lock : IconSet.LockOpen;
+                            size: 12px;
+                            stroke: layer.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                        }
+                        accessible-role: checkbox;
+                        accessible-label: Tr.t("sl.layer_locked");
+                        accessible-checked: layer.locked;
+                        TouchArea { clicked => { root.paint-layer-lock-toggled(layer.id); } }
+                    }
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        IconDisplay { icon: IconSet.Merge; size: 11px; stroke: DesignTokens.text-muted; }
+                        accessible-role: button;
+                        accessible-label: Tr.t("sl.merge_layer_down");
+                        TouchArea { clicked => { root.paint-layer-merged-down(layer.id); } }
+                    }
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        IconDisplay { icon: IconSet.Trash2; size: 11px; stroke: DesignTokens.danger; }
+                        accessible-role: button;
+                        accessible-label: Tr.t("sl.remove_layer");
+                        TouchArea { clicked => { root.paint-layer-removed(layer.id); } }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                height: 22px;
+
+                Text {
+                    text: Tr.t("sl.opacity");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    width: 52px;
+                    vertical-alignment: center;
+                }
+                for layer in root.paint-layers: Rectangle {
+                    visible: layer.active;
+                    horizontal-stretch: 1;
+                    height: 22px;
+
+                    layer-opacity := PetuniaSlider {
+                        minimum: 0.0;
+                        maximum: 1.0;
+                        value: layer.opacity;
+                        controlled: true;
+                        changed(value) => { root.paint-layer-opacity-set(layer.id, value); }
+                    }
+                }
+            }
+
+            if root.active-layer-is-decal: VerticalLayout {
+                spacing: 6px;
+                padding-top: 4px;
+
+                Text {
+                    text: root.label-decal-transform;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                }
+
+                if root.label-decal-hint != "": Text {
+                    text: root.label-decal-hint;
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-caption;
+                    wrap: word-wrap;
+                }
+
+                if !root.decal-surface: HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: root.label-decal-position;
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 52px;
+                        vertical-alignment: center;
+                    }
+                    NumericField {
+                        label: "U";
+                        value: root.decal-center-u;
+                        step: 0.05;
+                        scrubbed(delta, _) => {
+                            root.decal-center-u = Math.clamp(root.decal-center-u + delta * 0.01, 0.0, 1.0);
+                            root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
+                        }
+                    }
+                    NumericField {
+                        label: "V";
+                        value: root.decal-center-v;
+                        step: 0.05;
+                        scrubbed(delta, _) => {
+                            root.decal-center-v = Math.clamp(root.decal-center-v + delta * 0.01, 0.0, 1.0);
+                            root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: root.decal-surface ? root.label-decal-width : root.label-decal-scale;
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 52px;
+                        vertical-alignment: center;
+                    }
+                    NumericField {
+                        label: root.decal-surface ? "" : "U";
+                        value: root.decal-scale-u;
+                        step: 0.05;
+                        scrubbed(delta, _) => {
+                            root.decal-scale-u = Math.max(0.01, root.decal-scale-u + delta * 0.01);
+                            root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
+                        }
+                    }
+                    if !root.decal-surface: NumericField {
+                        label: "V";
+                        value: root.decal-scale-v;
+                        step: 0.05;
+                        scrubbed(delta, _) => {
+                            root.decal-scale-v = Math.max(0.01, root.decal-scale-v + delta * 0.01);
+                            root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: root.label-decal-rotation;
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 52px;
+                        vertical-alignment: center;
+                    }
+                    NumericField {
+                        label: Tr.t("sl.deg");
+                        value: root.decal-rotation-deg;
+                        step: 5.0;
+                        scrubbed(delta, _) => {
+                            root.decal-rotation-deg = root.decal-rotation-deg + delta * 1.0;
+                            root.decal-transform-changed("", root.decal-center-u, root.decal-center-v, root.decal-scale-u, root.decal-scale-v, root.decal-rotation-deg);
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 26px;
+                    border-radius: 4px;
+                    background: bake-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        IconDisplay { icon: IconSet.Check; size: 12px; stroke: DesignTokens.accent; }
+                        Text {
+                            text: root.label-decal-bake;
+                            color: DesignTokens.text-primary;
+                            font-size: DesignTokens.font-small;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
+                    bake-touch := TouchArea {
+                        clicked => { root.bake-active-decal(); }
+                    }
+                }
+
+                // Decal Set (cap. 39): variantes equivalentes e troca em degraus.
+                Text {
+                    text: Tr.t("ui.decal_variants");
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                }
+                VerticalLayout {
+                    spacing: 4px;
+                    for name[index] in root.decal-variant-names: BrushChip {
+                        label: name;
+                        active: index == root.decal-variant-index;
+                        clicked => { root.decal-variant-selected(index); }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    BrushChip {
+                        label: Tr.t("ui.decal_add_variant");
+                        clicked => { root.command-file-action("paint.add_decal_variant"); }
+                    }
+                    if root.decal-variant-names.length > 1: BrushChip {
+                        label: Tr.t("ui.decal_remove_variant");
+                        clicked => { root.decal-variant-remove-requested(); }
+                    }
+                }
+
+                Text {
+                    text: Tr.t("ui.decal_animation");
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    NumericField {
+                        label: Tr.t("ui.decal_frame");
+                        full-label: Tr.t("ui.decal_frame");
+                        value: root.decal-frame;
+                        step: 1;
+                        scrubbed(delta, _) => { root.decal-frame-changed(root.decal-frame + Math.round(delta)); }
+                        text-committed(text) => {
+                            if !text.is-float() { return false; }
+                            root.decal-frame-changed(Math.round(text.to-float()));
+                            return true;
+                        }
+                    }
+                    NumericField {
+                        label: Tr.t("ui.decal_fps");
+                        full-label: Tr.t("ui.decal_fps");
+                        value: root.decal-track-fps;
+                        step: 1;
+                        scrubbed(delta, _) => { root.decal-fps-changed(root.decal-track-fps + Math.round(delta)); }
+                        text-committed(text) => {
+                            if !text.is-float() { return false; }
+                            root.decal-fps-changed(text.to-float());
+                            return true;
+                        }
+                    }
+                    NumericField {
+                        label: Tr.t("ui.decal_length");
+                        full-label: Tr.t("ui.decal_length");
+                        value: root.decal-track-length;
+                        step: 1;
+                        scrubbed(delta, _) => { root.decal-length-changed(root.decal-track-length + Math.round(delta)); }
+                        text-committed(text) => {
+                            if !text.is-float() { return false; }
+                            root.decal-length-changed(Math.round(text.to-float()));
+                            return true;
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    BrushChip {
+                        label: Tr.t("ui.decal_set_key");
+                        active: root.decal-frame-keyed;
+                        clicked => { root.decal-key-set-requested(); }
+                    }
+                    if root.decal-frame-keyed: BrushChip {
+                        label: Tr.t("ui.decal_remove_key");
+                        clicked => { root.decal-key-remove-requested(); }
+                    }
+                    if root.decal-has-keys: BrushChip {
+                        label: root.decal-playing ? Tr.t("ui.decal_stop") : Tr.t("ui.decal_play");
+                        active: root.decal-playing;
+                        clicked => { root.decal-play-toggled(); }
+                    }
+                }
+                Text {
+                    text: root.decal-has-keys ? root.decal-keys-text : Tr.t("ui.decal_no_keys");
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-caption;
+                    wrap: word-wrap;
+                }
+                BrushChip {
+                    label: Tr.t("ui.decal_export_frames");
+                    clicked => { root.command-file-action("paint.export_decal_frames"); }
+                }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.color_palette");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 8px;
+            padding-top: 4px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: center;
+
+                Rectangle {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 6px;
+                    background: root.paint-color;
+                    border-width: 2px;
+                    border-color: DesignTokens.accent;
+                }
+
+                Text {
+                    text: root.label-active-brush-color;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: center;
+
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-violet;
+                    selected: root.paint-color == ColorPresets.paint-violet;
+                    clicked => { root.paint-color-changed(0.71, 0.55, 1.0); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-red;
+                    selected: root.paint-color == ColorPresets.paint-red;
+                    clicked => { root.paint-color-changed(0.93, 0.27, 0.27); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-green;
+                    selected: root.paint-color == ColorPresets.paint-green;
+                    clicked => { root.paint-color-changed(0.13, 0.77, 0.37); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-blue;
+                    selected: root.paint-color == ColorPresets.paint-blue;
+                    clicked => { root.paint-color-changed(0.23, 0.51, 0.96); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-yellow;
+                    selected: root.paint-color == ColorPresets.paint-yellow;
+                    clicked => { root.paint-color-changed(0.92, 0.70, 0.03); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-white;
+                    selected: root.paint-color == ColorPresets.paint-white;
+                    clicked => { root.paint-color-changed(1.0, 1.0, 1.0); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-gray;
+                    selected: root.paint-color == ColorPresets.paint-gray;
+                    clicked => { root.paint-color-changed(0.42, 0.45, 0.50); }
+                }
+                ColorSwatch {
+                    swatch-color: ColorPresets.paint-black;
+                    selected: root.paint-color == ColorPresets.paint-black;
+                    clicked => { root.paint-color-changed(0.07, 0.07, 0.07); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                padding-top: 4px;
+                Rectangle {
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    horizontal-stretch: 1;
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 4px;
+                        IconDisplay { icon: IconSet.Download; size: 12px; stroke: DesignTokens.text-primary; }
+                        Text { text: Tr.t("sl.import"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; vertical-alignment: center; }
+                    }
+                    TouchArea { clicked => { root.command-file-action("palette.import"); } }
+                }
+                Rectangle {
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    horizontal-stretch: 1;
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 4px;
+                        IconDisplay { icon: IconSet.Upload; size: 12px; stroke: DesignTokens.text-primary; }
+                        Text { text: Tr.t("sl.export"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; vertical-alignment: center; }
+                    }
+                    TouchArea { clicked => { root.command-file-action("palette.export"); } }
+                }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.brush_settings");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 8px;
+            padding-top: 4px;
+
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.size") + ": \{Math.round(root.brush-size * 10) / 10}";
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.brush-size-changed(Math.max(0.1, root.brush-size - 0.2)); } }
+                }
+                Rectangle { width: 4px; }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.brush-size-changed(Math.min(10.0, root.brush-size + 0.2)); } }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.opacity") + ": \{Math.round(root.brush-opacity * 100)}%";
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.brush-opacity-changed(Math.max(0.05, root.brush-opacity - 0.1)); } }
+                }
+                Rectangle { width: 4px; }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.brush-opacity-changed(Math.min(1.0, root.brush-opacity + 0.1)); } }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.hardness") + ": \{Math.round(root.brush-hardness * 100)}%";
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.brush-hardness-changed(Math.max(0.0, root.brush-hardness - 0.1)); } }
+                }
+                Rectangle { width: 4px; }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.brush-hardness-changed(Math.min(1.0, root.brush-hardness + 0.1)); } }
+                }
+            }
+
+            // --- Pincel: tipo, fluxo, estabilizador, variação, ponta, mistura ---
+            Text { text: Tr.t("sl.brush_type"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush"); active: root.active-tool == "brush"; clicked => { root.active-tool-changed("brush"); } }
+                BrushChip { label: Tr.t("sl.brush_type_pixel"); active: root.active-tool == "pixel"; clicked => { root.active-tool-changed("pixel"); } }
+                BrushChip { label: Tr.t("sl.airbrush"); active: root.active-tool == "airbrush"; clicked => { root.active-tool-changed("airbrush"); } }
+            }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush_type_spray"); active: root.active-tool == "spray"; clicked => { root.active-tool-changed("spray"); } }
+                BrushChip { label: Tr.t("sl.brush_type_smudge"); active: root.active-tool == "smudge"; clicked => { root.active-tool-changed("smudge"); } }
+                BrushChip { label: Tr.t("sl.brush_type_blur"); active: root.active-tool == "blur"; clicked => { root.active-tool-changed("blur"); } }
+            }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush_type_dodge"); active: root.active-tool == "dodge"; clicked => { root.active-tool-changed("dodge"); } }
+                BrushChip { label: Tr.t("sl.brush_type_burn"); active: root.active-tool == "burn"; clicked => { root.active-tool-changed("burn"); } }
+                BrushChip { label: Tr.t("sl.brush_type_clone"); active: root.active-tool == "clone"; clicked => { root.active-tool-changed("clone"); } }
+            }
+            if root.active-tool == "clone": Text {
+                text: root.clone-source-set ? Tr.t("sl.brush_clone_ready") : Tr.t("sl.brush_clone_hint");
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+                wrap: word-wrap;
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_flow");
+                value-text: "\{Math.round(root.brush-flow * 100)}%";
+                minus => { root.brush-param-changed("flow", Math.max(0.0, root.brush-flow - 0.1)); }
+                plus => { root.brush-param-changed("flow", Math.min(1.0, root.brush-flow + 0.1)); }
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_spacing");
+                value-text: "\{Math.round(root.brush-spacing * 100)}%";
+                minus => { root.brush-param-changed("spacing", Math.max(0.01, root.brush-spacing - 0.05)); }
+                plus => { root.brush-param-changed("spacing", Math.min(1.0, root.brush-spacing + 0.05)); }
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_smoothing");
+                value-text: "\{Math.round(root.brush-smoothing * 100)}%";
+                minus => { root.brush-param-changed("smoothing", Math.max(0.0, root.brush-smoothing - 0.1)); }
+                plus => { root.brush-param-changed("smoothing", Math.min(0.95, root.brush-smoothing + 0.1)); }
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_size_jitter");
+                value-text: "\{Math.round(root.brush-size-jitter * 100)}%";
+                minus => { root.brush-param-changed("size_jitter", Math.max(0.0, root.brush-size-jitter - 0.1)); }
+                plus => { root.brush-param-changed("size_jitter", Math.min(1.0, root.brush-size-jitter + 0.1)); }
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_opacity_jitter");
+                value-text: "\{Math.round(root.brush-opacity-jitter * 100)}%";
+                minus => { root.brush-param-changed("opacity_jitter", Math.max(0.0, root.brush-opacity-jitter - 0.1)); }
+                plus => { root.brush-param-changed("opacity_jitter", Math.min(1.0, root.brush-opacity-jitter + 0.1)); }
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_scatter");
+                value-text: "\{Math.round(root.brush-scatter * 100)}%";
+                minus => { root.brush-param-changed("scatter", Math.max(0.0, root.brush-scatter - 0.1)); }
+                plus => { root.brush-param-changed("scatter", Math.min(2.0, root.brush-scatter + 0.1)); }
+            }
+            if root.active-tool == "spray": BrushStepper {
+                label: Tr.t("sl.brush_spray_density");
+                value-text: "\{Math.round(root.brush-spray-density * 100)}%";
+                minus => { root.brush-param-changed("spray_density", Math.max(0.05, root.brush-spray-density - 0.05)); }
+                plus => { root.brush-param-changed("spray_density", Math.min(1.0, root.brush-spray-density + 0.05)); }
+            }
+            Text { text: Tr.t("sl.brush_tip"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush_tip_round"); active: root.brush-tip == "round"; clicked => { root.brush-tip-changed("round"); } }
+                BrushChip { label: Tr.t("sl.brush_tip_square"); active: root.brush-tip == "square"; clicked => { root.brush-tip-changed("square"); } }
+                BrushChip { label: Tr.t("sl.brush_tip_diamond"); active: root.brush-tip == "diamond"; clicked => { root.brush-tip-changed("diamond"); } }
+            }
+            if root.brush-tip != "round": BrushStepper {
+                label: Tr.t("sl.brush_angle");
+                value-text: "\{Math.round(root.brush-angle)}°";
+                minus => { root.brush-param-changed("angle", Math.max(-180.0, root.brush-angle - 15.0)); }
+                plus => { root.brush-param-changed("angle", Math.min(180.0, root.brush-angle + 15.0)); }
+            }
+            BrushStepper {
+                label: Tr.t("sl.brush_roundness");
+                value-text: "\{Math.round(root.brush-roundness * 100)}%";
+                minus => { root.brush-param-changed("roundness", Math.max(0.1, root.brush-roundness - 0.1)); }
+                plus => { root.brush-param-changed("roundness", Math.min(1.0, root.brush-roundness + 0.1)); }
+            }
+            Text { text: Tr.t("sl.brush_blend"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush_blend_normal"); active: root.brush-blend == "normal"; clicked => { root.brush-blend-changed("normal"); } }
+                BrushChip { label: Tr.t("sl.brush_blend_multiply"); active: root.brush-blend == "multiply"; clicked => { root.brush-blend-changed("multiply"); } }
+                BrushChip { label: Tr.t("sl.brush_blend_screen"); active: root.brush-blend == "screen"; clicked => { root.brush-blend-changed("screen"); } }
+            }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush_blend_add"); active: root.brush-blend == "add"; clicked => { root.brush-blend-changed("add"); } }
+                BrushChip { label: Tr.t("sl.brush_blend_darken"); active: root.brush-blend == "darken"; clicked => { root.brush-blend-changed("darken"); } }
+                BrushChip { label: Tr.t("sl.brush_blend_lighten"); active: root.brush-blend == "lighten"; clicked => { root.brush-blend-changed("lighten"); } }
+            }
+            Text { text: Tr.t("sl.brush_presets"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; }
+            VerticalLayout { spacing: 3px;
+                for preset-name[preset-index] in root.brush-presets: BrushChip {
+                    label: preset-name;
+                    active: root.brush-preset-index == preset-index;
+                    clicked => { root.brush-preset-applied(preset-index); }
+                }
+            }
+            HorizontalLayout { spacing: 4px;
+                BrushChip { label: Tr.t("sl.brush_preset_save"); clicked => { root.brush-preset-saved(); } }
+                BrushChip { label: Tr.t("sl.brush_preset_delete"); clicked => { root.brush-preset-deleted(root.brush-preset-index); } }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.symmetry");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: root.paint-symmetry-x ? DesignTokens.accent : DesignTokens.surface-raised;
+                    Text { text: "X"; color: root.paint-symmetry-x ? DesignTokens.on-accent : DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.paint-symmetry-x-toggled(); } }
+                }
+                Rectangle { width: 4px; }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: root.paint-symmetry-y ? DesignTokens.accent : DesignTokens.surface-raised;
+                    Text { text: "Y"; color: root.paint-symmetry-y ? DesignTokens.on-accent : DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.paint-symmetry-y-toggled(); } }
+                }
+                Rectangle { width: 4px; }
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: root.paint-symmetry-z ? DesignTokens.accent : DesignTokens.surface-raised;
+                    Text { text: "Z"; color: root.paint-symmetry-z ? DesignTokens.on-accent : DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.paint-symmetry-z-toggled(); } }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.target");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 64px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: !root.paint-target-vertex ? DesignTokens.accent : DesignTokens.surface-raised;
+                    Text { text: Tr.t("sl.texture"); color: !root.paint-target-vertex ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.paint-target-vertex-changed(false); } }
+                }
+                Rectangle { width: 4px; }
+                Rectangle {
+                    width: 58px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: root.paint-target-vertex ? DesignTokens.accent : DesignTokens.surface-raised;
+                    Text { text: Tr.t("sl.vertex"); color: root.paint-target-vertex ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.paint-target-vertex-changed(true); } }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.mask_selection");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
+                    horizontal-stretch: 1;
+                }
+                Rectangle {
+                    width: 44px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: root.paint-mask-selection ? DesignTokens.accent : DesignTokens.surface-raised;
+                    Text { text: root.paint-mask-selection ? Tr.t("sl.on") : Tr.t("sl.off"); color: root.paint-mask-selection ? DesignTokens.on-accent : DesignTokens.text-secondary; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.paint-mask-selection-toggled(); } }
+                }
+            }
+        }
+    }
+
+    InspectorSection {
+        title: Tr.t("sl.texture_layers");
+        open: true;
+        toggled => { self.open = !self.open; }
+
+        VerticalLayout {
+            spacing: 4px;
+            Rectangle {
+                height: 28px;
+                background: DesignTokens.surface-raised;
+                border-radius: 4px;
+                HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    spacing: 6px;
+                    alignment: center;
+                    IconDisplay { icon: IconSet.Layers3; size: 14px; stroke: DesignTokens.accent; }
+                    Text { text: root.label-albedo-base-color; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Text { text: Tr.t("sl.active"); color: DesignTokens.success; font-size: DesignTokens.font-caption; font-weight: 700; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

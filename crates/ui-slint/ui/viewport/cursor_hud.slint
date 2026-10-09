@@ -1,0 +1,351 @@
+import { DesignTokens, Tr } from "../tokens.slint";
+import { MeasureTag, WorldAxisTag } from "../types.slint";
+
+/// Projeta estado do shell; não cria outro owner de domínio.
+export component ViewportCursorHud inherits Rectangle {
+    in property <string> active-workspace;
+    in property <bool> colorblind-axes;
+    in property <length> cursor-screen-x;
+    in property <length> cursor-screen-y;
+    in property <bool> cursor-visible;
+    in property <string> dimension-text;
+    in property <bool> dimension-visible;
+    in property <length> dimension-x;
+    in property <length> dimension-y;
+    in property <bool> edit-pivot;
+    in property <string> hud-pill-badge;
+    in property <string> hud-pill-hint;
+    in property <string> hud-pill-title;
+    in property <string> hud-pill-value;
+    in property <bool> hud-pill-visible;
+    in property <length> hud-pill-x;
+    in property <length> hud-pill-y;
+    in property <string> label-edit-pivot;
+    in property <[MeasureTag]> measure-tags;
+    in property <string> measure-text;
+    in property <bool> measure-visible;
+    in property <length> measure-x;
+    in property <length> measure-y;
+    in property <bool> precision-mode;
+    in property <string> snap-marker-label;
+    in property <bool> snap-marker-round;
+    in property <bool> snap-marker-visible;
+    in property <length> snap-marker-x;
+    in property <length> snap-marker-y;
+    in property <bool> snap-mode;
+    in property <[WorldAxisTag]> world-axis-labels;
+    background: transparent;
+
+    // 3D Cursor overlay (âncora 3D para criação de primitivas e foco de câmera)
+    if root.cursor-visible && root.active-workspace == "MODEL": Rectangle {
+        x: root.cursor-screen-x - 14px;
+        y: root.cursor-screen-y - 14px;
+        width: 28px;
+        height: 28px;
+
+        // Outer ring (white)
+        Rectangle {
+            x: 2px; y: 2px;
+            width: 24px; height: 24px;
+            border-radius: 12px;
+            border-width: 1.5px;
+            border-color: DesignTokens.cursor-light;
+            background: transparent;
+        }
+        // Inner ring (accent / red)
+        Rectangle {
+            x: 4px; y: 4px;
+            width: 20px; height: 20px;
+            border-radius: 10px;
+            border-width: 1.5px;
+            border-color: DesignTokens.marker-pivot.with-alpha(0.87);
+            background: transparent;
+        }
+        // Horizontal crosshair
+        Rectangle {
+            x: 0px; y: 13px;
+            width: 28px; height: 2px;
+            background: DesignTokens.cursor-light;
+        }
+        // Vertical crosshair
+        Rectangle {
+            x: 13px; y: 0px;
+            width: 2px; height: 28px;
+            background: DesignTokens.cursor-light;
+        }
+        // Center dot
+        Rectangle {
+            x: 12px; y: 12px;
+            width: 4px; height: 4px;
+            border-radius: 2px;
+            background: DesignTokens.marker-pivot;
+        }
+    }
+
+    // Edit Pivot Mode visual banner / badge
+    if root.edit-pivot && root.active-workspace == "MODEL": Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 58px;
+        height: 30px;
+        width: edit-pivot-row.preferred-width + 24px;
+        border-radius: 6px;
+        background: DesignTokens.marker-pivot.with-alpha(0.13);
+        border-width: 1.5px;
+        border-color: DesignTokens.marker-pivot;
+        drop-shadow-blur: DesignTokens.elevation-1-blur;
+        drop-shadow-color: DesignTokens.elevation-1-color;
+
+        edit-pivot-row := HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 8px;
+            alignment: center;
+            Rectangle {
+                width: 8px; height: 8px;
+                border-radius: 4px;
+                background: DesignTokens.marker-pivot;
+                y: (parent.height - self.height) / 2;
+            }
+            Text {
+                text: "\{root.label-edit-pivot} (Insert)";
+                color: DesignTokens.hud-text;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Text {
+                text: Tr.t("sl.g_to_move_origin");
+                color: DesignTokens.marker-pivot-text;
+                font-size: DesignTokens.font-caption;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Marcador magnético de snap (Fase 4: Feedback Magnético)
+    if root.snap-marker-visible && root.active-workspace == "MODEL": Rectangle {
+        x: root.snap-marker-x - 8px;
+        y: root.snap-marker-y - 8px;
+        width: 16px;
+        height: 16px;
+        Rectangle {
+            x: 2px; y: 2px; width: 12px; height: 12px;
+            border-radius: root.snap-marker-round ? 6px : 2px;
+            background: transparent;
+            border-width: 2px;
+            border-color: DesignTokens.measure;
+            drop-shadow-blur: DesignTokens.glow-blur;
+            drop-shadow-color: DesignTokens.measure.with-alpha(0.8);
+        }
+        Rectangle {
+            x: 6px; y: 6px; width: 4px; height: 4px;
+            border-radius: 2px;
+            background: DesignTokens.measure;
+        }
+    }
+
+    // Rótulo do alvo de snap (P3D-040: forma + cor + texto)
+    if root.snap-marker-visible && root.snap-marker-label != "" && root.active-workspace == "MODEL": Rectangle {
+        x: root.snap-marker-x + 12px;
+        y: root.snap-marker-y + 10px;
+        width: snap-label.preferred-width + 10px;
+        height: 18px;
+        border-radius: 4px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        snap-label := Text {
+            text: root.snap-marker-label;
+            color: DesignTokens.text-primary;
+            font-size: DesignTokens.font-caption;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Rótulo da cota blueprint (Fase 4: Cotas Blueprint)
+    if root.dimension-visible && root.dimension-text != "" && root.active-workspace == "MODEL": dimension-label := Rectangle {
+        x: root.dimension-x - self.width / 2;
+        y: root.dimension-y - self.height / 2;
+        width: dim-label.preferred-width + 12px;
+        height: 20px;
+        border-radius: 4px;
+        background: DesignTokens.hud-surface;
+        border-width: 1px;
+        border-color: DesignTokens.badge-precision-border;
+        drop-shadow-blur: DesignTokens.elevation-1-blur;
+        drop-shadow-color: DesignTokens.elevation-1-color;
+        dim-label := Text {
+            text: root.dimension-text;
+            color: DesignTokens.hud-text;
+            font-size: DesignTokens.font-caption;
+            font-weight: 700;
+            font-family: "monospace";
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Rótulos de Medição nos Edges (Fase 6: Medição Rápida Compacta e Translúcida)
+    if root.measure-visible && root.active-workspace == "MODEL": Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+
+        for tag in root.measure-tags: Rectangle {
+            x: tag.x * 1px - self.width / 2;
+            y: tag.y * 1px - self.height / 2;
+            width: tag-label.preferred-width + 10px;
+            height: 18px;
+            border-radius: 4px;
+            background: DesignTokens.hud-surface;
+            border-width: 1px;
+            border-color: DesignTokens.measure.with-alpha(0.53);
+            drop-shadow-blur: DesignTokens.elevation-1-blur;
+            drop-shadow-color: DesignTokens.elevation-1-color;
+
+            tag-label := Text {
+                text: tag.text;
+                color: DesignTokens.measure;
+                font-size: DesignTokens.font-caption;
+                font-weight: 700;
+                font-family: "monospace";
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.measure-tags.length == 0 && root.measure-text != "": Rectangle {
+            x: root.measure-x - self.width / 2;
+            y: root.measure-y - self.height / 2;
+            width: fallback-label.preferred-width + 10px;
+            height: 18px;
+            border-radius: 4px;
+            background: DesignTokens.hud-surface;
+            border-width: 1px;
+            border-color: DesignTokens.measure.with-alpha(0.53);
+            drop-shadow-blur: DesignTokens.elevation-1-blur;
+            drop-shadow-color: DesignTokens.elevation-1-color;
+
+            fallback-label := Text {
+                text: root.measure-text;
+                color: DesignTokens.measure;
+                font-size: DesignTokens.font-caption;
+                font-weight: 700;
+                font-family: "monospace";
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Rótulos não-cromáticos dos eixos do mundo no chão 3D (Grid Viewport)
+    if root.colorblind-axes && root.active-workspace == "MODEL": Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+
+        for tag in root.world-axis-labels: Rectangle {
+            x: tag.x * 1px - 8px;
+            y: tag.y * 1px - 8px;
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            background: DesignTokens.hud-surface;
+            border-width: 1px;
+            border-color: tag.tint.transparentize(0.2);
+            drop-shadow-blur: DesignTokens.elevation-1-blur;
+            drop-shadow-color: DesignTokens.elevation-1-color;
+
+            Text {
+                text: tag.text;
+                color: tag.tint;
+                font-size: DesignTokens.font-caption;
+                font-weight: 700;
+                font-family: "monospace";
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // HUD Flutuante no Cursor (Fase 4: HUD Numérico em Tempo Real)
+    if root.hud-pill-visible && root.active-workspace == "MODEL": cursor-pill := Rectangle {
+        x: min(max(8px, root.hud-pill-x), parent.width - self.width - 8px);
+        y: min(max(8px, root.hud-pill-y), parent.height - self.height - 8px);
+        width: hud-pill-layout.preferred-width + 20px;
+        height: hud-pill-layout.preferred-height + 12px;
+        border-radius: 8px;
+        background: DesignTokens.hud-surface;
+        border-width: 1px;
+        border-color: DesignTokens.accent.transparentize(0.3);
+        drop-shadow-blur: DesignTokens.elevation-2-blur;
+        drop-shadow-color: DesignTokens.elevation-2-color;
+
+        hud-pill-layout := VerticalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            spacing: 3px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: space-between;
+                Text {
+                    text: root.hud-pill-title;
+                    color: DesignTokens.accent;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 700;
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    if root.hud-pill-badge != "": Rectangle {
+                        border-radius: 3px;
+                        background: DesignTokens.accent.transparentize(0.8);
+                        border-width: 1px;
+                        border-color: DesignTokens.accent;
+                        HorizontalLayout {
+                            padding-left: 4px; padding-right: 4px;
+                            Text { text: root.hud-pill-badge; color: DesignTokens.accent; font-size: DesignTokens.font-caption; font-weight: 700; }
+                        }
+                    }
+                    if root.precision-mode: Rectangle {
+                        border-radius: 3px;
+                        background: DesignTokens.badge-precision-bg;
+                        border-width: 1px;
+                        border-color: DesignTokens.badge-precision-border;
+                        HorizontalLayout {
+                            padding-left: 4px; padding-right: 4px;
+                            Text { text: Tr.t("sl.precision_0_1"); color: DesignTokens.badge-precision-text; font-size: DesignTokens.font-caption; font-weight: 700; font-family: "monospace"; }
+                        }
+                    }
+                    if root.snap-mode: Rectangle {
+                        border-radius: 3px;
+                        background: DesignTokens.badge-snap-bg;
+                        border-width: 1px;
+                        border-color: DesignTokens.badge-snap-border;
+                        HorizontalLayout {
+                            padding-left: 4px; padding-right: 4px;
+                            Text { text: Tr.t("sl.snap"); color: DesignTokens.badge-snap-text; font-size: DesignTokens.font-caption; font-weight: 700; font-family: "monospace"; }
+                        }
+                    }
+                }
+            }
+            Text {
+                text: root.hud-pill-value;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-default;
+                font-weight: 600;
+                font-family: "monospace";
+            }
+            if root.hud-pill-hint != "": Text {
+                text: root.hud-pill-hint;
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+            }
+        }
+    }
+}

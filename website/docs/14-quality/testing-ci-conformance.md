@@ -118,3 +118,7 @@ Cada evidência registra: commit SHA, branch, toolchain, OS, GPU/driver, feature
 ## Decisões fechadas
 
 Contratos testados por boundary; UI/GL/a11y hard gates; nenhuma aprovação sem evidência; rollback/cancel/Undo essenciais; fixtures cross-platform; performance medida; CI da branch e legado egui têm escopos separados.
+
+## Wave U01 — cobertura adicional (2026-10-09)
+
+`ui-slint.yml` passa a incluir `paint_shell` e `viewport_hud` junto de MODEL/UV/ANIMATE/gestures na configuração `animation-workspace`. As regressões novas exercitam input físico composto, strokes/seleção 2D, IDs/opacity de layers atualizados, efeitos/brush/binding do canvas e geometria/hit testing de HUDs passivos. Execução e limites da wave: [Slint Rescue §19](../09-ui/slint-rescue-plan.md#19-wave-u01--paint-e-huds-2026-10-09). A alteração de configuração não comprova execução remota; Q03 permanece parcial.

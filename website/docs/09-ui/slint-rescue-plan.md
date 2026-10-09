@@ -133,6 +133,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 - Context Bar da viewport extraída como host com `@children`;
 - View Bar extraída como host com `@children`;
 - overlays passivos de seleção, Animate e previews de ferramenta extraídos para `viewport/overlays.slint`;
+- guias/previews/stencil em `viewport/guides.slint`, cursor/cotas/snap em `cursor_hud.slint`, resumos em `status_hud.slint` e conteúdo de operação em `operation_hud.slint`; ver execução/gates da wave em §19;
 - `PetuniaViewportHost` extraído com superfície, resize lógico/físico, HiDPI e composição da imagem GPU;
 - `ViewportInputRouter` extraído: o antigo `TouchArea` de ~400 linhas saiu do monólito, mantendo apenas recognition state efêmero e callbacks semânticos;
 - `drag-threshold-px` agora controla a promoção click → drag/box/transform/lasso;
@@ -145,7 +146,7 @@ Erros críticos continuam proibidos de depender apenas de toast.
 ### Próximas extrações desta fase
 
 1. validar compilação do shell extraído;
-2. extrair overlays/HUD restantes que não recebem input;
+2. validar overlays/HUD extraídos na wave U01 (§19), incluindo equivalência visual/foco/teclado;
 3. definir `ViewportInputIntent`/boundary antes de mover pointer handling;
 4. somente depois, decompor picking/gizmos/tool sessions.
 
@@ -175,6 +176,7 @@ RightColumn
 - Workspaces MODEL e ANIMATE reestruturados sob `StructureHost` e `PropertiesHost`.
 - `AnimateInspector` extraído para `ui/animate.slint`.
 - `ModelInspector` extraído para `ui/workspaces/model/inspector.slint`, mantendo Parts em Structure e Transform/Material/Object/Combine em Properties. A extração preserva os corpos existentes; não implementa o split independente nem muda ownership de seleção, materiais, primitivas ou Undo.
+- `PaintInspector` extraído para `ui/workspaces/paint/inspector.slint`, preservando controles, 70 propriedades (incluindo seis bindings de ida/volta) e 50 callbacks. O inspector ainda contém as seções existentes; Layers/Properties independentes e Work Surface 2D pertencem às próximas fases. Gates em §19.
 - `UvInspector` extraído para `ui/workspaces/uv/inspector.slint`, composto pelo shell com as mesmas propriedades e callbacks. Os hosts são transitórios: operações UV ainda ocupam `StructureHost`; sua migração para Properties/Context Bar e a lista de Islands pertencem à fase de workspace.
 - O split vertical independente entre Structure e Properties ainda não foi implementado; a presença dos hosts não conclui a Fase 2.
 - Conteúdo recebe propriedades projetadas pelo shell; registry não foi introduzido.
@@ -423,3 +425,68 @@ Identidade das fontes testadas (SHA-256), conferida novamente antes do commit:
 **Risks:** cabeçalhos acessíveis e controles existentes são preservados, mas testes headless não comprovam equivalência visual, screen reader, Windows, GL ou low-end. Esses gates permanecem abertos na aceitação final U01/Rescue; não presumir Go a partir da extração.
 
 **Next checkpoint:** conteúdo PAINT em slice separado, depois overlays/HUD restantes e aceitação final. A extração MODEL só aumenta o percentual U01 após os gates focados; U01 não vira DONE enquanto houver checkpoints abertos.
+
+## 19. Wave U01 — PAINT e HUDs (2026-10-09)
+
+**Intent:** concluir a implementação estrutural restante sobre `0883bfbedc2b1c81ed692da5d455fed2dcb19e0a`, branch `refactor/architecture-foundation`. Conforme instrução do usuário, implementar toda a wave antes de executar testes; a bateria começa somente após PAINT, overlays/HUD, regressões e integração estarem escritos.
+
+**Sources:** §5 Shell estrutural e §6 Inspector deste plano; PAINT Workspace §2 (capacidades preservadas); Viewport Input Boundary; protocolo de implementação §C–F.
+
+**Gap:** MODEL/UV/ANIMATE extraídos e previamente verificados; PAINT e guias/HUD ainda inline; gate visual/foco/teclado final parcial. A extração estrutural não implementa o novo macro-layout PAINT nem fecha o Rescue Go/No-Go.
+
+**Changed:** `workspaces/paint/inspector.slint` projeta Canvas, Layers, Effects, Fill/Projection, Decal e Brush; bindings de ida/volta preservam painel do canvas e transforms do decal. A classificação de pincel permanece função única no shell. `viewport/guides.slint` mantém guias e previews antes do input; `cursor_hud.slint` mantém cursor, pivô, snap, cotas, medidas, eixos e pílula após o input; `status_hud.slint` mantém resumos após ViewBar. `operation_hud.slint` extrai conteúdo passivo, preservando o ToolCard interativo no host e sua posição. Nenhum componente novo recebe input ou ownership do documento. Regressões físicas `paint_shell`/`viewport_hud` e inclusão no workflow fazem parte da wave.
+
+**Verification (bateria iniciada somente após implementar toda a wave):**
+
+| Gate | Resultado |
+|---|---|
+| Comparação de corpos/projeções com a baseline; API/funções públicas e tail após PAINT preservados | pass |
+| `cargo fmt -p petunia_ui_slint -- --check` e `git diff --check` | pass |
+| `target/debug/xtask ui-lint` | pass, 29 arquivos |
+| Testes de integração default abaixo | pass, 39 testes |
+| `cargo test … --lib` | pass, 508 testes |
+| `cargo clippy … --all-targets -- -D warnings` | pass, todos os targets |
+| Validador do tracker, seis testes Node e guard documental | pass |
+| Feature `animation-workspace`, CI remota e aceitação visual/nativa | not run |
+
+```bash
+CARGO_BUILD_JOBS=1 cargo test -p petunia_ui_slint --config profile.test.package.petunia_ui_slint.debug=0 \
+  --test paint_shell --test viewport_hud --test model_shell --test uv_shell \
+  --test viewport_gestures --test animate_shell --test ui_metrics
+```
+
+Bateria unitária e Clippy executados sequencialmente, no mesmo target, com um job:
+
+```bash
+CARGO_BUILD_JOBS=1 cargo test -p petunia_ui_slint --config profile.test.package.petunia_ui_slint.debug=0 --lib
+CARGO_BUILD_JOBS=1 cargo clippy -p petunia_ui_slint --all-targets -- -D warnings
+node website/scripts/verify-progress.cjs
+node --test website/tests/progress.test.cjs
+python3 website/scripts/verify-agent-docs.py
+```
+
+Unitários: **508 pass**; integração: **39 pass**; total: **547 testes Rust pass**, sem ignorados/filtrados nos resultados das suítes. Clippy: **pass** com `-D warnings`. Logs: `/tmp/petunia-wave-unit.log` e `/tmp/petunia-wave-clippy.log`. Ambiente: Linux x86_64, Rust 1.98.1, Slint 1.18.0; override `debug=0` apenas no crate UI em test, sem remover metadados/asserções. Configuração de CI foi atualizada, mas não executada remotamente. Após os gates, sessões incrementais antigas/sem lock foram removidas; caches mais recentes e qualquer sessão ativa preservados.
+
+A primeira execução terminou em **fail**: o helper do teste emitia `PointerMoved` novamente antes do release e buscava a visibilidade da layer como button embora o contrato existente seja checkbox. Corrigido o harness, preservando asserções e código de produção, a execução consolidada passou: PAINT 3, HUD 2, MODEL 4, UV/PAINT 3, ANIMATE 11, gestures 15, métricas 1. Logs: `/tmp/petunia-wave-integration.log` (tentativa inicial) e `/tmp/petunia-wave-integration-final.log` (pass).
+
+Painel local `http://localhost:8080/#/progress`: reload + filtro IN PROGRESS mostra U01 (083%, 5/6) e Q03 (025%, 1/4), com links canônicos; console sem warnings/errors. Captura local `petunia-u01-wave-checkpoint.jpg`. Esse check do site não substitui o gate visual da aplicação Slint.
+
+PAINT projeta 70 propriedades, 50 callbacks e seis bindings de ida/volta. Guias/HUD são projeções sem input, comparadas à baseline com suas condições e posições preservadas. O shell passa de 8.802 para 7.145 linhas. U01 avança para **IN PROGRESS (083%)** (cinco de seis checkpoints); a aceitação final ainda está aberta.
+
+**Risks:** testes headless não comprovam equivalência visual, leitor de tela, GL, Windows ou desempenho low-end. Layout/ownership completo dos workspaces, DTOs/intents e decisão Go/No-Go pertencem a outros processos.
+
+**Next checkpoint:** implementação completa e bateria local aprovada. Registrar aceitação visual/nativa de layout, foco, teclado/F6, temas/escala e leitores de tela; completar a configuração `animation-workspace` e gates de plataforma quando executados. U01 permanece em andamento até existir prova da aceitação final; o Rescue Go/No-Go continua aberto.
+
+
+Fontes da wave (SHA-256, arquivos verificados):
+
+```text
+5b45468b0cb9355377e2fae5e898f27b637cdbb26fe0853508c79dd7b2260a75  crates/ui-slint/ui/app.slint
+5ee45e0127f55ff84895c53b91fcd77b5d3abf75bd8f81e43d00fbf87bb4809f  crates/ui-slint/ui/workspaces/paint/inspector.slint
+bcf2106b6a6bc70bb34ff5a7f2ba073424a61158a6f3b558c7c342ab6bbac8d8  crates/ui-slint/ui/viewport/guides.slint
+c80999450006e3de03a2d9536f2d56541f84f48fa514e8e823abc7ffdee1387f  crates/ui-slint/ui/viewport/cursor_hud.slint
+05c1837d266af168f3ad14368fd85b1160f838e38f9776cceeccad11b2684026  crates/ui-slint/ui/viewport/status_hud.slint
+e85d0011cff8a38b9fb725b1b7592f60606d7dc3dfb858cb592b103085671206  crates/ui-slint/ui/viewport/operation_hud.slint
+69ec5cfe88df9636c5479591f72606998591b99d21aa7e459bf03a1eef998088  crates/ui-slint/tests/paint_shell.rs
+cc3701e6d8745e29180bf1e534e4ed8230b20ff40bb51a89b3979a3ab5607a1f  crates/ui-slint/tests/viewport_hud.rs
+```
