@@ -176,13 +176,15 @@ fn overlays_block_regional_navigation_and_restore_the_invoking_region() {
     key(&shell, Key::F6.into());
     key(&shell, Key::F6.into());
     assert_eq!(shell.get_focus_region(), 4);
-    for overlay in 0..5 {
+    for overlay in 0..7 {
         match overlay {
             0 => shell.set_settings_visible(true),
             1 => shell.set_command_search_visible(true),
             2 => shell.set_reference_manager_visible(true),
             3 => shell.set_menu_open("file".into()),
-            _ => shell.set_context_menu_open(true),
+            4 => shell.set_context_menu_open(true),
+            5 => shell.set_home_open(true),
+            _ => shell.set_recovery_open(true),
         }
         key(&shell, Key::F6.into());
         backward(&shell);
@@ -196,7 +198,9 @@ fn overlays_block_regional_navigation_and_restore_the_invoking_region() {
             1 => shell.set_command_search_visible(false),
             2 => shell.set_reference_manager_visible(false),
             3 => shell.set_menu_open("".into()),
-            _ => shell.set_context_menu_open(false),
+            4 => shell.set_context_menu_open(false),
+            5 => shell.set_home_open(false),
+            _ => shell.set_recovery_open(false),
         }
         let panes = Rc::new(RefCell::new(Vec::new()));
         let observed = Rc::clone(&panes);
