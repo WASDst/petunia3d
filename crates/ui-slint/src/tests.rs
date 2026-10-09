@@ -9356,6 +9356,11 @@ fn test_reference_manager_operations_and_f4_shortcut() {
     assert!(!bridge.view_model().reference_manager_open);
     assert!(bridge.open_reference_manager());
     assert!(bridge.view_model().reference_manager_open);
+    // Referências é painel flutuante, não modal (plano U07).
+    assert_eq!(
+        bridge.overlays.top().map(|entry| entry.kind),
+        Some(crate::overlay::OverlayKind::FloatingPanel)
+    );
 
     // Add a reference image to project.refs
     let dummy_rgba = vec![255u8; 16 * 16 * 4];
