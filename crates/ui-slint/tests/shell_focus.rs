@@ -464,6 +464,66 @@ fn recovery_initial_focus_is_keep_and_escape_never_decides() {
 }
 
 #[test]
+fn creation_popover_returns_focus_to_its_rail_invoker() {
+    let shell = shell();
+    shell.set_modeling_mode("DRAW".into());
+    // O bridge real fecha o popover; aqui a emulação só liga a flag sincronizada.
+    let toggles = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&toggles);
+    let weak = shell.as_weak();
+    shell.on_add_menu_changed(move |open| {
+        observed.borrow_mut().push(open);
+        if open {
+            weak.upgrade().unwrap().set_add_menu_open(true);
+        }
+    });
+    let add = i_slint_backend_testing::ElementHandle::find_by_accessible_label(
+        &shell,
+        &petunia_ui_slint::tr::lookup("sl.add_primitive"),
+    )
+    .find(|item| item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::Button))
+    .expect("real rail invoker");
+    add.mock_single_click(slint::platform::PointerEventButton::Left);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    assert_eq!(
+        *toggles.borrow(),
+        vec![true],
+        "the rail control opens the creation popover"
+    );
+    assert!(shell.get_add_menu_open());
+    // Fechamento vindo do bridge (Esc/click-away/atalho): devolve o foco ao invocador.
+    shell.set_add_menu_open(false);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    assert!(!shell.get_add_menu_open());
+    key(&shell, Key::Return.into());
+    assert_eq!(
+        *toggles.borrow(),
+        vec![true, true],
+        "Enter reopens the same rail invoker"
+    );
+}
+
+#[test]
+fn context_menu_items_are_actionable_by_keyboard_and_semantic_action() {
+    let shell = shell();
+    shell.set_context_menu_open(true);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    let actions = Rc::new(RefCell::new(Vec::new()));
+    let observed = Rc::clone(&actions);
+    shell.on_context_menu_action(move |id| observed.borrow_mut().push(id.to_string()));
+    let rename = i_slint_backend_testing::ElementHandle::find_by_accessible_label(
+        &shell,
+        &petunia_ui_slint::tr::lookup("sl.rename"),
+    )
+    .find(|item| item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::Button))
+    .expect("menu item exposed as a button");
+    // A ação semântica percorre o mesmo caminho do Enter/Espaço no item focado.
+    rename.invoke_accessible_default_action();
+    assert_eq!(*actions.borrow(), vec!["rename"]);
+    assert!(!shell.get_context_menu_open(), "activating closes the menu");
+}
+
+#[test]
 fn home_escape_closes_once_through_its_modal_boundary() {
     let shell = shell();
     let closed = Rc::new(RefCell::new(0));

@@ -488,11 +488,16 @@ export component ContextMenuItem inherits Rectangle {
     accessible-enabled: !root.disabled;
     accessible-checkable: root.checked;
     accessible-checked: root.checked;
+    // Item de menu é acionável pelo teclado e pela ação semântica.
+    accessible-action-default => { if !root.disabled { root.clicked(); } }
+    forward-focus: item-focus;
     height: 26px;
     border-radius: 4px;
     background: root.disabled ? DesignTokens.surface-hover.with-alpha(0)
         : (touch-area.pressed ? DesignTokens.surface-pressed
         : ((touch-area.has-hover || root.highlighted) ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    border-width: item-focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
     animate background { duration: Motion.fast; easing: ease-out; }
 
     HorizontalLayout {
@@ -524,9 +529,21 @@ export component ContextMenuItem inherits Rectangle {
         }
     }
 
-    touch-area := TouchArea {
+    // O foco fica no item, não no container: Tab entra no menu e Enter/Space o aciona.
+    // Navegação por setas e contenção continuam com o chamador.
+    item-focus := FocusScope {
         enabled: !root.disabled;
-        clicked => { root.clicked(); }
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch-area := TouchArea {
+            enabled: !root.disabled;
+            clicked => { root.clicked(); }
+        }
     }
 }
 

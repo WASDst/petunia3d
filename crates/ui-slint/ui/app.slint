@@ -206,6 +206,10 @@ export component PetuniaSlintShell inherits Window {
     // O bridge projeta o topo da pilha. O default só cobre o shell sem bridge.
     in property <string> overlay-top-id: root.settings-visible ? "settings" : root.command-search-visible ? "command_palette" : "";
     private property <int> overlay-header-invoker: 0;
+    // Invocador do popover de criação (1 = botão do Tool Rail). O atalho global
+    // (Shift+A) não tem controle invocador: 0 conserva o comportamento anterior.
+    private property <int> add-menu-invoker: 0;
+    private property <int> rail-add-focus-token: 0;
     property <bool> settings-focus-active: root.settings-visible && root.overlay-top-id == "settings";
     property <bool> command-focus-active: root.command-search-visible && root.overlay-top-id == "command_palette";
     // Posição dos painéis flutuantes; negativo = centralizado.
@@ -1488,6 +1492,14 @@ export component PetuniaSlintShell inherits Window {
     changed compact-shell => { root.reconcile-focus-region(); }
     changed asset-library-visible => { root.reconcile-focus-region(); }
     changed active-workspace => { root.reconcile-focus-region(); }
+    // Fechamento do popover de criação devolve o foco ao controle que o abriu.
+    // Sem invocador de controle, o foco permanece onde estava (popover não modal).
+    changed add-menu-open => {
+        if !root.add-menu-open && root.add-menu-invoker == 1 {
+            root.add-menu-invoker = 0;
+            root.rail-add-focus-token += 1;
+        }
+    }
 
     root-focus := FocusScope {
         init => { self.focus(); }
@@ -1646,6 +1658,7 @@ export component PetuniaSlintShell inherits Window {
                     transform-instant-active: root.transform-instant-active;
                     show-tool-labels: root.show-tool-labels;
                     add-menu-open: root.add-menu-open;
+                    add-focus-token: root.rail-add-focus-token;
                     asset-library-visible: root.asset-library-visible;
 
                     select-tools: root.rail-select-tools;
@@ -1685,6 +1698,7 @@ export component PetuniaSlintShell inherits Window {
                     add-profile-rectangle(w, h) => { root.add-profile-rectangle(w, h); }
                     add-profile-circle(radius, segments) => { root.add-profile-circle(radius, segments); }
                     add-menu-toggled(open) => {
+                        if open { root.add-menu-invoker = 1; }
                         root.add-menu-open = open;
                         root.add-menu-changed(open);
                     }

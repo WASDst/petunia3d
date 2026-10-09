@@ -171,9 +171,7 @@ fn animate_drawer_transport_dispatches_existing_procedural_actions() {
         let button = transport
             .query_descendants()
             .match_accessible_role(AccessibleRole::Button)
-            .match_predicate(move |element| {
-                element.accessible_label().as_deref() == Some(label)
-            })
+            .match_predicate(move |element| element.accessible_label().as_deref() == Some(label))
             .find_first()
             .expect("drawer transport action");
         click(&shell, &button);

@@ -17,6 +17,9 @@ export component ToolRail inherits Rectangle {
     in property <bool> transform-instant-active: false;
     in property <bool> show-tool-labels: false;
     in property <bool> add-menu-open: false;
+    /// Epoch de retorno: o chamador só incrementa quando o popover de criação
+    /// fechou e o invocador registrado foi este botão.
+    in property <int> add-focus-token: 0;
     in property <bool> asset-library-visible: false;
 
     in property <[RailTool]> select-tools;
@@ -236,13 +239,15 @@ export component ToolRail inherits Rectangle {
 
             Rectangle { width: 28px; height: 1px; background: DesignTokens.border; }
 
-            ToolButton {
+            add-action := ToolButton {
                 show-label: root.show-tool-labels;
                 icon: IconSet.Plus;
                 semantic-label: Tr.t("sl.add_primitive");
                 shortcut: root.shortcuts.model-add-primitive;
                 description: Tr.t("sl.quick_menu_to_create_standard_3d_parametric_");
                 active: root.add-menu-open;
+                property <int> focus-token: root.add-focus-token;
+                changed focus-token => { if root.add-focus-token > 0 { add-action.focus(); } }
                 clicked => { root.add-menu-toggled(!root.add-menu-open); }
             }
         }
