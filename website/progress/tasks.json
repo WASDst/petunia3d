@@ -85,6 +85,11 @@
       "revision": "Slice compilado (default library) sobre 36266107236163f63b4c584bc0cd28b8ae95afca; hashes registrados em Workspaces §23",
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "summary": "§23: F6/Shift+F6 com sete IDs regionais, skip do Context Bar vazio em ANIMATE, recuperação de região, captura F6/setas e proteção de overlays. cargo check default --lib pass, exit 0 em 2m04s, sem warnings, Linux x86_64/Rust 1.98.1. Quatro regressões escritas, not run. Tab trap/memória por controle/reader pendentes; não conclui checkpoints."
+    },
+    "modal-focus": {
+      "revision": "Slice compilado (default library) sobre cba9f38f73d7c3b8f7a78915909edb10e2cb6b84; hashes registrados em Workspaces §24",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "summary": "§24: Settings/Palette com entrada/trap Tab/Shift+Tab e retorno aos dois invocadores Header; captura antes do controle, precedência modal Escape, click-away só no topo/pin e Add popover integrado à pilha existente. cargo check default --lib pass, exit 0 em 2m15s, sem warnings, Linux x86_64/Rust 1.98.1. Dez regressões escritas (6 shell/4 bridge), not run. Home/Recovery/outros overlays, foco por controle/caret/IME/reader e gates finais pendentes; não conclui checkpoints."
     }
   },
   "tasks": [
@@ -433,7 +438,7 @@
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Slice escrito e cargo check default --lib pass sobre 3626610: entradas F6/Shift+F6 por sete IDs com disponibilidade/retorno (Context Bar omitida em ANIMATE), proteção de overlays/roteador global e captura F6/setas. Quatro regressões not run por adiamento do usuário. Tab trap, invocador por controle, IME/reader e aceite nativo pendentes (§23 Workspaces).",
+      "baseline": "§23: F6 regional escrito/compilado. §24 sobre cba9f38: Tab nativo de controles e contenção nos modais Settings/Palette, captura de binding antes do TextInput/Enter, entradas nomeadas e ring; Tab de ferramenta na viewport preservado até migração regional completa. cargo check default --lib pass (2m15s). Seis regressões shell e quatro bridge escritas, not run por adiamento do usuário. Navegação regional completa, Home/Recovery, roles globais/IME/reader Windows-Linux e aceite nativo pendentes.",
       "checkpoints": [
         {
           "title": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer",
@@ -467,7 +472,7 @@
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Slice escrito e cargo check default --lib pass sobre 3626610: entradas F6/Shift+F6 por sete IDs com disponibilidade/retorno (Context Bar omitida em ANIMATE), proteção de overlays/roteador global e captura F6/setas. Quatro regressões not run por adiamento do usuário. Tab trap, invocador por controle, IME/reader e aceite nativo pendentes (§23 Workspaces).",
+      "baseline": "§24 sobre cba9f38: Settings/Palette recebem foco na busca e trap Tab/Shift+Tab; retornam aos seus dois invocadores Header, com fallback regional para outras entradas. OverlayStack projeta o topo; Escape modal precede cancelamento de ferramenta; click-away não atravessa pin/non-dismissible nem fecha duas camadas; Add popover integrado à pilha. cargo check default --lib pass (2m15s); dez novas regressões not run por adiamento do usuário. Home/Recovery/outros overlays, memória por controle/caret e gates nativos pendentes.",
       "checkpoints": [
         {
           "title": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro",

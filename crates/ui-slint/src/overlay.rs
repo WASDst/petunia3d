@@ -24,6 +24,26 @@ pub enum OverlayId {
     PivotMenu,
     MicroInspector,
     ReferenceManager,
+    AddMenu,
+}
+
+impl OverlayId {
+    /// Identificador de apresentação; não pertence ao documento persistente.
+    pub fn presentation_id(self) -> &'static str {
+        match self {
+            Self::CommandPalette => "command_palette",
+            Self::Settings => "settings",
+            Self::SceneDrawer => "scene_drawer",
+            Self::AssetLibrary => "asset_library",
+            Self::OutlinerContextMenu => "outliner_context",
+            Self::ContextMenu => "context",
+            Self::MenuBar => "menu",
+            Self::PivotMenu => "pivot",
+            Self::MicroInspector => "micro_inspector",
+            Self::ReferenceManager => "references",
+            Self::AddMenu => "add_menu",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

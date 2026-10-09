@@ -11724,3 +11724,93 @@ fn official_themes_meet_wcag_text_contrast() {
         );
     }
 }
+
+#[test]
+fn modal_escape_precedes_collected_tool_points_without_mutating_document() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.mark_document_clean();
+    bridge
+        .poly_pen_points
+        .push(petunia_core::PenPoint::New([0.0; 3]));
+    bridge.apply(UiIntent::OpenCommandSearch);
+    bridge.apply(UiIntent::OpenSettings);
+    assert_eq!(bridge.view_model().overlay_top_id, "settings");
+    assert!(bridge.handle_escape());
+    assert!(!bridge.settings_visible);
+    assert!(bridge.command_search_visible);
+    assert_eq!(
+        bridge.poly_pen_points.len(),
+        1,
+        "modal Escape preserves unfinished tool input"
+    );
+    assert_eq!(bridge.view_model().overlay_top_id, "command_palette");
+    assert!(bridge.handle_escape());
+    assert_eq!(bridge.poly_pen_points.len(), 1);
+    assert!(bridge.view_model().overlay_top_id.is_empty());
+    assert!(!bridge.state.is_document_dirty());
+    assert!(bridge.handle_escape());
+    assert!(
+        bridge.poly_pen_points.is_empty(),
+        "tool cancellation resumes after the modals"
+    );
+}
+
+#[test]
+fn click_away_respects_pinned_top_and_dismisses_one_layer_at_a_time() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(bridge.open_menu("file"));
+    bridge.apply(UiIntent::OpenSettings);
+    bridge.overlays.set_pinned(OverlayId::Settings, true);
+    assert!(!bridge.handle_click_away());
+    assert!(bridge.settings_visible && bridge.menu_open.is_some());
+    bridge.overlays.set_pinned(OverlayId::Settings, false);
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.settings_visible);
+    assert!(
+        bridge.menu_open.is_some(),
+        "one click does not close the underlying menu"
+    );
+    assert_eq!(bridge.view_model().overlay_top_id, "menu");
+    assert!(bridge.handle_click_away());
+    assert!(bridge.menu_open.is_none());
+}
+
+#[test]
+fn non_dismissible_modal_does_not_forward_escape_or_click_away_to_a_tool() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge
+        .poly_pen_points
+        .push(petunia_core::PenPoint::New([0.0; 3]));
+    bridge.command_search_visible = true;
+    bridge.overlays.push(OverlayEntry {
+        id: OverlayId::CommandPalette,
+        kind: OverlayKind::Modal,
+        pinned: false,
+        dismiss_on_escape: false,
+        dismiss_on_click_away: false,
+    });
+    assert!(
+        bridge.handle_escape(),
+        "blocked Escape is consumed by the modal"
+    );
+    assert!(!bridge.handle_click_away());
+    assert!(bridge.command_search_visible);
+    assert_eq!(bridge.poly_pen_points.len(), 1);
+    assert_eq!(bridge.overlays.len(), 1);
+}
+
+#[test]
+fn add_popover_participates_in_click_away_order_without_closing_the_drawer() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::ToggleSceneDrawer);
+    bridge.set_add_menu_open(true);
+    assert_eq!(bridge.view_model().overlay_top_id, "add_menu");
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.add_menu_open);
+    assert!(bridge.scene_drawer_visible);
+    bridge.set_add_menu_open(true);
+    bridge.set_add_menu_open(false);
+    assert_eq!(bridge.view_model().overlay_top_id, "scene_drawer");
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.scene_drawer_visible);
+}

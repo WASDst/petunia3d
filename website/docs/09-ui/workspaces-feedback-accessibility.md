@@ -577,3 +577,44 @@ Fontes finais desta etapa (SHA-256):
 **Risks:** check de compilação não comprova ordem nativa de Tab, foco visual, bubbling sob controles, reader, GL ou low-end. Widgets de overlay existentes ainda precisam do focus trap próprio. U06/U07 permanecem IN PROGRESS (000%), sem mudar o denominador ou alegar conformidade WCAG.
 
 **Next checkpoint:** implementar Tab regional/trap de overlays e memória de foco por controle em slice próprio. Na fase de testes posterior, executar shell_focus, viewport_gestures, shell suites/lib/feature e validar foco/teclado/temas/escala/AT-SPI no app nativo.
+
+## 24. Slice U06/U07 — contenção de dois modais e invocadores Header (2026-10-09)
+
+**Intent / Sources:** implementar a entrada/contenção de foco em Settings e Command Palette e a restauração dos seus dois invocadores no Header. Fontes: §16 OverlayStack, §18 navegação/teclado, Slint Rescue §§5/13 e implementação em `overlay.rs`, `app.slint`, `shell/header.slint`, `callbacks.rs`. Baseline `cba9f38f73d7c3b8f7a78915909edb10e2cb6b84`, branch `refactor/architecture-foundation`. Os testes permanecem adiados pelo usuário.
+
+**Gap matrix:**
+
+| Requisito | Realidade antes deste slice | Delta |
+|---|---|---|
+| F6 regional | Entradas/proteção/retorno regional escritos e compilados em §23; gates comportamentais not run | Preservar; não declarar verificado |
+| Abrir modal e focar conteúdo | Ausente em Settings/Palette | Entrada no TextInput de busca; ring na Palette |
+| Tab/Shift+Tab no modal | Percurso sem contenção | Boundary com guards e extremos reais, usando traversal nativo |
+| Tab em controles fora do modal | Roteador global podia consumir Tab | Rejeitar Tab comum quando foco está em controle; preservar o binding de ferramenta quando foco está na viewport |
+| Memória de invocador | Somente região F6 | Restaurar os botões concretos Search/Settings no Header; demais invocadores seguem fallback regional |
+| Capturar bindings | Bubble posterior a TextInput/Enter local | Capture no ancestor antes do controle/trap; Escape cancela captura antes de dismiss |
+| Modal versus cancelamento de ferramenta | Bridge podia cancelar gesto/pontos antes de fechar modal | Topo modal recebe Escape antes da gramática de ferramenta |
+| Click-away/pin | Podia fechar menu e camada superior no mesmo evento | Somente topo da pilha; pinned/non-dismissible bloqueia passagem |
+| Add popover | Flag local fora da pilha | Ambos os escritores (rail e comando) usam `set_add_menu_open`, com entrada Popover em OverlayStack |
+
+**Changed:** `shell/modal_focus_boundary.slint` envolve os cards existentes de Settings/Palette. O componente não desenha guards, não adiciona TouchArea nem enumera controles ou dados de documento. Capture registra sentido de Tab (incluindo Backtab) e intercepta Escape/F6 do modal ativo; guards agendam a transferência de foco ao primeiro/último controle real fornecido pelo chamador. Um Timer de 1 ms, ativo somente durante essa transferência, evita mudar foco dentro de focus-gained antes de o toolkit publicar foco/semântica. Isso não comprova o comportamento assistivo, que permanece pendente. Search/close na Palette; close do Header/close do footer em Settings. O foco inicial em Settings permanece na busca, acessível em ambos os sentidos. Os footers usam IconButton, tokens e labels traduzidos. Settings recebe scrim/click-away com a política já existente no bridge; drag/resize, categorias, keymap e demais conteúdos são reaproveitados. Home abre Settings pela intenção existente, evitando a flag isolada da pilha.
+
+`OverlayId::presentation_id()` e `ShellViewModel.overlay_top_id` projetam o topo atual de OverlayStack, sem pilha concorrente no Slint. O sync aplica a projeção antes das flags. Entre Settings/Palette, somente o topo recebe entrada/trap e elevação visual; a outra camada não toma foco ao ser sincronizada. O default declarativo do ID existe somente para uso do shell sem bridge; a execução de produção sobrescreve-o com a projeção real.
+
+O Header lembra quais dos seus dois botões abriram a superfície. Ao fechar o último overlay bloqueante, o shell restaura esse controle e limpa a memória; quando não há invocador Header, conserva o fallback regional de §23 (agora também após uma abertura anterior ao primeiro F6). Nenhuma referência de UI é persistida no projeto; Document/Undo/serialização, picking e renderer não mudam. As entradas/extremos referenciados pelo boundary precisam permanecer visíveis e habilitados; não usar um comando destrutivo como entrada padrão.
+
+**Verification:** compilação intermediária pelo build script Slint isolado **pass** após corrigir a tentativa de usar o role `dialog`, indisponível em Slint 1.18. `CARGO_BUILD_JOBS=1 cargo check -p petunia_ui_slint --lib` intermediário **pass**, exit 0 em 4m02s, sem warnings (`/tmp/petunia-u07-check.log`). A compilação das fontes finais, após adiar a transferência dos guards, **pass**, exit 0 em 2m15s, sem warnings (`/tmp/petunia-u07-check-final.log`). Ambiente Linux x86_64, Rust 1.98.1; features default e library apenas. Não inclui link/startup, alvos de teste, feature animation-workspace nem aceite nativo. A tentativa inicial de Timer falhou pela propriedade repeat inexistente; removida, usando running ligado apenas à transferência pendente. `cargo fmt -p petunia_ui_slint` aplicado; `git diff --check` pass. Nenhum teste/gate comportamental executado nesta etapa.
+
+Seis novas regressões headless em `tests/shell_focus.rs`: entrada/traversal nos extremos da Palette; Backtab/Enter no footer Settings; retorno a cada invocador Header com reabertura física via Enter; captura de texto/Enter/Tab/Escape sem editar query; Tab de ferramenta na viewport versus Tab nativo no Header; alternância do topo projetado entre os dois modais mantendo queries. O helper avança dois ticks de mock time para iniciar bindings e concluir o Timer, sem sleep real. Quatro regressões do bridge: precedência modal sobre pontos de ferramenta + projeção; pin/uma camada por click-away; modal non-dismissible; Add popover/drawer. Todas **not run**, incluindo compilação dos alvos de teste. Regressões anteriores não recebem pass retroativo.
+
+Fontes desta etapa (SHA-256):
+
+- `crates/ui-slint/ui/app.slint`: `44d1a0b79c63c0247a430d5570dd0a6a9307081dd607c55e4efd0ec7fd2769d7`
+- `crates/ui-slint/ui/shell/modal_focus_boundary.slint`: `0d53f4e7183400cfd85d994a65540cb803fda4c54ae92d2715746d5c7f36f3f9`
+- `crates/ui-slint/ui/shell/header.slint`: `e14fb81c53d0d0faad89aed26b813eff910ff68ed3ff9b0c314d3adc98372fd8`
+- `crates/ui-slint/src/overlay.rs`: `03739c196af8104e48bd0aa4b3a19ef2a708e54d55ec107dff075c149630321a`
+- `crates/ui-slint/src/lib.rs`: `6861ebd7df7021a41549cdf2170708456ddc6c30fcdb54d94a5579f64287f727`
+- `crates/ui-slint/tests/shell_focus.rs`: `404c69fd01a38b2548950a180546998606c642f055af0cde5b1e1d507d527f01`
+
+**Risks / limites:** nenhum comportamento foi executado nem observado no app nativo nesta etapa. Traversal dos guards, árvore/role acessível, bubbling, caret/IME, high contrast, escala/resize, Windows/Linux assistivo e integração final precisam de gates posteriores. Slint 1.18 não fornece `AccessibleRole::Dialog`: as superfícies usam groupbox nomeado, sem alegar role modal no leitor de tela. Este slice cobre Settings/Palette e os dois botões Header, não Home/Recovery, menus/flyouts, References, painéis pinados, memória de todo controle ou draft/caret em overlays aninhados. Tab regional completo continua pendente; o binding de ferramenta existente na Work Surface é preservado até esse contrato ser migrado. A elevação/foco entre outros tipos de overlay ainda precisa de integração ampla. U06/U07 continuam IN PROGRESS (000%), sem novos checkpoints comprovados.
+
+**Next checkpoint:** estender entrada/trap seguro a Home/Recovery, manter References como FloatingPanel, e restaurar controles internos em overlays aninhados sem perder draft/caret. Na fase de testes autorizada depois da implementação, executar shell_focus/lib/viewport_gestures/feature e documentar aceitação nativa com teclado, pointer, tema/escala e AT-SPI/Windows. Nenhum teste é liberado automaticamente por uma compilação verde.

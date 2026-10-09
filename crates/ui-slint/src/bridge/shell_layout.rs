@@ -1,11 +1,29 @@
 //! Coordenação do layout/sections do shell, sem picking nem mutações geométricas.
 use crate::callbacks::sync_window_properties;
+use crate::overlay::{OverlayEntry, OverlayId, OverlayKind};
 use crate::{
     PetuniaSlintShell, PetuniaViewport, SectionStateModel, SlintUiBridge, inspector_layout,
     section_layout,
 };
 use slint::ComponentHandle;
 use std::sync::{Arc, Mutex};
+
+impl<V: PetuniaViewport> SlintUiBridge<V> {
+    pub fn set_add_menu_open(&mut self, open: bool) {
+        self.add_menu_open = open;
+        if open {
+            self.overlays.push(OverlayEntry {
+                id: OverlayId::AddMenu,
+                kind: OverlayKind::Popover,
+                pinned: false,
+                dismiss_on_escape: true,
+                dismiss_on_click_away: true,
+            });
+        } else {
+            self.overlays.remove(OverlayId::AddMenu);
+        }
+    }
+}
 
 pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     window: &PetuniaSlintShell,

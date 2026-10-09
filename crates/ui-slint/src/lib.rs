@@ -13477,6 +13477,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn handle_escape(&mut self) -> bool {
+        // A decisão modal tem precedência sobre cancelar gestos do documento.
+        // Não atravessar um topo não dismissible para atingir a ferramenta.
+        if self
+            .overlays
+            .top()
+            .is_some_and(|entry| entry.kind == OverlayKind::Modal)
+        {
+            if let Some(entry) = self.overlays.esc() {
+                self.hide_overlay(entry.id);
+            }
+            return true;
+        }
         if self.close_context_menu() {
             return true;
         }
@@ -13595,27 +13607,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn handle_click_away(&mut self) -> bool {
-        let mut handled = false;
-        if self.close_context_menu() {
-            handled = true;
+        // Um click-away trata somente o topo: nunca fecha camadas por baixo
+        // de uma superfície pinada ou que exige decisão explícita.
+        if !self.overlays.is_empty() {
+            let Some(entry) = self.overlays.click_away() else {
+                return false;
+            };
+            match entry.id {
+                OverlayId::ContextMenu | OverlayId::OutlinerContextMenu => {
+                    self.close_context_menu();
+                }
+                OverlayId::MenuBar => {
+                    self.close_menu();
+                }
+                _ => self.hide_overlay(entry.id),
+            }
+            return true;
         }
-        if self.close_menu() {
-            handled = true;
-        }
-        if self.add_menu_open {
-            self.add_menu_open = false;
-            handled = true;
-        }
-        if self.pivot_menu_open {
-            self.pivot_menu_open = false;
-            self.overlays.remove(OverlayId::PivotMenu);
-            handled = true;
-        }
-        if let Some(entry) = self.overlays.click_away() {
-            self.hide_overlay(entry.id);
-            handled = true;
-        }
-        handled
+        false
     }
 
     pub fn execute_command(&mut self, id: CommandId) {
@@ -14517,7 +14526,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.apply(UiIntent::SetActiveTool("measure".to_string()));
             }
             "model.primitives" => {
-                self.add_menu_open = true;
+                self.set_add_menu_open(true);
             }
             "global.previous_tool" => return self.swap_to_previous_tool(),
             "global.micro_inspector" => return self.toggle_micro_inspector(),
@@ -16409,6 +16418,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         vm.settings_visible = self.settings_visible;
         vm.command_search_visible = self.command_search_visible;
+        vm.overlay_top_id = self
+            .overlays
+            .top()
+            .map(|entry| entry.id.presentation_id().to_owned())
+            .unwrap_or_default();
         vm.scene_drawer_visible = self.scene_drawer_visible;
         vm.reference_manager_open = self.reference_manager_open;
         for slot in &mut vm.reference_slots {
@@ -16473,6 +16487,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             OverlayId::PivotMenu => self.pivot_menu_open = false,
             OverlayId::MicroInspector => self.micro_inspector_open = false,
             OverlayId::ReferenceManager => self.reference_manager_open = false,
+            OverlayId::AddMenu => self.add_menu_open = false,
         }
     }
 }

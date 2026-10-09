@@ -858,6 +858,8 @@ pub struct ShellViewModel {
     pub active_material_slot: i32,
     pub settings_visible: bool,
     pub command_search_visible: bool,
+    /// Projeção do topo de OverlayStack; Slint não mantém uma segunda pilha.
+    pub overlay_top_id: String,
     pub scene_drawer_visible: bool,
     pub active_keymap_id: String,
     /// Semântica dos modificadores de pointer do keymap ativo.
@@ -1877,6 +1879,7 @@ impl ShellViewModel {
             section_states: Vec::new(),
             settings_visible: false,
             command_search_visible: false,
+            overlay_top_id: String::new(),
             scene_drawer_visible: false,
             active_keymap_id: state.ui.active_keymap_id.clone(),
             pointer_precision_mask: pointer_modifier_mask(

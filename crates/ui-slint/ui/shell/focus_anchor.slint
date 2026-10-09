@@ -6,6 +6,7 @@ export component RegionFocusAnchor inherits Rectangle {
     in property <string> label;
     in property <bool> enabled: true;
     in property <bool> activate-on-enter: true;
+    out property <bool> has-keyboard-focus: region-focus.has-focus;
     callback activated();
     changed focus-token => { if root.focus-token > 0 { region-focus.focus(); } }
     background: transparent;

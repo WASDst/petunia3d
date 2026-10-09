@@ -43,6 +43,13 @@ export component ShellHeader inherits Rectangle {
     callback redo-requested;
     callback search-requested;
     callback settings-requested;
+    callback overlay-invoked(int);
+
+    // IDs locais dos invocadores: 1 busca, 2 preferências.
+    public function restore-overlay-invoker(invoker: int) {
+        if invoker == 1 { search-action.focus(); }
+        if invoker == 2 { settings-action.focus(); }
+    }
 
     height: 42px;
     background: DesignTokens.surface;
@@ -167,19 +174,19 @@ export component ShellHeader inherits Rectangle {
 
             Rectangle { width: 1px; height: 16px; background: DesignTokens.border; }
 
-            CommandSearchField {
+            search-action := CommandSearchField {
                 placeholder: Tr.t("sl.search_command_placeholder");
                 shortcut: root.shortcut-search;
-                activated => { root.search-requested(); }
+                activated => { root.overlay-invoked(1); root.search-requested(); }
             }
 
-            TopAction {
+            settings-action := TopAction {
                 icon: IconSet.Settings;
                 icon-svg: PetuniaIcons.settings;
                 semantic-label: Tr.t("sl.settings");
                 shortcut: root.shortcut-settings;
                 description: Tr.t("sl.open_application_preferences_keymaps_and_the");
-                clicked => { root.settings-requested(); }
+                clicked => { root.overlay-invoked(2); root.settings-requested(); }
             }
         }
     }

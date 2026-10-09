@@ -13,6 +13,7 @@ import { DesignTokens, Tr } from "../tokens.slint";
 export component PetuniaViewportHost inherits Rectangle {
     in property <int> region-focus-token: 0;
     in property <bool> region-focus-enabled: true;
+    out property <bool> has-region-focus: surface-focus.has-keyboard-focus;
     in property <bool> split-enabled: false;
     in property <bool> has-gpu-viewport: false;
     in property <image> viewport-image;
@@ -58,7 +59,7 @@ export component PetuniaViewportHost inherits Rectangle {
         vertical-alignment: center;
     }
 
-    RegionFocusAnchor {
+    surface-focus := RegionFocusAnchor {
         width: root.width;
         height: root.height;
         label: Tr.t("sl.region_surface");

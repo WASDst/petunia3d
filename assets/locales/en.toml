@@ -1055,6 +1055,7 @@ multiselection_measure_tag = "Display average measure tag on multiple edge selec
 
 # Textos do shell Slint (Tr.t). Gerado na migração de literais para chaves.
 [sl]
+close_command_search = "Close command search"
 region_header = "Header"
 region_tools = "Tools"
 region_surface = "Work surface"

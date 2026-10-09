@@ -19,6 +19,7 @@ import { BrushChip, BrushStepper, ColorSwatch, ContextMenuItem, MenuDropdown, Nu
 import { IconButton } from "components/base.slint";
 import { StatusToast } from "components/feedback.slint";
 import { ShellHeader } from "shell/header.slint";
+import { ModalFocusBoundary } from "shell/modal_focus_boundary.slint";
 import { ToolRail } from "shell/tool_rail.slint";
 import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
@@ -201,6 +202,11 @@ export component PetuniaSlintShell inherits Window {
     in-out property <bool> scene-drawer-pinned: false;
     in-out property <bool> settings-visible: false;
     in-out property <bool> reference-manager-visible: false;
+    // O bridge projeta o topo da pilha. O default só cobre o shell sem bridge.
+    in property <string> overlay-top-id: root.settings-visible ? "settings" : root.command-search-visible ? "command_palette" : "";
+    private property <int> overlay-header-invoker: 0;
+    property <bool> settings-focus-active: root.settings-visible && root.overlay-top-id == "settings";
+    property <bool> command-focus-active: root.command-search-visible && root.overlay-top-id == "command_palette";
     // Posição dos painéis flutuantes; negativo = centralizado.
     in-out property <length> ref-panel-x: -1px;
     in-out property <length> ref-panel-y: -1px;
@@ -1467,7 +1473,14 @@ export component PetuniaSlintShell inherits Window {
         }
     }
     changed regional-focus-blocked => {
-        if !root.regional-focus-blocked && root.region-focus-epoch > 0 { root.enter-focus-region(root.focus-region); }
+        if !root.regional-focus-blocked {
+            if root.overlay-header-invoker == 1 || root.overlay-header-invoker == 2 {
+                root.focus-region = 0;
+                root.region-focus-epoch = 0;
+                shell-header.restore-overlay-invoker(root.overlay-header-invoker);
+                root.overlay-header-invoker = 0;
+            } else { root.enter-focus-region(root.focus-region); }
+        }
     }
     changed inspector-visible => { root.reconcile-focus-region(); }
     changed inspector-expanded => { root.reconcile-focus-region(); }
@@ -1477,6 +1490,15 @@ export component PetuniaSlintShell inherits Window {
 
     root-focus := FocusScope {
         init => { self.focus(); }
+        // Captura precede TextInput/Enter/F6 e o confinamento de cada modal.
+        capture-key-pressed(event) => {
+            if root.keymap-capture-action != "" {
+                if event.text == Key.Escape { root.keymap-capture-cancelled(); }
+                else { root.keymap-capture-key(root.shortcut-key-name(event.text), event.modifiers.control, event.modifiers.shift, event.modifiers.alt); }
+                return accept;
+            }
+            reject
+        }
         key-released(event) => {
             root.precision-mode = event.modifiers.shift;
             root.snap-mode = event.modifiers.control;
@@ -1485,16 +1507,10 @@ export component PetuniaSlintShell inherits Window {
         key-pressed(event) => {
             root.precision-mode = event.modifiers.shift;
             root.snap-mode = event.modifiers.control;
-            // Captura de atalho (Configurações → Teclado): a próxima combinação vai
-            // para a ação pendente; Esc cancela sem fechar o painel.
-            if root.keymap-capture-action != "" {
-                if event.text == Key.Escape {
-                    root.keymap-capture-cancelled();
-                } else {
-                    root.keymap-capture-key(root.shortcut-key-name(event.text), event.modifiers.control, event.modifiers.shift, event.modifiers.alt);
-                }
-                return accept;
-            }
+            // Controles usam Tab nativo. Na superfície de edição preserva-se
+            // o atalho de ferramenta configurado; combinações seguem no keymap.
+            if (event.text == Key.Tab || event.text == "\u{0019}") && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta
+                && !(root-focus.has-focus || viewport-region.has-region-focus) { return reject; }
             if root.settings-visible && (event.text == Key.DownArrow || event.text == Key.UpArrow) {
                 root.settings-tab = event.text == Key.DownArrow ? min(root.settings-tab + 1, 8) : max(root.settings-tab - 1, 0);
                 return accept;
@@ -1573,7 +1589,7 @@ export component PetuniaSlintShell inherits Window {
         VerticalLayout {
             spacing: 0px;
 
-            ShellHeader {
+            shell-header := ShellHeader {
                 region-focus-token: root.focus-region == 0 && !root.regional-focus-blocked ? root.region-focus-epoch : 0;
                 region-focus-enabled: !root.regional-focus-blocked;
                 menu-open: root.menu-open;
@@ -1611,6 +1627,7 @@ export component PetuniaSlintShell inherits Window {
                 redo-requested => { root.redo-requested(); }
                 search-requested => { root.search-requested(); }
                 settings-requested => { root.settings-requested(); }
+                overlay-invoked(invoker) => { root.overlay-header-invoker = invoker; }
             }
 
             HorizontalLayout {
@@ -4856,7 +4873,7 @@ export component PetuniaSlintShell inherits Window {
                             semantic-label: root.home-texts.settings;
                             clicked => {
                                 root.home-closed();
-                                root.settings-visible = true;
+                                root.settings-requested();
                             }
                         }
                     }
@@ -5763,13 +5780,22 @@ export component PetuniaSlintShell inherits Window {
             y: 0;
             width: parent.width;
             height: parent.height;
+            z: root.command-focus-active ? 20 : 0;
             background: DesignTokens.scrim;
 
             TouchArea {
                 clicked => { root.click-away-requested(); }
             }
 
-            Rectangle {
+            command-panel := ModalFocusBoundary {
+                active: root.command-focus-active;
+                initial-focus => { search-input.focus(); }
+                first-focus => { search-input.focus(); }
+                last-focus => { command-close.focus(); }
+                dismiss-requested => { root.escape-requested(); }
+                // Slint 1.18 não expõe role dialog; nome e contenção são locais.
+                accessible-role: groupbox;
+                accessible-label: Tr.t("sl.search_commands");
                 width: 480px;
                 height: 320px;
                 x: (parent.width - self.width) / 2;
@@ -5783,44 +5809,51 @@ export component PetuniaSlintShell inherits Window {
                     padding: 12px;
                     spacing: 8px;
 
-                    HorizontalLayout {
+                    Rectangle {
                         height: 36px;
-                        spacing: 8px;
-                        alignment: center;
+                        border-radius: DesignTokens.radius-control;
+                        border-width: search-input.has-focus ? 2px : 1px;
+                        border-color: search-input.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+                        HorizontalLayout {
+                            height: 36px;
+                            spacing: 8px;
+                            alignment: center;
 
-                        IconDisplay {
-                            icon: IconSet.Search;
-                            size: 16px;
-                            stroke: DesignTokens.text-secondary;
-                        }
-
-                        search-input := TextInput {
-                            accessible-role: text-input;
-                            accessible-label: Tr.t("sl.search_commands");
-                            font-size: DesignTokens.font-exceptional;
-                            color: DesignTokens.text-primary;
-                            vertical-alignment: center;
-                            horizontal-stretch: 1;
-                            text <=> root.command-query;
-                            edited => { root.command-query-changed(self.text); }
-                            key-pressed(event) => {
-                                if event.text == Key.DownArrow && root.command-results.length > 0 {
-                                    root.command-selection = Math.min(root.command-selection + 1, root.command-results.length - 1);
-                                    return accept;
-                                }
-                                if event.text == Key.UpArrow && root.command-results.length > 0 {
-                                    root.command-selection = Math.max(root.command-selection - 1, 0);
-                                    return accept;
-                                }
-                                reject
+                            IconDisplay {
+                                icon: IconSet.Search;
+                                size: 16px;
+                                stroke: DesignTokens.text-secondary;
                             }
-                            accepted => {
-                                if root.command-results.length > 0 {
-                                    if !root.command-results[root.command-selection].available {
-                                    } else if root.command-results[root.command-selection].id == "draw.import_svg" || root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
-                                        root.command-file-action(root.command-results[root.command-selection].id);
-                                    } else {
-                                        root.command-executed(root.command-results[root.command-selection].id);
+
+                            search-input := TextInput {
+                                accessible-role: text-input;
+                                accessible-label: Tr.t("sl.search_commands");
+                                font-size: DesignTokens.font-exceptional;
+                                color: DesignTokens.text-primary;
+                                vertical-alignment: center;
+                                single-line: true;
+                                horizontal-stretch: 1;
+                                text <=> root.command-query;
+                                edited => { root.command-query-changed(self.text); }
+                                key-pressed(event) => {
+                                    if event.text == Key.DownArrow && root.command-results.length > 0 {
+                                        root.command-selection = Math.min(root.command-selection + 1, root.command-results.length - 1);
+                                        return accept;
+                                    }
+                                    if event.text == Key.UpArrow && root.command-results.length > 0 {
+                                        root.command-selection = Math.max(root.command-selection - 1, 0);
+                                        return accept;
+                                    }
+                                    reject
+                                }
+                                accepted => {
+                                    if root.command-results.length > 0 {
+                                        if !root.command-results[root.command-selection].available {
+                                        } else if root.command-results[root.command-selection].id == "draw.import_svg" || root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
+                                            root.command-file-action(root.command-results[root.command-selection].id);
+                                        } else {
+                                            root.command-executed(root.command-results[root.command-selection].id);
+                                        }
                                     }
                                 }
                             }
@@ -5875,6 +5908,16 @@ export component PetuniaSlintShell inherits Window {
                                     }
                                 }
                             }
+                        }
+                    }
+                    HorizontalLayout {
+                        height: DesignTokens.control-height;
+                        alignment: end;
+                        command-close := IconButton {
+                            icon: IconSet.X;
+                            label: Tr.t("sl.close_command_search");
+                            semantic-label: Tr.t("sl.close_command_search");
+                            clicked => { root.escape-requested(); }
                         }
                     }
                 }
@@ -6183,7 +6226,17 @@ export component PetuniaSlintShell inherits Window {
             y: 0;
             width: parent.width;
             height: parent.height;
-            settings-panel := Rectangle {
+            z: root.settings-focus-active ? 20 : 0;
+            background: DesignTokens.scrim;
+            TouchArea { clicked => { root.click-away-requested(); } }
+            settings-panel := ModalFocusBoundary {
+                active: root.settings-focus-active;
+                initial-focus => { settings-search.focus(); }
+                first-focus => { settings-close.focus(); }
+                last-focus => { settings-footer-close.focus(); }
+                dismiss-requested => { root.settings-visible = false; root.settings-closed(); }
+                accessible-role: groupbox;
+                accessible-label: root.label-preferences != "" ? root.label-preferences : Tr.t("sl.settings");
                 width: min(root.settings-panel-w > 0px ? root.settings-panel-w : 660px, parent.width - 40px);
                 height: min(root.settings-panel-h > 0px ? root.settings-panel-h : 520px, parent.height - 40px);
                 x: root.settings-panel-x < 0px ? (parent.width - self.width) / 2 : clamp(root.settings-panel-x, 0px, max(parent.width - self.width, 0px));
@@ -6252,7 +6305,7 @@ export component PetuniaSlintShell inherits Window {
                             } }
 
                             VerticalLayout { alignment: center;
-                            TopAction {
+                            settings-close := TopAction {
                                 icon: IconSet.X;
                                 semantic-label: Tr.t("sl.close_settings");
                                 clicked => {
@@ -7309,6 +7362,18 @@ export component PetuniaSlintShell inherits Window {
                                     }
                                 }
                             }
+                        }
+                    }
+                    HorizontalLayout {
+                        height: DesignTokens.control-height + 16px;
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        alignment: end;
+                        settings-footer-close := IconButton {
+                            icon: IconSet.X;
+                            label: Tr.t("sl.close_settings");
+                            semantic-label: Tr.t("sl.close_settings");
+                            clicked => { root.settings-visible = false; root.settings-closed(); }
                         }
                     }
                 }
