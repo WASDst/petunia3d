@@ -435,3 +435,38 @@ fn projected_stack_top_owns_focus_when_both_modals_remain_visible() {
         "remaining modal regains query focus"
     );
 }
+
+#[test]
+fn recovery_initial_focus_is_keep_and_escape_never_decides() {
+    let shell = shell();
+    let decisions = Rc::new(RefCell::new(Vec::<&'static str>::new()));
+    let keep = Rc::clone(&decisions);
+    shell.on_recovery_keep_requested(move || keep.borrow_mut().push("keep"));
+    let discard = Rc::clone(&decisions);
+    shell.on_recovery_discard_requested(move || discard.borrow_mut().push("discard"));
+    let recover = Rc::clone(&decisions);
+    shell.on_recovery_recover_requested(move || recover.borrow_mut().push("recover"));
+    shell.set_recovery_open(true);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+
+    // Escape é não decisório: nem descarta, nem recupera, nem mantém.
+    key(&shell, Key::Escape.into());
+    assert!(shell.get_recovery_open(), "Escape leaves the decision open");
+    assert!(decisions.borrow().is_empty(), "Escape emits no decision");
+
+    // Foco inicial seguro: Enter ativa "Manter", a ação não destrutiva.
+    key(&shell, Key::Return.into());
+    assert_eq!(*decisions.borrow(), vec!["keep"], "initial focus is Keep");
+}
+
+#[test]
+fn home_escape_closes_once_through_its_modal_boundary() {
+    let shell = shell();
+    let closed = Rc::new(RefCell::new(0));
+    let observed = Rc::clone(&closed);
+    shell.on_home_closed(move || *observed.borrow_mut() += 1);
+    shell.set_home_open(true);
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
+    key(&shell, Key::Escape.into());
+    assert_eq!(*closed.borrow(), 1, "Escape closes Home exactly once");
+}
