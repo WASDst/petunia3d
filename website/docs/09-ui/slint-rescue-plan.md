@@ -550,3 +550,10 @@ PROFILE=debug TARGET=x86_64-unknown-linux-gnu \
 ```
 
 Isso comprova somente que o compilador Slint aceita o markup corrigido. Compilação completa Rust, regressões, layout/foco e aceite nativo permanecem **not run** depois da correção, conforme o adiamento do usuário. A falha inicial do `cargo run` e a regressão anterior `shell_focus` não recebem pass retroativo.
+
+## 21. Slice U04 — layout bridge e viewport DTOs (2026-10-09)
+
+Layout/sections extraídos para `bridge/shell_layout.rs`; select/box/lasso seguem `UiIntent::ViewportSelection`, hover segue DTO At/Clear e tool pointer recebe fase/px lógicos/modificadores tipados. `bridge/viewport.rs` faz conversão/refresh, `bridge/viewport_actions.rs` executa as consultas e a gramática existentes. Sem novo owner de Document/Geometry, renderer ou frontend. API antiga preservada. Registro de unidades, código movido, regressões não executadas, check e limites: [Viewport Input Boundary §22](./viewport-input-boundary.md#22-slice-u04--dtos-e-execucao-no-bridge-2026-10-09). U04 IN PROGRESS (000%); decomposição total e gates ainda abertos.
+
+
+Check de compilação do conjunto U02/U03/U04: `CARGO_BUILD_JOBS=1 cargo check -p petunia_ui_slint --lib` **pass**, exit 0 em 3m20s, sem warnings (`/tmp/petunia-u04-check.log`). O check default inclui o markup corrigido; não é execução dos testes, feature animation-workspace, link/startup, aceite visual/reader/GL/Windows. U02/U03/U04/U06/U08 continuam em andamento, sem novos checkpoints comportamentais concluídos.

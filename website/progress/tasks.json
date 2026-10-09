@@ -75,6 +75,11 @@
       "revision": "Código escrito sobre 1edfb2495e6b897b45adf148af019c1705fcc498; compilação/testes adiados",
       "document": "09-ui/slint-rescue-plan.md",
       "summary": "§20: split independente/scroll/resize/collapse/memória; drawer PAINT/UV/ANIMATE; correção F6 e controles de teclado. Implemented, unverified. Antes da wave, shell_focus 1 pass / 1 fail; nenhum gate pós-correção executado. Não conclui checkpoints. Após cargo run do usuário falhar por propriedade Slint reservada, markup corrigido e compilação Slint isolada pass (exit 0); Rust/testes pós-correção not run."
+    },
+    "u04-boundary": {
+      "revision": "Slice compilado (default library) sobre fbe5aa79cc2f573b6e5c7f8ba4e7df6608f28b10; hashes registrados em §22",
+      "document": "09-ui/viewport-input-boundary.md",
+      "summary": "§22: layout/sections em shell_layout; DTOs/execução em viewport_actions; API antiga, picking/keymap/ToolSession preservados. cargo check default --lib pass, exit 0, 3m20s, sem warnings. Quatro regressões escritas, not run; feature/runtime/reader/GL/Windows pendentes. Não conclui checkpoints comportamentais."
     }
   },
   "tasks": [
@@ -193,7 +198,7 @@
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Código escrito sobre 1edfb24: split Structure/Properties, scrolls independentes, resize/collapse e memória de sessão por workspace. Compilação, regressões e aceite nativo adiados pelo usuário; §20 Slint Rescue. Nenhum checkpoint verificado. Correção da propriedade reservada em WorkspaceDrawer; compilação Slint isolada pass, sem comprovar Rust/runtime.",
+      "baseline": "Código escrito sobre 1edfb24: split Structure/Properties, scrolls independentes, resize/collapse e memória de sessão por workspace. Compilação, regressões e aceite nativo adiados pelo usuário; §20 Slint Rescue. Nenhum checkpoint verificado. Correção da propriedade reservada em WorkspaceDrawer; compilação Slint e cargo check default --lib pass no conjunto U04. Testes/runtime/feature/aceite nativo pendentes.",
       "checkpoints": [
         {
           "title": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário",
@@ -220,7 +225,7 @@
       "document": "09-ui/slint-rescue-plan.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Código escrito sobre 1edfb24: drawer com abas PAINT presets/paleta, UV diagnostics e ANIMATE transporte procedural/Motion Stack; Assets/Prefabs e filtros preservados. Compilação/testes e aceite nativo adiados pelo usuário; timeline completa de keyframes continua pendente. §20 Slint Rescue. Correção da propriedade reservada em WorkspaceDrawer; compilação Slint isolada pass, sem comprovar Rust/runtime.",
+      "baseline": "Código escrito sobre 1edfb24: drawer com abas PAINT presets/paleta, UV diagnostics e ANIMATE transporte procedural/Motion Stack; Assets/Prefabs e filtros preservados. Compilação/testes e aceite nativo adiados pelo usuário; timeline completa de keyframes continua pendente. §20 Slint Rescue. Correção da propriedade reservada em WorkspaceDrawer; compilação Slint e cargo check default --lib pass no conjunto U04. Testes/runtime/feature/aceite nativo pendentes.",
       "checkpoints": [
         {
           "title": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack",
@@ -252,9 +257,9 @@
       "title": "Bridge e intents",
       "description": "Decompor lib.rs/callbacks.rs por responsabilidade; tornar select/hover/box/lasso/tool pointer DTOs explícitos; manter picking/Geometry em Rust.",
       "document": "09-ui/viewport-input-boundary.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Parcial. crates/ui-slint/src/lib.rs, crates/ui-slint/src/callbacks.rs, crates/ui-slint/src/bridge/viewport.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Slice escrito e cargo check default --lib pass sobre fbe5aa7: shell_layout extraído; DTOs select/hover/box/lasso/tool pointer e execução no bridge, API antiga e picking/keymap/ToolSession preservados. Quatro regressões escritas, not run por adiamento do usuário. Decomposição completa/gates pendentes (§22 Viewport Input Boundary).",
       "checkpoints": [
         {
           "title": "Decompor lib.rs/callbacks.rs por responsabilidade",

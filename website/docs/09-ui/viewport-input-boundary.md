@@ -366,8 +366,8 @@ Da mesma forma, a exceção da gramática de ferramentas que testava `event.modi
 
 Modificadores crus ainda atravessam a boundary para ToolSession e PAINT quando a interpretação pertence à própria ferramenta. A rodada específica de PAINT deve substituir Shift/Ctrl semânticos de clone/decal/straight stroke por ações de pointer próprias antes de considerar esse domínio totalmente migrado.
 
-### Passo C
-Criar DTO/intent Rust mais explícito para:
+### Passo C — escrito, testes pendentes (slice U04)
+DTOs/intents Rust ligados à produção em §22; compilação default pass, testes not run. Escopo:
 - select;
 - hover;
 - box/lasso;
@@ -448,3 +448,44 @@ A boundary deixou de existir apenas no markup:
 - `render_viewport`, `viewport_render_state`, `apply_viewport_gesture`, resize e orbit foram removidos do `lib.rs` raiz e vivem no módulo de viewport.
 
 Os algoritmos grandes de picking/seleção permanecem no Rust e serão extraídos apenas quando houver uma boundary de query/service clara; não serão movidos mecanicamente só para reduzir LOC.
+
+## 22. Slice U04 — DTOs e execução no bridge (2026-10-09)
+
+**Intent / Sources:** tornar os callbacks Slint de select/hover/box/lasso/tool pointer adapters de DTOs, conforme §3–8 deste capítulo e Slint Rescue §10–11. Baseline `fbe5aa7` na branch `refactor/architecture-foundation`; U02/U03 já escritos, aceite comportamental ainda adiado pelo usuário.
+
+**Gap:** callbacks de box/lasso ainda executavam seleção e montavam status lendo malha/sessão diretamente; tool pointer usava fase inteira para decidir refresh; layout/sections permanecia espalhado em `callbacks.rs`/`lib.rs`. Picking, parser lasso, keymap e ToolSession existentes são reutilizáveis.
+
+**Changed:**
+
+| Boundary | Contrato implementado |
+|---|---|
+| NormalizedViewportPoint | Origem superior esquerda; finitude de coordenadas/projeção NDC; capture fora de 0..1 preservado para box/point, sem clamp incidental |
+| LogicalViewportPoint | Pixels lógicos, valores finitos, coordenadas de capture negativas permitidas; sem DPI físico em ferramentas |
+| ViewportSelectionIntent | Point / Box / Lasso; `UiIntent::ViewportSelection` despacha no bridge; Replace/Add/Subtract preserva precedência de subtract quando ambos flags estavam ativos |
+| ViewportLassoPolygon | Reusa parser único: 131.072 bytes / 4.096 pontos, pelo menos três pontos, sem NaN/Inf; clamp à borda e NDC existentes preservados |
+| ViewportHoverIntent | At / Clear; escolha hover de Loop Cut versus componente no bridge; throttle e footprint PAINT existentes preservados |
+| ViewportToolPointerIntent | Press / Move / Release / Cancel em px lógicos; callback rejeita fase desconhecida; Move é comparado por enum, sem `phase == 1` |
+| PhysicalPointerModifiers | Shift/Ctrl/Alt descritos como teclas físicas; keymap Application continua resolvendo precision/snap/extend/alternate antes de ToolSession |
+| shell_layout.rs | Conexões e métodos de layout/sections movidos, mantendo nomes públicos, persistência e regras existentes; projeção de split continua limitada a três propriedades |
+| viewport_actions.rs | Execução da seleção/status/hover e gramática typed; preserva consultas, picking, ToolSession, commit/cancel/Undo existentes |
+
+O callback público Slint permanece compatível (int/float/bool), mas é convertido antes de executar. `tool_pointer`/`tool_pointer_ex` antigos também permanecem disponíveis; o adapter Rust legado conserva o fallback histórico de fase desconhecida para Cancel, enquanto a entrada Slint agora recusa códigos desconhecidos. Não criar cancel tácito a partir de entrada inválida.
+
+Métodos de layout/sections foram movidos por equivalência; esta extração não altera a política histórica de persistência/dirty das seções. DTOs não são serializados no Project. Core/Geometry não recebem dependência de UI/GPU; migração de ownership para Application continua processo separado.
+
+Contagem de fontes: `lib.rs` 16.994 → 16.779 linhas; `callbacks.rs` 5.540 → 5.401. Novos módulos pequenos por responsabilidade: shell_layout, viewport_actions e viewport_intents. Os callbacks de seleção deixam de ler malha/sessão para executar seleção ou compor status.
+
+**Verification:** formatação aplicada (`cargo fmt -p petunia_ui_slint`), revisão de source e `git diff --check` pass; `CARGO_BUILD_JOBS=1 cargo check -p petunia_ui_slint --lib` **pass**, exit 0, 3m20s, sem warnings. Log `/tmp/petunia-u04-check.log`; Linux x86_64, Rust 1.98.1, configuração default, library somente; o comando não compila nem executa testes e não verifica a feature animation-workspace. Regressões escritas (três de validação/unidades/fases + uma de integração da seleção com queries reais), **not run**. Bateria lib/integração/Clippy/ui-lint/feature animation-workspace, runtime/native/reader/GL/Windows/low-end: **not run** por adiamento do usuário. O check aceita a UI U02/U03 corrigida e a boundary U04, sem comprovar comportamento, link/startup da aplicação ou aceite assistivo.
+
+**Risks:** esta é decomposição incremental, sem alegar conclusão de todo U04. Ainda existem outros métodos de domínio/aplicação em `lib.rs`, callbacks gerais e entrada PAINT com modificadores crus (U05). DTO escrito não comprova runtime; testes de seleção/Undo/keymap remapeado/cancel precisam confirmar equivalência.
+
+**Next checkpoint:** check default registrado; continuar os slices autorizados de UI/bridge, especialmente F6 regional/foco e promoção das work surfaces. Executar as regressões somente na fase de testes posterior. U04 permanece IN PROGRESS (000%) até existir evidência suficiente dos critérios/gates completos.
+
+
+Fontes de DTOs/módulos no check (SHA-256):
+
+```text
+349a39b2bbc519dd7294be05fea44490d1275674e5f43a8ff8bb6510a6830a5f  src/viewport_intents.rs
+1c057e847564bffe232dd3a8a3f29da0caa4aa3f207c0fc254cffc4e69a0bc26  src/bridge/viewport_actions.rs
+cd26e41bd87b24f1d235c0abe77d4346e04a90d219c0ea29d362253d38e96a36  src/bridge/shell_layout.rs
+```

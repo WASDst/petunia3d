@@ -1,3 +1,4 @@
+use crate::bridge::shell_layout::sync_inspector_pane_layout;
 // Slint UI callback registration and shell property synchronization.
 // Registro de callbacks da UI Slint e sincronização de propriedades do shell.
 
@@ -2337,17 +2338,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
-    let parts_size_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_parts_row_height_changed(move |height| {
-        if let Ok(mut bridge) = parts_size_bridge.lock() {
-            bridge.set_parts_row_height(height);
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &bridge.view_model());
-            }
-        }
-    });
-
     let asset_query_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_asset_query_changed(move |query| {
@@ -2472,32 +2462,6 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
                 if let Some(frame) = new_frame {
                     window.set_viewport_image(frame);
                 }
-            }
-        }
-    });
-
-    let inspector_width_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_inspector_width_changed(move |width| {
-        if let Ok(mut bridge) = inspector_width_bridge.lock()
-            && bridge.set_inspector_width(width)
-        {
-            let vm = bridge.view_model();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
-            }
-        }
-    });
-
-    let asset_height_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_asset_library_height_changed(move |height| {
-        if let Ok(mut bridge) = asset_height_bridge.lock()
-            && bridge.set_asset_library_height(height)
-        {
-            let vm = bridge.view_model();
-            if let Some(window) = window_weak.upgrade() {
-                sync_window_properties(&window, &vm);
             }
         }
     });
@@ -5134,100 +5098,7 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
             }
         }
     });
-    let toggle_all_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_toggle_all_sections(move || {
-        if let (Ok(bridge), Some(window)) = (toggle_all_bridge.lock(), window_weak.upgrade()) {
-            let open = [
-                window.get_model_parts_open(),
-                window.get_model_transform_open(),
-                window.get_model_material_open(),
-                window.get_model_object_open(),
-                window.get_model_modifiers_open(),
-                window.get_quick_actions_section_open(),
-            ];
-            let next = bridge.toggle_all_sections(open);
-            window.set_model_parts_open(next[0]);
-            window.set_model_transform_open(next[1]);
-            window.set_model_material_open(next[2]);
-            window.set_model_object_open(next[3]);
-            window.set_model_modifiers_open(next[4]);
-            window.set_quick_actions_section_open(next[5]);
-        }
-    });
-    let section_pin_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_pin_open_toggled(move |id| {
-        if let (Ok(mut bridge), Some(window)) = (section_pin_bridge.lock(), window_weak.upgrade()) {
-            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                let idx = crate::section_layout::section_index(section);
-                let current_pin = bridge.section_layouts[idx].pin_open;
-                bridge.set_section_pin_open(section, !current_pin);
-                bridge.set_section_open(section, !current_pin);
-            }
-            sync_window_properties(&window, &bridge.view_model());
-        }
-    });
-
-    let section_toggle_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_open_toggled(move |id| {
-        if let (Ok(mut bridge), Some(window)) =
-            (section_toggle_bridge.lock(), window_weak.upgrade())
-        {
-            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                bridge.toggle_section_open(section);
-            }
-            sync_window_properties(&window, &bridge.view_model());
-        }
-    });
-
-    let collapse_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_inspector_collapse_requested(move || {
-        if let (Ok(mut bridge), Some(window)) = (collapse_bridge.lock(), window_weak.upgrade()) {
-            bridge.collapse_inspector();
-            sync_window_properties(&window, &bridge.view_model());
-        }
-    });
-
-    let layout_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_inspector_split_ratio_set(move |ratio| {
-        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade()) {
-            if bridge.set_inspector_structure_ratio(ratio) {
-                sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
-            }
-        }
-    });
-
-    let layout_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_inspector_pane_collapsed_set(move |pane, collapsed| {
-        let Ok(pane) = crate::inspector_layout::InspectorPane::try_from(pane) else {
-            return;
-        };
-        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade()) {
-            if bridge.set_inspector_pane_collapsed(pane, collapsed) {
-                sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
-            }
-        }
-    });
-
-    let section_pill_bridge = Arc::clone(&bridge);
-    let window_weak = window.as_weak();
-    window.on_section_pill_clicked(move |id| {
-        if let (Ok(mut bridge), Some(window)) = (section_pill_bridge.lock(), window_weak.upgrade())
-        {
-            if let Some(section) = crate::section_layout::section_id_from_str(id.as_str()) {
-                let idx = crate::section_layout::section_index(section);
-                let current_open = bridge.section_layouts[idx].open;
-                bridge.set_section_pin_open(section, !current_open);
-                bridge.set_section_open(section, !current_open);
-            }
-            sync_window_properties(&window, &bridge.view_model());
-        }
-    });
+    crate::bridge::shell_layout::connect_callbacks(window, Arc::clone(&bridge));
 
     let decal_transform_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
@@ -5527,14 +5398,4 @@ fn connect_decal_callbacks<V: PetuniaViewport + 'static>(
             refresh_after_texture_change(&mut bridge, &window);
         }
     });
-}
-
-/// Só projeções de apresentação: resize não reconstrói o view model de domínio por pixel.
-fn sync_inspector_pane_layout(
-    window: &PetuniaSlintShell,
-    layout: crate::inspector_layout::InspectorPaneLayout,
-) {
-    window.set_inspector_structure_ratio(layout.structure_ratio);
-    window.set_inspector_structure_collapsed(layout.structure_collapsed);
-    window.set_inspector_properties_collapsed(layout.properties_collapsed);
 }

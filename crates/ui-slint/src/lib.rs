@@ -34,8 +34,13 @@ pub mod thumbnail;
 pub mod tr;
 pub mod view_layout;
 pub mod viewport_gpu;
+pub mod viewport_intents;
 pub mod viewport_soft;
 
+use viewport_intents::{
+    LogicalViewportPoint, PhysicalPointerModifiers, ViewportSelectionIntent,
+    ViewportToolPointerIntent,
+};
 pub use viewport_soft::Software3dViewport;
 
 use commands::CommandId;
@@ -557,6 +562,7 @@ pub struct ViewportDrag {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UiIntent {
     SetWorkspace(Workspace),
+    ViewportSelection(ViewportSelectionIntent),
     /// Ação do workspace Animate (cap. 45 F2).
     Animate(animate::AnimateIntent),
     SaveProject,
@@ -1576,6 +1582,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             } => {
                 self.scrub_transform(kind, axis, delta, fine);
             }
+            UiIntent::ViewportSelection(intent) => self.apply_viewport_selection(intent),
             UiIntent::ViewportGesture(gesture) => {
                 self.apply_viewport_gesture(gesture);
             }
@@ -7128,35 +7135,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    pub fn inspector_pane_layout(&self) -> inspector_layout::InspectorPaneLayout {
-        self.inspector_layout.get(self.state.workspace)
-    }
-
-    pub fn set_inspector_structure_ratio(&mut self, ratio: f32) -> bool {
-        self.inspector_layout.set_ratio(self.state.workspace, ratio)
-    }
-
-    pub fn set_inspector_pane_collapsed(
-        &mut self,
-        pane: inspector_layout::InspectorPane,
-        collapsed: bool,
-    ) -> bool {
-        self.inspector_layout
-            .set_collapsed(self.state.workspace, pane, collapsed)
-    }
-
-    pub fn set_parts_row_height(&mut self, size: f32) -> bool {
-        if !size.is_finite() {
-            return false;
-        }
-        let size = size.clamp(28.0, 44.0);
-        if (self.parts_row_height - size).abs() < f32::EPSILON {
-            return false;
-        }
-        self.parts_row_height = size;
-        true
-    }
-
     /// Liga/desliga a viewport dividida. Recusa (com aviso) quando a vista
     /// principal ficaria abaixo de `MIN_SPLIT_VIEW_WIDTH` por metade.
     pub fn toggle_split_view(&mut self) -> bool {
@@ -7552,18 +7530,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         };
         self.set_view_preset(next)
-    }
-
-    /// Redimensiona o dock de contexto pelo divisor vertical.
-    ///
-    /// Layout é estado de apresentação: não marca o documento como alterado.
-    pub fn set_inspector_width(&mut self, width: f32) -> bool {
-        self.state.ui.set_right_width(width)
-    }
-
-    /// Redimensiona a Asset Library pelo divisor horizontal.
-    pub fn set_asset_library_height(&mut self, height: f32) -> bool {
-        self.state.ui.set_shell_asset_library_height(height)
     }
 
     /// Abre a modal do Gerenciador de Referências (P3D-013).
@@ -8616,128 +8582,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 &[("error", format!("{error}"))],
             ));
         }
-    }
-
-    /// Dock or float one Inspector section, then persist.
-    /// Ancora ou flutua uma seção do Inspector e persiste.
-    pub fn set_section_docked(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        docked: bool,
-    ) -> bool {
-        section_layout::set_docked(&mut self.section_layouts, section, docked);
-        self.persist_section_layouts();
-        true
-    }
-
-    /// Move a floating card in memory (coordinates sanitized), without I/O.
-    ///
-    /// A drag emits one event per pointer move; persisting here would write the
-    /// preferences file dozens of times per second. The UI commits once on
-    /// pointer release through [`Self::commit_section_float`].
-    /// Move um card flutuante em memória (coordenadas sanitizadas), sem I/O.
-    ///
-    /// O arraste emite um evento por movimento do ponteiro; persistir aqui
-    /// gravaria o arquivo dezenas de vezes por segundo. A UI confirma uma vez
-    /// ao soltar o ponteiro via [`Self::commit_section_float`].
-    pub fn move_section_float(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        x: f32,
-        y: f32,
-    ) -> bool {
-        section_layout::move_floating(&mut self.section_layouts, section, x, y);
-        true
-    }
-
-    /// Persist section layouts once, after a drag or any other live edit.
-    /// Persiste os layouts uma vez, depois do arraste ou de outra edição viva.
-    pub fn commit_section_float(&mut self) {
-        self.persist_section_layouts();
-    }
-
-    /// Pin a section open (ignores collapse-all), then persist.
-    /// Fixa uma seção aberta (ignora recolher-tudo) e persiste.
-    pub fn set_section_pin_open(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        pin_open: bool,
-    ) -> bool {
-        section_layout::set_pin_open(&mut self.section_layouts, section, pin_open);
-        self.persist_section_layouts();
-        true
-    }
-
-    /// Pin a section to an asset (`None` follows selection), then persist.
-    /// Fixa uma seção a um asset (`None` segue a seleção) e persiste.
-    pub fn set_section_pinned_asset(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        asset: Option<String>,
-    ) -> bool {
-        section_layout::set_pinned_asset(&mut self.section_layouts, section, asset);
-        self.persist_section_layouts();
-        true
-    }
-
-    /// Collapse-all toggle honoring pinned-open sections: if every section is
-    /// open, close the unpinned ones; otherwise open them. Pinned sections
-    /// stay open either way. Takes and returns open flags in canonical order.
-    /// Alternador de recolher-tudo respeitando pins: se tudo está aberto, fecha
-    /// as não-fixadas; senão, abre-as. Fixadas seguem abertas. Recebe e devolve
-    /// flags de aberto em ordem canônica.
-    pub fn toggle_all_sections(&self, open: [bool; 6]) -> [bool; 6] {
-        let close_all = open.iter().all(|flag| *flag);
-        let mut next = open;
-        for id in petunia_config::InspectorSectionId::all() {
-            if !self.section_layouts[section_layout::section_index(id)].pin_open {
-                next[section_layout::section_index(id)] = !close_all;
-            }
-        }
-        next
-    }
-
-    /// Presentation snapshot of the six section layouts, in canonical order.
-    /// Snapshot de apresentação dos seis layouts, em ordem canônica.
-    pub fn section_state_models(&self) -> Vec<SectionStateModel> {
-        petunia_config::InspectorSectionId::all()
-            .iter()
-            .map(|id| {
-                let layout = &self.section_layouts[section_layout::section_index(*id)];
-                SectionStateModel {
-                    id: id.as_str().to_string(),
-                    pin_open: layout.pin_open,
-                    open: layout.open,
-                }
-            })
-            .collect()
-    }
-
-    /// Abre ou fecha uma seção do Inspector (persistido).
-    pub fn set_section_open(&mut self, section: petunia_config::InspectorSectionId, open: bool) {
-        section_layout::set_open(&mut self.section_layouts, section, open);
-        self.persist_section_layouts();
-        self.state.mark_dirty();
-    }
-
-    /// "Recolher Inspector" (plano de UI F4, D1): fecha e solta o pin de todas
-    /// as seções, devolvendo o shell ao trilho de pílulas. É um comando
-    /// explícito do usuário, por isso ignora o pin — diferente do recolhimento
-    /// automático do peek, que o pin protege (ADR 005 §5).
-    pub fn collapse_inspector(&mut self) {
-        for id in petunia_config::InspectorSectionId::all() {
-            section_layout::set_open(&mut self.section_layouts, id, false);
-            section_layout::set_pin_open(&mut self.section_layouts, id, false);
-        }
-        self.persist_section_layouts();
-    }
-
-    /// Alterna estado aberto/fechado de uma seção do Inspector (persistido).
-    pub fn toggle_section_open(&mut self, section: petunia_config::InspectorSectionId) -> bool {
-        let open = section_layout::toggle_open(&mut self.section_layouts, section);
-        self.persist_section_layouts();
-        self.state.mark_dirty();
-        open
     }
 
     pub fn set_snap_target(&mut self, target_str: &str) -> bool {
@@ -11362,73 +11206,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         ctrl: bool,
         alt: bool,
     ) -> bool {
-        puffin::profile_function!();
-        if !x.is_finite() || !y.is_finite() {
+        let Some(at) = LogicalViewportPoint::new(x, y) else {
             return false;
-        }
-        self.pointer_position = [x, y];
-        self.tool_pointer_alt = alt;
-
-        // Os booleans recebidos aqui descrevem teclas físicas pressionadas.
-        // O significado (precision/snap/extend/alternate) vem do keymap ativo.
-        let held = Mods2 { ctrl, shift, alt };
-        let precision = self
-            .state
-            .ui
-            .keybinds
-            .pointer_modifier(petunia_config::keybinds::POINTER_PRECISION)
-            .held_in(held);
-        let snap = self
-            .state
-            .ui
-            .keybinds
-            .pointer_modifier(petunia_config::keybinds::POINTER_SNAP)
-            .held_in(held);
-        let extend = self
-            .state
-            .ui
-            .keybinds
-            .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND)
-            .held_in(held);
-        let alternate = self
-            .state
-            .ui
-            .keybinds
-            .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
-            .held_in(held);
-
-        let effect = match ViewportPointerPhase::from(phase) {
-            ViewportPointerPhase::Press => {
-                self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
-                let target = if self.grammar_tool() == Some(GrammarTool::Decal) {
-                    self.decal_press_target(x, y)
-                } else if self.grammar_tool() == Some(GrammarTool::DrawProfile) {
-                    self.profile_press_target(x, y)
-                } else if self.tool_press_parametric_handle {
-                    petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
-                } else if self.profile_transform_target_at(x, y) {
-                    petunia_core::PressTarget::Handle(0)
-                } else if self.gizmo_target_at(x, y).is_some() {
-                    petunia_core::PressTarget::Handle(1)
-                } else {
-                    petunia_core::PressTarget::Surface
-                };
-                self.tool_press_extend = extend;
-                self.tool_press_alternate = alternate;
-                self.tool_session.press([x, y], target)
-            }
-            ViewportPointerPhase::Move => self.tool_session.move_to([x, y]),
-            ViewportPointerPhase::Release => self.tool_session.release([x, y]),
-            ViewportPointerPhase::Cancel => {
-                if self.tool_session.is_gesture_active() {
-                    self.tool_session.key(petunia_core::ToolKey::Cancel)
-                } else {
-                    self.tool_session.reset();
-                    petunia_core::ToolEffect::Nothing
-                }
-            }
         };
-        self.apply_tool_effect(effect, precision, snap)
+        self.tool_pointer_intent(ViewportToolPointerIntent {
+            phase: ViewportPointerPhase::from(phase),
+            at,
+            modifiers: PhysicalPointerModifiers { shift, ctrl, alt },
+        })
     }
 
     fn apply_tool_effect(

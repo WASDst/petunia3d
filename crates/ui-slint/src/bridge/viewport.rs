@@ -3,17 +3,21 @@
 //! Esta camada registra callbacks semânticos da viewport e coordena bridge,
 //! render e sincronização visual. Não contém picking ou regra geométrica.
 
+use crate::viewport_intents::{
+    NormalizedViewportPoint, PhysicalPointerModifiers, RegionSelectionMode, ViewportHoverIntent,
+    ViewportLassoPolygon, ViewportSelectionIntent, ViewportToolPointerIntent,
+};
+
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use petunia_core::{SelectionDomain, Workspace};
+use petunia_core::Workspace;
 use slint::ComponentHandle;
 
 use crate::{
     PetuniaSlintShell, PetuniaViewport, SlintUiBridge, TransformKind, UiIntent, ViewportGesture,
     ViewportRenderState,
     callbacks::{sync_viewport_overlays, sync_window_properties},
-    projection::parse_lasso_path,
     refresh::{self, RefreshThrottle},
 };
 
@@ -99,58 +103,18 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
     let box_bridge = Arc::clone(&bridge);
     let box_window = window.as_weak();
     window.on_viewport_box_select(move |x0, y0, x1, y1, add, subtract| {
+        let (Some(from), Some(to)) = (
+            NormalizedViewportPoint::new(x0, y0),
+            NormalizedViewportPoint::new(x1, y1),
+        ) else {
+            return;
+        };
         if let Ok(mut bridge) = box_bridge.lock() {
-            bridge.state.select_viewport_box(
-                [x0 * 2.0 - 1.0, 1.0 - y0 * 2.0],
-                [x1 * 2.0 - 1.0, 1.0 - y1 * 2.0],
-                add,
-                subtract,
-            );
-
-            let summary = match bridge.state.selection_domain() {
-                SelectionDomain::Object => {
-                    let total = bridge.state.session.selection.assets.len();
-                    if total == 0 {
-                        "Box select: nothing in the region".to_string()
-                    } else {
-                        format!("Box select: {total} object(s)")
-                    }
-                }
-                SelectionDomain::Vertex | SelectionDomain::Edge | SelectionDomain::Face => {
-                    match bridge.state.project.active_mesh() {
-                        Some(mesh) => {
-                            let points = mesh.verts.iter().filter(|v| v.selected).count();
-                            let faces = mesh.faces.iter().filter(|f| f.selected).count();
-                            let edges = mesh.selected_edges.len();
-                            match bridge.state.selection_domain() {
-                                SelectionDomain::Vertex => {
-                                    if points == 0 {
-                                        "Box select: nothing in the region".to_string()
-                                    } else {
-                                        format!("Box select: {points} point(s)")
-                                    }
-                                }
-                                SelectionDomain::Edge => {
-                                    if edges == 0 {
-                                        "Box select: nothing in the region".to_string()
-                                    } else {
-                                        format!("Box select: {edges} edge(s)")
-                                    }
-                                }
-                                _ => {
-                                    if faces == 0 {
-                                        "Box select: nothing in the region".to_string()
-                                    } else {
-                                        format!("Box select: {faces} face(s)")
-                                    }
-                                }
-                            }
-                        }
-                        None => "Box select: no active object".to_string(),
-                    }
-                }
-            };
-            bridge.state.set_status(summary);
+            bridge.apply(UiIntent::ViewportSelection(ViewportSelectionIntent::Box {
+                from,
+                to,
+                mode: RegionSelectionMode::from_flags(add, subtract),
+            }));
 
             if let Some(window) = box_window.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
@@ -164,15 +128,16 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
     let lasso_bridge = Arc::clone(&bridge);
     let lasso_window = window.as_weak();
     window.on_viewport_lasso_select(move |path, add, subtract| {
-        let Some(polygon) = parse_lasso_path(path.as_str()) else {
+        let Some(polygon) = ViewportLassoPolygon::from_slint_path(path.as_str()) else {
             return;
         };
         if let Ok(mut bridge) = lasso_bridge.lock() {
-            bridge.state.select_viewport_lasso(&polygon, add, subtract);
-            let message = bridge
-                .state
-                .t_id(petunia_config::text_id::STATUS_LASSO_SELECTION_UPDATED);
-            bridge.state.set_status(message);
+            bridge.apply(UiIntent::ViewportSelection(
+                ViewportSelectionIntent::Lasso {
+                    polygon,
+                    mode: RegionSelectionMode::from_flags(add, subtract),
+                },
+            ));
             if let Some(window) = lasso_window.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
                 if let Some(frame) = bridge.render_viewport() {
@@ -202,8 +167,17 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
     let viewport_select_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_viewport_select(move |x, y, extend, loop_select| {
+        let Some(at) = NormalizedViewportPoint::new(x, y) else {
+            return;
+        };
         if let Ok(mut bridge) = viewport_select_bridge.lock() {
-            bridge.select_viewport_ext(x, y, extend, loop_select);
+            bridge.apply(UiIntent::ViewportSelection(
+                ViewportSelectionIntent::Point {
+                    at,
+                    extend,
+                    loop_select,
+                },
+            ));
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
             if let Some(window) = window_weak.upgrade() {
@@ -262,6 +236,9 @@ pub(crate) fn connect_hover_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     let hover_throttle = Rc::clone(&throttle);
     window.on_viewport_hover(move |x, y| {
+        let Some(at) = NormalizedViewportPoint::new(x, y) else {
+            return;
+        };
         if let Ok(mut bridge) = component_hover_bridge.lock() {
             if bridge.state.workspace == Workspace::Paint
                 && let Some(window) = window_weak.upgrade()
@@ -274,12 +251,7 @@ pub(crate) fn connect_hover_callbacks<V: PetuniaViewport + 'static>(
                 window.set_brush_cursor_tilt(tilt);
             }
 
-            let changed = if bridge.state.session.tools.active_tool == "loop_cut" {
-                let viewport_size = bridge.viewport_size;
-                bridge.update_loop_cut_hover(x * viewport_size[0], y * viewport_size[1])
-            } else {
-                crate::perf::measure("hover_component", || bridge.hover_component(x, y))
-            };
+            let changed = bridge.apply_viewport_hover(ViewportHoverIntent::At(at));
 
             if !changed {
                 return;
@@ -304,7 +276,7 @@ pub(crate) fn connect_hover_callbacks<V: PetuniaViewport + 'static>(
             window.set_brush_cursor_tilt(0.0);
         }
         if let Ok(mut bridge) = hover_clear_bridge.lock()
-            && bridge.clear_hover()
+            && bridge.apply_viewport_hover(ViewportHoverIntent::Clear)
         {
             let vm = bridge.view_model();
             let new_frame = bridge.render_viewport();
@@ -441,14 +413,20 @@ pub(crate) fn connect_tool_pointer_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     let tool_pointer_throttle = Rc::clone(&throttle);
     window.on_tool_pointer(move |phase, x, y, shift, ctrl, alt| {
+        let Some(intent) = ViewportToolPointerIntent::from_slint(
+            phase,
+            x,
+            y,
+            PhysicalPointerModifiers { shift, ctrl, alt },
+        ) else {
+            return;
+        };
         if let Ok(mut bridge) = tool_pointer_bridge.lock() {
-            if !crate::perf::measure("tool_pointer", || {
-                bridge.tool_pointer_ex(phase, x, y, shift, ctrl, alt)
-            }) {
+            if !crate::perf::measure("tool_pointer", || bridge.tool_pointer_intent(intent)) {
                 return;
             }
             if let Some(window) = window_weak.upgrade() {
-                if phase == 1 {
+                if intent.phase == crate::ViewportPointerPhase::Move {
                     refresh::refresh_interactive(
                         &window,
                         &tool_pointer_bridge,
