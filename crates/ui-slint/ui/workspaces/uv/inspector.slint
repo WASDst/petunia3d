@@ -1,10 +1,11 @@
+import { InspectorSplitLayout } from "../../shell/inspector_split.slint";
 import { IconDisplay, IconSet } from "@lucide";
 import { DesignTokens, Tr } from "../../tokens.slint";
 import { NumericField } from "../../components/controls.slint";
 import { InspectorSection } from "../../inspector/sections.slint";
 import { StructureHost, PropertiesHost } from "../../shell/right_column.slint";
 
-export component UvInspector inherits VerticalLayout {
+export component UvInspector inherits Rectangle {
     in property <string> label-unwrap-mesh: "";
     in property <string> label-pack-islands: "";
     in property <bool> uv-show-texture: true;
@@ -34,432 +35,454 @@ export component UvInspector inherits VerticalLayout {
     callback clear-all-uv-pins();
     callback uv-equalize-texel-density();
     callback extension-parameter-set(string, string) -> bool;
+    in property <float> structure-ratio: 0.4;
+    in property <bool> structure-collapsed: false;
+    in property <bool> properties-collapsed: false;
+    in property <int> structure-focus-token: 0;
+    callback split-ratio-changed(float);
+    callback pane-collapsed-set(int, bool);
 
-    spacing: 10px;
-
-    StructureHost {
-        InspectorSection {
+    split := InspectorSplitLayout {
+        width: root.width;
+        height: root.height;
+        structure-ratio: root.structure-ratio;
+        structure-collapsed: root.structure-collapsed;
+        properties-collapsed: root.properties-collapsed;
+        ratio-changed(value) => { root.split-ratio-changed(value); }
+        structure-pane := StructureHost {
+            width: parent.width;
+            height: split.structure-height;
             title: Tr.t("sl.uv_operations");
-            open: true;
-            toggled => { self.open = !self.open; }
+            collapsed: root.structure-collapsed;
+            focus-token: root.structure-focus-token;
+            collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
+            InspectorSection {
+                title: Tr.t("sl.uv_operations");
+                open: true;
+                toggled => { self.open = !self.open; }
 
-            VerticalLayout {
-                spacing: 8px;
-                padding-top: 4px;
+                VerticalLayout {
+                    spacing: 8px;
+                    padding-top: 4px;
 
-                Rectangle {
-                    height: 32px;
-                    border-radius: 5px;
-                    background: DesignTokens.accent;
-                    HorizontalLayout {
-                        spacing: 6px;
-                        IconDisplay { icon: IconSet.Maximize2; size: 14px; stroke: DesignTokens.on-accent; }
-                        Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: DesignTokens.font-small; font-weight: 700; vertical-alignment: center; }
+                    Rectangle {
+                        height: 32px;
+                        border-radius: 5px;
+                        background: DesignTokens.accent;
+                        HorizontalLayout {
+                            spacing: 6px;
+                            IconDisplay { icon: IconSet.Maximize2; size: 14px; stroke: DesignTokens.on-accent; }
+                            Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: DesignTokens.font-small; font-weight: 700; vertical-alignment: center; }
+                        }
+                        TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
                     }
-                    TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
-                }
 
-                Rectangle {
-                    height: 32px;
-                    border-radius: 5px;
-                    background: DesignTokens.surface-raised;
-                    border-width: 1px;
-                    border-color: DesignTokens.border;
-                    HorizontalLayout {
-                        alignment: center;
-                        spacing: 6px;
-                        IconDisplay { icon: IconSet.Grid2x2; size: 14px; stroke: DesignTokens.text-primary; }
-                        Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
+                    Rectangle {
+                        height: 32px;
+                        border-radius: 5px;
+                        background: DesignTokens.surface-raised;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        HorizontalLayout {
+                            alignment: center;
+                            spacing: 6px;
+                            IconDisplay { icon: IconSet.Grid2x2; size: 14px; stroke: DesignTokens.text-primary; }
+                            Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
+                        }
+                        TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
                     }
-                    TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }
                 }
             }
         }
-    }
+        properties-pane := PropertiesHost {
+            width: parent.width;
+            y: split.properties-y;
+            height: split.properties-height;
+            collapsed: root.properties-collapsed;
+            collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
+            // Preserva o espaçamento entre seções do bloco anterior no shell.
+            spacing: 10px;
+            InspectorSection {
+                title: Tr.t("sl.uv_editor");
+                open: true;
+                toggled => { self.open = !self.open; }
 
-    PropertiesHost {
-        // Preserva o espaçamento entre seções do bloco anterior no shell.
-        spacing: 10px;
-        InspectorSection {
-            title: Tr.t("sl.uv_editor");
-            open: true;
-            toggled => { self.open = !self.open; }
+                VerticalLayout {
+                    spacing: 6px;
+                    padding-top: 4px;
 
-            VerticalLayout {
-                spacing: 6px;
-                padding-top: 4px;
+                    // Caixa 0..1 com o layout real das UVs.
+                    uv-box := Rectangle {
+                        width: 256px;
+                        height: 256px;
+                        horizontal-stretch: 0;
+                        background: DesignTokens.canvas;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        clip: true;
 
-                // Caixa 0..1 com o layout real das UVs.
-                uv-box := Rectangle {
-                    width: 256px;
-                    height: 256px;
-                    horizontal-stretch: 0;
-                    background: DesignTokens.canvas;
-                    border-width: 1px;
-                    border-color: DesignTokens.border;
-                    clip: true;
-
-                    // Textura ativa sob a malha UV
-                    if root.uv-show-texture: Image {
-                        width: 100%;
-                        height: 100%;
-                        image-fit: fill;
-                        source: root.paint-canvas-image;
-                        opacity: 0.65;
-                    }
-
-                    // Selected UV faces / Faces UV selecionadas
-                    Path {
-                        fill: DesignTokens.uv-selected.with-alpha(0.2);
-                        stroke: DesignTokens.uv-selected;
-                        stroke-width: 1.5px;
-                        commands: root.uv-selected-commands;
-                    }
-
-                    // Base UV mesh wireframe / Malha de arame UV base
-                    Path {
-                        fill: transparent;
-                        stroke: DesignTokens.accent.with-alpha(0.65);
-                        stroke-width: 1px;
-                        commands: root.uv-layout-commands;
-                    }
-
-                    // Seam edges / Arestas de costura
-                    Path {
-                        fill: transparent;
-                        stroke: DesignTokens.uv-seam;
-                        stroke-width: 2px;
-                        commands: root.uv-seam-commands;
-                    }
-
-                    // Pinned UV vertices / Vértices UV fixados
-                    Path {
-                        fill: DesignTokens.uv-pinned;
-                        stroke: DesignTokens.uv-pinned-outline;
-                        stroke-width: 1px;
-                        commands: root.uv-pinned-commands;
-                    }
-
-                    TouchArea {
-                        property <bool> extend: false;
-                        property <bool> dragging: false;
-                        property <float> last-u: 0.0;
-                        property <float> last-v: 0.0;
-                        pointer-event(event) => {
-                            extend = event.modifiers.shift;
-                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
-                                dragging = true;
-                                last-u = self.mouse-x / self.width;
-                                last-v = 1.0 - self.mouse-y / self.height;
-                                // O domínio usa UV com origem embaixo; a caixa desenha
-                                // com origem em cima, então o V é invertido aqui.
-                                root.uv-editor-clicked(
-                                    last-u,
-                                    last-v,
-                                    extend,
-                                );
-                            } else if event.kind == PointerEventKind.up {
-                                dragging = false;
-                            }
+                        // Textura ativa sob a malha UV
+                        if root.uv-show-texture: Image {
+                            width: 100%;
+                            height: 100%;
+                            image-fit: fill;
+                            source: root.paint-canvas-image;
+                            opacity: 0.65;
                         }
-                        moved => {
-                            if self.pressed && dragging {
-                                let cur-u = self.mouse-x / self.width;
-                                let cur-v = 1.0 - self.mouse-y / self.height;
-                                let du = cur-u - last-u;
-                                let dv = cur-v - last-v;
-                                if Math.abs(du) > 0.002 || Math.abs(dv) > 0.002 {
-                                    root.uv-moved(du, dv);
-                                    last-u = cur-u;
-                                    last-v = cur-v;
+
+                        // Selected UV faces / Faces UV selecionadas
+                        Path {
+                            fill: DesignTokens.uv-selected.with-alpha(0.2);
+                            stroke: DesignTokens.uv-selected;
+                            stroke-width: 1.5px;
+                            commands: root.uv-selected-commands;
+                        }
+
+                        // Base UV mesh wireframe / Malha de arame UV base
+                        Path {
+                            fill: transparent;
+                            stroke: DesignTokens.accent.with-alpha(0.65);
+                            stroke-width: 1px;
+                            commands: root.uv-layout-commands;
+                        }
+
+                        // Seam edges / Arestas de costura
+                        Path {
+                            fill: transparent;
+                            stroke: DesignTokens.uv-seam;
+                            stroke-width: 2px;
+                            commands: root.uv-seam-commands;
+                        }
+
+                        // Pinned UV vertices / Vértices UV fixados
+                        Path {
+                            fill: DesignTokens.uv-pinned;
+                            stroke: DesignTokens.uv-pinned-outline;
+                            stroke-width: 1px;
+                            commands: root.uv-pinned-commands;
+                        }
+
+                        TouchArea {
+                            property <bool> extend: false;
+                            property <bool> dragging: false;
+                            property <float> last-u: 0.0;
+                            property <float> last-v: 0.0;
+                            pointer-event(event) => {
+                                extend = event.modifiers.shift;
+                                if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                    dragging = true;
+                                    last-u = self.mouse-x / self.width;
+                                    last-v = 1.0 - self.mouse-y / self.height;
+                                    // O domínio usa UV com origem embaixo; a caixa desenha
+                                    // com origem em cima, então o V é invertido aqui.
+                                    root.uv-editor-clicked(
+                                        last-u,
+                                        last-v,
+                                        extend,
+                                    );
+                                } else if event.kind == PointerEventKind.up {
+                                    dragging = false;
+                                }
+                            }
+                            moved => {
+                                if self.pressed && dragging {
+                                    let cur-u = self.mouse-x / self.width;
+                                    let cur-v = 1.0 - self.mouse-y / self.height;
+                                    let du = cur-u - last-u;
+                                    let dv = cur-v - last-v;
+                                    if Math.abs(du) > 0.002 || Math.abs(dv) > 0.002 {
+                                        root.uv-moved(du, dv);
+                                        last-u = cur-u;
+                                        last-v = cur-v;
+                                    }
                                 }
                             }
                         }
+
+                        // Contorno do espaço 0..1.
+                        Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: DesignTokens.border; }
+                        Rectangle { x: 0; y: parent.height - 1px; width: 100%; height: 1px; background: DesignTokens.border; }
+                        Rectangle { x: 0; y: 0; width: 1px; height: 100%; background: DesignTokens.border; }
+                        Rectangle { x: parent.width - 1px; y: 0; width: 1px; height: 100%; background: DesignTokens.border; }
                     }
 
-                    // Contorno do espaço 0..1.
-                    Rectangle { x: 0; y: 0; width: 100%; height: 1px; background: DesignTokens.border; }
-                    Rectangle { x: 0; y: parent.height - 1px; width: 100%; height: 1px; background: DesignTokens.border; }
-                    Rectangle { x: 0; y: 0; width: 1px; height: 100%; background: DesignTokens.border; }
-                    Rectangle { x: parent.width - 1px; y: 0; width: 1px; height: 100%; background: DesignTokens.border; }
-                }
-
-                HorizontalLayout {
-                    spacing: 6px;
-                    height: 26px;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: root.uv-show-texture ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: root.uv-show-texture ? DesignTokens.accent : DesignTokens.border;
-                        Text {
-                            text: root.uv-show-texture ? Tr.t("sl.show_texture") : Tr.t("sl.show_texture_2");
-                            color: root.uv-show-texture ? DesignTokens.accent : DesignTokens.text-primary;
-                            font-size: DesignTokens.font-caption;
-                            font-weight: root.uv-show-texture ? 700 : 400;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 26px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: root.uv-show-texture ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: root.uv-show-texture ? DesignTokens.accent : DesignTokens.border;
+                            Text {
+                                text: root.uv-show-texture ? Tr.t("sl.show_texture") : Tr.t("sl.show_texture_2");
+                                color: root.uv-show-texture ? DesignTokens.accent : DesignTokens.text-primary;
+                                font-size: DesignTokens.font-caption;
+                                font-weight: root.uv-show-texture ? 700 : 400;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                            TouchArea { clicked => { root.toggle-uv-show-texture(); } }
                         }
-                        TouchArea { clicked => { root.toggle-uv-show-texture(); } }
+                    }
+
+                    Text {
+                        text: "\{root.uv-island-count} island(s)  ·  \{root.uv-face-count} face(s)  ·  selected: \{root.uv-selected-face}  ·  UV set: \{root.uv-selected-count}";
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        height: 26px;
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: "← U"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.move_uv_left");
+                            TouchArea { clicked => { root.uv-moved(-0.05, 0.0); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: "U →"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.move_uv_right");
+                            TouchArea { clicked => { root.uv-moved(0.05, 0.0); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: "↓ V"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.move_uv_down");
+                            TouchArea { clicked => { root.uv-moved(0.0, -0.05); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: "V ↑"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.move_uv_up");
+                            TouchArea { clicked => { root.uv-moved(0.0, 0.05); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+                        height: 26px;
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.scale_2"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.scale_uv_down");
+                            TouchArea { clicked => { root.uv-scaled(0.9); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.scale_3"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.scale_uv_up");
+                            TouchArea { clicked => { root.uv-scaled(1.1); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.rotate_2"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.rotate_uv_counter_clockwise");
+                            TouchArea { clicked => { root.uv-rotated(-15.0); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.rotate_3"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.rotate_uv_clockwise");
+                            TouchArea { clicked => { root.uv-rotated(15.0); } }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        height: 28px;
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.90_ccw"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.rotate_uv_90_degrees_counter_clockwise");
+                            TouchArea { clicked => { root.uv-rotated(-90.0); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.90_cw"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.rotate_uv_90_degrees_clockwise");
+                            TouchArea { clicked => { root.uv-rotated(90.0); } }
+                        }
+                    }
+                    if root.uv-layout-truncated: Text {
+                        text: Tr.t("sl.layout_truncated_only_the_first_2000_faces_a");
+                        color: DesignTokens.text-muted;
+                        font-size: DesignTokens.font-caption;
+                        wrap: word-wrap;
+                    }
+
+                    if !root.decal-surface: HorizontalLayout {
+                        spacing: 6px;
+                        height: 28px;
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.mark_unmark_seams"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.toggle_seams_on_the_selected_face");
+                            TouchArea { clicked => { root.uv-seam-toggled(); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.clear_seams"); color: DesignTokens.danger; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.clear_all_seams");
+                            TouchArea { clicked => { root.uv-seams-cleared(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 6px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.pin_unpin_p"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.pin_or_unpin_uv_vertices_of_the_selected_fac");
+                            TouchArea { clicked => { root.toggle-uv-pins(); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.clear_pins"); color: DesignTokens.danger; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.clear_all_uv_pins");
+                            TouchArea { clicked => { root.clear-all-uv-pins(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 28px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.equalize_texel_density"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.equalize_texel_density_across_uv_islands");
+                            TouchArea { clicked => { root.uv-equalize-texel-density(); } }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        height: 28px;
+                        spacing: 6px;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.stitch_seams"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.weld_coincident_3d_edges_that_have_split_uv_");
+                            TouchArea { clicked => { root.command-executed("uv.stitch"); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: DesignTokens.surface-raised;
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            Text { text: Tr.t("sl.relax_uv"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.smooth_unpinned_uv_island_corners_to_minimiz");
+                            TouchArea { clicked => { root.command-executed("uv.relax"); } }
+                        }
                     }
                 }
+            }
 
+            InspectorSection {
+                title: Tr.t("sl.uv_statistics");
+                open: true;
+                toggled => { self.open = !self.open; }
+
+                NumericField {
+                    label: Tr.t("surface.export_padding");
+                    value: root.export-padding;
+                    step: 1;
+                    text-committed(text) => { return root.extension-parameter-set("padding", text); }
+                    scrubbed(delta, fine) => { root.extension-parameter-set("padding", "\{root.export-padding + delta * (fine ? 0.1 : 1)}"); }
+                }
                 Text {
-                    text: "\{root.uv-island-count} island(s)  ·  \{root.uv-face-count} face(s)  ·  selected: \{root.uv-selected-face}  ·  UV set: \{root.uv-selected-count}";
-                    color: DesignTokens.text-secondary;
-                    font-size: DesignTokens.font-caption;
-                }
-
-                HorizontalLayout {
-                    spacing: 4px;
-                    height: 26px;
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: "← U"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.move_uv_left");
-                        TouchArea { clicked => { root.uv-moved(-0.05, 0.0); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: "U →"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.move_uv_right");
-                        TouchArea { clicked => { root.uv-moved(0.05, 0.0); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: "↓ V"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.move_uv_down");
-                        TouchArea { clicked => { root.uv-moved(0.0, -0.05); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: "V ↑"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.move_uv_up");
-                        TouchArea { clicked => { root.uv-moved(0.0, 0.05); } }
-                    }
-                }
-
-                HorizontalLayout {
-                    spacing: 4px;
-                    height: 26px;
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.scale_2"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.scale_uv_down");
-                        TouchArea { clicked => { root.uv-scaled(0.9); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.scale_3"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.scale_uv_up");
-                        TouchArea { clicked => { root.uv-scaled(1.1); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.rotate_2"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.rotate_uv_counter_clockwise");
-                        TouchArea { clicked => { root.uv-rotated(-15.0); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.rotate_3"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.rotate_uv_clockwise");
-                        TouchArea { clicked => { root.uv-rotated(15.0); } }
-                    }
-                }
-                HorizontalLayout {
-                    spacing: 6px;
-                    height: 28px;
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.90_ccw"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.rotate_uv_90_degrees_counter_clockwise");
-                        TouchArea { clicked => { root.uv-rotated(-90.0); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.90_cw"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.rotate_uv_90_degrees_clockwise");
-                        TouchArea { clicked => { root.uv-rotated(90.0); } }
-                    }
-                }
-                if root.uv-layout-truncated: Text {
-                    text: Tr.t("sl.layout_truncated_only_the_first_2000_faces_a");
-                    color: DesignTokens.text-muted;
-                    font-size: DesignTokens.font-caption;
+                    text: root.uv-stats;
                     wrap: word-wrap;
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-small;
                 }
-
-                if !root.decal-surface: HorizontalLayout {
-                    spacing: 6px;
-                    height: 28px;
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.mark_unmark_seams"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.toggle_seams_on_the_selected_face");
-                        TouchArea { clicked => { root.uv-seam-toggled(); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.clear_seams"); color: DesignTokens.danger; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.clear_all_seams");
-                        TouchArea { clicked => { root.uv-seams-cleared(); } }
-                    }
-                }
-
-                HorizontalLayout {
-                    height: 28px;
-                    spacing: 6px;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.pin_unpin_p"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.pin_or_unpin_uv_vertices_of_the_selected_fac");
-                        TouchArea { clicked => { root.toggle-uv-pins(); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.clear_pins"); color: DesignTokens.danger; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.clear_all_uv_pins");
-                        TouchArea { clicked => { root.clear-all-uv-pins(); } }
-                    }
-                }
-
-                HorizontalLayout {
-                    height: 28px;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.equalize_texel_density"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.equalize_texel_density_across_uv_islands");
-                        TouchArea { clicked => { root.uv-equalize-texel-density(); } }
-                    }
-                }
-
-                HorizontalLayout {
-                    height: 28px;
-                    spacing: 6px;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.stitch_seams"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.weld_coincident_3d_edges_that_have_split_uv_");
-                        TouchArea { clicked => { root.command-executed("uv.stitch"); } }
-                    }
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        border-radius: 4px;
-                        background: DesignTokens.surface-raised;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { text: Tr.t("sl.relax_uv"); color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
-                        accessible-role: button;
-                        accessible-label: Tr.t("sl.smooth_unpinned_uv_island_corners_to_minimiz");
-                        TouchArea { clicked => { root.command-executed("uv.relax"); } }
-                    }
-                }
-            }
-        }
-
-        InspectorSection {
-            title: Tr.t("sl.uv_statistics");
-            open: true;
-            toggled => { self.open = !self.open; }
-
-            NumericField {
-                label: Tr.t("surface.export_padding");
-                value: root.export-padding;
-                step: 1;
-                text-committed(text) => { return root.extension-parameter-set("padding", text); }
-                scrubbed(delta, fine) => { root.extension-parameter-set("padding", "\{root.export-padding + delta * (fine ? 0.1 : 1)}"); }
-            }
-            Text {
-                text: root.uv-stats;
-                wrap: word-wrap;
-                color: DesignTokens.text-secondary;
-                font-size: DesignTokens.font-small;
             }
         }
     }

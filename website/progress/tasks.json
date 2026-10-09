@@ -70,6 +70,11 @@
       "revision": "Wave sobre 0883bfbedc2b1c81ed692da5d455fed2dcb19e0a; fontes SHA-256 registradas no Slint Rescue §19",
       "document": "09-ui/slint-rescue-plan.md",
       "summary": "Wave PAINT/overlays/HUD completa: 547 testes Rust default/headless (508 unitários + 39 integração, incluindo cinco novos), fmt, ui-lint (29 arquivos), Clippy -D warnings, seis testes Node e guard documental pass. Feature animation-workspace, CI remota e aceitação visual/nativa: not run."
+    },
+    "wave-u02-u03": {
+      "revision": "Código escrito sobre 1edfb2495e6b897b45adf148af019c1705fcc498; compilação/testes adiados",
+      "document": "09-ui/slint-rescue-plan.md",
+      "summary": "§20: split independente/scroll/resize/collapse/memória; drawer PAINT/UV/ANIMATE; correção F6 e controles de teclado. Implemented, unverified. Antes da wave, shell_focus 1 pass / 1 fail; nenhum gate pós-correção executado. Não conclui checkpoints."
     }
   },
   "tasks": [
@@ -142,7 +147,7 @@
       "document": "09-ui/slint-rescue-plan.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Implementação estrutural da wave completa: PAINT + guias/HUD extraídos; 547 testes Rust, Clippy e gates de fonte/site pass. Aceitação visual/nativa final pendente; cinco de seis checkpoints concluídos.",
+      "baseline": "Extrações estruturais verificadas no commit 1edfb24 (547 testes default pass). Nova regressão F6: 1 pass / 1 fail no fechamento. Bateria animation-workspace e aceitação visual/nativa adiadas por instrução do usuário; corrigir foco na próxima wave UI.",
       "checkpoints": [
         {
           "title": "Extrair AnimateInspector e preservar a regressão ANIMATE no backend headless.",
@@ -186,9 +191,9 @@
       "title": "Structure/Properties",
       "description": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário.",
       "document": "09-ui/workspaces-feedback-accessibility.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Parcial. crates/ui-slint/ui/shell/right_column.slint:13. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Código escrito sobre 1edfb24: split Structure/Properties, scrolls independentes, resize/collapse e memória de sessão por workspace. Compilação, regressões e aceite nativo adiados pelo usuário; §20 Slint Rescue. Nenhum checkpoint verificado.",
       "checkpoints": [
         {
           "title": "Implementar split vertical independente, resize/collapse responsivo, estado por workspace e seções contextuais por descriptors/registry quando necessário",
@@ -213,9 +218,9 @@
       "title": "Workspace Drawer",
       "description": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack; preservar Assets/Prefabs, filtros e teclado.",
       "document": "09-ui/slint-rescue-plan.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Parcial. crates/ui-slint/ui/shell/workspace_drawer.slint. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Código escrito sobre 1edfb24: drawer com abas PAINT presets/paleta, UV diagnostics e ANIMATE transporte procedural/Motion Stack; Assets/Prefabs e filtros preservados. Compilação/testes e aceite nativo adiados pelo usuário; timeline completa de keyframes continua pendente. §20 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Completar conteúdos PAINT presets/paleta, UV diagnostics e ANIMATE timeline/motion stack",
@@ -237,7 +242,8 @@
         "09-ui/slint-rescue-plan.md",
         "06-paint/workspace-ux.md",
         "07-uv/workspace-ux.md",
-        "09-ui/slint-reassessment.md"
+        "09-ui/slint-reassessment.md",
+        "10-animation/workspace-ux.md"
       ]
     },
     {
@@ -415,9 +421,9 @@
       "title": "Acessibilidade",
       "description": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer; auditar screen reader Linux/Windows.",
       "document": "09-ui/workspaces-feedback-accessibility.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Cobertura parcial. crates/ui-slint/tests/viewport_gestures.rs, crates/ui-slint/ui/components. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Correção limitada escrita: F6 aponta para Structure visível no painel expandido e pill no rail recolhido; token zero não força foco. Regressão anterior 1 pass / 1 fail; pós-correção not run por adiamento do usuário. Navegação completa/reader Windows-Linux pendentes. §20 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Completar F6/Shift+F6, Tab regional, nomes/roles/estados/valores, disabled reason, IME e rotas alternativas ao pointer",
@@ -481,9 +487,9 @@
       "title": "Design system e legibilidade",
       "description": "Substituir controles ad-hoc gradualmente; fechar todos os estados, texto operacional >=12 logical px, alvos >=28px, escala 100–200%, temas/contraste/motion, overflow, listas virtualizadas e NumericField sem wheel incidental.",
       "document": "09-ui/slint-reassessment.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "A auditar. crates/ui-slint/ui/tokens.slint, crates/ui-slint/ui/components/controls.slint. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "baseline": "Correções limitadas U02/U03 escritas: alças/chips/swatches com alvo 28px e teclado/ações acessíveis; hosts/drawer/chips usam texto operacional 12px. Auditoria global de estados/escala/contraste/input numérico e testes adiados, ainda pendentes. §20 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Substituir controles ad-hoc gradualmente",
@@ -2137,7 +2143,7 @@
       "document": "14-quality/testing-ci-conformance.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-09",
-      "baseline": "Workflow inclui MODEL/UV/PAINT/ANIMATE/HUD/gestures e push na branch autorizada; 547 testes Rust default e Clippy pass localmente. CI remota, suíte animation-workspace, auditoria paths/toolchain e baterias transversais ainda pendentes.",
+      "baseline": "Workflow inclui MODEL/UV/PAINT/ANIMATE/HUD/gestures e push na branch autorizada; 547 testes Rust default e Clippy pass localmente. CI remota, suíte animation-workspace, auditoria paths/toolchain e baterias transversais ainda pendentes. Suítes shell_focus/inspector_split/workspace_drawer configuradas em U02/U03; execução pós-correção e CI remota not run, sem novos checkpoints.",
       "checkpoints": [
         {
           "title": "Incluir uv_shell no workflow Slint",

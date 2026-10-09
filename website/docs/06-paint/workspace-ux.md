@@ -606,3 +606,8 @@ Layers à direita
 ```
 
 O motor atual será reaproveitado e reorganizado progressivamente; não haverá rewrite funcional sem necessidade comprovada.
+
+
+## Checkpoint de apresentação U02/U03 — 2026-10-09
+
+Presets e paleta foram transferidos do Inspector para abas no Workspace Drawer; Layers ocupa Structure e decal ocupa Properties. Canvas como Work Surface e os modos 3D/2D/Split/PiP completos permanecem no processo de workspace. **Código escrito, não compilado/testado:** bateria e aceite nativo adiados pelo usuário. Registro e limites: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).

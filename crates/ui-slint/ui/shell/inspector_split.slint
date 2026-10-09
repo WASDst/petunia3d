@@ -1,0 +1,177 @@
+import { IconDisplay, IconSet } from "@lucide";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { ScrollView } from "std-widgets.slint";
+
+/// Duas regiões de apresentação, com geometria limitada à área disponível.
+/// Recebe estado do bridge; arraste e teclado apenas emitem intenções de layout.
+export component InspectorSplitLayout inherits Rectangle {
+    in property <float> structure-ratio: 0.4;
+    in property <bool> structure-collapsed: false;
+    in property <bool> properties-collapsed: false;
+    in property <length> pane-header-height: 32px;
+    callback ratio-changed(float);
+
+    property <length> divider-height: DesignTokens.control-height;
+    property <length> usable-height: max(0px, root.height - root.divider-height);
+    property <length> minimum-pane: min(112px, root.usable-height / 2);
+    out property <length> structure-height: root.structure-collapsed
+        ? min(root.pane-header-height, root.usable-height / 2)
+        : (root.properties-collapsed
+            ? max(0px, root.usable-height - root.pane-header-height)
+            : clamp(root.usable-height * root.structure-ratio, root.minimum-pane, root.usable-height - root.minimum-pane));
+    out property <length> properties-y: root.structure-height + root.divider-height;
+    out property <length> properties-height: root.properties-collapsed
+        ? min(root.pane-header-height, max(0px, root.height - root.properties-y))
+        : max(0px, root.height - root.properties-y);
+
+    background: transparent;
+    clip: true;
+    @children
+
+    divider := Rectangle {
+        x: 0px;
+        y: root.structure-height;
+        width: root.width;
+        height: root.divider-height;
+        background: divider-touch.has-hover || divider-touch.pressed ? DesignTokens.surface-hover : DesignTokens.surface;
+        accessible-role: slider;
+        accessible-label: Tr.t("sl.resize_panel_height");
+        accessible-value: Math.round(root.structure-ratio * 100);
+        accessible-value-minimum: 15;
+        accessible-value-maximum: 85;
+        accessible-value-step: 5;
+        accessible-enabled: !root.structure-collapsed && !root.properties-collapsed;
+        accessible-action-increment => {
+            if !root.structure-collapsed && !root.properties-collapsed {
+                root.ratio-changed(min(0.85, root.structure-ratio + 0.05));
+            }
+        }
+        accessible-action-decrement => {
+            if !root.structure-collapsed && !root.properties-collapsed {
+                root.ratio-changed(max(0.15, root.structure-ratio - 0.05));
+            }
+        }
+        forward-focus: divider-focus;
+
+        Rectangle {
+            width: 32px;
+            height: 2px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 1px;
+            background: divider-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border-strong;
+        }
+        divider-focus := FocusScope {
+            enabled: !root.structure-collapsed && !root.properties-collapsed;
+            key-pressed(event) => {
+                if event.text == Key.UpArrow || event.text == Key.LeftArrow {
+                    root.ratio-changed(max(0.15, root.structure-ratio - (event.modifiers.shift ? 0.01 : 0.05)));
+                    return accept;
+                }
+                if event.text == Key.DownArrow || event.text == Key.RightArrow {
+                    root.ratio-changed(min(0.85, root.structure-ratio + (event.modifiers.shift ? 0.01 : 0.05)));
+                    return accept;
+                }
+                if event.text == Key.Home { root.ratio-changed(0.15); return accept; }
+                if event.text == Key.End { root.ratio-changed(0.85); return accept; }
+                reject
+            }
+            divider-touch := TouchArea {
+                enabled: !root.structure-collapsed && !root.properties-collapsed;
+                mouse-cursor: MouseCursor.ns-resize;
+                property <length> start-y;
+                property <float> start-ratio;
+                pointer-event(event) => {
+                    if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                        divider-focus.focus();
+                        self.start-y = self.mouse-y + root.structure-height;
+                        self.start-ratio = root.structure-ratio;
+                    }
+                }
+                moved => {
+                    if self.pressed && root.usable-height > 0px {
+                        // A alça se move com o split: usar posição no host, sem realimentação local.
+                        let delta = self.mouse-y + root.structure-height - self.start-y;
+                        root.ratio-changed(clamp(self.start-ratio + delta / root.usable-height, 0.15, 0.85));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Cabeçalho estável + scroll próprio. Colapso não destrói nem copia estado autoral.
+export component InspectorPane inherits Rectangle {
+    in property <string> title;
+    in property <bool> collapsed: false;
+    in property <length> spacing: 8px;
+    in property <int> focus-token: 0;
+    callback collapse-requested(bool);
+    changed focus-token => { if root.focus-token > 0 { header-focus.focus(); } }
+    background: transparent;
+    clip: true;
+
+    VerticalLayout {
+        spacing: 0px;
+        header := Rectangle {
+            height: 32px;
+            background: header-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
+            accessible-role: button;
+            accessible-label: (root.collapsed ? Tr.t("sl.expand") : Tr.t("sl.collapse")) + " · " + root.title;
+            accessible-checked: !root.collapsed;
+            accessible-action-default => { root.collapse-requested(!root.collapsed); }
+            forward-focus: header-focus;
+            border-width: header-focus.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus-ring;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 8px;
+                alignment: start;
+                IconDisplay {
+                    icon: root.collapsed ? IconSet.ChevronRight : IconSet.ChevronDown;
+                    size: 14px;
+                    stroke: DesignTokens.text-secondary;
+                }
+                Text {
+                    text: root.title;
+                    font-size: DesignTokens.font-default;
+                    font-weight: 600;
+                    color: DesignTokens.text-primary;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+            }
+            header-focus := FocusScope {
+                key-pressed(event) => {
+                    if event.text == Key.Return || event.text == " " {
+                        root.collapse-requested(!root.collapsed);
+                        return accept;
+                    }
+                    reject
+                }
+                header-touch := TouchArea {
+                    clicked => {
+                        header-focus.focus();
+                        root.collapse-requested(!root.collapsed);
+                    }
+                }
+            }
+        }
+        // @children fica incondicional; o mesmo conteúdo conserva seleção/edições locais.
+        ScrollView {
+            visible: !root.collapsed;
+            height: root.collapsed ? 0px : max(0px, root.height - 32px);
+            vertical-stretch: root.collapsed ? 0 : 1;
+            horizontal-scrollbar-policy: always-off;
+            vertical-scrollbar-policy: as-needed;
+            VerticalLayout {
+                width: parent.width;
+                spacing: root.spacing;
+                vertical-stretch: 0;
+                @children
+            }
+        }
+    }
+}

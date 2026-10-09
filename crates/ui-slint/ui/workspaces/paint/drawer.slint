@@ -1,0 +1,118 @@
+import { DesignTokens, ColorPresets, Tr } from "../../tokens.slint";
+import { BrushChip, ColorSwatch } from "../../components/controls.slint";
+
+/// Presets existentes; seleção e persistência continuam no bridge/Application.
+export component PaintPresetsContent inherits VerticalLayout {
+    in property <[string]> brush-presets;
+    in property <int> brush-preset-index: -1;
+    callback applied(int);
+    callback saved();
+    callback deleted(int);
+    spacing: 6px;
+    for preset-name[preset-index] in root.brush-presets: BrushChip {
+        label: preset-name;
+        active: root.brush-preset-index == preset-index;
+        clicked => { root.applied(preset-index); }
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        BrushChip { label: Tr.t("sl.brush_preset_save"); clicked => { root.saved(); } }
+        BrushChip {
+            label: Tr.t("sl.brush_preset_delete");
+            enabled: root.brush-preset-index >= 0 && root.brush-preset-index < root.brush-presets.length;
+            clicked => { root.deleted(root.brush-preset-index); }
+        }
+    }
+}
+
+/// Paleta existente transferida do Inspector, sem duplicar cores/arquivo no shell.
+export component PaintPaletteContent inherits VerticalLayout {
+    in property <color> paint-color;
+    in property <string> label-active-brush-color;
+    callback paint-color-changed(float, float, float);
+    callback command-file-action(string);
+    spacing: 8px;
+    padding-top: 4px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: center;
+
+        Rectangle {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            background: root.paint-color;
+            border-width: 2px;
+            border-color: DesignTokens.accent;
+        }
+
+        Text {
+            text: root.label-active-brush-color;
+            color: DesignTokens.text-primary;
+            font-size: DesignTokens.font-default;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: center;
+
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-violet;
+            semantic-label: Tr.t("sl.palette_violet");
+            selected: root.paint-color == ColorPresets.paint-violet;
+            clicked => { root.paint-color-changed(0.71, 0.55, 1.0); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-red;
+            semantic-label: Tr.t("sl.palette_red");
+            selected: root.paint-color == ColorPresets.paint-red;
+            clicked => { root.paint-color-changed(0.93, 0.27, 0.27); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-green;
+            semantic-label: Tr.t("sl.palette_green");
+            selected: root.paint-color == ColorPresets.paint-green;
+            clicked => { root.paint-color-changed(0.13, 0.77, 0.37); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-blue;
+            semantic-label: Tr.t("sl.palette_blue");
+            selected: root.paint-color == ColorPresets.paint-blue;
+            clicked => { root.paint-color-changed(0.23, 0.51, 0.96); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-yellow;
+            semantic-label: Tr.t("sl.palette_yellow");
+            selected: root.paint-color == ColorPresets.paint-yellow;
+            clicked => { root.paint-color-changed(0.92, 0.70, 0.03); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-white;
+            semantic-label: Tr.t("sl.palette_white");
+            selected: root.paint-color == ColorPresets.paint-white;
+            clicked => { root.paint-color-changed(1.0, 1.0, 1.0); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-gray;
+            semantic-label: Tr.t("sl.palette_gray");
+            selected: root.paint-color == ColorPresets.paint-gray;
+            clicked => { root.paint-color-changed(0.42, 0.45, 0.50); }
+        }
+        ColorSwatch {
+            swatch-color: ColorPresets.paint-black;
+            semantic-label: Tr.t("sl.palette_black");
+            selected: root.paint-color == ColorPresets.paint-black;
+            clicked => { root.paint-color-changed(0.07, 0.07, 0.07); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        BrushChip { label: Tr.t("sl.import"); clicked => { root.command-file-action("palette.import"); } }
+        BrushChip { label: Tr.t("sl.export"); clicked => { root.command-file-action("palette.export"); } }
+    }
+}

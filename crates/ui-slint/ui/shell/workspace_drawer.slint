@@ -10,14 +10,18 @@ export component WorkspaceDrawer inherits Rectangle {
     in property <length> right-clearance: 8px;
     in property <length> bottom-offset: 30px;
     callback height-changed(length);
+    property <length> maximum-height: max(132px, min(520px, root.height - root.bottom-offset - 120px));
+    property <length> effective-height: clamp(root.drawer-height, 132px, root.maximum-height);
 
     background: transparent;
 
     if root.open: SplitterHorizontal {
         x: root.left-offset;
-        y: parent.height - (root.bottom-offset + 6px) - root.drawer-height;
+        y: parent.height - root.bottom-offset - root.effective-height - DesignTokens.control-height;
         width: parent.width - root.left-offset - root.right-clearance;
-        value: root.drawer-height;
+        value: root.effective-height;
+        minimum: 132px;
+        maximum: root.maximum-height;
         direction: -1.0;
         moved(height) => { root.height-changed(height); }
     }
@@ -27,9 +31,9 @@ export component WorkspaceDrawer inherits Rectangle {
         // viver em elemento condicional no Slint 1.18.
         visible: root.open;
         x: root.left-offset;
-        y: parent.height - root.bottom-offset - root.drawer-height;
+        y: parent.height - root.bottom-offset - root.effective-height;
         width: parent.width - root.left-offset - root.right-clearance;
-        height: root.drawer-height;
+        height: root.effective-height;
         background: DesignTokens.surface-raised;
         border-width: 1px;
         border-color: DesignTokens.border;

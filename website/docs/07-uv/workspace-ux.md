@@ -419,3 +419,8 @@ Structure/Properties podem colapsar, mas UV continua sendo work surface.
 UV será um workspace de relação **3D ↔ 2D**, não um painel técnico secundário.
 
 O editor existente deve ser promovido e reorganizado, preservando seus algoritmos úteis enquanto a arquitetura de seleção/FaceCorner é corrigida conforme o capítulo técnico.
+
+
+## Checkpoint de apresentação U02/U03 — 2026-10-09
+
+O drawer auxiliar recebe o diagnóstico já projetado pela Application, com ações Pack/Equalize existentes. A promoção do editor UV a Work Surface, lista de Islands e diagnóstico acionável por alvo permanecem pendentes. **Código escrito, não compilado/testado:** bateria e aceite nativo adiados pelo usuário. Registro e limites: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).

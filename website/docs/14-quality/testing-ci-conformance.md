@@ -122,3 +122,7 @@ Contratos testados por boundary; UI/GL/a11y hard gates; nenhuma aprovação sem 
 ## Wave U01 — cobertura adicional (2026-10-09)
 
 `ui-slint.yml` passa a incluir `paint_shell` e `viewport_hud` junto de MODEL/UV/ANIMATE/gestures na configuração `animation-workspace`. As regressões novas exercitam input físico composto, strokes/seleção 2D, IDs/opacity de layers atualizados, efeitos/brush/binding do canvas e geometria/hit testing de HUDs passivos. Execução e limites da wave: [Slint Rescue §19](../09-ui/slint-rescue-plan.md#19-wave-u01--paint-e-huds-2026-10-09). A alteração de configuração não comprova execução remota; Q03 permanece parcial.
+
+## Wave U02/U03 — suítes preparadas (2026-10-09)
+
+`ui-slint.yml` inclui `shell_focus`, `inspector_split` e `workspace_drawer` na integração com `animation-workspace`. A primeira execução de `shell_focus`, anterior à nova implementação, teve **1 pass / 1 fail**. Após o usuário adiar os testes, a correção e as novas regressões foram escritas, sem execução/compilação. Q03 mantém o checkpoint anterior (025%); CI remota e gates desta wave: **not run**. Registro: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).

@@ -1,0 +1,82 @@
+import { IconSet } from "@lucide";
+import { TopAction } from "../components/controls.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { ScrollView } from "std-widgets.slint";
+
+/// Chrome comum; o shell guarda a aba e cada workspace fornece seu conteúdo.
+export component WorkspaceDrawerContent inherits Rectangle {
+    in property <[string]> tabs;
+    in property <int> selected-tab: 0;
+    callback tab-selected(int);
+    callback close-requested();
+    private property <int> navigation-token: 0;
+    function select-tab(index: int) {
+        root.tab-selected(index);
+        root.navigation-token += 1;
+    }
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 6px;
+        padding: 8px;
+        HorizontalLayout {
+            height: DesignTokens.control-height;
+            spacing: 6px;
+            ScrollView {
+                horizontal-stretch: 1;
+                vertical-scrollbar-policy: always-off;
+                horizontal-scrollbar-policy: as-needed;
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    for label[index] in root.tabs: Rectangle {
+                        width: max(104px, tab-label.preferred-width + 20px);
+                        height: DesignTokens.control-height;
+                        border-radius: DesignTokens.radius-control;
+                        background: root.selected-tab == index ? DesignTokens.accent : tab-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
+                        border-width: tab-focus.has-focus ? 2px : 1px;
+                        border-color: tab-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+                        accessible-role: tab;
+                        accessible-label: label;
+                        accessible-checked: root.selected-tab == index;
+                        accessible-action-default => { root.select-tab(index); }
+                        property <int> focus-token: root.navigation-token;
+                        changed focus-token => { if root.selected-tab == index { tab-focus.focus(); } }
+                        forward-focus: tab-focus;
+                        tab-label := Text {
+                            text: label;
+                            color: root.selected-tab == index ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            font-size: DesignTokens.font-default;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        tab-focus := FocusScope {
+                            key-pressed(event) => {
+                                if event.text == Key.Return || event.text == " " { root.select-tab(index); return accept; }
+                                if event.text == Key.LeftArrow { root.select-tab(max(0, index - 1)); return accept; }
+                                if event.text == Key.RightArrow { root.select-tab(min(root.tabs.length - 1, index + 1)); return accept; }
+                                if event.text == Key.Home { root.select-tab(0); return accept; }
+                                if event.text == Key.End { root.select-tab(root.tabs.length - 1); return accept; }
+                                if event.text == Key.Escape { root.close-requested(); return accept; }
+                                reject
+                            }
+                            tab-touch := TouchArea {
+                                clicked => { root.select-tab(index); }
+                            }
+                        }
+                    }
+                }
+            }
+            TopAction {
+                icon: IconSet.X;
+                semantic-label: Tr.t("sl.close_workspace_drawer");
+                clicked => { root.close-requested(); }
+            }
+        }
+        Rectangle { height: 1px; background: DesignTokens.border; }
+        Rectangle {
+            vertical-stretch: 1;
+            @children
+        }
+    }
+}

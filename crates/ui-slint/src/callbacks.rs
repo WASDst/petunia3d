@@ -521,6 +521,7 @@ pub(crate) fn sync_window_properties(window: &PetuniaSlintShell, vm: &ShellViewM
     window.set_parts_selected_only(vm.parts_selected_only);
     window.set_parts_sort_by_name(vm.parts_sort_by_name);
     window.set_parts_row_height(vm.parts_row_height);
+    sync_inspector_pane_layout(window, vm.inspector_pane_layout);
     let prefab_items: Vec<PrefabItem> = vm.prefab_items.iter().map(to_prefab_item).collect();
     crate::refresh::set_model_if_changed(window.get_prefab_items(), prefab_items, |model| {
         window.set_prefab_items(model)
@@ -5190,6 +5191,29 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let layout_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_inspector_split_ratio_set(move |ratio| {
+        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade()) {
+            if bridge.set_inspector_structure_ratio(ratio) {
+                sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
+            }
+        }
+    });
+
+    let layout_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_inspector_pane_collapsed_set(move |pane, collapsed| {
+        let Ok(pane) = crate::inspector_layout::InspectorPane::try_from(pane) else {
+            return;
+        };
+        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade()) {
+            if bridge.set_inspector_pane_collapsed(pane, collapsed) {
+                sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
+            }
+        }
+    });
+
     let section_pill_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_section_pill_clicked(move |id| {
@@ -5503,4 +5527,14 @@ fn connect_decal_callbacks<V: PetuniaViewport + 'static>(
             refresh_after_texture_change(&mut bridge, &window);
         }
     });
+}
+
+/// Só projeções de apresentação: resize não reconstrói o view model de domínio por pixel.
+fn sync_inspector_pane_layout(
+    window: &PetuniaSlintShell,
+    layout: crate::inspector_layout::InspectorPaneLayout,
+) {
+    window.set_inspector_structure_ratio(layout.structure_ratio);
+    window.set_inspector_structure_collapsed(layout.structure_collapsed);
+    window.set_inspector_properties_collapsed(layout.properties_collapsed);
 }

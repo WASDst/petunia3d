@@ -178,7 +178,7 @@ RightColumn
 - `ModelInspector` extraído para `ui/workspaces/model/inspector.slint`, mantendo Parts em Structure e Transform/Material/Object/Combine em Properties. A extração preserva os corpos existentes; não implementa o split independente nem muda ownership de seleção, materiais, primitivas ou Undo.
 - `PaintInspector` extraído para `ui/workspaces/paint/inspector.slint`, preservando controles, 70 propriedades (incluindo seis bindings de ida/volta) e 50 callbacks. O inspector ainda contém as seções existentes; Layers/Properties independentes e Work Surface 2D pertencem às próximas fases. Gates em §19.
 - `UvInspector` extraído para `ui/workspaces/uv/inspector.slint`, composto pelo shell com as mesmas propriedades e callbacks. Os hosts são transitórios: operações UV ainda ocupam `StructureHost`; sua migração para Properties/Context Bar e a lista de Islands pertencem à fase de workspace.
-- O split vertical independente entre Structure e Properties ainda não foi implementado; a presença dos hosts não conclui a Fase 2.
+- Split vertical independente escrito na wave U02 (§20): cabeçalhos, scrolls, resize/collapse e memória de sessão por workspace. Compilação, regressões e aceite nativo ainda não executados; não considerar Fase 2 verificada.
 - Conteúdo recebe propriedades projetadas pelo shell; registry não foi introduzido.
 
 ## 7. Fase 3 — Workspace Drawer
@@ -194,6 +194,8 @@ ANIMATE → Timeline / Motion Stack
 
 O container pertence ao shell.
 O conteúdo pertence ao workspace.
+
+**Implementação em andamento (2026-10-09):** conteúdo com abas por workspace escrito na wave U03 (§20), preservando rotas Assets/Prefabs. PAINT migra presets/paleta; UV projeta diagnóstico; ANIMATE reutiliza transporte procedural/Motion Stack. Não equivale a timeline completa de keyframes nem a aceite visual.
 
 ## 8. Fase 4 — Viewport
 
@@ -490,3 +492,45 @@ e85d0011cff8a38b9fb725b1b7592f60606d7dc3dfb858cb592b103085671206  crates/ui-slin
 69ec5cfe88df9636c5479591f72606998591b99d21aa7e459bf03a1eef998088  crates/ui-slint/tests/paint_shell.rs
 cc3701e6d8745e29180bf1e534e4ed8230b20ff40bb51a89b3979a3ab5607a1f  crates/ui-slint/tests/viewport_hud.rs
 ```
+
+## 20. Wave U02/U03 — regiões independentes e drawer (2026-10-09)
+
+**Intent:** continuar a refatoração da UI sobre `1edfb2495e6b897b45adf148af019c1705fcc498`, branch `refactor/architecture-foundation`. Após iniciar o fechamento U01, o usuário orientou: “prossiga com as outras implementações, principalmente a refatoração da UI, deppois testamos”. A bateria desta wave e o aceite nativo ficam adiados; implementar não autoriza marcar gates pass.
+
+**Sources:** §6–7 deste plano; Workspaces, Feedback e Acessibilidade §2–6, §19–20; PAINT UX §2–3 e palette/presets; UV UX §2–3 e Health; ANIMATE UX §1–4 e procedural transport; protocolo de implementação §C–F e contrato do tracker.
+
+**Gap / Changed:**
+
+| Processo | Antes | Código escrito nesta wave | Limite |
+|---|---|---|---|
+| U02 | Hosts em uma coluna com scroll comum | `InspectorSplitLayout` + `InspectorPane`; scroll próprio por região, proporção limitada, resize por ponteiro/setas/Home/End, collapse por Enter/Espaço/ação acessível; quatro workspaces conectados | Não compilado/testado; UV ainda usa operações em Structure e canvas pequeno em Properties |
+| U02 | Layout sem memória por workspace | `inspector_layout.rs` guarda proporção/collapse em slots tipados de sessão; bridge valida e sincroniza apenas três propriedades por mudança | Não serializa layout no projeto; não altera Document/Undo/revisão |
+| U03 | Drawer com Assets/Prefabs em todos os workspaces | `WorkspaceDrawerContent`: abas com teclado, memória local da aba por workspace, close/Esc; filtros/callbacks Assets preservados | Abertura/altura seguem o estado existente do drawer; restauração regional de foco pertence a U07 |
+| U03 | Presets/paleta no Inspector PAINT | Corpos/ações migrados para `workspaces/paint/drawer.slint`, presets e paleta em abas próprias | Novo macro-layout Canvas 2D/3D/PiP não está neste slice |
+| U03 | Conteúdo UV/ANIMATE inferior ausente | UV diagnostics projetado + Pack/Equalize; ANIMATE playhead/play/pause/Keep Live/Apply Now + seleção/duplicação/remoção de motions | Diagnóstico acionável por ilha, keyframes/curves e blending completo continuam pendentes |
+| U06 | F6 sempre enviado à pill, mesmo com rail oculto no painel aberto | Token positivo entregue ao header Structure quando expandido; rail só recebe token quando recolhido; zero não força foco | Correção limitada, sem alegar navegação completa de regiões/Shift+F6 ou reader |
+| U08 | Chips/swatches/alça sem teclado ou alvo adequado | `BrushChip` e `ColorSwatch` com foco/ação semântica/Enter/Espaço; alças com ações de incremento/decremento; alvos de 28px; texto operacional dos novos hosts/drawer e chips usa token de 12px | Auditoria global de estados/temas/escala, nomes/estados globais e leitores de tela aberta |
+
+MODEL preserva Parts/Transform/Material/Object/Combine e mantém headers de Properties alcançáveis no painel aberto. PAINT usa Layers em Structure e decal em Properties; ANIMATE passa Creature + picker/stack para Structure, mantendo parâmetros em Properties. Contratos autorais, intents, renderers e schemas não são reescritos. O transporte flutuante não aparece simultaneamente com o transporte do drawer aberto.
+
+O divisor inferior usa a faixa persistida existente (132–520px), limita a altura visual à janela e calcula arraste em coordenadas absolutas para evitar realimentação quando a própria alça se move. Em janelas muito baixas e layouts estreitos, a usabilidade ainda requer validação real.
+
+**Verification:**
+
+| Gate / evidência | Estado real |
+|---|---|
+| Antes desta wave: inicialização da aplicação pelo `cargo run` no terminal do usuário (fontes de `1edfb24`), terminal “Petunia3D window ready” | pass somente para startup; não comprova esta wave nem layout/teclado |
+| Antes do adiamento: `CARGO_BUILD_JOBS=1 cargo test -p petunia_ui_slint --config profile.test.package.petunia_ui_slint.debug=0 --test shell_focus` | fail: 1 pass / 1 fail; Enter não chegou ao callback esperado durante travessia dos workspaces; log `/tmp/petunia-u01-focus.log` |
+| Revisão de código da rota F6 | Identificado token para rail oculto quando expandido; correção escrita, comportamento pós-correção não executado |
+| Formatação Rust com `cargo fmt -p petunia_ui_slint` | Aplicada como edição; `--check` não executado nesta wave |
+| Revisão de whitespace com `git diff --check` | pass após remover espaço residual da movimentação do bloco PAINT; não é teste funcional |
+| Compilação/check, testes unitários/integração, Clippy, ui-lint, validadores site/tracker | not run após orientação de adiamento |
+| Aceite visual/nativo, Linux/Windows, escala/temas, AT-SPI/leitor, GL, low-end e CI remota | not run |
+
+Regressões escritas, **não executadas**: três unitários de memória/validação, `shell_focus` (3), `inspector_split` (2), `workspace_drawer` (3). Cobrem input físico, roteamento de ações, limites, collapse, recuperação de layout/filtros e teclado. Configuração CI inclui as três suítes; YAML alterado não comprova execução remota. Os 547 pass da wave anterior continuam vinculados apenas às fontes anteriores.
+
+**Acompanhamento:** U01 continua IN PROGRESS (083%) com aceite final aberto; U02/U03/U06/U08 ficam IN PROGRESS (000%) sem checkpoints novos marcados. Q03 continua IN PROGRESS (025%) pela configuração já entregue, sem inferir gates novos. Nenhum denominador foi alterado.
+
+**Risks:** toda a wave é `implemented, unverified`; compilação pode revelar diagnósticos e regressões precisam confirmar a integração. A11y inclui melhorias locais, sem conformidade global presumida. O renderer efetivamente iniciado na baseline continua WGPU histórico; isso não implementa o OpenGL de destino.
+
+**Next checkpoint:** prosseguir nos slices de UI autorizados; quando iniciar a fase de testes, compilar e executar a bateria inteira das fontes finais, começando pelas três suítes novas, depois integrações existentes/lib/Clippy/ui-lint/guard do site. Aceite nativo/plataforma permanece evidência separada. Não fechar U01/U02/U03/U06/U08 apenas pela presença dos arquivos.

@@ -296,7 +296,7 @@ export component InspectorPill inherits Rectangle {
     in property <int> focus-token: 0;
     callback clicked;
     callback hovered(string);
-    changed focus-token => { pill-focus.focus(); }
+    changed focus-token => { if root.focus-token > 0 { pill-focus.focus(); } }
 
     accessible-role: button;
     accessible-label: root.semantic-label;

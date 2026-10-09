@@ -445,3 +445,8 @@ Em janela estreita:
 ANIMATE continua **procedural-first, progressive-disclosure e viewport-first**.
 
 O objetivo não é competir com um DCC tradicional em quantidade de editores expostos, mas permitir chegar a movimento útil rapidamente e revelar posing, keyframes, layers e curves conforme a necessidade cresce.
+
+
+## Checkpoint de apresentação U02/U03 — 2026-10-09
+
+O drawer recebe transporte/playhead procedural e Motion Stack usando as ações existentes. Creature/Motion picker ficam em Structure, parâmetros em Properties. Timeline completa de keyframes, curves, blending e expansão procedural permanecem pendentes. **Código escrito, não compilado/testado:** bateria e aceite nativo adiados pelo usuário. Registro e limites: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).

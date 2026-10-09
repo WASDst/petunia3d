@@ -1,3 +1,4 @@
+import { InspectorSplitLayout } from "../../shell/inspector_split.slint";
 import { DesignTokens, Tr } from "../../tokens.slint";
 import { PetuniaIcons } from "../../petunia_icons.slint";
 import { EmptyState } from "../../components/base.slint";
@@ -8,7 +9,7 @@ import { ModifierEntry, SceneItem, SectionState } from "../../types.slint";
 
 /// Conteúdo MODEL: recebe projeções do shell e encaminha intenções sem domínio próprio.
 /// Estado, validação numérica e comandos continuam sob responsabilidade do host Rust.
-export component ModelInspector inherits VerticalLayout {
+export component ModelInspector inherits Rectangle {
     in property <bool> model-parts-open;
     in property <string> hovered-inspector-section;
     in property <string> label-parts;
@@ -177,12 +178,28 @@ export component ModelInspector inherits VerticalLayout {
     callback boolean-cleanup-set(bool);
     callback boolean-operand-cleared();
     callback boolean-operand-set(string);
+    in property <float> structure-ratio: 0.4;
+    in property <bool> structure-collapsed: false;
+    in property <bool> properties-collapsed: false;
+    in property <int> structure-focus-token: 0;
+    callback split-ratio-changed(float);
+    callback pane-collapsed-set(int, bool);
 
-        spacing: 0px;
-        vertical-stretch: 0;
-
-        StructureHost {
-            if (root.model-parts-open || root.hovered-inspector-section == "parts"): InspectorSection {
+    split := InspectorSplitLayout {
+        width: root.width;
+        height: root.height;
+        structure-ratio: root.structure-ratio;
+        structure-collapsed: root.structure-collapsed;
+        properties-collapsed: root.properties-collapsed;
+        ratio-changed(value) => { root.split-ratio-changed(value); }
+        structure-pane := StructureHost {
+            width: parent.width;
+            height: split.structure-height;
+            title: root.label-parts;
+            collapsed: root.structure-collapsed;
+            focus-token: root.structure-focus-token;
+            collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
+            InspectorSection {
                 title: root.label-parts;
                 section-id: "parts";
                 open: root.model-parts-open || root.hovered-inspector-section == "parts";
@@ -224,8 +241,12 @@ export component ModelInspector inherits VerticalLayout {
                 }
             }
         }
-
-        PropertiesHost {
+        properties-pane := PropertiesHost {
+            width: parent.width;
+            y: split.properties-y;
+            height: split.properties-height;
+            collapsed: root.properties-collapsed;
+            collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
             spacing: 0px;
 
             // Sem seleção: um estado vazio no lugar de Transform, para o painel
@@ -241,7 +262,7 @@ export component ModelInspector inherits VerticalLayout {
                 }
             }
 
-            if (root.object-has-selection && root.selection-domain == "OBJECT" && (root.model-transform-open || root.hovered-inspector-section == "transform")): InspectorSection {
+            if root.object-has-selection && root.selection-domain == "OBJECT": InspectorSection {
                 title: root.label-tab-transform;
                 section-id: "transform";
                 open: root.model-transform-open || root.hovered-inspector-section == "transform";
@@ -268,7 +289,7 @@ export component ModelInspector inherits VerticalLayout {
                         scrub-cancelled => { root.transform-scrub-cancelled(); }
                     }
             }
-            if (root.model-material-open || root.hovered-inspector-section == "material"): InspectorSection {
+            InspectorSection {
                 title: root.label-tab-material;
                 section-id: "material";
                 open: root.model-material-open || root.hovered-inspector-section == "material";
@@ -331,7 +352,7 @@ export component ModelInspector inherits VerticalLayout {
                     material-albedo-clear => { root.material-albedo-clear(); }
                 }
             }
-            if (root.model-object-open || root.hovered-inspector-section == "object"): InspectorSection {
+            if root.object-has-selection: InspectorSection {
                 title: root.label-tab-object;
                 section-id: "object";
                 open: root.model-object-open || root.hovered-inspector-section == "object";
@@ -478,4 +499,5 @@ export component ModelInspector inherits VerticalLayout {
                 }
             }
         }
+    }
 }

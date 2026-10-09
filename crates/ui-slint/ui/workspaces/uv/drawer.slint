@@ -1,0 +1,31 @@
+import { BrushChip } from "../../components/controls.slint";
+import { DesignTokens, Tr } from "../../tokens.slint";
+
+/// Diagnostic projeté par Application; les actions gardent les routes existantes.
+export component UvDiagnosticsContent inherits VerticalLayout {
+    in property <string> stats;
+    in property <int> island-count;
+    in property <int> selected-count;
+    callback command-executed(string);
+    callback equalize-density();
+    spacing: 8px;
+    Text {
+        text: Tr.t("sl.uv_drawer_summary") + ": " + root.island-count + " · " + root.selected-count;
+        color: DesignTokens.text-primary;
+        font-size: DesignTokens.font-default;
+        wrap: word-wrap;
+    }
+    Text {
+        text: root.stats;
+        accessible-role: text;
+        accessible-label: root.stats;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-default;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        BrushChip { label: Tr.t("sl.pack_islands"); clicked => { root.command-executed("uv.pack_islands"); } }
+        BrushChip { label: Tr.t("sl.equalize_texel_density"); clicked => { root.equalize-density(); } }
+    }
+}

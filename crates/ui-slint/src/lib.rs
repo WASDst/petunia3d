@@ -20,6 +20,7 @@ mod draw_extensions;
 mod draw_shapes;
 pub mod files;
 mod input;
+pub mod inspector_layout;
 pub mod keymap_edit;
 pub mod numeric;
 pub mod overlay;
@@ -909,6 +910,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub paint_pip: bool,
     /// Miniaturas renderizadas por (prefab, revisão); `None` = sem geometria.
     prefab_thumbs: std::cell::RefCell<PrefabThumbCache>,
+    inspector_layout: inspector_layout::InspectorLayoutMemory,
     pub parts_query: String,
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
@@ -1348,6 +1350,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             split: split_view::SplitView::default(),
             paint_pip: false,
             prefab_thumbs: Default::default(),
+            inspector_layout: inspector_layout::InspectorLayoutMemory::default(),
             parts_query: String::new(),
             parts_selected_only: false,
             parts_sort_by_name: false,
@@ -7123,6 +7126,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.parts_sort_by_name = enabled;
         true
+    }
+
+    pub fn inspector_pane_layout(&self) -> inspector_layout::InspectorPaneLayout {
+        self.inspector_layout.get(self.state.workspace)
+    }
+
+    pub fn set_inspector_structure_ratio(&mut self, ratio: f32) -> bool {
+        self.inspector_layout.set_ratio(self.state.workspace, ratio)
+    }
+
+    pub fn set_inspector_pane_collapsed(
+        &mut self,
+        pane: inspector_layout::InspectorPane,
+        collapsed: bool,
+    ) -> bool {
+        self.inspector_layout
+            .set_collapsed(self.state.workspace, pane, collapsed)
     }
 
     pub fn set_parts_row_height(&mut self, size: f32) -> bool {
@@ -15322,6 +15342,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.parts_selected_only = self.parts_selected_only;
         vm.parts_sort_by_name = self.parts_sort_by_name;
         vm.parts_row_height = self.parts_row_height;
+        vm.inspector_pane_layout = self.inspector_pane_layout();
 
         for profile in &self.state.project.project.profiles {
             let pts = self

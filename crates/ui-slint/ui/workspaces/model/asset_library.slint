@@ -12,6 +12,7 @@ export component AssetLibraryContent inherits VerticalLayout {
     in property <string> search-label: "";
     in property <string> sort-label: "";
     in property <string> thumbnail-size-label: "";
+    in property <bool> show-close-button: true;
 
     in-out property <string> query: "";
     in-out property <bool> only-favorites: false;
@@ -92,7 +93,7 @@ export component AssetLibraryContent inherits VerticalLayout {
             }
         }
 
-        TopAction {
+        if root.show-close-button: TopAction {
             icon: IconSet.X;
             semantic-label: Tr.t("sl.close_asset_library");
             clicked => { root.close-requested(); }

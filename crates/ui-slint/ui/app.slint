@@ -6,6 +6,7 @@ import { ColorPresets, DesignTokens, Motion, Tr } from "tokens.slint";
 import { PetuniaIcons } from "petunia_icons.slint";
 import {
     AnimateCreatureBody,
+    AnimateDrawerContent,
     AnimateInspector,
     AnimateMotionBody,
     AnimateParamEntry,
@@ -21,6 +22,9 @@ import { ShellHeader } from "shell/header.slint";
 import { ToolRail } from "shell/tool_rail.slint";
 import { RightColumnShell } from "shell/right_column.slint";
 import { WorkspaceDrawer } from "shell/workspace_drawer.slint";
+import { WorkspaceDrawerContent } from "shell/drawer_content.slint";
+import { PaintPresetsContent, PaintPaletteContent } from "workspaces/paint/drawer.slint";
+import { UvDiagnosticsContent } from "workspaces/uv/drawer.slint";
 import { StatusBar } from "shell/status_bar.slint";
 import { ContextBar } from "viewport/context_bar.slint";
 import { ViewBar } from "viewport/view_bar.slint";
@@ -327,7 +331,19 @@ export component PetuniaSlintShell inherits Window {
     in-out property <int> object-modifier-count: 0;
     in-out property <[color]> material-palette: [];
     in-out property <length> inspector-width: 336px;
+    in property <float> inspector-structure-ratio: 0.4;
+    in property <bool> inspector-structure-collapsed: false;
+    in property <bool> inspector-properties-collapsed: false;
+    callback inspector-split-ratio-set(float);
+    callback inspector-pane-collapsed-set(int, bool);
     in-out property <length> asset-library-height: 200px;
+    // Présentation locale: les filtres/données restent projetés par Rust.
+    private property <int> paint-drawer-tab: 1;
+    private property <int> uv-drawer-tab: 1;
+    private property <int> animate-drawer-tab: 1;
+    private property <int> drawer-tab: root.active-workspace == "PAINT" ? root.paint-drawer-tab
+        : root.active-workspace == "UV" ? root.uv-drawer-tab
+        : root.active-workspace == "ANIMATE" ? root.animate-drawer-tab : 0;
     in-out property <string> scene-stats: "";
     in-out property <string> uv-stats: "";
     in-out property <string> current-theme: "petunia-dark";
@@ -1892,7 +1908,7 @@ export component PetuniaSlintShell inherits Window {
                                 active: root.shading-popover-open || root.show-xray;
                                 clicked => { root.shading-popover-toggled(!root.shading-popover-open); }
                             }
-                        
+
                     }
 
                     ViewportStatusHud {
@@ -1912,7 +1928,7 @@ export component PetuniaSlintShell inherits Window {
 
                     // Barra de transporte: interativa, então fica DEPOIS do
                     // o input router (irmãos posteriores recebem o clique antes).
-                    if root.active-workspace == "ANIMATE" && root.animate-has-creature: AnimateTransport {
+                    if root.active-workspace == "ANIMATE" && root.animate-has-creature && !(root.asset-library-visible && root.drawer-tab == 1): AnimateTransport {
                         // Centrada na parte livre da viewport (fora do painel aberto)
                         // e ACIMA da barra contextual (40px + 14px de margem + respiro).
                         x: (parent.width - root.right-clearance - self.width) / 2;
@@ -3408,7 +3424,7 @@ export component PetuniaSlintShell inherits Window {
                                 active: root.shelf-overflow-open;
                                 clicked => { root.shelf-overflow-open = !root.shelf-overflow-open; }
                             }
-                        
+
                     }
 
                     // Personalizar ações rápidas: cartão não modal acima da barra.
@@ -3787,7 +3803,7 @@ export component PetuniaSlintShell inherits Window {
                             }
                         }
                     }
-                
+
                     RightColumnShell {
                         x: 0px;
                         y: 0px;
@@ -3827,6 +3843,15 @@ export component PetuniaSlintShell inherits Window {
                         delete-requested => { root.delete-requested(); }
 
                             if active-workspace == "MODEL": ModelInspector {
+                                width: parent.width;
+                                height: parent.height;
+                                structure-ratio: root.inspector-structure-ratio;
+                                structure-collapsed: root.inspector-structure-collapsed;
+                                properties-collapsed: root.inspector-properties-collapsed;
+                                // F6 must target a visible header when the rail is hidden by an open panel.
+                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
+                                pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 model-parts-open : root.model-parts-open;
                                 hovered-inspector-section : root.hovered-inspector-section;
                                 label-parts : root.label-parts;
@@ -3998,6 +4023,15 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "PAINT": PaintInspector {
+                                width: parent.width;
+                                height: parent.height;
+                                structure-ratio: root.inspector-structure-ratio;
+                                structure-collapsed: root.inspector-structure-collapsed;
+                                properties-collapsed: root.inspector-properties-collapsed;
+                                // F6 must target a visible header when the rail is hidden by an open panel.
+                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
+                                pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 active-layer-is-decal: root.active-layer-is-decal;
                                 active-tool: root.active-tool;
                                 active-tool-changed(arg1) => { root.active-tool-changed(arg1); }
@@ -4123,6 +4157,15 @@ export component PetuniaSlintShell inherits Window {
                             // Animate: Creature → Motions → Motion (Styles + sliders).
                             // Conteúdo modularizado em animate.slint via StructureHost + PropertiesHost.
                             if active-workspace == "ANIMATE": AnimateInspector {
+                                width: parent.width;
+                                height: parent.height;
+                                structure-ratio: root.inspector-structure-ratio;
+                                structure-collapsed: root.inspector-structure-collapsed;
+                                properties-collapsed: root.inspector-properties-collapsed;
+                                // F6 must target a visible header when the rail is hidden by an open panel.
+                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
+                                pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 texts: root.animate-texts;
                                 creatures: root.animate-creatures;
                                 creature-presets: root.animate-creature-presets;
@@ -4145,6 +4188,15 @@ export component PetuniaSlintShell inherits Window {
                             }
 
                             if active-workspace == "UV": UvInspector {
+                                width: parent.width;
+                                height: parent.height;
+                                structure-ratio: root.inspector-structure-ratio;
+                                structure-collapsed: root.inspector-structure-collapsed;
+                                properties-collapsed: root.inspector-properties-collapsed;
+                                // F6 must target a visible header when the rail is hidden by an open panel.
+                                structure-focus-token: root.inspector-visible && !root.compact-shell && root.inspector-expanded ? root.f6-rail-token : 0;
+                                split-ratio-changed(value) => { root.inspector-split-ratio-set(value); }
+                                pane-collapsed-set(pane, collapsed) => { root.inspector-pane-collapsed-set(pane, collapsed); }
                                 label-unwrap-mesh: root.label-unwrap-mesh;
                                 label-pack-islands: root.label-pack-islands;
                                 uv-show-texture: root.uv-show-texture;
@@ -4176,7 +4228,7 @@ export component PetuniaSlintShell inherits Window {
                                 extension-parameter-set(param, val) => { return root.extension-parameter-set(param, val); }
                             }
 
-                            
+
                     }
 
                     // Picture-in-picture do Paint: o canvas 2D ocupa a viewport e o 3D vira um inset
@@ -5556,31 +5608,86 @@ export component PetuniaSlintShell inherits Window {
             bottom-offset: 30px;
             height-changed(height) => { root.asset-library-height-changed(height / 1px); }
 
-            AssetLibraryContent {
+            WorkspaceDrawerContent {
                 width: parent.width;
                 height: parent.height;
-                title: root.label-project-asset-library;
-                save-active-label: root.label-save-active-as-asset;
-                search-label: root.label-search-assets;
-                sort-label: root.label-sort-assets;
-                thumbnail-size-label: root.label-thumbnail-size;
-
-                query <=> root.asset-query;
-                only-favorites <=> root.asset-only-favorites;
-                sort-by-name <=> root.asset-sort-by-name;
-                thumbnail-size <=> root.asset-thumbnail-size;
-                items: root.prefab-items;
-
+                tabs: root.active-workspace == "PAINT" ? [root.label-project-asset-library, Tr.t("sl.brush_presets"), Tr.t("sl.color_palette")]
+                    : root.active-workspace == "UV" ? [root.label-project-asset-library, Tr.t("sl.uv_drawer_diagnostics")]
+                    : root.active-workspace == "ANIMATE" ? [root.label-project-asset-library, Tr.t("sl.animate_drawer_timeline")]
+                    : [root.label-project-asset-library];
+                selected-tab: root.drawer-tab;
+                tab-selected(index) => {
+                    if root.active-workspace == "PAINT" { root.paint-drawer-tab = clamp(index, 0, 2); }
+                    if root.active-workspace == "UV" { root.uv-drawer-tab = clamp(index, 0, 1); }
+                    if root.active-workspace == "ANIMATE" { root.animate-drawer-tab = clamp(index, 0, 1); }
+                }
                 close-requested => { root.asset-library-requested(); }
-                save-active-requested => { root.save-active-as-asset-requested(); }
-                query-changed(query) => { root.asset-query-changed(query); }
-                only-favorites-changed(enabled) => { root.asset-only-favorites-changed(enabled); }
-                sort-changed(enabled) => { root.asset-sort-changed(enabled); }
-                thumbnail-size-changed(value) => { root.asset-thumbnail-size-changed(value); }
-                place-requested(id) => { root.prefab-place-requested(id); }
-                delete-requested(id) => { root.prefab-delete-requested(id); }
-                update-requested(id) => { root.prefab-update-requested(id); }
-                favorite-requested(id, favorite) => { root.prefab-favorite-requested(id, favorite); }
+                if root.drawer-tab == 0: AssetLibraryContent {
+                    show-close-button: false;
+                    width: parent.width;
+                    height: parent.height;
+                    title: root.label-project-asset-library;
+                    save-active-label: root.label-save-active-as-asset;
+                    search-label: root.label-search-assets;
+                    sort-label: root.label-sort-assets;
+                    thumbnail-size-label: root.label-thumbnail-size;
+
+                    query <=> root.asset-query;
+                    only-favorites <=> root.asset-only-favorites;
+                    sort-by-name <=> root.asset-sort-by-name;
+                    thumbnail-size <=> root.asset-thumbnail-size;
+                    items: root.prefab-items;
+
+                    close-requested => { root.asset-library-requested(); }
+                    save-active-requested => { root.save-active-as-asset-requested(); }
+                    query-changed(query) => { root.asset-query-changed(query); }
+                    only-favorites-changed(enabled) => { root.asset-only-favorites-changed(enabled); }
+                    sort-changed(enabled) => { root.asset-sort-changed(enabled); }
+                    thumbnail-size-changed(value) => { root.asset-thumbnail-size-changed(value); }
+                    place-requested(id) => { root.prefab-place-requested(id); }
+                    delete-requested(id) => { root.prefab-delete-requested(id); }
+                    update-requested(id) => { root.prefab-update-requested(id); }
+                    favorite-requested(id, favorite) => { root.prefab-favorite-requested(id, favorite); }
+                }
+                if root.drawer-tab != 0: ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    horizontal-scrollbar-policy: always-off;
+                    vertical-scrollbar-policy: as-needed;
+                    VerticalLayout {
+                        width: parent.width;
+                        vertical-stretch: 0;
+                        if root.active-workspace == "PAINT" && root.drawer-tab == 1: PaintPresetsContent {
+                            brush-presets: root.brush-presets;
+                            brush-preset-index: root.brush-preset-index;
+                            applied(index) => { root.brush-preset-applied(index); }
+                            saved => { root.brush-preset-saved(); }
+                            deleted(index) => { root.brush-preset-deleted(index); }
+                        }
+                        if root.active-workspace == "PAINT" && root.drawer-tab == 2: PaintPaletteContent {
+                            paint-color: root.paint-color;
+                            label-active-brush-color: root.label-active-brush-color;
+                            paint-color-changed(r, g, b) => { root.paint-color-changed(r, g, b); }
+                            command-file-action(id) => { root.command-file-action(id); }
+                        }
+                        if root.active-workspace == "UV": UvDiagnosticsContent {
+                            stats: root.uv-stats;
+                            island-count: root.uv-island-count;
+                            selected-count: root.uv-selected-count;
+                            command-executed(id) => { root.command-executed(id); }
+                            equalize-density => { root.uv-equalize-texel-density(); }
+                        }
+                        if root.active-workspace == "ANIMATE": AnimateDrawerContent {
+                            texts: root.animate-texts;
+                            motions: root.animate-motions;
+                            playing: root.animate-playing;
+                            has-motion: root.animate-has-motion;
+                            progress: root.animate-progress;
+                            time-label: root.animate-time-label;
+                            action(a, b, v) => { root.animate-action(a, b, v); }
+                        }
+                    }
+                }
             }
         }
 

@@ -283,6 +283,7 @@ pub struct ShellViewModel {
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
     pub parts_row_height: f32,
+    pub inspector_pane_layout: crate::inspector_layout::InspectorPaneLayout,
     pub prefab_items: Vec<PrefabItemModel>,
     pub asset_only_favorites: bool,
     pub split_enabled: bool,
@@ -1310,6 +1311,8 @@ impl ShellViewModel {
             parts_selected_only: false,
             parts_sort_by_name: false,
             parts_row_height: 28.0,
+            inspector_pane_layout: crate::inspector_layout::InspectorLayoutMemory::default()
+                .get(state.workspace),
             prefab_items: Vec::new(),
             asset_only_favorites: false,
             split_enabled: false,

@@ -3,23 +3,17 @@ import { IconButton } from "../components/base.slint";
 import { DesignTokens, Motion, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
 import { InspectorPill } from "../inspector/sections.slint";
-import { ScrollView } from "std-widgets.slint";
 
-/// Host transitório da coluna direita durante o Slint Rescue.
-///
-/// Nesta fase ele extrai chrome, rail, hover/peek, cabeçalho e scroll.
-/// O conteúdo específico de cada workspace continua injetado por @children
-/// e será migrado depois para Structure + Properties.
-export component StructureHost inherits VerticalLayout {
+import { InspectorPane } from "inspector_split.slint";
+
+/// Regiões independentes; cada uma possui seu próprio cabeçalho e scroll.
+export component StructureHost inherits InspectorPane {
+    title: Tr.t("sl.inspector_structure");
     spacing: 0px;
-    vertical-stretch: 0;
-    @children
 }
 
-export component PropertiesHost inherits VerticalLayout {
-    spacing: 8px;
-    vertical-stretch: 0;
-    @children
+export component PropertiesHost inherits InspectorPane {
+    title: Tr.t("sl.inspector_properties");
 }
 
 export component RightColumnShell inherits Rectangle {
@@ -87,7 +81,7 @@ export component RightColumnShell inherits Rectangle {
             alignment: start;
 
             InspectorPill {
-                focus-token: root.f6-rail-token;
+                focus-token: root.inspector-expanded ? 0 : root.f6-rail-token;
                 section-id: "parts";
                 icon: IconSet.Layers3;
                 icon-svg: PetuniaIcons.parts;
@@ -219,17 +213,10 @@ export component RightColumnShell inherits Rectangle {
                 }
             }
 
-            ScrollView {
+            // As regiões internas possuem scroll próprio; não há scroll comum envolvendo o split.
+            Rectangle {
                 vertical-stretch: 1;
-                horizontal-scrollbar-policy: always-off;
-                vertical-scrollbar-policy: as-needed;
-
-                VerticalLayout {
-                    spacing: 10px;
-                    width: parent.width;
-                    vertical-stretch: 0;
-                    @children
-                }
+                @children
             }
         }
     }
