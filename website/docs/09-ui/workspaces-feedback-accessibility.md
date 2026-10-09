@@ -544,7 +544,7 @@ A especialização ocorre no conteúdo de Tool Rail, Work Surface, Structure, Pr
 
 O split Structure/Properties e o drawer por workspace estão escritos sobre `1edfb24`, com estado efêmero de layout no bridge e abas locais no shell. MODEL conserva Parts/propriedades; PAINT separa Layers/decal e migra presets/paleta para o drawer; ANIMATE separa Creature/Motion Stack dos parâmetros; UV mantém seu conteúdo transitório até a promoção da Work Surface.
 
-Scrolls independentes, resize/collapse, teclado das alças/abas/chips/swatches e destino F6 para a região visível foram escritos. **Compilação, testes e aceite nativo adiados pelo usuário: not run.** Não declarar conformidade assistiva, fechamento da navegação regional nem DONE a partir deste registro. Gap, arquivos, regressão inicial fail e próximo checkpoint: [Slint Rescue §20](./slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).
+Scrolls independentes, resize/collapse, teclado das alças/abas/chips/swatches e destino F6 para a região visível foram escritos. **Compilação, testes e aceite nativo adiados pelo usuário: not run.** Não declarar conformidade assistiva, fechamento da navegação regional nem DONE a partir deste registro. Gap, arquivos, regressão inicial fail e próximo checkpoint: [Slint Rescue §20](./slint-rescue-plan.md#20-wave-u02-u03-regioes-independentes-e-drawer-2026-10-09).
 
 ## 23. Slice U06/U07 — entradas regionais e retorno de foco (2026-10-09)
 
