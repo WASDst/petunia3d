@@ -1,0 +1,397 @@
+import { IconDisplay, IconSet } from "@lucide";
+import { ScrollView } from "std-widgets.slint";
+import { PetuniaSlider, TopAction } from "../../components/controls.slint";
+import { DesignTokens, Motion, Tr } from "../../tokens.slint";
+import { PrefabItem } from "../../types.slint";
+
+/// Conteúdo atual da Asset Library/Prefabs.
+/// Não controla geometria do drawer; pode ser hospedado pelo WorkspaceDrawer.
+export component AssetLibraryContent inherits VerticalLayout {
+    in property <string> title: "";
+    in property <string> save-active-label: "";
+    in property <string> search-label: "";
+    in property <string> sort-label: "";
+    in property <string> thumbnail-size-label: "";
+    in property <bool> show-close-button: true;
+
+    in-out property <string> query: "";
+    in-out property <bool> only-favorites: false;
+    in-out property <bool> sort-by-name: false;
+    in-out property <float> thumbnail-size: 80;
+    in property <[PrefabItem]> items: [];
+
+    callback close-requested;
+    callback save-active-requested;
+    callback query-changed(string);
+    callback only-favorites-changed(bool);
+    callback sort-changed(bool);
+    callback thumbnail-size-changed(float);
+    callback place-requested(string);
+    callback delete-requested(string);
+    callback update-requested(string);
+    callback favorite-requested(string, bool);
+
+    padding: 10px;
+    spacing: 8px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        height: 28px;
+
+        VerticalLayout {
+            alignment: center;
+            IconDisplay { icon: IconSet.FolderArchive; size: 16px; stroke: DesignTokens.accent; }
+        }
+
+        Text {
+            text: root.title;
+            color: DesignTokens.text-primary;
+            font-size: DesignTokens.font-default;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: "({root.items.length})";
+            color: DesignTokens.text-muted;
+            font-size: DesignTokens.font-small;
+            vertical-alignment: center;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: 24px;
+                width: max(140px, save-label.preferred-width + 44px);
+                border-radius: DesignTokens.radius-control;
+                background: save-touch.pressed ? DesignTokens.accent.darker(0.15) : (save-touch.has-hover ? DesignTokens.accent.brighter(0.1) : DesignTokens.accent);
+                animate background { duration: Motion.fast; easing: ease-out; }
+                accessible-role: button;
+                accessible-label: root.save-active-label;
+
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 5px;
+                    alignment: center;
+                    VerticalLayout {
+                        alignment: center;
+                        IconDisplay { icon: IconSet.BookmarkPlus; size: 12px; stroke: DesignTokens.on-accent; }
+                    }
+                    save-label := Text {
+                        text: root.save-active-label;
+                        color: DesignTokens.on-accent;
+                        font-size: DesignTokens.font-caption;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+
+                save-touch := TouchArea { clicked => { root.save-active-requested(); } }
+            }
+        }
+
+        if root.show-close-button: TopAction {
+            icon: IconSet.X;
+            semantic-label: Tr.t("sl.close_asset_library");
+            clicked => { root.close-requested(); }
+        }
+    }
+
+    Rectangle { height: 1px; background: DesignTokens.border; }
+
+    HorizontalLayout {
+        spacing: 8px;
+        height: 26px;
+
+        Rectangle {
+            height: 26px;
+            horizontal-stretch: 1;
+            border-radius: DesignTokens.radius-control;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: asset-search-input.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+            animate border-color { duration: Motion.fast; easing: ease-out; }
+            accessible-role: search;
+            accessible-label: root.search-label;
+
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                spacing: 5px;
+                VerticalLayout {
+                    alignment: center;
+                    IconDisplay { icon: IconSet.Search; size: 13px; stroke: DesignTokens.text-muted; }
+                }
+                asset-search-input := TextInput {
+                    text: root.query;
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    single-line: true;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                    accessible-label: root.search-label;
+                    edited => { root.query-changed(self.text); }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: DesignTokens.radius-control;
+            background: root.only-favorites ? DesignTokens.accent : (fav-filter-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
+            animate background { duration: Motion.fast; easing: ease-out; }
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: button;
+            accessible-label: Tr.t("sl.prefab_only_favorites");
+            accessible-checked: root.only-favorites;
+            IconDisplay {
+                icon: IconSet.Star;
+                size: 13px;
+                stroke: root.only-favorites ? DesignTokens.on-accent : DesignTokens.text-primary;
+            }
+            fav-filter-touch := TouchArea {
+                clicked => { root.only-favorites-changed(!root.only-favorites); }
+                Tooltip {
+                    VerticalLayout {
+                        padding: 6px;
+                        Text {
+                            text: Tr.t("sl.prefab_only_favorites");
+                            color: DesignTokens.text-primary;
+                            font-size: DesignTokens.font-caption;
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: DesignTokens.radius-control;
+            background: root.sort-by-name ? DesignTokens.accent : (sort-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
+            animate background { duration: Motion.fast; easing: ease-out; }
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: button;
+            accessible-label: root.sort-label;
+            accessible-checked: root.sort-by-name;
+            IconDisplay {
+                icon: IconSet.ArrowDownAz;
+                size: 14px;
+                stroke: root.sort-by-name ? DesignTokens.on-accent : DesignTokens.text-primary;
+            }
+            sort-touch := TouchArea {
+                clicked => { root.sort-changed(!root.sort-by-name); }
+            }
+        }
+
+        Text {
+            text: root.thumbnail-size-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            vertical-alignment: center;
+        }
+
+        PetuniaSlider {
+            width: 100px;
+            minimum: 48;
+            maximum: 128;
+            value <=> root.thumbnail-size;
+            changed(value) => { root.thumbnail-size-changed(value); }
+        }
+    }
+
+    if root.items.length == 0: VerticalLayout {
+        vertical-stretch: 1;
+        alignment: center;
+        spacing: 4px;
+        Text {
+            text: Tr.t("sl.prefab_empty_title");
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-default;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: Tr.t("sl.prefab_empty_hint");
+            color: DesignTokens.text-muted;
+            font-size: DesignTokens.font-small;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    if root.items.length > 0: ScrollView {
+        vertical-stretch: 1;
+
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+
+            for item in root.items: Rectangle {
+                width: root.thumbnail-size * 1px + 16px;
+                height: root.thumbnail-size * 1px + 50px;
+                border-radius: DesignTokens.radius-panel;
+                background: card-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
+                animate background { duration: Motion.fast; easing: ease-out; }
+                border-width: 1px;
+                border-color: card-touch.has-hover ? DesignTokens.border-strong : DesignTokens.border;
+                animate border-color { duration: Motion.fast; easing: ease-out; }
+                accessible-role: button;
+                accessible-label: item.name;
+                accessible-action-default => { root.place-requested(item.id); }
+
+                card-touch := TouchArea {
+                    clicked => { root.place-requested(item.id); }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 6px;
+                            spacing: 2px;
+                            Text { text: item.name; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                            Text { text: Tr.t("sl.prefab_place"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; }
+                            if item.tags != "": Text { text: item.tags; color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 6px;
+
+                    Rectangle {
+                        height: root.thumbnail-size * 1px;
+                        border-radius: DesignTokens.radius-control;
+                        background: DesignTokens.canvas;
+                        clip: true;
+
+                        if item.has-thumbnail: Image {
+                            source: item.thumbnail;
+                            width: 100%;
+                            height: 100%;
+                            image-fit: contain;
+                        }
+                        if !item.has-thumbnail: IconDisplay {
+                            icon: IconSet.Box;
+                            size: 24px;
+                            stroke: DesignTokens.text-muted;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                        }
+
+                        Rectangle {
+                            x: 4px;
+                            y: 4px;
+                            width: 22px;
+                            height: 22px;
+                            border-radius: 11px;
+                            background: item.favorite ? DesignTokens.accent : DesignTokens.surface-raised.with-alpha(card-touch.has-hover ? 0.9 : 0.0);
+                            animate background { duration: Motion.fast; easing: ease-out; }
+                            accessible-role: button;
+                            accessible-label: Tr.t("sl.prefab_favorite");
+                            accessible-checked: item.favorite;
+                            opacity: (item.favorite || card-touch.has-hover || fav-touch.has-hover) ? 1.0 : 0.0;
+                            animate opacity { duration: Motion.fast; easing: ease-out; }
+                            IconDisplay {
+                                icon: IconSet.Star;
+                                size: 12px;
+                                stroke: item.favorite ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            }
+                            fav-touch := TouchArea {
+                                clicked => { root.favorite-requested(item.id, !item.favorite); }
+                            }
+                        }
+
+                        if item.instances > 0: Rectangle {
+                            x: parent.width - self.width - 4px;
+                            y: 4px;
+                            height: 18px;
+                            width: max(22px, inst-text.preferred-width + 10px);
+                            border-radius: 9px;
+                            background: DesignTokens.surface-raised.with-alpha(0.9);
+                            border-width: 1px;
+                            border-color: DesignTokens.border;
+                            inst-text := Text {
+                                text: "×{item.instances}";
+                                color: DesignTokens.text-secondary;
+                                font-size: DesignTokens.font-caption;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        HorizontalLayout {
+                            x: parent.width - self.preferred-width - 4px;
+                            y: parent.height - 26px;
+                            height: 22px;
+                            spacing: 4px;
+                            opacity: card-touch.has-hover || upd-touch.has-hover || del-touch.has-hover ? 1.0 : 0.0;
+                            animate opacity { duration: Motion.fast; easing: ease-out; }
+
+                            Rectangle {
+                                width: 22px;
+                                height: 22px;
+                                border-radius: DesignTokens.radius-control;
+                                background: upd-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised.with-alpha(0.92);
+                                accessible-role: button;
+                                accessible-label: Tr.t("sl.prefab_update");
+                                IconDisplay { icon: IconSet.RefreshCw; size: 12px; stroke: DesignTokens.text-primary; }
+                                upd-touch := TouchArea {
+                                    clicked => { root.update-requested(item.id); }
+                                    Tooltip {
+                                        VerticalLayout {
+                                            padding: 6px;
+                                            Text { text: Tr.t("sl.prefab_update"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 22px;
+                                height: 22px;
+                                border-radius: DesignTokens.radius-control;
+                                background: del-touch.has-hover ? DesignTokens.danger : DesignTokens.surface-raised.with-alpha(0.92);
+                                accessible-role: button;
+                                accessible-label: Tr.t("sl.prefab_delete");
+                                IconDisplay {
+                                    icon: IconSet.Trash2;
+                                    size: 12px;
+                                    stroke: del-touch.has-hover ? DesignTokens.on-accent : DesignTokens.text-primary;
+                                }
+                                del-touch := TouchArea {
+                                    clicked => { root.delete-requested(item.id); }
+                                    Tooltip {
+                                        VerticalLayout {
+                                            padding: 6px;
+                                            Text { text: Tr.t("sl.prefab_delete"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: item.name;
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-small;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "{item.parts} " + Tr.t("sl.prefab_parts") + "  ·  {item.tris} tris";
+                        color: DesignTokens.text-muted;
+                        font-size: DesignTokens.font-caption;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+    }
+}

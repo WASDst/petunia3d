@@ -1,0 +1,29 @@
+import { DesignTokens } from "../tokens.slint";
+
+/// Entrada regional por teclado, sem TouchArea nem interferência no input físico.
+export component RegionFocusAnchor inherits Rectangle {
+    in property <int> focus-token: 0;
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <bool> activate-on-enter: true;
+    out property <bool> has-keyboard-focus: region-focus.has-focus;
+    callback activated();
+    changed focus-token => { if root.focus-token > 0 { region-focus.focus(); } }
+    background: transparent;
+    border-width: region-focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
+    accessible-role: groupbox;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+    forward-focus: region-focus;
+    region-focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if root.activate-on-enter && (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                return accept;
+            }
+            reject
+        }
+    }
+}

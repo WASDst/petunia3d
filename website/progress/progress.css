@@ -1,0 +1,54 @@
+.app-shell.progress-mode { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.progress-mode .toc { display: none; }
+.progress-mode .content { max-width: 1440px; width: 100%; }
+.progress-header h1 { margin: 12px 0 16px; font-size: clamp(1.75rem, 3vw, 2.25rem); line-height: 1.2; letter-spacing: -0.035em; }
+.progress-header p { max-width: 76ch; }
+.progress-page .eyebrow { font-size: var(--text-xs); overflow-wrap: anywhere; }
+.progress-meta, .progress-note, .progress-phase > p { color: var(--fgColor-muted); font-size: var(--text-sm); }
+.progress-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 28px 0; }
+.progress-counts > div { border: 1px solid var(--borderColor-default); border-radius: var(--radius-medium); padding: 16px; background: var(--bgColor-muted); }
+.progress-counts dt { color: var(--fgColor-muted); font-size: var(--text-xs); font-weight: 600; }
+.progress-counts dd { margin: 8px 0 0; font-size: 1.75rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.progress-filters { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; padding: 16px; border: 1px solid var(--borderColor-default); border-radius: var(--radius-medium); }
+.progress-filters > div { flex: 1 1 180px; min-width: 0; }
+.progress-filters > div:first-child { flex-grow: 2; }
+.progress-filters label { display: block; margin-bottom: 6px; font-size: var(--text-sm); font-weight: 600; }
+.progress-filters input, .progress-filters select, .progress-reset { width: 100%; min-height: 40px; border: 1px solid var(--borderColor-default); border-radius: var(--radius-small); background: var(--bgColor-default); color: var(--fgColor-default); padding: 8px 10px; font: inherit; font-size: var(--text-sm); }
+.progress-reset { width: auto; cursor: pointer; }
+.progress-reset:hover { background: var(--bgColor-muted); }
+.progress-page :is(input, select, button, summary, .progress-table-scroll):focus-visible { outline: 2px solid var(--fgColor-accent); outline-offset: 3px; }
+.progress-phase { margin: 32px 0 40px; }
+.progress-phase h2 { font-size: var(--text-lg); margin-bottom: 6px; }
+.progress-phase h2 > span { color: var(--fgColor-muted); font-size: var(--text-sm); margin-left: 8px; font-weight: 400; }
+.progress-phase > p { margin-top: 0; }
+.progress-table-scroll { overflow-x: auto; border: 1px solid var(--borderColor-default); border-radius: var(--radius-medium); }
+.progress-page table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: var(--text-sm); }
+.progress-page :is(th, td) { padding: 16px 12px; border-bottom: 1px solid var(--borderColor-muted); text-align: left; vertical-align: top; }
+.progress-page thead th { background: var(--bgColor-muted); font-weight: 600; }
+.progress-page tbody th { width: 64px; font-size: var(--text-xs); }
+.progress-page tr:last-child :is(th, td) { border-bottom: 0; }
+.progress-page tbody tr:hover { background: color-mix(in srgb, var(--fgColor-muted) 4%, transparent); }
+.task-description { width: 55%; }
+.task-description > p { margin: 6px 0 12px; color: var(--fgColor-muted); }
+.task-description strong > a { color: var(--fgColor-default); text-decoration: none; }
+.task-description strong > a:hover { color: var(--fgColor-accent); text-decoration: underline; }
+.task-description summary { cursor: pointer; color: var(--fgColor-muted); padding: 4px 0; min-height: 28px; font-size: var(--text-xs); }
+.task-baseline { font-size: var(--text-xs); overflow-wrap: anywhere; }
+.task-checkpoints { padding-left: 18px; }
+.task-checkpoints li { margin: 12px 0; }
+.task-checkpoints small { display: block; margin-top: 6px; color: var(--fgColor-muted); overflow-wrap: anywhere; font-size: var(--text-xs); }
+.checkpoint-state { font-size: var(--text-xs); font-weight: 600; color: var(--fgColor-muted); }
+.checkpoint-state.complete { color: var(--fgColor-success); }
+.task-status { display: inline-block; border-radius: 4px; padding: 4px 8px; font-size: var(--text-xs); white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.task-status.todo { background: var(--bgColor-muted); color: var(--fgColor-muted); }
+.task-status.in-progress { background: var(--bgColor-accent-muted); color: var(--fgColor-accent); }
+.task-status.done { background: var(--bgColor-success-muted); color: var(--fgColor-success); }
+.progress-page progress { display: block; height: 5px; width: 100%; margin-top: 8px; accent-color: var(--fgColor-accent); }
+.task-date { display: block; font-size: var(--text-xs); margin-top: 8px; color: var(--fgColor-muted); }
+.task-document { min-width: 140px; max-width: 200px; font-size: var(--text-xs); overflow-wrap: anywhere; }
+.task-permalink { color: var(--fgColor-muted); text-underline-offset: 3px; }
+.progress-empty { border: 1px dashed var(--borderColor-default); border-radius: var(--radius-medium); padding: 32px; text-align: center; color: var(--fgColor-muted); }
+.task-highlight { background: var(--bgColor-accent-muted); }
+.topnav a[aria-current="page"] { color: var(--fgColor-accent); }
+@media (max-width: 800px) { .app-shell.progress-mode { display: block; } .progress-counts > div { padding: 12px 10px; } .progress-filters > div { flex-basis: 100%; } .progress-reset { width: 100%; } }
+@media print { .progress-filters, .task-date { display: none; } .progress-table-scroll { overflow: visible; } .progress-page table { min-width: 0; } .progress-counts { break-inside: avoid; } }

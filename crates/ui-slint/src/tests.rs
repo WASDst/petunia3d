@@ -5648,7 +5648,10 @@ fn orbiting_uses_the_selection_as_pivot() {
     bridge.state.sync_selection();
     assert_ne!(bridge.state.session.camera.target.x, 5.0);
 
-    assert!(bridge.orbit_viewport(10.0, 0.0));
+    bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit {
+        dx: 10.0,
+        dy: 0.0,
+    }));
     assert!(
         (bridge.state.session.camera.target.x - 5.0).abs() < 1.0e-3,
         "a órbita precisa pivotar na seleção, veio {:?}",
@@ -5664,7 +5667,10 @@ fn orbiting_uses_the_selection_as_pivot() {
         .deselect_all();
     bridge.state.sync_selection();
     let target = bridge.state.session.camera.target;
-    assert!(bridge.orbit_viewport(10.0, 0.0));
+    bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit {
+        dx: 10.0,
+        dy: 0.0,
+    }));
     assert_eq!(bridge.state.session.camera.target, target);
 }
 
@@ -6723,7 +6729,10 @@ fn cursor_focuses_camera_and_serves_as_orbit_pivot() {
     // When cursor tool is active, orbiting sets camera target to cursor_3d
     bridge.execute_command(CommandId::ToolCursor);
     bridge.state.session.camera.target = glam::Vec3::ZERO;
-    assert!(bridge.orbit_viewport(10.0, 10.0));
+    bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit {
+        dx: 10.0,
+        dy: 10.0,
+    }));
     assert_eq!(
         bridge.state.session.camera.target,
         glam::Vec3::new(10.0, 5.0, -8.0)
@@ -8692,7 +8701,12 @@ fn test_settings_open_close_intents_and_view_model_sync() {
 fn test_keymap_profile_switching() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     assert_eq!(bridge.state.ui.active_keymap_id, "petunia-default");
-    assert_eq!(bridge.view_model().active_keymap_id, "petunia-default");
+    let default_vm = bridge.view_model();
+    assert_eq!(default_vm.active_keymap_id, "petunia-default");
+    assert_eq!(default_vm.pointer_precision_mask, 2); // Shift
+    assert_eq!(default_vm.pointer_snap_mask, 1); // Ctrl
+    assert_eq!(default_vm.pointer_pan_mask, 2); // Shift
+    assert_eq!(default_vm.pointer_orbit_left_mask, 0); // disabled
 
     // Switch to Blender profile
     assert!(bridge.set_keymap_profile("blender"));
@@ -8706,7 +8720,10 @@ fn test_keymap_profile_switching() {
     // Switch to Maya profile
     assert!(bridge.set_keymap_profile("maya"));
     assert_eq!(bridge.state.ui.active_keymap_id, "maya");
-    assert_eq!(bridge.view_model().active_keymap_id, "maya");
+    let maya_vm = bridge.view_model();
+    assert_eq!(maya_vm.active_keymap_id, "maya");
+    assert_eq!(maya_vm.pointer_orbit_left_mask, 4); // Alt
+    assert_eq!(maya_vm.pointer_pan_mask, 2); // Shift still pans MMB
 }
 
 #[test]
@@ -9338,6 +9355,18 @@ fn test_reference_manager_operations_and_f4_shortcut() {
     assert!(bridge.close_reference_manager());
     assert!(!bridge.view_model().reference_manager_open);
     assert!(bridge.open_reference_manager());
+    assert!(bridge.view_model().reference_manager_open);
+    // Referências é painel flutuante, não modal (plano U07):
+    // click-away não fecha; Esc e o botão de fechar seguem valendo.
+    let entry = bridge.overlays.top().expect("references on the stack");
+    assert_eq!(entry.kind, crate::overlay::OverlayKind::FloatingPanel);
+    assert!(entry.pinned);
+    assert!(entry.dismiss_on_escape);
+    assert!(!entry.dismiss_on_click_away);
+    assert!(
+        !bridge.handle_click_away(),
+        "click-away must not close the references panel"
+    );
     assert!(bridge.view_model().reference_manager_open);
 
     // Add a reference image to project.refs
@@ -11706,4 +11735,94 @@ fn official_themes_meet_wcag_text_contrast() {
             "{id}: texto sobre o destaque = {on_accent:.2}"
         );
     }
+}
+
+#[test]
+fn modal_escape_precedes_collected_tool_points_without_mutating_document() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.state.mark_document_clean();
+    bridge
+        .poly_pen_points
+        .push(petunia_core::PenPoint::New([0.0; 3]));
+    bridge.apply(UiIntent::OpenCommandSearch);
+    bridge.apply(UiIntent::OpenSettings);
+    assert_eq!(bridge.view_model().overlay_top_id, "settings");
+    assert!(bridge.handle_escape());
+    assert!(!bridge.settings_visible);
+    assert!(bridge.command_search_visible);
+    assert_eq!(
+        bridge.poly_pen_points.len(),
+        1,
+        "modal Escape preserves unfinished tool input"
+    );
+    assert_eq!(bridge.view_model().overlay_top_id, "command_palette");
+    assert!(bridge.handle_escape());
+    assert_eq!(bridge.poly_pen_points.len(), 1);
+    assert!(bridge.view_model().overlay_top_id.is_empty());
+    assert!(!bridge.state.is_document_dirty());
+    assert!(bridge.handle_escape());
+    assert!(
+        bridge.poly_pen_points.is_empty(),
+        "tool cancellation resumes after the modals"
+    );
+}
+
+#[test]
+fn click_away_respects_pinned_top_and_dismisses_one_layer_at_a_time() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(bridge.open_menu("file"));
+    bridge.apply(UiIntent::OpenSettings);
+    bridge.overlays.set_pinned(OverlayId::Settings, true);
+    assert!(!bridge.handle_click_away());
+    assert!(bridge.settings_visible && bridge.menu_open.is_some());
+    bridge.overlays.set_pinned(OverlayId::Settings, false);
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.settings_visible);
+    assert!(
+        bridge.menu_open.is_some(),
+        "one click does not close the underlying menu"
+    );
+    assert_eq!(bridge.view_model().overlay_top_id, "menu");
+    assert!(bridge.handle_click_away());
+    assert!(bridge.menu_open.is_none());
+}
+
+#[test]
+fn non_dismissible_modal_does_not_forward_escape_or_click_away_to_a_tool() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge
+        .poly_pen_points
+        .push(petunia_core::PenPoint::New([0.0; 3]));
+    bridge.command_search_visible = true;
+    bridge.overlays.push(OverlayEntry {
+        id: OverlayId::CommandPalette,
+        kind: OverlayKind::Modal,
+        pinned: false,
+        dismiss_on_escape: false,
+        dismiss_on_click_away: false,
+    });
+    assert!(
+        bridge.handle_escape(),
+        "blocked Escape is consumed by the modal"
+    );
+    assert!(!bridge.handle_click_away());
+    assert!(bridge.command_search_visible);
+    assert_eq!(bridge.poly_pen_points.len(), 1);
+    assert_eq!(bridge.overlays.len(), 1);
+}
+
+#[test]
+fn add_popover_participates_in_click_away_order_without_closing_the_drawer() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::ToggleSceneDrawer);
+    bridge.set_add_menu_open(true);
+    assert_eq!(bridge.view_model().overlay_top_id, "add_menu");
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.add_menu_open);
+    assert!(bridge.scene_drawer_visible);
+    bridge.set_add_menu_open(true);
+    bridge.set_add_menu_open(false);
+    assert_eq!(bridge.view_model().overlay_top_id, "scene_drawer");
+    assert!(bridge.handle_click_away());
+    assert!(!bridge.scene_drawer_visible);
 }

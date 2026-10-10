@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub mod animate;
+mod bridge;
 mod brush_panel;
 pub mod color_wheel;
 pub mod commands;
@@ -19,6 +20,7 @@ mod draw_extensions;
 mod draw_shapes;
 pub mod files;
 mod input;
+pub mod inspector_layout;
 pub mod keymap_edit;
 pub mod numeric;
 pub mod overlay;
@@ -32,8 +34,13 @@ pub mod thumbnail;
 pub mod tr;
 pub mod view_layout;
 pub mod viewport_gpu;
+pub mod viewport_intents;
 pub mod viewport_soft;
 
+use viewport_intents::{
+    LogicalViewportPoint, PhysicalPointerModifiers, ViewportSelectionIntent,
+    ViewportToolPointerIntent,
+};
 pub use viewport_soft::Software3dViewport;
 
 use commands::CommandId;
@@ -62,6 +69,29 @@ pub enum ViewportGesture {
     Orbit { dx: f32, dy: f32 },
     Pan { dx: f32, dy: f32 },
     Zoom { delta: f32 },
+}
+
+/// Fase semântica de um gesto primário na viewport.
+///
+/// O Slint ainda usa inteiros no callback público por compatibilidade com a
+/// API gerada, mas a lógica Rust não deve depender de números mágicos.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewportPointerPhase {
+    Press,
+    Move,
+    Release,
+    Cancel,
+}
+
+impl From<i32> for ViewportPointerPhase {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => Self::Press,
+            1 => Self::Move,
+            2 => Self::Release,
+            _ => Self::Cancel,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -532,6 +562,7 @@ pub struct ViewportDrag {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UiIntent {
     SetWorkspace(Workspace),
+    ViewportSelection(ViewportSelectionIntent),
     /// Ação do workspace Animate (cap. 45 F2).
     Animate(animate::AnimateIntent),
     SaveProject,
@@ -885,6 +916,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub paint_pip: bool,
     /// Miniaturas renderizadas por (prefab, revisão); `None` = sem geometria.
     prefab_thumbs: std::cell::RefCell<PrefabThumbCache>,
+    inspector_layout: inspector_layout::InspectorLayoutMemory,
     pub parts_query: String,
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
@@ -1324,6 +1356,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             split: split_view::SplitView::default(),
             paint_pip: false,
             prefab_thumbs: Default::default(),
+            inspector_layout: inspector_layout::InspectorLayoutMemory::default(),
             parts_query: String::new(),
             parts_selected_only: false,
             parts_sort_by_name: false,
@@ -1549,6 +1582,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             } => {
                 self.scrub_transform(kind, axis, delta, fine);
             }
+            UiIntent::ViewportSelection(intent) => self.apply_viewport_selection(intent),
             UiIntent::ViewportGesture(gesture) => {
                 self.apply_viewport_gesture(gesture);
             }
@@ -2337,71 +2371,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.sync_viewport_context();
     }
 
-    /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre
-    /// faz zoom (constituição 11). Contagens e raios usam `viewport_ctrl_scroll`.
-    pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
-        match gesture {
-            ViewportGesture::Orbit { dx, dy } => {
-                self.state.session.camera.orbit(dx, dy);
-            }
-            ViewportGesture::Pan { dx, dy } => {
-                self.state.session.camera.pan(dx, dy);
-            }
-            ViewportGesture::Zoom { delta } => {
-                self.state.session.camera.zoom(delta);
-            }
-        }
-        self.state.mark_dirty();
-    }
-
-    /// Opções de render compartilhadas pela vista principal e pela secundária.
-    fn viewport_render_state(&self) -> ViewportRenderState {
-        ViewportRenderState {
-            shading: self.state.session.shading,
-            xray: self.state.session.show_xray,
-            show_triangulation: self.state.session.show_triangulation,
-            textured: self.state.session.textured,
-            show_wireframe_overlay: self.state.session.show_wireframe_overlay,
-            show_face_orientation: self.state.session.show_face_orientation,
-            show_uv_checker: self.state.session.show_uv_checker,
-            selection_domain: self.state.selection_domain(),
-            xray_opacity: self.state.session.xray_opacity,
-            selection_rgb: self.state.ui.selection_rgb,
-            selection_thickness: self.state.ui.selection_thickness,
-            show_grid: self.state.session.show_grid,
-            hover: self.state.session.tools.hover,
-            boolean_operand: self.state.session.tools.boolean_operand,
-            studio_light_follows_camera: self.preferences.studio_light_follows_camera,
-            matcap: self.preferences.viewport_matcap,
-            ambient_occlusion: self.preferences.viewport_ambient_occlusion,
-            edge_mode: self.edge_mode(),
-            workplane: self.workplane_overlay(),
-        }
-    }
-
-    pub fn render_viewport(&mut self) -> Option<slint::Image> {
-        puffin::profile_function!();
-        let render_state = self.viewport_render_state();
-        self.viewport
-            .queue_texture_updates(self.state.render.take_texture_updates());
-        let pose = self.animate_pose_override();
-        self.viewport.set_pose_override(pose);
-        let (outlined, active) = self.outlined_objects();
-        self.viewport.set_outlined_objects(&outlined, active);
-        self.viewport
-            .set_rigid_previews(self.state.rigid_preview_transforms());
-        if self.viewport.draws_gizmo() {
-            let shapes = self.gizmo_overlay_shapes();
-            self.viewport.set_screen_overlay(shapes);
-        }
-        self.viewport.render_frame(
-            &self.state.project,
-            &self.state.project.refs,
-            &self.state.session.camera,
-            render_state,
-        )
-    }
-
     /// Cria uma camada de efeito com parâmetros padrão para o tipo pedido.
     pub fn add_paint_effect_layer(&mut self, kind: &str) -> bool {
         use petunia_project::paint_layers::{PaintEffect, PaintLayer};
@@ -2772,36 +2741,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         commands
     }
 
-    pub fn resize_viewport(&mut self, width: u32, height: u32) {
-        self.resize_viewport_scaled(width, height, self.pixel_ratio);
-    }
-
-    /// Redimensiona a viewport. `width`/`height` são px lógicos (câmera, picking
-    /// e overlays); `pixel_ratio` é px físicos por px lógico (fator de escala da
-    /// janela, incluindo a preferência de UI scale).
-    pub fn resize_viewport_scaled(&mut self, width: u32, height: u32, pixel_ratio: f32) {
-        let width = width.max(1);
-        let height = height.max(1);
-        let ratio = if pixel_ratio.is_finite() && pixel_ratio > 0.0 {
-            pixel_ratio.clamp(0.5, 4.0)
-        } else {
-            1.0
-        };
-        self.pixel_ratio = ratio;
-        if self.viewport.uses_physical_pixels() {
-            self.viewport.set_pixel_ratio(ratio);
-            self.viewport.resize(
-                (width as f32 * ratio).round().max(1.0) as u32,
-                (height as f32 * ratio).round().max(1.0) as u32,
-            );
-        } else {
-            self.viewport.resize(width, height);
-        }
-        self.viewport_size = [width as f32, height as f32];
-        self.state.session.camera.aspect = width as f32 / height as f32;
-        self.state.mark_dirty();
-    }
-
     /// Preenche o HUD da operação e a barra de status contextual.
     ///
     /// O HUD diz *o que está acontecendo e com que valor*; a barra diz *como
@@ -3073,27 +3012,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .t_id(petunia_config::text_id::SELECTION_MODE)
             .replace("{domain}", &self.state.t_id(domain));
         self.state.set_status(message);
-    }
-
-    /// Orbita a câmera, usando a seleção como pivô quando existe.
-    ///
-    /// É o comportamento de Blender/C4D: o usuário orbita em torno do que
-    /// está trabalhando, não de um ponto fixo da cena.
-    pub fn orbit_viewport(&mut self, dx: f32, dy: f32) -> bool {
-        if !dx.is_finite() || !dy.is_finite() {
-            return false;
-        }
-        if self.state.session.tools.active_tool == "cursor"
-            || self.state.session.tools.active_tool == "cursor_3d"
-            || self.state.session.pivot_point == petunia_core::PivotPoint::Cursor3D
-        {
-            self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
-        } else if let Some(center) = self.selection_pivot() {
-            self.state.session.camera.target = center;
-        }
-        self.state.session.camera.orbit(dx, dy);
-        self.state.mark_dirty();
-        true
     }
 
     pub fn set_pivot_point(&mut self, id: &str) -> bool {
@@ -5686,17 +5604,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
-    /// Limpa a preselection (ponteiro saiu da viewport).
-    pub fn clear_hover(&mut self) -> bool {
-        let had_preview =
-            self.profile_hover_snap.take().is_some() | self.region_hover.take().is_some();
-        if !self.state.session.tools.hover.is_some() {
-            return had_preview;
-        }
-        self.state.session.tools.hover = petunia_core::HoverTarget::None;
-        true
-    }
-
     /// Oclusão do segmento olho→ponto: a preselection respeita faces, salvo
     /// em X-Ray. `origin`/`direction` documentam o raio que gerou `position`;
     /// o teste usa a mesma cena canônica (`point_visible`) do picking.
@@ -5844,19 +5751,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         None
-    }
-
-    /// Atualiza o handle do gizmo sob o cursor (preselection).
-    pub fn hover_gizmo(&mut self, x: f32, y: f32) -> bool {
-        if self.gizmo_drag.is_some() {
-            return false;
-        }
-        let next = self.gizmo_handle_at(x, y);
-        if next == self.gizmo_hover {
-            return false;
-        }
-        self.gizmo_hover = next;
-        true
     }
 
     /// Inicia o arrasto no handle do gizmo, restringindo a transformação ao eixo ou plano.
@@ -7241,18 +7135,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
-    pub fn set_parts_row_height(&mut self, size: f32) -> bool {
-        if !size.is_finite() {
-            return false;
-        }
-        let size = size.clamp(28.0, 44.0);
-        if (self.parts_row_height - size).abs() < f32::EPSILON {
-            return false;
-        }
-        self.parts_row_height = size;
-        true
-    }
-
     /// Liga/desliga a viewport dividida. Recusa (com aviso) quando a vista
     /// principal ficaria abaixo de `MIN_SPLIT_VIEW_WIDTH` por metade.
     pub fn toggle_split_view(&mut self) -> bool {
@@ -7650,40 +7532,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.set_view_preset(next)
     }
 
-    /// Redimensiona o dock de contexto pelo divisor vertical.
-    ///
-    /// Layout é estado de apresentação: não marca o documento como alterado.
-    pub fn set_inspector_width(&mut self, width: f32) -> bool {
-        self.state.ui.set_right_width(width)
-    }
-
-    /// Redimensiona a Asset Library pelo divisor horizontal.
-    pub fn set_asset_library_height(&mut self, height: f32) -> bool {
-        self.state.ui.set_shell_asset_library_height(height)
-    }
-
-    /// Abre a modal do Gerenciador de Referências (P3D-013).
+    /// Abre o painel flutuante do Gerenciador de Referências (P3D-013).
+    /// Não é modal: não prende foco nem bloqueia Esc além do topo da pilha.
+    /// Fica pinado porque se trabalha com ele aberto: click-away não fecha,
+    /// só Esc ou o botão de fechar.
     pub fn open_reference_manager(&mut self) -> bool {
         self.reference_manager_open = true;
         self.overlays.push(OverlayEntry {
             id: OverlayId::ReferenceManager,
-            kind: OverlayKind::Modal,
-            pinned: false,
+            kind: OverlayKind::FloatingPanel,
+            pinned: true,
             dismiss_on_escape: true,
-            dismiss_on_click_away: true,
+            dismiss_on_click_away: false,
         });
         self.state.set_status(self.state.t("sl.reference_images"));
         true
     }
 
-    /// Fecha a modal do Gerenciador de Referências.
+    /// Fecha o painel do Gerenciador de Referências.
     pub fn close_reference_manager(&mut self) -> bool {
         self.reference_manager_open = false;
         self.overlays.remove(OverlayId::ReferenceManager);
         true
     }
 
-    /// Alterna a visibilidade da modal do Gerenciador de Referências.
+    /// Alterna a visibilidade do painel do Gerenciador de Referências.
     pub fn toggle_reference_manager(&mut self) -> bool {
         if self.reference_manager_open {
             self.close_reference_manager()
@@ -8712,128 +8585,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 &[("error", format!("{error}"))],
             ));
         }
-    }
-
-    /// Dock or float one Inspector section, then persist.
-    /// Ancora ou flutua uma seção do Inspector e persiste.
-    pub fn set_section_docked(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        docked: bool,
-    ) -> bool {
-        section_layout::set_docked(&mut self.section_layouts, section, docked);
-        self.persist_section_layouts();
-        true
-    }
-
-    /// Move a floating card in memory (coordinates sanitized), without I/O.
-    ///
-    /// A drag emits one event per pointer move; persisting here would write the
-    /// preferences file dozens of times per second. The UI commits once on
-    /// pointer release through [`Self::commit_section_float`].
-    /// Move um card flutuante em memória (coordenadas sanitizadas), sem I/O.
-    ///
-    /// O arraste emite um evento por movimento do ponteiro; persistir aqui
-    /// gravaria o arquivo dezenas de vezes por segundo. A UI confirma uma vez
-    /// ao soltar o ponteiro via [`Self::commit_section_float`].
-    pub fn move_section_float(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        x: f32,
-        y: f32,
-    ) -> bool {
-        section_layout::move_floating(&mut self.section_layouts, section, x, y);
-        true
-    }
-
-    /// Persist section layouts once, after a drag or any other live edit.
-    /// Persiste os layouts uma vez, depois do arraste ou de outra edição viva.
-    pub fn commit_section_float(&mut self) {
-        self.persist_section_layouts();
-    }
-
-    /// Pin a section open (ignores collapse-all), then persist.
-    /// Fixa uma seção aberta (ignora recolher-tudo) e persiste.
-    pub fn set_section_pin_open(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        pin_open: bool,
-    ) -> bool {
-        section_layout::set_pin_open(&mut self.section_layouts, section, pin_open);
-        self.persist_section_layouts();
-        true
-    }
-
-    /// Pin a section to an asset (`None` follows selection), then persist.
-    /// Fixa uma seção a um asset (`None` segue a seleção) e persiste.
-    pub fn set_section_pinned_asset(
-        &mut self,
-        section: petunia_config::InspectorSectionId,
-        asset: Option<String>,
-    ) -> bool {
-        section_layout::set_pinned_asset(&mut self.section_layouts, section, asset);
-        self.persist_section_layouts();
-        true
-    }
-
-    /// Collapse-all toggle honoring pinned-open sections: if every section is
-    /// open, close the unpinned ones; otherwise open them. Pinned sections
-    /// stay open either way. Takes and returns open flags in canonical order.
-    /// Alternador de recolher-tudo respeitando pins: se tudo está aberto, fecha
-    /// as não-fixadas; senão, abre-as. Fixadas seguem abertas. Recebe e devolve
-    /// flags de aberto em ordem canônica.
-    pub fn toggle_all_sections(&self, open: [bool; 6]) -> [bool; 6] {
-        let close_all = open.iter().all(|flag| *flag);
-        let mut next = open;
-        for id in petunia_config::InspectorSectionId::all() {
-            if !self.section_layouts[section_layout::section_index(id)].pin_open {
-                next[section_layout::section_index(id)] = !close_all;
-            }
-        }
-        next
-    }
-
-    /// Presentation snapshot of the six section layouts, in canonical order.
-    /// Snapshot de apresentação dos seis layouts, em ordem canônica.
-    pub fn section_state_models(&self) -> Vec<SectionStateModel> {
-        petunia_config::InspectorSectionId::all()
-            .iter()
-            .map(|id| {
-                let layout = &self.section_layouts[section_layout::section_index(*id)];
-                SectionStateModel {
-                    id: id.as_str().to_string(),
-                    pin_open: layout.pin_open,
-                    open: layout.open,
-                }
-            })
-            .collect()
-    }
-
-    /// Abre ou fecha uma seção do Inspector (persistido).
-    pub fn set_section_open(&mut self, section: petunia_config::InspectorSectionId, open: bool) {
-        section_layout::set_open(&mut self.section_layouts, section, open);
-        self.persist_section_layouts();
-        self.state.mark_dirty();
-    }
-
-    /// "Recolher Inspector" (plano de UI F4, D1): fecha e solta o pin de todas
-    /// as seções, devolvendo o shell ao trilho de pílulas. É um comando
-    /// explícito do usuário, por isso ignora o pin — diferente do recolhimento
-    /// automático do peek, que o pin protege (ADR 005 §5).
-    pub fn collapse_inspector(&mut self) {
-        for id in petunia_config::InspectorSectionId::all() {
-            section_layout::set_open(&mut self.section_layouts, id, false);
-            section_layout::set_pin_open(&mut self.section_layouts, id, false);
-        }
-        self.persist_section_layouts();
-    }
-
-    /// Alterna estado aberto/fechado de uma seção do Inspector (persistido).
-    pub fn toggle_section_open(&mut self, section: petunia_config::InspectorSectionId) -> bool {
-        let open = section_layout::toggle_open(&mut self.section_layouts, section);
-        self.persist_section_layouts();
-        self.state.mark_dirty();
-        open
     }
 
     pub fn set_snap_target(&mut self, target_str: &str) -> bool {
@@ -11458,51 +11209,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         ctrl: bool,
         alt: bool,
     ) -> bool {
-        puffin::profile_function!();
-        if !x.is_finite() || !y.is_finite() {
+        let Some(at) = LogicalViewportPoint::new(x, y) else {
             return false;
-        }
-        self.pointer_position = [x, y];
-        self.tool_pointer_alt = alt;
-        let effect = match phase {
-            0 => {
-                self.tool_press_parametric_handle = self.parametric_handle_at([x, y]);
-                let target = if self.grammar_tool() == Some(GrammarTool::Decal) {
-                    self.decal_press_target(x, y)
-                } else if self.grammar_tool() == Some(GrammarTool::DrawProfile) {
-                    self.profile_press_target(x, y)
-                } else if self.tool_press_parametric_handle {
-                    petunia_core::PressTarget::Handle(PARAMETRIC_HANDLE_TARGET)
-                } else if self.profile_transform_target_at(x, y) {
-                    petunia_core::PressTarget::Handle(0)
-                } else if self.gizmo_target_at(x, y).is_some() {
-                    petunia_core::PressTarget::Handle(1)
-                } else {
-                    petunia_core::PressTarget::Surface
-                };
-                // Modificadores de ponteiro vêm do keymap (`[pointer]`).
-                let held = Mods2 { ctrl, shift, alt };
-                let keys = &self.state.ui.keybinds;
-                self.tool_press_extend = keys
-                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND)
-                    .held_in(held);
-                self.tool_press_alternate = keys
-                    .pointer_modifier(petunia_config::keybinds::POINTER_ALTERNATE)
-                    .held_in(held);
-                self.tool_session.press([x, y], target)
-            }
-            1 => self.tool_session.move_to([x, y]),
-            2 => self.tool_session.release([x, y]),
-            _ => {
-                if self.tool_session.is_gesture_active() {
-                    self.tool_session.key(petunia_core::ToolKey::Cancel)
-                } else {
-                    self.tool_session.reset();
-                    petunia_core::ToolEffect::Nothing
-                }
-            }
         };
-        self.apply_tool_effect(effect, shift, ctrl)
+        self.tool_pointer_intent(ViewportToolPointerIntent {
+            phase: ViewportPointerPhase::from(phase),
+            at,
+            modifiers: PhysicalPointerModifiers { shift, ctrl, alt },
+        })
     }
 
     fn apply_tool_effect(
@@ -13042,34 +12756,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .is_some_and(|last| self.state.last_operation_is_current(last))
     }
 
-    /// Roda com Ctrl: contagens e raios da ferramenta ativa. A roda sem
-    /// modificador sempre faz zoom (constituição 11).
-    pub fn viewport_ctrl_scroll(&mut self, delta: f32) -> bool {
-        if !delta.is_finite() {
-            return false;
-        }
-        if self.state.session.tools.active_tool == "loop_cut" || self.loop_cut.is_some() {
-            self.scroll_loop_cut_count(delta);
-        } else if self.state.session.tools.modal.is_some()
-            && self.state.session.proportional_editing
-        {
-            let step = if delta > 0.0 { 0.25 } else { -0.25 };
-            self.adjust_proportional_radius(step);
-            if let Some(drag) = self.drag {
-                self.update_viewport_transform_modified(
-                    drag.last_pointer[0],
-                    drag.last_pointer[1],
-                    false,
-                    false,
-                );
-            }
-        } else {
-            self.state.session.camera.zoom(delta);
-        }
-        self.state.mark_dirty();
-        true
-    }
-
     /// Abre a sessão modal de uma ferramenta paramétrica com preview próprio.
     pub fn begin_tool_modal(&mut self, kind: ToolModalKind) -> bool {
         // Um valor digitado numa operação anterior nunca vaza para a próxima.
@@ -13794,6 +13480,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn handle_escape(&mut self) -> bool {
+        // A decisão modal tem precedência sobre cancelar gestos do documento.
+        // Não atravessar um topo não dismissible para atingir a ferramenta.
+        if self
+            .overlays
+            .top()
+            .is_some_and(|entry| entry.kind == OverlayKind::Modal)
+        {
+            if let Some(entry) = self.overlays.esc() {
+                self.hide_overlay(entry.id);
+            }
+            return true;
+        }
         if self.close_context_menu() {
             return true;
         }
@@ -13912,27 +13610,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn handle_click_away(&mut self) -> bool {
-        let mut handled = false;
-        if self.close_context_menu() {
-            handled = true;
+        // Um click-away trata somente o topo: nunca fecha camadas por baixo
+        // de uma superfície pinada ou que exige decisão explícita.
+        if !self.overlays.is_empty() {
+            let Some(entry) = self.overlays.click_away() else {
+                return false;
+            };
+            match entry.id {
+                OverlayId::ContextMenu | OverlayId::OutlinerContextMenu => {
+                    self.close_context_menu();
+                }
+                OverlayId::MenuBar => {
+                    self.close_menu();
+                }
+                _ => self.hide_overlay(entry.id),
+            }
+            return true;
         }
-        if self.close_menu() {
-            handled = true;
-        }
-        if self.add_menu_open {
-            self.add_menu_open = false;
-            handled = true;
-        }
-        if self.pivot_menu_open {
-            self.pivot_menu_open = false;
-            self.overlays.remove(OverlayId::PivotMenu);
-            handled = true;
-        }
-        if let Some(entry) = self.overlays.click_away() {
-            self.hide_overlay(entry.id);
-            handled = true;
-        }
-        handled
+        false
     }
 
     pub fn execute_command(&mut self, id: CommandId) {
@@ -14834,7 +14529,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.apply(UiIntent::SetActiveTool("measure".to_string()));
             }
             "model.primitives" => {
-                self.add_menu_open = true;
+                self.set_add_menu_open(true);
             }
             "global.previous_tool" => return self.swap_to_previous_tool(),
             "global.micro_inspector" => return self.toggle_micro_inspector(),
@@ -15444,6 +15139,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.parts_selected_only = self.parts_selected_only;
         vm.parts_sort_by_name = self.parts_sort_by_name;
         vm.parts_row_height = self.parts_row_height;
+        vm.inspector_pane_layout = self.inspector_pane_layout();
 
         for profile in &self.state.project.project.profiles {
             let pts = self
@@ -16725,6 +16421,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         vm.settings_visible = self.settings_visible;
         vm.command_search_visible = self.command_search_visible;
+        vm.overlay_top_id = self
+            .overlays
+            .top()
+            .map(|entry| entry.id.presentation_id().to_owned())
+            .unwrap_or_default();
         vm.scene_drawer_visible = self.scene_drawer_visible;
         vm.reference_manager_open = self.reference_manager_open;
         for slot in &mut vm.reference_slots {
@@ -16789,6 +16490,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             OverlayId::PivotMenu => self.pivot_menu_open = false,
             OverlayId::MicroInspector => self.micro_inspector_open = false,
             OverlayId::ReferenceManager => self.reference_manager_open = false,
+            OverlayId::AddMenu => self.add_menu_open = false,
         }
     }
 }

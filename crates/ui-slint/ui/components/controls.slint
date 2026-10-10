@@ -7,28 +7,55 @@ import { MenuEntry } from "../types.slint";
 export component SplitterHorizontal inherits Rectangle {
     in property <length> value;
     in property <float> direction: 1.0;
+    in property <length> minimum: 132px;
+    in property <length> maximum: 520px;
     callback moved(length);
 
     width: 100%;
-    height: 6px;
-    background: touch-area.has-hover || touch-area.pressed ? DesignTokens.accent : DesignTokens.border;
+    height: DesignTokens.control-height;
+    background: touch-area.has-hover || touch-area.pressed ? DesignTokens.surface-hover : DesignTokens.surface;
     accessible-role: slider;
     accessible-label: Tr.t("sl.resize_panel_height");
-    accessible-value: 50;
+    accessible-value: root.value / 1px;
+    accessible-value-minimum: root.minimum / 1px;
+    accessible-value-maximum: root.maximum / 1px;
+    accessible-value-step: 10;
+    accessible-action-increment => { root.moved(min(root.maximum, root.value + 10px)); }
+    accessible-action-decrement => { root.moved(max(root.minimum, root.value - 10px)); }
+    forward-focus: splitter-focus;
 
-    touch-area := TouchArea {
-        property <length> start-value;
-        property <length> start-y;
-
-        pointer-event(event) => {
-            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
-                self.start-value = root.value;
-                self.start-y = self.mouse-y;
-            }
+    Rectangle {
+        width: 32px;
+        height: 2px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: splitter-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border-strong;
+    }
+    splitter-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.UpArrow { root.moved(min(root.maximum, root.value + 10px)); return accept; }
+            if event.text == Key.DownArrow { root.moved(max(root.minimum, root.value - 10px)); return accept; }
+            if event.text == Key.Home { root.moved(root.minimum); return accept; }
+            if event.text == Key.End { root.moved(root.maximum); return accept; }
+            reject
         }
-        moved => {
-            if self.pressed {
-                root.moved(self.start-value + root.direction * (self.mouse-y - self.start-y));
+
+        touch-area := TouchArea {
+            mouse-cursor: MouseCursor.ns-resize;
+            property <length> start-value;
+            property <length> start-y;
+
+            pointer-event(event) => {
+                if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                    self.start-value = root.value;
+                    splitter-focus.focus();
+                    self.start-y = self.mouse-y + root.absolute-position.y;
+                }
+            }
+            moved => {
+                if self.pressed {
+                    root.moved(clamp(self.start-value + root.direction * (self.mouse-y + root.absolute-position.y - self.start-y), root.minimum, root.maximum));
+                }
             }
         }
     }
@@ -358,24 +385,40 @@ export component BrushStepper inherits HorizontalLayout {
 export component BrushChip inherits Rectangle {
     in property <string> label;
     in property <bool> active: false;
+    in property <bool> enabled: true;
     callback clicked();
-    height: 24px;
+    height: DesignTokens.control-height;
     horizontal-stretch: 1;
     border-radius: 4px;
     background: root.active ? DesignTokens.accent : (chip-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
     accessible-role: button;
     accessible-label: root.label;
     accessible-checked: root.active;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    forward-focus: chip-focus;
+    border-width: chip-focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
     Text {
         text: root.label;
-        color: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
-        font-size: DesignTokens.font-caption;
+        color: !root.enabled ? DesignTokens.disabled : root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        font-size: DesignTokens.font-default;
         font-weight: 600;
         horizontal-alignment: center;
         vertical-alignment: center;
         overflow: elide;
     }
-    chip-touch := TouchArea { clicked => { root.clicked(); } }
+    chip-focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        chip-touch := TouchArea {
+            enabled: root.enabled;
+            clicked => { chip-focus.focus(); root.clicked(); }
+        }
+    }
 }
 
 /// Alça de arraste de painéis flutuantes não modais (cap. 36, revisão 2026-09-30).
@@ -445,11 +488,16 @@ export component ContextMenuItem inherits Rectangle {
     accessible-enabled: !root.disabled;
     accessible-checkable: root.checked;
     accessible-checked: root.checked;
+    // Item de menu é acionável pelo teclado e pela ação semântica.
+    accessible-action-default => { if !root.disabled { root.clicked(); } }
+    forward-focus: item-focus;
     height: 26px;
     border-radius: 4px;
     background: root.disabled ? DesignTokens.surface-hover.with-alpha(0)
         : (touch-area.pressed ? DesignTokens.surface-pressed
         : ((touch-area.has-hover || root.highlighted) ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    border-width: item-focus.has-focus ? 2px : 0px;
+    border-color: DesignTokens.focus-ring;
     animate background { duration: Motion.fast; easing: ease-out; }
 
     HorizontalLayout {
@@ -481,9 +529,21 @@ export component ContextMenuItem inherits Rectangle {
         }
     }
 
-    touch-area := TouchArea {
+    // O foco fica no item, não no container: Tab entra no menu e Enter/Space o aciona.
+    // Navegação por setas e contenção continuam com o chamador.
+    item-focus := FocusScope {
         enabled: !root.disabled;
-        clicked => { root.clicked(); }
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch-area := TouchArea {
+            enabled: !root.disabled;
+            clicked => { root.clicked(); }
+        }
     }
 }
 
@@ -815,9 +875,17 @@ export component ToolButton inherits Rectangle {
     in property <bool> show-label: false;
     /// Marca de canto: o botão é um grupo com mais variações (flyout).
     in property <bool> has-more: false;
+    /// Item destacado por navegação de teclado num popover/flyout não modal.
+    /// O índice pertence ao shell; o controle só projeta o estado.
+    in property <bool> highlighted: false;
+    /// Popover associado aberto: o controle mantém o foco e opera o popup por
+    /// highlight (mesmo padrão da barra de menus), sem roubar foco.
+    in property <bool> popup-open: false;
     callback clicked;
-    /// Botão direito: abre as variações de um grupo.
+    /// Botão direito, Shift+F10 ou tecla Menu: abre as variações de um grupo.
     callback secondary-clicked;
+    callback popup-step(int);
+    callback popup-invoke;
 
     accessible-role: button;
     accessible-label: root.semantic-label;
@@ -825,7 +893,7 @@ export component ToolButton inherits Rectangle {
     width: root.show-label ? 132px : 32px;
     height: 32px;
     border-radius: 6px;
-    background: active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : (touch-area.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
+    background: active ? DesignTokens.accent : (touch-area.pressed ? DesignTokens.surface-pressed : ((touch-area.has-hover || root.highlighted) ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0)));
     animate background { duration: Motion.fast; easing: ease-out; }
     animate border-color { duration: Motion.fast; easing: ease-out; }
     transform-scale: touch-area.pressed ? 0.94 : 1.0;
@@ -869,8 +937,21 @@ export component ToolButton inherits Rectangle {
     }
     tool-focus := FocusScope {
         key-pressed(event) => {
+            // Escape não é interceptado aqui: superfícies da pilha fecham pelo
+            // topo em OverlayStack e o flyout da UI já é fechado pelo shell.
+            if root.popup-open {
+                if event.text == Key.DownArrow { root.popup-step(1); return accept; }
+                if event.text == Key.UpArrow { root.popup-step(-1); return accept; }
+                if event.text == Key.Return || event.text == " " { root.popup-invoke(); return accept; }
+                reject
+            }
             if event.text == Key.Return || event.text == " " {
                 root.clicked();
+                return accept;
+            }
+            // Convenção desktop: Shift+F10 ou tecla Menu abrem o menu do controle.
+            if (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu {
+                root.secondary-clicked();
                 return accept;
             }
             reject
@@ -906,16 +987,21 @@ export struct RailTool {
 }
 
 /// Grupo de ferramentas parecidas num só botão do trilho. Mostra a variação
-/// ativa (ou a última usada); clique ativa, botão direito ou a marca de canto
-/// pedem o flyout com todas as variações. Suporta até 4 variações.
+/// ativa (ou a última usada); clique ativa, botão direito, Shift+F10, tecla
+/// Menu ou a marca de canto pedem o flyout com todas as variações. Suporta até
+/// 4 variações.
 export component ToolGroup inherits Rectangle {
     in property <[RailTool]> tools;
     in property <bool> show-label: false;
     in property <string> more-hint;
+    /// Flyout deste grupo está aberto (o shell é dono do índice de highlight).
+    in property <bool> flyout-open: false;
     in-out property <int> current: 0;
     callback activated(string);
     /// Pede o flyout; `x`/`y` são a posição absoluta do botão.
     callback more-requested(length, length);
+    callback flyout-step(int);
+    callback flyout-invoke;
 
     property <int> shown: root.tools[0].active ? 0 : (root.tools[1].active ? 1 : (root.tools[2].active ? 2 : (root.tools[3].active ? 3 : root.current)));
     width: button.width;
@@ -930,6 +1016,9 @@ export component ToolGroup inherits Rectangle {
         active: root.tools[root.shown].active;
         show-label: root.show-label;
         has-more: root.tools.length > 1;
+        popup-open: root.flyout-open && root.tools.length > 1;
+        popup-step(delta) => { root.flyout-step(delta); }
+        popup-invoke => { root.flyout-invoke(); }
         clicked => {
             root.current = root.shown;
             root.activated(root.tools[root.shown].id);
@@ -948,24 +1037,34 @@ export component ToolGroup inherits Rectangle {
 
 export component ColorSwatch inherits Rectangle {
     in property <color> swatch-color;
+    in property <string> semantic-label: Tr.t("sl.color_swatch");
     in property <bool> selected;
     callback clicked;
 
     accessible-role: button;
-    accessible-label: Tr.t("sl.color_swatch");
-    width: 24px;
-    height: 24px;
+    accessible-label: root.semantic-label;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: swatch-focus;
+    width: DesignTokens.control-height;
+    height: DesignTokens.control-height;
     border-radius: 4px;
     background: root.swatch-color;
-    border-width: selected ? 2px : 1px;
-    border-color: selected ? DesignTokens.accent : DesignTokens.border;
+    border-width: selected || swatch-focus.has-focus ? 2px : 1px;
+    border-color: swatch-focus.has-focus ? DesignTokens.focus-ring : selected ? DesignTokens.accent : DesignTokens.border;
 
-    TouchArea {
-        clicked => { root.clicked(); }
-        Tooltip {
-            RichTooltip {
-                title: Tr.t("sl.color_swatch");
-                description: Tr.t("sl.click_to_select_or_modify_active_color");
+    swatch-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+        TouchArea {
+            clicked => { swatch-focus.focus(); root.clicked(); }
+            Tooltip {
+                RichTooltip {
+                    title: Tr.t("sl.color_swatch");
+                    description: Tr.t("sl.click_to_select_or_modify_active_color");
+                }
             }
         }
     }

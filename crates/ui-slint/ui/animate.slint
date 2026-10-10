@@ -1,3 +1,4 @@
+import { InspectorSplitLayout } from "shell/inspector_split.slint";
 // Workspace Animate (cap. 45 F2, P3D-169/170).
 //
 // Componentes declarativos que só LEEM propriedades e só EMITEM a ação
@@ -10,6 +11,8 @@
 
 import { IconDisplay, IconSet } from "@lucide";
 import { DesignTokens } from "tokens.slint";
+import { InspectorSection } from "inspector/sections.slint";
+import { StructureHost, PropertiesHost } from "shell/right_column.slint";
 
 export struct AnimateRowEntry {
     id: string,
@@ -777,5 +780,153 @@ export component AnimateTransport inherits Rectangle {
             enabled: root.has-motion;
             clicked => { root.action("apply-now", "convert", 0); }
         }
+    }
+}
+
+export component AnimateInspector inherits Rectangle {
+    in property <AnimateTexts> texts;
+    in property <[AnimateRowEntry]> creatures;
+    in property <[AnimateRowEntry]> creature-presets;
+    in property <bool> has-creature;
+    in property <[AnimateRowEntry]> catalog;
+    in property <[AnimateRowEntry]> motions;
+    in property <bool> has-motion;
+    in property <bool> can-fit;
+    in property <string> fit-tip;
+    in property <string> linked-models;
+    in property <[AnimateRowEntry]> styles;
+    in property <[AnimateParamEntry]> params;
+    in property <bool> rig-error;
+    in property <bool> show-advanced;
+    in property <bool> show-bones;
+    in property <bool> stepped;
+    in property <bool> root-motion;
+    in property <bool> root-motion-supported;
+
+    callback action(string, string, float);
+    in property <float> structure-ratio: 0.4;
+    in property <bool> structure-collapsed: false;
+    in property <bool> properties-collapsed: false;
+    in property <int> structure-focus-token: 0;
+    in property <int> properties-focus-token: 0;
+    in property <bool> regional-focus-enabled: true;
+    callback split-ratio-changed(float);
+    callback pane-collapsed-set(int, bool);
+
+    split := InspectorSplitLayout {
+        width: root.width;
+        height: root.height;
+        structure-ratio: root.structure-ratio;
+        structure-collapsed: root.structure-collapsed;
+        properties-collapsed: root.properties-collapsed;
+        ratio-changed(value) => { root.split-ratio-changed(value); }
+        structure-pane := StructureHost {
+            width: parent.width;
+            height: split.structure-height;
+            title: root.texts.title-creature;
+            collapsed: root.structure-collapsed;
+            focus-token: root.structure-focus-token;
+            focus-enabled: root.regional-focus-enabled;
+            collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
+            // Recolhe sozinha quando já existe uma criatura; a lista de motions permanece acessível.
+            InspectorSection {
+                title: root.texts.title-creature;
+                open: !root.has-creature;
+                toggled => { self.open = !self.open; }
+
+                AnimateCreatureBody {
+                    texts: root.texts;
+                    creatures: root.creatures;
+                    presets: root.creature-presets;
+                    has-creature: root.has-creature;
+                    action(a, b, v) => { root.action(a, b, v); }
+                }
+            }
+            InspectorSection {
+                title: root.texts.title-picker;
+                open: true;
+                toggled => { self.open = !self.open; }
+
+                AnimateMotionBody {
+                    texts: root.texts;
+                    catalog: root.catalog;
+                    motions: root.motions;
+                    has-motion: root.has-motion;
+                    has-creature: root.has-creature;
+                    can-fit: root.can-fit;
+                    fit-tip: root.fit-tip;
+                    linked-models: root.linked-models;
+                    action(a, b, v) => { root.action(a, b, v); }
+                }
+            }
+        }
+        properties-pane := PropertiesHost {
+            width: parent.width;
+            y: split.properties-y;
+            height: split.properties-height;
+            collapsed: root.properties-collapsed;
+            focus-token: root.properties-focus-token;
+            focus-enabled: root.regional-focus-enabled;
+            collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
+            spacing: 10px;
+
+            if root.has-motion: InspectorSection {
+                title: root.texts.title-motion;
+                open: true;
+                toggled => { self.open = !self.open; }
+
+                AnimateTweakBody {
+                    texts: root.texts;
+                    styles: root.styles;
+                    params: root.params;
+                    has-motion: root.has-motion;
+                    rig-error: root.rig-error;
+                    show-advanced: root.show-advanced;
+                    show-bones: root.show-bones;
+                    stepped: root.stepped;
+                    root-motion: root.root-motion;
+                    root-motion-supported: root.root-motion-supported;
+                    action(a, b, v) => { root.action(a, b, v); }
+                }
+            }
+        }
+    }
+}
+
+/// Drawer procedural: transporte existente + motions projetadas, sem novo motor/keyframes.
+export component AnimateDrawerContent inherits VerticalLayout {
+    in property <AnimateTexts> texts;
+    in property <[AnimateRowEntry]> motions;
+    in property <bool> playing;
+    in property <bool> has-motion;
+    in property <float> progress;
+    in property <string> time-label;
+    callback action(string, string, float);
+    spacing: 8px;
+    transport := AnimateTransport {
+        texts: root.texts;
+        playing: root.playing;
+        has-motion: root.has-motion;
+        progress: root.progress;
+        time-label: root.time-label;
+        action(a, b, v) => { root.action(a, b, v); }
+    }
+    if !root.has-motion: Text {
+        text: root.texts.empty-motion;
+        color: DesignTokens.text-secondary;
+        font-size: DesignTokens.font-small;
+        wrap: word-wrap;
+    }
+    for motion in root.motions: AnimChip {
+        label: motion.label;
+        selected: motion.selected;
+        enabled: motion.available;
+        tip: motion.detail;
+        clicked => { root.action("select-motion", motion.id, 0); }
+    }
+    if root.has-motion: HorizontalLayout {
+        spacing: 6px;
+        AnimButton { label: root.texts.duplicate; clicked => { root.action("duplicate-motion", "", 0); } }
+        AnimButton { label: root.texts.remove; danger: true; clicked => { root.action("remove-motion", "", 0); } }
     }
 }

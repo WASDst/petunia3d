@@ -1,0 +1,111 @@
+import { DesignTokens, Tr } from "../tokens.slint";
+import { IconDisplay, IconSet } from "@lucide";
+
+/// Projeta estado do shell; não cria outro owner de domínio.
+export component ViewportStatusHud inherits Rectangle {
+    in property <string> active-workspace;
+    in property <string> active-tool;
+    in property <bool> is-instant-tool-mode;
+    in property <string> measure-hud-text;
+    in property <bool> measure-visible;
+    in property <bool> tool-modal-active;
+    in property <string> tool-modal-title;
+    in property <string> tool-options-title;
+    background: transparent;
+
+    // Pílula de Ferramenta Ativa e Modo de Operação (Feedback visual contínuo)
+    if !root.measure-visible && root.active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
+        width: min(parent.width - 40px, active-tool-hud-row.preferred-width + 24px);
+        x: (parent.width - self.width) / 2;
+        y: 58px;
+        height: 28px;
+        border-radius: 14px;
+        background: DesignTokens.hud-surface;
+        border-width: 1px;
+        border-color: root.is-instant-tool-mode ? DesignTokens.accent : DesignTokens.border;
+        drop-shadow-blur: DesignTokens.elevation-1-blur;
+        drop-shadow-color: DesignTokens.elevation-1-color;
+
+        active-tool-hud-row := HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 8px;
+            alignment: center;
+
+            Text {
+                text: root.tool-modal-active ? root.tool-modal-title : (root.tool-options-title != "" ? root.tool-options-title : root.active-tool);
+                color: DesignTokens.accent;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            Rectangle {
+                border-radius: 3px;
+                background: root.is-instant-tool-mode ? DesignTokens.accent : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: root.is-instant-tool-mode ? DesignTokens.accent : DesignTokens.border;
+                HorizontalLayout {
+                    padding-left: 5px;
+                    padding-right: 5px;
+                    Text {
+                        text: root.is-instant-tool-mode ? Tr.t("sl.free_mode") : Tr.t("sl.card_gizmo");
+                        color: root.is-instant-tool-mode ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            Text {
+                text: root.active-tool == "slice"
+                    ? "Arraste o corte · T: Trim/Split · Enter/Clique Confirma · Esc Cancela"
+                    : (root.is-instant-tool-mode
+                        ? "Mova o mouse · LMB/Enter Confirma · RMB/Esc Cancela"
+                        : "2 Toques no atalho: Modo Livre · Enter Confirma");
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-caption;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Pílula Flutuante de Medição / Dimensões (Centro: Resumo HUD no Topo)
+    if root.measure-visible && root.measure-hud-text != "" && root.active-workspace == "MODEL": measure-summary := Rectangle {
+        width: min(parent.width - 40px, measure-hud-row.preferred-width + 24px);
+        x: (parent.width - self.width) / 2;
+        y: 58px;
+        height: 26px;
+        border-radius: 6px;
+        background: DesignTokens.hud-surface;
+        border-width: 1px;
+        border-color: DesignTokens.measure.with-alpha(0.53);
+        drop-shadow-blur: DesignTokens.elevation-1-blur;
+        drop-shadow-color: DesignTokens.elevation-1-color;
+        drop-shadow-offset-y: DesignTokens.elevation-1-offset;
+
+        measure-hud-row := HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 6px;
+            alignment: center;
+
+            IconDisplay {
+                icon: IconSet.ArrowUpDown;
+                size: 12px;
+                stroke: DesignTokens.measure;
+            }
+
+            Text {
+                text: root.measure-hud-text;
+                color: DesignTokens.measure;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                font-family: "monospace";
+                vertical-alignment: center;
+            }
+        }
+    }
+}

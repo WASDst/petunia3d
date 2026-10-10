@@ -1,0 +1,46 @@
+# Petunia3D — Documentation Website
+
+Site estático para a documentação técnica, decisões arquiteturais e acompanhamento da refatoração do Petunia3D.
+
+A pasta replica deliberadamente a stack, o design e a filosofia do website do novo Petunia Design: **zero build**, dependências pequenas e versionadas por CDN, leitura previsível, acessibilidade e baixo atrito para manutenção.
+
+## Stack
+
+HTML5, CSS nativo, Web Awesome 3.14.0, Phosphor Icons Web 2.1.2, Alpine.js 3.17.4, Marked 18.0.14, Fuse.js 7.5.0 e Markdown.
+
+Node.js não é necessário para servir o site; é usado apenas pelos gates de sintaxe e acompanhamento. Não há bundler, package manager, node_modules ou etapa de build.
+
+## Filosofia
+
+Este site é o **caderno vivo da refatoração**. Cada domínio só vira decisão quando for discutido e aprovado. Hipóteses permanecem marcadas como propostas.
+
+## Executar localmente
+
+```bash
+python3 -m http.server 8080 -d website
+```
+
+## Atualização e publicação
+
+O módulo **Reimplementação** (`#/progress`) exibe `website/progress/tasks.json`: tarefas vinculadas aos documentos, filtros, checkpoints e TODO / IN PROGRESS (000%) / DONE. Atualizar o JSON em cada implementação é obrigatório; veja `website/docs/17-reimplementation/index.md`. Percentuais são derivados dos checkpoints, sem storage privado no navegador.
+
+Adicione novos arquivos em website/docs e registre cada página em website/docs/manifest.json. O site é zero-build e usa o manifesto para navegação e busca.
+
+**Atenção:** o workflow existente .github/workflows/docs.yml constrói docs/ (site legado VitePress); ele **não publica website/** automaticamente. Alterações nesta branch de refatoração atualizam a fonte do novo caderno, mas publicação de preview/produção depende de host configurado e não autoriza merge na main.
+
+Links relativos entre capítulos Markdown são convertidos pelo cliente em rotas internas, preservando a navegação do site.
+
+## Leitura por code agents
+
+- Entrada obrigatória na branch: `AGENTS.md` na raiz.
+- Guia no site: `website/docs/16-code-agents/index.md`.
+- Catálogo oficial externo e verificável: `16-code-agents/workforce-index.md` (39 agents, 189 skills, 20 recipes do Prumo).
+- Índice de contexto progressivo para crawlers/LLMs: `website/llms.txt`.
+- Cadastro de páginas humanas: `website/docs/manifest.json`.
+- O catálogo JSON e os links das Skills são referências externas; não instalam ou executam código Prumo automaticamente.
+
+## Gate de documentação dos agentes
+
+Execute `python3 website/scripts/verify-agent-docs.py` para conferir o manifesto do site, links internos, cobertura integral do inventário Prumo (39/189/20), paths/manifests das fontes e ausência de duplicação. Execute `node --check website/app.js` para a sintaxe do SPA. O workflow `.github/workflows/agent-docs.yml` roda ambos os comandos quando o site ou `AGENTS.md` mudam; não compila a GUI nem altera a publicação do `docs/` legado.
+
+Para o acompanhamento, execute também `node --check website/progress/progress.js`, `node website/scripts/verify-progress.cjs` e `node --test website/tests/progress.test.cjs`. A mesma CI verifica os três estados, evidências e cobertura documental. Não confundir validade do JSON com conformidade funcional do editor.

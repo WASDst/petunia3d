@@ -18,3 +18,7 @@ frame_selection = "F"
 extrude = "Ctrl+E"
 bevel = "Ctrl+B"
 delete = "Delete"
+
+
+[pointer]
+orbit_left = "Alt"

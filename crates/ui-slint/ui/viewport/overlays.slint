@@ -1,0 +1,130 @@
+import { DesignTokens } from "../tokens.slint";
+
+/// Overlays puramente visuais da viewport.
+/// Não recebe input e não altera domínio; apenas projeta comandos já calculados.
+export component ViewportPassiveOverlays inherits Rectangle {
+    in property <bool> selection-visible: false;
+    in property <string> selection-unselected-outline: "";
+    in property <string> selection-outline: "";
+    in property <string> selection-active-outline: "";
+    in property <string> selection-unselected-points: "";
+    in property <string> selection-points: "";
+    in property <color> selection-color: DesignTokens.selection;
+    in property <color> active-selection-color: DesignTokens.selection-active;
+    in property <float> selection-thickness: 2.0;
+
+    in property <bool> animate-bones-visible: false;
+    in property <string> animate-bone-commands: "";
+    in property <string> animate-joint-commands: "";
+
+    in property <string> operation-preview: "";
+    in property <string> loop-cut-preview: "";
+    in property <string> poly-pen-preview: "";
+    in property <string> region-shapes: "";
+    in property <string> profile-outline: "";
+    in property <string> profile-selection: "";
+    in property <string> region-hover: "";
+
+    background: transparent;
+
+    if root.selection-visible: Path {
+        fit: ImageFit.preserve;
+        fill: transparent;
+        stroke: DesignTokens.text-secondary;
+        stroke-width: 1.25px;
+        commands: root.selection-unselected-outline;
+    }
+    if root.selection-visible: Path {
+        fit: ImageFit.preserve;
+        fill: transparent;
+        stroke: root.selection-color;
+        stroke-width: max(2px, root.selection-thickness * 1px);
+        commands: root.selection-outline;
+    }
+    if root.selection-visible: Path {
+        fit: ImageFit.preserve;
+        fill: transparent;
+        stroke: root.active-selection-color;
+        stroke-width: root.selection-thickness * 1.2 * 1px;
+        commands: root.selection-active-outline;
+    }
+    if root.selection-visible: Path {
+        fit: ImageFit.preserve;
+        fill: DesignTokens.text-muted;
+        stroke: transparent;
+        commands: root.selection-unselected-points;
+    }
+    if root.selection-visible: Path {
+        fit: ImageFit.preserve;
+        fill: root.active-selection-color;
+        stroke: transparent;
+        commands: root.selection-points;
+    }
+
+    if root.animate-bones-visible: Path {
+        fit: ImageFit.preserve;
+        commands: root.animate-bone-commands;
+        fill: transparent;
+        stroke: DesignTokens.accent;
+        stroke-width: 2.5px;
+    }
+    if root.animate-bones-visible: Path {
+        fit: ImageFit.preserve;
+        commands: root.animate-joint-commands;
+        fill: transparent;
+        stroke: DesignTokens.text-primary;
+        stroke-width: 1.5px;
+    }
+
+    Path {
+        fit: ImageFit.preserve;
+        commands: root.operation-preview;
+        fill: transparent;
+        stroke: DesignTokens.selection-active;
+        stroke-width: 2.5px;
+    }
+    Path {
+        fit: ImageFit.preserve;
+        commands: root.loop-cut-preview;
+        fill: transparent;
+        stroke: DesignTokens.selection-active;
+        stroke-width: 2px;
+    }
+    if root.poly-pen-preview != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.poly-pen-preview;
+        fill: transparent;
+        stroke: DesignTokens.selection-active;
+        stroke-width: 2px;
+    }
+    if root.region-shapes != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.region-shapes;
+        fill-rule: evenodd;
+        fill: DesignTokens.selection.transparentize(0.9);
+        stroke: DesignTokens.selection.transparentize(0.6);
+        stroke-width: 1px;
+    }
+    if root.profile-outline != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.profile-outline;
+        fill: transparent;
+        stroke: DesignTokens.selection.transparentize(0.35);
+        stroke-width: 1.5px;
+    }
+    if root.profile-selection != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.profile-selection;
+        fill: transparent;
+        stroke: DesignTokens.selection;
+        stroke-width: 3px;
+    }
+    if root.region-hover != "": Path {
+        fit: ImageFit.preserve;
+        commands: root.region-hover;
+        fill-rule: evenodd;
+        fill: DesignTokens.selection.transparentize(0.78);
+        stroke: DesignTokens.selection;
+        stroke-width: 1.5px;
+    }
+}

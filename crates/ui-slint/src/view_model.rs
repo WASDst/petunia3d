@@ -283,6 +283,7 @@ pub struct ShellViewModel {
     pub parts_selected_only: bool,
     pub parts_sort_by_name: bool,
     pub parts_row_height: f32,
+    pub inspector_pane_layout: crate::inspector_layout::InspectorPaneLayout,
     pub prefab_items: Vec<PrefabItemModel>,
     pub asset_only_favorites: bool,
     pub split_enabled: bool,
@@ -857,10 +858,29 @@ pub struct ShellViewModel {
     pub active_material_slot: i32,
     pub settings_visible: bool,
     pub command_search_visible: bool,
+    /// Projeção do topo de OverlayStack; Slint não mantém uma segunda pilha.
+    pub overlay_top_id: String,
     pub scene_drawer_visible: bool,
     pub active_keymap_id: String,
+    /// Semântica dos modificadores de pointer do keymap ativo.
+    /// Bitmask: Ctrl=1, Shift=2, Alt=4.
+    pub pointer_precision_mask: i32,
+    pub pointer_snap_mask: i32,
+    pub pointer_extend_mask: i32,
+    pub pointer_subtract_mask: i32,
+    pub pointer_pan_mask: i32,
+    pub pointer_cursor_place_mask: i32,
+    pub pointer_adjust_mask: i32,
+    pub pointer_loop_mask: i32,
+    pub pointer_orbit_left_mask: i32,
     /// Painel do workspace Animate (cap. 45 F2).
     pub animate: crate::animate::AnimateViewModel,
+}
+
+fn pointer_modifier_mask(mods: petunia_config::keybinds::Mods2) -> i32 {
+    (if mods.ctrl { 1 } else { 0 })
+        | (if mods.shift { 2 } else { 0 })
+        | (if mods.alt { 4 } else { 0 })
 }
 
 impl ShellViewModel {
@@ -1293,6 +1313,8 @@ impl ShellViewModel {
             parts_selected_only: false,
             parts_sort_by_name: false,
             parts_row_height: 28.0,
+            inspector_pane_layout: crate::inspector_layout::InspectorLayoutMemory::default()
+                .get(state.workspace),
             prefab_items: Vec::new(),
             asset_only_favorites: false,
             split_enabled: false,
@@ -1857,8 +1879,63 @@ impl ShellViewModel {
             section_states: Vec::new(),
             settings_visible: false,
             command_search_visible: false,
+            overlay_top_id: String::new(),
             scene_drawer_visible: false,
             active_keymap_id: state.ui.active_keymap_id.clone(),
+            pointer_precision_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PRECISION),
+            ),
+            pointer_snap_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SNAP),
+            ),
+            pointer_extend_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND),
+            ),
+            pointer_subtract_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SUBTRACT),
+            ),
+            pointer_pan_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PAN),
+            ),
+            pointer_cursor_place_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_CURSOR_PLACE),
+            ),
+            pointer_adjust_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ADJUST),
+            ),
+            pointer_loop_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_LOOP),
+            ),
+            pointer_orbit_left_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ORBIT_LEFT),
+            ),
             animate: crate::animate::AnimateViewModel::default(),
         }
     }

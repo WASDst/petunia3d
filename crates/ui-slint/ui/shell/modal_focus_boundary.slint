@@ -1,0 +1,65 @@
+/// Contém o percurso nativo de Tab em uma superfície modal.
+/// Os guards não desenham nem capturam pointer. O chamador fornece entradas reais,
+/// sempre visíveis/habilitadas, e conserva a política de dismiss no bridge.
+export component ModalFocusBoundary inherits Rectangle {
+    in property <bool> active: true;
+    callback initial-focus;
+    callback first-focus;
+    callback last-focus;
+    callback dismiss-requested;
+    private property <bool> reverse-navigation: false;
+    private property <bool> transfer-pending: false;
+
+    init => { if root.active { root.initial-focus(); } }
+    changed active => { if root.active { root.initial-focus(); } }
+
+    // A navegação nativa publica foco/semântica depois de focus-gained.
+    // Transferir no próximo evento evita uma atribuição reentrante nesse passo.
+    Timer {
+        interval: 1ms;
+        running: root.transfer-pending;
+        triggered => {
+            root.transfer-pending = false;
+            if root.active {
+                if root.reverse-navigation { root.last-focus(); } else { root.first-focus(); }
+            }
+        }
+    }
+
+    boundary-scope := FocusScope {
+        width: root.width;
+        height: root.height;
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if root.active {
+                if (event.text == Key.Tab || event.text == "\u{0019}") && !event.modifiers.control && !event.modifiers.alt && !event.modifiers.meta {
+                    root.reverse-navigation = event.modifiers.shift || event.text == "\u{0019}";
+                }
+                if event.text == Key.Escape { root.dismiss-requested(); return accept; }
+                if event.text == Key.F6 { return accept; }
+            }
+            reject
+        }
+
+        before-content := FocusScope {
+            enabled: root.active;
+            focus-on-click: false;
+            focus-gained(reason) => {
+                root.transfer-pending = true;
+            }
+        }
+        Rectangle {
+            width: root.width;
+            height: root.height;
+            @children
+        }
+        after-content := FocusScope {
+            enabled: root.active;
+            focus-on-click: false;
+            focus-gained(reason) => {
+                root.transfer-pending = true;
+            }
+        }
+    }
+}

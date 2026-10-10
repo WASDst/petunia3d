@@ -77,3 +77,32 @@ também exporta o mapa atual de volta para TOML.
   `gradient`, `gradient_radial`, `line`, `rectangle`, `ellipse`, tamanho e dureza.
 
 `global.*`, `view.*` e `window.*` valem em qualquer workspace; os demais só no seu contexto.
+
+
+## Modificadores de ponteiro
+
+A seção opcional `[pointer]` mapeia **significados de interação**, não comandos
+de teclado. Ela evita que o frontend interprete Shift/Ctrl/Alt por perfil.
+
+Exemplo do Maya-like:
+
+```toml
+[pointer]
+orbit_left = "Alt"
+```
+
+Ações reconhecidas atualmente:
+
+- `alternate` — comportamento alternativo da ferramenta;
+- `extend` — estender seleção;
+- `precision` — ajuste fino durante drag;
+- `snap` — snapping durante manipulação;
+- `subtract` — subtrair em box/lasso;
+- `pan` — transformar MMB em pan;
+- `cursor_place` — posicionar Cursor 3D pelo gesto contextual;
+- `adjust` — ajuste contextual pela roda;
+- `loop` — seleção de loop/conectado pelo pointer;
+- `orbit_left` — transformar LMB em orbit (usado pelo perfil Maya-like).
+
+Perfis parciais herdam os defaults Petunia. `orbit_left` não possui default:
+fica inativo salvo quando o perfil o declara explicitamente.

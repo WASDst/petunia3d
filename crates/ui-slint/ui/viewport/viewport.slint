@@ -1,0 +1,72 @@
+import { RegionFocusAnchor } from "../shell/focus_anchor.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
+
+/// Host da viewport principal.
+///
+/// Responsabilidade nesta fase:
+/// - geometria da superfície;
+/// - fundo/borda;
+/// - resize lógico + físico (HiDPI);
+/// - apresentação da textura GPU/fallback.
+///
+/// Input, picking, gizmos e tool sessions permanecem no chamador via @children.
+export component PetuniaViewportHost inherits Rectangle {
+    in property <int> region-focus-token: 0;
+    in property <bool> region-focus-enabled: true;
+    out property <bool> has-region-focus: surface-focus.has-keyboard-focus;
+    in property <bool> split-enabled: false;
+    in property <bool> has-gpu-viewport: false;
+    in property <image> viewport-image;
+    callback resized(float, float, float, float);
+
+    x: 0px;
+    y: 0px;
+    // width/height são dimensionados pelo componente pai (app.slint).
+    clip: true;
+    background: DesignTokens.canvas;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    property <float> physical-width: self.width / 1phx;
+    property <float> physical-height: self.height / 1phx;
+
+    changed width => {
+        root.resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
+    }
+    changed height => {
+        root.resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
+    }
+    changed physical-width => {
+        root.resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
+    }
+    changed physical-height => {
+        root.resized(self.width / 1px, self.height / 1px, self.physical-width, self.physical-height);
+    }
+
+
+    if root.has-gpu-viewport: Image {
+        width: 100%;
+        height: 100%;
+        image-fit: contain;
+        source: root.viewport-image;
+    }
+
+    if !root.has-gpu-viewport: Text {
+        text: Tr.t("sl.viewport_n_nslint_shell_bootstrap_ngpu_viewp");
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-exceptional;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    surface-focus := RegionFocusAnchor {
+        width: root.width;
+        height: root.height;
+        label: Tr.t("sl.region_surface");
+        focus-token: root.region-focus-token;
+        enabled: root.region-focus-enabled;
+        activate-on-enter: false;
+    }
+
+    @children
+}

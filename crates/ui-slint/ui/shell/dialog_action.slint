@@ -1,0 +1,57 @@
+import { DesignTokens } from "../tokens.slint";
+
+/// Ação textual de card modal (ex.: descartar, manter, recuperar).
+/// Alcançável por Tab, ativada por Enter/Espaço, com anel de foco visível.
+/// `primary` usa accent preenchido; `danger` marca ação destrutiva sem ser o foco inicial.
+export component DialogActionButton inherits Rectangle {
+    in property <string> label;
+    in property <string> semantic-label;
+    in property <bool> primary: false;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    accessible-role: button;
+    accessible-label: root.semantic-label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    forward-focus: focus;
+    min-height: DesignTokens.control-height;
+    horizontal-stretch: 1;
+    border-radius: DesignTokens.radius-control;
+    background: !root.enabled ? DesignTokens.surface
+        : root.primary ? DesignTokens.accent
+        : touch.pressed ? DesignTokens.surface-pressed
+        : touch.has-hover ? DesignTokens.surface-hover
+        : DesignTokens.surface;
+    border-width: focus.has-focus ? 2px : 1px;
+    border-color: focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+
+    Text {
+        text: root.label;
+        color: !root.enabled ? DesignTokens.disabled
+            : root.primary ? DesignTokens.on-accent
+            : root.danger ? DesignTokens.danger
+            : DesignTokens.text-primary;
+        font-size: DesignTokens.font-small;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+        touch := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.clicked(); }
+        }
+    }
+}

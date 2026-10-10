@@ -205,6 +205,22 @@ impl Mods2 {
 pub const POINTER_ALTERNATE: &str = "pointer.alternate";
 /// Modificador que estende a seleção ao clicar.
 pub const POINTER_EXTEND: &str = "pointer.extend";
+/// Modificador de ajuste fino em gestos contínuos.
+pub const POINTER_PRECISION: &str = "pointer.precision";
+/// Modificador que ativa snapping durante manipulação.
+pub const POINTER_SNAP: &str = "pointer.snap";
+/// Modificador que subtrai da seleção por área/lasso.
+pub const POINTER_SUBTRACT: &str = "pointer.subtract";
+/// Modificador que troca MMB de orbit para pan.
+pub const POINTER_PAN: &str = "pointer.pan";
+/// Modificador de RMB para posicionar o Cursor 3D.
+pub const POINTER_CURSOR_PLACE: &str = "pointer.cursor_place";
+/// Modificador da roda para ajuste contextual (contagem/raio).
+pub const POINTER_ADJUST: &str = "pointer.adjust";
+/// Modificador para seleção de loop/conectado via pointer.
+pub const POINTER_LOOP: &str = "pointer.loop";
+/// Modificador que transforma LMB em orbit; usado pelo perfil Maya-like.
+pub const POINTER_ORBIT_LEFT: &str = "pointer.orbit_left";
 
 /// Mapa ação -> binding, ex. `"model.extrude"`.
 #[derive(Debug, Default, Clone)]
@@ -588,14 +604,19 @@ impl Keybinds {
     /// Modificador de uma ação de ponteiro (`pointer.alternate`, ...).
     pub fn pointer_modifier(&self, action: &str) -> Mods2 {
         self.pointer.get(action).copied().unwrap_or(match action {
-            POINTER_ALTERNATE => Mods2 {
+            POINTER_ALTERNATE | POINTER_SNAP | POINTER_SUBTRACT | POINTER_ADJUST => Mods2 {
                 ctrl: true,
                 ..Mods2::default()
             },
-            POINTER_EXTEND => Mods2 {
+            POINTER_EXTEND | POINTER_PRECISION | POINTER_PAN | POINTER_CURSOR_PLACE => Mods2 {
                 shift: true,
                 ..Mods2::default()
             },
+            POINTER_LOOP => Mods2 {
+                alt: true,
+                ..Mods2::default()
+            },
+            POINTER_ORBIT_LEFT => Mods2::default(),
             _ => Mods2::default(),
         })
     }
@@ -787,7 +808,17 @@ impl Keybinds {
                 kb.map.insert(a.to_string(), b);
             }
         }
-        for (action, mods) in [(POINTER_ALTERNATE, "Ctrl"), (POINTER_EXTEND, "Shift")] {
+        for (action, mods) in [
+            (POINTER_ALTERNATE, "Ctrl"),
+            (POINTER_EXTEND, "Shift"),
+            (POINTER_PRECISION, "Shift"),
+            (POINTER_SNAP, "Ctrl"),
+            (POINTER_SUBTRACT, "Ctrl"),
+            (POINTER_PAN, "Shift"),
+            (POINTER_CURSOR_PLACE, "Shift"),
+            (POINTER_ADJUST, "Ctrl"),
+            (POINTER_LOOP, "Alt"),
+        ] {
             if let Some(mods) = parse_modifiers(mods) {
                 kb.pointer.insert(action.to_string(), mods);
             }
@@ -1099,4 +1130,54 @@ mod tests {
         kb.remove_binding("model.extrude");
         assert_eq!(kb.shortcut_for("model.extrude"), None);
     }
+
+    #[test]
+    fn viewport_pointer_semantics_come_from_the_active_keymap() {
+        let defaults = Keybinds::load_profile("petunia-default");
+        let maya = Keybinds::load_profile("maya");
+
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_PRECISION),
+            Mods2 {
+                shift: true,
+                ..Mods2::default()
+            }
+        );
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_SNAP),
+            Mods2 {
+                ctrl: true,
+                ..Mods2::default()
+            }
+        );
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_LOOP),
+            Mods2 {
+                alt: true,
+                ..Mods2::default()
+            }
+        );
+        assert_eq!(
+            defaults.pointer_modifier(POINTER_ORBIT_LEFT),
+            Mods2::default(),
+            "Petunia default must not turn Alt+LMB into orbit"
+        );
+        assert_eq!(
+            maya.pointer_modifier(POINTER_ORBIT_LEFT),
+            Mods2 {
+                alt: true,
+                ..Mods2::default()
+            },
+            "Maya-like navigation must be profile data, not a UI special case"
+        );
+        assert_eq!(
+            maya.pointer_modifier(POINTER_PAN),
+            Mods2 {
+                shift: true,
+                ..Mods2::default()
+            },
+            "profiles inherit canonical pointer actions unless they override them"
+        );
+    }
+
 }

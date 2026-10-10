@@ -294,14 +294,16 @@ export component InspectorPill inherits Rectangle {
     out property <bool> has-hover: pill-touch.has-hover;
     /// Incrementar move o foco de teclado para esta pílula (usado por F6).
     in property <int> focus-token: 0;
+    in property <bool> focus-enabled: true;
     callback clicked;
     callback hovered(string);
-    changed focus-token => { pill-focus.focus(); }
+    changed focus-token => { if root.focus-token > 0 { pill-focus.focus(); } }
 
     accessible-role: button;
     accessible-label: root.semantic-label;
     accessible-checked: root.active;
-    accessible-action-default => { root.clicked(); }
+    accessible-enabled: root.focus-enabled;
+    accessible-action-default => { if root.focus-enabled { root.clicked(); } }
     // 36 px: contrato do rail (ADR 004) e alvo de clique confortável.
     width: 36px;
     height: 36px;
@@ -324,6 +326,7 @@ export component InspectorPill inherits Rectangle {
 
     // Teclado: Tab foca a pílula (e abre o peek), Enter/Espaço fixa ou solta a seção.
     pill-focus := FocusScope {
+        enabled: root.focus-enabled;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
             reject
@@ -349,6 +352,7 @@ export component InspectorPill inherits Rectangle {
     }
 
     pill-touch := TouchArea {
+        enabled: root.focus-enabled;
         clicked => { root.clicked(); }
         changed has-hover => {
             if self.has-hover {
@@ -613,9 +617,28 @@ export component PartsBody inherits VerticalLayout {
             accessible-item-selectable: true;
             accessible-item-selected: item.selected;
             background: item.selected ? DesignTokens.surface-hover : transparent;
-            border-width: item.active ? 1px : 0px;
-            border-color: item.active ? DesignTokens.selection-active : DesignTokens.selection;
+            border-width: row-focus.has-focus ? 2px : (item.active ? 1px : 0px);
+            border-color: row-focus.has-focus ? DesignTokens.focus-ring : (item.active ? DesignTokens.selection-active : DesignTokens.selection);
             border-radius: 4px;
+            // Linha operável por teclado: Enter/Espaço seleciona; Shift+F10 ou a
+            // tecla Menu abrem o menu de contexto da linha (caminho sem pointer).
+            row-focus := FocusScope {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                key-pressed(event) => {
+                    if event.text == Key.Return || event.text == " " {
+                        root.scene-select(item.id, false);
+                        return accept;
+                    }
+                    if (event.text == Key.F10 && event.modifiers.shift) || event.text == Key.Menu {
+                        root.scene-context-requested(item.id, (self.absolute-position.x + 8px) / 1px, (self.absolute-position.y + self.height) / 1px);
+                        return accept;
+                    }
+                    reject
+                }
+            }
             HorizontalLayout {
                 padding-left: 6px;
                 padding-right: 4px;
@@ -630,7 +653,7 @@ export component PartsBody inherits VerticalLayout {
                             root.scene-context-requested(item.id, (self.absolute-position.x + self.mouse-x) / 1px, (self.absolute-position.y + self.mouse-y) / 1px);
                         }
                     }
-                    clicked => { root.scene-select(item.id, self.extend); }
+                    clicked => { row-focus.focus(); root.scene-select(item.id, self.extend); }
                     HorizontalLayout {
                         spacing: 5px;
                         alignment: center;

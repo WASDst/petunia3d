@@ -1,0 +1,368 @@
+{
+  "domains": [
+    {
+      "id": "reimplementation",
+      "title": "Reimplementação",
+      "files": [
+        {
+          "path": "17-reimplementation/index.md",
+          "title": "Acompanhamento e atualização de status"
+        }
+      ]
+    },
+    {
+      "id": "philosophy",
+      "title": "Filosofia",
+      "files": [
+        {
+          "path": "00-philosophy/refactor-principles.md",
+          "title": "Princípios da refatoração"
+        },
+        {
+          "path": "00-philosophy/code-quality.md",
+          "title": "Qualidade e estilo de código"
+        },
+        {
+          "path": "00-philosophy/decision-register.md",
+          "title": "Registro de decisões e escopo"
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "title": "Core",
+      "files": [
+        {
+          "path": "01-core/architecture-decision.md",
+          "title": "Decisão arquitetural"
+        },
+        {
+          "path": "01-core/current-code-triage.md",
+          "title": "Triagem do código atual"
+        },
+        {
+          "path": "01-core/camera-and-selection.md",
+          "title": "Câmera e seleção"
+        }
+      ]
+    },
+    {
+      "id": "application",
+      "title": "Application",
+      "files": [
+        {
+          "path": "02-application/architecture-decision.md",
+          "title": "Decisão arquitetural"
+        },
+        {
+          "path": "02-application/state-separation.md",
+          "title": "Separação de estado"
+        },
+        {
+          "path": "02-application/commands-events-services.md",
+          "title": "Commands, eventos e serviços"
+        }
+      ]
+    },
+    {
+      "id": "geometry",
+      "title": "Geometry",
+      "files": [
+        {
+          "path": "03-geometry/architecture-decision.md",
+          "title": "Decisão arquitetural"
+        },
+        {
+          "path": "03-geometry/uv-face-corners.md",
+          "title": "UV e Face Corners"
+        },
+        {
+          "path": "03-geometry/uv-migration-map.md",
+          "title": "Mapa de migração UV"
+        },
+        {
+          "path": "03-geometry/modeling-workspaces.md",
+          "title": "Workspaces de modelagem"
+        },
+        {
+          "path": "03-geometry/draw-unification-proposal.md",
+          "title": "DRAW / POLY — unificação aprovada"
+        },
+        {
+          "path": "03-geometry/shape-builder-3d.md",
+          "title": "Shape Builder 3D"
+        },
+        {
+          "path": "03-geometry/splines-planar-shapes.md",
+          "title": "Splines e Planar Shapes"
+        },
+        {
+          "path": "03-geometry/generators-redesign.md",
+          "title": "Redesign de Generators"
+        },
+        {
+          "path": "03-geometry/object-geometry-source.md",
+          "title": "Object e Geometry Source — aprovado"
+        },
+        {
+          "path": "03-geometry/scene-hierarchy-transforms.md",
+          "title": "Scene Hierarchy e Transforms — aprovado"
+        },
+        {
+          "path": "03-geometry/modifiers-evaluation.md",
+          "title": "Modifiers e Geometry Evaluation — aprovado"
+        },
+        {
+          "path": "03-geometry/snapping-inference-attachments.md",
+          "title": "Snapping, Inference e Surface Attachments — aprovado"
+        },
+        {
+          "path": "03-geometry/validation-repair-cleanup.md",
+          "title": "Validation, Repair e Cleanup — aprovado"
+        },
+        {
+          "path": "03-geometry/generators-implementation.md",
+          "title": "Generators — implementação detalhada"
+        },
+        {
+          "path": "03-geometry/normals-shading-sharp-edges.md",
+          "title": "Normals, Shading e Sharp Edges — aprovado"
+        },
+        {
+          "path": "03-geometry/snapping-inference-workplane.md",
+          "title": "Snapping, Inference e Workplane — aprovado"
+        },
+        {
+          "path": "03-geometry/direct-modeling-semantics.md",
+          "title": "Direct Modeling — aprovado"
+        },
+        {
+          "path": "03-geometry/transforms-origin-pivot-gizmos.md",
+          "title": "Transforms, Origin, Pivot & Gizmos — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "renderer",
+      "title": "Renderer",
+      "files": [
+        {
+          "path": "04-renderer/architecture-decision.md",
+          "title": "Arquitetura do Renderer — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "materials",
+      "title": "Materials & Textures",
+      "files": [
+        {
+          "path": "05-materials/architecture-decision.md",
+          "title": "Materials, Textures e Paint Binding — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "paint",
+      "title": "Paint",
+      "files": [
+        {
+          "path": "06-paint/architecture-decision.md",
+          "title": "Paint Architecture — aprovado"
+        },
+        {
+          "path": "06-paint/decals-animated-decals.md",
+          "title": "Decals e Animated Decals — aprovado"
+        },
+        {
+          "path": "06-paint/workspace-ux.md",
+          "title": "PAINT Workspace — UX e comportamento — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "uv",
+      "title": "UV Workspace",
+      "files": [
+        {
+          "path": "07-uv/architecture-decision.md",
+          "title": "UV Workspace e Editor — aprovado"
+        },
+        {
+          "path": "07-uv/workspace-ux.md",
+          "title": "UV Workspace — UX e comportamento — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "reference-projection",
+      "title": "Reference & Projection",
+      "files": [
+        {
+          "path": "08-reference-projection/architecture-decision.md",
+          "title": "Image Reference & Photo Projection — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "ui",
+      "title": "UI / UX",
+      "files": [
+        {
+          "path": "09-ui/slint-reassessment.md",
+          "title": "Slint Reassessment & GUI Architecture — aprovado"
+        },
+        {
+          "path": "09-ui/workspaces-feedback-accessibility.md",
+          "title": "Workspaces, Feedback Visual e Acessibilidade — aprovado"
+        },
+        {
+          "path": "09-ui/slint-rescue-plan.md",
+          "title": "Slint Rescue — plano incremental — em execução"
+        },
+        {
+          "path": "09-ui/viewport-input-boundary.md",
+          "title": "Viewport Input Boundary — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "animation",
+      "title": "Animation",
+      "files": [
+        {
+          "path": "10-animation/workspace-ux.md",
+          "title": "ANIMATE Workspace — UX e comportamento — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "title": "Project & Assets",
+      "files": [
+        {
+          "path": "11-project/project-persistence.md",
+          "title": "Project, Document, Save e Recovery — aprovado"
+        },
+        {
+          "path": "11-project/assets-resource-management.md",
+          "title": "Assets, Library e Recursos Compartilhados — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "interchange",
+      "title": "Import & Export",
+      "files": [
+        {
+          "path": "12-interchange/import-export-game-ready.md",
+          "title": "Import, Export e Game-Ready — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "extensions",
+      "title": "Plugins & Automation",
+      "files": [
+        {
+          "path": "13-extensions/lua-plugins-public-api.md",
+          "title": "Lua Plugins e Public API — aprovado"
+        },
+        {
+          "path": "13-extensions/mcp-automation-agents.md",
+          "title": "MCP, Automação e Agentes — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "quality",
+      "title": "Quality & Performance",
+      "files": [
+        {
+          "path": "14-quality/testing-ci-conformance.md",
+          "title": "Testing, CI e Conformance — aprovado"
+        },
+        {
+          "path": "14-quality/performance-jobs-budgets.md",
+          "title": "Performance, Jobs e Budgets — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "title": "Build & Distribution",
+      "files": [
+        {
+          "path": "15-platform/build-distribution-compatibility.md",
+          "title": "Build, Distribuição e Compatibilidade — aprovado"
+        }
+      ]
+    },
+    {
+      "id": "code-agents",
+      "title": "Code Agents & Prumo",
+      "files": [
+        {
+          "path": "16-code-agents/index.md",
+          "title": "Code Agents — Comece aqui"
+        },
+        {
+          "path": "16-code-agents/reading-navigation.md",
+          "title": "Leitura, autoridade e contexto progressivo"
+        },
+        {
+          "path": "16-code-agents/implementation-protocol.md",
+          "title": "Protocolo de implementação e gap matrix"
+        },
+        {
+          "path": "16-code-agents/domain-playbooks.md",
+          "title": "Playbooks por domínio Petunia3D"
+        },
+        {
+          "path": "16-code-agents/prompt-library.md",
+          "title": "Prompts de implementação e auditoria"
+        },
+        {
+          "path": "16-code-agents/agent-orchestration.md",
+          "title": "Orquestração, papéis e permissions"
+        },
+        {
+          "path": "16-code-agents/evidence-handoffs.md",
+          "title": "Evidências, status e handoffs"
+        },
+        {
+          "path": "16-code-agents/workforce-index.md",
+          "title": "Prumo Workforce — catálogo completo"
+        },
+        {
+          "path": "16-code-agents/agents-catalog.md",
+          "title": "Prumo — 39 Agents com links"
+        },
+        {
+          "path": "16-code-agents/skills-foundations.md",
+          "title": "Prumo Skills — Engenharia e Documentação"
+        },
+        {
+          "path": "16-code-agents/skills-experience.md",
+          "title": "Prumo Skills — Acessibilidade, Neurodivergência e UX"
+        },
+        {
+          "path": "16-code-agents/skills-engine-graphics.md",
+          "title": "Prumo Skills — Editor, Engine e Render"
+        },
+        {
+          "path": "16-code-agents/skills-security-delivery.md",
+          "title": "Prumo Skills — Segurança e Privacidade"
+        },
+        {
+          "path": "16-code-agents/skills-languages-specialized.md",
+          "title": "Prumo Skills — Linguagens e Especialidades"
+        },
+        {
+          "path": "16-code-agents/recipes-catalog.md",
+          "title": "Prumo — 20 Recipes com links"
+        }
+      ]
+    }
+  ]
+}

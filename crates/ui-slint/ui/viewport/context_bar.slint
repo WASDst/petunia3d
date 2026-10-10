@@ -1,0 +1,37 @@
+import { RegionFocusAnchor } from "../shell/focus_anchor.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
+
+/// Moldura da barra contextual da viewport.
+/// O conteúdo continua no workspace durante a migração e entra via @children.
+export component ContextBar inherits Rectangle {
+    in property <int> region-focus-token: 0;
+    in property <bool> region-focus-enabled: true;
+    // A posição depende do parent no chamador, não existe parent no root do componente.
+    width: bar-row.preferred-width + 16px;
+    height: 40px;
+    border-radius: 10px;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+    RegionFocusAnchor {
+        width: root.width;
+        height: root.height;
+        label: Tr.t("sl.region_context");
+        focus-token: root.region-focus-token;
+        enabled: root.region-focus-enabled;
+    }
+
+    bar-row := HorizontalLayout {
+        x: 8px;
+        y: 4px;
+        width: self.preferred-width;
+        height: self.preferred-height;
+        spacing: 4px;
+        alignment: center;
+        @children
+    }
+}

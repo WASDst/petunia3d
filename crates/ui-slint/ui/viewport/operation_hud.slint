@@ -1,0 +1,37 @@
+import { DesignTokens } from "../tokens.slint";
+
+/// Projeta estado do shell; não cria outro owner de domínio.
+export component ViewportOperationHud inherits VerticalLayout {
+    in property <string> operation-hud-hint;
+    in property <[string]> operation-hud-lines;
+    in property <string> operation-hud-subject;
+
+    spacing: 8px;
+    alignment: start;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: center;
+        Text {
+            text: root.operation-hud-subject;
+            color: DesignTokens.accent;
+            font-size: DesignTokens.font-small;
+            font-weight: 700;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+    for line in root.operation-hud-lines: Text {
+        text: line;
+        color: DesignTokens.text-primary;
+        font-size: DesignTokens.font-default;
+        font-weight: 600;
+        font-family: "monospace";
+    }
+    if root.operation-hud-hint != "": Text {
+        text: root.operation-hud-hint;
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-caption;
+        wrap: word-wrap;
+    }
+}

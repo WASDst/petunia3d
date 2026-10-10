@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - refactor/architecture-foundation
     paths:
       - 'crates/ui-slint/**'
       - 'crates/xtask/**'
@@ -106,9 +107,10 @@ jobs:
       # Com a feature, a lib e o harness `--lib` de `petunia_ui_slint` são
       # recompilados ao mesmo tempo; um job por vez mantém o pico de memória
       # em uma instância do rustc.
-      - name: Integration tests (Animate workspace + viewport gestures)
+      - name: Integration tests (workspace shells + viewport gestures)
         env:
           CARGO_BUILD_JOBS: 1
         run: >
           cargo test -p petunia_ui_slint --features animation-workspace
           --lib --test animate_shell --test viewport_gestures
+          --test model_shell --test uv_shell --test paint_shell --test viewport_hud --test shell_focus --test inspector_split --test workspace_drawer

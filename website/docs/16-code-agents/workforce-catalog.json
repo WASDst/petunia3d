@@ -1,0 +1,1699 @@
+{
+  "source": {
+    "repository": "poppy-lat/prumo",
+    "url": "https://github.com/poppy-lat/prumo",
+    "git_tree_sha": "e213260c99d22c89bf31890ec595a89725031c71",
+    "branch": "main",
+    "date": "2026-10-08",
+    "workforce_root": "src/prumo/resources/workforce",
+    "commit_sha": "e213260c99d22c89bf31890ec595a89725031c71"
+  },
+  "counts": {
+    "agents": 39,
+    "skills": 189,
+    "recipes": 20
+  },
+  "agents": [
+    {
+      "id": "accessibility-reviewer",
+      "source_file": "src/prumo/resources/workforce/agents/accessibility-reviewer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/accessibility-reviewer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/accessibility-reviewer/manifest.json"
+    },
+    {
+      "id": "advertising-designer",
+      "source_file": "src/prumo/resources/workforce/agents/advertising-designer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/advertising-designer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/advertising-designer/manifest.json"
+    },
+    {
+      "id": "architect",
+      "source_file": "src/prumo/resources/workforce/agents/architect/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/architect/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/architect/manifest.json"
+    },
+    {
+      "id": "backend-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/backend-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/backend-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/backend-engineer/manifest.json"
+    },
+    {
+      "id": "brand-designer",
+      "source_file": "src/prumo/resources/workforce/agents/brand-designer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/brand-designer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/brand-designer/manifest.json"
+    },
+    {
+      "id": "compiler-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/compiler-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/compiler-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/compiler-engineer/manifest.json"
+    },
+    {
+      "id": "creative-director",
+      "source_file": "src/prumo/resources/workforce/agents/creative-director/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/creative-director/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/creative-director/manifest.json"
+    },
+    {
+      "id": "database-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/database-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/database-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/database-engineer/manifest.json"
+    },
+    {
+      "id": "debugger",
+      "source_file": "src/prumo/resources/workforce/agents/debugger/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/debugger/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/debugger/manifest.json"
+    },
+    {
+      "id": "design-researcher",
+      "source_file": "src/prumo/resources/workforce/agents/design-researcher/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/design-researcher/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/design-researcher/manifest.json"
+    },
+    {
+      "id": "design-system-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/design-system-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/design-system-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/design-system-engineer/manifest.json"
+    },
+    {
+      "id": "devops-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/devops-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/devops-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/devops-engineer/manifest.json"
+    },
+    {
+      "id": "documentation-maintainer",
+      "source_file": "src/prumo/resources/workforce/agents/documentation-maintainer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/documentation-maintainer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/documentation-maintainer/manifest.json"
+    },
+    {
+      "id": "editor-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/editor-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/editor-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/editor-engineer/manifest.json"
+    },
+    {
+      "id": "engine-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/engine-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/engine-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/engine-engineer/manifest.json"
+    },
+    {
+      "id": "explorer",
+      "source_file": "src/prumo/resources/workforce/agents/explorer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/explorer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/explorer/manifest.json"
+    },
+    {
+      "id": "frontend-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/frontend-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/frontend-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/frontend-engineer/manifest.json"
+    },
+    {
+      "id": "implementer",
+      "source_file": "src/prumo/resources/workforce/agents/implementer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/implementer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/implementer/manifest.json"
+    },
+    {
+      "id": "isolation-auditor",
+      "source_file": "src/prumo/resources/workforce/agents/isolation-auditor/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/isolation-auditor/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/isolation-auditor/manifest.json"
+    },
+    {
+      "id": "issue-author",
+      "source_file": "src/prumo/resources/workforce/agents/issue-author/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/issue-author/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/issue-author/manifest.json"
+    },
+    {
+      "id": "issue-triager",
+      "source_file": "src/prumo/resources/workforce/agents/issue-triager/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/issue-triager/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/issue-triager/manifest.json"
+    },
+    {
+      "id": "motion-designer",
+      "source_file": "src/prumo/resources/workforce/agents/motion-designer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/motion-designer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/motion-designer/manifest.json"
+    },
+    {
+      "id": "networking-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/networking-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/networking-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/networking-engineer/manifest.json"
+    },
+    {
+      "id": "performance-agent",
+      "source_file": "src/prumo/resources/workforce/agents/performance-agent/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/performance-agent/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/performance-agent/manifest.json"
+    },
+    {
+      "id": "prototyper",
+      "source_file": "src/prumo/resources/workforce/agents/prototyper/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/prototyper/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/prototyper/manifest.json"
+    },
+    {
+      "id": "quality-reviewer",
+      "source_file": "src/prumo/resources/workforce/agents/quality-reviewer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/quality-reviewer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/quality-reviewer/manifest.json"
+    },
+    {
+      "id": "release-verifier",
+      "source_file": "src/prumo/resources/workforce/agents/release-verifier/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/release-verifier/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/release-verifier/manifest.json"
+    },
+    {
+      "id": "renderer-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/renderer-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/renderer-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/renderer-engineer/manifest.json"
+    },
+    {
+      "id": "reviewer",
+      "source_file": "src/prumo/resources/workforce/agents/reviewer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/reviewer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/reviewer/manifest.json"
+    },
+    {
+      "id": "scientific-computing-agent",
+      "source_file": "src/prumo/resources/workforce/agents/scientific-computing-agent/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/scientific-computing-agent/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/scientific-computing-agent/manifest.json"
+    },
+    {
+      "id": "security-architect",
+      "source_file": "src/prumo/resources/workforce/agents/security-architect/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/security-architect/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/security-architect/manifest.json"
+    },
+    {
+      "id": "security-reviewer",
+      "source_file": "src/prumo/resources/workforce/agents/security-reviewer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/security-reviewer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/security-reviewer/manifest.json"
+    },
+    {
+      "id": "svg-artist",
+      "source_file": "src/prumo/resources/workforce/agents/svg-artist/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/svg-artist/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/svg-artist/manifest.json"
+    },
+    {
+      "id": "systems-architect",
+      "source_file": "src/prumo/resources/workforce/agents/systems-architect/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/systems-architect/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/systems-architect/manifest.json"
+    },
+    {
+      "id": "technology-decision-agent",
+      "source_file": "src/prumo/resources/workforce/agents/technology-decision-agent/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/technology-decision-agent/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/technology-decision-agent/manifest.json"
+    },
+    {
+      "id": "tester",
+      "source_file": "src/prumo/resources/workforce/agents/tester/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/tester/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/tester/manifest.json"
+    },
+    {
+      "id": "ui-component-engineer",
+      "source_file": "src/prumo/resources/workforce/agents/ui-component-engineer/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/ui-component-engineer/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/ui-component-engineer/manifest.json"
+    },
+    {
+      "id": "ux-architect",
+      "source_file": "src/prumo/resources/workforce/agents/ux-architect/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/ux-architect/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/ux-architect/manifest.json"
+    },
+    {
+      "id": "visual-identity-auditor",
+      "source_file": "src/prumo/resources/workforce/agents/visual-identity-auditor/AGENT.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/visual-identity-auditor/AGENT.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/agents/visual-identity-auditor/manifest.json"
+    }
+  ],
+  "skills": [
+    {
+      "id": "accessibility",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/accessibility/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/accessibility/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/accessibility/manifest.json"
+    },
+    {
+      "id": "acp-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/acp-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/acp-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/acp-security/manifest.json"
+    },
+    {
+      "id": "advertising-design",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/advertising-design/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/advertising-design/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/advertising-design/manifest.json"
+    },
+    {
+      "id": "aesthetic-analysis",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/aesthetic-analysis/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/aesthetic-analysis/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/aesthetic-analysis/manifest.json"
+    },
+    {
+      "id": "agentic-workflow-design",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/agentic-workflow-design/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/agentic-workflow-design/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/agentic-workflow-design/manifest.json"
+    },
+    {
+      "id": "api-contract-testing",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/api-contract-testing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/api-contract-testing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/api-contract-testing/manifest.json"
+    },
+    {
+      "id": "api-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/api-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/api-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/api-security/manifest.json"
+    },
+    {
+      "id": "applied-mathematics-dsp",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/applied-mathematics-dsp/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/applied-mathematics-dsp/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/applied-mathematics-dsp/manifest.json"
+    },
+    {
+      "id": "architecture-quality",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/architecture-quality/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/architecture-quality/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/architecture-quality/manifest.json"
+    },
+    {
+      "id": "asset-pipeline",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/asset-pipeline/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/asset-pipeline/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/asset-pipeline/manifest.json"
+    },
+    {
+      "id": "asset-reference-research",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/asset-reference-research/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/asset-reference-research/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/asset-reference-research/manifest.json"
+    },
+    {
+      "id": "ast-transformation",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/ast-transformation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ast-transformation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ast-transformation/manifest.json"
+    },
+    {
+      "id": "audio-engineering",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/audio-engineering/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/audio-engineering/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/audio-engineering/manifest.json"
+    },
+    {
+      "id": "auth-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/auth-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/auth-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/auth-security/manifest.json"
+    },
+    {
+      "id": "backend-api",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/backend-api/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/backend-api/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/backend-api/manifest.json"
+    },
+    {
+      "id": "benchmarking",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/benchmarking/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/benchmarking/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/benchmarking/manifest.json"
+    },
+    {
+      "id": "binary-security-mitigations",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/binary-security-mitigations/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/binary-security-mitigations/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/binary-security-mitigations/manifest.json"
+    },
+    {
+      "id": "brand-identity",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/brand-identity/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/brand-identity/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/brand-identity/manifest.json"
+    },
+    {
+      "id": "bytecode-vm-architecture",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/bytecode-vm-architecture/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/bytecode-vm-architecture/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/bytecode-vm-architecture/manifest.json"
+    },
+    {
+      "id": "caching",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/caching/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/caching/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/caching/manifest.json"
+    },
+    {
+      "id": "ci-cd",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/ci-cd/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ci-cd/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ci-cd/manifest.json"
+    },
+    {
+      "id": "clang-context-indexing",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/clang-context-indexing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/clang-context-indexing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/clang-context-indexing/manifest.json"
+    },
+    {
+      "id": "clean-code",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/clean-code/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/clean-code/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/clean-code/manifest.json"
+    },
+    {
+      "id": "code-quality",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/code-quality/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/code-quality/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/code-quality/manifest.json"
+    },
+    {
+      "id": "code-review",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/code-review/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/code-review/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/code-review/manifest.json"
+    },
+    {
+      "id": "cognitive-clarity",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/cognitive-clarity/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/cognitive-clarity/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/cognitive-clarity/manifest.json"
+    },
+    {
+      "id": "color-science",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/color-science/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/color-science/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/color-science/manifest.json"
+    },
+    {
+      "id": "competitor-analysis",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/competitor-analysis/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/competitor-analysis/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/competitor-analysis/manifest.json"
+    },
+    {
+      "id": "compiler-development",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/compiler-development/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/compiler-development/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/compiler-development/manifest.json"
+    },
+    {
+      "id": "compiler-frontend-engineering",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/compiler-frontend-engineering/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/compiler-frontend-engineering/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/compiler-frontend-engineering/manifest.json"
+    },
+    {
+      "id": "compiler-ir-optimization",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/compiler-ir-optimization/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/compiler-ir-optimization/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/compiler-ir-optimization/manifest.json"
+    },
+    {
+      "id": "component-specification",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/component-specification/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/component-specification/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/component-specification/manifest.json"
+    },
+    {
+      "id": "computational-chemistry-materials",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/computational-chemistry-materials/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/computational-chemistry-materials/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/computational-chemistry-materials/manifest.json"
+    },
+    {
+      "id": "computational-physics",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/computational-physics/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/computational-physics/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/computational-physics/manifest.json"
+    },
+    {
+      "id": "concurrency-quality",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/concurrency-quality/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/concurrency-quality/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/concurrency-quality/manifest.json"
+    },
+    {
+      "id": "containers",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/containers/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/containers/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/containers/manifest.json"
+    },
+    {
+      "id": "context-optimization",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/context-optimization/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/context-optimization/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/context-optimization/manifest.json"
+    },
+    {
+      "id": "contrast",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/contrast/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/contrast/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/contrast/manifest.json"
+    },
+    {
+      "id": "database-review",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/database-review/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/database-review/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/database-review/manifest.json"
+    },
+    {
+      "id": "dependency-management",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/dependency-management/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/dependency-management/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/dependency-management/manifest.json"
+    },
+    {
+      "id": "design-critique",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/design-critique/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-critique/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-critique/manifest.json"
+    },
+    {
+      "id": "design-psychology",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/design-psychology/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-psychology/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-psychology/manifest.json"
+    },
+    {
+      "id": "design-research",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/design-research/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-research/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-research/manifest.json"
+    },
+    {
+      "id": "design-system",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/design-system/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-system/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-system/manifest.json"
+    },
+    {
+      "id": "design-tokens",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/design-tokens/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-tokens/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/design-tokens/manifest.json"
+    },
+    {
+      "id": "desktop-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/desktop-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/desktop-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/desktop-security/manifest.json"
+    },
+    {
+      "id": "documentation",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/documentation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/documentation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/documentation/manifest.json"
+    },
+    {
+      "id": "documentation-for-llms",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/documentation-for-llms/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/documentation-for-llms/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/documentation-for-llms/manifest.json"
+    },
+    {
+      "id": "documentation-publishing",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/documentation-publishing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/documentation-publishing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/documentation-publishing/manifest.json"
+    },
+    {
+      "id": "editor-tooling",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/editor-tooling/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/editor-tooling/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/editor-tooling/manifest.json"
+    },
+    {
+      "id": "error-handling",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/error-handling/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/error-handling/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/error-handling/manifest.json"
+    },
+    {
+      "id": "filesystem-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/filesystem-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/filesystem-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/filesystem-security/manifest.json"
+    },
+    {
+      "id": "focus-management",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/focus-management/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/focus-management/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/focus-management/manifest.json"
+    },
+    {
+      "id": "frontend-web",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/frontend-web/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/frontend-web/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/frontend-web/manifest.json"
+    },
+    {
+      "id": "fuzz-grammar-testing",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/fuzz-grammar-testing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/fuzz-grammar-testing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/fuzz-grammar-testing/manifest.json"
+    },
+    {
+      "id": "game-engine-architecture",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/game-engine-architecture/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/game-engine-architecture/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/game-engine-architecture/manifest.json"
+    },
+    {
+      "id": "game-runtime",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/game-runtime/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/game-runtime/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/game-runtime/manifest.json"
+    },
+    {
+      "id": "game-ui-testing",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/game-ui-testing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/game-ui-testing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/game-ui-testing/manifest.json"
+    },
+    {
+      "id": "generative-svg-art",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/generative-svg-art/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/generative-svg-art/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/generative-svg-art/manifest.json"
+    },
+    {
+      "id": "git-workflow",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/git-workflow/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/git-workflow/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/git-workflow/manifest.json"
+    },
+    {
+      "id": "github-ci-debug",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-ci-debug/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-ci-debug/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-ci-debug/manifest.json"
+    },
+    {
+      "id": "github-issue-create",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-issue-create/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-issue-create/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-issue-create/manifest.json"
+    },
+    {
+      "id": "github-issue-refine",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-issue-refine/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-issue-refine/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-issue-refine/manifest.json"
+    },
+    {
+      "id": "github-issue-triage",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-issue-triage/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-issue-triage/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-issue-triage/manifest.json"
+    },
+    {
+      "id": "github-pr-create",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-pr-create/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-pr-create/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-pr-create/manifest.json"
+    },
+    {
+      "id": "github-pr-feedback",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-pr-feedback/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-pr-feedback/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-pr-feedback/manifest.json"
+    },
+    {
+      "id": "github-pr-review",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-pr-review/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-pr-review/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-pr-review/manifest.json"
+    },
+    {
+      "id": "github-release",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-release/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-release/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-release/manifest.json"
+    },
+    {
+      "id": "github-repository",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/github-repository/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-repository/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/github-repository/manifest.json"
+    },
+    {
+      "id": "goal-management",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/goal-management/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/goal-management/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/goal-management/manifest.json"
+    },
+    {
+      "id": "grounded-implementation",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/grounded-implementation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/grounded-implementation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/grounded-implementation/manifest.json"
+    },
+    {
+      "id": "icon-system",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/icon-system/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/icon-system/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/icon-system/manifest.json"
+    },
+    {
+      "id": "implementation-reality-verification",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/implementation-reality-verification/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/implementation-reality-verification/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/implementation-reality-verification/manifest.json"
+    },
+    {
+      "id": "information-architecture",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/information-architecture/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/information-architecture/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/information-architecture/manifest.json"
+    },
+    {
+      "id": "input-handling",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/input-handling/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/input-handling/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/input-handling/manifest.json"
+    },
+    {
+      "id": "interaction-design",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/interaction-design/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/interaction-design/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/interaction-design/manifest.json"
+    },
+    {
+      "id": "interaction-research",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/interaction-research/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/interaction-research/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/interaction-research/manifest.json"
+    },
+    {
+      "id": "keyboard-accessibility",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/keyboard-accessibility/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/keyboard-accessibility/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/keyboard-accessibility/manifest.json"
+    },
+    {
+      "id": "lang-asm",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-asm/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-asm/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-asm/manifest.json"
+    },
+    {
+      "id": "lang-bash",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-bash/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-bash/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-bash/manifest.json"
+    },
+    {
+      "id": "lang-c",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-c/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-c/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-c/manifest.json"
+    },
+    {
+      "id": "lang-c3",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-c3/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-c3/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-c3/manifest.json"
+    },
+    {
+      "id": "lang-cpp",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-cpp/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-cpp/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-cpp/manifest.json"
+    },
+    {
+      "id": "lang-csharp",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-csharp/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-csharp/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-csharp/manifest.json"
+    },
+    {
+      "id": "lang-css",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-css/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-css/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-css/manifest.json"
+    },
+    {
+      "id": "lang-d",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-d/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-d/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-d/manifest.json"
+    },
+    {
+      "id": "lang-dart",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-dart/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-dart/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-dart/manifest.json"
+    },
+    {
+      "id": "lang-dockerfile",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-dockerfile/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-dockerfile/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-dockerfile/manifest.json"
+    },
+    {
+      "id": "lang-elixir",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-elixir/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-elixir/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-elixir/manifest.json"
+    },
+    {
+      "id": "lang-glsl",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-glsl/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-glsl/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-glsl/manifest.json"
+    },
+    {
+      "id": "lang-go",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-go/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-go/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-go/manifest.json"
+    },
+    {
+      "id": "lang-graphql",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-graphql/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-graphql/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-graphql/manifest.json"
+    },
+    {
+      "id": "lang-hlsl",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-hlsl/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-hlsl/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-hlsl/manifest.json"
+    },
+    {
+      "id": "lang-html",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-html/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-html/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-html/manifest.json"
+    },
+    {
+      "id": "lang-java",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-java/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-java/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-java/manifest.json"
+    },
+    {
+      "id": "lang-javascript",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-javascript/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-javascript/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-javascript/manifest.json"
+    },
+    {
+      "id": "lang-json",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-json/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-json/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-json/manifest.json"
+    },
+    {
+      "id": "lang-kotlin",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-kotlin/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-kotlin/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-kotlin/manifest.json"
+    },
+    {
+      "id": "lang-lua",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-lua/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-lua/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-lua/manifest.json"
+    },
+    {
+      "id": "lang-odin",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-odin/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-odin/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-odin/manifest.json"
+    },
+    {
+      "id": "lang-php",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-php/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-php/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-php/manifest.json"
+    },
+    {
+      "id": "lang-python",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-python/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-python/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-python/manifest.json"
+    },
+    {
+      "id": "lang-ruby",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-ruby/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-ruby/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-ruby/manifest.json"
+    },
+    {
+      "id": "lang-rust",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-rust/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-rust/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-rust/manifest.json"
+    },
+    {
+      "id": "lang-sql",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-sql/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-sql/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-sql/manifest.json"
+    },
+    {
+      "id": "lang-swift",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-swift/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-swift/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-swift/manifest.json"
+    },
+    {
+      "id": "lang-terraform",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-terraform/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-terraform/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-terraform/manifest.json"
+    },
+    {
+      "id": "lang-typescript",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-typescript/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-typescript/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-typescript/manifest.json"
+    },
+    {
+      "id": "lang-wgsl",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-wgsl/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-wgsl/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-wgsl/manifest.json"
+    },
+    {
+      "id": "lang-yaml",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-yaml/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-yaml/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-yaml/manifest.json"
+    },
+    {
+      "id": "lang-zig",
+      "category": "Linguagens e formatos específicos",
+      "source_file": "src/prumo/resources/workforce/skills/lang-zig/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-zig/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lang-zig/manifest.json"
+    },
+    {
+      "id": "language-tooling",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/language-tooling/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/language-tooling/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/language-tooling/manifest.json"
+    },
+    {
+      "id": "layout-patterns",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/layout-patterns/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/layout-patterns/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/layout-patterns/manifest.json"
+    },
+    {
+      "id": "lean-progressive-context",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/lean-progressive-context/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lean-progressive-context/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/lean-progressive-context/manifest.json"
+    },
+    {
+      "id": "linux-kernel-isolation",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/linux-kernel-isolation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/linux-kernel-isolation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/linux-kernel-isolation/manifest.json"
+    },
+    {
+      "id": "marketing-collateral",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/marketing-collateral/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/marketing-collateral/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/marketing-collateral/manifest.json"
+    },
+    {
+      "id": "mcp-integration",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/mcp-integration/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/mcp-integration/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/mcp-integration/manifest.json"
+    },
+    {
+      "id": "mcp-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/mcp-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/mcp-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/mcp-security/manifest.json"
+    },
+    {
+      "id": "mcp-tooling",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/mcp-tooling/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/mcp-tooling/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/mcp-tooling/manifest.json"
+    },
+    {
+      "id": "memory-management",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/memory-management/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/memory-management/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/memory-management/manifest.json"
+    },
+    {
+      "id": "memory-safety-sanitizers",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/memory-safety-sanitizers/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/memory-safety-sanitizers/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/memory-safety-sanitizers/manifest.json"
+    },
+    {
+      "id": "motion-accessibility",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/motion-accessibility/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/motion-accessibility/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/motion-accessibility/manifest.json"
+    },
+    {
+      "id": "motion-library",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/motion-library/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/motion-library/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/motion-library/manifest.json"
+    },
+    {
+      "id": "multiplayer-networking",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/multiplayer-networking/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/multiplayer-networking/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/multiplayer-networking/manifest.json"
+    },
+    {
+      "id": "network-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/network-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/network-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/network-security/manifest.json"
+    },
+    {
+      "id": "network-testing",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/network-testing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/network-testing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/network-testing/manifest.json"
+    },
+    {
+      "id": "observability",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/observability/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/observability/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/observability/manifest.json"
+    },
+    {
+      "id": "orchestration-multi-agent",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/orchestration-multi-agent/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/orchestration-multi-agent/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/orchestration-multi-agent/manifest.json"
+    },
+    {
+      "id": "performance-native",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/performance-native/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/performance-native/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/performance-native/manifest.json"
+    },
+    {
+      "id": "performance-web",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/performance-web/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/performance-web/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/performance-web/manifest.json"
+    },
+    {
+      "id": "physics-collision",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/physics-collision/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/physics-collision/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/physics-collision/manifest.json"
+    },
+    {
+      "id": "physics-testing",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/physics-testing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/physics-testing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/physics-testing/manifest.json"
+    },
+    {
+      "id": "playtest-automation",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/playtest-automation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/playtest-automation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/playtest-automation/manifest.json"
+    },
+    {
+      "id": "playwright-ui",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/playwright-ui/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/playwright-ui/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/playwright-ui/manifest.json"
+    },
+    {
+      "id": "plugin-architecture",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/plugin-architecture/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/plugin-architecture/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/plugin-architecture/manifest.json"
+    },
+    {
+      "id": "plugin-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/plugin-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/plugin-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/plugin-security/manifest.json"
+    },
+    {
+      "id": "process-execution-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/process-execution-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/process-execution-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/process-execution-security/manifest.json"
+    },
+    {
+      "id": "project-documentation-architect",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/project-documentation-architect/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/project-documentation-architect/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/project-documentation-architect/manifest.json"
+    },
+    {
+      "id": "project-intelligence",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/project-intelligence/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/project-intelligence/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/project-intelligence/manifest.json"
+    },
+    {
+      "id": "prompt-engineering",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/prompt-engineering/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/prompt-engineering/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/prompt-engineering/manifest.json"
+    },
+    {
+      "id": "prototyping",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/prototyping/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/prototyping/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/prototyping/manifest.json"
+    },
+    {
+      "id": "prumo-navigation",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/prumo-navigation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/prumo-navigation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/prumo-navigation/manifest.json"
+    },
+    {
+      "id": "realtime-audio-dsp",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/realtime-audio-dsp/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/realtime-audio-dsp/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/realtime-audio-dsp/manifest.json"
+    },
+    {
+      "id": "realtime-synchronization",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/realtime-synchronization/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/realtime-synchronization/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/realtime-synchronization/manifest.json"
+    },
+    {
+      "id": "refactoring",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/refactoring/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/refactoring/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/refactoring/manifest.json"
+    },
+    {
+      "id": "release-engineering",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/release-engineering/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/release-engineering/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/release-engineering/manifest.json"
+    },
+    {
+      "id": "rendering-2d",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/rendering-2d/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rendering-2d/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rendering-2d/manifest.json"
+    },
+    {
+      "id": "rendering-3d",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/rendering-3d/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rendering-3d/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rendering-3d/manifest.json"
+    },
+    {
+      "id": "responsive-design",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/responsive-design/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/responsive-design/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/responsive-design/manifest.json"
+    },
+    {
+      "id": "roslyn-context-indexing",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/roslyn-context-indexing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/roslyn-context-indexing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/roslyn-context-indexing/manifest.json"
+    },
+    {
+      "id": "rpc-protocols",
+      "category": "Infraestrutura, pesquisa e ferramentas complementares",
+      "source_file": "src/prumo/resources/workforce/skills/rpc-protocols/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rpc-protocols/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rpc-protocols/manifest.json"
+    },
+    {
+      "id": "runtime-memory-gc",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/runtime-memory-gc/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/runtime-memory-gc/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/runtime-memory-gc/manifest.json"
+    },
+    {
+      "id": "rust-analyzer-context-indexing",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/rust-analyzer-context-indexing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rust-analyzer-context-indexing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/rust-analyzer-context-indexing/manifest.json"
+    },
+    {
+      "id": "scene-graph",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/scene-graph/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/scene-graph/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/scene-graph/manifest.json"
+    },
+    {
+      "id": "screen-reader",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/screen-reader/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/screen-reader/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/screen-reader/manifest.json"
+    },
+    {
+      "id": "secrets-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/secrets-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/secrets-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/secrets-security/manifest.json"
+    },
+    {
+      "id": "secure-coding",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/secure-coding/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/secure-coding/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/secure-coding/manifest.json"
+    },
+    {
+      "id": "security-agent-mcp",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/security-agent-mcp/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-agent-mcp/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-agent-mcp/manifest.json"
+    },
+    {
+      "id": "security-authz-matrix",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/security-authz-matrix/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-authz-matrix/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-authz-matrix/manifest.json"
+    },
+    {
+      "id": "security-review",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/security-review/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-review/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-review/manifest.json"
+    },
+    {
+      "id": "security-saas-isolation",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/security-saas-isolation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-saas-isolation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-saas-isolation/manifest.json"
+    },
+    {
+      "id": "security-threat-model",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/security-threat-model/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-threat-model/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/security-threat-model/manifest.json"
+    },
+    {
+      "id": "serialization",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/serialization/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/serialization/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/serialization/manifest.json"
+    },
+    {
+      "id": "shaders",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/shaders/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/shaders/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/shaders/manifest.json"
+    },
+    {
+      "id": "state-management",
+      "category": "Editor, engine, renderer e multimídia",
+      "source_file": "src/prumo/resources/workforce/skills/state-management/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/state-management/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/state-management/manifest.json"
+    },
+    {
+      "id": "supply-chain-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/supply-chain-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/supply-chain-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/supply-chain-security/manifest.json"
+    },
+    {
+      "id": "surface-protocol-conformance",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/surface-protocol-conformance/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/surface-protocol-conformance/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/surface-protocol-conformance/manifest.json"
+    },
+    {
+      "id": "svg-engineering",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/svg-engineering/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/svg-engineering/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/svg-engineering/manifest.json"
+    },
+    {
+      "id": "testing-quality",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/testing-quality/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/testing-quality/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/testing-quality/manifest.json"
+    },
+    {
+      "id": "threat-modeling",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/threat-modeling/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/threat-modeling/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/threat-modeling/manifest.json"
+    },
+    {
+      "id": "traycer-orchestration",
+      "category": "Documentação, agentes e fluxo de entrega",
+      "source_file": "src/prumo/resources/workforce/skills/traycer-orchestration/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/traycer-orchestration/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/traycer-orchestration/manifest.json"
+    },
+    {
+      "id": "tree-sitter-context-indexing",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/tree-sitter-context-indexing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/tree-sitter-context-indexing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/tree-sitter-context-indexing/manifest.json"
+    },
+    {
+      "id": "ts-morph-context-indexing",
+      "category": "Compiladores e infraestrutura de linguagens",
+      "source_file": "src/prumo/resources/workforce/skills/ts-morph-context-indexing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ts-morph-context-indexing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ts-morph-context-indexing/manifest.json"
+    },
+    {
+      "id": "type-system-theory",
+      "category": "Arquitetura, código, testes e performance",
+      "source_file": "src/prumo/resources/workforce/skills/type-system-theory/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/type-system-theory/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/type-system-theory/manifest.json"
+    },
+    {
+      "id": "typography-system",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/typography-system/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/typography-system/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/typography-system/manifest.json"
+    },
+    {
+      "id": "ui-implementation",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/ui-implementation/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ui-implementation/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ui-implementation/manifest.json"
+    },
+    {
+      "id": "ui-ux-review",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/ui-ux-review/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ui-ux-review/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ui-ux-review/manifest.json"
+    },
+    {
+      "id": "untrusted-project-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/untrusted-project-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/untrusted-project-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/untrusted-project-security/manifest.json"
+    },
+    {
+      "id": "user-flows",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/user-flows/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/user-flows/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/user-flows/manifest.json"
+    },
+    {
+      "id": "ux-architecture",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/ux-architecture/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ux-architecture/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/ux-architecture/manifest.json"
+    },
+    {
+      "id": "visual-communication",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/visual-communication/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-communication/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-communication/manifest.json"
+    },
+    {
+      "id": "visual-qa",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/visual-qa/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-qa/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-qa/manifest.json"
+    },
+    {
+      "id": "visual-reference-research",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/visual-reference-research/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-reference-research/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-reference-research/manifest.json"
+    },
+    {
+      "id": "visual-regression",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/visual-regression/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-regression/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/visual-regression/manifest.json"
+    },
+    {
+      "id": "web-security",
+      "category": "Segurança, privacidade e limites de confiança",
+      "source_file": "src/prumo/resources/workforce/skills/web-security/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/web-security/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/web-security/manifest.json"
+    },
+    {
+      "id": "website-forensics",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/website-forensics/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/website-forensics/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/website-forensics/manifest.json"
+    },
+    {
+      "id": "wireframe-styleguide",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/wireframe-styleguide/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/wireframe-styleguide/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/wireframe-styleguide/manifest.json"
+    },
+    {
+      "id": "wireframing",
+      "category": "Design, UX, identidade e comunicação visual",
+      "source_file": "src/prumo/resources/workforce/skills/wireframing/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/wireframing/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/wireframing/manifest.json"
+    },
+    {
+      "id": "zoom-reflow",
+      "category": "Acessibilidade, cognição e neurodivergência",
+      "source_file": "src/prumo/resources/workforce/skills/zoom-reflow/SKILL.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/zoom-reflow/SKILL.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/skills/zoom-reflow/manifest.json"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "architecture-change",
+      "source_file": "src/prumo/resources/workforce/recipes/architecture-change/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/architecture-change/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/architecture-change/recipe.json"
+    },
+    {
+      "id": "brand-creation",
+      "source_file": "src/prumo/resources/workforce/recipes/brand-creation/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/brand-creation/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/brand-creation/recipe.json"
+    },
+    {
+      "id": "bug-fix",
+      "source_file": "src/prumo/resources/workforce/recipes/bug-fix/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/bug-fix/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/bug-fix/recipe.json"
+    },
+    {
+      "id": "compiler-change",
+      "source_file": "src/prumo/resources/workforce/recipes/compiler-change/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/compiler-change/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/compiler-change/recipe.json"
+    },
+    {
+      "id": "compiler-conformance",
+      "source_file": "src/prumo/resources/workforce/recipes/compiler-conformance/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/compiler-conformance/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/compiler-conformance/recipe.json"
+    },
+    {
+      "id": "design-system-foundation",
+      "source_file": "src/prumo/resources/workforce/recipes/design-system-foundation/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/design-system-foundation/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/design-system-foundation/recipe.json"
+    },
+    {
+      "id": "documentation-refactor",
+      "source_file": "src/prumo/resources/workforce/recipes/documentation-refactor/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/documentation-refactor/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/documentation-refactor/recipe.json"
+    },
+    {
+      "id": "engine-renderer",
+      "source_file": "src/prumo/resources/workforce/recipes/engine-renderer/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/engine-renderer/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/engine-renderer/recipe.json"
+    },
+    {
+      "id": "feature-standard",
+      "source_file": "src/prumo/resources/workforce/recipes/feature-standard/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/feature-standard/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/feature-standard/recipe.json"
+    },
+    {
+      "id": "github-issue",
+      "source_file": "src/prumo/resources/workforce/recipes/github-issue/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/github-issue/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/github-issue/recipe.json"
+    },
+    {
+      "id": "icon-library-creation",
+      "source_file": "src/prumo/resources/workforce/recipes/icon-library-creation/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/icon-library-creation/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/icon-library-creation/recipe.json"
+    },
+    {
+      "id": "marketing-campaign",
+      "source_file": "src/prumo/resources/workforce/recipes/marketing-campaign/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/marketing-campaign/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/marketing-campaign/recipe.json"
+    },
+    {
+      "id": "multiplayer-feature",
+      "source_file": "src/prumo/resources/workforce/recipes/multiplayer-feature/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/multiplayer-feature/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/multiplayer-feature/recipe.json"
+    },
+    {
+      "id": "project-bootstrap",
+      "source_file": "src/prumo/resources/workforce/recipes/project-bootstrap/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/project-bootstrap/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/project-bootstrap/recipe.json"
+    },
+    {
+      "id": "release",
+      "source_file": "src/prumo/resources/workforce/recipes/release/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/release/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/release/recipe.json"
+    },
+    {
+      "id": "security-audit-release",
+      "source_file": "src/prumo/resources/workforce/recipes/security-audit-release/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/security-audit-release/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/security-audit-release/recipe.json"
+    },
+    {
+      "id": "security-review",
+      "source_file": "src/prumo/resources/workforce/recipes/security-review/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/security-review/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/security-review/recipe.json"
+    },
+    {
+      "id": "ui-feature",
+      "source_file": "src/prumo/resources/workforce/recipes/ui-feature/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/ui-feature/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/ui-feature/recipe.json"
+    },
+    {
+      "id": "ui-review",
+      "source_file": "src/prumo/resources/workforce/recipes/ui-review/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/ui-review/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/ui-review/recipe.json"
+    },
+    {
+      "id": "web-feature",
+      "source_file": "src/prumo/resources/workforce/recipes/web-feature/RECIPE.md",
+      "source_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/web-feature/RECIPE.md",
+      "manifest_url": "https://github.com/poppy-lat/prumo/blob/main/src/prumo/resources/workforce/recipes/web-feature/recipe.json"
+    }
+  ]
+}

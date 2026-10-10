@@ -1,0 +1,45 @@
+import { SplitterHorizontal } from "../components/controls.slint";
+import { DesignTokens } from "../tokens.slint";
+
+/// Container inferior reutilizável por workspace.
+/// O shell é dono de posição/altura; o conteúdo é injetado via @children.
+export component WorkspaceDrawer inherits Rectangle {
+    in property <bool> open: false;
+    in property <length> drawer-height: 220px;
+    in property <length> left-offset: 52px;
+    in property <length> right-clearance: 8px;
+    in property <length> bottom-offset: 30px;
+    callback height-changed(length);
+    property <length> drawer-height-limit: max(132px, min(520px, root.height - root.bottom-offset - 120px));
+    property <length> effective-height: clamp(root.drawer-height, 132px, root.drawer-height-limit);
+
+    background: transparent;
+
+    if root.open: SplitterHorizontal {
+        x: root.left-offset;
+        y: parent.height - root.bottom-offset - root.effective-height - DesignTokens.control-height;
+        width: parent.width - root.left-offset - root.right-clearance;
+        value: root.effective-height;
+        minimum: 132px;
+        maximum: root.drawer-height-limit;
+        direction: -1.0;
+        moved(height) => { root.height-changed(height); }
+    }
+
+    drawer := Rectangle {
+        // A posição e o conteúdo permanecem estáveis; @children não pode
+        // viver em elemento condicional no Slint 1.18.
+        visible: root.open;
+        x: root.left-offset;
+        y: parent.height - root.bottom-offset - root.effective-height;
+        width: parent.width - root.left-offset - root.right-clearance;
+        height: root.effective-height;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        border-radius: 6px;
+        clip: true;
+
+        @children
+    }
+}

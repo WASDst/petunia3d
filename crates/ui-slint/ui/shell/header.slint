@@ -1,0 +1,193 @@
+import { RegionFocusAnchor } from "focus_anchor.slint";
+import { IconSet } from "@lucide";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
+import { CommandSearchField } from "../components/base.slint";
+import { MenuButton, TopAction, WorkspaceSegment } from "../components/controls.slint";
+
+/// Header global do Petunia.
+/// Responsabilidade: menus, seletor de workspace e ações globais.
+/// Não conhece documento, mesh ou módulos; apenas recebe estado de apresentação
+/// e emite intents semânticas para o shell.
+export component ShellHeader inherits Rectangle {
+    in property <int> region-focus-token: 0;
+    in property <bool> region-focus-enabled: true;
+    in property <string> menu-open: "";
+    in property <string> menu-file-label;
+    in property <string> menu-edit-label;
+    in property <string> menu-view-label;
+    in property <string> menu-window-label;
+
+    in property <string> active-workspace: "MODEL";
+    in property <string> modeling-mode: "POLY";
+    in property <string> draw-title: "";
+    in property <string> draw-description: "";
+    in property <string> poly-title: "";
+    in property <string> poly-description: "";
+    in property <bool> reduced-motion: false;
+    in property <bool> animate-available: false;
+    in property <string> animate-label: "";
+    in property <string> animate-tip: "";
+
+    in property <bool> can-undo: false;
+    in property <bool> can-redo: false;
+    in property <string> shortcut-undo: "";
+    in property <string> shortcut-redo: "";
+    in property <string> shortcut-search: "";
+    in property <string> shortcut-settings: "";
+
+    callback menu-toggled(string, length);
+    callback menu-opened(string, length);
+    callback workspace-changed(string);
+    callback undo-requested;
+    callback redo-requested;
+    callback search-requested;
+    callback settings-requested;
+    callback overlay-invoked(int);
+
+    // IDs locais dos invocadores: 1 busca, 2 preferências.
+    public function restore-overlay-invoker(invoker: int) {
+        if invoker == 1 { search-action.focus(); }
+        if invoker == 2 { settings-action.focus(); }
+    }
+
+    height: 42px;
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    RegionFocusAnchor {
+        width: root.width;
+        height: root.height;
+        label: Tr.t("sl.region_header");
+        focus-token: root.region-focus-token;
+        enabled: root.region-focus-enabled;
+        activated => { root.menu-toggled("file", file-menu.absolute-position.x); }
+    }
+
+    HorizontalLayout {
+        width: parent.width;
+        height: parent.height;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 0px;
+
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            alignment: start;
+            spacing: 6px;
+
+            Image {
+                source: @image-url("../icons/logo.svg");
+                width: 22px;
+                height: 22px;
+            }
+
+            Rectangle { width: 4px; }
+
+            file-menu := MenuButton {
+                label: root.menu-file-label;
+                shortcut: "Alt+F";
+                description: Tr.t("sl.new_open_save_import_export_projects_and_sce");
+                open: root.menu-open == "file";
+                clicked => { root.menu-toggled("file", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "file" {
+                        root.menu-opened("file", self.absolute-position.x);
+                    }
+                }
+            }
+            MenuButton {
+                label: root.menu-edit-label;
+                shortcut: "Alt+E";
+                description: Tr.t("sl.undo_redo_history_and_global_application_pre");
+                open: root.menu-open == "edit";
+                clicked => { root.menu-toggled("edit", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "edit" {
+                        root.menu-opened("edit", self.absolute-position.x);
+                    }
+                }
+            }
+            MenuButton {
+                label: root.menu-view-label;
+                shortcut: "Alt+V";
+                description: Tr.t("sl.camera_viewpoints_viewport_overlays_and_rend");
+                open: root.menu-open == "view";
+                clicked => { root.menu-toggled("view", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "view" {
+                        root.menu-opened("view", self.absolute-position.x);
+                    }
+                }
+            }
+            MenuButton {
+                label: root.menu-window-label;
+                shortcut: "Alt+W";
+                description: Tr.t("sl.toggle_panels_layouts_fullscreen_mode_and_ac");
+                open: root.menu-open == "window";
+                clicked => { root.menu-toggled("window", self.absolute-position.x); }
+                hovered => {
+                    if root.menu-open != "" && root.menu-open != "window" {
+                        root.menu-opened("window", self.absolute-position.x);
+                    }
+                }
+            }
+        }
+
+        WorkspaceSegment {
+            active: root.active-workspace == "MODEL" ? root.modeling-mode : root.active-workspace;
+            draw-title: root.draw-title;
+            draw-description: root.draw-description;
+            poly-title: root.poly-title;
+            poly-description: root.poly-description;
+            reduced-motion: root.reduced-motion;
+            animate-available: root.animate-available;
+            animate-label: root.animate-label;
+            animate-tip: root.animate-tip;
+            changed(ws) => { root.workspace-changed(ws); }
+        }
+
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            alignment: end;
+            spacing: 4px;
+
+            TopAction {
+                icon: IconSet.Undo;
+                icon-svg: PetuniaIcons.undo;
+                semantic-label: Tr.t("sl.undo");
+                shortcut: root.shortcut-undo;
+                description: Tr.t("sl.revert_the_most_recent_modeling_or_editing_o");
+                enabled: root.can-undo;
+                clicked => { root.undo-requested(); }
+            }
+            TopAction {
+                icon: IconSet.Redo;
+                icon-svg: PetuniaIcons.redo;
+                semantic-label: Tr.t("sl.redo");
+                shortcut: root.shortcut-redo;
+                description: Tr.t("sl.reapply_the_most_recently_undone_operation");
+                enabled: root.can-redo;
+                clicked => { root.redo-requested(); }
+            }
+
+            Rectangle { width: 1px; height: 16px; background: DesignTokens.border; }
+
+            search-action := CommandSearchField {
+                placeholder: Tr.t("sl.search_command_placeholder");
+                shortcut: root.shortcut-search;
+                activated => { root.overlay-invoked(1); root.search-requested(); }
+            }
+
+            settings-action := TopAction {
+                icon: IconSet.Settings;
+                icon-svg: PetuniaIcons.settings;
+                semantic-label: Tr.t("sl.settings");
+                shortcut: root.shortcut-settings;
+                description: Tr.t("sl.open_application_preferences_keymaps_and_the");
+                clicked => { root.overlay-invoked(2); root.settings-requested(); }
+            }
+        }
+    }
+}

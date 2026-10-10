@@ -1,4 +1,4 @@
-import { DesignTokens } from "../tokens.slint";
+import { DesignTokens, Motion } from "../tokens.slint";
 
 /// Tooltip rico moderno (Blender / VS Code / Figma style):
 /// Cabeçalho com título em destaque e badge kbd estilizado para o atalho,
@@ -75,6 +75,55 @@ export component RichTooltip inherits Rectangle {
             color: DesignTokens.text-muted;
             font-size: DesignTokens.font-caption;
             wrap: word-wrap;
+        }
+    }
+}
+
+
+/// Toast transitório canônico do shell.
+/// Informação crítica deve possuir também representação persistente/recuperável;
+/// este componente é apenas feedback não bloqueante.
+export component StatusToast inherits Rectangle {
+    in property <bool> shown: false;
+    in property <string> message: "";
+    in property <color> severity-color: DesignTokens.info;
+    in property <length> available-width: 600px;
+
+    width: min(root.available-width, max(220px, toast-text.preferred-width + 44px));
+    height: 34px;
+    opacity: root.shown ? 1.0 : 0.0;
+    animate opacity { duration: Motion.medium; easing: ease-out; }
+    border-radius: DesignTokens.radius-panel;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: root.severity-color;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+    accessible-role: text;
+    accessible-label: root.message;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        alignment: center;
+
+        Rectangle {
+            width: 3px;
+            height: 16px;
+            border-radius: 1.5px;
+            background: root.severity-color;
+            y: (parent.height - self.height) / 2;
+        }
+
+        toast-text := Text {
+            text: root.message;
+            color: DesignTokens.text-primary;
+            font-size: DesignTokens.font-default;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
         }
     }
 }
