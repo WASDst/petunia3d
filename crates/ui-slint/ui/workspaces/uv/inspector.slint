@@ -52,6 +52,8 @@ export component UvInspector inherits Rectangle {
         properties-collapsed: root.properties-collapsed;
         ratio-changed(value) => { root.split-ratio-changed(value); }
         structure-pane := StructureHost {
+            // Sem `y` o Slint centraliza o filho no split e o painel fica sob Properties.
+            y: 0px;
             width: parent.width;
             height: split.structure-height;
             title: Tr.t("sl.uv_operations");

@@ -126,10 +126,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
     let layout_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_inspector_split_ratio_set(move |ratio| {
-        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade()) {
-            if bridge.set_inspector_structure_ratio(ratio) {
-                sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
-            }
+        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade())
+            && bridge.set_inspector_structure_ratio(ratio)
+        {
+            sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
         }
     });
 
@@ -139,10 +139,10 @@ pub(crate) fn connect_callbacks<V: PetuniaViewport + 'static>(
         let Ok(pane) = crate::inspector_layout::InspectorPane::try_from(pane) else {
             return;
         };
-        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade()) {
-            if bridge.set_inspector_pane_collapsed(pane, collapsed) {
-                sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
-            }
+        if let (Ok(mut bridge), Some(window)) = (layout_bridge.lock(), window_weak.upgrade())
+            && bridge.set_inspector_pane_collapsed(pane, collapsed)
+        {
+            sync_inspector_pane_layout(&window, bridge.inspector_pane_layout());
         }
     });
 

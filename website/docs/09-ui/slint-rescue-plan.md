@@ -275,6 +275,8 @@ Slint callback → mesh.faces[...]
 
 ## 12. Fase 8 — OpenGL viewport
 
+> Estado (2026-10-11): executada; evidência, desvios e limites em [§26](#26-fase-8-concluida-e-fase-7-avancada-viewport-opengl-remocao-do-egui-e-regressoes-da-u02-2026-10-10-a-2026-10-11).
+
 Integrar o renderer final aprovado:
 
 ```text
@@ -575,3 +577,51 @@ Boundary de Tab/Shift+Tab usando o percurso nativo, foco inicial nas buscas, ret
 ## 25. Slice U07 — popovers não modais por highlight e teclado no flyout e no menu de contexto (2026-10-09)
 
 Decisão registrada em §16 regra 8: popover não modal não rouba foco; setas movem um highlight do shell (padrão da barra de menus), Enter invoca o destacado, Escape fecha o topo e o foco permanece no invocador. Implementado no popover de criação (`add-menu-highlight`) e no flyout de grupo (`rail-flyout-highlight`), com abertura por Shift+F10/tecla Menu; linhas do Outliner (Inspector e drawer compacto) ganham foco por teclado, Enter/Espaço seleciona e Shift+F10/Menu abrem o menu de contexto ancorado na linha. Escape do popover continua na pilha (§24: `handle_escape`/`overlays.esc`, topo-primeiro); a UI não intercepta Esc de camadas da pilha. Setas dentro do menu de contexto e entre linhas da lista permanecem pendentes. Gap, arquivos, evidência e limites: [Workspaces §26](./workspaces-feedback-accessibility.md#26-slice-u07-popovers-nao-modais-por-highlight-e-teclado-no-flyout-e-no-menu-de-contexto-2026-10-09). U07 IN PROGRESS; três regressões escritas, **not run**; compilação `--lib --tests` pass, exit 0 em 5m36s, sem warnings; log `/tmp/petunia-u07-popovers-check.log`.
+
+## 26. Fase 8 concluída e Fase 7 avançada — viewport OpenGL, remoção do egui e regressões da U02 (2026-10-10 a 2026-10-11)
+
+**Pedido do usuário:** migração completa de WGPU para OpenGL, refatoração da GUI conforme `website/docs` e remoção do egui legado, com os testes executados somente ao final.
+
+**Desvio registrado:** o §12 e o 04-renderer pediam remover os backends legados *depois* dos gates. Por pedido explícito do usuário, `render-wgpu`, `render-gl`, `crates/ui` (egui) e `crates/app` foram removidos antes da rodada de testes; os gates abaixo foram executados depois, sobre o código já sem legado.
+
+### Fase 8 — viewport
+
+- `crates/ui-slint/src/viewport_gl.rs`: o renderer `petunia_render::gl` desenha no notifier do Slint/FemtoVG num FBO próprio (MSAA + resolve) importado com `BorrowedOpenGLTextureBuilder`, sem `glReadPixels` por frame; o estado GL do host é salvo e restaurado. Detalhes em [04-renderer — Estado de implementação](../04-renderer/architecture-decision.md#estado-de-implementacao-2026-10-10).
+- `crates/ui-slint/src/host.rs`: `DesktopHost` substitui o host `crates/app`.
+- Prévias de ferramenta (loop cut, slice e afins) viajam no contrato de render como override de desenho e **não** escrevem no Document; o commit único passa por `ApplyMeshEditCmd`, com checagem de geometria-fonte (`STATUS_TOOL_SOURCE_CHANGED`).
+- P01: `RenderObject.transform` usa `Asset::world_matrix()`; transformação de objeto move por matriz de modelo sem retriangular (teste `object_transform_moves_by_model_matrix_without_retriangulating`).
+
+### Fase 7 — fronteira da UI
+
+O bridge passou a usar a API de edição do core em vez de mutar a malha: `UvSeamCmd`/`UvPinCmd`, `AssignMaterialSlotCmd`, `NudgeCmd`, `apply_component_selection` (cliques de componente, loops e seleção de pintura) e `select_hover_if_empty` (Delete/Duplicate). Mudança de comportamento intencional: em Edição sem seleção as setas não movem mais a malha inteira; `NudgeCmd` recusa e o status explica. **Gap restante:** três mutações diretas da faca em `bridge/slice_knife.rs` (A06).
+
+### Regressões encontradas e corrigidas na rodada de testes
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| Inspectors e drawer com tamanho errado; cliques perdidos em PAINT/UV/MODEL/ANIMATE | Em conteúdo passado por `@children`, `parent` é o pai **léxico** (RightColumnShell), não o slot | Remoção de `width/height: parent.*` nas instâncias do slot (`app.slint`) |
+| Linha de Parts coberta por "Nada selecionado" | `structure-pane` sem `y` é **centralizado** pelo Slint dentro do split, ficando sob Properties | `y: 0px` nos quatro inspectors (MODEL, PAINT, UV, ANIMATE) |
+| Clique no centro da linha do Outliner/camadas ocultava a parte em vez de selecionar | `alignment: center` num `HorizontalLayout` vale para o eixo horizontal e ignora `horizontal-stretch`; botões ficavam no meio da linha | Remoção do `alignment: center` nas linhas do Outliner (Inspector e drawer compacto) e de camadas de PAINT; regressão em `shell_focus.rs` |
+| Popover de criação sem invocador no DRAW | Botão Add Primitive ausente do bloco DRAW do Tool Rail | `draw-add-action` em `tool_rail.slint` |
+| Flyout/highlight do Tool Rail não abriam por teclado após clique | `FocusScope` não recebe foco quando o `TouchArea` filho aceita o press | `ToolButton` foca explicitamente no press esquerdo |
+
+**Auditoria de `alignment` (2026-10-11).** Regra do solver Slint 1.18 (`i-slint-core` `solve_box_layout`): **qualquer** `alignment` diferente de `stretch` (`start`, `end`, `center`, `space-*`) dá a cada filho o tamanho preferido e ignora `horizontal-stretch`/`vertical-stretch`; `alignment: start` + stretch explícito **não** corrige. Segunda regra: elementos sem tamanho intrínseco (`Rectangle`, `TouchArea` e componentes baseados neles, como `IconButton`) têm stretch padrão 1, então numa linha `stretch` eles dividem a sobra com o filho elástico; fixe `width` ou `horizontal-stretch: 0`. Um varredor estrutural em `xtask/src/slint_lint.rs` encontrou 30 layouts com stretch ignorado; 28 eram bugs (campo de busca e sliders no tamanho mínimo, botões e atalhos migrando para o meio da linha, espaçadores mortos) e foram corrigidos removendo o `alignment`: `PartsFilterRow` (busca e campo), `PartsRowSizeControl`, `MaterialBody` (cabeçalho, slots, albedo), `Vector3Field`, `NumericField`, `BrushStepper`, linhas do pincel de PAINT (Tamanho/Opacidade/Dureza viraram `BrushStepper`; Simetria/Alvo/Máscara e o botão albedo ganharam papel e nome acessíveis; albedo passou a 24 px), camada albedo de PAINT, popover de shading, Settings (quatro sliders), resultados e busca da paleta de comandos, status bar, HUD de operação, cabeçalho do Inspector (`IconButton` com `horizontal-stretch: 0`), card de referência e trilho de ferramentas (biblioteca de assets volta ao fim). Os dois restantes (`InspectorSection` e `InspectorSplitLayout`: título como último filho) renderizam igual e ficaram como estão. Regressões geométricas em `tests/layout_fill.rs`.
+
+### Evidência (Linux, rustc 1.98.1, 2026-10-11)
+
+Rodada final executada num clone isolado com este patch aplicado sobre `ddf87c7`, um build pesado por vez (o earlyoom encerra builds paralelos do `petunia_ui_slint`).
+
+| Comando | Resultado |
+|---|---|
+| `cargo test -p petunia_render --no-fail-fast` | pass — 34 unitários + 21 de pixel GL (Mesa zink sobre RTX 3060), 0 warnings |
+| `cargo test -p petunia_ui_slint --no-fail-fast --lib --tests` | pass — 513 lib + 61 integração (animate_shell 11, inspector_split 2, model_shell 4, paint_shell 3, shell_focus 17, ui_metrics 1, uv_shell 3, viewport_gestures 15, viewport_hud 2, workspace_drawer 3) |
+| `cargo test -p petunia_ui_slint --features animation-workspace --no-fail-fast --lib --tests` | **fail (1)** — 513 lib + 64 integração pass; `ui_metrics` falha: POLY com 46 controles para meta 45 (a aba ANIMATE do header é o único controle a mais; sem a feature POLY tem exatamente 45) |
+| `cargo clippy -p petunia_render -p petunia_ui_slint -p xtask --all-targets --no-deps -- -D warnings` (e ui-slint com `animation-workspace`) | pass |
+| `cargo fmt --check`; `xtask arch-check`, `ui-lint`, `docs-generate --check` | pass — `arch-check` atualizado: requisitos de manifesto de `crates/ui`/`crates/app` removidos, confinamento agora cobre `ui-slint` e `application` e ignora comentários de manifesto |
+| `cargo clippy` com dependências do workspace | fail fora do escopo desta sessão: 4 lints em `petunia_mesh` (`inset.rs`, `ops.rs`, `uv_relax.rs`, `uv_tools.rs`), código da sessão de Geometria |
+
+**Decisão pendente do produto:** qual controle sai de POLY (ou se uma aba de workspace atrás de feature conta para a meta) — o limite não foi elevado para obter verde.
+
+**Not run:** Windows; GPU de baixo desempenho; inspeção visual da composição na janela nativa; leitor de tela (Orca/NVDA); gate de performance. Gap de acessibilidade conhecido: rolar o painel até a região focada por F6 quando ela está fora da área visível.
+
+**Controle de versão:** a reorganização de pastas de 2026-10-10 (~22h20) removeu o `.git` local antes do push; os commits locais daquele dia (`360647c`, `698f591`, `4babc87`, `94a30a3` e os de outras sessões) não chegaram ao remoto (`31fe654`). O conteúdo está preservado na árvore de trabalho; o histórico precisa ser recomposto em novos commits.

@@ -1,10 +1,10 @@
 {
   "files": {
     "COMMANDS.md": {
-      "size_bytes": 13200
+      "size_bytes": 14267
     },
     "ICON_TOKENS.md": {
-      "size_bytes": 7532
+      "size_bytes": 15663
     },
     "KEYBINDS.md": {
       "size_bytes": 25615
@@ -13,7 +13,7 @@
       "size_bytes": 1662
     },
     "TEXT_TOKENS.md": {
-      "size_bytes": 157034
+      "size_bytes": 158236
     },
     "THEME_TOKENS.md": {
       "size_bytes": 3604

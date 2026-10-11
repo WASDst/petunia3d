@@ -1105,7 +1105,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
 /// Dados da área de transferência de geometria.
 #[derive(Clone, Debug)]
 pub enum GeometryClipboard {
-    Mesh(petunia_core::Mesh),
+    Mesh(Box<petunia_core::Mesh>),
     Asset(Box<petunia_project::Asset>),
 }
 

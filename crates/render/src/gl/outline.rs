@@ -81,7 +81,7 @@ impl GlRenderer {
         gl.disable(glow::DEPTH_TEST);
         gl.depth_mask(false);
         gl.enable(glow::BLEND);
-        super::buffers::alpha_blend(&gl);
+        super::buffers::alpha_blend(gl);
         gl.draw_arrays(glow::TRIANGLES, 0, 3);
         gl.disable(glow::BLEND);
         gl.enable(glow::DEPTH_TEST);

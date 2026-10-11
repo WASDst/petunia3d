@@ -14,7 +14,7 @@ description: Catálogo canônico de chaves de internacionalização TextId (P3D-
 > **Single Source of Truth (P3D-088, P3D-119)**
 > A UI do Petunia3D é 100% internacionalizada. Nenhuma string do usuário é hardcoded; todas as mensagens passam pelo motor `I18n` com fallback seguro em inglês.
 
-Total de chaves de localização cadastradas: **1957**.
+Total de chaves de localização cadastradas: **1977**.
 
 | Chave (`TextId`) | Inglês (`en.toml`) | Português (`pt-BR.toml`) |
 | :--- | :--- | :--- |
@@ -758,6 +758,7 @@ Total de chaves de localização cadastradas: **1957**.
 | `sl.alt_w_subdivide` | Alt+W: Subdivide | Alt+W: Subdividir (Subdivide) |
 | `sl.angle` | Angle | Ângulo |
 | `sl.angle_2` | Angle:  | Ângulo:  |
+| `sl.animate_drawer_timeline` | Timeline / Motion Stack | Timeline / Pilha de motions |
 | `sl.appearance` | Appearance | Aparência |
 | `sl.assistive_technology` | Assistive Technology | Tecnologia Assistiva |
 | `sl.autodesk_3ds_max` | Autodesk 3ds Max | Autodesk 3ds Max |
@@ -855,9 +856,11 @@ Total de chaves de localização cadastradas: **1957**.
 | `sl.click_to_unpin_section` | Click to unpin section | Clique para desafixar a seção |
 | `sl.click_vertices_or_edges_to_draw_cut_path` | Click vertices or edges to draw cut path | Clique em vértices ou arestas para desenhar o caminho do corte |
 | `sl.close_asset_library` | Close asset library | Fechar biblioteca de Assets |
+| `sl.close_command_search` | Close command search | Fechar busca de comandos |
 | `sl.close_reference_manager` | Close reference manager | Fechar gerenciador de referências |
 | `sl.close_scene_drawer` | Close scene drawer | Fechar gaveta da cena |
 | `sl.close_settings` | Close settings | Fechar configurações |
+| `sl.close_workspace_drawer` | Close workspace drawer | Fechar painel do workspace |
 | `sl.collapse` | Collapse | Recolher |
 | `sl.collapse_and_merge_all_selected_vertices_to_` | Collapse and merge all selected vertices to their median center | Colapsa e mescla todos os vértices selecionados no centro mediano |
 | `sl.collapse_inspector` | Collapse Inspector | Recolher Inspector |
@@ -989,6 +992,8 @@ Total de chaves de localização cadastradas: **1957**.
 | `sl.insert_a_connected_edge_loop_ring_across_qua` | Insert a connected edge loop ring across quad mesh geometry | Insere um anel de arestas conectado em uma malha de quads |
 | `sl.inset` | Inset | Inset |
 | `sl.inset_new_polygonal_boundary_inside_selected` | Inset new polygonal boundary inside selected faces | Cria um novo contorno poligonal dentro das faces selecionadas |
+| `sl.inspector_properties` | Properties | Propriedades |
+| `sl.inspector_structure` | Structure | Estrutura |
 | `sl.instant_shortcut` | Instant Shortcut | Atalho Instantâneo |
 | `sl.interactively_slice_through_edges_and_faces_` | Interactively slice through edges and faces with cutting line | Corta arestas e faces de forma interativa com uma linha de corte |
 | `sl.interface_language` | Interface Language | Idioma da Interface |
@@ -1113,6 +1118,14 @@ Total de chaves de localização cadastradas: **1957**.
 | `sl.paint_pip_back` | Back to the 3D view | Voltar para a vista 3D |
 | `sl.paint_select_description` | Switch the object being painted or pick faces to paint; Shift adds, double-click picks a whole UV island | Troca o objeto que está sendo pintado ou escolhe faces para pintar; Shift soma, duplo clique escolhe a ilha UV inteira |
 | `sl.paint_workspace` | Paint Workspace | Espaço de pintura |
+| `sl.palette_black` | Black | Preto |
+| `sl.palette_blue` | Blue | Azul |
+| `sl.palette_gray` | Gray | Cinza |
+| `sl.palette_green` | Green | Verde |
+| `sl.palette_red` | Red | Vermelho |
+| `sl.palette_violet` | Violet | Violeta |
+| `sl.palette_white` | White | Branco |
+| `sl.palette_yellow` | Yellow | Amarelo |
 | `sl.parametric_6_sided_hexahedral_box_with_width` | Parametric 6-sided hexahedral box with width, height and depth | Caixa paramétrica de 6 faces com largura, altura e profundidade |
 | `sl.parametric_circular_cylinder_with_top_bottom` | Parametric circular cylinder with top/bottom cap options | Cilindro circular paramétrico com tampas superior/inferior opcionais |
 | `sl.part_selection_color` | Part selection color | Cor de seleção da parte |
@@ -1184,6 +1197,10 @@ Total de chaves de localização cadastradas: **1957**.
 | `sl.reference_images` | Reference Images | Imagens de referência |
 | `sl.reference_images_manager_for_background_blue` | Reference Images manager for background blueprints and modeling guides | Gerenciador de imagens de referência para blueprints de fundo e guias de modelagem |
 | `sl.region` | Region | Região |
+| `sl.region_context` | Context actions | Ações contextuais |
+| `sl.region_header` | Header | Cabeçalho |
+| `sl.region_surface` | Work surface | Área de trabalho |
+| `sl.region_tools` | Tools | Ferramentas |
 | `sl.relax` | Relax | Relaxar |
 | `sl.relax_uv` | Relax UV | Relaxar UV |
 | `sl.remove_layer` | Remove layer | Remover camada |
@@ -1355,6 +1372,8 @@ Total de chaves de localização cadastradas: **1957**.
 | `sl.uv_checkerboard` | UV Checkerboard | Xadrez UV |
 | `sl.uv_checkerboard_off` | UV Checkerboard: Off | Xadrez UV: desligado |
 | `sl.uv_checkerboard_on` | UV Checkerboard: On | Xadrez UV: ligado |
+| `sl.uv_drawer_diagnostics` | UV diagnostics | Diagnóstico UV |
+| `sl.uv_drawer_summary` | Islands · selected faces | Ilhas · faces selecionadas |
 | `sl.uv_editor` | UV Editor | Editor UV |
 | `sl.uv_operations` | UV Operations | Operações UV |
 | `sl.uv_projection_unwrapping_seams_and_island_pa` | UV projection, unwrapping, seams, and island packing | Projeção UV, unwrap, seams e empacotamento de ilhas |
@@ -1555,6 +1574,7 @@ Total de chaves de localização cadastradas: **1957**.
 | `status.texel_density` | Texel density: {e} | Densidade de texel: {e} |
 | `status.the_last_layer_cannot_be_removed` | The last layer cannot be removed | A última camada não pode ser removida |
 | `status.tool_active_drag_the_gizmo_type_a` | {0} tool active · Drag the gizmo, type a value or press again for Free mode | Ferramenta {0} ativa · Arraste o gizmo, digite o valor ou aperte novamente para o modo livre |
+| `status.tool_source_changed` | The model changed while the tool was open; nothing was applied | O modelo mudou com a ferramenta aberta; nada foi aplicado |
 | `status.undo_done` | Undo done. | Desfazer executado. |
 | `status.unknown_effect_layer` | Unknown effect layer: {kind} | Camada de efeito desconhecida: {kind} |
 | `status.unknown_primitive` | Unknown primitive: {kind_str} | Primitiva desconhecida: {kind_str} |

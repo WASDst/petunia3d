@@ -14,7 +14,7 @@ description: Catálogo canônico de comandos gerados a partir do CommandDispatch
 > **Single Source of Truth (P3D-100, P3D-119)**
 > Todos os comandos do Petunia3D são registrados centralmente no `CommandDispatcher`, permitindo despacho transacional com histórico (Undo/Redo), Command Palette e telemetria.
 
-Total de comandos registrados no motor: **109**.
+Total de comandos registrados no motor: **117**.
 
 ## Tabela Geral de Comandos
 
@@ -57,12 +57,14 @@ Total de comandos registrados no motor: **109**.
 | `model.clear_location` | **Clear Location** | `Model` | Sim | Modeling | Reset object location to [0, 0, 0] |
 | `model.clear_rotation` | **Clear Rotation** | `Model` | Sim | Modeling | Reset object rotation to [0, 0, 0] |
 | `model.clear_scale` | **Clear Scale** | `Model` | Sim | Modeling | Reset object scale to [1, 1, 1] |
+| `model.clear_sharp` | **Clear Sharp** | `Model` | Sim | Modeling | Remove the sharp mark from the selected edges |
 | `model.connect` | **Connect Loops** | `Model` | Sim | Modeling | Connect two faces or boundary loops with quads and triangles |
 | `model.cut` | **Cut** | `Model` | Não | Modeling | Subtract the boolean operand from the active object |
 | `model.dissolve` | **Dissolve** | `Model` | Sim | Modeling | Dissolve selected edges, faces, or vertices cleanly |
 | `model.extrude` | **Extrude** | `Model` | Sim | Extrude | Extrude selected faces along surface normal |
 | `model.extrude_individual` | **Extrude Individual** | `Model` | Sim | Extrude | Extrude selected faces individually |
 | `model.flip_diagonal` | **Flip Diagonal** | `Model` | Sim | Modeling | Flip quad internal diagonal or triangle edge |
+| `model.flip_faces` | **Flip Faces** | `Model` | Sim | Modeling | Reverse the winding of the selected faces |
 | `model.flip_normals` | **Flip Normals** | `Model` | Sim | Modeling | Reverse orientation of face normals |
 | `model.fuse` | **Fuse** | `Model` | Não | Modeling | Combine the active object with the boolean operand into one |
 | `model.inset` | **Inset Faces** | `Model` | Sim | Modeling | Inset selected faces towards interior |
@@ -72,13 +74,17 @@ Total de comandos registrados no motor: **109**.
 | `model.knife` | **Knife** | `Model` | Não | Knife | Cut the active mesh along edge points picked in the viewport |
 | `model.loop_cut` | **Loop Cut** | `Model` | Sim | LoopCut | Insert evenly spaced cuts along a quad ring |
 | `model.make_face` | **Make Face / Edge** | `Model` | Sim | Modeling | Create a new face or edge connecting selected vertices or edges (F) |
+| `model.mark_sharp` | **Mark Sharp** | `Model` | Sim | Modeling | Mark the selected edges as sharp (limits smooth shading) |
 | `model.merge` | **Merge Center** | `Model` | Sim | Modeling | Merge selected vertices into center point |
+| `model.orient_consistently` | **Orient Consistently** | `Model` | Sim | Modeling | Make face winding consistent across connected faces |
+| `model.orient_outward` | **Orient Outward** | `Model` | Sim | Modeling | Orient a closed mesh so faces point outside |
 | `model.push_pull` | **Push/Pull** | `Model` | Não | Modeling | Push or pull selected faces along the surface normal |
 | `model.revolve` | **Revolve 360** | `Model` | Sim | Modeling | Revolve selected profile 360 degrees around an axis |
 | `model.scale_selection` | **Scale Selection** | `Model` | Sim | Modeling | Scale selected geometry uniformly around its center |
 | `model.separate_selection` | **Separate Selection** | `Model` | Sim | Modeling | Separate selected geometry into a new object |
 | `model.shade_flat` | **Shade Flat** | `Model` | Sim | Modeling | Use faceted normals on the active object |
 | `model.shade_smooth` | **Shade Smooth** | `Model` | Sim | Modeling | Interpolate normals across faces of the active object |
+| `model.smooth_by_angle` | **Smooth by Angle** | `Model` | Sim | Modeling | Shade smooth and mark edges above the angle as sharp |
 | `model.spin` | **Spin** | `Model` | Sim | Modeling | Extrude and spin selected geometry in an arc around axis |
 | `model.subdivide` | **Subdivide** | `Model` | Sim | LoopCut | Subdivide selected geometry |
 | `model.symmetrize` | **Symmetrize** | `Model` | Sim | Modeling | Copy one side to the other across an axis |
@@ -103,7 +109,8 @@ Total de comandos registrados no motor: **109**.
 | `uv.pack_islands` | **Pack UV Islands** | `Tools` | Sim | UvUnwrapping | Pack UV islands into 0..1 without overlaps |
 | `uv.project_reference` | **Project From Reference** | `Tools` | Sim | UvUnwrapping | Project UVs from the active reference image or fallback to camera view |
 | `uv.project_view` | **Project From View** | `Tools` | Sim | UvUnwrapping | Project UVs from the current camera view |
-| `uv.relax` | **Relax UVs** | `Tools` | Sim | UvUnwrapping | Smooth and relax UV coordinates to reduce stretching |
+| `uv.relax` | **Relax UVs** | `Tools` | Sim | UvUnwrapping | Relax UV islands toward the 3D shape (as-rigid-as-possible), keeping pins and seams |
+| `uv.split` | **Split UVs** | `Tools` | Sim | UvUnwrapping | Mark seams around the selected UV faces without duplicating vertices |
 | `uv.stitch` | **Stitch UV Seams** | `Tools` | Sim | UvUnwrapping | Weld and align separated UV seams on shared 3D edges |
 | `uv.unwrap_auto` | **Auto UV** | `Tools` | Sim | UvUnwrapping | Unwrap the active mesh with the generic UV provider |
 | `view.back` | **View Back** | `View` | Não | Navigation | Align camera to Back orthographic view |
@@ -116,6 +123,7 @@ Total de comandos registrados no motor: **109**.
 | `view.isometric_se` | **Isometric SE** | `View` | Não | Navigation | Align camera to South-East isometric view |
 | `view.isometric_sw` | **Isometric SW** | `View` | Não | Navigation | Align camera to South-West isometric view |
 | `view.left` | **View Left** | `View` | Não | Navigation | Align camera to Left orthographic view |
+| `view.pseudo_isometric_2to1` | **Pseudo-Isometric 2:1** | `View` | Não | Navigation | Align camera to classic 2:1 pseudo-isometric game view (26.565°) |
 | `view.reset_camera` | **Reset Camera** | `View` | Não | Navigation | Reset 3D camera to default isometric view |
 | `view.right` | **View Right** | `View` | Não | Navigation | Align camera to Right orthographic view |
 | `view.toggle_face_orientation` | **Toggle Face Orientation** | `View` | Não | Navigation | Display front faces in blue and back faces in red |

@@ -1275,10 +1275,17 @@ mod tests {
         project.assets[0].transform.translation = [0.0, 2.0, 0.0];
         let (surface, transform) = {
             let frame = extractor.extract_parts(SceneParts::new(&project, &camera, viewport()));
-            (frame.objects[0].surface_revision, frame.objects[0].transform)
+            (
+                frame.objects[0].surface_revision,
+                frame.objects[0].transform,
+            )
         };
         assert_eq!(surface, revision, "a superfície local não muda");
-        assert_eq!(extractor.object_rebuild_count(), rebuilt, "sem triangular de novo");
+        assert_eq!(
+            extractor.object_rebuild_count(),
+            rebuilt,
+            "sem triangular de novo"
+        );
         assert_eq!(Mat4::from_cols_array(&transform).w_axis.y, 2.0);
     }
 

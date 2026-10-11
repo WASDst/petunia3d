@@ -639,11 +639,13 @@ export component PartsBody inherits VerticalLayout {
                     reject
                 }
             }
+            // Sem `alignment: center`: no HorizontalLayout ele vale para o eixo
+            // horizontal, ignora o stretch e centralizava nome + botões, deixando
+            // o meio da linha sobre "Ocultar" em vez de selecionar.
             HorizontalLayout {
                 padding-left: 6px;
                 padding-right: 4px;
                 spacing: 4px;
-                alignment: center;
                 TouchArea {
                     property <bool> extend: false;
                     horizontal-stretch: 1;
@@ -656,7 +658,6 @@ export component PartsBody inherits VerticalLayout {
                     clicked => { row-focus.focus(); root.scene-select(item.id, self.extend); }
                     HorizontalLayout {
                         spacing: 5px;
-                        alignment: center;
                         IconDisplay { icon: item.tris == 0 ? IconSet.Spline : IconSet.Box; size: 12px; stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted; }
                         if root.rename-active && item.selected: TextInput {
                             text: root.rename-value;

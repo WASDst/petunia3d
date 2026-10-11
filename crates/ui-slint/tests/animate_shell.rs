@@ -471,6 +471,8 @@ fn the_production_callback_path_keeps_the_workspace_and_shows_the_pill() {
     bridge.apply(UiIntent::Animate(AnimateIntent::AddCreature(
         RigPresetKind::Humanoid,
     )));
+    // A API de callbacks recebe `Arc<Mutex<_>>`; o teste roda numa só thread.
+    #[allow(clippy::arc_with_non_send_sync)]
     let bridge = Arc::new(Mutex::new(bridge));
     petunia_ui_slint::animate::connect_animate_callbacks(&shell, Arc::clone(&bridge));
     shell.set_active_workspace("ANIMATE".into());

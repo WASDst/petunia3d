@@ -105,7 +105,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     faces: new_faces,
                     ..Default::default()
                 };
-                self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                self.clipboard = Some(GeometryClipboard::Mesh(Box::new(sub_mesh)));
                 self.state.set_status(
                     self.state
                         .t_id(petunia_config::text_id::STATUS_COPIED_SELECTED_FACES_TO_CLIPBOARD),
@@ -155,7 +155,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     selected_edges: new_selected_edges,
                     ..Default::default()
                 };
-                self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                self.clipboard = Some(GeometryClipboard::Mesh(Box::new(sub_mesh)));
                 self.state.set_status(
                     self.state
                         .t_id(petunia_config::text_id::STATUS_COPIED_SELECTED_EDGES_TO_CLIPBOARD),
@@ -199,7 +199,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     faces: new_faces,
                     ..Default::default()
                 };
-                self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                self.clipboard = Some(GeometryClipboard::Mesh(Box::new(sub_mesh)));
                 self.state.set_status(
                     self.state.t_id(
                         petunia_config::text_id::STATUS_COPIED_SELECTED_VERTICES_TO_CLIPBOARD,
@@ -226,7 +226,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             faces: vec![new_f],
                             ..Default::default()
                         };
-                        self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                        self.clipboard = Some(GeometryClipboard::Mesh(Box::new(sub_mesh)));
                         self.state.set_status(self.state.t_id(
                             petunia_config::text_id::STATUS_COPIED_HOVERED_FACE_TO_CLIPBOARD,
                         ));
@@ -244,7 +244,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             selected_edges: new_edges,
                             ..Default::default()
                         };
-                        self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                        self.clipboard = Some(GeometryClipboard::Mesh(Box::new(sub_mesh)));
                         self.state.set_status(self.state.t_id(
                             petunia_config::text_id::STATUS_COPIED_HOVERED_EDGE_TO_CLIPBOARD,
                         ));
@@ -257,7 +257,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             verts: vec![v.clone()],
                             ..Default::default()
                         };
-                        self.clipboard = Some(GeometryClipboard::Mesh(sub_mesh));
+                        self.clipboard = Some(GeometryClipboard::Mesh(Box::new(sub_mesh)));
                         self.state.set_status(self.state.t_id(
                             petunia_config::text_id::STATUS_COPIED_HOVERED_VERTEX_TO_CLIPBOARD,
                         ));
@@ -289,7 +289,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         match clipboard_data {
-            GeometryClipboard::Mesh(mut mesh) => {
+            GeometryClipboard::Mesh(mesh) => {
+                let mut mesh = *mesh;
                 let base_name = self
                     .state
                     .project

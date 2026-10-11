@@ -115,11 +115,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         {
             return false;
         }
-        let selected = self
-            .state
-            .project
-            .active_mesh()
-            .map_or(0, |mesh| mesh.faces.iter().filter(|face| face.selected).count());
+        let selected = self.state.project.active_mesh().map_or(0, |mesh| {
+            mesh.faces.iter().filter(|face| face.selected).count()
+        });
         let status = match (click, first) {
             (true, Some(face)) => crate::tr::fill(
                 &self

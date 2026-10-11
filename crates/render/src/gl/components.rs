@@ -55,7 +55,7 @@ impl GlRenderer {
     unsafe fn overlay_state(&self, xray: bool) {
         let gl = &self.gl;
         gl.enable(glow::BLEND);
-        super::buffers::alpha_blend(&gl);
+        super::buffers::alpha_blend(gl);
         gl.depth_mask(false);
         if xray {
             gl.disable(glow::DEPTH_TEST);

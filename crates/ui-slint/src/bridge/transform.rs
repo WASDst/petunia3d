@@ -357,7 +357,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let command = petunia_core::NudgeCmd {
             delta: delta.to_array(),
         };
-        if self.state.dispatch(&command).is_err() {
+        if let Err(error) = self.state.dispatch(&command) {
+            // Sem seleção em Edição o core recusa em vez de mover a malha inteira;
+            // o status explica a tecla que não fez nada.
+            self.state.set_status(error.to_string());
             return false;
         }
         self.state.set_status(crate::tr::fill(

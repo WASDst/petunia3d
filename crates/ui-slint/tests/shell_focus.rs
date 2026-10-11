@@ -167,6 +167,8 @@ fn hidden_regions_are_skipped_and_disappearing_regions_restore_surface() {
     backward(&shell);
     assert_eq!(shell.get_focus_region(), 5);
     shell.set_asset_library_visible(false);
+    // `changed` do Slint é adiado para o próximo tick, como no redimensionamento acima.
+    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
     assert_eq!(
         shell.get_focus_region(),
         2,
@@ -681,9 +683,16 @@ fn outliner_row_opens_its_context_menu_from_the_keyboard() {
             item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::ListItem)
         })
         .expect("real outliner row");
+    let hidden = Rc::new(RefCell::new(Vec::<String>::new()));
+    let observed = Rc::clone(&hidden);
+    shell.on_scene_toggle_visibility(move |id| observed.borrow_mut().push(id.to_string()));
     row.mock_single_click(PointerEventButton::Left);
     i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
     assert_eq!(selections.borrow().len(), 1, "clique seleciona a linha");
+    assert!(
+        hidden.borrow().is_empty(),
+        "o centro da linha seleciona; Ocultar fica no seu botão à direita"
+    );
 
     shift_key(&shell, Key::F10.into());
     let menu = context.borrow();
@@ -703,70 +712,4 @@ fn outliner_row_opens_its_context_menu_from_the_keyboard() {
     key(&shell, Key::Escape.into());
     assert!(!shell.get_context_menu_open());
     assert_eq!(*click_aways.borrow(), 1);
-}
-
-#[test]
-fn zz_probe_row() {
-    let shell = shell();
-    shell.set_model_parts_open(true);
-    shell.set_parts_items(ModelRc::new(VecModel::from(vec![SceneItem {
-        id: "part-a".into(),
-        name: "Part A".into(),
-        visible: true,
-        ..SceneItem::default()
-    }])));
-    i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(1));
-    let selections = Rc::new(RefCell::new(Vec::new()));
-    let observed = Rc::clone(&selections);
-    shell.on_scene_select(move |id, extend| observed.borrow_mut().push((id.to_string(), extend)));
-    let row = i_slint_backend_testing::ElementHandle::find_by_accessible_label(&shell, "Part A")
-        .find(|item| {
-            item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::ListItem)
-        })
-        .unwrap();
-    let (p, z) = (row.absolute_position(), row.size());
-    eprintln!("row at {p:?} {z:?}");
-    let position = slint::LogicalPosition::new(p.x + 40.0, p.y + z.height / 2.0);
-    let covering: Vec<String> = i_slint_backend_testing::ElementQuery::from_root(&shell)
-        .match_descendants()
-        .find_all()
-        .into_iter()
-        .filter(|e| {
-            let (q, s) = (e.absolute_position(), e.size());
-            position.x >= q.x
-                && position.x <= q.x + s.width
-                && position.y >= q.y
-                && position.y <= q.y + s.height
-        })
-        .map(|e| {
-            format!(
-                "{}|{}|{:?}",
-                e.type_name().unwrap_or_default(),
-                e.id().unwrap_or_default(),
-                e.accessible_label().unwrap_or_default()
-            )
-        })
-        .collect();
-    eprintln!(
-        "covering ({}): {:?}",
-        covering.len(),
-        &covering[covering.len().saturating_sub(25)..]
-    );
-    for (wait, label) in [(1u64, "1ms"), (300, "300ms")] {
-        shell
-            .window()
-            .dispatch_event(WindowEvent::PointerMoved { position });
-        shell.window().dispatch_event(WindowEvent::PointerPressed {
-            position,
-            button: PointerEventButton::Left,
-        });
-        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(wait));
-        shell.window().dispatch_event(WindowEvent::PointerReleased {
-            position,
-            button: PointerEventButton::Left,
-        });
-        i_slint_backend_testing::mock_elapsed_time(Duration::from_millis(wait));
-        eprintln!("{label}: selections={:?}", selections.borrow());
-    }
-    panic!("probe");
 }

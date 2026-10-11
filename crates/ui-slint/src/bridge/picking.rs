@@ -204,10 +204,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                             (true, true) => petunia_core::SelectionOp::Subtract,
                             (true, false) => petunia_core::SelectionOp::Add,
                         };
-                        if let Err(error) = self
-                            .state
-                            .apply_component_selection(&petunia_core::ComponentSet::Faces(faces), op)
-                        {
+                        if let Err(error) = self.state.apply_component_selection(
+                            &petunia_core::ComponentSet::Faces(faces),
+                            op,
+                        ) {
                             self.state.set_status(format!("{error}"));
                             return;
                         }
@@ -404,9 +404,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Target::Vertex(index) => {
                 if loop_select {
-                    let count = self.select_loop_through_core(|mesh| {
-                        mesh.select_vertex_loop(index, extend)
-                    });
+                    let count = self
+                        .select_loop_through_core(|mesh| mesh.select_vertex_loop(index, extend));
                     self.state.set_status(crate::tr::fill(
                         &self
                             .state
@@ -425,9 +424,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             Target::Edge(a, b) => {
                 if loop_select {
-                    let count = self.select_loop_through_core(|mesh| {
-                        mesh.select_edge_loop((a, b), extend)
-                    });
+                    let count =
+                        self.select_loop_through_core(|mesh| mesh.select_edge_loop((a, b), extend));
                     self.state.set_status(crate::tr::fill(
                         &self
                             .state

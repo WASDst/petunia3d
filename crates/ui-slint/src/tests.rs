@@ -8152,14 +8152,33 @@ fn test_nudge_selection_with_arrow_keys() {
     let vx_fine = bridge.state.project.active_mesh().unwrap().verts[0].pos[0];
     assert!((vx_fine - (vx_after - 0.01)).abs() < 1e-4);
 
-    // 2. No modo Edição: setas movem os vértices selecionados
+    // 2. No modo Edição: sem seleção o NudgeCmd recusa (não move a malha inteira);
+    //    com uma face selecionada pela API do core, só os vértices dela se movem.
     bridge.state.set_edit_mode(petunia_core::EditMode::Edit);
-    bridge.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
-    bridge.state.sync_selection();
-    let vy_before = bridge.state.project.active_mesh().unwrap().verts[0].pos[1];
+    bridge.clear_component_selection();
+    let untouched = bridge.state.project.active_mesh().unwrap().clone();
+    bridge.route_shortcut("Up", false, false, false);
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().verts[0].pos,
+        untouched.verts[0].pos
+    );
+    bridge
+        .state
+        .apply_component_selection(
+            &petunia_core::ComponentSet::Faces(vec![0]),
+            petunia_core::SelectionOp::Replace,
+        )
+        .unwrap();
+    let face_vertex = untouched.faces[0].verts[0] as usize;
+    let outside = (0..untouched.verts.len())
+        .find(|v| !untouched.faces[0].verts.contains(&(*v as u32)))
+        .unwrap();
     assert!(bridge.route_shortcut("Up", false, false, false));
-    let vy_after = bridge.state.project.active_mesh().unwrap().verts[0].pos[1];
-    assert!((vy_after - (vy_before + 0.1)).abs() < 1e-4);
+    let mesh = bridge.state.project.active_mesh().unwrap();
+    assert!(
+        (mesh.verts[face_vertex].pos[1] - (untouched.verts[face_vertex].pos[1] + 0.1)).abs() < 1e-4
+    );
+    assert_eq!(mesh.verts[outside].pos, untouched.verts[outside].pos);
 
     // 3. No workspace UV: setas movem as faces selecionadas no espaço UV
     bridge.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Uv));

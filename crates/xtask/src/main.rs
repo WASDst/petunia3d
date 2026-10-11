@@ -775,11 +775,6 @@ fn task_arch_check() -> Result<()> {
     println!("🛡️ Validando fronteiras P0 (Wave M3)...");
     let p0_manifest_checks = [
         (
-            "crates/ui/Cargo.toml",
-            &["egui_extras", "iconflow"][..],
-            "petunia_ui deve possuir os adapters egui_extras/iconflow",
-        ),
-        (
             "crates/mesh/Cargo.toml",
             &["geo =", "manifold-rust"][..],
             "petunia_mesh deve possuir os providers geo/manifold-rust",
@@ -794,12 +789,10 @@ fn task_arch_check() -> Result<()> {
             &["tracing =", "slotmap =", "rayon =", "flume =", "schemars"][..],
             "petunia_core deve possuir tracing/slotmap/rayon/flume/schemars",
         ),
-        (
-            "crates/app/Cargo.toml",
-            &["tracing-subscriber", "eframe"][..],
-            "petunia_app deve possuir tracing-subscriber/eframe",
-        ),
     ];
+    // `crates/ui` (egui) e `crates/app` foram removidos com a pilha egui/WGPU:
+    // as dependências que só eles possuíam não têm mais dono, e o confinamento
+    // abaixo passa a proibi-las em todos os crates.
     for (rel_path, required, reason) in p0_manifest_checks {
         let path = root.join(rel_path);
         let content =
@@ -828,14 +821,12 @@ fn task_arch_check() -> Result<()> {
         "crates/plugins",
         "crates/mcp",
         "crates/render",
-        "crates/render-gl",
-        "crates/render-wgpu",
         "crates/module-model",
         "crates/module-paint",
         "crates/module-uv",
         "crates/module-assets",
-        "crates/ui",
-        "crates/app",
+        "crates/application",
+        "crates/ui-slint",
         "crates/cli",
         "crates/ffi",
     ];
@@ -846,7 +837,7 @@ fn task_arch_check() -> Result<()> {
             }
             let cargo_p = root.join(c).join("Cargo.toml");
             if cargo_p.exists() {
-                let content = std::fs::read_to_string(&cargo_p)?;
+                let content = manifest_without_comments(&std::fs::read_to_string(&cargo_p)?);
                 if content.contains(dep) {
                     bail!(
                         "Violação P0 (Wave M3): {c}/Cargo.toml depende de '{dep}' fora do dono {owner}!"
@@ -907,16 +898,6 @@ fn task_arch_check() -> Result<()> {
             &["xatlas"][..],
             "petunia_mesh deve possuir o provider xatlas",
         ),
-        (
-            "crates/app/Cargo.toml",
-            &["notify ="][..],
-            "petunia_app deve possuir notify",
-        ),
-        (
-            "crates/ui/Cargo.toml",
-            &["egui_inbox", "egui_taffy", "twill"][..],
-            "petunia_ui deve possuir inbox/taffy/twill",
-        ),
     ];
     for (rel_path, required, reason) in p1_manifest_checks {
         let path = root.join(rel_path);
@@ -951,7 +932,7 @@ fn task_arch_check() -> Result<()> {
             }
             let cargo_p = root.join(c).join("Cargo.toml");
             if cargo_p.exists() {
-                let content = std::fs::read_to_string(&cargo_p)?;
+                let content = manifest_without_comments(&std::fs::read_to_string(&cargo_p)?);
                 if content.contains(dep) {
                     bail!(
                         "Violação P1 (Wave M4): {c}/Cargo.toml depende de '{dep}' fora do dono {owner}!"
@@ -1101,4 +1082,13 @@ fn task_ui_metrics() -> Result<()> {
         bail!("ui-metrics: a contagem de controles passou da meta (ver tabela acima)");
     }
     Ok(())
+}
+
+/// Manifesto sem linhas de comentário: confinamento olha dependências, não prosa.
+fn manifest_without_comments(content: &str) -> String {
+    content
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
