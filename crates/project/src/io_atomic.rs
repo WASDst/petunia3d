@@ -50,8 +50,11 @@ pub fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), AtomicIoError> {
         detail: e.to_string(),
     })?;
     use std::io::Write as _;
+    // Dados no disco antes do rename: sem `sync_all`, um crash logo após o
+    // rename pode deixar o arquivo novo vazio/truncado no lugar do anterior.
     temp.write_all(bytes)
         .and_then(|()| temp.flush())
+        .and_then(|()| temp.as_file().sync_all())
         .map_err(|e| AtomicIoError::Temp {
             path: path_str.clone(),
             detail: e.to_string(),
@@ -60,7 +63,19 @@ pub fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), AtomicIoError> {
         path: path_str,
         detail: e.to_string(),
     })?;
+    sync_directory(&dir);
     Ok(())
+}
+
+/// Torna o rename durável (entrada de diretório) onde o SO permite. Melhor
+/// esforço: falhar aqui não desfaz um replace já concluído.
+fn sync_directory(dir: &Path) {
+    #[cfg(unix)]
+    if let Ok(handle) = std::fs::File::open(dir) {
+        let _ = handle.sync_all();
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
 }
 
 /// Scoped temp directory, deleted on drop. For export staging, recovery

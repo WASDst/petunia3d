@@ -210,7 +210,24 @@ pub trait FormatExporter: Send + Sync {
         indices: &[usize],
         options: &ExportOptions,
     ) -> Result<Vec<u8>, PipelineError>;
+
+    /// Perdas declaradas antes de exportar: nunca prometer um efeito que o
+    /// formato não representa (website/docs/12-interchange, "Política de
+    /// conversão e perda").
+    fn warnings(&self, options: &ExportOptions) -> Vec<String> {
+        let mut out = Vec::new();
+        if options.export_materials && !self.capabilities().supports_materials {
+            out.push(format!(
+                "{}: materials are not exported by this format",
+                self.format().label()
+            ));
+        }
+        out
+    }
 }
+
+/// Maior arquivo aceito por um import (antes de qualquer parse).
+pub const MAX_IMPORT_FILE_BYTES: u64 = 256 * 1024 * 1024;
 
 /// Trait abstrata para adaptadores de importação modular (P3D-071).
 pub trait FormatImporter: Send + Sync {
@@ -253,7 +270,7 @@ impl FormatExporter for ObjExporter {
         _project: &Project,
         options: &ExportOptions,
     ) -> Result<Vec<u8>, PipelineError> {
-        let mut mesh = asset.evaluated_mesh();
+        let mut mesh = asset.world_mesh().into_owned();
         if options.triangulate {
             mesh.triangulate();
         }
@@ -266,7 +283,9 @@ impl FormatExporter for ObjExporter {
                 ];
             }
         }
-        let text = mesh.to_obj();
+        // Mesma saída de `export::export_obj`: normais por FaceCorner do
+        // sombreamento autoral (Smooth/Flat + Sharp), não só posições.
+        let text = mesh.to_obj_with_normals(asset.surface_shading);
         Ok(text.into_bytes())
     }
 
@@ -279,7 +298,7 @@ impl FormatExporter for ObjExporter {
         let mut merged = Mesh::default();
         for &idx in indices {
             if let Some(asset) = project.assets.get(idx) {
-                let mut m = asset.evaluated_mesh();
+                let mut m = asset.world_mesh().into_owned();
                 if options.triangulate {
                     m.triangulate();
                 }
@@ -400,6 +419,17 @@ impl FormatExporter for GlbExporter {
             ExportError::Other(s) => PipelineError::Export(s),
             ExportError::Io(s) => PipelineError::Export(s),
         })
+    }
+
+    fn warnings(&self, options: &ExportOptions) -> Vec<String> {
+        let mut out = Vec::new();
+        if (options.scale - 1.0).abs() > 1e-5 {
+            out.push(format!(
+                "GLB: scale {} is not applied (units stay in meters)",
+                options.scale
+            ));
+        }
+        out
     }
 }
 
@@ -705,19 +735,36 @@ impl DeliveryPipeline {
             .exporter(format)
             .ok_or_else(|| PipelineError::UnsupportedFormat(format.label().to_string()))?;
 
+        // Game-Ready Validator: Error bloqueia este alvo; Warning vai ao relatório.
+        let diagnostics = crate::game_ready::validate_asset(asset);
+        if crate::game_ready::has_errors(&diagnostics) {
+            let codes: Vec<String> = diagnostics
+                .iter()
+                .filter(|d| d.severity == crate::game_ready::Severity::Error)
+                .map(|d| format!("{}: {}", d.code, d.message))
+                .collect();
+            return Err(PipelineError::Validation(codes.join("; ")));
+        }
+        let mut warnings = exporter.warnings(options);
+        warnings.extend(
+            diagnostics
+                .iter()
+                .filter(|d| d.severity == crate::game_ready::Severity::Warning)
+                .map(|d| format!("{}: {}", d.code, d.message)),
+        );
+
         let bytes = exporter.export_asset(asset, project, options)?;
 
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(path, &bytes)?;
+        // Escrita atômica: uma falha no meio nunca deixa o destino truncado.
+        crate::io_atomic::atomic_write(path, &bytes)
+            .map_err(|e| PipelineError::Io(std::io::Error::other(e.to_string())))?;
 
         Ok(ExportReport {
             asset_name: asset.name.clone(),
             output_path: path.to_path_buf(),
             format,
             bytes_written: bytes.len(),
-            warnings: Vec::new(),
+            warnings,
         })
     }
 
@@ -732,10 +779,13 @@ impl DeliveryPipeline {
     ) -> Result<BatchExportReport, PipelineError> {
         std::fs::create_dir_all(dir)?;
         let mut report = BatchExportReport::default();
+        // Nomes únicos e determinísticos dentro do batch: dois objetos com o
+        // mesmo nome nunca se sobrescrevem (`Cube`, `Cube_2`, …).
+        let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for &idx in indices {
             if let Some(asset) = project.assets.get(idx) {
-                let sanitized = sanitize_name(&asset.name);
+                let sanitized = unique_name(&sanitize_name(&asset.name), &mut used);
                 let target = dir.join(format!("{sanitized}.{}", format.extension()));
                 match self.export_single_asset(project, idx, &target, options) {
                     Ok(rep) => {
@@ -783,6 +833,12 @@ impl DeliveryPipeline {
             )
         })?;
 
+        let size = std::fs::metadata(path)?.len();
+        if size > MAX_IMPORT_FILE_BYTES {
+            return Err(PipelineError::Validation(format!(
+                "file has {size} bytes (max {MAX_IMPORT_FILE_BYTES})"
+            )));
+        }
         let data = std::fs::read(path)?;
         let name_hint = path
             .file_stem()
@@ -829,6 +885,19 @@ impl DeliveryPipeline {
 
         importer.import_bytes(&data, name_hint, options)
     }
+}
+
+/// `base`, ou `base_2`, `base_3`… — o primeiro ainda não usado (sem
+/// diferenciar maiúsculas, por causa de filesystems case-insensitive).
+fn unique_name(base: &str, used: &mut std::collections::HashSet<String>) -> String {
+    let base = if base.is_empty() { "object" } else { base };
+    let mut candidate = base.to_string();
+    let mut n = 2;
+    while !used.insert(candidate.to_lowercase()) {
+        candidate = format!("{base}_{n}");
+        n += 1;
+    }
+    candidate
 }
 
 fn sanitize_name(name: &str) -> String {

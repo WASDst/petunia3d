@@ -356,3 +356,61 @@ fn test_hostile_gltf_malformed_json() {
     let res = pipeline.import_file(&corrupt_path, &ImportOptions::default());
     assert!(res.is_err());
 }
+
+#[test]
+fn batch_names_never_collide_inside_one_export() {
+    let dir = tempdir().expect("tempdir");
+    let mut proj = Project::new();
+    proj.add("Crate", Mesh::cube(1.0));
+    proj.add("Crate", Mesh::cube(2.0));
+    proj.add("crate", Mesh::plane(1.0));
+    let target_dir = dir.path().join("dupes");
+    let report = DeliveryPipeline::new()
+        .batch_export(
+            &proj,
+            &target_dir,
+            FileFormat::Obj,
+            &ExportOptions::default(),
+        )
+        .expect("batch export");
+    assert!(report.all_succeeded());
+    let mut names: Vec<String> = report
+        .succeeded
+        .iter()
+        .map(|r| {
+            r.output_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    names.sort();
+    assert_eq!(names.len(), 3);
+    names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    assert_eq!(names.len(), 3, "case-insensitive collision: {names:?}");
+}
+
+#[test]
+fn unsupported_options_are_reported_not_silently_dropped() {
+    let dir = tempdir().expect("tempdir");
+    let proj = sample_test_project();
+    let pipeline = DeliveryPipeline::new();
+    let scaled = ExportOptions {
+        scale: 2.0,
+        ..ExportOptions::default()
+    };
+    let glb = pipeline
+        .export_single_asset(&proj, 0, &dir.path().join("a.glb"), &scaled)
+        .expect("glb");
+    assert!(glb.warnings.iter().any(|w| w.contains("scale")));
+    let obj = pipeline
+        .export_single_asset(
+            &proj,
+            0,
+            &dir.path().join("a.obj"),
+            &ExportOptions::default(),
+        )
+        .expect("obj");
+    assert!(obj.warnings.iter().any(|w| w.contains("materials")));
+}

@@ -70,6 +70,7 @@ pub use shared::Shared;
 pub mod autosave;
 pub mod export;
 pub mod format;
+pub mod game_ready;
 pub mod gltf_rig;
 pub mod ik;
 pub mod import_gltf;
@@ -79,11 +80,13 @@ pub mod material;
 pub mod model_library;
 pub mod motion;
 mod motion_gen;
+pub mod object_transform;
 pub mod package;
 pub mod paint_layers;
 pub mod palette;
 pub mod path_generator;
 pub mod pipeline;
+pub mod plugin_data;
 pub mod posing;
 pub mod prefab;
 pub mod profile;
@@ -99,7 +102,10 @@ pub use animation::{
     AnimationAsset, AnimationClip, AnimationLibrary, BoneTrack, Interpolation, Keyframe,
     RetargetProfile, RigPreset, auto_fit_humanoid, compute_auto_skin_weights,
 };
-pub use autosave::{AutosaveConfig, AutosaveService, RecoveryInfo, SessionLockInfo};
+pub use autosave::{
+    AutosaveConfig, AutosaveService, AutosaveStorage, FileAutosaveStorage, RecoveryCandidate,
+    RecoveryInfo, SessionLockInfo,
+};
 pub use export::{ExportError, export_gltf, export_obj};
 pub use ik::{
     IkChain, IkError, IkOutcome, IkSolver, chain_end_position, solve_chain, solve_fabrik,
@@ -117,6 +123,7 @@ pub use motion::{
     BakeOptions, BakeResult, BakeTolerance, MotionError, MotionEvaluator, MotionGenerator,
     MotionParam, MotionRecipe, MotionStyle, ParamSpec, RootMode, bake_motion,
 };
+pub use object_transform::{ObjectTransform, TransformError};
 pub use package::{
     Attachment, PACKAGE_VERSION, PackageError, PackageManifest, open_package, open_package_bytes,
     save_package, save_package_bytes,
@@ -337,6 +344,10 @@ impl Canvas {
     /// histórico tem orçamento de bytes, então lados maiores encurtam o undo.
     pub const MAX_SIDE: u32 = 2048;
 
+    /// Lado da textura criada quando um asset ainda não tem canvas (PAINT) e
+    /// resolução assumida por UV (padding em pixels, texel density).
+    pub const DEFAULT_SIDE: u32 = 1024;
+
     /// Redimensiona por vizinho mais próximo (operação explícita de resize;
     /// preserva o conteúdo proporcionalmente, sem filtros caros).
     pub fn resized(&self, w: u32, h: u32) -> Self {
@@ -463,11 +474,28 @@ pub struct Asset {
     /// Escala persistente do asset.
     #[serde(default = "default_scale")]
     pub scale: [f32; 3],
+    /// Política de sombreamento da superfície (Flat por padrão); propriedade do
+    /// objeto, não do viewport.
+    #[serde(default)]
+    pub surface_shading: petunia_mesh::shading::SurfaceShading,
+    /// Transform autoritativo local → mundo (P01/G10). Fase 1 da migração:
+    /// identidade em todo objeto; consumidores em mundo já leem
+    /// [`Asset::world_matrix`] / [`Asset::world_mesh`].
+    #[serde(default)]
+    pub transform: object_transform::ObjectTransform,
     #[serde(skip)]
     eval_cache: Option<(u64, u64, Mesh)>,
 }
 
 impl Asset {
+    /// Resolução `[largura, altura]` da textura ativa do asset, ou
+    /// [`Canvas::DEFAULT_SIDE`]² quando ainda não há textura.
+    pub fn texture_size(&self) -> [u32; 2] {
+        self.texture
+            .as_ref()
+            .map_or([Canvas::DEFAULT_SIDE; 2], |canvas| [canvas.w, canvas.h])
+    }
+
     pub fn new(name: &str, mesh: Mesh) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -491,6 +519,8 @@ impl Asset {
             position: [0.0, 0.0, 0.0],
             rotation: [0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
+            surface_shading: petunia_mesh::shading::SurfaceShading::Flat,
+            transform: object_transform::ObjectTransform::IDENTITY,
             eval_cache: None,
         }
     }
@@ -635,6 +665,65 @@ impl Asset {
             return std::borrow::Cow::Borrowed(cached);
         }
         std::borrow::Cow::Owned(self.evaluated_mesh())
+    }
+
+    /// Matriz local → mundo do objeto (sem hierarquia ainda: `world = local`).
+    pub fn world_matrix(&self) -> glam::Mat4 {
+        self.transform.to_mat4()
+    }
+
+    /// Posições em mundo dos vértices autorais (mesma ordem de `mesh.verts`,
+    /// sem modifiers e sem reordenar cantos).
+    pub fn world_positions(&self) -> Vec<glam::Vec3> {
+        let matrix = self.world_matrix();
+        self.mesh
+            .verts
+            .iter()
+            .map(|v| matrix.transform_point3(v.vec()))
+            .collect()
+    }
+
+    /// Ponto em mundo → frame local do objeto (entrada de cursor, snap, raio).
+    pub fn to_local_point(&self, world: glam::Vec3) -> glam::Vec3 {
+        self.world_matrix().inverse().transform_point3(world)
+    }
+
+    /// Vetor/deslocamento em mundo → frame local (deltas de gizmo).
+    pub fn to_local_vector(&self, world: glam::Vec3) -> glam::Vec3 {
+        self.world_matrix().inverse().transform_vector3(world)
+    }
+
+    /// Ponto local → mundo.
+    pub fn to_world_point(&self, local: glam::Vec3) -> glam::Vec3 {
+        self.world_matrix().transform_point3(local)
+    }
+
+    /// Malha autoral deste objeto expressa no frame local de `target`
+    /// (`target⁻¹ · self`): operando de booleano/join que vai viver dentro de
+    /// `target`. Sob determinante negativo inverte o winding (vértices, UVs e
+    /// pins por canto) para manter a aparência.
+    pub fn mesh_in_frame_of(&self, target: &Asset) -> Mesh {
+        let mut mesh = self.mesh.to_owned_value();
+        if self.transform == target.transform {
+            return mesh;
+        }
+        mesh.transform_affine(target.world_matrix().inverse() * self.world_matrix());
+        mesh
+    }
+
+    /// Malha avaliada (modifiers) em coordenadas de mundo. Emprestada quando o
+    /// transform é identidade (zero cópia); senão, cópia com posições
+    /// transformadas e winding invertido sob escala negativa, para a aparência
+    /// e as normais continuarem corretas. É a entrada de picking, snapping,
+    /// export, booleanos e projeção — nunca editar autoria por ela.
+    pub fn world_mesh(&self) -> std::borrow::Cow<'_, Mesh> {
+        let evaluated = self.evaluated_mesh_ref();
+        if self.transform.is_identity() {
+            return evaluated;
+        }
+        let mut mesh = evaluated.into_owned();
+        mesh.transform_affine(self.world_matrix());
+        std::borrow::Cow::Owned(mesh)
     }
 
     /// Avalia a pilha de modifiers sem alterar a malha-base.
@@ -944,6 +1033,86 @@ impl Light {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RefAxis {
+    Front,
+    Back,
+    Left,
+    Right,
+    Side,
+    Top,
+    Bottom,
+}
+
+impl RefAxis {
+    pub fn key(&self) -> &'static str {
+        match self {
+            RefAxis::Front => "refs.front",
+            RefAxis::Back => "refs.back",
+            RefAxis::Left => "refs.left",
+            RefAxis::Right | RefAxis::Side => "refs.right",
+            RefAxis::Top => "refs.top",
+            RefAxis::Bottom => "refs.bottom",
+        }
+    }
+}
+
+/// Imagem de referência autoral persistida no documento (website/docs/02-application/state-separation.md).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReferenceImage {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+    pub axis: RefAxis,
+    pub offset: f32,
+    pub size: f32,
+    pub opacity: f32,
+    pub visible: bool,
+    pub locked: bool,
+    pub rotation: f32,
+    pub xray: bool,
+    /// Identidade monotônica do conteúdo de `rgba` (nunca 0). Trocar os pixels
+    /// exige `bump_revision()`; o renderer usa isto em vez de varrer os bytes.
+    #[serde(default = "ReferenceImage::next_revision")]
+    pub revision: u64,
+}
+
+impl ReferenceImage {
+    /// Próxima revisão global de conteúdo (única por processo, começa em 1).
+    pub fn next_revision() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Marca que `rgba` foi substituído.
+    pub fn bump_revision(&mut self) {
+        self.revision = Self::next_revision();
+    }
+
+    pub fn from_rgba(name: String, width: u32, height: u32, rgba: Vec<u8>) -> Self {
+        Self {
+            revision: Self::next_revision(),
+            name,
+            width,
+            height,
+            rgba,
+            axis: RefAxis::Front,
+            offset: -3.0,
+            size: 4.0,
+            opacity: 0.6,
+            visible: true,
+            locked: false,
+            rotation: 0.0,
+            xray: false,
+        }
+    }
+}
+
+/// Documento autoral canônico (website/docs/02-application/state-separation.md).
+pub type Document = Project;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Project {
     #[serde(default = "Uuid::new_v4")]
@@ -1011,9 +1180,9 @@ pub struct Project {
     pub profiles: Vec<ProfileResource>,
     #[serde(default)]
     pub path_generators: Vec<PathGenerator>,
-    /// Assets com sombreamento suave (normais interpoladas). Ausente = flat,
-    /// o padrão do cap. 05. Fica no projeto — não no `Asset` — para não deslocar
-    /// o layout postcard legado, que embute `Vec<Asset>`.
+    /// **Legado, somente leitura.** Antes do `Asset::surface_shading`, o Smooth ficava
+    /// numa lista paralela. Arquivos antigos ainda a trazem; `validate()` migra os ids
+    /// para o objeto e esvazia a lista, então ela nunca é uma segunda autoridade.
     #[serde(default)]
     pub smooth_shaded_assets: Vec<Uuid>,
     /// Papéis dos ossos por esqueleto (P3D-169). Append-only: fora de `Skeleton`
@@ -1033,32 +1202,33 @@ pub struct Project {
     /// Vínculo instância → prefab de origem.
     #[serde(default)]
     pub prefab_links: Vec<prefab::PrefabLink>,
+    /// Imagens de referência autorais persistidas no documento (A03 / Checkpoint 3).
+    #[serde(default)]
+    pub references: Vec<ReferenceImage>,
+    /// Dados autorais namespaced de plugins (schema versionado, preservados
+    /// quando o plugin está ausente).
+    #[serde(default)]
+    pub plugin_data: plugin_data::PluginDataStore,
 }
 
 impl Project {
     /// O asset usa sombreamento suave (Shade Smooth)?
     pub fn is_smooth_shaded(&self, asset_id: Uuid) -> bool {
-        self.smooth_shaded_assets.contains(&asset_id)
+        self.assets
+            .iter()
+            .find(|asset| asset.id == asset_id)
+            .is_some_and(|asset| asset.surface_shading.is_smooth())
     }
 
     /// Define Flat/Smooth de um asset. Retorna `true` quando algo mudou.
     /// Avança apenas a revisão de normais.
     pub fn set_smooth_shaded(&mut self, asset_id: Uuid, smooth: bool) -> bool {
-        if !self.assets.iter().any(|asset| asset.id == asset_id) {
+        let Some(asset) = self.assets.iter_mut().find(|asset| asset.id == asset_id) else {
             return false;
-        }
-        let changed = if smooth {
-            if self.is_smooth_shaded(asset_id) {
-                false
-            } else {
-                self.smooth_shaded_assets.push(asset_id);
-                true
-            }
-        } else {
-            let before = self.smooth_shaded_assets.len();
-            self.smooth_shaded_assets.retain(|id| *id != asset_id);
-            self.smooth_shaded_assets.len() != before
         };
+        let wanted = petunia_mesh::shading::SurfaceShading::from_smooth(smooth);
+        let changed = asset.surface_shading != wanted;
+        asset.surface_shading = wanted;
         if changed {
             self.bump_normals();
         }
@@ -1086,6 +1256,8 @@ impl Default for Project {
             motions: Vec::new(),
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
+            plugin_data: Default::default(),
+            references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -1240,6 +1412,15 @@ impl Project {
     }
 
     /// Keeps cache revisions monotonic when undo/redo restores an older snapshot.
+    /// Identidade compacta da revisão do documento (muda quando qualquer domínio muda).
+    pub fn revision_id(&self) -> u64 {
+        self.revision_clock()
+            .iter()
+            .fold(0xcbf2_9ce4_8422_2325u64, |acc, value| {
+                (acc ^ value).wrapping_mul(0x0100_0000_01b3)
+            })
+    }
+
     pub fn revision_clock(&self) -> [u64; 11] {
         [
             self.topology_revision,
@@ -1604,6 +1785,8 @@ impl Project {
             motions: Vec::new(),
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
+            plugin_data: Default::default(),
+            references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
             palette: default_palette(),
@@ -2202,13 +2385,12 @@ impl Project {
     /// Normaliza projeto vindo de arquivo (M2/M3): malhas válidas,
     /// no mínimo 1 asset, `active` dentro dos limites e materiais íntegros (P3D-050).
     pub fn validate(&mut self) {
-        // Remove ids de sombreamento suave que não apontam mais para um asset.
-        let asset_ids: std::collections::HashSet<Uuid> =
-            self.assets.iter().map(|asset| asset.id).collect();
-        self.smooth_shaded_assets
-            .retain(|id| asset_ids.contains(id));
-        self.smooth_shaded_assets.sort_unstable();
-        self.smooth_shaded_assets.dedup();
+        // Migra a lista legada de Smooth para o objeto e a esvazia (uma só autoridade).
+        for legacy_id in std::mem::take(&mut self.smooth_shaded_assets) {
+            if let Some(asset) = self.assets.iter_mut().find(|asset| asset.id == legacy_id) {
+                asset.surface_shading = petunia_mesh::shading::SurfaceShading::Smooth;
+            }
+        }
         // Movimentos: só os de esqueletos existentes, com ids únicos.
         let mut motion_ids = std::collections::HashSet::new();
         let skeletons = &self.skeletons;
@@ -2269,7 +2451,12 @@ impl Project {
         let fallback_mat_id = self.materials[0].id;
 
         for a in &mut self.assets {
-            a.mesh.validate();
+            // Fronteira de deserialização/carregamento: migração explícita com relatório
+            // (website/docs/03-geometry/validation-repair-cleanup.md §2).
+            let _ = petunia_mesh::repair_external_mesh(
+                &mut a.mesh,
+                petunia_mesh::RepairPolicy::LegacyProjectMigration,
+            );
             if let Some(cv) = a.texture.as_mut() {
                 cv.validate();
             }

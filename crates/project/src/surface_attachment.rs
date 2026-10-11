@@ -144,7 +144,31 @@ pub fn evaluate_surface_attachment(
         .find(|asset| asset.id == attachment.target)
         .ok_or(SurfaceAttachmentError::MissingTarget)?;
     let triangle = triangle_data(&asset.mesh, attachment.triangle)?;
-    evaluate_triangle_frame(triangle, attachment)
+    evaluate_triangle_frame(triangle, attachment).map(|frame| frame_to_world(asset, frame))
+}
+
+/// Frame avaliado no triângulo autoral (local do alvo) → mundo: posição pela
+/// matriz do objeto, normal pela inversa-transposta, tangentes pela matriz.
+fn frame_to_world(asset: &crate::Asset, frame: SurfaceFrame) -> SurfaceFrame {
+    if asset.transform.is_identity() {
+        return frame;
+    }
+    let matrix = asset.world_matrix();
+    let normal_matrix = matrix.inverse().transpose();
+    let dir = |v: [f32; 3], m: glam::Mat4| {
+        m.transform_vector3(Vec3::from_array(v))
+            .normalize_or_zero()
+            .to_array()
+    };
+    SurfaceFrame {
+        position: matrix
+            .transform_point3(Vec3::from_array(frame.position))
+            .to_array(),
+        normal: dir(frame.normal, normal_matrix),
+        tangent: dir(frame.tangent, matrix),
+        bitangent: dir(frame.bitangent, matrix),
+        uv: frame.uv,
+    }
 }
 
 /// Evaluates a path while computing each target's topology fingerprint once.
@@ -171,6 +195,7 @@ pub fn evaluate_surface_attachments(
                 return Err(SurfaceAttachmentError::NeedsReattach);
             }
             evaluate_triangle_frame(triangle_data(&asset.mesh, a.triangle)?, a)
+                .map(|frame| frame_to_world(asset, frame))
         })
         .collect()
 }
@@ -294,6 +319,15 @@ fn project_ray(
         asset.visible && !asset.locked && target.is_none_or(|target| asset.id == target)
     }) {
         let topology_fingerprint = asset.mesh.topology_fingerprint();
+        // O raio está em mundo e os triângulos são locais: testa no frame do
+        // objeto e compara objetos pela distância em mundo.
+        let world_matrix = asset.world_matrix();
+        let to_local = world_matrix.inverse();
+        let local_origin = to_local.transform_point3(origin);
+        let local_direction = to_local.transform_vector3(direction).normalize_or_zero();
+        if local_direction == Vec3::ZERO {
+            continue;
+        }
         for (face_index, _) in asset.mesh.faces.iter().enumerate() {
             for (triangle_index, corners) in asset
                 .mesh
@@ -304,11 +338,17 @@ fn project_ray(
                 let face = &asset.mesh.faces[face_index];
                 let points =
                     corners.map(|corner| asset.mesh.verts[face.verts[corner] as usize].vec());
-                let Some(ray_hit) = petunia_mesh::triangulate::ray_tri_hit(
-                    origin, direction, points[0], points[1], points[2],
+                let Some(mut ray_hit) = petunia_mesh::triangulate::ray_tri_hit(
+                    local_origin,
+                    local_direction,
+                    points[0],
+                    points[1],
+                    points[2],
                 ) else {
                     continue;
                 };
+                let local_point = local_origin + local_direction * ray_hit.distance;
+                ray_hit.distance = world_matrix.transform_point3(local_point).distance(origin);
                 if ray_hit.distance > max_distance
                     || nearest
                         .as_ref()
@@ -335,8 +375,10 @@ fn project_ray(
                     source_topology_fingerprint: topology_fingerprint,
                     last_world_position: base_position.to_array(),
                 };
-                let frame =
-                    evaluate_triangle_frame(triangle_data(&asset.mesh, handle)?, &attachment)?;
+                let frame = frame_to_world(
+                    asset,
+                    evaluate_triangle_frame(triangle_data(&asset.mesh, handle)?, &attachment)?,
+                );
                 attachment.last_world_position = frame.position;
                 nearest = Some(SurfaceHit {
                     distance: ray_hit.distance,

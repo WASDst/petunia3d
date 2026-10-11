@@ -125,6 +125,8 @@ impl LegacyProjectWithSplines {
             motions: Vec::new(),
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
+            plugin_data: Default::default(),
+            references: Vec::new(),
         }
     }
 }
@@ -198,6 +200,8 @@ impl LegacyProjectBeforeSplines {
             motions: Vec::new(),
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
+            plugin_data: Default::default(),
+            references: Vec::new(),
         }
     }
 }
@@ -219,6 +223,95 @@ pub enum ProjectError {
     Version(u32, u32),
     #[error("arquivo excede o limite de tamanho ({0} bytes)")]
     TooLarge(u64),
+    /// Load Strict: o arquivo só abriria com reparo (Legacy Repair).
+    #[error("o arquivo precisa de reparo: {0}")]
+    RepairRequired(String),
+}
+
+/// Container/layout de onde o projeto foi lido.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoadSource {
+    ZipV1,
+    LegacyPostcard,
+    LegacyPostcardWithSplines,
+    LegacyPostcardBeforeSplines,
+}
+
+/// Política de reparo no load (website/docs/11-project/project-persistence.md,
+/// "Load: pipeline de confiança"): Strict recusa qualquer reparo; Legacy
+/// Repair aplica-o e o registra no [`LoadReport`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LoadMode {
+    Strict,
+    #[default]
+    LegacyRepair,
+}
+
+/// O que o load fez além de ler: origem, versão e reparos auditáveis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadReport {
+    pub source: LoadSource,
+    pub format_version: u32,
+    /// Uma linha por categoria alterada pela validação (ex.: `motions: 3 -> 2`).
+    pub repairs: Vec<String>,
+}
+
+/// Contagens que a validação pode alterar; a diferença antes/depois é o
+/// registro auditável do reparo.
+fn repair_census(project: &Project) -> Vec<(&'static str, usize)> {
+    vec![
+        ("assets", project.assets.len()),
+        ("active", project.active),
+        ("materials", project.materials.len()),
+        ("lights", project.lights.len()),
+        ("skeletons", project.skeletons.len()),
+        ("animations", project.animations.len()),
+        ("splines", project.splines.len()),
+        ("profiles", project.profiles.len()),
+        ("path_generators", project.path_generators.len()),
+        (
+            "smooth_shaded_assets (legacy)",
+            project.smooth_shaded_assets.len(),
+        ),
+        ("rig_roles", project.rig_roles.len()),
+        ("ik_chains", project.ik_chains.len()),
+        ("motions", project.motions.len()),
+        ("prefabs", project.prefabs.len()),
+        ("prefab_links", project.prefab_links.len()),
+        ("references", project.references.len()),
+        ("annotations", project.annotations.len()),
+        ("measurements", project.measurements.len()),
+    ]
+}
+
+/// Etapa final comum do load: valida (repara) em staging, registra a diferença
+/// e aplica a política do `mode`. Nada é publicado em caso de erro.
+fn finish_load(
+    mut project: Project,
+    source: LoadSource,
+    format_version: u32,
+    mode: LoadMode,
+) -> Result<(Project, LoadReport), ProjectError> {
+    let before = repair_census(&project);
+    project.validate();
+    let after = repair_census(&project);
+    let repairs: Vec<String> = before
+        .iter()
+        .zip(&after)
+        .filter(|(b, a)| b.1 != a.1)
+        .map(|(b, a)| format!("{}: {} -> {}", b.0, b.1, a.1))
+        .collect();
+    if mode == LoadMode::Strict && !repairs.is_empty() {
+        return Err(ProjectError::RepairRequired(repairs.join(", ")));
+    }
+    Ok((
+        project,
+        LoadReport {
+            source,
+            format_version,
+            repairs,
+        },
+    ))
 }
 
 /// Salva o projeto no disco utilizando escrita atômica segura (P3D-001).
@@ -270,27 +363,64 @@ pub fn save_atomic(project: &Project, path: &std::path::Path) -> Result<(), Proj
     atomic_write(path, &bytes).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
+/// Load com Legacy Repair (compatibilidade): reparos aplicados sem relatório.
 pub fn load(path: &std::path::Path) -> Result<Project, ProjectError> {
+    load_with_report(path, LoadMode::LegacyRepair).map(|(project, _)| project)
+}
+
+/// Load com política explícita e relatório de origem/versão/reparos.
+pub fn load_with_report(
+    path: &std::path::Path,
+    mode: LoadMode,
+) -> Result<(Project, LoadReport), ProjectError> {
     let meta = std::fs::metadata(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     if meta.len() > MAX_FILE_BYTES {
         return Err(ProjectError::TooLarge(meta.len()));
     }
     let bytes = std::fs::read(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    load_bytes(&bytes)
+    load_bytes_with_report(&bytes, mode)
 }
 
 /// Parses a project from raw bytes (fuzz boundary: never panics on hostile input).
 pub fn load_bytes(bytes: &[u8]) -> Result<Project, ProjectError> {
+    load_bytes_with_report(bytes, LoadMode::LegacyRepair).map(|(project, _)| project)
+}
+
+/// [`load_bytes`] com política de reparo e relatório.
+pub fn load_bytes_with_report(
+    bytes: &[u8],
+    mode: LoadMode,
+) -> Result<(Project, LoadReport), ProjectError> {
     if bytes.len() as u64 > MAX_FILE_BYTES {
         return Err(ProjectError::TooLarge(bytes.len() as u64));
     }
-    if bytes.len() >= 2 && bytes[0] == ZIP_MAGIC[0] && bytes[1] == ZIP_MAGIC[1] {
-        return load_zip(bytes);
-    }
-    load_legacy_postcard(bytes)
+    let (project, source, version) =
+        if bytes.len() >= 2 && bytes[0] == ZIP_MAGIC[0] && bytes[1] == ZIP_MAGIC[1] {
+            load_zip(bytes)?
+        } else {
+            load_legacy_postcard(bytes)?
+        };
+    finish_load(project, source, version, mode)
 }
 
-fn load_zip(bytes: &[u8]) -> Result<Project, ProjectError> {
+/// Lê no máximo `limit` bytes de uma entrada; o tamanho declarado no cabeçalho
+/// do ZIP não é confiável (zip bomb), então o limite vale para o fluxo real.
+fn read_entry_bounded(entry: &mut impl Read, limit: usize) -> Result<Vec<u8>, ProjectError> {
+    let mut buf = Vec::new();
+    entry
+        .take(limit as u64 + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| ProjectError::Format(e.to_string()))?;
+    if buf.len() > limit {
+        return Err(ProjectError::TooLarge(buf.len() as u64));
+    }
+    Ok(buf)
+}
+
+/// Limite do `manifest.json` (metadados pequenos).
+const MAX_MANIFEST_BYTES: usize = 64 * 1024;
+
+fn load_zip(bytes: &[u8]) -> Result<(Project, LoadSource, u32), ProjectError> {
     let cursor = Cursor::new(bytes);
     let mut archive =
         zip::ZipArchive::new(cursor).map_err(|e| ProjectError::Format(e.to_string()))?;
@@ -314,36 +444,27 @@ fn load_zip(bytes: &[u8]) -> Result<Project, ProjectError> {
             return Err(ProjectError::TooLarge(uncompressed));
         }
         if name == "manifest.json" {
-            let mut buf = String::new();
-            entry
-                .read_to_string(&mut buf)
-                .map_err(|e| ProjectError::Format(e.to_string()))?;
+            let buf = read_entry_bounded(&mut entry, MAX_MANIFEST_BYTES)?;
             let manifest: ManifestV1 =
-                serde_json::from_str(&buf).map_err(|e| ProjectError::Format(e.to_string()))?;
+                serde_json::from_slice(&buf).map_err(|e| ProjectError::Format(e.to_string()))?;
             if manifest.version > PROJECT_VERSION {
                 return Err(ProjectError::Version(manifest.version, PROJECT_VERSION));
             }
             manifest_version = manifest.version;
         } else if name == "document.json" {
-            if size as usize > MAX_JSON_BYTES {
+            if size > MAX_JSON_BYTES as u64 {
                 return Err(ProjectError::TooLarge(size));
             }
-            let mut buf = Vec::new();
-            entry
-                .read_to_end(&mut buf)
-                .map_err(|e| ProjectError::Format(e.to_string()))?;
-            document = Some(buf);
+            document = Some(read_entry_bounded(&mut entry, MAX_JSON_BYTES)?);
         }
     }
-    let _ = manifest_version;
     let doc = document.ok_or_else(|| ProjectError::Format("document.json ausente".into()))?;
-    let mut project: Project =
+    let project: Project =
         serde_json::from_slice(&doc).map_err(|e| ProjectError::Format(e.to_string()))?;
-    project.validate();
-    Ok(project)
+    Ok((project, LoadSource::ZipV1, manifest_version))
 }
 
-fn load_legacy_postcard(bytes: &[u8]) -> Result<Project, ProjectError> {
+fn load_legacy_postcard(bytes: &[u8]) -> Result<(Project, LoadSource, u32), ProjectError> {
     let file: PetuniaFile = match postcard::from_bytes(bytes) {
         Ok(file) => file,
         Err(current_error) => {
@@ -354,9 +475,11 @@ fn load_legacy_postcard(bytes: &[u8]) -> Result<Project, ProjectError> {
                 if legacy.version > PROJECT_VERSION {
                     return Err(ProjectError::Version(legacy.version, PROJECT_VERSION));
                 }
-                let mut project = legacy.project.into_project();
-                project.validate();
-                return Ok(project);
+                return Ok((
+                    legacy.project.into_project(),
+                    LoadSource::LegacyPostcardWithSplines,
+                    legacy.version,
+                ));
             }
             let legacy: LegacyPetuniaFileBeforeSplines =
                 postcard::from_bytes(bytes).map_err(|legacy_error| {
@@ -368,9 +491,11 @@ fn load_legacy_postcard(bytes: &[u8]) -> Result<Project, ProjectError> {
             if legacy.version > PROJECT_VERSION {
                 return Err(ProjectError::Version(legacy.version, PROJECT_VERSION));
             }
-            let mut project = legacy.project.into_project();
-            project.validate();
-            return Ok(project);
+            return Ok((
+                legacy.project.into_project(),
+                LoadSource::LegacyPostcardBeforeSplines,
+                legacy.version,
+            ));
         }
     };
     if file.magic != *MAGIC {
@@ -379,9 +504,7 @@ fn load_legacy_postcard(bytes: &[u8]) -> Result<Project, ProjectError> {
     if file.version > PROJECT_VERSION {
         return Err(ProjectError::Version(file.version, PROJECT_VERSION));
     }
-    let mut project = file.project;
-    project.validate();
-    Ok(project)
+    Ok((file.project, LoadSource::LegacyPostcard, file.version))
 }
 
 #[cfg(test)]
@@ -667,6 +790,7 @@ mod tests {
             selected_edges: Default::default(),
             uv_seams: Default::default(),
             uv_pinned: Default::default(),
+            sharp_edges: Default::default(),
         };
         let bad = super::super::Project {
             id: uuid::Uuid::new_v4(),
@@ -692,6 +816,8 @@ mod tests {
                 modifiers: vec![],
                 origin: None,
                 paint_stack: None,
+                surface_shading: Default::default(),
+                transform: Default::default(),
                 eval_cache: None,
                 parametric: None,
                 selection_overlay_color: None,
@@ -962,5 +1088,64 @@ mod tests {
     fn oversized_input_is_rejected() {
         let huge = vec![0u8; (MAX_FILE_BYTES as usize) + 1];
         assert!(matches!(load_bytes(&huge), Err(ProjectError::TooLarge(_))));
+    }
+
+    /// ZIP V1 escrito à mão, sem a normalização de `encode_zip`.
+    fn raw_zip(document: &[u8]) -> Vec<u8> {
+        let manifest = serde_json::json!({ "format": "petunia", "version": 1, "name": "raw" });
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut cursor);
+            let opts = zip::write::SimpleFileOptions::default();
+            zip.start_file("manifest.json", opts).unwrap();
+            zip.write_all(manifest.to_string().as_bytes()).unwrap();
+            zip.start_file("document.json", opts).unwrap();
+            zip.write_all(document).unwrap();
+            zip.finish().unwrap();
+        }
+        cursor.into_inner()
+    }
+
+    #[test]
+    fn bounded_reads_ignore_the_declared_entry_size() {
+        // O limite vale para o fluxo real, não para o cabeçalho (zip bomb).
+        let mut stream = Cursor::new(vec![7u8; 100]);
+        assert!(matches!(
+            read_entry_bounded(&mut stream, 10),
+            Err(ProjectError::TooLarge(11))
+        ));
+        let mut exact = Cursor::new(vec![7u8; 10]);
+        assert_eq!(read_entry_bounded(&mut exact, 10).unwrap().len(), 10);
+    }
+
+    #[test]
+    fn strict_load_refuses_repairs_and_legacy_repair_reports_them() {
+        let mut p = Project::new();
+        p.add("Plane", Mesh::plane(1.0));
+        p.active = 99;
+        let bytes = raw_zip(&serde_json::to_vec(&p).unwrap());
+
+        let strict = load_bytes_with_report(&bytes, LoadMode::Strict);
+        assert!(matches!(strict, Err(ProjectError::RepairRequired(ref m)) if m.contains("active")));
+
+        let (project, report) = load_bytes_with_report(&bytes, LoadMode::LegacyRepair).unwrap();
+        assert!(project.active < project.assets.len());
+        assert_eq!(report.source, LoadSource::ZipV1);
+        assert_eq!(report.format_version, 1);
+        assert!(
+            report
+                .repairs
+                .iter()
+                .any(|r| r.starts_with("active: 99 -> "))
+        );
+    }
+
+    #[test]
+    fn clean_files_load_strict_with_an_empty_report() {
+        let mut p = Project::new();
+        p.add("Plane", Mesh::plane(1.0));
+        let bytes = encode_zip(&p).unwrap();
+        let (_, report) = load_bytes_with_report(&bytes, LoadMode::Strict).unwrap();
+        assert!(report.repairs.is_empty());
     }
 }

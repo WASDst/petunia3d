@@ -145,6 +145,152 @@ pub fn simplify(points: &[[f64; 2]], tolerance: f64, closed: bool) -> Vec<[f64; 
         out
     }
 }
+/// Opções da limpeza de contorno antes de gerar Mesh.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContourCleanupOptions {
+    /// Pontos consecutivos mais próximos que isso são o mesmo ponto.
+    pub merge_distance: f64,
+    /// Desvio máximo (Douglas–Peucker); `0` desliga a simplificação.
+    pub tolerance: f64,
+    /// Segmentos mais longos que isso são subdivididos; `0` desliga.
+    pub max_segment: f64,
+}
+
+impl Default for ContourCleanupOptions {
+    fn default() -> Self {
+        Self {
+            merge_distance: 1.0e-6,
+            tolerance: 0.0,
+            max_segment: 0.0,
+        }
+    }
+}
+
+/// O que cada etapa da limpeza fez (auditável; nada é silencioso).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ContourCleanupReport {
+    pub input_points: usize,
+    pub duplicates_removed: usize,
+    pub collinear_removed: usize,
+    pub simplified_removed: usize,
+    pub resample_added: usize,
+    pub output_points: usize,
+}
+
+/// Limpeza de contorno **antes** de gerar Mesh (website/docs/03-geometry/
+/// validation-repair-cleanup.md, "Contour cleanup versus Mesh cleanup"):
+/// pontos duplicados → colineares → Douglas–Peucker → resample adaptativo.
+/// Contorno fechado nunca cai abaixo de 3 pontos; entrada não finita volta
+/// intacta com relatório vazio de mudanças.
+pub fn contour_cleanup(
+    points: &[[f64; 2]],
+    closed: bool,
+    options: ContourCleanupOptions,
+) -> (Vec<[f64; 2]>, ContourCleanupReport) {
+    let mut report = ContourCleanupReport {
+        input_points: points.len(),
+        output_points: points.len(),
+        ..ContourCleanupReport::default()
+    };
+    let minimum = if closed { 3 } else { 2 };
+    if points.len() < minimum || points.iter().flatten().any(|v| !v.is_finite()) {
+        return (points.to_vec(), report);
+    }
+    let merge = options.merge_distance.max(0.0);
+
+    // 1. Duplicados consecutivos (e o fechamento repetido do contorno).
+    let mut out: Vec<DVec2> = Vec::with_capacity(points.len());
+    for p in points.iter().map(|p| DVec2::from_array(*p)) {
+        if out
+            .last()
+            .is_none_or(|last: &DVec2| last.distance(p) > merge)
+        {
+            out.push(p);
+        }
+    }
+    while closed && out.len() > minimum && out[0].distance(out[out.len() - 1]) <= merge {
+        out.pop();
+    }
+    report.duplicates_removed = points.len() - out.len();
+
+    // 2. Colineares: o ponto do meio não muda a forma (desvio ≤ merge).
+    let before = out.len();
+    let mut changed = true;
+    while changed && out.len() > minimum {
+        changed = false;
+        let n = out.len();
+        let mut keep = vec![true; n];
+        let range = if closed { 0..n } else { 1..n.saturating_sub(1) };
+        let mut removed = 0;
+        for i in range {
+            if n - removed <= minimum {
+                break;
+            }
+            let (a, b, c) = (out[(i + n - 1) % n], out[i], out[(i + 1) % n]);
+            let ac = c - a;
+            let length = ac.length();
+            let along = if length > 1e-20 {
+                (b - a).dot(ac) / (length * length)
+            } else {
+                -1.0
+            };
+            let deviation = if length > 1e-20 {
+                (b - a).perp_dot(ac).abs() / length
+            } else {
+                f64::INFINITY
+            };
+            if keep[(i + n - 1) % n] && (0.0..=1.0).contains(&along) && deviation <= merge {
+                keep[i] = false;
+                removed += 1;
+            }
+        }
+        if removed > 0 {
+            out = out
+                .into_iter()
+                .zip(keep)
+                .filter_map(|(p, k)| k.then_some(p))
+                .collect();
+            changed = true;
+        }
+    }
+    report.collinear_removed = before - out.len();
+
+    // 3. Douglas–Peucker (reaproveita `simplify`).
+    let mut result: Vec<[f64; 2]> = out.iter().map(|p| p.to_array()).collect();
+    if options.tolerance > 0.0 {
+        let before = result.len();
+        result = simplify(&result, options.tolerance, closed);
+        report.simplified_removed = before.saturating_sub(result.len());
+    }
+
+    // 4. Resample adaptativo: só subdivide segmentos longos (nunca remove).
+    if options.max_segment > 0.0 && options.max_segment.is_finite() {
+        let n = result.len();
+        let segments = if closed { n } else { n - 1 };
+        let mut resampled = Vec::with_capacity(n);
+        for i in 0..segments {
+            let (a, b) = (
+                DVec2::from_array(result[i]),
+                DVec2::from_array(result[(i + 1) % n]),
+            );
+            resampled.push(a.to_array());
+            let pieces = (a.distance(b) / options.max_segment)
+                .ceil()
+                .clamp(1.0, 1024.0) as usize;
+            for k in 1..pieces {
+                resampled.push(a.lerp(b, k as f64 / pieces as f64).to_array());
+            }
+        }
+        if !closed {
+            resampled.push(result[n - 1]);
+        }
+        report.resample_added = resampled.len() - n;
+        result = resampled;
+    }
+    report.output_points = result.len();
+    (result, report)
+}
+
 /// Arco por três pontos, amostrado na ordem a → b → c.
 pub fn arc_three_points(a: [f64; 2], b: [f64; 2], c: [f64; 2], segments: usize) -> Vec<[f64; 2]> {
     let (a, b, c) = (
@@ -253,7 +399,15 @@ pub fn trace_alpha(
         }
         if ring.len() >= 3 {
             ring.reverse();
-            loops.push(simplify(&ring, tolerance, true));
+            let (clean, _) = contour_cleanup(
+                &ring,
+                true,
+                ContourCleanupOptions {
+                    tolerance,
+                    ..ContourCleanupOptions::default()
+                },
+            );
+            loops.push(clean);
         }
     }
     loops
@@ -274,6 +428,51 @@ mod tests {
         let loops = trace_alpha(3, 3, &pixels, 128, 0.1);
         assert_eq!(loops.len(), 2);
     }
+    #[test]
+    fn cleanup_stages_report_what_they_did() {
+        // Quadrado com fechamento repetido, um duplicado e um ponto colinear.
+        let raw = [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [2.0, 0.0],
+            [2.0, 2.0],
+            [0.0, 2.0],
+            [0.0, 0.0],
+        ];
+        let (clean, report) = contour_cleanup(&raw, true, ContourCleanupOptions::default());
+        assert_eq!(clean, vec![[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]]);
+        assert_eq!(report.duplicates_removed, 2);
+        assert_eq!(report.collinear_removed, 1);
+        assert_eq!(report.output_points, 4);
+    }
+
+    #[test]
+    fn resample_only_adds_points_on_long_segments() {
+        let square = [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]];
+        let (out, report) = contour_cleanup(
+            &square,
+            true,
+            ContourCleanupOptions {
+                max_segment: 1.0,
+                ..ContourCleanupOptions::default()
+            },
+        );
+        assert_eq!(report.resample_added, 4);
+        assert_eq!(out.len(), 8);
+    }
+
+    #[test]
+    fn closed_contours_keep_three_points_and_bad_input_is_untouched() {
+        let thin = [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]];
+        let (out, _) = contour_cleanup(&thin, true, ContourCleanupOptions::default());
+        assert!(out.len() >= 3);
+        let bad = [[0.0, 0.0], [f64::NAN, 1.0], [1.0, 1.0]];
+        let (out, report) = contour_cleanup(&bad, true, ContourCleanupOptions::default());
+        assert_eq!(out.len(), 3);
+        assert_eq!(report.duplicates_removed + report.collinear_removed, 0);
+    }
+
     #[test]
     fn round_corner_keeps_dimensions() {
         let p = rounded_rectangle(2.0, 1.0, 0.1);

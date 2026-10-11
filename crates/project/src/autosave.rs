@@ -7,7 +7,10 @@
 //! 4. Autosave **nunca** limpa o `dirty state` do documento;
 //! 5. Retenção de $N$ snapshots (descarta o mais antigo ao exceder limite);
 //! 6. Marcador de sessão (`session.lock`) para detecção determinística de unclean shutdown / crash;
-//! 7. Recuperação segura: o usuário escolhe Recover, Open Saved ou Discard, sem sobrescrita silenciosa;
+//! 7. Recuperação segura: o usuário escolhe Recover, Inspect ou Discard por geração
+//!    ([`AutosaveService::list_recovery_generations`]), sem sobrescrita silenciosa;
+//!    documentos sem arquivo têm diretório por `project_id`, e cada snapshot leva
+//!    a revisão no nome;
 //! 8. 100% puro e desacoplado do egui (acionado por timestamps/relógio).
 
 use serde::{Deserialize, Serialize};
@@ -60,12 +63,61 @@ pub struct RecoveryInfo {
     pub is_newer_than_main: bool,
 }
 
+/// Uma geração de recuperação no disco (website/docs/11-project/project-persistence.md,
+/// "Autosave e Crash Recovery"): o que o diálogo Recover/Inspect/Discard mostra.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryCandidate {
+    pub snapshot_path: PathBuf,
+    /// Segundos Unix gravados no nome do snapshot.
+    pub timestamp: u64,
+    pub seq: u64,
+    /// Revisão do documento no snapshot; `None` em snapshots de versões antigas.
+    pub revision: Option<u64>,
+    /// Projeto salvo de origem; `None` para documento sem arquivo.
+    pub project_path: Option<PathBuf>,
+}
+
 /// Serviço de autosave e retenção de snapshots.
 #[derive(Debug, Clone)]
 pub struct AutosaveService {
     pub config: AutosaveConfig,
     pub last_autosave_time: u64,
+    /// Revisão do documento no último snapshot gravado com sucesso: ciclos sem
+    /// mudança nova são coalescidos mesmo que o documento continue dirty.
+    last_snapshot_revision: Option<u64>,
     seq: u64,
+}
+
+/// Mecanismo de persistência do autosave (infraestrutura): *como e onde* gravar.
+/// A política (`AutosaveService::decide`) só decide *quando*.
+pub trait AutosaveStorage {
+    fn write_snapshot(
+        &self,
+        project: &Project,
+        project_path: Option<&Path>,
+        timestamp: u64,
+        seq: u64,
+        revision: u64,
+        keep_n: usize,
+    ) -> Result<PathBuf, ProjectError>;
+}
+
+/// Armazenamento em disco: arquivos rotativos com escrita atômica.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FileAutosaveStorage;
+
+impl AutosaveStorage for FileAutosaveStorage {
+    fn write_snapshot(
+        &self,
+        project: &Project,
+        project_path: Option<&Path>,
+        timestamp: u64,
+        seq: u64,
+        revision: u64,
+        keep_n: usize,
+    ) -> Result<PathBuf, ProjectError> {
+        AutosaveService::perform_snapshot(project, project_path, timestamp, seq, revision, keep_n)
+    }
 }
 
 impl Default for AutosaveService {
@@ -79,6 +131,7 @@ impl AutosaveService {
         Self {
             config,
             last_autosave_time: 0,
+            last_snapshot_revision: None,
             seq: 0,
         }
     }
@@ -95,6 +148,101 @@ impl AutosaveService {
                 .join(".petunia")
                 .join("autosave")
         }
+    }
+
+    /// Diretório de autosave de um documento: ao lado do arquivo salvo, ou, sem
+    /// arquivo, um diretório temporário **por `project_id`** — dois documentos
+    /// sem nome nunca podam as gerações um do outro.
+    pub fn autosave_dir_for(project_path: Option<&Path>, project_id: uuid::Uuid) -> PathBuf {
+        match project_path {
+            Some(_) => Self::autosave_dir(project_path),
+            None => Self::untitled_root()
+                .join(format!("untitled-{project_id}"))
+                .join(".petunia")
+                .join("autosave"),
+        }
+    }
+
+    fn untitled_root() -> PathBuf {
+        std::env::temp_dir().join("petunia3d")
+    }
+
+    /// Diretórios onde procurar gerações: o do arquivo salvo, ou — sem arquivo —
+    /// o diretório legado `untitled_project` e todos os `untitled-<id>`.
+    fn recovery_dirs(project_path: Option<&Path>) -> Vec<PathBuf> {
+        let mut dirs = vec![Self::autosave_dir(project_path)];
+        if project_path.is_none()
+            && let Ok(rd) = fs::read_dir(Self::untitled_root())
+        {
+            let mut per_id: Vec<PathBuf> = rd
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with("untitled-"))
+                })
+                .map(|p| p.join(".petunia").join("autosave"))
+                .collect();
+            per_id.sort();
+            dirs.extend(per_id);
+        }
+        dirs
+    }
+
+    /// Lê `autosave-<timestamp>-<seq>[-r<revision>].petunia`.
+    fn parse_snapshot_name(name: &str) -> Option<(u64, u64, Option<u64>)> {
+        let stem = name.strip_prefix("autosave-")?.strip_suffix(".petunia")?;
+        let mut parts = stem.split('-');
+        let timestamp = parts.next()?.parse().ok()?;
+        let seq = parts.next()?.parse().ok()?;
+        let revision = match parts.next() {
+            Some(r) => Some(r.strip_prefix('r')?.parse().ok()?),
+            None => None,
+        };
+        parts.next().is_none().then_some((timestamp, seq, revision))
+    }
+
+    /// Todas as gerações de recuperação disponíveis, da mais nova para a mais
+    /// antiga (empate: ordem de caminho). Nada é lido além de nomes de arquivo.
+    pub fn list_recovery_generations(project_path: Option<&Path>) -> Vec<RecoveryCandidate> {
+        let mut out = Vec::new();
+        for dir in Self::recovery_dirs(project_path) {
+            let Ok(rd) = fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in rd.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let Some((timestamp, seq, revision)) = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .and_then(Self::parse_snapshot_name)
+                else {
+                    continue;
+                };
+                out.push(RecoveryCandidate {
+                    snapshot_path: path,
+                    timestamp,
+                    seq,
+                    revision,
+                    project_path: project_path.map(Path::to_path_buf),
+                });
+            }
+        }
+        out.sort_by(|a, b| {
+            (b.timestamp, b.seq)
+                .cmp(&(a.timestamp, a.seq))
+                .then_with(|| a.snapshot_path.cmp(&b.snapshot_path))
+        });
+        out
+    }
+
+    /// Discard de uma geração específica (as demais continuam recuperáveis).
+    pub fn discard_generation(candidate: &RecoveryCandidate) -> Result<(), std::io::Error> {
+        fs::remove_file(&candidate.snapshot_path)
     }
 
     /// Determina o caminho do marcador de sessão ativa (`session.lock`).
@@ -139,47 +287,79 @@ impl AutosaveService {
         let _ = fs::remove_file(lock_path);
     }
 
-    /// Tenta executar um passo do autosave caso o intervalo tenha sido atingido e haja modificações.
-    /// Retorna `Some(Ok(path))` se o snapshot foi criado com sucesso.
+    /// Política pura: devolve o número de sequência do snapshot quando é hora de
+    /// gravar, ou `None`. Não toca o filesystem nem o relógio (o tempo é injetado).
     ///
-    /// Serializes from the borrowed project (no extra clone of live editor
-    /// state beyond encode_zip). Callers that already hold an immutable
-    /// revisioned snapshot should pass that instead of the live document.
-    pub fn tick(
-        &mut self,
-        current_time_secs: u64,
-        is_dirty: bool,
-        project: &Project,
-        project_path: Option<&Path>,
-    ) -> Option<Result<PathBuf, ProjectError>> {
+    /// Coalesce por revisão: sem mudança desde o último snapshot bem-sucedido não há
+    /// o que gravar de novo.
+    pub fn decide(&mut self, now_secs: u64, is_dirty: bool, revision: u64) -> Option<u64> {
         if !self.config.enabled {
             return None;
         }
-
         if self.config.only_when_dirty && !is_dirty {
             return None;
         }
-
-        if current_time_secs
+        if self.last_snapshot_revision == Some(revision) {
+            return None;
+        }
+        if now_secs
             < self
                 .last_autosave_time
                 .saturating_add(self.config.interval_secs)
         {
             return None;
         }
-
-        self.last_autosave_time = current_time_secs;
+        self.last_autosave_time = now_secs;
         self.seq = self.seq.wrapping_add(1);
+        Some(self.seq)
+    }
 
-        let result = Self::perform_snapshot(
+    /// Passo completo com armazenamento injetado: política + gravação.
+    /// Retorna `Some(Ok(path))` se o snapshot foi criado com sucesso.
+    pub fn tick_with(
+        &mut self,
+        storage: &dyn AutosaveStorage,
+        now_secs: u64,
+        is_dirty: bool,
+        revision: u64,
+        project: &Project,
+        project_path: Option<&Path>,
+    ) -> Option<Result<PathBuf, ProjectError>> {
+        let seq = self.decide(now_secs, is_dirty, revision)?;
+        let result = storage.write_snapshot(
             project,
             project_path,
-            current_time_secs,
-            self.seq,
+            now_secs,
+            seq,
+            revision,
             self.config.keep_n,
         );
-
+        if result.is_ok() {
+            self.last_snapshot_revision = Some(revision);
+        }
         Some(result)
+    }
+
+    /// `tick_with` sobre o armazenamento em disco padrão.
+    ///
+    /// Serializa a partir do projeto emprestado; quem já tem um snapshot imutável
+    /// versionado deve passá-lo no lugar do documento vivo.
+    pub fn tick(
+        &mut self,
+        current_time_secs: u64,
+        is_dirty: bool,
+        revision: u64,
+        project: &Project,
+        project_path: Option<&Path>,
+    ) -> Option<Result<PathBuf, ProjectError>> {
+        self.tick_with(
+            &FileAutosaveStorage,
+            current_time_secs,
+            is_dirty,
+            revision,
+            project,
+            project_path,
+        )
     }
 
     /// Captures an immutable snapshot suitable for a worker thread.
@@ -194,12 +374,13 @@ impl AutosaveService {
         project_path: Option<&Path>,
         timestamp: u64,
         seq: u64,
+        revision: u64,
         keep_n: usize,
     ) -> Result<PathBuf, ProjectError> {
-        let dir = Self::autosave_dir(project_path);
+        let dir = Self::autosave_dir_for(project_path, project.id);
         fs::create_dir_all(&dir).map_err(|e| ProjectError::Io(e.to_string()))?;
 
-        let filename = format!("autosave-{timestamp:010}-{seq:04}.petunia");
+        let filename = format!("autosave-{timestamp:010}-{seq:04}-r{revision}.petunia");
         let target_path = dir.join(filename);
 
         // Grava de forma atômica
@@ -269,32 +450,10 @@ impl AutosaveService {
             .map(|i| i.project_name.clone())
             .unwrap_or_else(|| "Untitled".to_string());
 
-        let dir = Self::autosave_dir(project_path);
-        if !dir.exists() {
-            return None;
-        }
-
-        // Procura todos os snapshots de autosave
-        let mut snapshots = Vec::new();
-        if let Ok(rd) = fs::read_dir(&dir) {
-            for entry in rd.flatten() {
-                let path = entry.path();
-                if path.is_file()
-                    && let Some(name) = path.file_name().and_then(|n| n.to_str())
-                    && name.starts_with("autosave-")
-                    && name.ends_with(".petunia")
-                {
-                    snapshots.push(path);
-                }
-            }
-        }
-
-        if snapshots.is_empty() {
-            return None;
-        }
-
-        snapshots.sort();
-        let newest_snapshot = snapshots.pop()?;
+        let newest_snapshot = Self::list_recovery_generations(project_path)
+            .into_iter()
+            .next()?
+            .snapshot_path;
 
         // Determina se o snapshot é mais recente que o arquivo principal (quando existir)
         let mut is_newer = true;
@@ -329,9 +488,10 @@ impl AutosaveService {
 
     /// Descarta todos os snapshots de recuperação e remove o marcador de sessão.
     pub fn discard_recovery(project_path: Option<&Path>) -> Result<(), std::io::Error> {
-        let dir = Self::autosave_dir(project_path);
-        if dir.exists() {
-            let _ = fs::remove_dir_all(&dir);
+        for dir in Self::recovery_dirs(project_path) {
+            if dir.exists() {
+                let _ = fs::remove_dir_all(&dir);
+            }
         }
         Self::remove_session_lock(project_path);
         Ok(())
@@ -357,24 +517,77 @@ mod tests {
         let proj_path = dir.join("proj.petunia");
 
         // Caso 1: Não dirty -> não deve disparar
-        let res = service.tick(100, false, &p, Some(&proj_path));
+        let res = service.tick(100, false, 1, &p, Some(&proj_path));
         assert!(res.is_none());
 
         // Caso 2: Dirty -> dispara snapshot
-        let res = service.tick(100, true, &p, Some(&proj_path));
+        let res = service.tick(100, true, 1, &p, Some(&proj_path));
         assert!(res.is_some());
         let snap_path = res.unwrap().unwrap();
         assert!(snap_path.exists());
 
         // Caso 3: Mesmo tempo ou intervalo não atingido -> não dispara
-        let res = service.tick(105, true, &p, Some(&proj_path));
+        let res = service.tick(105, true, 2, &p, Some(&proj_path));
         assert!(res.is_none());
 
         // Caso 4: Intervalo atingido -> dispara novo snapshot
-        let res = service.tick(111, true, &p, Some(&proj_path));
+        let res = service.tick(111, true, 2, &p, Some(&proj_path));
         assert!(res.is_some());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn autosave_coalesces_cycles_without_a_new_revision() {
+        let mut service = AutosaveService::new(AutosaveConfig {
+            enabled: true,
+            interval_secs: 10,
+            keep_n: 3,
+            only_when_dirty: true,
+        });
+        let p = Project::new();
+        let dir = std::env::temp_dir().join(format!("petunia_as_rev_{}", uuid::Uuid::new_v4()));
+        let proj_path = dir.join("proj.petunia");
+        assert!(service.tick(100, true, 7, &p, Some(&proj_path)).is_some());
+        // Mesmo documento ainda dirty, mas a revisão não mudou: nada novo a gravar.
+        assert!(service.tick(200, true, 7, &p, Some(&proj_path)).is_none());
+        // Nova revisão -> novo snapshot.
+        assert!(service.tick(300, true, 8, &p, Some(&proj_path)).is_some());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn failed_snapshots_are_retried_on_the_same_revision() {
+        struct Failing;
+        impl AutosaveStorage for Failing {
+            fn write_snapshot(
+                &self,
+                _: &Project,
+                _: Option<&Path>,
+                _: u64,
+                _: u64,
+                _: u64,
+                _: usize,
+            ) -> Result<PathBuf, ProjectError> {
+                Err(ProjectError::Io("disk full".into()))
+            }
+        }
+        let mut service = AutosaveService::new(AutosaveConfig {
+            enabled: true,
+            interval_secs: 10,
+            keep_n: 3,
+            only_when_dirty: true,
+        });
+        let p = Project::new();
+        assert!(matches!(
+            service.tick_with(&Failing, 100, true, 1, &p, None),
+            Some(Err(_))
+        ));
+        // A falha não consome a revisão: a próxima janela tenta de novo.
+        assert!(matches!(
+            service.tick_with(&Failing, 200, true, 1, &p, None),
+            Some(Err(_))
+        ));
     }
 
     #[test]
@@ -391,7 +604,7 @@ mod tests {
         // Cria 7 snapshots com limite keep_n = 3
         for i in 1..=7 {
             let snap =
-                AutosaveService::perform_snapshot(&p, Some(&proj_path), 1000 + i, i, 3).unwrap();
+                AutosaveService::perform_snapshot(&p, Some(&proj_path), 1000 + i, i, i, 3).unwrap();
             assert!(snap.exists());
         }
 
@@ -425,7 +638,7 @@ mod tests {
 
         // 2. Autosave grava snapshot
         let snap_path =
-            AutosaveService::perform_snapshot(&p, Some(&proj_path), 5010, 1, 5).unwrap();
+            AutosaveService::perform_snapshot(&p, Some(&proj_path), 5010, 1, 42, 5).unwrap();
         assert!(snap_path.exists());
 
         // 3. Simula crash (lock permanece no disco sem clean shutdown)
@@ -441,5 +654,73 @@ mod tests {
         assert!(!snap_path.exists());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn generations_are_listed_newest_first_with_revision_and_discarded_one_by_one() {
+        let dir =
+            std::env::temp_dir().join(format!("petunia_generations_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let proj_path = dir.join("scene.petunia");
+        let p = Project::new();
+        for (ts, rev) in [(100, 3), (200, 7), (300, 9)] {
+            AutosaveService::perform_snapshot(&p, Some(&proj_path), ts, ts, rev, 5).unwrap();
+        }
+
+        let generations = AutosaveService::list_recovery_generations(Some(&proj_path));
+        let summary: Vec<_> = generations
+            .iter()
+            .map(|g| (g.timestamp, g.revision))
+            .collect();
+        assert_eq!(
+            summary,
+            vec![(300, Some(9)), (200, Some(7)), (100, Some(3))]
+        );
+        assert!(
+            generations
+                .iter()
+                .all(|g| g.project_path.as_deref() == Some(&*proj_path))
+        );
+
+        AutosaveService::discard_generation(&generations[0]).unwrap();
+        let left = AutosaveService::list_recovery_generations(Some(&proj_path));
+        assert_eq!(left.len(), 2);
+        assert_eq!(left[0].timestamp, 200);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn untitled_documents_keep_separate_generations_per_project_id() {
+        let a = Project::new();
+        let b = Project::new();
+        assert_ne!(a.id, b.id);
+        let dir_a = AutosaveService::autosave_dir_for(None, a.id);
+        let dir_b = AutosaveService::autosave_dir_for(None, b.id);
+        assert_ne!(dir_a, dir_b);
+
+        // keep_n = 1 em A não poda a geração de B.
+        let snap_b = AutosaveService::perform_snapshot(&b, None, 10, 1, 1, 1).unwrap();
+        AutosaveService::perform_snapshot(&a, None, 20, 1, 1, 1).unwrap();
+        AutosaveService::perform_snapshot(&a, None, 30, 2, 2, 1).unwrap();
+        assert!(snap_b.exists());
+        let _ = fs::remove_dir_all(dir_a.parent().unwrap().parent().unwrap());
+        let _ = fs::remove_dir_all(dir_b.parent().unwrap().parent().unwrap());
+    }
+
+    #[test]
+    fn snapshot_names_parse_with_and_without_revision() {
+        assert_eq!(
+            AutosaveService::parse_snapshot_name("autosave-0000000100-0002-r17.petunia"),
+            Some((100, 2, Some(17)))
+        );
+        assert_eq!(
+            AutosaveService::parse_snapshot_name("autosave-0000000100-0002.petunia"),
+            Some((100, 2, None))
+        );
+        assert_eq!(
+            AutosaveService::parse_snapshot_name("autosave-x.petunia"),
+            None
+        );
+        assert_eq!(AutosaveService::parse_snapshot_name("notes.txt"), None);
     }
 }

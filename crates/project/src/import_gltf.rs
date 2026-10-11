@@ -53,7 +53,7 @@ pub enum GltfImportError {
 /// Skin/animação de um GLB (cap. 45 F0). Ver [`crate::gltf_rig::import_rig`].
 pub use crate::gltf_rig::import_rig;
 use gltf_json::validation::Validate;
-use petunia_mesh::{Face, Mesh, Vertex};
+use petunia_mesh::{Face, Mesh, RepairPolicy, Vertex, repair_external_mesh};
 use std::path::Path;
 
 /// Imported GLB meshes (name, mesh).
@@ -322,8 +322,19 @@ pub fn import_scene_bytes(
                 // glTF is already triangles; keep quad-merging off — just validate.
                 out.triangulate();
             }
-            out.validate();
-            // Remap check: validate() may drop degenerate faces; keep slot.
+            // Importador é trust boundary: reparo explícito com relatório
+            // (website/docs/03-geometry/validation-repair-cleanup.md).
+            let repair = repair_external_mesh(&mut out, RepairPolicy::TolerantImport);
+            for w in &repair.warnings {
+                warnings.push(format!("malha '{}': {w}", mesh.name().unwrap_or("?")));
+            }
+            if repair.faces_dropped > 0 {
+                warnings.push(format!(
+                    "malha '{}': {} face(s) inválida(s) descartada(s)",
+                    mesh.name().unwrap_or("?"),
+                    repair.faces_dropped
+                ));
+            }
             if out.verts.is_empty() || out.faces.is_empty() {
                 continue;
             }

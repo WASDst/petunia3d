@@ -17,7 +17,9 @@ pub enum ExportError {
 }
 
 pub fn export_obj(asset: &Asset) -> String {
-    asset.evaluated_mesh().to_obj()
+    asset
+        .world_mesh()
+        .to_obj_with_normals(asset.surface_shading)
 }
 
 /// Export-only dilation: the editable document and paint layers stay intact.
@@ -176,7 +178,8 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
     }
     let mut parts = Vec::new();
     for a in picked {
-        let mut m = a.evaluated_mesh();
+        let evaluated = a.evaluated_mesh();
+        let mut m = evaluated.clone();
         m.triangulate();
         // M6: valida em vez de panicar (malha pode vir de arquivo hostil)
         if !m
@@ -224,7 +227,6 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
                 )
             };
 
-        let normals = m.compute_normals();
         // Textura pintada (Albedo): asset.texture ou canal do material.
         let texture_png = a
             .texture
@@ -250,31 +252,32 @@ pub fn export_gltf(project: &Project, indices: &[usize]) -> Result<Vec<u8>, Expo
             joints: Vec::new(),
             weights: Vec::new(),
         };
-        let mut lut: std::collections::HashMap<(u32, u32), u32> = Default::default();
-        for f in &m.faces {
-            if f.verts.len() != 3 {
-                continue;
-            }
-            for k in 0..3 {
-                let vi = f.verts[k];
-                let key = (
-                    vi,
-                    f.uv[k][0].to_bits() ^ f.uv[k][1].to_bits().rotate_left(1),
-                );
-                let id = *lut.entry(key).or_insert_with(|| {
-                    let id = (p.pos.len() / 3) as u32;
-                    let vv = &m.verts[vi as usize];
-                    p.pos.extend_from_slice(&vv.pos);
-                    p.nrm.extend_from_slice(&normals[vi as usize]);
-                    p.uv.extend_from_slice(&[f.uv[k][0], f.uv[k][1]]);
-                    if let Some(skin) = &p.skin {
-                        p.joints.extend_from_slice(&skin.joints[vi as usize]);
-                        p.weights.extend_from_slice(&skin.weights[vi as usize]);
-                    }
-                    id
-                });
-                p.idx.push(id);
-            }
+        // Normais por face-corner do cálculo canônico (as mesmas do render): o vértice
+        // de export só é compartilhado quando posição, UV e normal coincidem.
+        let mut lut: std::collections::HashMap<(u32, [u32; 2], [u32; 3]), u32> = Default::default();
+        for corner in evaluated.shaded_corners(a.surface_shading) {
+            let key = (
+                corner.vertex,
+                [corner.uv[0].to_bits(), corner.uv[1].to_bits()],
+                [
+                    corner.normal[0].to_bits(),
+                    corner.normal[1].to_bits(),
+                    corner.normal[2].to_bits(),
+                ],
+            );
+            let vi = corner.vertex;
+            let id = *lut.entry(key).or_insert_with(|| {
+                let id = (p.pos.len() / 3) as u32;
+                p.pos.extend_from_slice(&corner.position);
+                p.nrm.extend_from_slice(&corner.normal);
+                p.uv.extend_from_slice(&corner.uv);
+                if let Some(skin) = &p.skin {
+                    p.joints.extend_from_slice(&skin.joints[vi as usize]);
+                    p.weights.extend_from_slice(&skin.weights[vi as usize]);
+                }
+                id
+            });
+            p.idx.push(id);
         }
         if p.idx.is_empty() {
             continue;

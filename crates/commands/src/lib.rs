@@ -31,6 +31,24 @@ struct HistoryEntry<T> {
     version: usize,
 }
 
+/// Estado do histórico no instante em que um Save começou.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SavePoint {
+    version: usize,
+    epoch: u64,
+}
+
+/// Início de uma transação no histórico: N operações viram **uma** entrada de
+/// Undo ([`UndoStack::squash_since`]) ou são descartadas juntas
+/// ([`UndoStack::rollback_to`]) — batch atômico de plugin/automação.
+#[derive(Debug, Clone)]
+pub struct HistoryMark<T> {
+    next_version: usize,
+    current_version: usize,
+    redo: VecDeque<HistoryEntry<T>>,
+    redo_bytes: usize,
+}
+
 /// Pilha genérica de undo/redo sobre estado clonável com rastreamento determinístico de estado salvo/dirty.
 #[derive(Debug)]
 pub struct UndoStack<T: Clone> {
@@ -43,6 +61,8 @@ pub struct UndoStack<T: Clone> {
     clean_version: Option<usize>,
     current_version: usize,
     next_version: usize,
+    /// Cresce a cada `mark_dirty` forçado (mudança fora do histórico).
+    untracked_epoch: u64,
     /// Com pegada, o orçamento conta blocos compartilhados uma vez só.
     footprint: Option<HistoryFootprint<T>>,
 }
@@ -65,6 +85,7 @@ impl<T: Clone> UndoStack<T> {
             clean_version: Some(0),
             current_version: 0,
             next_version: 0,
+            untracked_epoch: 0,
             footprint: None,
         }
     }
@@ -211,6 +232,25 @@ impl<T: Clone> UndoStack<T> {
     /// Força o estado a ser marcado como não salvo (dirty).
     pub fn mark_dirty(&mut self) {
         self.clean_version = None;
+        self.untracked_epoch = self.untracked_epoch.wrapping_add(1);
+    }
+
+    /// Captura o estado a gravar. Um Save que termina depois de novas edições
+    /// só pode limpar *aquele* estado, nunca o mais recente.
+    pub fn save_point(&self) -> SavePoint {
+        SavePoint {
+            version: self.current_version,
+            epoch: self.untracked_epoch,
+        }
+    }
+
+    /// Confirma que `point` foi gravado com sucesso. Se o histórico já avançou, o
+    /// documento continua dirty; desfazer de volta até `point` volta a limpo.
+    /// Mudanças fora do histórico feitas depois do `point` mantêm o dirty.
+    pub fn mark_saved(&mut self, point: SavePoint) {
+        if point.epoch == self.untracked_epoch {
+            self.clean_version = Some(point.version);
+        }
     }
 
     /// Verifica se o estado atual coincide exatamente com o ponto salvo.
@@ -271,6 +311,67 @@ impl<T: Clone> UndoStack<T> {
         Some(next.value)
     }
 
+    /// Marca o início de uma transação.
+    pub fn mark(&self) -> HistoryMark<T> {
+        HistoryMark {
+            next_version: self.next_version,
+            current_version: self.current_version,
+            redo: self.redo.clone(),
+            redo_bytes: self.redo_bytes,
+        }
+    }
+
+    /// Quantas entradas foram empilhadas desde `mark` (cada push avança
+    /// `next_version` em 1; entradas expulsas pelo orçamento não contam).
+    fn pushed_since(&self, mark: &HistoryMark<T>) -> usize {
+        self.next_version
+            .saturating_sub(mark.next_version)
+            .min(self.undo.len())
+    }
+
+    /// Funde as entradas empilhadas desde `mark` numa só, rotulada `label`: ela
+    /// guarda o estado de antes da transação, então um Undo desfaz tudo de uma
+    /// vez. Retorna quantas entradas foram fundidas. Se o orçamento já expulsou
+    /// a primeira entrada da transação, a mais antiga restante é usada.
+    pub fn squash_since(&mut self, mark: &HistoryMark<T>, label: impl Into<String>) -> usize {
+        let pushed = self.pushed_since(mark);
+        if pushed == 0 {
+            return 0;
+        }
+        let mut removed: Vec<HistoryEntry<T>> =
+            (0..pushed).filter_map(|_| self.undo.pop_back()).collect();
+        for entry in &removed {
+            self.undo_bytes = self.undo_bytes.saturating_sub(entry.bytes);
+        }
+        // `removed` está da mais nova para a mais antiga.
+        if let Some(mut oldest) = removed.pop() {
+            oldest.label = label.into();
+            self.undo_bytes = self.undo_bytes.saturating_add(oldest.bytes);
+            self.undo.push_back(oldest);
+        }
+        self.refresh_shared_bytes();
+        pushed
+    }
+
+    /// Descarta as entradas empilhadas desde `mark` e restaura a versão atual e
+    /// o redo de antes da transação. Devolve o snapshot de antes da transação
+    /// quando ainda está no histórico; o chamador restaura o documento.
+    pub fn rollback_to(&mut self, mark: HistoryMark<T>) -> Option<T> {
+        let pushed = self.pushed_since(&mark);
+        let mut before = None;
+        for _ in 0..pushed {
+            if let Some(entry) = self.undo.pop_back() {
+                self.undo_bytes = self.undo_bytes.saturating_sub(entry.bytes);
+                before = Some(entry.value);
+            }
+        }
+        self.current_version = mark.current_version;
+        self.redo = mark.redo;
+        self.redo_bytes = mark.redo_bytes;
+        self.refresh_shared_bytes();
+        before
+    }
+
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
@@ -304,6 +405,49 @@ pub trait Command<Context, Res = (), Err = String>: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn squash_turns_a_transaction_into_one_undo_step() {
+        let mut stack: UndoStack<u32> = UndoStack::new();
+        stack.checkpoint("before", &0);
+        let mark = stack.mark();
+        stack.checkpoint("a", &1);
+        stack.checkpoint("b", &2);
+        stack.checkpoint("c", &3);
+        assert_eq!(stack.squash_since(&mark, "plugin batch"), 3);
+        assert_eq!(stack.depth(), (2, 0));
+        assert_eq!(stack.undo_label(), Some("plugin batch"));
+        // O único passo restaura o estado de antes da transação.
+        assert_eq!(stack.undo(4), Some(1));
+    }
+
+    #[test]
+    fn rollback_discards_the_transaction_and_restores_redo_and_dirty() {
+        let mut stack: UndoStack<u32> = UndoStack::new();
+        stack.checkpoint("x", &0);
+        stack.mark_clean();
+        stack.checkpoint("y", &1);
+        assert_eq!(stack.undo(2), Some(1)); // redo agora tem um passo
+        let clean_before = stack.is_clean();
+        let mark = stack.mark();
+        stack.checkpoint("a", &5);
+        stack.checkpoint("b", &6);
+        assert_eq!(stack.rollback_to(mark), Some(5));
+        assert_eq!(stack.depth(), (1, 1));
+        assert_eq!(stack.is_clean(), clean_before);
+        assert_eq!(stack.redo_label(), Some("y"));
+    }
+
+    #[test]
+    fn empty_transactions_change_nothing() {
+        let mut stack: UndoStack<u32> = UndoStack::new();
+        stack.checkpoint("x", &0);
+        let mark = stack.mark();
+        assert_eq!(stack.squash_since(&mark, "noop"), 0);
+        assert_eq!(stack.undo_label(), Some("x"));
+        assert_eq!(stack.rollback_to(mark), None);
+        assert_eq!(stack.depth(), (1, 0));
+    }
 
     #[test]
     fn footprint_counts_shared_blocks_once() {
@@ -359,6 +503,30 @@ mod tests {
             *ctx += self.0;
             Ok(())
         }
+    }
+
+    #[test]
+    fn saving_an_older_revision_keeps_the_newer_edit_dirty() {
+        let mut st = UndoStack::<i32>::new();
+        st.checkpoint("edit 1", &1);
+        let point = st.save_point();
+        // Edição enquanto o Save ainda gravava.
+        st.checkpoint("edit 2", &2);
+        st.mark_saved(point);
+        assert!(st.is_dirty(), "o estado mais novo não foi gravado");
+        // Voltar ao estado gravado deixa o documento limpo.
+        assert_eq!(st.undo(3), Some(2));
+        assert!(st.is_clean());
+    }
+
+    #[test]
+    fn untracked_changes_after_the_save_point_stay_dirty() {
+        let mut st = UndoStack::<i32>::new();
+        st.checkpoint("edit", &1);
+        let point = st.save_point();
+        st.mark_dirty();
+        st.mark_saved(point);
+        assert!(st.is_dirty());
     }
 
     #[test]
