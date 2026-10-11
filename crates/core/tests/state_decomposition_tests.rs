@@ -2,11 +2,15 @@
 //! Valida que ProjectState, EditorSession, ToolState, UiState e RenderResources
 //! podem ser operados de forma 100% isolada e desacoplada.
 
+use petunia_core::KeyText;
+use petunia_core::command::{CommandContext, CommandDispatcher, SelectAllCmd};
 use petunia_core::events::EventBus;
 use petunia_core::modal::ModalKind;
+use petunia_core::queries::query_selection_details;
 use petunia_core::state::{
-    AppState, EditMode, EditorSession, ProjectState, RenderResources, TextureDirtyRect, ToolState,
-    UiState,
+    ActiveTool, ActiveToolSessionKind, AppState, DocumentSession, EditMode, EditorSession,
+    ProjectState, ReferenceImage, RenderResources, Shading, TextureDirtyRect, ToolSessionManager,
+    ToolState, UiState, ViewportSession,
 };
 use petunia_mesh::Mesh;
 use petunia_project::{Canvas, Project};
@@ -251,4 +255,159 @@ fn test_app_state_composition_and_deref_coercion() {
 
     state.render.stats.fps = 60.0;
     assert_eq!(state.render.stats.fps, 60.0);
+}
+
+#[test]
+fn test_document_session_isolated_lifecycle() {
+    let mut doc_session = DocumentSession::new();
+    assert_eq!(doc_session.document().assets.len(), 1);
+    assert_eq!(doc_session.scene_tris(), 12);
+    assert_eq!(doc_session.file_path(), None);
+    assert!(!doc_session.is_dirty());
+
+    doc_session.set_file_path(Some("scene.p3d".to_string()));
+    assert_eq!(
+        doc_session.file_path().map(|s| s.as_str()),
+        Some("scene.p3d")
+    );
+
+    doc_session.document_mut().add("Sphere", Mesh::cube(2.0));
+    assert_eq!(doc_session.document().assets.len(), 2);
+
+    doc_session.checkpoint("added sphere");
+    assert!(doc_session.is_dirty());
+    assert!(doc_session.history().can_undo());
+
+    doc_session.mark_clean();
+    assert!(!doc_session.is_dirty());
+
+    let can_undo = doc_session.history_mut().can_undo();
+    assert!(can_undo);
+}
+
+#[test]
+fn test_viewport_session_isolated_lifecycle() {
+    let mut vs = ViewportSession::new();
+    assert_eq!(vs.shading, Shading::Solid);
+    assert_eq!(vs.cursor_3d, [0.0, 0.0, 0.0]);
+    assert!(vs.snap_enabled);
+    assert!(vs.show_grid);
+
+    // Modificar configurações na sessão da viewport
+    vs.shading = Shading::Wireframe;
+    vs.cursor_3d = [1.0, 2.0, 3.0];
+    vs.snap_enabled = false;
+    vs.camera.distance = 15.0;
+
+    let mut session = EditorSession::new();
+    session.set_viewport_session(vs.clone());
+
+    assert_eq!(session.shading, Shading::Wireframe);
+    assert_eq!(session.cursor_3d, [1.0, 2.0, 3.0]);
+    assert!(!session.snap_enabled);
+    assert_eq!(session.camera.distance, 15.0);
+
+    let retrieved_vs = session.viewport_session();
+    assert_eq!(retrieved_vs, vs);
+
+    let from_vs = ViewportSession::from(&session);
+    assert_eq!(from_vs, vs);
+}
+
+#[test]
+fn test_app_state_session_accessors() {
+    let mut state = AppState::new("en");
+
+    // DocumentSession accessors
+    assert_eq!(state.document_session().assets.len(), 1);
+    state
+        .document_session_mut()
+        .set_file_path(Some("project.p3d".to_string()));
+    assert_eq!(
+        state.document_session().file_path().map(|s| s.as_str()),
+        Some("project.p3d")
+    );
+
+    // EditorSession accessors
+    assert_eq!(state.editor_session().edit_mode(), EditMode::Object);
+    state.editor_session_mut().locked_axes[1] = true;
+    assert!(state.editor_session().locked_axes[1]);
+
+    // ViewportSession accessors
+    let mut vs = state.viewport_session();
+    vs.cursor_3d = [5.0, 5.0, 5.0];
+    state.set_viewport_session(vs);
+    assert_eq!(state.viewport_session().cursor_3d, [5.0, 5.0, 5.0]);
+
+    // ToolSessionManager accessors
+    let tsm: &ToolSessionManager = state.tool_session_manager();
+    assert_eq!(tsm.active_tool, "select");
+    state.tool_session_manager_mut().active_tool = "extrude".to_string();
+    assert_eq!(state.tool_session_manager().active_tool, "extrude");
+}
+
+#[test]
+fn test_reference_image_in_authored_document() {
+    let mut doc_session = DocumentSession::new();
+    assert!(doc_session.references().is_empty());
+
+    let ref_img = ReferenceImage::from_rgba("blueprint".to_string(), 100, 100, vec![255; 40000]);
+    doc_session.references_mut().push(ref_img);
+
+    assert_eq!(doc_session.references().len(), 1);
+    assert_eq!(doc_session.references()[0].name, "blueprint");
+
+    doc_session.checkpoint("added ref");
+    assert!(doc_session.history().can_undo());
+
+    doc_session.reset();
+    assert!(doc_session.references().is_empty());
+}
+
+#[test]
+fn test_tool_session_manager_active_tool_and_session() {
+    let mut tsm = ToolSessionManager::new();
+    assert_eq!(tsm.active_tool_info().id, "select");
+    assert_eq!(tsm.active_session_kind(), ActiveToolSessionKind::None);
+    assert!(!tsm.is_session_active());
+
+    tsm.set_active_tool_info(ActiveTool {
+        id: "knife".to_string(),
+        activation: petunia_core::ToolActivation::Instant,
+    });
+    assert_eq!(tsm.active_tool_info().id, "knife");
+    assert_eq!(tsm.active_tool, "knife");
+}
+
+#[test]
+fn test_command_context_dispatch_and_queries() {
+    let mut doc_session = DocumentSession::new();
+    let mut editor_session = EditorSession::new();
+    let mut events = EventBus::new();
+
+    // Queries sobre DocumentSession isolado
+    let hierarchy = doc_session.query_scene_hierarchy();
+    assert_eq!(hierarchy.assets.len(), 1);
+    assert_eq!(hierarchy.total_verts, 8);
+
+    // Queries cruzadas desacopladas
+    let sel_details = query_selection_details(&doc_session, &editor_session);
+    assert_eq!(sel_details.selected_verts_count, 0);
+
+    // Despacho sobre CommandContext em SelectionDomain::Object
+    let mut ctx = CommandContext::new(&mut doc_session, &mut editor_session, &mut events, &KeyText);
+    let select_all = SelectAllCmd;
+    let res = CommandDispatcher::dispatch_context(&mut ctx, &select_all);
+    assert!(res.is_ok());
+    assert_eq!(editor_session.selection.assets.len(), 1);
+
+    // Despacho sobre CommandContext em SelectionDomain::Vertex
+    editor_session.selection_domain = petunia_core::SelectionDomain::Vertex;
+    let mut ctx_vertex =
+        CommandContext::new(&mut doc_session, &mut editor_session, &mut events, &KeyText);
+    let res = CommandDispatcher::dispatch_context(&mut ctx_vertex, &select_all);
+    assert!(res.is_ok());
+
+    let updated_sel = query_selection_details(&doc_session, &editor_session);
+    assert_eq!(updated_sel.selected_verts_count, 8);
 }

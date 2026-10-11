@@ -4,7 +4,7 @@
 #![forbid(unsafe_code)]
 
 use crate::bvh::TriangleBvh;
-use crate::{Camera, SelectMode};
+use crate::{Camera, SelectionDomain};
 use glam::{Mat4, Vec2, Vec3};
 use petunia_mesh::{Mesh, triangulate};
 
@@ -32,7 +32,7 @@ pub fn pick_mesh(
     camera: &Camera,
     viewport_pixels: Vec2,
     cursor_ndc: Vec2,
-    mode: SelectMode,
+    mode: impl Into<SelectionDomain>,
     xray: bool,
 ) -> Option<PickHit> {
     pick_mesh_filtered(
@@ -54,10 +54,11 @@ pub fn pick_mesh_filtered(
     camera: &Camera,
     viewport_pixels: Vec2,
     cursor_ndc: Vec2,
-    mode: SelectMode,
+    mode: impl Into<SelectionDomain>,
     xray: bool,
     visible: impl Fn(Vec3) -> bool,
 ) -> Option<PickHit> {
+    let mode: SelectionDomain = mode.into();
     let matrix = camera.view_proj();
     let inverse = matrix.inverse();
     if !inverse.is_finite() {
@@ -102,9 +103,10 @@ pub fn pick_mesh_in_scene(
     camera: &Camera,
     viewport_pixels: Vec2,
     cursor_ndc: Vec2,
-    mode: SelectMode,
+    mode: impl Into<SelectionDomain>,
     xray: bool,
 ) -> Option<PickHit> {
+    let mode: SelectionDomain = mode.into();
     let face = |_: Vec3, _: Vec3| scene.nearest_face(asset_index, camera, cursor_ndc.to_array());
     pick_components(
         mesh,
@@ -125,7 +127,7 @@ fn pick_components(
     camera: &Camera,
     viewport_pixels: Vec2,
     cursor_ndc: Vec2,
-    mode: SelectMode,
+    mode: SelectionDomain,
     xray: bool,
     face_under_ray: impl Fn(Vec3, Vec3) -> Option<(usize, Vec3)>,
     face_visible: impl Fn(Vec3) -> bool,
@@ -142,7 +144,7 @@ fn pick_components(
     if !inverse.is_finite() {
         return None;
     }
-    if mode == SelectMode::Face {
+    if mode == SelectionDomain::Face {
         let (origin, direction) = ray(inverse, cursor_ndc)?;
         return face_under_ray(origin, direction).and_then(|(face, position)| {
             project(matrix, position)
@@ -182,7 +184,7 @@ fn pick_components(
         ));
     };
     match mode {
-        SelectMode::Vertex => {
+        SelectionDomain::Vertex => {
             for (index, vertex) in mesh.verts.iter().enumerate() {
                 consider(
                     PickComponent::Vertex(index),
@@ -191,7 +193,7 @@ fn pick_components(
                 );
             }
         }
-        SelectMode::Edge => {
+        SelectionDomain::Edge => {
             for (a, b) in mesh.edges_unique() {
                 let (Some(va), Some(vb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize))
                 else {
@@ -222,7 +224,7 @@ fn pick_components(
                 );
             }
         }
-        SelectMode::Face => {}
+        SelectionDomain::Face | SelectionDomain::Object => {}
     }
     best.map(|(_, _, hit)| hit)
 }
@@ -325,7 +327,7 @@ mod tests {
         camera
     }
 
-    fn pick(mesh: &Mesh, cursor: Vec2, mode: SelectMode, xray: bool) -> Option<PickHit> {
+    fn pick(mesh: &Mesh, cursor: Vec2, mode: SelectionDomain, xray: bool) -> Option<PickHit> {
         pick_mesh(mesh, &camera(), Vec2::splat(800.0), cursor, mode, xray)
     }
 
@@ -346,7 +348,7 @@ mod tests {
                             &camera,
                             Vec2::splat(size),
                             Vec2::new(offset * 2.0 / size, 0.0),
-                            SelectMode::Vertex,
+                            SelectionDomain::Vertex,
                             false
                         )
                         .is_some(),
@@ -369,14 +371,14 @@ mod tests {
             ..Mesh::default()
         };
         let cursor = Vec2::new(0.073, 4.9 / 400.0);
-        let hit = pick(&mesh, cursor, SelectMode::Edge, false).unwrap();
+        let hit = pick(&mesh, cursor, SelectionDomain::Edge, false).unwrap();
         assert_eq!(hit.component, PickComponent::Edge(0, 1));
         assert!((hit.position.x - 0.146).abs() < 1e-5);
         assert!(
             pick(
                 &mesh,
                 Vec2::new(0.073, 5.1 / 400.0),
-                SelectMode::Edge,
+                SelectionDomain::Edge,
                 false
             )
             .is_none()
@@ -397,21 +399,21 @@ mod tests {
             index as u32 + 1,
             index as u32 + 2,
         ]));
-        assert!(pick(&mesh, Vec2::ZERO, SelectMode::Vertex, false).is_none());
+        assert!(pick(&mesh, Vec2::ZERO, SelectionDomain::Vertex, false).is_none());
         assert_eq!(
-            pick(&mesh, Vec2::ZERO, SelectMode::Vertex, true)
+            pick(&mesh, Vec2::ZERO, SelectionDomain::Vertex, true)
                 .unwrap()
                 .component,
             PickComponent::Vertex(index)
         );
-        assert!(pick(&mesh, Vec2::new(0.1, 0.0), SelectMode::Edge, false).is_none());
-        assert!(pick(&mesh, Vec2::new(0.1, 0.0), SelectMode::Edge, true).is_some());
+        assert!(pick(&mesh, Vec2::new(0.1, 0.0), SelectionDomain::Edge, false).is_none());
+        assert!(pick(&mesh, Vec2::new(0.1, 0.0), SelectionDomain::Edge, true).is_some());
     }
 
     #[test]
     fn faces_choose_nearest_surface() {
         let mesh = Mesh::cube(2.0);
-        let hit = pick(&mesh, Vec2::ZERO, SelectMode::Face, false).unwrap();
+        let hit = pick(&mesh, Vec2::ZERO, SelectionDomain::Face, false).unwrap();
         assert!((hit.position.z - 1.0).abs() < 1e-4);
     }
 
@@ -428,8 +430,8 @@ mod tests {
             faces: vec![Face::new(vec![0, 1, 2, 3, 4])],
             ..Mesh::default()
         };
-        assert!(pick(&mesh, Vec2::new(0.0, 0.35), SelectMode::Face, false).is_none());
-        assert!(pick(&mesh, Vec2::new(0.0, -0.35), SelectMode::Face, false).is_some());
+        assert!(pick(&mesh, Vec2::new(0.0, 0.35), SelectionDomain::Face, false).is_none());
+        assert!(pick(&mesh, Vec2::new(0.0, -0.35), SelectionDomain::Face, false).is_some());
     }
 
     #[test]
@@ -439,7 +441,11 @@ mod tests {
             faces: vec![Face::new(vec![0, 99, 100])],
             ..Mesh::default()
         };
-        for mode in [SelectMode::Vertex, SelectMode::Edge, SelectMode::Face] {
+        for mode in [
+            SelectionDomain::Vertex,
+            SelectionDomain::Edge,
+            SelectionDomain::Face,
+        ] {
             assert!(pick(&mesh, Vec2::ZERO, mode, false).is_none());
             assert!(pick_mesh(&mesh, &camera(), Vec2::ZERO, Vec2::ZERO, mode, false).is_none());
         }
@@ -466,7 +472,7 @@ mod tests {
             &camera,
             Vec2::splat(800.0),
             cursor,
-            SelectMode::Edge,
+            SelectionDomain::Edge,
             true,
         )
         .unwrap();
@@ -485,7 +491,7 @@ mod tests {
             &camera,
             Vec2::splat(800.0),
             cursor,
-            SelectMode::Face,
+            SelectionDomain::Face,
             false,
         )
         .unwrap();
@@ -499,6 +505,6 @@ mod tests {
             verts: vec![Vertex::new(0.0, 0.0, 9.0)],
             ..Mesh::default()
         };
-        assert!(pick(&mesh, Vec2::ZERO, SelectMode::Vertex, true).is_none());
+        assert!(pick(&mesh, Vec2::ZERO, SelectionDomain::Vertex, true).is_none());
     }
 }

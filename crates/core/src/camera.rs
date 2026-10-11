@@ -25,6 +25,8 @@ pub enum ViewPreset {
     IsometricNW,
     IsometricSE,
     IsometricSW,
+    /// Projeção pseudo-isométrica clássica de games 2:1 (26,565°).
+    PseudoIsometric2To1,
 }
 
 impl ViewPreset {
@@ -41,11 +43,12 @@ impl ViewPreset {
             Self::IsometricNW => "Isometric NW",
             Self::IsometricSE => "Isometric SE",
             Self::IsometricSW => "Isometric SW",
+            Self::PseudoIsometric2To1 => "Pseudo-Isometric 2:1",
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Camera {
     pub target: Vec3,
     pub distance: f32,
@@ -199,6 +202,10 @@ impl Camera {
                 self.yaw = -std::f32::consts::FRAC_PI_4 * 3.0;
                 self.pitch = 0.6154797;
             }
+            ViewPreset::PseudoIsometric2To1 => {
+                self.yaw = std::f32::consts::FRAC_PI_4;
+                self.pitch = 26.565_f32.to_radians();
+            }
         }
     }
 
@@ -272,6 +279,12 @@ impl Camera {
         let iso_se_fwd = -Vec3::new(-1.0, 1.0, 1.0).normalize();
         let iso_sw_fwd = -Vec3::new(-1.0, 1.0, -1.0).normalize();
 
+        let pseudo_iso_pitch = 26.565_f32.to_radians();
+        let (pseudo_sp, pseudo_cp) = pseudo_iso_pitch.sin_cos();
+        let (pseudo_sy, pseudo_cy) = std::f32::consts::FRAC_PI_4.sin_cos();
+        let pseudo_iso_fwd =
+            -Vec3::new(pseudo_sy * pseudo_cp, pseudo_sp, pseudo_cy * pseudo_cp).normalize_or_zero();
+
         [
             (Vec3::NEG_Z, ViewPreset::Front),
             (Vec3::Z, ViewPreset::Back),
@@ -283,6 +296,7 @@ impl Camera {
             (iso_nw_fwd, ViewPreset::IsometricNW),
             (iso_se_fwd, ViewPreset::IsometricSE),
             (iso_sw_fwd, ViewPreset::IsometricSW),
+            (pseudo_iso_fwd, ViewPreset::PseudoIsometric2To1),
         ]
         .into_iter()
         .find_map(|(direction, preset)| {
@@ -330,6 +344,8 @@ impl Camera {
             } else {
                 ("User Ortho", yaw_deg, pitch_deg)
             }
+        } else if (pitch_deg - 26.565).abs() < 1.5 && (yaw_deg - 45.0).abs() < 1.5 {
+            ("Pseudo-Isometric 2:1", yaw_deg, pitch_deg)
         } else {
             ("User Ortho", yaw_deg, pitch_deg)
         }
@@ -551,6 +567,7 @@ mod tests {
             (ViewPreset::IsometricNW, "Isometric NW"),
             (ViewPreset::IsometricSE, "Isometric SE"),
             (ViewPreset::IsometricSW, "Isometric SW"),
+            (ViewPreset::PseudoIsometric2To1, "Pseudo-Isometric 2:1"),
         ];
 
         for (preset, expected_name) in presets {
@@ -568,5 +585,23 @@ mod tests {
         assert_eq!(persp_camera.proj, Projection::Perspective);
         let (name, _, _) = persp_camera.nominal_view();
         assert_eq!(name, "User Persp");
+    }
+
+    #[test]
+    fn pseudo_isometric_2to1_framing_and_projection() {
+        let mut camera = Camera::default();
+        let initial_visible_h = camera.visible_height();
+        camera.set_preset(ViewPreset::PseudoIsometric2To1);
+
+        assert_eq!(camera.proj, Projection::Ortho);
+        assert_eq!(camera.view_preset(), Some(ViewPreset::PseudoIsometric2To1));
+
+        let (name, yaw_deg, pitch_deg) = camera.nominal_view();
+        assert_eq!(name, "Pseudo-Isometric 2:1");
+        assert!((yaw_deg - 45.0).abs() < 1e-3);
+        assert!((pitch_deg - 26.565).abs() < 1e-3);
+
+        // Framing preservation: visible height should remain identical
+        assert!((camera.visible_height() - initial_visible_h).abs() < 1e-4);
     }
 }

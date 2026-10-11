@@ -129,7 +129,7 @@ pub fn unproject_to_surface_or_cursor_plane(
             camera,
             vp_pixels,
             glam::Vec2::new(ndc[0], ndc[1]),
-            crate::selection::SelectMode::Face,
+            crate::selection::SelectionDomain::Face,
             false,
         ) {
             let p = hit.position;

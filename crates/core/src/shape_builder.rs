@@ -18,6 +18,7 @@
 //!
 //! Só polígonos: as curvas chegam tesseladas e saem como polilinhas.
 
+use crate::context::{CommandContext, EditorView};
 use glam::Vec3;
 use petunia_mesh::arrangement::{Region2, region_at};
 use petunia_mesh::shape_ops::{pathfinder_regions, regions_union};
@@ -77,23 +78,99 @@ pub enum ShapeEditError {
 }
 
 impl AppState {
-    /// Planos com perfis que o Shape Builder pode editar, e suas faces.
-    pub fn shape_planes(&self) -> Vec<ShapePlane> {
-        self.profile_groups(true)
-            .into_iter()
-            .map(|group| ShapePlane {
-                plane: group.plane,
-                profiles: group.profiles.clone(),
-                regions: group.regions(),
-            })
-            .filter(|plane| !plane.regions.is_empty())
-            .collect()
-    }
-
     fn same_plane(a: &RegionPlane, b: &RegionPlane) -> bool {
         a.normal.dot(b.normal).abs() > 0.9999 && (a.origin - b.origin).dot(a.normal).abs() < 1.0e-4
     }
+}
 
+fn same_ring(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    if a.is_empty() {
+        return true;
+    }
+    let near = |p: [f64; 2], q: [f64; 2]| (p[0] - q[0]).hypot(p[1] - q[1]) < 1.0e-6;
+    (0..b.len()).any(|offset| {
+        (0..a.len()).all(|i| near(a[i], b[(offset + i) % b.len()]))
+            || (0..a.len()).all(|i| near(a[i], b[(offset + b.len() - i) % b.len()]))
+    })
+}
+fn same_region(a: &Region2, b: &Region2) -> bool {
+    same_ring(&a.outer, &b.outer)
+        && a.holes.len() == b.holes.len()
+        && a.holes
+            .iter()
+            .all(|hole| b.holes.iter().any(|other| same_ring(hole, other)))
+}
+
+/// Comando de edição de formas (Shape Builder e Pathfinder).
+#[derive(Debug, Clone)]
+pub struct ShapeEditCmd {
+    pub plane: Option<RegionPlane>,
+    pub edit: ShapeEdit,
+}
+
+impl ShapeEditCmd {
+    pub fn pathfinder(op: PathfinderOp) -> Self {
+        Self {
+            plane: None,
+            edit: ShapeEdit::Pathfinder(op),
+        }
+    }
+
+    fn title(&self) -> &'static str {
+        match &self.edit {
+            ShapeEdit::Merge { .. } => "Shape Builder: merge",
+            ShapeEdit::Delete { .. } => "Shape Builder: delete",
+            ShapeEdit::Pathfinder(PathfinderOp::Unite) => "Unite",
+            ShapeEdit::Pathfinder(PathfinderOp::Subtract) => "Subtract",
+            ShapeEdit::Pathfinder(PathfinderOp::Intersect) => "Intersect",
+            ShapeEdit::Pathfinder(PathfinderOp::Exclude) => "Exclude",
+        }
+    }
+}
+
+impl Command for ShapeEditCmd {
+    fn label(&self) -> &'static str {
+        match &self.edit {
+            ShapeEdit::Merge { .. } => "shape builder merge",
+            ShapeEdit::Delete { .. } => "shape builder delete",
+            ShapeEdit::Pathfinder(PathfinderOp::Unite) => "shape unite",
+            ShapeEdit::Pathfinder(PathfinderOp::Subtract) => "shape subtract",
+            ShapeEdit::Pathfinder(PathfinderOp::Intersect) => "shape intersect",
+            ShapeEdit::Pathfinder(PathfinderOp::Exclude) => "shape exclude",
+        }
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::SPLINES | petunia_project::ProjectChanges::PROCEDURAL
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.project.profiles.is_empty() {
+            return Err("Draw at least one closed shape first");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        match state.apply_shape_edit(self.plane.as_ref(), &self.edit) {
+            Ok(report) => {
+                state.set_status(format!(
+                    "{}: {} faces → {} faces",
+                    self.title(),
+                    report.faces_before,
+                    report.faces_after
+                ));
+                Ok(())
+            }
+            Err(error) => Err(CommandError::Execution(error.to_string())),
+        }
+    }
+}
+
+impl CommandContext<'_> {
     /// Aplica `edit` ao plano `hint` (ou ao do perfil mais recente).
     pub fn apply_shape_edit(
         &mut self,
@@ -104,12 +181,12 @@ impl AppState {
         let group: &ProfileGroup = match hint {
             Some(plane) => groups
                 .iter()
-                .find(|g| Self::same_plane(&g.plane, plane))
+                .find(|g| AppState::same_plane(&g.plane, plane))
                 .ok_or(ShapeEditError::NoShapes)?,
             // Sem plano indicado: o do perfil mais recente (o último criado).
             None => {
                 let latest = self
-                    .project
+                    .document
                     .project
                     .profiles
                     .iter()
@@ -202,11 +279,11 @@ impl AppState {
                 if pieces.len() == 1 && same_ring(&pieces[0], &line.points) {
                     continue;
                 }
-                let Some(profile) = self.project.project.get_profile(*id).cloned() else {
+                let Some(profile) = self.document.project.get_profile(*id).cloned() else {
                     continue;
                 };
-                let _ = self.project.project.remove_profile(*id);
-                let _ = self.project.project.remove_spline(profile.spline_id);
+                let _ = self.document.project.remove_profile(*id);
+                let _ = self.document.project.remove_spline(profile.spline_id);
                 for (index, piece) in pieces.into_iter().enumerate() {
                     let local: Vec<_> = piece
                         .into_iter()
@@ -234,11 +311,11 @@ impl AppState {
                         copy.id = uuid::Uuid::new_v4();
                     }
                     copy.spline_id = spline.id;
-                    self.project
+                    self.document
                         .project
                         .add_spline(spline)
                         .map_err(|_| ShapeEditError::Empty)?;
-                    self.project
+                    self.document
                         .project
                         .add_profile(copy)
                         .map_err(|_| ShapeEditError::Empty)?;
@@ -265,12 +342,12 @@ impl AppState {
             .collect();
         let wall_thickness = removed
             .first()
-            .and_then(|id| self.project.project.get_profile(*id))
+            .and_then(|id| self.document.project.get_profile(*id))
             .map_or(0.0, |profile| profile.wall_thickness);
         for id in &removed {
-            if let Some(profile) = self.project.project.get_profile(*id).cloned() {
-                let _ = self.project.project.remove_profile(*id);
-                let _ = self.project.project.remove_spline(profile.spline_id);
+            if let Some(profile) = self.document.project.get_profile(*id).cloned() {
+                let _ = self.document.project.remove_profile(*id);
+                let _ = self.document.project.remove_spline(profile.spline_id);
             }
         }
         let workplane = ProfileWorkplane {
@@ -289,8 +366,8 @@ impl AppState {
             profile.holes = face.holes;
             // Falhas aqui são de dados inválidos (não finitos): o dispatcher
             // desfaz o comando inteiro ao receber o erro.
-            if self.project.project.add_spline(spline).is_err()
-                || self.project.project.add_profile(profile).is_err()
+            if self.document.project.add_spline(spline).is_err()
+                || self.document.project.add_profile(profile).is_err()
             {
                 return Err(ShapeEditError::Empty);
             }
@@ -299,90 +376,18 @@ impl AppState {
     }
 }
 
-fn same_ring(a: &[[f64; 2]], b: &[[f64; 2]]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    if a.is_empty() {
-        return true;
-    }
-    let near = |p: [f64; 2], q: [f64; 2]| (p[0] - q[0]).hypot(p[1] - q[1]) < 1.0e-6;
-    (0..b.len()).any(|offset| {
-        (0..a.len()).all(|i| near(a[i], b[(offset + i) % b.len()]))
-            || (0..a.len()).all(|i| near(a[i], b[(offset + b.len() - i) % b.len()]))
-    })
-}
-fn same_region(a: &Region2, b: &Region2) -> bool {
-    same_ring(&a.outer, &b.outer)
-        && a.holes.len() == b.holes.len()
-        && a.holes
-            .iter()
-            .all(|hole| b.holes.iter().any(|other| same_ring(hole, other)))
-}
-
-/// Comando de edição de formas (Shape Builder e Pathfinder).
-#[derive(Debug, Clone)]
-pub struct ShapeEditCmd {
-    pub plane: Option<RegionPlane>,
-    pub edit: ShapeEdit,
-}
-
-impl ShapeEditCmd {
-    pub fn pathfinder(op: PathfinderOp) -> Self {
-        Self {
-            plane: None,
-            edit: ShapeEdit::Pathfinder(op),
-        }
-    }
-
-    fn title(&self) -> &'static str {
-        match &self.edit {
-            ShapeEdit::Merge { .. } => "Shape Builder: merge",
-            ShapeEdit::Delete { .. } => "Shape Builder: delete",
-            ShapeEdit::Pathfinder(PathfinderOp::Unite) => "Unite",
-            ShapeEdit::Pathfinder(PathfinderOp::Subtract) => "Subtract",
-            ShapeEdit::Pathfinder(PathfinderOp::Intersect) => "Intersect",
-            ShapeEdit::Pathfinder(PathfinderOp::Exclude) => "Exclude",
-        }
-    }
-}
-
-impl Command for ShapeEditCmd {
-    fn label(&self) -> &'static str {
-        match &self.edit {
-            ShapeEdit::Merge { .. } => "shape builder merge",
-            ShapeEdit::Delete { .. } => "shape builder delete",
-            ShapeEdit::Pathfinder(PathfinderOp::Unite) => "shape unite",
-            ShapeEdit::Pathfinder(PathfinderOp::Subtract) => "shape subtract",
-            ShapeEdit::Pathfinder(PathfinderOp::Intersect) => "shape intersect",
-            ShapeEdit::Pathfinder(PathfinderOp::Exclude) => "shape exclude",
-        }
-    }
-
-    fn changes(&self) -> petunia_project::ProjectChanges {
-        petunia_project::ProjectChanges::SPLINES | petunia_project::ProjectChanges::PROCEDURAL
-    }
-
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.project.profiles.is_empty() {
-            return Err("Draw at least one closed shape first");
-        }
-        Ok(())
-    }
-
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        match state.apply_shape_edit(self.plane.as_ref(), &self.edit) {
-            Ok(report) => {
-                state.set_status(format!(
-                    "{}: {} faces → {} faces",
-                    self.title(),
-                    report.faces_before,
-                    report.faces_after
-                ));
-                Ok(())
-            }
-            Err(error) => Err(CommandError::Execution(error.to_string())),
-        }
+impl<'a> EditorView<'a> {
+    /// Planos com perfis que o Shape Builder pode editar, e suas faces.
+    pub fn shape_planes(self) -> Vec<ShapePlane> {
+        self.profile_groups(true)
+            .into_iter()
+            .map(|group| ShapePlane {
+                plane: group.plane,
+                profiles: group.profiles.clone(),
+                regions: group.regions(),
+            })
+            .filter(|plane| !plane.regions.is_empty())
+            .collect()
     }
 }
 

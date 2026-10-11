@@ -17,7 +17,7 @@ use std::sync::Arc;
 use glam::Vec3;
 use petunia_core::{
     AppState, BrushBlend, BrushLock, BrushSettings, BrushStyle, BrushTip, BrushType,
-    PaintRestriction, StrokeBuffer, hash01,
+    CommandContext, EditorView, PaintRestriction, StrokeBuffer, hash01,
 };
 use petunia_mesh::Mesh;
 use petunia_project::Canvas;
@@ -364,20 +364,20 @@ impl PaintModule {
     ///
     /// Resolvido uma vez por traço (fica em `paint_restriction`). `first_face`
     /// é a face sob o primeiro toque, usada pela trava `FirstFace`.
-    pub fn resolve_restriction(
-        state: &mut AppState,
+    pub fn resolve_restriction_in(
+        state: &mut CommandContext<'_>,
         first_face: Option<usize>,
     ) -> Option<Arc<PaintRestriction>> {
-        if let Some(cached) = &state.session.tools.paint_restriction {
+        if let Some(cached) = &state.editor.tools.paint_restriction {
             return cached.clone();
         }
-        let tools = &state.session.tools;
-        let (selected, total) = state.project.active_mesh().map_or((0, 0), |mesh| {
+        let tools = &state.editor.tools;
+        let (selected, total) = state.document.active_mesh().map_or((0, 0), |mesh| {
             let selected = mesh
                 .faces
                 .iter()
                 .enumerate()
-                .filter(|(i, face)| face.selected || state.session.selection.faces.contains(i))
+                .filter(|(i, face)| face.selected || state.editor.selection.faces.contains(i))
                 .count();
             (selected, mesh.faces.len())
         });
@@ -387,15 +387,15 @@ impl PaintModule {
         let resolved = if !by_selection && !by_first_face {
             None
         } else {
-            state.project.active_mesh().map(|mesh| {
+            state.document.active_mesh().map(|mesh| {
                 let mut flags = vec![true; mesh.faces.len()];
                 if by_selection {
                     for (i, face) in mesh.faces.iter().enumerate() {
-                        flags[i] = face.selected || state.session.selection.faces.contains(&i);
+                        flags[i] = face.selected || state.editor.selection.faces.contains(&i);
                     }
                 }
                 if by_first_face {
-                    let locked = state.session.tools.paint_lock_face.unwrap_or(first_face);
+                    let locked = state.editor.tools.paint_lock_face.unwrap_or(first_face);
                     for (i, flag) in flags.iter_mut().enumerate() {
                         *flag &= Some(i) == locked;
                     }
@@ -404,14 +404,17 @@ impl PaintModule {
             })
         };
         if by_first_face {
-            state
-                .session
-                .tools
-                .paint_lock_face
-                .get_or_insert(first_face);
+            state.editor.tools.paint_lock_face.get_or_insert(first_face);
         }
-        state.session.tools.paint_restriction = Some(resolved.clone());
+        state.editor.tools.paint_restriction = Some(resolved.clone());
         resolved
+    }
+
+    pub fn resolve_restriction(
+        state: &mut AppState,
+        first_face: Option<usize>,
+    ) -> Option<Arc<PaintRestriction>> {
+        state.in_context(|ctx| Self::resolve_restriction_in(ctx, first_face))
     }
 
     /// Sem faces elegíveis com a restrição ativa (ex.: máscara ligada e nada
@@ -421,8 +424,8 @@ impl PaintModule {
     }
 
     /// Tamanho do canvas da camada ativa.
-    pub(crate) fn active_canvas_dims(state: &AppState) -> Option<(u32, u32)> {
-        let asset = state.project.assets.get(state.project.active)?;
+    pub(crate) fn active_canvas_dims_in(state: EditorView<'_>) -> Option<(u32, u32)> {
+        let asset = state.document.assets.get(state.document.active)?;
         asset
             .paint_stack
             .as_ref()
@@ -436,19 +439,19 @@ impl PaintModule {
     ///
     /// Cria o buffer de traço na primeira chamada. Retorna `None` se não há
     /// camada pintável (ou ela está travada).
-    fn with_stroke_target<R>(
-        state: &mut AppState,
+    fn with_stroke_target_in<R>(
+        state: &mut CommandContext<'_>,
         f: impl FnOnce(&mut Target, &Mesh) -> R,
     ) -> Option<(R, DirtyTiles)> {
-        let style = state.session.tools.brush_style;
+        let style = state.editor.tools.brush_style;
         let palette: Vec<[u8; 3]> = state
-            .project
+            .document
             .palette
             .iter()
             .map(|rgb| rgb.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8))
             .collect();
-        let active = state.project.active;
-        let asset = state.project.assets.get_mut(active)?;
+        let active = state.document.active;
+        let asset = state.document.assets.get_mut(active)?;
         if asset.locked {
             return None;
         }
@@ -459,7 +462,7 @@ impl PaintModule {
         }
         let layer_id = layer.id;
         let cv = layer.canvas_mut()?;
-        let buf_slot = &mut state.session.tools.paint_buffer;
+        let buf_slot = &mut state.editor.tools.paint_buffer;
         let stale = buf_slot
             .as_ref()
             .is_none_or(|b| b.layer != layer_id || (b.w, b.h) != (cv.w, cv.h));
@@ -488,7 +491,7 @@ impl PaintModule {
         Some((out, target.into_dirty()))
     }
 
-    pub(crate) fn paint_color_rgba(state: &AppState) -> [u8; 4] {
+    pub(crate) fn paint_color_rgba_in(state: EditorView<'_>) -> [u8; 4] {
         let c = state.paint_color;
         [
             (c[0].clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -499,48 +502,48 @@ impl PaintModule {
     }
 
     /// Dabs 2D (coordenadas de texel) com restrição por face e buffer de traço.
-    pub(crate) fn stamp_dabs_2d(
-        state: &mut AppState,
+    pub(crate) fn stamp_dabs_2d_in(
+        state: &mut CommandContext<'_>,
         points: &[(u32, u32)],
         settings: BrushSettings,
     ) -> DirtyTiles {
         if points.is_empty() {
             return DirtyTiles::default();
         }
-        Self::ensure_stack(state);
-        let Some((w, h)) = Self::active_canvas_dims(state) else {
+        Self::ensure_stack_in(state);
+        let Some((w, h)) = Self::active_canvas_dims_in(state.view()) else {
             return DirtyTiles::default();
         };
-        let standalone = state.session.tools.paint_stroke.is_none();
+        let standalone = state.editor.tools.paint_stroke.is_none();
         if standalone {
-            Self::reset_stroke_scratch(state);
+            Self::reset_stroke_scratch_in(state);
         }
-        let first_face = state.project.active_mesh().and_then(|m| {
+        let first_face = state.document.active_mesh().and_then(|m| {
             points
                 .first()
                 .and_then(|&(x, y)| m.faces_at_texel(x, y, w, h).first().copied())
         });
-        let restriction = Self::resolve_restriction(state, first_face);
+        let restriction = Self::resolve_restriction_in(state, first_face);
         if Self::restriction_blocks_everything(restriction.as_ref()) {
             return DirtyTiles::default();
         }
-        let style = state.session.tools.brush_style.sanitized();
-        let clone_source = state.session.tools.clone_source;
-        let params = DabParams::new(settings, &style, Self::paint_color_rgba(state));
+        let style = state.editor.tools.brush_style.sanitized();
+        let clone_source = state.editor.tools.clone_source;
+        let params = DabParams::new(settings, &style, Self::paint_color_rgba_in(state.view()));
         let radius0 = settings.sanitized().size_px * 0.5;
         let stencil = state
-            .session
+            .editor
             .tools
             .paint_stencil
             .as_ref()
             .filter(|stencil| {
                 state
-                    .project
+                    .document
                     .active()
                     .is_some_and(|a| a.id == stencil.target)
             })
             .cloned();
-        let result = Self::with_stroke_target(state, |target, mesh| {
+        let result = Self::with_stroke_target_in(state, |target, mesh| {
             let mask = restriction.as_ref().map(|r| r.mask(mesh, w, h));
             for &(cx, cy) in points {
                 let n = target.buf.dabs;
@@ -611,7 +614,7 @@ impl PaintModule {
             }
         });
         if standalone {
-            Self::reset_stroke_scratch(state);
+            Self::reset_stroke_scratch_in(state);
         }
         let Some(((), dirty)) = result else {
             return DirtyTiles::default();
@@ -620,40 +623,40 @@ impl PaintModule {
     }
 
     /// Esquece restrição, trava e buffer do traço (fim de traço ou dab avulso).
-    pub(crate) fn reset_stroke_scratch(state: &mut AppState) {
-        state.session.tools.paint_restriction = None;
-        state.session.tools.paint_buffer = None;
-        state.session.tools.paint_lock_face = None;
+    pub(crate) fn reset_stroke_scratch_in(state: &mut CommandContext<'_>) {
+        state.editor.tools.paint_restriction = None;
+        state.editor.tools.paint_buffer = None;
+        state.editor.tools.paint_lock_face = None;
     }
 
     /// Dabs 3D: pincel esférico de raio `r_world` em cada ponto de impacto.
     ///
     /// `hits` = `(face sob o cursor, ponto de impacto)`. A simetria espelha o
     /// ponto de impacto e repete o dab (a superfície espelhada recebe o seu).
-    pub(crate) fn stamp_dabs_3d(
-        state: &mut AppState,
+    pub(crate) fn stamp_dabs_3d_in(
+        state: &mut CommandContext<'_>,
         hits: &[(usize, Vec3)],
         settings: BrushSettings,
     ) -> DirtyTiles {
         if hits.is_empty() {
             return DirtyTiles::default();
         }
-        Self::ensure_stack(state);
-        let Some((w, h)) = Self::active_canvas_dims(state) else {
+        Self::ensure_stack_in(state);
+        let Some((w, h)) = Self::active_canvas_dims_in(state.view()) else {
             return DirtyTiles::default();
         };
-        let restriction = Self::resolve_restriction(state, hits.first().map(|h| h.0));
+        let restriction = Self::resolve_restriction_in(state, hits.first().map(|h| h.0));
         if Self::restriction_blocks_everything(restriction.as_ref()) {
             return DirtyTiles::default();
         }
-        let style = state.session.tools.brush_style.sanitized();
-        let clone_source = state.session.tools.clone_source;
-        let params = DabParams::new(settings, &style, Self::paint_color_rgba(state));
+        let style = state.editor.tools.brush_style.sanitized();
+        let clone_source = state.editor.tools.clone_source;
+        let params = DabParams::new(settings, &style, Self::paint_color_rgba_in(state.view()));
         let size_px = settings.sanitized().size_px;
         let (sx, sy, sz) = (
-            state.session.tools.paint_symmetry_x,
-            state.session.tools.paint_symmetry_y,
-            state.session.tools.paint_symmetry_z,
+            state.editor.tools.paint_symmetry_x,
+            state.editor.tools.paint_symmetry_y,
+            state.editor.tools.paint_symmetry_z,
         );
         struct Dab {
             hit: Vec3,
@@ -663,15 +666,22 @@ impl PaintModule {
             texel: Option<[f32; 2]>,
         }
         let mut dabs: Vec<Dab> = Vec::with_capacity(hits.len());
-        if let Some(mesh) = state.project.active_mesh() {
-            for &(face, hit) in hits {
+        if let Some(asset) = state.document.active() {
+            let mesh = &asset.mesh;
+            // Os hits chegam em mundo; o carimbo trabalha no frame local do
+            // objeto (normais e centros de face são locais, e a simetria vale
+            // nos eixos do objeto). O raio local divide pela escala média.
+            let scale = asset.transform.scale().abs();
+            let mean_scale = ((scale.x + scale.y + scale.z) / 3.0).max(1.0e-6);
+            for &(face, world_hit) in hits {
                 if face >= mesh.faces.len() {
                     continue;
                 }
                 let normal = mesh.face_normal(face).normalize_or_zero();
-                let radius = state.world_radius_for_px(hit, size_px);
-                let texel = Self::face_hit_uv(state, face, hit, false)
-                    .and_then(|uv| Self::uv_to_px(state, uv))
+                let radius = state.world_radius_for_px(world_hit, size_px) / mean_scale;
+                let hit = asset.to_local_point(world_hit);
+                let texel = Self::face_hit_uv_in(state.view(), face, world_hit, false)
+                    .and_then(|uv| Self::uv_to_px_in(state.view(), uv))
                     .map(|(x, y)| [x as f32, y as f32]);
                 for flip in 0u8..8 {
                     let (fx, fy, fz) = (flip & 1 != 0, flip & 2 != 0, flip & 4 != 0);
@@ -695,18 +705,18 @@ impl PaintModule {
         }
         let plain_round = style.tip == BrushTip::Round && style.roundness >= 0.999;
         let stencil = state
-            .session
+            .editor
             .tools
             .paint_stencil
             .as_ref()
             .filter(|stencil| {
                 state
-                    .project
+                    .document
                     .active()
                     .is_some_and(|a| a.id == stencil.target)
             })
             .cloned();
-        let result = Self::with_stroke_target(state, |target, mesh| {
+        let result = Self::with_stroke_target_in(state, |target, mesh| {
             // Com restrição, a sangria da face só cai em calha ou em face
             // permitida (P3D-132: nenhuma tinta fora da área permitida).
             let mask = restriction.as_ref().map(|r| r.mask(mesh, w, h));

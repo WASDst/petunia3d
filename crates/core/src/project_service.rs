@@ -48,6 +48,18 @@ impl From<PipelineError> for ProjectServiceError {
     }
 }
 
+/// Resumo de uma geração de recuperação para o diálogo Inspect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverySummary {
+    pub project_id: uuid::Uuid,
+    pub name: String,
+    pub asset_count: usize,
+    pub face_count: usize,
+    pub timestamp: u64,
+    pub revision: Option<u64>,
+    pub project_path: Option<std::path::PathBuf>,
+}
+
 /// Serviço puro de aplicação para carregamento, salvamento, importação e exportação de projetos e assets.
 pub struct ProjectService;
 
@@ -55,7 +67,7 @@ impl ProjectService {
     /// Reinicia a sessão para um projeto vazio padrão (P3D-001 §New Project).
     pub fn new_project(state: &mut AppState) {
         state.project.reset();
-        state.session.tools.uv_selected.clear();
+        state.session.tools.uv_selection.clear();
         state.sync_selection();
         state.mark_document_clean();
         state.set_status("new project".to_string());
@@ -65,16 +77,29 @@ impl ProjectService {
 
     /// Carrega um arquivo de projeto (.petunia) e sincroniza o estado da aplicação (P3D-001 §Open Project).
     pub fn load_project(state: &mut AppState, path: &Path) -> Result<(), ProjectServiceError> {
-        let p = format::load(path).map_err(|e| ProjectServiceError::Format(e.to_string()))?;
+        let (p, report) = format::load_with_report(path, format::LoadMode::LegacyRepair)
+            .map_err(|e| ProjectServiceError::Format(e.to_string()))?;
         state.project.palette = p.palette.clone();
         state.project.project = p;
         // Arquivos carregados começam com revisões em 0; avançar evita o hash
         // de conteúdo por frame do fingerprint (ver `ProjectState::new`).
         state.project.project.bump_changes(ProjectChanges::ALL);
         state.project.undo.clear();
-        state.session.tools.uv_selected.clear();
+        state.session.tools.uv_selection.clear();
         state.project.project_path = Some(path.to_string_lossy().to_string());
         state.mark_document_clean();
+        // Legacy Repair auditável: cada reparo é registrado e o documento abre
+        // sujo, porque a memória já difere do arquivo em disco.
+        for repair in &report.repairs {
+            crate::diagnostics::log_event(
+                crate::diagnostics::DiagnosticCategory::ProjectIo,
+                "load.repair",
+                repair,
+            );
+        }
+        if !report.repairs.is_empty() {
+            state.mark_document_dirty();
+        }
         state.events.emit(AppEvent::ProjectLoaded);
         state.sync_selection();
         let now = std::time::SystemTime::now()
@@ -85,8 +110,8 @@ impl ProjectService {
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "Untitled".to_string());
-        state.project.recent_projects.add(path, &name, now);
-        let _ = state.project.recent_projects.save();
+        state.ui.recent_projects.add(path, &name, now);
+        let _ = state.ui.recent_projects.save();
         state.set_status(format!("open {}", path.display()));
         state.mark_dirty();
         Ok(())
@@ -96,10 +121,12 @@ impl ProjectService {
     pub fn save_project(state: &mut AppState, path: &Path) -> Result<(), ProjectServiceError> {
         state.events.emit(AppEvent::ProjectSaving);
         state.project.project.palette = state.project.palette.clone();
+        // O ponto salvo é o estado que foi serializado, e só vale se a gravação der certo.
+        let save_point = state.project.save_point();
         format::save(&state.project.project, path)
             .map_err(|e| ProjectServiceError::Format(e.to_string()))?;
         state.project.project_path = Some(path.to_string_lossy().to_string());
-        state.mark_document_clean();
+        state.project.mark_saved(save_point);
         state.events.emit(AppEvent::ProjectSaved);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -109,8 +136,8 @@ impl ProjectService {
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "Untitled".to_string());
-        state.project.recent_projects.add(path, &name, now);
-        let _ = state.project.recent_projects.save();
+        state.ui.recent_projects.add(path, &name, now);
+        let _ = state.ui.recent_projects.save();
         state.set_status(format!("saved {}", path.display()));
         state.mark_dirty();
         Ok(())
@@ -138,7 +165,7 @@ impl ProjectService {
         // de conteúdo por frame do fingerprint (ver `ProjectState::new`).
         state.project.project.bump_changes(ProjectChanges::ALL);
         state.project.undo.clear();
-        state.session.tools.uv_selected.clear();
+        state.session.tools.uv_selection.clear();
         state.project.project_path = original_path.map(|p| p.to_string_lossy().to_string());
         // Ao recuperar, o documento entra como modificado/dirty (P3D-002)
         state.mark_document_dirty();
@@ -147,6 +174,39 @@ impl ProjectService {
         state.set_status("recovered from autosave snapshot".to_string());
         state.mark_dirty();
         Ok(())
+    }
+
+    /// Inspect (Recover / Inspect / Discard): lê uma geração de recuperação e
+    /// devolve um resumo **sem tocar na sessão aberta** — nem documento, nem
+    /// histórico, nem caminho (website/docs/11-project/project-persistence.md).
+    pub fn inspect_recovery(
+        candidate: &petunia_project::RecoveryCandidate,
+    ) -> Result<RecoverySummary, ProjectServiceError> {
+        let project = format::load(&candidate.snapshot_path)
+            .map_err(|e| ProjectServiceError::Format(e.to_string()))?;
+        Ok(RecoverySummary {
+            project_id: project.id,
+            name: project.name.clone(),
+            asset_count: project.assets.len(),
+            face_count: project.assets.iter().map(|a| a.mesh.faces.len()).sum(),
+            timestamp: candidate.timestamp,
+            revision: candidate.revision,
+            project_path: candidate.project_path.clone(),
+        })
+    }
+
+    /// Recover de uma geração escolhida: abre o snapshot como documento sujo,
+    /// mantendo o caminho do projeto de origem; o arquivo principal só é
+    /// sobrescrito por um Save explícito.
+    pub fn recover_generation(
+        state: &mut AppState,
+        candidate: &petunia_project::RecoveryCandidate,
+    ) -> Result<(), ProjectServiceError> {
+        Self::recover_from_snapshot(
+            state,
+            &candidate.snapshot_path,
+            candidate.project_path.as_deref(),
+        )
     }
 
     /// Importa uma malha Wavefront OBJ do disco e a anexa como novo asset do projeto.

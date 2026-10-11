@@ -19,7 +19,7 @@
 use std::sync::Arc;
 
 use glam::Vec3;
-use petunia_core::{AppState, BrushSettings, PaintRestriction};
+use petunia_core::{AppState, BrushSettings, CommandContext, PaintRestriction};
 use petunia_mesh::Mesh;
 use petunia_mesh::uv_layout::closest_point_on_triangle;
 
@@ -611,8 +611,8 @@ impl PaintModule {
     /// dab 3D, na profundidade do nó mais próximo da câmera (nunca deixa
     /// buracos). Restrições (seleção, trava, `isolate_selection`) valem como
     /// num traço comum; as amostras só colam em faces elegíveis.
-    pub fn paint_surface_path(
-        state: &mut AppState,
+    pub fn paint_surface_path_in(
+        state: &mut CommandContext<'_>,
         nodes: &[Vec3],
         closed: bool,
         smooth: bool,
@@ -623,13 +623,15 @@ impl PaintModule {
         if s.kind.is_shape() || nodes.is_empty() {
             return 0;
         }
-        let Some(mesh) = state.project.active_mesh() else {
+        // O caminho está em mundo: distâncias e projeção usam a malha em mundo
+        // (mesmos índices de face da malha autoral).
+        let Some(world) = state.document.active().map(|a| a.world_mesh().into_owned()) else {
             return 0;
         };
-        if mesh.faces.is_empty() {
+        if world.faces.is_empty() {
             return 0;
         }
-        let diagonal = mesh_diagonal(mesh);
+        let diagonal = mesh_diagonal(&world);
         // Passo de mundo = diâmetro do pincel de `dab_step_px` na menor
         // profundidade do caminho (mesma conversão do dab 3D).
         let step_px = s.dab_step_px();
@@ -648,18 +650,18 @@ impl PaintModule {
         }
 
         // Abre o traço (um Undo) antes de qualquer mutação.
-        let owns_stroke = state.session.tools.paint_stroke.is_none();
+        let owns_stroke = state.editor.tools.paint_stroke.is_none();
         if owns_stroke {
             state.begin_paint_stroke();
-            if state.session.tools.paint_stroke.is_none() {
+            if state.editor.tools.paint_stroke.is_none() {
                 return 0;
             }
         }
 
-        let restriction = Self::path_restriction(state, &samples, isolate_selection);
+        let restriction = Self::path_restriction_in(state, &samples, isolate_selection);
         let allowed = |f: usize| restriction.as_ref().is_none_or(|r| r.allows_face(f));
         let max_distance = (diagonal * 0.25).max(world_radius * 4.0);
-        let hits: Vec<(usize, Vec3)> = match state.project.active_mesh() {
+        let hits: Vec<(usize, Vec3)> = match Some(&world) {
             Some(mesh) => project_path_onto_surface(mesh, &samples, max_distance, &allowed)
                 .into_iter()
                 .map(|h| (h.face, h.position))
@@ -667,15 +669,38 @@ impl PaintModule {
             None => Vec::new(),
         };
         let painted = !hits.is_empty()
-            && Self::paint_mesh_3d_batch_with_settings(state, &hits, s, isolate_selection);
+            && Self::paint_mesh_3d_batch_with_settings_in(state, &hits, s, isolate_selection);
         if owns_stroke {
             state.finish_paint_stroke(false);
         }
         if painted { hits.len() } else { 0 }
     }
 
+    pub fn paint_surface_path(
+        state: &mut AppState,
+        nodes: &[Vec3],
+        closed: bool,
+        smooth: bool,
+        settings: BrushSettings,
+        isolate_selection: bool,
+    ) -> usize {
+        state.in_context(|ctx| {
+            Self::paint_surface_path_in(ctx, nodes, closed, smooth, settings, isolate_selection)
+        })
+    }
+
     /// Linha reta entre dois pontos da superfície (Shift+clique): mesma
     /// maquinaria de [`PaintModule::paint_surface_path`] com dois nós.
+    pub fn paint_surface_line_in(
+        state: &mut CommandContext<'_>,
+        a: Vec3,
+        b: Vec3,
+        settings: BrushSettings,
+        isolate_selection: bool,
+    ) -> usize {
+        Self::paint_surface_path_in(state, &[a, b], false, false, settings, isolate_selection)
+    }
+
     pub fn paint_surface_line(
         state: &mut AppState,
         a: Vec3,
@@ -683,37 +708,38 @@ impl PaintModule {
         settings: BrushSettings,
         isolate_selection: bool,
     ) -> usize {
-        Self::paint_surface_path(state, &[a, b], false, false, settings, isolate_selection)
+        state.in_context(|ctx| Self::paint_surface_line_in(ctx, a, b, settings, isolate_selection))
     }
 
     /// Resolve (e guarda no traço) a restrição de faces do caminho, igual a um
     /// traço comum. Com trava na primeira face, a primeira amostra elegível
     /// pela seleção define a face travada.
-    fn path_restriction(
-        state: &mut AppState,
+    fn path_restriction_in(
+        state: &mut CommandContext<'_>,
         samples: &[Vec3],
         isolate_selection: bool,
     ) -> Option<Arc<PaintRestriction>> {
         use petunia_core::BrushLock;
-        let forced = isolate_selection && !state.session.tools.paint_isolate_selection;
+        let forced = isolate_selection && !state.editor.tools.paint_isolate_selection;
         if forced {
-            state.session.tools.paint_isolate_selection = true;
+            state.editor.tools.paint_isolate_selection = true;
         }
-        let first_face = if state.session.tools.brush_lock == BrushLock::FirstFace {
-            let by_selection = state.session.tools.paint_isolate_selection;
-            let sel = &state.session.selection.faces;
-            state.project.active_mesh().and_then(|mesh| {
+        let first_face = if state.editor.tools.brush_lock == BrushLock::FirstFace {
+            let by_selection = state.editor.tools.paint_isolate_selection;
+            let sel = &state.editor.selection.faces;
+            state.document.active().and_then(|asset| {
+                let mesh = asset.world_mesh();
                 let eligible =
                     |f: usize| !by_selection || mesh.faces[f].selected || sel.contains(&f);
                 let first = *samples.first()?;
-                snap_to_surface(mesh, first, f32::INFINITY, &eligible).map(|h| h.face)
+                snap_to_surface(&mesh, first, f32::INFINITY, &eligible).map(|h| h.face)
             })
         } else {
             None
         };
-        let restriction = Self::resolve_restriction(state, first_face);
+        let restriction = Self::resolve_restriction_in(state, first_face);
         if forced {
-            state.session.tools.paint_isolate_selection = false;
+            state.editor.tools.paint_isolate_selection = false;
         }
         restriction
     }

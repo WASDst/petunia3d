@@ -1,0 +1,920 @@
+//! Superfície de compatibilidade de `AppState` sobre o contexto restrito do editor.
+//!
+//! As implementações vivem em `impl CommandContext` / `impl EditorView` (sem acesso a UI
+//! nem a render); `AppState` apenas delega, aplicando os efeitos ao final.
+
+use crate::context::CommandContext;
+use glam::Vec3;
+use uuid::Uuid;
+
+use super::*;
+use crate::region_push::ProfileGroup;
+use petunia_project::{MotionGenerator, MotionStyle, Project, ProjectChanges, RootMode};
+
+impl AppState {
+    #[inline]
+    pub fn brush_world_radius(&self, hit: Vec3) -> f32 {
+        self.view().brush_world_radius(hit)
+    }
+
+    #[inline]
+    pub fn world_radius_for_px(&self, hit: Vec3, size_px: f32) -> f32 {
+        self.view().world_radius_for_px(hit, size_px)
+    }
+
+    #[inline]
+    pub fn animate_resolve(&mut self) {
+        self.in_context(|ctx| ctx.animate_resolve())
+    }
+
+    #[inline]
+    pub fn animate_select_skeleton(&mut self, id: Uuid) -> bool {
+        self.in_context(|ctx| ctx.animate_select_skeleton(id))
+    }
+
+    #[inline]
+    pub fn animate_select_motion(&mut self, id: Uuid) -> bool {
+        self.in_context(|ctx| ctx.animate_select_motion(id))
+    }
+
+    #[inline]
+    pub fn animate_add_rig(&mut self, kind: RigPresetKind) -> Result<Uuid, CommandError> {
+        self.in_context(|ctx| ctx.animate_add_rig(kind))
+    }
+
+    #[inline]
+    pub fn animate_add_motion(&mut self, generator: MotionGenerator) -> Result<Uuid, CommandError> {
+        self.in_context(|ctx| ctx.animate_add_motion(generator))
+    }
+
+    #[inline]
+    pub fn animate_duplicate_motion(&mut self) -> Result<Uuid, CommandError> {
+        self.in_context(|ctx| ctx.animate_duplicate_motion())
+    }
+
+    #[inline]
+    pub fn animate_remove_motion(&mut self) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_remove_motion())
+    }
+
+    #[inline]
+    pub fn animate_param_preview(&mut self, key: &str, value: f32) -> bool {
+        self.in_context(|ctx| ctx.animate_param_preview(key, value))
+    }
+
+    #[inline]
+    pub fn animate_param_commit(&mut self) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_param_commit())
+    }
+
+    #[inline]
+    pub fn animate_param_cancel(&mut self) {
+        self.in_context(|ctx| ctx.animate_param_cancel())
+    }
+
+    #[inline]
+    pub fn animate_set_param(&mut self, key: &str, value: f32) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_set_param(key, value))
+    }
+
+    #[inline]
+    pub fn animate_set_style(&mut self, style: MotionStyle) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_set_style(style))
+    }
+
+    #[inline]
+    pub fn animate_fit_to_model(&mut self) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_fit_to_model())
+    }
+
+    #[inline]
+    pub fn animate_set_stepped(&mut self, fps: Option<f32>) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_set_stepped(fps))
+    }
+
+    #[inline]
+    pub fn animate_set_root_mode(&mut self, mode: RootMode) -> Result<bool, CommandError> {
+        self.in_context(|ctx| ctx.animate_set_root_mode(mode))
+    }
+
+    #[inline]
+    pub fn animate_toggle_play(&mut self) {
+        self.in_context(|ctx| ctx.animate_toggle_play())
+    }
+
+    #[inline]
+    pub fn animate_seek(&mut self, time: f32) {
+        self.in_context(|ctx| ctx.animate_seek(time))
+    }
+
+    #[inline]
+    pub fn animate_apply_now(&mut self, keep_motion: bool) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_apply_now(keep_motion))
+    }
+
+    #[inline]
+    pub fn is_interacting(&self) -> bool {
+        self.view().is_interacting()
+    }
+
+    #[inline]
+    pub fn begin_mesh_preview(&mut self, label: &'static str) -> bool {
+        self.in_context(|ctx| ctx.begin_mesh_preview(label))
+    }
+
+    #[inline]
+    pub fn preview_mesh(&mut self, mesh: Mesh) {
+        self.in_context(|ctx| ctx.preview_mesh(mesh))
+    }
+
+    #[inline]
+    pub fn finish_mesh_preview(&mut self, cancel: bool) {
+        self.in_context(|ctx| ctx.finish_mesh_preview(cancel))
+    }
+
+    #[inline]
+    pub fn begin_modal(&mut self, kind: ModalKind) -> Result<(), ModalError> {
+        self.in_context(|ctx| ctx.begin_modal(kind))
+    }
+
+    #[inline]
+    pub fn set_modal_constraint(&mut self, constraint: ModalConstraint) -> Result<(), ModalError> {
+        self.in_context(|ctx| ctx.set_modal_constraint(constraint))
+    }
+
+    #[inline]
+    pub fn update_modal(&mut self, translation: Vec3, value: f32) -> Result<(), ModalError> {
+        self.in_context(|ctx| ctx.update_modal(translation, value))
+    }
+
+    #[inline]
+    pub fn update_modal_snapped(
+        &mut self,
+        translation: Vec3,
+        value: f32,
+        snap: Option<SnapKind>,
+    ) -> Result<(), ModalError> {
+        self.in_context(|ctx| ctx.update_modal_snapped(translation, value, snap))
+    }
+
+    #[inline]
+    pub fn rigid_preview_transforms(&self) -> &[(uuid::Uuid, glam::Mat4)] {
+        self.view().rigid_preview_transforms()
+    }
+
+    #[inline]
+    pub fn update_modal_components(&mut self, components: Vec3) -> Result<(), ModalError> {
+        self.in_context(|ctx| ctx.update_modal_components(components))
+    }
+
+    #[inline]
+    pub fn commit_modal(&mut self) -> bool {
+        self.in_context(|ctx| ctx.commit_modal())
+    }
+
+    #[inline]
+    pub fn cancel_modal(&mut self) -> bool {
+        self.in_context(|ctx| ctx.cancel_modal())
+    }
+
+    #[inline]
+    pub fn poly_pen_add_polygon(
+        &mut self,
+        points: &[PenPoint],
+    ) -> Result<usize, PolyPenCommandError> {
+        self.in_context(|ctx| ctx.poly_pen_add_polygon(points))
+    }
+
+    #[inline]
+    pub fn poly_pen_melt_point(&mut self, point: u32) -> Result<(), PolyPenCommandError> {
+        self.in_context(|ctx| ctx.poly_pen_melt_point(point))
+    }
+
+    #[inline]
+    pub fn poly_pen_split_edge(
+        &mut self,
+        a: u32,
+        b: u32,
+        t: f32,
+    ) -> Result<u32, PolyPenCommandError> {
+        self.in_context(|ctx| ctx.poly_pen_split_edge(a, b, t))
+    }
+
+    #[inline]
+    pub fn begin_poly_pen_edge_extrude(
+        &mut self,
+        a: u32,
+        b: u32,
+    ) -> Result<(), PolyPenCommandError> {
+        self.in_context(|ctx| ctx.begin_poly_pen_edge_extrude(a, b))
+    }
+
+    #[inline]
+    pub fn begin_poly_pen_strip(
+        &mut self,
+        a: u32,
+        b: u32,
+    ) -> Result<PenStrip, PolyPenCommandError> {
+        self.in_context(|ctx| ctx.begin_poly_pen_strip(a, b))
+    }
+
+    #[inline]
+    pub fn poly_pen_strip_to(
+        &mut self,
+        strip: &mut PenStrip,
+        target: Vec3,
+    ) -> Result<usize, PolyPenCommandError> {
+        self.in_context(|ctx| ctx.poly_pen_strip_to(strip, target))
+    }
+
+    #[inline]
+    pub fn finish_poly_pen_strip(&mut self, strip: PenStrip) -> bool {
+        self.in_context(|ctx| ctx.finish_poly_pen_strip(strip))
+    }
+
+    #[inline]
+    pub fn cancel_poly_pen_strip(&mut self, strip: PenStrip) {
+        self.in_context(|ctx| ctx.cancel_poly_pen_strip(strip))
+    }
+
+    #[inline]
+    pub fn query_scene_hierarchy(&self) -> SceneHierarchyDto {
+        self.view().query_scene_hierarchy()
+    }
+
+    #[inline]
+    pub fn query_selection_details(&self) -> SelectionDetailsDto {
+        self.view().query_selection_details()
+    }
+
+    #[inline]
+    pub fn set_active_asset_by_id(&mut self, id: Uuid) -> bool {
+        self.in_context(|ctx| ctx.set_active_asset_by_id(id))
+    }
+
+    #[inline]
+    pub fn delete_asset_by_id(&mut self, id: Uuid) -> bool {
+        self.in_context(|ctx| ctx.delete_asset_by_id(id))
+    }
+
+    #[inline]
+    pub fn find_asset_by_id(&self, id: Uuid) -> Option<&petunia_project::Asset> {
+        self.view().find_asset_by_id(id)
+    }
+
+    #[inline]
+    pub fn profile_region_planes(&self) -> RegionPlanes {
+        self.view().profile_region_planes()
+    }
+
+    #[inline]
+    pub fn profile_region_at_ray(&self, origin: Vec3, direction: Vec3) -> Option<RegionHit> {
+        self.view().profile_region_at_ray(origin, direction)
+    }
+
+    #[inline]
+    pub fn region_host_face(&self, hit: &RegionHit) -> Option<usize> {
+        self.view().region_host_face(hit)
+    }
+
+    #[inline]
+    pub fn begin_region_push_pull(&mut self, hit: &RegionHit) -> Result<(), RegionPushError> {
+        self.in_context(|ctx| ctx.begin_region_push_pull(hit))
+    }
+
+    #[inline]
+    pub fn shape_planes(&self) -> Vec<ShapePlane> {
+        self.view().shape_planes()
+    }
+
+    #[inline]
+    pub fn apply_shape_edit(
+        &mut self,
+        hint: Option<&RegionPlane>,
+        edit: &ShapeEdit,
+    ) -> Result<ShapeEditReport, ShapeEditError> {
+        self.in_context(|ctx| ctx.apply_shape_edit(hint, edit))
+    }
+
+    #[inline]
+    pub fn document_session(&self) -> &DocumentSession {
+        self.view().document_session()
+    }
+
+    #[inline]
+    pub fn editor_session(&self) -> &EditorSession {
+        self.view().editor_session()
+    }
+
+    #[inline]
+    pub fn viewport_session(&self) -> ViewportSession {
+        self.view().viewport_session()
+    }
+
+    #[inline]
+    pub fn set_viewport_session(&mut self, vs: ViewportSession) {
+        self.in_context(|ctx| ctx.set_viewport_session(vs))
+    }
+
+    #[inline]
+    pub fn tool_session_manager(&self) -> &ToolSessionManager {
+        self.view().tool_session_manager()
+    }
+
+    #[inline]
+    pub fn scene_tris(&self) -> usize {
+        self.view().scene_tris()
+    }
+
+    #[inline]
+    pub fn scene_verts(&self) -> usize {
+        self.view().scene_verts()
+    }
+
+    #[inline]
+    pub fn primitive_session_valid(&self) -> bool {
+        self.view().primitive_session_valid()
+    }
+
+    #[inline]
+    pub fn begin_primitive(
+        &mut self,
+        kind: crate::command::PrimitiveKind,
+        name: Option<String>,
+    ) -> bool {
+        self.in_context(|ctx| ctx.begin_primitive(kind, name))
+    }
+
+    #[inline]
+    pub fn update_primitive(
+        &mut self,
+        descriptor: crate::primitive_session::PrimitiveDescriptor,
+    ) -> bool {
+        self.in_context(|ctx| ctx.update_primitive(descriptor))
+    }
+
+    #[inline]
+    pub fn active_is_parametric(&self) -> bool {
+        self.view().active_is_parametric()
+    }
+
+    #[inline]
+    pub fn active_primitive_descriptor(
+        &self,
+    ) -> Option<crate::primitive_session::PrimitiveDescriptor> {
+        self.view().active_primitive_descriptor()
+    }
+
+    #[inline]
+    pub fn freeze_active_primitive(&mut self) -> bool {
+        self.in_context(|ctx| ctx.freeze_active_primitive())
+    }
+
+    #[inline]
+    pub fn update_active_primitive(
+        &mut self,
+        descriptor: crate::primitive_session::PrimitiveDescriptor,
+        create_checkpoint: bool,
+    ) -> bool {
+        self.in_context(|ctx| ctx.update_active_primitive(descriptor, create_checkpoint))
+    }
+
+    #[inline]
+    pub fn confirm_primitive(&mut self) -> bool {
+        self.in_context(|ctx| ctx.confirm_primitive())
+    }
+
+    #[inline]
+    pub fn cancel_primitive(&mut self) -> bool {
+        self.in_context(|ctx| ctx.cancel_primitive())
+    }
+
+    #[inline]
+    pub fn reopen_last_primitive(&mut self) -> bool {
+        self.in_context(|ctx| ctx.reopen_last_primitive())
+    }
+
+    #[inline]
+    pub fn finalize_primitive_session(&mut self) {
+        self.in_context(|ctx| ctx.finalize_primitive_session())
+    }
+
+    #[inline]
+    pub fn switch_workspace(&mut self, next: Workspace) {
+        self.in_context(|ctx| ctx.switch_workspace(next))
+    }
+
+    #[inline]
+    pub fn is_axis_locked(&self, axis: usize) -> bool {
+        self.view().is_axis_locked(axis)
+    }
+
+    #[inline]
+    pub fn active_axis_constraint_label(&self) -> Option<(&'static str, [u8; 3])> {
+        self.view().active_axis_constraint_label()
+    }
+
+    #[inline]
+    pub fn toggle_axis_lock(&mut self, axis: usize) {
+        self.in_context(|ctx| ctx.toggle_axis_lock(axis))
+    }
+
+    #[inline]
+    pub fn is_document_dirty(&self) -> bool {
+        self.view().is_document_dirty()
+    }
+
+    #[inline]
+    pub fn mark_document_dirty(&mut self) {
+        self.in_context(|ctx| ctx.mark_document_dirty())
+    }
+
+    #[inline]
+    pub fn mark_document_clean(&mut self) {
+        self.in_context(|ctx| ctx.mark_document_clean())
+    }
+
+    #[inline]
+    pub fn checkpoint(&mut self, label: &str) {
+        self.in_context(|ctx| ctx.checkpoint(label))
+    }
+
+    #[inline]
+    pub fn undo(&mut self) -> bool {
+        self.in_context(|ctx| ctx.undo())
+    }
+
+    #[inline]
+    pub fn redo(&mut self) -> bool {
+        self.in_context(|ctx| ctx.redo())
+    }
+
+    #[inline]
+    pub fn emit_mesh_changed(&mut self) {
+        self.in_context(|ctx| ctx.emit_mesh_changed())
+    }
+
+    #[inline]
+    pub fn emit_positions_changed(&mut self) {
+        self.in_context(|ctx| ctx.emit_positions_changed())
+    }
+
+    #[inline]
+    pub fn emit_uv_changed(&mut self) {
+        self.in_context(|ctx| ctx.emit_uv_changed())
+    }
+
+    #[inline]
+    pub fn emit_color_changed(&mut self) {
+        self.in_context(|ctx| ctx.emit_color_changed())
+    }
+
+    #[inline]
+    pub fn emit_material_changed(&mut self) {
+        self.in_context(|ctx| ctx.emit_material_changed())
+    }
+
+    #[inline]
+    pub fn emit_texture_changed(&mut self) {
+        self.in_context(|ctx| ctx.emit_texture_changed())
+    }
+
+    #[inline]
+    pub fn emit_texture_changed_regions(&mut self, regions: Vec<TextureDirtyRect>) {
+        self.in_context(|ctx| ctx.emit_texture_changed_regions(regions))
+    }
+
+    #[inline]
+    pub fn emit_project_changed(&mut self, changes: ProjectChanges) {
+        self.in_context(|ctx| ctx.emit_project_changed(changes))
+    }
+
+    #[inline]
+    pub fn sync_selection(&mut self) -> bool {
+        self.in_context(|ctx| ctx.sync_selection())
+    }
+
+    #[inline]
+    pub fn apply_component_selection(
+        &mut self,
+        set: &crate::ComponentSet,
+        op: crate::SelectionOp,
+    ) -> Result<(), crate::CommandError> {
+        self.in_context(|ctx| ctx.apply_component_selection(set, op))
+    }
+
+    #[inline]
+    pub fn select_hover_if_empty(&mut self) -> bool {
+        self.in_context(|ctx| ctx.select_hover_if_empty())
+    }
+
+    #[inline]
+    pub fn uv_click(&mut self, point: glam::Vec2, radius: f32, extend: bool) -> bool {
+        self.in_context(|ctx| ctx.uv_click(point, radius, extend))
+    }
+
+    #[inline]
+    pub fn set_uv_sync(&mut self, enabled: bool) {
+        self.in_context(|ctx| ctx.set_uv_sync(enabled))
+    }
+
+    #[inline]
+    pub fn select_object(&mut self, index: Option<usize>, extend: bool) {
+        self.in_context(|ctx| ctx.select_object(index, extend))
+    }
+
+    #[inline]
+    pub fn selection_domain(&self) -> SelectionDomain {
+        self.view().selection_domain()
+    }
+
+    #[inline]
+    pub fn set_edit_mode(&mut self, mode: EditMode) {
+        self.in_context(|ctx| ctx.set_edit_mode(mode))
+    }
+
+    #[inline]
+    pub fn set_selection_domain(&mut self, domain: SelectionDomain) {
+        self.in_context(|ctx| ctx.set_selection_domain(domain))
+    }
+
+    #[inline]
+    pub fn cycle_selection_domain(&mut self) {
+        self.in_context(|ctx| ctx.cycle_selection_domain())
+    }
+
+    #[inline]
+    pub fn calculate_pivot(&self, pivot: PivotPoint) -> glam::Vec3 {
+        self.view().calculate_pivot(pivot)
+    }
+
+    #[inline]
+    pub fn set_origin_geometry(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_geometry())
+    }
+
+    #[inline]
+    pub fn set_origin_bottom(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_bottom())
+    }
+
+    #[inline]
+    pub fn set_origin_cursor(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_cursor())
+    }
+
+    #[inline]
+    pub fn set_origin_selection(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_origin_selection())
+    }
+
+    #[inline]
+    pub fn set_geometry_to_origin(&mut self) -> Result<(), &'static str> {
+        self.in_context(|ctx| ctx.set_geometry_to_origin())
+    }
+
+    #[inline]
+    pub fn toggle_edit_pivot(&mut self) -> bool {
+        self.in_context(|ctx| ctx.toggle_edit_pivot())
+    }
+
+    #[inline]
+    pub fn current_tool_feedback(&self) -> Option<crate::modal_feedback::ToolFeedback> {
+        self.view().current_tool_feedback()
+    }
+
+    #[inline]
+    pub fn brush_settings(&self) -> crate::BrushSettings {
+        self.view().brush_settings()
+    }
+
+    #[inline]
+    pub fn paint_at(&mut self, center: Vec3) {
+        self.in_context(|ctx| ctx.paint_at(center))
+    }
+
+    #[inline]
+    pub fn begin_paint_stroke(&mut self) {
+        self.in_context(|ctx| ctx.begin_paint_stroke())
+    }
+
+    #[inline]
+    pub fn finish_paint_stroke(&mut self, cancel: bool) {
+        self.in_context(|ctx| ctx.finish_paint_stroke(cancel))
+    }
+
+    #[inline]
+    pub fn pick_vertex(&self, origin: Vec3, dir: Vec3) -> Option<(usize, Vec3)> {
+        self.view().pick_vertex(origin, dir)
+    }
+
+    #[inline]
+    pub fn save_active_as_asset(&mut self) -> bool {
+        self.in_context(|ctx| ctx.save_active_as_asset())
+    }
+
+    #[inline]
+    pub fn save_selection_as_prefab(&mut self, name: Option<&str>) -> Option<uuid::Uuid> {
+        self.in_context(|ctx| ctx.save_selection_as_prefab(name))
+    }
+
+    #[inline]
+    pub fn instantiate_prefab(
+        &mut self,
+        prefab_id: uuid::Uuid,
+        position: Option<[f32; 3]>,
+    ) -> bool {
+        self.in_context(|ctx| ctx.instantiate_prefab(prefab_id, position))
+    }
+
+    #[inline]
+    pub fn delete_prefab(&mut self, prefab_id: uuid::Uuid) -> bool {
+        self.in_context(|ctx| ctx.delete_prefab(prefab_id))
+    }
+
+    #[inline]
+    pub fn rename_prefab(&mut self, prefab_id: uuid::Uuid, name: &str) -> bool {
+        self.in_context(|ctx| ctx.rename_prefab(prefab_id, name))
+    }
+
+    #[inline]
+    pub fn set_prefab_favorite(&mut self, prefab_id: uuid::Uuid, favorite: bool) -> bool {
+        self.in_context(|ctx| ctx.set_prefab_favorite(prefab_id, favorite))
+    }
+
+    #[inline]
+    pub fn update_prefab_from_selection(&mut self, prefab_id: uuid::Uuid) -> bool {
+        self.in_context(|ctx| ctx.update_prefab_from_selection(prefab_id))
+    }
+
+    #[inline]
+    pub fn apply_boolean(
+        &mut self,
+        op: petunia_mesh::boolean::BooleanOp,
+    ) -> Result<usize, petunia_mesh::boolean::BooleanError> {
+        self.in_context(|ctx| ctx.apply_boolean(op))
+    }
+
+    #[inline]
+    pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
+        self.in_context(|ctx| ctx.join_active_with_operand())
+    }
+
+    #[inline]
+    pub fn rename_active_asset(&mut self, name: &str) -> Result<bool, AssetRenameError> {
+        self.in_context(|ctx| ctx.rename_active_asset(name))
+    }
+
+    #[inline]
+    pub fn frame_selection(&mut self) {
+        self.in_context(|ctx| ctx.frame_selection())
+    }
+
+    #[inline]
+    pub fn frame_all(&mut self) {
+        self.in_context(|ctx| ctx.frame_all())
+    }
+
+    #[inline]
+    pub fn instantiate_asset_at_cursor(&mut self, asset_index: usize) -> bool {
+        self.in_context(|ctx| ctx.instantiate_asset_at_cursor(asset_index))
+    }
+
+    #[inline]
+    pub fn instantiate_asset_by_id(
+        &mut self,
+        asset_id: uuid::Uuid,
+        position: Option<[f32; 3]>,
+    ) -> bool {
+        self.in_context(|ctx| ctx.instantiate_asset_by_id(asset_id, position))
+    }
+
+    #[inline]
+    pub fn toggle_isolate(&mut self) {
+        self.in_context(|ctx| ctx.toggle_isolate())
+    }
+
+    #[inline]
+    pub fn refresh_isolation(&mut self) {
+        self.in_context(|ctx| ctx.refresh_isolation())
+    }
+
+    #[inline]
+    pub fn is_active_locked(&self) -> bool {
+        self.view().is_active_locked()
+    }
+
+    #[inline]
+    pub fn toggle_lock_active(&mut self) {
+        self.in_context(|ctx| ctx.toggle_lock_active())
+    }
+
+    #[inline]
+    pub fn commit_modal_gesture(&mut self) -> Option<LastOperation> {
+        self.in_context(|ctx| ctx.commit_modal_gesture())
+    }
+
+    #[inline]
+    pub fn last_operation_is_current(&self, last: &LastOperation) -> bool {
+        self.view().last_operation_is_current(last)
+    }
+
+    #[inline]
+    pub fn adjust_last_operation(
+        &mut self,
+        last: &LastOperation,
+        value: f32,
+    ) -> Result<Option<LastOperation>, ModalError> {
+        self.in_context(|ctx| ctx.adjust_last_operation(last, value))
+    }
+}
+
+#[allow(dead_code)]
+impl CommandContext<'_> {
+    #[inline]
+    pub fn brush_world_radius(&self, hit: Vec3) -> f32 {
+        self.view().brush_world_radius(hit)
+    }
+
+    #[inline]
+    pub fn world_radius_for_px(&self, hit: Vec3, size_px: f32) -> f32 {
+        self.view().world_radius_for_px(hit, size_px)
+    }
+
+    #[inline]
+    pub fn is_interacting(&self) -> bool {
+        self.view().is_interacting()
+    }
+
+    #[inline]
+    pub(crate) fn modal_flips_when_negative(&self) -> bool {
+        self.view().modal_flips_when_negative()
+    }
+
+    #[inline]
+    pub(crate) fn modal_prelude_state(&self) -> Option<(Project, Selection)> {
+        self.view().modal_prelude_state()
+    }
+
+    #[inline]
+    pub fn rigid_preview_transforms(&self) -> &[(uuid::Uuid, glam::Mat4)] {
+        self.view().rigid_preview_transforms()
+    }
+
+    #[inline]
+    pub(crate) fn poly_pen_viewer(&self) -> Vec3 {
+        self.view().poly_pen_viewer()
+    }
+
+    #[inline]
+    pub fn query_scene_hierarchy(&self) -> SceneHierarchyDto {
+        self.view().query_scene_hierarchy()
+    }
+
+    #[inline]
+    pub fn query_selection_details(&self) -> SelectionDetailsDto {
+        self.view().query_selection_details()
+    }
+
+    #[inline]
+    pub fn query_uv_diagnostics(&self) -> UvDiagnosticsDto {
+        self.view().query_uv_diagnostics()
+    }
+
+    #[inline]
+    pub fn find_asset_by_id(&self, id: Uuid) -> Option<&petunia_project::Asset> {
+        self.view().find_asset_by_id(id)
+    }
+
+    #[inline]
+    pub fn profile_region_planes(&self) -> RegionPlanes {
+        self.view().profile_region_planes()
+    }
+
+    #[inline]
+    pub(crate) fn profile_groups(&self, editable_only: bool) -> Vec<ProfileGroup> {
+        self.view().profile_groups(editable_only)
+    }
+
+    #[inline]
+    pub fn profile_region_at_ray(&self, origin: Vec3, direction: Vec3) -> Option<RegionHit> {
+        self.view().profile_region_at_ray(origin, direction)
+    }
+
+    #[inline]
+    pub fn region_host_face(&self, hit: &RegionHit) -> Option<usize> {
+        self.view().region_host_face(hit)
+    }
+
+    #[inline]
+    pub fn shape_planes(&self) -> Vec<ShapePlane> {
+        self.view().shape_planes()
+    }
+
+    #[inline]
+    pub fn document_session(&self) -> &DocumentSession {
+        self.view().document_session()
+    }
+
+    #[inline]
+    pub fn editor_session(&self) -> &EditorSession {
+        self.view().editor_session()
+    }
+
+    #[inline]
+    pub fn viewport_session(&self) -> ViewportSession {
+        self.view().viewport_session()
+    }
+
+    #[inline]
+    pub fn tool_session_manager(&self) -> &ToolSessionManager {
+        self.view().tool_session_manager()
+    }
+
+    #[inline]
+    pub fn scene_tris(&self) -> usize {
+        self.view().scene_tris()
+    }
+
+    #[inline]
+    pub fn scene_verts(&self) -> usize {
+        self.view().scene_verts()
+    }
+
+    #[inline]
+    pub fn primitive_session_valid(&self) -> bool {
+        self.view().primitive_session_valid()
+    }
+
+    #[inline]
+    pub fn active_is_parametric(&self) -> bool {
+        self.view().active_is_parametric()
+    }
+
+    #[inline]
+    pub fn active_primitive_descriptor(
+        &self,
+    ) -> Option<crate::primitive_session::PrimitiveDescriptor> {
+        self.view().active_primitive_descriptor()
+    }
+
+    #[inline]
+    pub fn is_axis_locked(&self, axis: usize) -> bool {
+        self.view().is_axis_locked(axis)
+    }
+
+    #[inline]
+    pub fn active_axis_constraint_label(&self) -> Option<(&'static str, [u8; 3])> {
+        self.view().active_axis_constraint_label()
+    }
+
+    #[inline]
+    pub fn is_document_dirty(&self) -> bool {
+        self.view().is_document_dirty()
+    }
+
+    #[inline]
+    pub fn selection_domain(&self) -> SelectionDomain {
+        self.view().selection_domain()
+    }
+
+    #[inline]
+    pub fn calculate_pivot(&self, pivot: PivotPoint) -> glam::Vec3 {
+        self.view().calculate_pivot(pivot)
+    }
+
+    #[inline]
+    pub fn current_tool_feedback(&self) -> Option<crate::modal_feedback::ToolFeedback> {
+        self.view().current_tool_feedback()
+    }
+
+    #[inline]
+    pub fn brush_settings(&self) -> crate::BrushSettings {
+        self.view().brush_settings()
+    }
+
+    #[inline]
+    pub fn pick_vertex(&self, origin: Vec3, dir: Vec3) -> Option<(usize, Vec3)> {
+        self.view().pick_vertex(origin, dir)
+    }
+
+    #[inline]
+    pub fn pick_edge(&self, origin: Vec3, dir: Vec3) -> Option<((u32, u32), Vec3)> {
+        self.view().pick_edge(origin, dir)
+    }
+
+    #[inline]
+    pub(crate) fn selected_or_active_asset_ids(&self) -> Vec<uuid::Uuid> {
+        self.view().selected_or_active_asset_ids()
+    }
+
+    #[inline]
+    pub fn is_active_locked(&self) -> bool {
+        self.view().is_active_locked()
+    }
+
+    #[inline]
+    pub fn last_operation_is_current(&self, last: &LastOperation) -> bool {
+        self.view().last_operation_is_current(last)
+    }
+}

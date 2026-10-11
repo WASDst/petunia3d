@@ -2125,7 +2125,8 @@ fn no_op_command_creates_no_history_entry_and_keeps_session() {
     state.finalize_primitive_session();
     // Com uma única face selecionada nenhuma aresta compartilhada entra no
     // filtro de costura, então o comando não tem o que alterar.
-    state.session.uv_selected.insert(0);
+    let mesh = state.project.active_mesh().unwrap().clone();
+    state.session.uv_selection.set_faces(&mesh, [0]);
     let depth = state.project.undo.depth();
     let clock = state.project.project.revision_clock();
     let result = state.dispatch(&UvStitchCmd);
@@ -2223,4 +2224,82 @@ fn separate_selection_with_vertex_selection() {
     let sep_asset = state.project.active().unwrap();
     assert_eq!(sep_asset.mesh.faces.len(), 1);
     assert_eq!(sep_asset.mesh.verts.len(), 4);
+}
+
+#[test]
+fn test_command_context_isolation() {
+    use petunia_core::{AppState, CommandContext};
+
+    let mut state = AppState::new("en");
+    {
+        let ctx: CommandContext<'_> = state.command_context();
+        assert_eq!(ctx.document.assets.len(), 1);
+        assert_eq!(ctx.editor.workspace, petunia_core::Workspace::Model);
+    }
+}
+
+#[test]
+fn test_commands_operate_with_application_selection() {
+    use petunia_core::{
+        AppState, BevelCmd, EditMode, ExtrudeSelectedCmd, InsetFacesCmd, MergeCenterCmd,
+        ScaleSelectionCmd, SelectionDomain,
+    };
+
+    let mut state = AppState::new("en");
+    state.set_edit_mode(EditMode::Edit);
+    state.set_selection_domain(SelectionDomain::Face);
+
+    // 1. Extrude: seleção puramente na sessão da aplicação
+    state.session.selection.faces = vec![0];
+    assert!(!state.project.active_mesh().unwrap().faces[0].selected);
+    let initial_faces = state.project.active_mesh().unwrap().faces.len();
+
+    state.dispatch(&ExtrudeSelectedCmd { dist: 1.0 }).unwrap();
+    // A extrusão de uma face de um cubo adiciona paredes laterais (+4 faces)
+    assert!(state.project.active_mesh().unwrap().faces.len() > initial_faces);
+    assert!(!state.session.selection.faces.is_empty());
+
+    // 2. Inset: seleção de face na aplicação
+    state.session.selection.faces = vec![0];
+    let before_inset_faces = state.project.active_mesh().unwrap().faces.len();
+    state
+        .dispatch(&InsetFacesCmd {
+            distance: 0.2,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(state.project.active_mesh().unwrap().faces.len() > before_inset_faces);
+
+    // 3. Scale: seleção de vértices na aplicação
+    state.set_selection_domain(SelectionDomain::Vertex);
+    state.session.selection.verts = vec![0, 1];
+    let v0_orig = state.project.active_mesh().unwrap().verts[0].pos;
+    state.dispatch(&ScaleSelectionCmd { factor: 2.0 }).unwrap();
+    let v0_scaled = state.project.active_mesh().unwrap().verts[0].pos;
+    assert_ne!(v0_orig, v0_scaled);
+
+    // 4. Merge at Center: seleção de vértices na aplicação
+    state.session.selection.verts = vec![0, 1];
+    let before_merge_verts = state.project.active_mesh().unwrap().verts.len();
+    state.dispatch(&MergeCenterCmd).unwrap();
+    assert_eq!(
+        state.project.active_mesh().unwrap().verts.len(),
+        before_merge_verts - 1
+    );
+
+    // 5. Bevel: seleção de aresta na aplicação em malha nova
+    let mut bevel_state = AppState::new("en");
+    bevel_state.set_edit_mode(EditMode::Edit);
+    bevel_state.set_selection_domain(SelectionDomain::Edge);
+    bevel_state.session.selection.edges = vec![(0, 1)];
+    let before_bevel_faces = bevel_state.project.active_mesh().unwrap().faces.len();
+    bevel_state
+        .dispatch(&BevelCmd {
+            amount: 0.1,
+            segments: 1,
+            clamp_overlap: true,
+            affect_vertices: false,
+        })
+        .unwrap();
+    assert!(bevel_state.project.active_mesh().unwrap().faces.len() > before_bevel_faces);
 }

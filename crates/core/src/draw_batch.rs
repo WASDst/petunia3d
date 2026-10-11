@@ -1,5 +1,5 @@
 //! Um gesto DRAW pode produzir vários perfis (espelho, SVG, vetorização).
-use crate::{AppState, Command, CommandError, CreateProfileCmd, UpdateSplineCmd};
+use crate::{Command, CommandContext, CommandError, CreateProfileCmd, EditorView, UpdateSplineCmd};
 use petunia_project::{ProfileResource, ProjectChanges, SplineResource};
 #[derive(Clone)]
 pub struct DrawBatchCmd {
@@ -13,7 +13,7 @@ impl Command for DrawBatchCmd {
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL
     }
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if let Some(spline) = &self.update {
             UpdateSplineCmd {
                 spline: spline.clone(),
@@ -29,7 +29,7 @@ impl Command for DrawBatchCmd {
         }
         Ok(())
     }
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if self.profiles.len() > 2000 {
             return Err("Too many profiles");
         }
@@ -61,6 +61,7 @@ impl Command for DrawBatchCmd {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::AppState;
     use petunia_project::{ProfileResource, ProfileWorkplane, SplineResource};
     fn profile() -> (SplineResource, ProfileResource) {
         let spline = SplineResource::from_polyline(

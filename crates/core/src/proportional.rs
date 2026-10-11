@@ -49,7 +49,7 @@ impl ProportionalFalloff {
 }
 
 /// Configurações de edição proporcional da sessão.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProportionalSettings {
     pub enabled: bool,
     pub radius: f32,

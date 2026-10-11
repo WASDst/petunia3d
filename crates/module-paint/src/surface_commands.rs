@@ -4,14 +4,14 @@ use crate::{
     projection::{DepthBuffer, ProjectionParams},
 };
 use glam::Vec3;
-use petunia_core::{AppState, BrushSettings, Command, CommandError};
+use petunia_core::{BrushSettings, Command, CommandContext, CommandError, EditorView};
 use petunia_project::{Canvas, ProjectChanges, SplineResource, SurfaceAttachment};
 
-fn clear_stroke(state: &mut AppState) {
-    state.session.tools.paint_stroke = None;
-    state.session.tools.paint_buffer = None;
-    state.session.tools.paint_restriction = None;
-    state.session.tools.paint_lock_face = None;
+fn clear_stroke(state: &mut CommandContext<'_>) {
+    state.editor.tools.paint_stroke = None;
+    state.editor.tools.paint_buffer = None;
+    state.editor.tools.paint_restriction = None;
+    state.editor.tools.paint_lock_face = None;
 }
 #[derive(Clone, Default)]
 pub enum PathPaintMode {
@@ -35,8 +35,8 @@ impl Command for PaintPathCmd {
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::TEXTURES | ProjectChanges::SPLINES
     }
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let asset = state.project.active().ok_or("No active asset")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = state.document.active().ok_or("No active asset")?;
         if asset.locked || self.anchors.len() < 2 || self.anchors.len() > 8192 {
             return Err("Path needs an unlocked surface and two points");
         }
@@ -45,9 +45,12 @@ impl Command for PaintPathCmd {
         }
         Ok(())
     }
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(
+        &self,
+        state: &mut petunia_core::CommandContext<'_>,
+    ) -> Result<(), petunia_core::CommandError> {
         let frames =
-            petunia_project::evaluate_surface_attachments(&state.project.project, &self.anchors)
+            petunia_project::evaluate_surface_attachments(&state.document.project, &self.anchors)
                 .map_err(|e| CommandError::Execution(e.to_string()))?;
         let nodes: Vec<_> = frames
             .into_iter()
@@ -55,18 +58,24 @@ impl Command for PaintPathCmd {
             .collect();
         state.begin_paint_stroke();
         let count = match &self.mode {
-            PathPaintMode::Stroke => {
-                PaintModule::paint_surface_path(state, &nodes, false, false, self.settings, false)
-            }
+            PathPaintMode::Stroke => PaintModule::paint_surface_path_in(
+                state,
+                &nodes,
+                false,
+                false,
+                self.settings,
+                false,
+            ),
             PathPaintMode::Ribbon => {
-                let original = state.session.tools.brush_style;
-                state.session.tools.brush_style.tip = petunia_core::BrushTip::Square;
+                let original = state.editor.tools.brush_style;
+                state.editor.tools.brush_style.tip = petunia_core::BrushTip::Square;
                 let mut settings = self.settings;
                 settings.hardness = 1.0;
                 settings.spacing = 0.1;
-                let count =
-                    PaintModule::paint_surface_path(state, &nodes, false, false, settings, false);
-                state.session.tools.brush_style = original;
+                let count = PaintModule::paint_surface_path_in(
+                    state, &nodes, false, false, settings, false,
+                );
+                state.editor.tools.brush_style = original;
                 count
             }
             PathPaintMode::RepeatedStamp(image) => {
@@ -83,7 +92,7 @@ impl Command for PaintPathCmd {
             point.attachment = Some(*anchor);
         }
         let result = state
-            .project
+            .document
             .project
             .add_spline(spline)
             .map_err(|e| CommandError::Execution(e.to_string()));
@@ -106,19 +115,23 @@ impl Command for ProjectionPaintCmd {
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::TEXTURES
     }
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let asset = state.project.active().ok_or("No active asset")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = state.document.active().ok_or("No active asset")?;
         if asset.locked {
             Err("Surface is locked")
         } else {
             Ok(())
         }
     }
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(
+        &self,
+        state: &mut petunia_core::CommandContext<'_>,
+    ) -> Result<(), petunia_core::CommandError> {
+        // `view_proj` está em mundo: projeta a malha em mundo.
         let mesh = state
-            .project
-            .active_mesh()
-            .cloned()
+            .document
+            .active()
+            .map(|a| a.world_mesh().into_owned())
             .ok_or(CommandError::NoActiveAsset)?;
         let depth = DepthBuffer::build(
             self.params.view_proj,
@@ -127,21 +140,21 @@ impl Command for ProjectionPaintCmd {
             self.scene_triangles.iter().copied(),
         );
         state.begin_paint_stroke();
-        PaintModule::ensure_stack(state);
+        PaintModule::ensure_stack_in(state);
         let (w, h) = state
-            .project
+            .document
             .active()
             .and_then(|a| a.texture.as_ref())
             .map_or((256, 256), |c| (c.w, c.h));
         if let Some(stack) = state
-            .project
+            .document
             .active_mut()
             .and_then(|a| a.paint_stack.as_mut())
         {
             stack.add_layer(petunia_project::PaintLayer::new(&self.name, w, h, [0; 4]));
         }
         let mut changed = false;
-        PaintModule::restricted_edit(state, self.first_face, |canvas| {
+        PaintModule::restricted_edit_in(state, self.first_face, |canvas| {
             changed = !crate::projection::project_image_onto_mesh(
                 canvas,
                 &mesh,
@@ -153,7 +166,7 @@ impl Command for ProjectionPaintCmd {
             .is_empty();
         });
         changed &= state
-            .project
+            .document
             .active()
             .and_then(|a| a.paint_stack.as_ref())
             .and_then(|s| s.active())
@@ -163,19 +176,21 @@ impl Command for ProjectionPaintCmd {
         if !changed {
             return Err(CommandError::Execution("No eligible paint pixels".into()));
         }
-        PaintModule::composite_active(state);
+        PaintModule::composite_active_in(state);
         Ok(())
     }
 }
 
 fn paint_stamps(
-    state: &mut AppState,
+    state: &mut CommandContext<'_>,
     nodes: &[Vec3],
     image: &Canvas,
     settings: BrushSettings,
     name: &str,
 ) -> usize {
-    let Some(mesh) = state.project.active_mesh().cloned() else {
+    // Os nós estão em mundo; só texels são escritos, então a malha em mundo
+    // (mesmos índices e UVs) é a referência certa.
+    let Some(mesh) = state.document.active().map(|a| a.world_mesh().into_owned()) else {
         return 0;
     };
     let radius = nodes
@@ -195,26 +210,26 @@ fn paint_stamps(
     let first_face = crate::project_path_onto_surface(&mesh, &samples, radius * 4.0, &|_| true)
         .first()
         .map(|h| h.face);
-    let restriction = PaintModule::resolve_restriction(state, first_face);
+    let restriction = PaintModule::resolve_restriction_in(state, first_face);
     let hits = crate::project_path_onto_surface(&mesh, &samples, radius * 4.0, &|face| {
         restriction.as_ref().is_none_or(|r| r.allows_face(face))
     });
-    PaintModule::ensure_stack(state);
+    PaintModule::ensure_stack_in(state);
     // A stamp writes raster pixels, never mutates the live decal used as its source.
     let (w, h) = state
-        .project
+        .document
         .active()
         .and_then(|a| a.texture.as_ref())
         .map_or((256, 256), |c| (c.w, c.h));
     if let Some(stack) = state
-        .project
+        .document
         .active_mut()
         .and_then(|a| a.paint_stack.as_mut())
     {
         stack.add_layer(petunia_project::PaintLayer::new(name, w, h, [0; 4]));
     }
     let mut touched = 0;
-    PaintModule::restricted_edit(state, first_face, |canvas| {
+    PaintModule::restricted_edit_in(state, first_face, |canvas| {
         for (index, hit) in hits.iter().enumerate() {
             let normal = mesh.face_normal(hit.face).normalize_or_zero();
             if normal == Vec3::ZERO {
@@ -282,7 +297,7 @@ fn paint_stamps(
         }
     });
     if state
-        .project
+        .document
         .active()
         .and_then(|a| a.paint_stack.as_ref())
         .and_then(|s| s.active())
@@ -291,13 +306,14 @@ fn paint_stamps(
     {
         touched = 0;
     }
-    PaintModule::composite_active(state);
+    PaintModule::composite_active_in(state);
     touched
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use petunia_core::AppState;
     use petunia_mesh::Mesh;
     fn surface() -> AppState {
         let mut state = AppState::default();

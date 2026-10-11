@@ -31,7 +31,7 @@ impl Tool for BevelTool {
 impl BevelTool {
     pub fn apply(state: &mut AppState) {
         let amt = state.bevel_amount;
-        let segs = state.bevel_segments.clamp(1, 4);
+        let segs = state.bevel_segments.clamp(1, 8);
         let clamp = state.tools.bevel_clamp_overlap;
         let affect_verts = state.tools.bevel_affect_vertices;
         if let Err(err) = state.dispatch(&petunia_core::BevelCmd {

@@ -11,12 +11,13 @@
 //!   arrastar a partir de uma aresta de borda cria uma faixa de quads que
 //!   segue o cursor; o gesto inteiro é 1 Undo e `Esc` restaura.
 
+use crate::context::{CommandContext, EditorView};
 use glam::Vec3;
 use petunia_mesh::poly_pen::{PenPoint, PolyPenError};
 use petunia_project::{Project, ProjectChanges};
 
 use crate::modal::{ModalError, ModalKind};
-use crate::{AppState, Selection, SelectionDomain};
+use crate::{Selection, SelectionDomain};
 
 /// Quads criados no máximo por evento do ponteiro (arrasto muito rápido não
 /// gera milhares de faces de uma vez).
@@ -58,12 +59,12 @@ pub enum PolyPenCommandError {
     Locked,
 }
 
-impl AppState {
-    fn poly_pen_ready(&mut self) -> Result<(), PolyPenCommandError> {
+impl CommandContext<'_> {
+    pub(crate) fn poly_pen_ready(&mut self) -> Result<(), PolyPenCommandError> {
         if self.modal.is_some() {
             return Err(ModalError::AlreadyActive.into());
         }
-        if self.project.active_mesh().is_none() {
+        if self.document.active_mesh().is_none() {
             return Err(PolyPenCommandError::NoActiveMesh);
         }
         if self.is_active_locked() {
@@ -72,31 +73,38 @@ impl AppState {
         Ok(())
     }
 
-    /// Direção da superfície para a câmera, para orientar polígonos soltos.
-    fn poly_pen_viewer(&self) -> Vec3 {
-        -self.session.camera.forward()
-    }
-
     /// Adiciona o polígono desenhado e seleciona a face nova.
     pub fn poly_pen_add_polygon(
         &mut self,
         points: &[PenPoint],
     ) -> Result<usize, PolyPenCommandError> {
         self.poly_pen_ready()?;
-        let viewer = self.poly_pen_viewer();
+        let asset = self
+            .document
+            .active()
+            .ok_or(PolyPenCommandError::NoActiveMesh)?;
+        // Pontos novos e direção do observador chegam em mundo; a malha é local.
+        let viewer = asset
+            .to_local_vector(self.poly_pen_viewer())
+            .normalize_or_zero();
+        let points: Vec<PenPoint> = points
+            .iter()
+            .map(|p| match *p {
+                PenPoint::New(world) => {
+                    PenPoint::New(asset.to_local_point(Vec3::from_array(world)).to_array())
+                }
+                existing => existing,
+            })
+            .collect();
         // Validar numa cópia: erro não toca o documento nem o histórico.
-        let mut mesh = self
-            .project
-            .active_mesh()
-            .ok_or(PolyPenCommandError::NoActiveMesh)?
-            .clone();
-        let face = mesh.add_pen_polygon(points, viewer)?;
+        let mut mesh = asset.mesh.to_owned_value();
+        let face = mesh.add_pen_polygon(&points, viewer)?;
         mesh.deselect_all();
         mesh.faces[face].selected = true;
         mesh.sync_vert_selection_from_faces();
         self.freeze_active_primitive_for_command();
-        self.project.checkpoint("Poly Pen");
-        if let Some(active) = self.project.project.active_mesh_mut() {
+        self.document.checkpoint("Poly Pen");
+        if let Some(active) = self.document.project.active_mesh_mut() {
             *active = mesh;
         }
         self.set_selection_domain(SelectionDomain::Face);
@@ -110,7 +118,7 @@ impl AppState {
     pub fn poly_pen_melt_point(&mut self, point: u32) -> Result<(), PolyPenCommandError> {
         self.poly_pen_ready()?;
         let mut mesh = self
-            .project
+            .document
             .active_mesh()
             .ok_or(PolyPenCommandError::NoActiveMesh)?
             .clone();
@@ -123,8 +131,8 @@ impl AppState {
             return Err(PolyPenError::Degenerate.into());
         }
         self.freeze_active_primitive_for_command();
-        self.project.checkpoint("Poly Pen: Melt");
-        if let Some(active) = self.project.project.active_mesh_mut() {
+        self.document.checkpoint("Poly Pen: Melt");
+        if let Some(active) = self.document.project.active_mesh_mut() {
             *active = mesh;
         }
         self.sync_selection();
@@ -142,7 +150,7 @@ impl AppState {
     ) -> Result<u32, PolyPenCommandError> {
         self.poly_pen_ready()?;
         let mut mesh = self
-            .project
+            .document
             .active_mesh()
             .ok_or(PolyPenCommandError::NoActiveMesh)?
             .clone();
@@ -150,8 +158,8 @@ impl AppState {
         mesh.deselect_all();
         mesh.verts[point as usize].selected = true;
         self.freeze_active_primitive_for_command();
-        self.project.checkpoint("Poly Pen: Add point");
-        if let Some(active) = self.project.project.active_mesh_mut() {
+        self.document.checkpoint("Poly Pen: Add point");
+        if let Some(active) = self.document.project.active_mesh_mut() {
             *active = mesh;
         }
         self.set_selection_domain(SelectionDomain::Vertex);
@@ -168,10 +176,10 @@ impl AppState {
         b: u32,
     ) -> Result<(), PolyPenCommandError> {
         self.poly_pen_ready()?;
-        let before = self.project.project.clone();
-        let before_selection = self.session.selection.clone();
+        let before = self.document.project.clone();
+        let before_selection = self.editor.selection.clone();
         let mut mesh = self
-            .project
+            .document
             .active_mesh()
             .ok_or(PolyPenCommandError::NoActiveMesh)?
             .clone();
@@ -180,7 +188,7 @@ impl AppState {
         // estender a aresta para as faces vizinhas.
         self.set_selection_domain(SelectionDomain::Edge);
         self.freeze_active_primitive_for_command();
-        if let Some(active) = self.project.project.active_mesh_mut() {
+        if let Some(active) = self.document.project.active_mesh_mut() {
             *active = mesh;
         }
         self.emit_project_changed(ProjectChanges::GEOMETRY | ProjectChanges::SELECTION);
@@ -189,7 +197,7 @@ impl AppState {
     }
 
     /// Começa a pintura de faces na aresta de borda `a–b`. Nada muda até o
-    /// primeiro passo de [`Self::poly_pen_strip_to`].
+    /// primeiro passo de [`AppState::poly_pen_strip_to`].
     pub fn begin_poly_pen_strip(
         &mut self,
         a: u32,
@@ -197,7 +205,7 @@ impl AppState {
     ) -> Result<PenStrip, PolyPenCommandError> {
         self.poly_pen_ready()?;
         let mesh = self
-            .project
+            .document
             .active_mesh()
             .ok_or(PolyPenCommandError::NoActiveMesh)?;
         let (Some(pa), Some(pb)) = (mesh.verts.get(a as usize), mesh.verts.get(b as usize)) else {
@@ -212,7 +220,7 @@ impl AppState {
         if !step.is_finite() || step < 1.0e-5 {
             return Err(PolyPenError::Degenerate.into());
         }
-        let before = Box::new((self.project.project.clone(), self.session.selection.clone()));
+        let before = Box::new((self.document.project.clone(), self.editor.selection.clone()));
         self.freeze_active_primitive_for_command();
         Ok(PenStrip {
             before,
@@ -235,11 +243,16 @@ impl AppState {
         }
         let mut added = 0;
         {
-            let mesh = self
+            // O alvo e o passo chegam em mundo; a faixa cresce no frame local.
+            let asset = self
+                .document
                 .project
-                .project
-                .active_mesh_mut()
+                .active_mut()
                 .ok_or(PolyPenCommandError::NoActiveMesh)?;
+            let scale = asset.transform.scale().abs();
+            let step = strip.step / ((scale.x + scale.y + scale.z) / 3.0).max(1.0e-6);
+            let target = asset.to_local_point(target);
+            let mesh = &mut *asset.mesh;
             while added < STRIP_MAX_QUADS_PER_EVENT {
                 let (a, b) = strip.edge;
                 let (Some(pa), Some(pb)) = (
@@ -249,10 +262,10 @@ impl AppState {
                     return Err(PolyPenError::MissingPoint.into());
                 };
                 let offset = target - (pa + pb) * 0.5;
-                if offset.length() < strip.step {
+                if offset.length() < step {
                     break;
                 }
-                let delta = offset.normalize() * strip.step;
+                let delta = offset.normalize() * step;
                 let (a_new, b_new, face) = mesh.extrude_edge(a, b)?;
                 mesh.verts[a_new as usize].pos = (pa + delta).to_array();
                 mesh.verts[b_new as usize].pos = (pb + delta).to_array();
@@ -275,7 +288,7 @@ impl AppState {
             return false;
         }
         let PenStrip { before, faces, .. } = strip;
-        if let Some(mesh) = self.project.project.active_mesh_mut() {
+        if let Some(mesh) = self.document.project.active_mesh_mut() {
             mesh.deselect_all();
             for &face in &faces {
                 if let Some(face) = mesh.faces.get_mut(face) {
@@ -284,7 +297,7 @@ impl AppState {
             }
             mesh.sync_vert_selection_from_faces();
         }
-        self.project
+        self.document
             .checkpoint_snapshot("Poly Pen: Paint", &before.0);
         self.set_selection_domain(SelectionDomain::Face);
         self.sync_selection();
@@ -300,10 +313,18 @@ impl AppState {
     }
 }
 
+impl<'a> EditorView<'a> {
+    /// Direção da superfície para a câmera, para orientar polígonos soltos.
+    pub(crate) fn poly_pen_viewer(self) -> Vec3 {
+        -self.editor.camera.forward()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ViewPreset;
+    use crate::state::AppState;
 
     fn front_state() -> AppState {
         let mut state = AppState::default();

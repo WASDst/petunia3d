@@ -1,7 +1,8 @@
 //! Testes unitários para Application API (Queries & DTOs) — Gauntlet G9 / F-010.
 
 use petunia_core::{
-    AddPrimitiveCmd, AppState, EditMode, PrimitiveKind, ProjectService, SelectAllCmd, SelectMode,
+    AddPrimitiveCmd, AppState, PrimitiveKind, ProjectService, SelectAllCmd, SelectMode,
+    SelectionDomain,
 };
 use uuid::Uuid;
 
@@ -43,14 +44,14 @@ fn test_query_selection_details_and_center() {
     let mut state = AppState::new("en");
     ProjectService::new_project(&mut state);
 
-    state.set_edit_mode(EditMode::Edit);
-    state.select_mode = SelectMode::Vertex;
+    state.set_selection_domain(SelectionDomain::Vertex);
     state.dispatch(&SelectAllCmd).expect("SelectAll");
 
     let sel_dto = state.query_selection_details();
     assert!(sel_dto.active_asset_id.is_some());
     assert_eq!(sel_dto.active_asset_name.as_deref(), Some("Cube"));
     assert_eq!(sel_dto.selected_verts_count, 8);
+    assert_eq!(sel_dto.selection_domain, SelectionDomain::Vertex);
     assert_eq!(sel_dto.select_mode, SelectMode::Vertex);
     assert!(sel_dto.selection_center.is_some());
 }
@@ -121,15 +122,15 @@ fn test_export_selected_uuid_resilience() {
     let _sphere_id = state.project.assets[1].id;
     let capsule_id = state.project.assets[2].id;
 
-    state.project.export_selected = vec![cube_id, capsule_id];
-    let indices = state.project.export_selected_indices();
+    state.ui.export_selected = vec![cube_id, capsule_id];
+    let indices = state.export_selected_indices();
     assert_eq!(indices, vec![0, 2]);
 
     // Deleta o asset do meio (Sphere)
     state.project.remove(1);
 
     // O índice do Capsule foi atualizado automaticamente de 2 para 1
-    let indices_after = state.project.export_selected_indices();
+    let indices_after = state.export_selected_indices();
     assert_eq!(indices_after, vec![0, 1]);
     assert_eq!(state.project.assets[indices_after[0]].id, cube_id);
     assert_eq!(state.project.assets[indices_after[1]].id, capsule_id);

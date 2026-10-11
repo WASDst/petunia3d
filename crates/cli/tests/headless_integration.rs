@@ -159,7 +159,7 @@ fn test_headless_geometric_tools_execution() {
     TransformTool::apply_scale(&mut state);
 
     // Inset
-    state.inset_factor = 0.5;
+    state.inset_distance = 0.1;
     InsetTool::apply(&mut state);
 
     // Bevel

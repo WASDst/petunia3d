@@ -1,6 +1,7 @@
 //! Transactional viewport previews. Each update starts from the original mesh;
 //! only commit records history, and cancel restores the exact project snapshot.
 
+use crate::context::{CommandContext, EditorView};
 use glam::{EulerRot, Quat, Vec3};
 use petunia_mesh::Mesh;
 use petunia_project::{Project, ProjectChanges};
@@ -110,6 +111,11 @@ pub struct ModalOp {
     flip_when_negative: bool,
     /// Prévia incremental: evita clonar e validar a malha inteira por evento.
     preview: PreviewCache,
+    /// Edit Mode: frame local do objeto → mundo. Pivô, normal, eixos e
+    /// distâncias do gesto são de mundo; `source` e a malha publicada são
+    /// locais, então posições são lidas como `W·local` e escritas como
+    /// `W⁻¹·mundo`. Identidade em Object Mode (que ainda move vértices).
+    object_to_world: glam::Mat4,
 }
 
 /// Estado da prévia incremental de uma operação modal.
@@ -283,227 +289,6 @@ fn individual_pivots(mesh: &Mesh, object: bool) -> Vec<Vec3> {
 }
 
 impl AppState {
-    pub fn begin_modal(&mut self, kind: ModalKind) -> Result<(), ModalError> {
-        if self.modal.is_some() || self.mesh_preview.is_some() || self.paint_stroke.is_some() {
-            return Err(ModalError::AlreadyActive);
-        }
-        if self.is_active_locked() {
-            return Err(ModalError::ActiveLocked);
-        }
-        self.sync_selection();
-        let mesh = self.project.active_mesh().ok_or(ModalError::NoActiveMesh)?;
-        if !valid_mesh(mesh) {
-            return Err(ModalError::InvalidMesh);
-        }
-        let mut source = mesh.clone();
-        let transform = matches!(kind, ModalKind::Move | ModalKind::Rotate | ModalKind::Scale);
-        if transform {
-            self.gizmo_mode = kind;
-        }
-        if transform && self.edit_mode() == EditMode::Object {
-            source.select_all();
-        } else {
-            // Edições topológicas ou de sub-elementos congelam a primitiva paramétrica em malha B-Rep estática.
-            self.freeze_active_primitive();
-
-            // Face and edge selection must transform their vertices too.
-            for face in &source.faces {
-                if face.selected {
-                    for &vi in &face.verts {
-                        source.verts[vi as usize].selected = true;
-                    }
-                }
-            }
-            for &(a, b) in &source.selected_edges {
-                source.verts[a as usize].selected = true;
-                source.verts[b as usize].selected = true;
-            }
-        }
-        if !source.has_selection() || source.verts.is_empty() {
-            return Err(ModalError::NoSelection);
-        }
-        if matches!(
-            kind,
-            ModalKind::Extrude
-                | ModalKind::ExtrudeIndividual
-                | ModalKind::Inset
-                | ModalKind::PushPull
-        ) {
-            if source.selected_face_count() == 0 {
-                source.sync_face_selection_from_verts();
-            }
-            if source.selected_face_count() == 0 {
-                return Err(ModalError::FacesRequired);
-            }
-        }
-        if kind == ModalKind::Bevel && source.selected_edges.is_empty() {
-            let sel_verts = source.verts.iter().filter(|v| v.selected).count();
-            if sel_verts == 0 {
-                source.sync_edge_selection_from_verts();
-                if source.selected_edges.is_empty() {
-                    return Err(ModalError::EdgesRequired);
-                }
-            }
-        }
-        let mut normal = Vec3::ZERO;
-        for (fi, face) in source.faces.iter().enumerate() {
-            if face.selected {
-                normal += source.face_normal(fi);
-            }
-        }
-        normal = normal.normalize_or_zero();
-        if normal == Vec3::ZERO || transform {
-            normal = self.camera.forward().normalize_or_zero();
-        }
-        let initial_constraint = match self.locked_axes {
-            [true, false, false] => ModalConstraint::Axis(0),
-            [false, true, false] => ModalConstraint::Axis(1),
-            [false, false, true] => ModalConstraint::Axis(2),
-            [false, true, true] => ModalConstraint::Plane(0),
-            [true, false, true] => ModalConstraint::Plane(1),
-            [true, true, false] => ModalConstraint::Plane(2),
-            _ => ModalConstraint::Free,
-        };
-        let pivot = self.calculate_pivot(self.session.pivot_point);
-        let individual_origins =
-            transform && self.session.pivot_point == crate::PivotPoint::IndividualOrigins;
-        let pivots = individual_origins
-            .then(|| individual_pivots(&source, self.edit_mode() == EditMode::Object));
-        self.modal = Some(ModalOp {
-            id: NEXT_MODAL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            preview: PreviewCache::default(),
-            kind,
-            pivots,
-            individual_origins,
-            constraint: initial_constraint,
-            pivot,
-            normal,
-            value: if kind == ModalKind::Scale { 1.0 } else { 0.0 },
-            components: if kind == ModalKind::Scale {
-                Vec3::ONE
-            } else {
-                Vec3::ZERO
-            },
-            original: self.project.project.clone(),
-            selection: self.session.selection.clone(),
-            source,
-            changed: false,
-            snap: None,
-            before_prelude: None,
-            flip_when_negative: false,
-        });
-        self.pending_modal = None;
-        self.mark_dirty();
-        Ok(())
-    }
-
-    /// Inicia `kind` depois de um prelúdio já aplicado ao documento fora do
-    /// histórico (ex.: imprint de uma região numa face). `before` é o estado
-    /// anterior ao prelúdio: confirmar grava uma única entrada de Undo a partir
-    /// dele; cancelar (ou confirmar sem mudança) volta exatamente a ele. Em
-    /// erro, o documento também volta a `before`.
-    pub fn begin_modal_after_prelude(
-        &mut self,
-        kind: ModalKind,
-        before: Project,
-        before_selection: Selection,
-    ) -> Result<(), ModalError> {
-        match self.begin_modal(kind) {
-            Ok(()) => {
-                if let Some(modal) = self.modal.as_mut() {
-                    modal.before_prelude = Some(Box::new((before, before_selection)));
-                }
-                Ok(())
-            }
-            Err(error) => {
-                if !matches!(error, ModalError::AlreadyActive) {
-                    self.restore_before_prelude(before, before_selection);
-                }
-                Err(error)
-            }
-        }
-    }
-
-    pub(crate) fn restore_before_prelude(&mut self, before: Project, selection: Selection) {
-        let revision_clock = self.project.project.revision_clock();
-        self.project.project = before;
-        self.project
-            .project
-            .rebase_revisions_after_restore(revision_clock);
-        self.session.selection = selection;
-        self.events.emit(crate::AppEvent::SelectionChanged(
-            self.session.selection.clone(),
-        ));
-        self.emit_project_changed(ProjectChanges::ALL);
-    }
-
-    pub(crate) fn modal_flips_when_negative(&self) -> bool {
-        self.modal
-            .as_ref()
-            .is_some_and(|modal| modal.flip_when_negative)
-    }
-
-    /// Marca a operação ativa como extrusão de uma folha de região solta.
-    pub(crate) fn set_modal_flip_when_negative(&mut self) {
-        if let Some(modal) = self.modal.as_mut() {
-            modal.flip_when_negative = true;
-        }
-    }
-
-    /// Estado posterior ao prelúdio (para reaplicar a "Última operação").
-    pub(crate) fn modal_prelude_state(&self) -> Option<(Project, Selection)> {
-        let modal = self.modal.as_ref()?;
-        modal
-            .before_prelude
-            .as_ref()
-            .map(|_| (modal.original.clone(), modal.selection.clone()))
-    }
-
-    pub fn set_modal_constraint(&mut self, constraint: ModalConstraint) -> Result<(), ModalError> {
-        if matches!(constraint, ModalConstraint::Axis(i) | ModalConstraint::Plane(i) if i > 2) {
-            return Err(ModalError::InvalidInput);
-        }
-        let modal = self.modal.as_mut().ok_or(ModalError::NoActiveOperation)?;
-        modal.constraint = constraint;
-        self.locked_axes = match constraint {
-            ModalConstraint::Axis(0) => [true, false, false],
-            ModalConstraint::Axis(1) => [false, true, false],
-            ModalConstraint::Axis(2) => [false, false, true],
-            ModalConstraint::Plane(0) => [false, true, true],
-            ModalConstraint::Plane(1) => [true, false, true],
-            ModalConstraint::Plane(2) => [true, true, false],
-            _ => [false, false, false],
-        };
-        self.mark_dirty();
-        Ok(())
-    }
-
-    /// `translation` is an absolute world-space delta from the start, `value`
-    /// is the absolute scalar (including exact numeric input), never a frame delta.
-    /// The core never snaps: snapping is one screen-space pass by the caller
-    /// ([`crate::inference`]), reported through [`Self::update_modal_snapped`].
-    pub fn update_modal(&mut self, translation: Vec3, value: f32) -> Result<(), ModalError> {
-        self.update_modal_snapped(translation, value, None)
-    }
-
-    /// Same as [`Self::update_modal`], recording which snap target the caller
-    /// already applied to `translation` (P3D-040: one snap pass per gesture).
-    pub fn update_modal_snapped(
-        &mut self,
-        translation: Vec3,
-        value: f32,
-        snap: Option<SnapKind>,
-    ) -> Result<(), ModalError> {
-        if let Some(result) = self.update_modal_fast(translation, value, snap) {
-            return result;
-        }
-        let result = self.update_modal_slow(translation, value, snap);
-        if result.is_ok() {
-            self.record_modal_preview(value);
-        }
-        result
-    }
-
     /// Direção de Extrude/Push conforme a restrição ativa.
     fn modal_direction(modal: &ModalOp) -> Vec3 {
         match modal.constraint {
@@ -512,301 +297,6 @@ impl AppState {
                 (modal.normal - axis(i) * modal.normal[i]).normalize_or_zero()
             }
             ModalConstraint::Free => modal.normal,
-        }
-    }
-
-    /// Caminho incremental. `None` = usar a prévia exata.
-    fn update_modal_fast(
-        &mut self,
-        translation: Vec3,
-        value: f32,
-        snap: Option<SnapKind>,
-    ) -> Option<Result<(), ModalError>> {
-        if !translation.is_finite() || !value.is_finite() || value.abs() > 1.0e6 {
-            return None;
-        }
-        let proportional = self.proportional_editing;
-        let edit_pivot = self.session.edit_pivot;
-        let object_mode = self.edit_mode() == EditMode::Object;
-        let modal = self.session.tools.modal.as_mut()?;
-        if edit_pivot
-            || (object_mode
-                && !matches!(
-                    modal.kind,
-                    ModalKind::Move | ModalKind::Rotate | ModalKind::Scale
-                ))
-        {
-            return None;
-        }
-        let direction = Self::modal_direction(modal);
-        let mesh = &mut self.project.active_mut()?.mesh;
-        let changes = match modal.kind {
-            ModalKind::Move | ModalKind::Rotate | ModalKind::Scale | ModalKind::PushPull => {
-                if !modal.preview.source_topology_live
-                    || (proportional && modal.kind != ModalKind::PushPull)
-                    || mesh.verts.len() != modal.source.verts.len()
-                    || (modal.kind == ModalKind::Scale && value.abs() < 1.0e-6)
-                {
-                    return None;
-                }
-                let source = &modal.source;
-                let affected = modal.preview.affected.get_or_insert_with(|| {
-                    source
-                        .verts
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, v)| v.selected)
-                        .map(|(i, _)| i as u32)
-                        .collect()
-                });
-                let pivots = modal.pivots.as_deref();
-                let pivot_of = |i: usize| pivots.map_or(modal.pivot, |p| p[i]);
-                let (components, transform): (Vec3, Box<dyn Fn(usize, Vec3) -> Vec3 + '_>) =
-                    match modal.kind {
-                        ModalKind::Move => {
-                            let delta = match modal.constraint {
-                                ModalConstraint::Free => translation,
-                                ModalConstraint::Axis(i) => {
-                                    if snap.is_some() {
-                                        axis(i) * translation[i]
-                                    } else {
-                                        axis(i) * value
-                                    }
-                                }
-                                ModalConstraint::Plane(i) => translation - axis(i) * translation[i],
-                            };
-                            (delta, Box::new(move |_, p| p + delta))
-                        }
-                        ModalKind::PushPull => {
-                            let delta = direction * value;
-                            (Vec3::ZERO, Box::new(move |_, p| p + delta))
-                        }
-                        ModalKind::Rotate => {
-                            let normal = match modal.constraint {
-                                ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => axis(i),
-                                ModalConstraint::Free => modal.normal,
-                            };
-                            let rotation = Quat::from_axis_angle(normal, value.to_radians());
-                            let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
-                            (
-                                Vec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees()),
-                                Box::new(move |i, p| {
-                                    let pivot = pivot_of(i);
-                                    pivot + rotation * (p - pivot)
-                                }),
-                            )
-                        }
-                        _ => {
-                            let factors = match modal.constraint {
-                                ModalConstraint::Free => Vec3::splat(value),
-                                ModalConstraint::Axis(i) => Vec3::ONE + axis(i) * (value - 1.0),
-                                ModalConstraint::Plane(i) => {
-                                    Vec3::splat(value) + axis(i) * (1.0 - value)
-                                }
-                            };
-                            (
-                                factors,
-                                Box::new(move |i, p| {
-                                    let pivot = pivot_of(i);
-                                    pivot + (p - pivot) * factors
-                                }),
-                            )
-                        }
-                    };
-                let mut changed = false;
-                for &index in affected.iter() {
-                    let index = index as usize;
-                    let base = source.verts[index].vec();
-                    let next = transform(index, base);
-                    if !next.is_finite() {
-                        return Some(Err(ModalError::InvalidMesh));
-                    }
-                    changed |= next != base;
-                    mesh.verts[index].pos = next.to_array();
-                }
-                modal.value = value;
-                modal.components = components;
-                modal.changed = changed;
-                if object_mode {
-                    drop(transform);
-                    if !Self::fast_object_transform(&mut self.project.project, modal) {
-                        return None;
-                    }
-                    ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
-                } else if modal.kind == ModalKind::PushPull {
-                    ProjectChanges::GEOMETRY
-                } else {
-                    ProjectChanges::POSITIONS
-                }
-            }
-            ModalKind::Extrude => {
-                let flip = modal.flip_when_negative && value < 0.0;
-                let extrude = modal.preview.extrude.as_ref()?;
-                if value == 0.0
-                    || extrude.live_flip != Some(flip)
-                    || mesh.verts.len() != extrude.base.verts.len()
-                {
-                    return None;
-                }
-                for &index in &extrude.cap {
-                    let index = index as usize;
-                    let next = extrude.base.verts[index].vec() + direction * value;
-                    if !next.is_finite() {
-                        return Some(Err(ModalError::InvalidMesh));
-                    }
-                    mesh.verts[index].pos = next.to_array();
-                }
-                modal.value = value;
-                modal.changed = true;
-                ProjectChanges::GEOMETRY
-            }
-            ModalKind::Inset | ModalKind::Bevel | ModalKind::ExtrudeIndividual => {
-                let linear = &mut modal.preview.linear;
-                let (reference, vertices) = linear.model.as_ref()?;
-                let span = (linear.range.1 - linear.range.0).abs().max(1.0e-3);
-                if !linear.validated
-                    || linear.disabled
-                    || value == 0.0
-                    || linear.since_check >= LINEAR_RECHECK_EVERY
-                    || value < linear.range.0 - span * 0.5
-                    || value > linear.range.1 + span * 0.5
-                    || (modal.kind == ModalKind::Inset && value < 0.0)
-                    || (modal.kind == ModalKind::Bevel && value < 0.0)
-                    || linear
-                        .samples
-                        .last()
-                        .is_none_or(|(_, sample)| sample.verts.len() != mesh.verts.len())
-                {
-                    return None;
-                }
-                let offset = value - reference;
-                for &(index, at_reference, slope) in vertices {
-                    let next = at_reference + slope * offset;
-                    if !next.is_finite() {
-                        return None;
-                    }
-                    mesh.verts[index as usize].pos = next.to_array();
-                }
-                linear.predicted = true;
-                linear.since_check += 1;
-                modal.value = value;
-                modal.changed = true;
-                ProjectChanges::GEOMETRY
-            }
-        };
-        modal.snap = snap;
-        self.emit_project_changed(changes);
-        Some(Ok(()))
-    }
-
-    /// Depois de uma prévia exata: prepara os caches do caminho incremental.
-    fn record_modal_preview(&mut self, value: f32) {
-        let proportional = self.proportional_editing;
-        if let Some(modal) = self.session.tools.modal.as_mut() {
-            modal.preview.rigid.clear();
-        }
-        let published = self.project.active().map(|asset| &*asset.mesh);
-        let Some(modal) = self.session.tools.modal.as_mut() else {
-            return;
-        };
-        match modal.kind {
-            ModalKind::Move | ModalKind::Rotate | ModalKind::Scale | ModalKind::PushPull => {
-                // Com edição proporcional a prévia exata desloca vizinhos que o
-                // caminho incremental não reescreve.
-                modal.preview.source_topology_live =
-                    !(proportional && modal.kind != ModalKind::PushPull);
-            }
-            ModalKind::Extrude => {
-                if value == 0.0 {
-                    if let Some(extrude) = modal.preview.extrude.as_mut() {
-                        extrude.live_flip = None;
-                    }
-                    return;
-                }
-                let flip = modal.flip_when_negative && value < 0.0;
-                let extrude = modal.preview.extrude.get_or_insert_with(|| {
-                    let mut base = modal.source.clone();
-                    base.extrude_selected(0.0);
-                    let cap = base
-                        .verts
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, v)| v.selected)
-                        .map(|(i, _)| i as u32)
-                        .collect();
-                    ExtrudePreview {
-                        base,
-                        cap,
-                        live_flip: None,
-                    }
-                });
-                extrude.live_flip = Some(flip);
-            }
-            ModalKind::Inset | ModalKind::Bevel | ModalKind::ExtrudeIndividual => {
-                let Some(published) = published else {
-                    return;
-                };
-                let linear = &mut modal.preview.linear;
-                linear.predicted = false;
-                linear.since_check = 0;
-                if linear.disabled || value == 0.0 {
-                    return;
-                }
-                let same_topology = |a: &Mesh, b: &Mesh| {
-                    a.verts.len() == b.verts.len()
-                        && a.faces.len() == b.faces.len()
-                        && a.faces
-                            .iter()
-                            .zip(&b.faces)
-                            .all(|(x, y)| x.verts == y.verts)
-                };
-                if let Some((reference, vertices)) = linear.model.as_ref() {
-                    // Reverificação: a operação exata precisa bater com o modelo.
-                    let offset = value - reference;
-                    let scale = published
-                        .verts
-                        .iter()
-                        .map(|v| v.vec().abs().max_element())
-                        .fold(1.0_f32, f32::max);
-                    let fits = linear
-                        .samples
-                        .last()
-                        .is_some_and(|(_, sample)| same_topology(sample, published))
-                        && vertices.iter().all(|&(index, at_reference, slope)| {
-                            published.verts.get(index as usize).is_some_and(|v| {
-                                v.vec().distance(at_reference + slope * offset) <= 1.0e-4 * scale
-                            })
-                        });
-                    if fits {
-                        linear.validated = true;
-                        linear.range = (linear.range.0.min(value), linear.range.1.max(value));
-                    } else {
-                        linear.disabled = true;
-                        linear.model = None;
-                    }
-                    return;
-                }
-                if let Some((first_value, first)) = linear.samples.first()
-                    && (value - first_value).abs() > 1.0e-6
-                    && same_topology(first, published)
-                {
-                    let delta = value - first_value;
-                    let vertices = first
-                        .verts
-                        .iter()
-                        .zip(&published.verts)
-                        .enumerate()
-                        .filter_map(|(index, (a, b))| {
-                            let (a, b) = (a.vec(), b.vec());
-                            (a != b).then(|| (index as u32, b, (b - a) / delta))
-                        })
-                        .collect();
-                    linear.model = Some((value, vertices));
-                    linear.range = (value.min(*first_value), value.max(*first_value));
-                }
-                linear.samples.clear();
-                linear.samples.push((value, published.clone()));
-            }
         }
     }
 
@@ -934,20 +424,581 @@ impl AppState {
             _ => {}
         }
     }
+}
 
-    /// Matrizes rígidas (original → prévia) dos objetos em transformação no
-    /// modo objeto. Vazio fora desse caso; o renderer as usa para não
-    /// triangular de novo um objeto que só se move.
-    pub fn rigid_preview_transforms(&self) -> &[(uuid::Uuid, glam::Mat4)] {
-        self.session
-            .tools
-            .modal
-            .as_ref()
-            .map_or(&[], |modal| modal.preview.rigid.as_slice())
+/// Sessão interativa de transformação modal por ponteiro e teclado numérico.
+#[derive(Debug, Clone)]
+pub struct PointerSession {
+    /// Posição 2D de tela inicial do clique/arrasto (pixels lógicos).
+    pub anchor: [f32; 2],
+    /// Buffer de entrada de texto numérico (ex: "1.5", "-45").
+    pub numeric: String,
+    /// Flag indicando se a sessão foi iniciada via arraste de gizmo.
+    pub drag_handle: bool,
+    /// Flag indicando se a pré-visualização atual é válida.
+    pub valid_preview: bool,
+    /// Última posição 2D de tela registrada.
+    pub last_pos: [f32; 2],
+}
+
+impl PointerSession {
+    pub fn new(anchor: [f32; 2], drag_handle: bool) -> Self {
+        Self {
+            anchor,
+            numeric: String::new(),
+            drag_handle,
+            valid_preview: true,
+            last_pos: anchor,
+        }
+    }
+
+    pub fn push_char(&mut self, c: char) -> bool {
+        if (c.is_ascii_digit() || matches!(c, '.' | ',' | '-' | '+')) && self.numeric.len() < 64 {
+            self.numeric.push(if c == ',' { '.' } else { c });
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn pop_char(&mut self) -> Option<char> {
+        self.numeric.pop()
+    }
+
+    pub fn parse_numeric(&self) -> Option<f32> {
+        self.numeric.parse::<f32>().ok()
+    }
+}
+
+impl CommandContext<'_> {
+    pub fn begin_modal(&mut self, kind: ModalKind) -> Result<(), ModalError> {
+        if self.modal.is_some() || self.mesh_preview.is_some() || self.paint_stroke.is_some() {
+            return Err(ModalError::AlreadyActive);
+        }
+        if self.is_active_locked() {
+            return Err(ModalError::ActiveLocked);
+        }
+        self.sync_selection();
+        let mesh = self
+            .document
+            .active_mesh()
+            .ok_or(ModalError::NoActiveMesh)?;
+        if !valid_mesh(mesh) {
+            return Err(ModalError::InvalidMesh);
+        }
+        let mut source = mesh.clone();
+        let transform = matches!(kind, ModalKind::Move | ModalKind::Rotate | ModalKind::Scale);
+        if transform {
+            self.gizmo_mode = kind;
+        }
+        if transform && self.edit_mode() == EditMode::Object {
+            source.select_all();
+        } else {
+            // Edições topológicas ou de sub-elementos congelam a primitiva paramétrica em malha B-Rep estática.
+            self.freeze_active_primitive();
+
+            // Face and edge selection must transform their vertices too.
+            for face in &source.faces {
+                if face.selected {
+                    for &vi in &face.verts {
+                        source.verts[vi as usize].selected = true;
+                    }
+                }
+            }
+            for &(a, b) in &source.selected_edges {
+                source.verts[a as usize].selected = true;
+                source.verts[b as usize].selected = true;
+            }
+        }
+        if !source.has_selection() || source.verts.is_empty() {
+            return Err(ModalError::NoSelection);
+        }
+        if matches!(
+            kind,
+            ModalKind::Extrude
+                | ModalKind::ExtrudeIndividual
+                | ModalKind::Inset
+                | ModalKind::PushPull
+        ) {
+            if source.selected_face_count() == 0 {
+                source.sync_face_selection_from_verts();
+            }
+            if source.selected_face_count() == 0 {
+                return Err(ModalError::FacesRequired);
+            }
+        }
+        if kind == ModalKind::Bevel && source.selected_edges.is_empty() {
+            let sel_verts = source.verts.iter().filter(|v| v.selected).count();
+            if sel_verts == 0 {
+                source.sync_edge_selection_from_verts();
+                if source.selected_edges.is_empty() {
+                    return Err(ModalError::EdgesRequired);
+                }
+            }
+        }
+        let object_to_world = match self.edit_mode() {
+            EditMode::Object => glam::Mat4::IDENTITY,
+            _ => self
+                .document
+                .active()
+                .map_or(glam::Mat4::IDENTITY, petunia_project::Asset::world_matrix),
+        };
+        let mut normal = Vec3::ZERO;
+        for (fi, face) in source.faces.iter().enumerate() {
+            if face.selected {
+                normal += source.face_normal(fi);
+            }
+        }
+        // Normal local → mundo pela inversa-transposta.
+        normal = object_to_world
+            .inverse()
+            .transpose()
+            .transform_vector3(normal)
+            .normalize_or_zero();
+        if normal == Vec3::ZERO || transform {
+            normal = self.camera.forward().normalize_or_zero();
+        }
+        let initial_constraint = match self.locked_axes {
+            [true, false, false] => ModalConstraint::Axis(0),
+            [false, true, false] => ModalConstraint::Axis(1),
+            [false, false, true] => ModalConstraint::Axis(2),
+            [false, true, true] => ModalConstraint::Plane(0),
+            [true, false, true] => ModalConstraint::Plane(1),
+            [true, true, false] => ModalConstraint::Plane(2),
+            _ => ModalConstraint::Free,
+        };
+        let pivot = self.calculate_pivot(self.editor.pivot_point);
+        let individual_origins =
+            transform && self.editor.pivot_point == crate::PivotPoint::IndividualOrigins;
+        // Centroides locais → mundo (mapas afins preservam centroides).
+        let pivots = individual_origins.then(|| {
+            individual_pivots(&source, self.edit_mode() == EditMode::Object)
+                .into_iter()
+                .map(|p| object_to_world.transform_point3(p))
+                .collect()
+        });
+        self.modal = Some(ModalOp {
+            id: NEXT_MODAL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            preview: PreviewCache::default(),
+            kind,
+            pivots,
+            individual_origins,
+            constraint: initial_constraint,
+            pivot,
+            normal,
+            value: if kind == ModalKind::Scale { 1.0 } else { 0.0 },
+            components: if kind == ModalKind::Scale {
+                Vec3::ONE
+            } else {
+                Vec3::ZERO
+            },
+            original: self.document.project.clone(),
+            selection: self.editor.selection.clone(),
+            source,
+            changed: false,
+            snap: None,
+            before_prelude: None,
+            flip_when_negative: false,
+            object_to_world,
+        });
+        self.pending_modal = None;
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Inicia `kind` depois de um prelúdio já aplicado ao documento fora do
+    /// histórico (ex.: imprint de uma região numa face). `before` é o estado
+    /// anterior ao prelúdio: confirmar grava uma única entrada de Undo a partir
+    /// dele; cancelar (ou confirmar sem mudança) volta exatamente a ele. Em
+    /// erro, o documento também volta a `before`.
+    pub fn begin_modal_after_prelude(
+        &mut self,
+        kind: ModalKind,
+        before: Project,
+        before_selection: Selection,
+    ) -> Result<(), ModalError> {
+        match self.begin_modal(kind) {
+            Ok(()) => {
+                if let Some(modal) = self.modal.as_mut() {
+                    modal.before_prelude = Some(Box::new((before, before_selection)));
+                }
+                Ok(())
+            }
+            Err(error) => {
+                if !matches!(error, ModalError::AlreadyActive) {
+                    self.restore_before_prelude(before, before_selection);
+                }
+                Err(error)
+            }
+        }
+    }
+
+    pub(crate) fn restore_before_prelude(&mut self, before: Project, selection: Selection) {
+        let revision_clock = self.document.project.revision_clock();
+        self.document.project = before;
+        self.document
+            .project
+            .rebase_revisions_after_restore(revision_clock);
+        self.editor.selection = selection;
+        self.events.emit(crate::AppEvent::SelectionChanged(
+            self.editor.selection.clone(),
+        ));
+        self.emit_project_changed(ProjectChanges::ALL);
+    }
+
+    /// Marca a operação ativa como extrusão de uma folha de região solta.
+    pub(crate) fn set_modal_flip_when_negative(&mut self) {
+        if let Some(modal) = self.modal.as_mut() {
+            modal.flip_when_negative = true;
+        }
+    }
+
+    pub fn set_modal_constraint(&mut self, constraint: ModalConstraint) -> Result<(), ModalError> {
+        if matches!(constraint, ModalConstraint::Axis(i) | ModalConstraint::Plane(i) if i > 2) {
+            return Err(ModalError::InvalidInput);
+        }
+        let modal = self.modal.as_mut().ok_or(ModalError::NoActiveOperation)?;
+        modal.constraint = constraint;
+        self.locked_axes = match constraint {
+            ModalConstraint::Axis(0) => [true, false, false],
+            ModalConstraint::Axis(1) => [false, true, false],
+            ModalConstraint::Axis(2) => [false, false, true],
+            ModalConstraint::Plane(0) => [false, true, true],
+            ModalConstraint::Plane(1) => [true, false, true],
+            ModalConstraint::Plane(2) => [true, true, false],
+            _ => [false, false, false],
+        };
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// `translation` is an absolute world-space delta from the start, `value`
+    /// is the absolute scalar (including exact numeric input), never a frame delta.
+    /// The core never snaps: snapping is one screen-space pass by the caller
+    /// ([`crate::inference`]), reported through [`AppState::update_modal_snapped`].
+    pub fn update_modal(&mut self, translation: Vec3, value: f32) -> Result<(), ModalError> {
+        self.update_modal_snapped(translation, value, None)
+    }
+
+    /// Same as [`AppState::update_modal`], recording which snap target the caller
+    /// already applied to `translation` (P3D-040: one snap pass per gesture).
+    pub fn update_modal_snapped(
+        &mut self,
+        translation: Vec3,
+        value: f32,
+        snap: Option<SnapKind>,
+    ) -> Result<(), ModalError> {
+        if let Some(result) = self.update_modal_fast(translation, value, snap) {
+            return result;
+        }
+        let result = self.update_modal_slow(translation, value, snap);
+        if result.is_ok() {
+            self.record_modal_preview(value);
+        }
+        result
+    }
+
+    /// Caminho incremental. `None` = usar a prévia exata.
+    pub(crate) fn update_modal_fast(
+        &mut self,
+        translation: Vec3,
+        value: f32,
+        snap: Option<SnapKind>,
+    ) -> Option<Result<(), ModalError>> {
+        if !translation.is_finite() || !value.is_finite() || value.abs() > 1.0e6 {
+            return None;
+        }
+        let proportional = self.proportional_editing;
+        let edit_pivot = self.editor.edit_pivot;
+        let object_mode = self.edit_mode() == EditMode::Object;
+        let modal = self.editor.tools.modal.as_mut()?;
+        if edit_pivot
+            || (object_mode
+                && !matches!(
+                    modal.kind,
+                    ModalKind::Move | ModalKind::Rotate | ModalKind::Scale
+                ))
+        {
+            return None;
+        }
+        let direction = AppState::modal_direction(modal);
+        let to_world = modal.object_to_world;
+        let to_local = to_world.inverse();
+        let mesh = &mut self.document.active_mut()?.mesh;
+        let changes = match modal.kind {
+            ModalKind::Move | ModalKind::Rotate | ModalKind::Scale | ModalKind::PushPull => {
+                if !modal.preview.source_topology_live
+                    || (proportional && modal.kind != ModalKind::PushPull)
+                    || mesh.verts.len() != modal.source.verts.len()
+                    || (modal.kind == ModalKind::Scale && value.abs() < 1.0e-6)
+                {
+                    return None;
+                }
+                let source = &modal.source;
+                let affected = modal.preview.affected.get_or_insert_with(|| {
+                    source
+                        .verts
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, v)| v.selected)
+                        .map(|(i, _)| i as u32)
+                        .collect()
+                });
+                let pivots = modal.pivots.as_deref();
+                let pivot_of = |i: usize| pivots.map_or(modal.pivot, |p| p[i]);
+                let (components, transform): (Vec3, Box<dyn Fn(usize, Vec3) -> Vec3 + '_>) =
+                    match modal.kind {
+                        ModalKind::Move => {
+                            let delta = match modal.constraint {
+                                ModalConstraint::Free => translation,
+                                ModalConstraint::Axis(i) => {
+                                    if snap.is_some() {
+                                        axis(i) * translation[i]
+                                    } else {
+                                        axis(i) * value
+                                    }
+                                }
+                                ModalConstraint::Plane(i) => translation - axis(i) * translation[i],
+                            };
+                            (delta, Box::new(move |_, p| p + delta))
+                        }
+                        ModalKind::PushPull => {
+                            let delta = direction * value;
+                            (Vec3::ZERO, Box::new(move |_, p| p + delta))
+                        }
+                        ModalKind::Rotate => {
+                            let normal = match modal.constraint {
+                                ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => axis(i),
+                                ModalConstraint::Free => modal.normal,
+                            };
+                            let rotation = Quat::from_axis_angle(normal, value.to_radians());
+                            let (x, y, z) = rotation.to_euler(EulerRot::XYZ);
+                            (
+                                Vec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees()),
+                                Box::new(move |i, p| {
+                                    let pivot = pivot_of(i);
+                                    pivot + rotation * (p - pivot)
+                                }),
+                            )
+                        }
+                        _ => {
+                            let factors = match modal.constraint {
+                                ModalConstraint::Free => Vec3::splat(value),
+                                ModalConstraint::Axis(i) => Vec3::ONE + axis(i) * (value - 1.0),
+                                ModalConstraint::Plane(i) => {
+                                    Vec3::splat(value) + axis(i) * (1.0 - value)
+                                }
+                            };
+                            (
+                                factors,
+                                Box::new(move |i, p| {
+                                    let pivot = pivot_of(i);
+                                    pivot + (p - pivot) * factors
+                                }),
+                            )
+                        }
+                    };
+                let mut changed = false;
+                for &index in affected.iter() {
+                    let index = index as usize;
+                    let base = source.verts[index].vec();
+                    let next = to_local
+                        .transform_point3(transform(index, to_world.transform_point3(base)));
+                    if !next.is_finite() {
+                        return Some(Err(ModalError::InvalidMesh));
+                    }
+                    changed |= next != base;
+                    mesh.verts[index].pos = next.to_array();
+                }
+                modal.value = value;
+                modal.components = components;
+                modal.changed = changed;
+                if object_mode {
+                    drop(transform);
+                    if !AppState::fast_object_transform(&mut self.document.project, modal) {
+                        return None;
+                    }
+                    ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+                } else if modal.kind == ModalKind::PushPull {
+                    ProjectChanges::GEOMETRY
+                } else {
+                    ProjectChanges::POSITIONS
+                }
+            }
+            ModalKind::Extrude => {
+                let flip = modal.flip_when_negative && value < 0.0;
+                let extrude = modal.preview.extrude.as_ref()?;
+                if value == 0.0
+                    || extrude.live_flip != Some(flip)
+                    || mesh.verts.len() != extrude.base.verts.len()
+                {
+                    return None;
+                }
+                let local_direction = to_local.transform_vector3(direction);
+                for &index in &extrude.cap {
+                    let index = index as usize;
+                    let next = extrude.base.verts[index].vec() + local_direction * value;
+                    if !next.is_finite() {
+                        return Some(Err(ModalError::InvalidMesh));
+                    }
+                    mesh.verts[index].pos = next.to_array();
+                }
+                modal.value = value;
+                modal.changed = true;
+                ProjectChanges::GEOMETRY
+            }
+            ModalKind::Inset | ModalKind::Bevel | ModalKind::ExtrudeIndividual => {
+                let linear = &mut modal.preview.linear;
+                let (reference, vertices) = linear.model.as_ref()?;
+                let span = (linear.range.1 - linear.range.0).abs().max(1.0e-3);
+                if !linear.validated
+                    || linear.disabled
+                    || value == 0.0
+                    || linear.since_check >= LINEAR_RECHECK_EVERY
+                    || value < linear.range.0 - span * 0.5
+                    || value > linear.range.1 + span * 0.5
+                    || (modal.kind == ModalKind::Inset && value < 0.0)
+                    || (modal.kind == ModalKind::Bevel && value < 0.0)
+                    || linear
+                        .samples
+                        .last()
+                        .is_none_or(|(_, sample)| sample.verts.len() != mesh.verts.len())
+                {
+                    return None;
+                }
+                let offset = value - reference;
+                for &(index, at_reference, slope) in vertices {
+                    let next = at_reference + slope * offset;
+                    if !next.is_finite() {
+                        return None;
+                    }
+                    mesh.verts[index as usize].pos = next.to_array();
+                }
+                linear.predicted = true;
+                linear.since_check += 1;
+                modal.value = value;
+                modal.changed = true;
+                ProjectChanges::GEOMETRY
+            }
+        };
+        modal.snap = snap;
+        self.emit_project_changed(changes);
+        Some(Ok(()))
+    }
+
+    /// Depois de uma prévia exata: prepara os caches do caminho incremental.
+    pub(crate) fn record_modal_preview(&mut self, value: f32) {
+        let proportional = self.proportional_editing;
+        if let Some(modal) = self.editor.tools.modal.as_mut() {
+            modal.preview.rigid.clear();
+        }
+        let published = self.document.active().map(|asset| &*asset.mesh);
+        let Some(modal) = self.editor.tools.modal.as_mut() else {
+            return;
+        };
+        match modal.kind {
+            ModalKind::Move | ModalKind::Rotate | ModalKind::Scale | ModalKind::PushPull => {
+                // Com edição proporcional a prévia exata desloca vizinhos que o
+                // caminho incremental não reescreve.
+                modal.preview.source_topology_live =
+                    !(proportional && modal.kind != ModalKind::PushPull);
+            }
+            ModalKind::Extrude => {
+                if value == 0.0 {
+                    if let Some(extrude) = modal.preview.extrude.as_mut() {
+                        extrude.live_flip = None;
+                    }
+                    return;
+                }
+                let flip = modal.flip_when_negative && value < 0.0;
+                let extrude = modal.preview.extrude.get_or_insert_with(|| {
+                    let mut base = modal.source.clone();
+                    base.extrude_selected(0.0);
+                    let cap = base
+                        .verts
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, v)| v.selected)
+                        .map(|(i, _)| i as u32)
+                        .collect();
+                    ExtrudePreview {
+                        base,
+                        cap,
+                        live_flip: None,
+                    }
+                });
+                extrude.live_flip = Some(flip);
+            }
+            ModalKind::Inset | ModalKind::Bevel | ModalKind::ExtrudeIndividual => {
+                let Some(published) = published else {
+                    return;
+                };
+                let linear = &mut modal.preview.linear;
+                linear.predicted = false;
+                linear.since_check = 0;
+                if linear.disabled || value == 0.0 {
+                    return;
+                }
+                let same_topology = |a: &Mesh, b: &Mesh| {
+                    a.verts.len() == b.verts.len()
+                        && a.faces.len() == b.faces.len()
+                        && a.faces
+                            .iter()
+                            .zip(&b.faces)
+                            .all(|(x, y)| x.verts == y.verts)
+                };
+                if let Some((reference, vertices)) = linear.model.as_ref() {
+                    // Reverificação: a operação exata precisa bater com o modelo.
+                    let offset = value - reference;
+                    let scale = published
+                        .verts
+                        .iter()
+                        .map(|v| v.vec().abs().max_element())
+                        .fold(1.0_f32, f32::max);
+                    let fits = linear
+                        .samples
+                        .last()
+                        .is_some_and(|(_, sample)| same_topology(sample, published))
+                        && vertices.iter().all(|&(index, at_reference, slope)| {
+                            published.verts.get(index as usize).is_some_and(|v| {
+                                v.vec().distance(at_reference + slope * offset) <= 1.0e-4 * scale
+                            })
+                        });
+                    if fits {
+                        linear.validated = true;
+                        linear.range = (linear.range.0.min(value), linear.range.1.max(value));
+                    } else {
+                        linear.disabled = true;
+                        linear.model = None;
+                    }
+                    return;
+                }
+                if let Some((first_value, first)) = linear.samples.first()
+                    && (value - first_value).abs() > 1.0e-6
+                    && same_topology(first, published)
+                {
+                    let delta = value - first_value;
+                    let vertices = first
+                        .verts
+                        .iter()
+                        .zip(&published.verts)
+                        .enumerate()
+                        .filter_map(|(index, (a, b))| {
+                            let (a, b) = (a.vec(), b.vec());
+                            (a != b).then(|| (index as u32, b, (b - a) / delta))
+                        })
+                        .collect();
+                    linear.model = Some((value, vertices));
+                    linear.range = (value.min(*first_value), value.max(*first_value));
+                }
+                linear.samples.clear();
+                linear.samples.push((value, published.clone()));
+            }
+        }
     }
 
     /// A prévia exata, usada no primeiro evento e quando a topologia muda.
-    fn update_modal_slow(
+    pub(crate) fn update_modal_slow(
         &mut self,
         translation: Vec3,
         value: f32,
@@ -966,7 +1017,13 @@ impl AppState {
         if modal.kind == ModalKind::Bevel && value < 0.0 {
             return Err(ModalError::InvalidInput);
         }
+        // A operação roda em mundo (pivô, eixos e distâncias do gesto) e volta
+        // ao frame local antes de publicar.
+        let to_world = modal.object_to_world;
         let mut mesh = modal.source.clone();
+        if to_world != glam::Mat4::IDENTITY {
+            mesh.transform_affine(to_world);
+        }
         let mut components = Vec3::ZERO;
         let direction = match modal.constraint {
             ModalConstraint::Axis(i) => axis(i),
@@ -996,7 +1053,7 @@ impl AppState {
                     ModalConstraint::Plane(i) => translation - axis(i) * translation[i],
                 };
                 components = delta;
-                if self.session.edit_pivot {
+                if self.editor.edit_pivot {
                     // In Edit Pivot mode, geometry stays stationary; only origin moves.
                 } else if use_proportional {
                     for vertex in &mut mesh.verts {
@@ -1006,8 +1063,8 @@ impl AppState {
                             let dist = (vertex.vec() - modal.pivot).length();
                             let weight = crate::proportional::calculate_falloff_weight(
                                 dist,
-                                self.session.proportional_settings.radius,
-                                self.session.proportional_settings.falloff,
+                                self.editor.proportional_settings.radius,
+                                self.editor.proportional_settings.falloff,
                             );
                             if weight > 0.0 {
                                 vertex.pos = (vertex.vec() + delta * weight).to_array();
@@ -1037,8 +1094,8 @@ impl AppState {
                         let dist = (vertex.vec() - modal.pivot).length();
                         let weight = crate::proportional::calculate_falloff_weight(
                             dist,
-                            self.session.proportional_settings.radius,
-                            self.session.proportional_settings.falloff,
+                            self.editor.proportional_settings.radius,
+                            self.editor.proportional_settings.falloff,
                         );
                         if weight > 0.0 {
                             let rotated = pivot + rotation * (vertex.vec() - pivot);
@@ -1065,8 +1122,8 @@ impl AppState {
                         let dist = (vertex.vec() - modal.pivot).length();
                         let weight = crate::proportional::calculate_falloff_weight(
                             dist,
-                            self.session.proportional_settings.radius,
-                            self.session.proportional_settings.falloff,
+                            self.editor.proportional_settings.radius,
+                            self.editor.proportional_settings.falloff,
                         );
                         if weight > 0.0 {
                             let scaled = pivot + (vertex.vec() - pivot) * factors;
@@ -1091,10 +1148,17 @@ impl AppState {
             ModalKind::ExtrudeIndividual if value != 0.0 => mesh.extrude_individual(value),
             // Inset métrico (unidades de mundo) com limite anti-interseção.
             ModalKind::Inset if value != 0.0 => {
-                mesh.inset_selected_distance(value);
+                let faces: Vec<usize> = mesh
+                    .faces
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, f)| f.selected)
+                    .map(|(i, _)| i)
+                    .collect();
+                mesh.inset_faces(&faces, value, self.tools.inset_mode);
             }
             ModalKind::Bevel if value != 0.0 => {
-                let segs = self.tools.bevel_segments.clamp(1, 4);
+                let segs = self.tools.bevel_segments.clamp(1, 8);
                 let clamp = self.tools.bevel_clamp_overlap;
                 let affect_verts = self.tools.bevel_affect_vertices;
                 let has_verts = mesh.verts.iter().any(|v| v.selected);
@@ -1109,6 +1173,9 @@ impl AppState {
             }
             ModalKind::PushPull => mesh.translate_selected((direction * value).to_array()),
             _ => {}
+        }
+        if to_world != glam::Mat4::IDENTITY {
+            mesh.transform_affine(to_world.inverse());
         }
         self.publish_modal_mesh(mesh, value, components)?;
         if let Some(modal) = self.modal.as_mut() {
@@ -1150,7 +1217,7 @@ impl AppState {
                 .map_or(modal.pivot, |pivots| pivots[index]);
             vertex.pos = match modal.kind {
                 ModalKind::Move => {
-                    if self.session.edit_pivot {
+                    if self.editor.edit_pivot {
                         vertex.vec()
                     } else {
                         vertex.vec() + components
@@ -1174,7 +1241,7 @@ impl AppState {
         Ok(())
     }
 
-    fn publish_modal_mesh(
+    pub(crate) fn publish_modal_mesh(
         &mut self,
         mut mesh: Mesh,
         value: f32,
@@ -1199,7 +1266,7 @@ impl AppState {
             let changed = !same_geometry(&mesh, &modal.source);
             let modal_kind = modal.kind;
             let modal_pivot = modal.pivot;
-            let is_edit_pivot = self.session.edit_pivot;
+            let is_edit_pivot = self.editor.edit_pivot;
             let is_object_mode = self.edit_mode() == EditMode::Object;
             let active_id = modal.original.active().map(|asset| asset.id);
             let active_orig = modal.original.active().and_then(|a| a.origin);
@@ -1341,7 +1408,7 @@ impl AppState {
             .iter()
             .any(|(_, _, is_changed, _, _, _, _)| *is_changed);
 
-        let active = self.project.active_mut().ok_or(ModalError::NoActiveMesh)?;
+        let active = self.document.active_mut().ok_or(ModalError::NoActiveMesh)?;
         active.mesh = mesh.into();
         if is_edit_pivot && modal_kind == ModalKind::Move {
             active.origin = Some((modal_pivot + components).to_array());
@@ -1392,7 +1459,7 @@ impl AppState {
             }
         }
         for (id, other_mesh, _, other_orig, other_pos, other_rot, other_scale) in others {
-            if let Some(asset) = self.project.assets.iter_mut().find(|asset| asset.id == id) {
+            if let Some(asset) = self.document.assets.iter_mut().find(|asset| asset.id == id) {
                 asset.mesh = other_mesh;
                 if is_object_mode && other_orig.is_some() {
                     asset.origin = other_orig;
@@ -1444,7 +1511,7 @@ impl AppState {
         if let Some(before) = modal.before_prelude {
             let (before, selection) = *before;
             if modal.changed {
-                self.project.undo.checkpoint_sized(
+                self.document.undo.checkpoint_sized(
                     modal.kind.label(),
                     &before,
                     before.estimated_bytes(),
@@ -1454,19 +1521,19 @@ impl AppState {
                 self.restore_before_prelude(before, selection);
             }
         } else if modal.changed {
-            self.project.undo.checkpoint_sized(
+            self.document.undo.checkpoint_sized(
                 modal.kind.label(),
                 &modal.original,
                 modal.original.estimated_bytes(),
             );
             self.mark_document_dirty();
         } else {
-            let revision_clock = self.project.project.revision_clock();
+            let revision_clock = self.document.project.revision_clock();
             let previewed = revision_clock != modal.original.revision_clock();
-            self.project.project = modal.original;
-            self.session.selection = modal.selection;
+            self.document.project = modal.original;
+            self.editor.selection = modal.selection;
             if previewed {
-                self.project
+                self.document
                     .project
                     .rebase_revisions_after_restore(revision_clock);
                 restored_changes = Some(match modal.kind {
@@ -1498,15 +1565,15 @@ impl AppState {
             self.locked_axes = [false; 3];
             return true;
         }
-        let revision_clock = self.project.project.revision_clock();
-        self.project.project = modal.original;
-        self.project
+        let revision_clock = self.document.project.revision_clock();
+        self.document.project = modal.original;
+        self.document
             .project
             .rebase_revisions_after_restore(revision_clock);
-        self.session.selection = modal.selection;
+        self.editor.selection = modal.selection;
         self.locked_axes = [false; 3];
         self.events.emit(crate::AppEvent::SelectionChanged(
-            self.session.selection.clone(),
+            self.editor.selection.clone(),
         ));
         let changes = match modal.kind {
             ModalKind::Move | ModalKind::Rotate | ModalKind::Scale => {
@@ -1519,47 +1586,31 @@ impl AppState {
     }
 }
 
-/// Sessão interativa de transformação modal por ponteiro e teclado numérico.
-#[derive(Debug, Clone)]
-pub struct PointerSession {
-    /// Posição 2D de tela inicial do clique/arrasto (pixels lógicos).
-    pub anchor: [f32; 2],
-    /// Buffer de entrada de texto numérico (ex: "1.5", "-45").
-    pub numeric: String,
-    /// Flag indicando se a sessão foi iniciada via arraste de gizmo.
-    pub drag_handle: bool,
-    /// Flag indicando se a pré-visualização atual é válida.
-    pub valid_preview: bool,
-    /// Última posição 2D de tela registrada.
-    pub last_pos: [f32; 2],
-}
-
-impl PointerSession {
-    pub fn new(anchor: [f32; 2], drag_handle: bool) -> Self {
-        Self {
-            anchor,
-            numeric: String::new(),
-            drag_handle,
-            valid_preview: true,
-            last_pos: anchor,
-        }
+impl<'a> EditorView<'a> {
+    pub(crate) fn modal_flips_when_negative(self) -> bool {
+        self.modal
+            .as_ref()
+            .is_some_and(|modal| modal.flip_when_negative)
     }
 
-    pub fn push_char(&mut self, c: char) -> bool {
-        if (c.is_ascii_digit() || matches!(c, '.' | ',' | '-' | '+')) && self.numeric.len() < 64 {
-            self.numeric.push(if c == ',' { '.' } else { c });
-            true
-        } else {
-            false
-        }
+    /// Estado posterior ao prelúdio (para reaplicar a "Última operação").
+    pub(crate) fn modal_prelude_state(self) -> Option<(Project, Selection)> {
+        let modal = self.modal.as_ref()?;
+        modal
+            .before_prelude
+            .as_ref()
+            .map(|_| (modal.original.clone(), modal.selection.clone()))
     }
 
-    pub fn pop_char(&mut self) -> Option<char> {
-        self.numeric.pop()
-    }
-
-    pub fn parse_numeric(&self) -> Option<f32> {
-        self.numeric.parse::<f32>().ok()
+    /// Matrizes rígidas (original → prévia) dos objetos em transformação no
+    /// modo objeto. Vazio fora desse caso; o renderer as usa para não
+    /// triangular de novo um objeto que só se move.
+    pub fn rigid_preview_transforms(self) -> &'a [(uuid::Uuid, glam::Mat4)] {
+        self.editor
+            .tools
+            .modal
+            .as_ref()
+            .map_or(&[], |modal| modal.preview.rigid.as_slice())
     }
 }
 
@@ -1820,6 +1871,37 @@ mod tests {
             assert_eq!(state.project.undo.depth(), (0, 0));
             assert_exact_mesh(state.project.active_mesh().unwrap(), &original);
         }
+    }
+
+    /// Edit Mode num objeto transformado: o gesto é em mundo, a escrita é local
+    /// (website/docs/03-geometry/transforms-origin-pivot-gizmos.md, "World-space
+    /// interaction em Edit Mode").
+    #[test]
+    fn edit_mode_moves_are_world_deltas_on_transformed_objects() {
+        let mut state = selected_face();
+        state.project.active_mut().unwrap().transform =
+            petunia_project::ObjectTransform::from_trs(
+                Vec3::new(3.0, 0.0, 0.0),
+                Quat::from_rotation_y(0.5),
+                Vec3::splat(2.0),
+            );
+        let before = state.project.active().unwrap().world_positions();
+        let selected: Vec<bool> = state
+            .project
+            .active_mesh()
+            .unwrap()
+            .verts
+            .iter()
+            .map(|v| v.selected)
+            .collect();
+        state.begin_modal(ModalKind::Move).unwrap();
+        state.update_modal(Vec3::X, 0.0).unwrap();
+        let after = state.project.active().unwrap().world_positions();
+        for ((b, a), moved) in before.iter().zip(&after).zip(&selected) {
+            let expected = if *moved { *b + Vec3::X } else { *b };
+            assert!(a.distance(expected) < 1e-4, "{a} != {expected}");
+        }
+        assert!(state.commit_modal());
     }
 
     #[test]

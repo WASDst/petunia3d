@@ -36,6 +36,9 @@ pub enum CommandError {
     /// efeito colateral e **não** grava entrada de histórico nem avança revisões.
     #[error("Nada a alterar: {0}")]
     NoChange(String),
+    /// Referência a um objeto que não existe (mais): nunca cai em outro objeto.
+    #[error("Referência inválida ou obsoleta: {0}")]
+    StaleReference(String),
     #[error(transparent)]
     Spline(#[from] SplineError),
     #[error(transparent)]
@@ -46,13 +49,16 @@ pub enum CommandError {
     PathGenerator(#[from] PathGeneratorError),
 }
 
-/// Trait central de comando executável contra o estado do editor (`AppState`).
+pub use crate::context::{CommandContext, EditorView, HostRequest, UiRequest};
+
+/// Trait central de comando. Executa contra `CommandContext` (documento, editor e
+/// eventos): comandos não enxergam UI nem recursos de render.
 pub trait Command: Send + Sync {
     /// Rótulo legível para telemetria e pilha de histórico (Undo/Redo).
     fn label(&self) -> &'static str;
 
     /// Executa o comando contra o estado do editor.
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError>;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError>;
 
     /// Indica se a operação altera dados do projeto e exige gravação prévia de checkpoint no UndoStack.
     fn is_destructive(&self) -> bool {
@@ -70,7 +76,7 @@ pub trait Command: Send + Sync {
 
     /// Valida disponibilidade contextual do comando contra o estado atual (P3D-100).
     /// Retorna Ok(()) se puder ser executado, ou Err("razão legível") quando desabilitado.
-    fn can_execute(&self, _state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, _state: &EditorView<'_>) -> Result<(), &'static str> {
         Ok(())
     }
 }
@@ -80,7 +86,7 @@ impl<T: ?Sized + Command> Command for Box<T> {
         (**self).label()
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         (**self).execute(state)
     }
 
@@ -92,7 +98,7 @@ impl<T: ?Sized + Command> Command for Box<T> {
         (**self).changes()
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         (**self).can_execute(state)
     }
 }
@@ -243,7 +249,7 @@ impl CommandDispatcher {
 
     pub fn can_execute(&self, id: &str, state: &AppState) -> Result<(), &'static str> {
         let cmd = self.registry.get(id).ok_or("Comando não registrado")?;
-        cmd.can_execute(state)
+        cmd.can_execute(&state.view())
     }
 
     pub fn execute(&self, id: &str, state: &mut AppState) -> Result<(), CommandError> {
@@ -252,60 +258,72 @@ impl CommandDispatcher {
             .get(id)
             .ok_or_else(|| CommandError::Execution(format!("Comando '{id}' não registrado")))?
             .clone();
-        cmd.can_execute(state)
-            .map_err(|reason| CommandError::Execution(reason.to_string()))?;
         Self::dispatch(state, cmd.as_ref())
     }
 
     pub fn dispatch(state: &mut AppState, cmd: &dyn Command) -> Result<(), CommandError> {
-        cmd.can_execute(state)
+        let mut ctx = state.command_context();
+        let result = Self::run(&mut ctx, cmd);
+        let effects = ctx.into_effects();
+        let host = state.apply_effects(effects);
+        result.and(host)
+    }
+
+    /// Fronteira de mutação única: valida (`can_execute`), executa o comando no contexto restrito,
+    /// restaura o documento se falhar e registra uma entrada de undo se tiver
+    /// sucesso (website/docs/02-application/commands-events-services.md).
+    pub fn run(ctx: &mut CommandContext<'_>, cmd: &dyn Command) -> Result<(), CommandError> {
+        cmd.can_execute(&ctx.view())
             .map_err(|reason| CommandError::Execution(reason.into()))?;
         if cmd.is_destructive()
-            && (state.modal.is_some()
-                || state.mesh_preview.is_some()
-                || state.paint_stroke.is_some())
+            && (ctx.modal.is_some() || ctx.mesh_preview.is_some() || ctx.paint_stroke.is_some())
         {
             return Err(CommandError::Execution(
                 "Confirm or cancel the active operation first".into(),
             ));
         }
         let changes = cmd.changes();
-        state.project.project.history_selection = state.session.selection.assets.clone();
-        let original_selection = state.session.selection.clone();
-        let original = cmd.is_destructive().then(|| state.project.project.clone());
+        ctx.document.project.history_selection = ctx.editor.selection.assets.clone();
+        let original_selection = ctx.editor.selection.clone();
+        let original = cmd.is_destructive().then(|| ctx.document.project.clone());
         // A sessão de criação de primitiva é consumida ao congelar; guardá-la
         // permite restaurar o estado de sessão junto com o projeto se falhar.
         let original_primitive_session = (
-            state.session.primitive_session.clone(),
-            state.session.last_primitive,
+            ctx.editor.primitive_session.clone(),
+            ctx.editor.last_primitive,
         );
         if cmd.is_destructive() {
-            state.freeze_active_primitive_for_command();
+            ctx.freeze_active_primitive_for_command();
         }
-        if let Err(error) = cmd.execute(state) {
+        if let Err(error) = cmd.execute(ctx) {
             if let Some(original) = original {
-                state.project.project = original;
-                state.session.selection = original_selection;
-                (
-                    state.session.primitive_session,
-                    state.session.last_primitive,
-                ) = original_primitive_session;
+                ctx.document.project = original;
+                ctx.editor.selection = original_selection;
+                (ctx.editor.primitive_session, ctx.editor.last_primitive) =
+                    original_primitive_session;
                 // The project and selection are the same snapshot. Recomputing
                 // selection here would mutate the restored document on failure.
-                state.mark_dirty();
+                ctx.mark_dirty();
             }
             return Err(error);
         }
 
         if let Some(original) = original {
             let bytes = original.estimated_bytes();
-            state.project.undo.push_sized(cmd.label(), original, bytes);
-            state.mark_document_dirty();
+            ctx.document.undo.push_sized(cmd.label(), original, bytes);
         }
-        state.sync_selection();
-        state.emit_project_changed(changes);
-        state.mark_dirty();
+        ctx.sync_selection();
+        ctx.emit_project_changed(changes);
+        ctx.mark_dirty();
         Ok(())
+    }
+
+    /// Variante para quem já tem um contexto restrito (testes e serviços).
+    pub fn dispatch_context(
+        ctx: &mut CommandContext<'_>,
+        cmd: &dyn Command,
+    ) -> Result<(), CommandError> {
+        Self::run(ctx, cmd)
     }
 
     /// Consulta a lista de comandos filtrados por busca fuzzy/substring para a Command Palette (P3D-081).
@@ -919,11 +937,21 @@ impl CommandDispatcher {
             CommandMetadata::new(
                 "uv.relax",
                 "Relax UVs",
-                "Smooth and relax UV coordinates to reduce stretching",
+                "Relax UV islands toward the 3D shape (as-rigid-as-possible), keeping pins and seams",
                 CommandCategory::Tools,
             )
             .with_docs(DocsTopic::UvUnwrapping),
             UvRelaxCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.split",
+                "Split UVs",
+                "Mark seams around the selected UV faces without duplicating vertices",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvSplitCmd,
         );
         d.register_with_meta(
             CommandMetadata::new(
@@ -1037,6 +1065,66 @@ impl CommandDispatcher {
                 "model.flip_normals",
                 "Flip Normals",
                 "Reverse orientation of face normals",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            FlipNormalsCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.mark_sharp",
+                "Mark Sharp",
+                "Mark the selected edges as sharp (limits smooth shading)",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            MarkSharpCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.clear_sharp",
+                "Clear Sharp",
+                "Remove the sharp mark from the selected edges",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ClearSharpCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.smooth_by_angle",
+                "Smooth by Angle",
+                "Shade smooth and mark edges above the angle as sharp",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            SmoothByAngleCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.orient_consistently",
+                "Orient Consistently",
+                "Make face winding consistent across connected faces",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            OrientConsistentlyCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.orient_outward",
+                "Orient Outward",
+                "Orient a closed mesh so faces point outside",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            OrientOutwardCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.flip_faces",
+                "Flip Faces",
+                "Reverse the winding of the selected faces",
                 CommandCategory::Model,
             )
             .with_docs(DocsTopic::Modeling),
@@ -1357,6 +1445,16 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Navigation),
             SetViewPresetCmd(ViewPreset::IsometricSW),
         );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "view.pseudo_isometric_2to1",
+                "Pseudo-Isometric 2:1",
+                "Align camera to classic 2:1 pseudo-isometric game view (26.565°)",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Navigation),
+            SetViewPresetCmd(ViewPreset::PseudoIsometric2To1),
+        );
 
         // 6. Janela e Interface (Window)
         d.register_with_meta(
@@ -1529,7 +1627,7 @@ impl Command for AddPrimitiveCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         // Caminho canônico único: sessão de criação (§82), nunca inserção seca.
         // `at_cursor` é sempre verdadeiro nos chamadores (offset do cursor 3D).
         if state.begin_primitive(self.kind, self.name.clone()) {
@@ -1551,25 +1649,25 @@ impl Command for DuplicateAssetCmd {
         "duplicate asset"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let idx = self.asset_index.unwrap_or(state.project.active);
-        if state.project.assets.get(idx).is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        if state.document.assets.get(idx).is_none() {
             Err("No active asset to duplicate")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let idx = self.asset_index.unwrap_or(state.project.active);
-        let Some(asset) = state.project.assets.get(idx) else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get(idx) else {
             return Err(CommandError::InvalidAssetIndex(idx));
         };
 
         let copy = asset.duplicate();
         let copy_name = copy.name.clone();
-        state.project.assets.push(copy);
-        state.project.active = state.project.assets.len() - 1;
+        state.document.assets.push(copy);
+        state.document.active = state.document.assets.len() - 1;
         state.set_status(format!("Duplicated {}", copy_name));
         Ok(())
     }
@@ -1592,8 +1690,8 @@ impl Command for ReorderAssetCmd {
         ProjectChanges::NONE
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let len = state.project.assets.len();
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let len = state.document.assets.len();
         if self.from >= len || self.to >= len || self.from == self.to {
             Err("Invalid reorder indices")
         } else {
@@ -1601,8 +1699,8 @@ impl Command for ReorderAssetCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        if state.project.reorder_asset(self.from, self.to) {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if state.document.reorder_asset(self.from, self.to) {
             state.mark_dirty();
             state.set_status("Objeto reordenado na cena".to_string());
             Ok(())
@@ -1624,17 +1722,17 @@ impl Command for InstantiateAssetCmd {
         "instantiate asset"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.assets.iter().any(|a| a.id == self.asset_id) {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.assets.iter().any(|a| a.id == self.asset_id) {
             Ok(())
         } else {
             Err("Asset not found in project library")
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let Some(asset) = state
-            .project
+            .document
             .assets
             .iter()
             .find(|a| a.id == self.asset_id)
@@ -1644,15 +1742,15 @@ impl Command for InstantiateAssetCmd {
         };
 
         let mut instance = asset.duplicate();
-        let target_pos = self.position.unwrap_or(state.session.cursor_3d);
+        let target_pos = self.position.unwrap_or(state.editor.cursor_3d);
         for v in &mut instance.mesh.verts {
             v.pos[0] += target_pos[0];
             v.pos[1] += target_pos[1];
             v.pos[2] += target_pos[2];
         }
         let name = instance.name.clone();
-        state.project.assets.push(instance);
-        state.project.active = state.project.assets.len() - 1;
+        state.document.assets.push(instance);
+        state.document.active = state.document.assets.len() - 1;
         state.set_status(format!("Instantiated '{}'", name));
         Ok(())
     }
@@ -1669,24 +1767,24 @@ impl Command for DeleteAssetCmd {
         "delete asset"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let idx = self.asset_index.unwrap_or(state.project.active);
-        if idx >= state.project.assets.len() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        if idx >= state.document.assets.len() {
             Err("No active asset to delete")
-        } else if state.project.assets[idx].locked {
+        } else if state.document.assets[idx].locked {
             Err("Object is locked")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let idx = self.asset_index.unwrap_or(state.project.active);
-        if idx >= state.project.assets.len() {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        if idx >= state.document.assets.len() {
             return Err(CommandError::InvalidAssetIndex(idx));
         }
 
-        state.project.remove(idx);
+        state.document.remove(idx);
         state.set_status("Asset deleted");
         Ok(())
     }
@@ -1701,9 +1799,9 @@ impl Command for DeleteSelectionCmd {
         "delete"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() == EditMode::Object {
-            if state.project.active().is_none() {
+            if state.document.active().is_none() {
                 Err("No active asset to delete")
             } else if state.is_active_locked() {
                 Err("Object is locked")
@@ -1717,26 +1815,34 @@ impl Command for DeleteSelectionCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.edit_mode() == EditMode::Object {
-            let selected = state.session.selection.assets.clone();
+            let selected = state.editor.selection.assets.clone();
             if selected.is_empty() {
                 return DeleteAssetCmd { asset_index: None }.execute(state);
             }
             state
-                .project
+                .document
                 .assets
                 .retain(|asset| !selected.contains(&asset.id) || asset.locked);
-            state.project.active = usize::MAX;
-            state.session.selection.assets.clear();
+            state.document.active = usize::MAX;
+            state.editor.selection.assets.clear();
             state.set_status("Deleted selected objects");
             return Ok(());
         }
 
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        if !state.editor.selection.is_empty()
+            && !mesh.faces.iter().any(|f| f.selected)
+            && !mesh.verts.iter().any(|v| v.selected)
+        {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
         mesh.delete_selected();
+        state.editor.selection.clear();
+        state.sync_selection();
         state.set_status("Deleted selection");
         Ok(())
     }
@@ -1751,9 +1857,9 @@ impl Command for DuplicateSelectionCmd {
         "duplicate"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() == EditMode::Object {
-            if state.project.active().is_none() {
+            if state.document.active().is_none() {
                 Err("No active asset to duplicate")
             } else {
                 Ok(())
@@ -1765,11 +1871,11 @@ impl Command for DuplicateSelectionCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.edit_mode() == EditMode::Object {
-            let selected = &state.session.selection.assets;
+            let selected = &state.editor.selection.assets;
             let copies: Vec<_> = state
-                .project
+                .document
                 .assets
                 .iter()
                 .filter(|asset| selected.contains(&asset.id))
@@ -1778,17 +1884,24 @@ impl Command for DuplicateSelectionCmd {
             if copies.is_empty() {
                 return DuplicateAssetCmd { asset_index: None }.execute(state);
             }
-            state.session.selection.assets = copies.iter().map(|asset| asset.id).collect();
-            state.project.assets.extend(copies);
-            state.project.active = state.project.assets.len() - 1;
+            state.editor.selection.assets = copies.iter().map(|asset| asset.id).collect();
+            state.document.assets.extend(copies);
+            state.document.active = state.document.assets.len() - 1;
             state.set_status("Duplicated selected objects");
             return Ok(());
         }
 
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        if !state.editor.selection.is_empty()
+            && !mesh.faces.iter().any(|f| f.selected)
+            && !mesh.verts.iter().any(|v| v.selected)
+        {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
         mesh.duplicate_selected();
+        state.sync_selection();
         state.set_status("Duplicated selection");
         Ok(())
     }
@@ -1807,9 +1920,9 @@ impl Command for SelectAllCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
-            && state.project.active_mesh().is_none()
+            && state.document.active_mesh().is_none()
         {
             Err("No active mesh")
         } else {
@@ -1817,25 +1930,25 @@ impl Command for SelectAllCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.selection_domain() == crate::SelectionDomain::Object {
-            state.session.selection.assets = state
-                .project
+            state.editor.selection.assets = state
+                .document
                 .assets
                 .iter()
                 .filter(|a| a.visible && !a.locked)
                 .map(|a| a.id)
                 .collect();
-            state.project.active = state
-                .session
+            state.document.active = state
+                .editor
                 .selection
                 .assets
                 .last()
-                .and_then(|id| state.project.assets.iter().position(|a| a.id == *id))
+                .and_then(|id| state.document.assets.iter().position(|a| a.id == *id))
                 .unwrap_or(usize::MAX);
             return Ok(());
         }
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.select_all();
@@ -1856,9 +1969,9 @@ impl Command for ClearSelectionCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
-            && state.project.active_mesh().is_none()
+            && state.document.active_mesh().is_none()
         {
             Err("No active mesh")
         } else {
@@ -1866,12 +1979,12 @@ impl Command for ClearSelectionCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.selection_domain() == crate::SelectionDomain::Object {
             state.select_object(None, false);
             return Ok(());
         }
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.deselect_all();
@@ -1892,9 +2005,9 @@ impl Command for InvertSelectionCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
-            && state.project.active_mesh().is_none()
+            && state.document.active_mesh().is_none()
         {
             Err("No active mesh")
         } else {
@@ -1902,24 +2015,24 @@ impl Command for InvertSelectionCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.selection_domain() == crate::SelectionDomain::Object {
-            let selected = &state.session.selection.assets;
+            let selected = &state.editor.selection.assets;
             let ids: Vec<_> = state
-                .project
+                .document
                 .assets
                 .iter()
                 .filter(|a| a.visible && !a.locked && !selected.contains(&a.id))
                 .map(|a| a.id)
                 .collect();
-            state.project.active = ids
+            state.document.active = ids
                 .last()
-                .and_then(|id| state.project.assets.iter().position(|a| a.id == *id))
+                .and_then(|id| state.document.assets.iter().position(|a| a.id == *id))
                 .unwrap_or(usize::MAX);
-            state.session.selection.assets = ids;
+            state.editor.selection.assets = ids;
             return Ok(());
         }
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.invert_selection();
@@ -1945,7 +2058,7 @@ impl Command for SetSelectionDomainCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_selection_domain(self.0);
         Ok(())
     }
@@ -1964,7 +2077,7 @@ impl Command for CycleSelectionDomainCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.cycle_selection_domain();
         Ok(())
     }
@@ -1987,8 +2100,8 @@ impl Command for SeparateSelectionCmd {
         petunia_project::ProjectChanges::ALL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(mesh) = state.project.active_mesh() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(mesh) = state.document.active_mesh() else {
             return Err("No active mesh");
         };
         if !mesh.has_selection() {
@@ -1997,8 +2110,8 @@ impl Command for SeparateSelectionCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(active_asset) = state.project.active() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(active_asset) = state.document.active() else {
             return Err(CommandError::NoActiveAsset);
         };
         let orig_name = active_asset.name.clone();
@@ -2059,16 +2172,23 @@ impl Command for SeparateSelectionCmd {
         if sep_mesh.verts.is_empty() {
             return Err(CommandError::Execution("No geometry separated".into()));
         }
-        sep_mesh.validate();
+        // Comandos internos nunca auto-reparam: validação estrita detecta bugs
+        // do próprio editor em vez de consertar silenciosamente
+        // (website/docs/03-geometry/validation-repair-cleanup.md).
+        sep_mesh
+            .validate_invariants()
+            .map_err(|e| CommandError::Execution(format!("Malha separada inválida: {e}")))?;
 
         // 2. Remove os elementos selecionados da malha original
-        if let Some(active_mesh) = state.project.active_mesh_mut() {
+        if let Some(active_mesh) = state.document.active_mesh_mut() {
             // Aplica a mesma sincronização antes de deletar
             if active_mesh.faces.iter().any(|f| f.selected) {
                 active_mesh.sync_vert_selection_from_faces();
             }
             active_mesh.delete_selected();
-            active_mesh.validate();
+            active_mesh
+                .validate_invariants()
+                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
         }
 
         // 3. Adiciona a malha separada como novo objeto/asset na cena
@@ -2078,8 +2198,8 @@ impl Command for SeparateSelectionCmd {
         new_asset.base_color = base_color;
         new_asset.collection = collection;
         new_asset.selection_overlay_color = custom_overlay_color;
-        state.project.assets.push(new_asset);
-        state.project.active = state.project.assets.len() - 1;
+        state.document.assets.push(new_asset);
+        state.document.active = state.document.assets.len() - 1;
         state.sync_selection();
         state.emit_mesh_changed();
         state.set_status(format!("Separated selection into {}", new_name));
@@ -2104,8 +2224,8 @@ impl Command for ClearLocationCmd {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(active) = state.project.active() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(active) = state.document.active() else {
             return Err("No active object");
         };
         if active.locked {
@@ -2114,8 +2234,8 @@ impl Command for ClearLocationCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(active) = state.project.active_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(active) = state.document.active_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let delta = [
@@ -2135,7 +2255,10 @@ impl Command for ClearLocationCmd {
                 orig[1] += delta[1];
                 orig[2] += delta[2];
             }
-            active.mesh.validate();
+            active
+                .mesh
+                .validate_invariants()
+                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
         }
         state.set_status("Cleared location to [0, 0, 0]");
         Ok(())
@@ -2159,8 +2282,8 @@ impl Command for ClearRotationCmd {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(active) = state.project.active() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(active) = state.document.active() else {
             return Err("No active object");
         };
         if active.locked {
@@ -2169,8 +2292,8 @@ impl Command for ClearRotationCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(active) = state.project.active_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(active) = state.document.active_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let rot = active.rotation;
@@ -2192,7 +2315,10 @@ impl Command for ClearRotationCmd {
                 let p = glam::Vec3::from(v.pos);
                 v.pos = (pivot + inv_rot * (p - pivot)).to_array();
             }
-            active.mesh.validate();
+            active
+                .mesh
+                .validate_invariants()
+                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
         }
         state.set_status("Cleared rotation to [0, 0, 0]");
         Ok(())
@@ -2216,8 +2342,8 @@ impl Command for ClearScaleCmd {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(active) = state.project.active() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(active) = state.document.active() else {
             return Err("No active object");
         };
         if active.locked {
@@ -2226,8 +2352,8 @@ impl Command for ClearScaleCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(active) = state.project.active_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(active) = state.document.active_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let scale = active.scale;
@@ -2261,7 +2387,10 @@ impl Command for ClearScaleCmd {
                 let p = glam::Vec3::from(v.pos);
                 v.pos = (pivot + inv_scale * (p - pivot)).to_array();
             }
-            active.mesh.validate();
+            active
+                .mesh
+                .validate_invariants()
+                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
         }
         state.set_status("Cleared scale to [1, 1, 1]");
         Ok(())
@@ -2285,8 +2414,8 @@ impl Command for ClearAllTransformsCmd {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(active) = state.project.active() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(active) = state.document.active() else {
             return Err("No active object");
         };
         if active.locked {
@@ -2295,7 +2424,7 @@ impl Command for ClearAllTransformsCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         ClearScaleCmd.execute(state)?;
         ClearRotationCmd.execute(state)?;
         ClearLocationCmd.execute(state)?;
@@ -2315,12 +2444,12 @@ impl Command for SubdivideSelectionCmd {
         "subdivide"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else if state.selection.is_empty()
             && state
-                .project
+                .document
                 .active_mesh()
                 .is_none_or(|m| !m.faces.iter().any(|f| f.selected) && m.selected_edges.is_empty())
         {
@@ -2330,12 +2459,16 @@ impl Command for SubdivideSelectionCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let cuts = state.tools.subdivide_cuts.clamp(1, 6);
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        if !state.editor.selection.is_empty() {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
         mesh.subdivide_selected_cuts(cuts);
+        state.sync_selection();
         state.set_status(format!("Subdivided selection ({cuts} cuts)"));
         Ok(())
     }
@@ -2350,7 +2483,7 @@ impl Command for MergeCenterCmd {
         "merge"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
         } else if state.selection.verts.len() < 2 {
@@ -2360,11 +2493,15 @@ impl Command for MergeCenterCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        if !state.editor.selection.verts.is_empty() {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
         mesh.merge_center();
+        state.sync_selection();
         state.set_status("Merged selection at center");
         Ok(())
     }
@@ -2387,21 +2524,25 @@ impl Command for WeldCmd {
         "weld"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
-        } else if state.project.active_mesh().is_none() {
+        } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        let removed = mesh.weld_merged_count(self.eps.max(0.0));
+        let before_verts = mesh.verts.len();
+        let result = mesh.weld_with_remap(self.eps.max(0.0));
+        let removed = before_verts.saturating_sub(mesh.verts.len());
+        state.editor.selection.remap(&result.remap);
+        state.sync_selection();
         state.set_status(format!("Welded {removed} vertices (eps {:.4})", self.eps));
         Ok(())
     }
@@ -2430,18 +2571,18 @@ impl Command for SymmetrizeCmd {
         "symmetrize"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
-        } else if state.project.active_mesh().is_none() {
+        } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let mirrored = mesh.symmetrize(self.axis, self.positive_to_negative, self.eps);
@@ -2468,20 +2609,215 @@ impl Command for FlipNormalsCmd {
         ProjectChanges::NORMALS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.flip_normals();
         state.set_status("Flipped normals");
+        Ok(())
+    }
+}
+
+/// Marca como Sharp as arestas selecionadas do objeto ativo (decisão autoral que
+/// delimita smoothing islands; não é seam nem feature edge).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MarkSharpCmd;
+
+impl Command for MarkSharpCmd {
+    fn label(&self) -> &'static str {
+        "mark sharp"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
+        if mesh.selected_edges.is_empty() {
+            Err("Select edges to mark sharp")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let mesh = state
+            .document
+            .active_mesh_mut()
+            .ok_or(CommandError::NoActiveAsset)?;
+        let edges: Vec<_> = mesh.selected_edges.iter().copied().collect();
+        let changed = mesh.mark_sharp(edges);
+        if changed == 0 {
+            return Err(CommandError::NoChange("edges are already sharp".into()));
+        }
+        state.set_status(format!("Marked {changed} sharp edge(s)"));
+        Ok(())
+    }
+}
+
+/// Remove a marca Sharp das arestas selecionadas do objeto ativo.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ClearSharpCmd;
+
+impl Command for ClearSharpCmd {
+    fn label(&self) -> &'static str {
+        "clear sharp"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
+        if mesh.selected_edges.is_empty() {
+            Err("Select edges to clear sharp")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let mesh = state
+            .document
+            .active_mesh_mut()
+            .ok_or(CommandError::NoActiveAsset)?;
+        let edges: Vec<_> = mesh.selected_edges.iter().copied().collect();
+        let changed = mesh.clear_sharp(edges);
+        if changed == 0 {
+            return Err(CommandError::NoChange("edges are not sharp".into()));
+        }
+        state.set_status(format!("Cleared {changed} sharp edge(s)"));
+        Ok(())
+    }
+}
+
+/// Smooth by Angle: torna o objeto Smooth e grava como Sharp as arestas internas
+/// acima do limiar. Não é Auto Smooth permanente: o limiar é só parâmetro do comando.
+#[derive(Debug, Clone, Copy)]
+pub struct SmoothByAngleCmd {
+    pub angle_deg: f32,
+}
+
+impl Default for SmoothByAngleCmd {
+    fn default() -> Self {
+        Self { angle_deg: 30.0 }
+    }
+}
+
+impl Command for SmoothByAngleCmd {
+    fn label(&self) -> &'static str {
+        "smooth by angle"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if !self.angle_deg.is_finite() || !(0.0..=180.0).contains(&self.angle_deg) {
+            return Err("Angle must be between 0 and 180 degrees");
+        }
+        state
+            .document
+            .active_mesh()
+            .map(|_| ())
+            .ok_or("No active mesh")
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let id = state
+            .document
+            .active()
+            .map(|asset| asset.id)
+            .ok_or(CommandError::NoActiveAsset)?;
+        let marked = state
+            .document
+            .active_mesh_mut()
+            .ok_or(CommandError::NoActiveAsset)?
+            .smooth_by_angle(self.angle_deg);
+        state.document.project.set_smooth_shaded(id, true);
+        state.set_status(format!(
+            "Smooth by angle {:.0}°: {marked} sharp edge(s)",
+            self.angle_deg
+        ));
+        Ok(())
+    }
+}
+
+/// Propaga winding consistente por componente conexo (malhas abertas ou fechadas).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OrientConsistentlyCmd;
+
+impl Command for OrientConsistentlyCmd {
+    fn label(&self) -> &'static str {
+        "orient consistently"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS | ProjectChanges::GEOMETRY
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        state
+            .document
+            .active_mesh()
+            .map(|_| ())
+            .ok_or("No active mesh")
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state
+            .document
+            .active_mesh_mut()
+            .ok_or(CommandError::NoActiveAsset)?
+            .orient_consistently();
+        state.set_status("Oriented faces consistently");
+        Ok(())
+    }
+}
+
+/// Orienta consistentemente e escolhe o exterior pelo volume com sinal.
+/// Recusa malhas abertas.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OrientOutwardCmd;
+
+impl Command for OrientOutwardCmd {
+    fn label(&self) -> &'static str {
+        "orient outward"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::NORMALS | ProjectChanges::GEOMETRY
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
+        if mesh.is_closed_manifold() {
+            Ok(())
+        } else {
+            Err("Orient Outward needs a closed manifold mesh")
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state
+            .document
+            .active_mesh_mut()
+            .ok_or(CommandError::NoActiveAsset)?
+            .orient_outward()
+            .map_err(|error| CommandError::Execution(error.to_string()))?;
+        state.set_status("Oriented faces outward");
         Ok(())
     }
 }
@@ -2506,9 +2842,9 @@ impl Command for SetShadeSmoothCmd {
         ProjectChanges::NORMALS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let asset = state.project.active().ok_or("No active mesh")?;
-        if state.project.is_smooth_shaded(asset.id) == self.smooth {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = state.document.active().ok_or("No active mesh")?;
+        if state.document.is_smooth_shaded(asset.id) == self.smooth {
             Err(if self.smooth {
                 "Object is already smooth shaded"
             } else {
@@ -2519,13 +2855,13 @@ impl Command for SetShadeSmoothCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let id = state
-            .project
+            .document
             .active()
             .map(|asset| asset.id)
             .ok_or(CommandError::NoActiveAsset)?;
-        if !state.project.project.set_smooth_shaded(id, self.smooth) {
+        if !state.document.project.set_smooth_shaded(id, self.smooth) {
             return Err(CommandError::NoChange("shading already set".into()));
         }
         state.set_status(if self.smooth {
@@ -2547,12 +2883,12 @@ impl Command for FlipDiagonalCmd {
         "flip diagonal"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
         } else if state.selection.is_empty()
             && !state
-                .project
+                .document
                 .active_mesh()
                 .is_some_and(|m| m.has_selection())
         {
@@ -2562,8 +2898,8 @@ impl Command for FlipDiagonalCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         if mesh.flip_diagonal() {
@@ -2602,8 +2938,8 @@ impl Command for RevolveCmd {
         "revolve"
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         if mesh.revolve_selection(self.segments, self.angle_deg, self.axis, self.center) {
@@ -2637,12 +2973,12 @@ impl Command for ExtrudeIndividualCmd {
         "extrude individual"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
         } else if !state.selection.faces.is_empty()
             || state
-                .project
+                .document
                 .active_mesh()
                 .is_some_and(|m| m.faces.iter().any(|f| f.selected))
         {
@@ -2652,8 +2988,8 @@ impl Command for ExtrudeIndividualCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         if !mesh.faces.iter().any(|f| f.selected) {
@@ -2678,12 +3014,12 @@ impl Command for SelectLinkedCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
         } else if state.selection.is_empty()
             && !state
-                .project
+                .document
                 .active_mesh()
                 .is_some_and(|m| m.has_selection())
         {
@@ -2693,8 +3029,8 @@ impl Command for SelectLinkedCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.select_linked();
@@ -2720,8 +3056,8 @@ impl Command for BoxSelectCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.box_select(self.p0, self.p1, &self.view_proj, self.add);
@@ -2744,9 +3080,9 @@ impl Command for ToggleLockAssetCmd {
         ProjectChanges::NONE
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let idx = self.asset_index.unwrap_or(state.project.active);
-        let Some(asset) = state.project.assets.get_mut(idx) else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get_mut(idx) else {
             return Err(CommandError::InvalidAssetIndex(idx));
         };
         asset.locked = !asset.locked;
@@ -2776,9 +3112,9 @@ impl Command for ToggleVisibilityAssetCmd {
         ProjectChanges::NONE
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let idx = self.asset_index.unwrap_or(state.project.active);
-        let Some(asset) = state.project.assets.get_mut(idx) else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get_mut(idx) else {
             return Err(CommandError::InvalidAssetIndex(idx));
         };
         asset.visible = !asset.visible;
@@ -2809,8 +3145,8 @@ impl Command for SetAssetCollectionCmd {
         ProjectChanges::NONE
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(asset) = state.project.assets.get_mut(self.asset_index) else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(asset) = state.document.assets.get_mut(self.asset_index) else {
             return Err(CommandError::InvalidAssetIndex(self.asset_index));
         };
         asset.collection = self.collection.clone();
@@ -2839,14 +3175,14 @@ impl Command for ToggleCollectionVisibilityCmd {
         ProjectChanges::NONE
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let all_vis = state
-            .project
+            .document
             .assets
             .iter()
             .filter(|a| a.collection.as_deref() == Some(&self.collection))
             .all(|a| a.visible);
-        for a in &mut state.project.assets {
+        for a in &mut state.document.assets {
             if a.collection.as_deref() == Some(&self.collection) {
                 a.visible = !all_vis;
             }
@@ -2875,14 +3211,14 @@ impl Command for ToggleCollectionLockCmd {
         ProjectChanges::NONE
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let all_locked = state
-            .project
+            .document
             .assets
             .iter()
             .filter(|a| a.collection.as_deref() == Some(&self.collection))
             .all(|a| a.locked);
-        for a in &mut state.project.assets {
+        for a in &mut state.document.assets {
             if a.collection.as_deref() == Some(&self.collection) {
                 a.locked = !all_locked;
             }
@@ -2913,8 +3249,8 @@ impl Command for NewProjectCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        crate::project_service::ProjectService::new_project(state);
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.request_host(HostRequest::NewProject);
         Ok(())
     }
 }
@@ -2932,19 +3268,17 @@ impl Command for SaveProjectCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if !state.is_document_dirty() && state.project.project_path.is_some() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if !state.is_document_dirty() && state.document.project_path.is_some() {
             Err("Document has no unsaved changes")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        if let Some(ref path_str) = state.project.project_path.clone() {
-            let path = std::path::PathBuf::from(path_str);
-            crate::project_service::ProjectService::save_project(state, &path)
-                .map_err(|e| CommandError::Execution(e.to_string()))?;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if let Some(ref path_str) = state.document.project_path.clone() {
+            state.request_host(HostRequest::SaveProject(std::path::PathBuf::from(path_str)));
             Ok(())
         } else {
             state.set_status("Save As required (no destination file)");
@@ -2966,7 +3300,7 @@ impl Command for OpenProjectCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_status("Open Project requested");
         Ok(())
     }
@@ -2985,7 +3319,7 @@ impl Command for SaveProjectAsCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_status("Save As requested");
         Ok(())
     }
@@ -3004,7 +3338,7 @@ impl Command for ImportObjCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_status("Import OBJ requested");
         Ok(())
     }
@@ -3023,7 +3357,7 @@ impl Command for ImportGltfCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_status("Import glTF/GLB requested");
         Ok(())
     }
@@ -3042,7 +3376,7 @@ impl Command for ExportObjCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_status("Export OBJ requested");
         Ok(())
     }
@@ -3061,7 +3395,7 @@ impl Command for ExportGlbCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_status("Export GLB requested");
         Ok(())
     }
@@ -3080,15 +3414,15 @@ impl Command for SaveActiveAsAssetCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active().is_none() {
             Err("No active model selected")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.save_active_as_asset() {
             Ok(())
         } else {
@@ -3110,15 +3444,15 @@ impl Command for UndoCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.undo.can_undo() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.undo.can_undo() {
             Ok(())
         } else {
             Err("Nothing to undo")
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.undo();
         Ok(())
     }
@@ -3137,15 +3471,15 @@ impl Command for RedoCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.undo.can_redo() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.undo.can_redo() {
             Ok(())
         } else {
             Err("Nothing to redo")
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.redo();
         Ok(())
     }
@@ -3168,14 +3502,14 @@ impl Command for ExtrudeSelectedCmd {
         "extrude"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
-        } else if state.project.active_mesh().is_none() {
+        } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else if !state.selection.faces.is_empty()
             || state
-                .project
+                .document
                 .active_mesh()
                 .is_some_and(|m| m.faces.iter().any(|f| f.selected))
         {
@@ -3185,19 +3519,23 @@ impl Command for ExtrudeSelectedCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let dist = if self.dist != 0.0 {
             self.dist
         } else {
             state.tools.extrude_dist
         };
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
+        if !state.editor.selection.faces.is_empty() {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
         if !mesh.faces.iter().any(|f| f.selected) {
             return Err(CommandError::EmptySelection);
         }
         mesh.extrude_selected(dist);
+        state.sync_selection();
         state.set_status(format!("Extruded faces ({:.2})", dist));
         Ok(())
     }
@@ -3217,13 +3555,13 @@ impl Command for PushPullToolCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.edit_mode() != EditMode::Edit {
             Err("Requires Edit mode")
-        } else if state.project.active_mesh().is_none() {
+        } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else if state
-            .project
+            .document
             .active_mesh()
             .is_some_and(|m| m.faces.iter().any(|f| f.selected))
         {
@@ -3233,7 +3571,7 @@ impl Command for PushPullToolCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
             .begin_modal(crate::ModalKind::PushPull)
             .map_err(|error| CommandError::Execution(error.to_string()))
@@ -3253,20 +3591,22 @@ impl Command for KnifeToolCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh().cloned() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(asset) = state.document.active() else {
             return Err(CommandError::NoActiveAsset);
         };
-        state.session.tools.cut_session = Some(crate::CutSession::new(mesh));
-        state.session.tools.active_tool = "cut".to_string();
+        let session = crate::CutSession::new(asset.mesh.to_owned_value())
+            .with_object_to_world(asset.world_matrix());
+        state.editor.tools.cut_session = Some(session);
+        state.editor.tools.active_tool = "cut".to_string();
         state.set_status("Knife: pick two edge points, Enter confirms");
         Ok(())
     }
@@ -3303,18 +3643,23 @@ impl Command for BooleanOpCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             return Err("No active mesh");
         }
-        let Some(operand) = state.session.tools.boolean_operand else {
+        let Some(operand) = state.editor.tools.boolean_operand else {
             return Err("Choose a boolean operand first");
         };
-        if !state.project.assets.iter().any(|asset| asset.id == operand) {
+        if !state
+            .document
+            .assets
+            .iter()
+            .any(|asset| asset.id == operand)
+        {
             return Err("The boolean operand no longer exists");
         }
         if state
-            .project
+            .document
             .active()
             .is_some_and(|asset| asset.id == operand)
         {
@@ -3323,10 +3668,10 @@ impl Command for BooleanOpCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         match state.apply_boolean(self.op) {
             Ok(verts) => {
-                let detail = match &state.session.tools.boolean_report {
+                let detail = match &state.editor.tools.boolean_report {
                     Some(r) if r.fell_back => format!(
                         "{} triangles (cleanup refused: kernel result kept)",
                         r.faces
@@ -3359,18 +3704,23 @@ impl Command for JoinObjectsCmd {
         false
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             return Err("No active mesh");
         }
-        let Some(operand) = state.session.tools.boolean_operand else {
+        let Some(operand) = state.editor.tools.boolean_operand else {
             return Err("Choose a boolean operand first");
         };
-        if !state.project.assets.iter().any(|asset| asset.id == operand) {
+        if !state
+            .document
+            .assets
+            .iter()
+            .any(|asset| asset.id == operand)
+        {
             return Err("The boolean operand no longer exists");
         }
         if state
-            .project
+            .document
             .active()
             .is_some_and(|asset| asset.id == operand)
         {
@@ -3379,7 +3729,7 @@ impl Command for JoinObjectsCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         match state.join_active_with_operand() {
             Ok(verts) => {
                 state.set_status(format!("Join: {verts} vertices merged"));
@@ -3390,15 +3740,23 @@ impl Command for JoinObjectsCmd {
     }
 }
 
-/// Comando para aplicação de inset nas faces selecionadas.
+/// Inset métrico das faces selecionadas (website/docs/03-geometry/
+/// direct-modeling-semantics.md, "Inset"): Region por padrão, distância em
+/// unidades de mundo; o clamp aparece no status, nunca silencioso.
 #[derive(Debug, Clone)]
 pub struct InsetFacesCmd {
-    pub factor: f32,
+    /// Distância em unidades de mundo; `0.0` usa a da ferramenta.
+    pub distance: f32,
+    /// `None` usa o modo da ferramenta.
+    pub mode: Option<petunia_mesh::InsetMode>,
 }
 
 impl Default for InsetFacesCmd {
     fn default() -> Self {
-        Self { factor: 0.2 }
+        Self {
+            distance: 0.0,
+            mode: None,
+        }
     }
 }
 
@@ -3407,12 +3765,12 @@ impl Command for InsetFacesCmd {
         "inset"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else if !state.selection.faces.is_empty()
             || state
-                .project
+                .document
                 .active_mesh()
                 .is_some_and(|m| m.faces.iter().any(|f| f.selected))
         {
@@ -3422,20 +3780,51 @@ impl Command for InsetFacesCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let factor = if self.factor != 0.0 {
-            self.factor
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let distance = if self.distance != 0.0 {
+            self.distance
         } else {
-            state.tools.inset_factor
+            state.tools.inset_distance
         };
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let mode = self.mode.unwrap_or(state.tools.inset_mode);
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        if !mesh.faces.iter().any(|f| f.selected) {
+        if !state.editor.selection.faces.is_empty() {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
+        let faces: Vec<usize> = mesh
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.selected)
+            .map(|(i, _)| i)
+            .collect();
+        if faces.is_empty() {
             return Err(CommandError::EmptySelection);
         }
-        mesh.inset_selected(factor);
-        state.set_status(format!("Inset faces ({:.2})", factor));
+        let report = mesh.inset_faces(&faces, distance, mode);
+        if report.applied <= 0.0 {
+            return Err(CommandError::NoChange(format!(
+                "inset {distance:.2} cannot be applied to this selection"
+            )));
+        }
+        state.sync_selection();
+        let mut status = if report.limited {
+            format!(
+                "Inset requested {:.2} · applied {:.2} · limit reached",
+                report.requested, report.applied
+            )
+        } else {
+            format!("Inset {:.2}", report.applied)
+        };
+        if report.skipped_regions > 0 {
+            status.push_str(&format!(
+                " · {} region(s) with unsupported topology skipped",
+                report.skipped_regions
+            ));
+        }
+        state.set_status(status);
         Ok(())
     }
 }
@@ -3465,10 +3854,11 @@ impl Command for BevelCmd {
         "bevel"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if let Some(mesh) = state.project.active_mesh() {
-            let has_edges = !mesh.selected_edges.is_empty();
-            let has_verts = mesh.verts.iter().any(|v| v.selected);
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if let Some(mesh) = state.document.active_mesh() {
+            let has_edges = !state.selection.edges.is_empty() || !mesh.selected_edges.is_empty();
+            let has_verts =
+                !state.selection.verts.is_empty() || mesh.verts.iter().any(|v| v.selected);
             if !has_edges && !has_verts {
                 Err("Select edges or points first")
             } else {
@@ -3479,31 +3869,70 @@ impl Command for BevelCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let amount = if self.amount != 0.0 {
             self.amount
         } else {
             state.tools.bevel_amount
         };
+        // UI comum oferece 1–8 (website/docs/03-geometry, "Bevel / Segments").
         let segments = if self.segments == 0 {
-            state.tools.bevel_segments.clamp(1, 4)
+            state.tools.bevel_segments
         } else {
-            self.segments.clamp(1, 4)
-        };
-        let Some(mesh) = state.project.active_mesh_mut() else {
+            self.segments
+        }
+        .clamp(1, 8);
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        let has_edges = !mesh.selected_edges.is_empty();
-        let has_verts = mesh.verts.iter().any(|v| v.selected);
-        if !has_edges && !has_verts {
+        let has_app_sel =
+            !state.editor.selection.edges.is_empty() || !state.editor.selection.verts.is_empty();
+        let has_mesh_sel = !mesh.selected_edges.is_empty() || mesh.verts.iter().any(|v| v.selected);
+        if !has_app_sel && !has_mesh_sel {
             return Err(CommandError::EmptySelection);
         }
-        let (v_count, f_count) = if self.affect_vertices && has_verts {
-            mesh.bevel_selected_vertex(amount, self.clamp_overlap)
-        } else {
-            mesh.bevel_selected_full(amount, segments, self.clamp_overlap)
-        };
-        state.set_status(format!("Beveled (+{} verts, +{} faces)", v_count, f_count));
+        if has_app_sel {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
+        let has_verts = mesh.verts.iter().any(|v| v.selected);
+        if (self.affect_vertices && has_verts) || mesh.selected_edges.is_empty() {
+            let (applied, unsupported) = mesh.bevel_selected_vertex(amount, self.clamp_overlap);
+            if applied == 0 {
+                return Err(CommandError::NoChange(format!(
+                    "no selected point can be beveled ({unsupported} unsupported)"
+                )));
+            }
+            state.sync_selection();
+            state.set_status(format!("Bevel {applied} point(s)"));
+            return Ok(());
+        }
+        // Conjunto inteiro validado antes: qualquer aresta sem solução = nada muda.
+        let edges: Vec<(u32, u32)> = mesh.selected_edges.iter().copied().collect();
+        let report = mesh.bevel_edges(&edges, amount, segments, self.clamp_overlap);
+        if !report.unsupported_edges.is_empty() {
+            let listed: Vec<String> = report
+                .unsupported_edges
+                .iter()
+                .take(6)
+                .map(|(a, b)| format!("{a}-{b}"))
+                .collect();
+            return Err(CommandError::Execution(format!(
+                "Bevel not applied: {} of {} selected edge(s) have unsupported topology ({}{})",
+                report.unsupported_edges.len(),
+                edges.len(),
+                listed.join(", "),
+                if report.unsupported_edges.len() > listed.len() {
+                    ", …"
+                } else {
+                    ""
+                }
+            )));
+        }
+        state.sync_selection();
+        state.set_status(format!(
+            "Bevel {} edge(s) · {} segment(s)",
+            report.beveled_edges, report.segments
+        ));
         Ok(())
     }
 }
@@ -3529,26 +3958,36 @@ impl Command for ScaleSelectionCmd {
         ProjectChanges::POSITIONS
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.active_mesh().is_none() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
             Err("No active mesh")
         } else {
             Ok(())
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let factor = if self.factor == 0.0 {
             state.tools.transform_scale
         } else {
             self.factor
         };
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        let center = mesh.selection_center();
-        mesh.scale_selected(factor, center);
+        if !state.editor.selection.verts.is_empty() {
+            let center = mesh.vertices_center(&state.editor.selection.verts);
+            mesh.scale_vertices(
+                &state.editor.selection.verts,
+                [factor, factor, factor],
+                center,
+            );
+        } else {
+            let center = mesh.selection_center();
+            mesh.scale_selected(factor, center);
+        }
         state.tools.transform_scale = 1.0;
+        state.sync_selection();
         state.set_status(format!("Scaled selection ({factor:.2})"));
         Ok(())
     }
@@ -3567,7 +4006,7 @@ impl Command for ToggleWireframeCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.shading = match state.shading {
             crate::Shading::Wireframe => crate::Shading::Solid,
             _ => crate::Shading::Wireframe,
@@ -3590,7 +4029,7 @@ impl Command for ToggleWireOverlayCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.show_wireframe_overlay = !state.show_wireframe_overlay;
         state.mark_dirty();
         Ok(())
@@ -3610,7 +4049,7 @@ impl Command for ToggleXRayCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.show_xray = !state.show_xray;
         state.mark_dirty();
         Ok(())
@@ -3630,9 +4069,9 @@ impl Command for ToggleFaceOrientationCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.session.show_face_orientation = !state.session.show_face_orientation;
-        state.set_status(if state.session.show_face_orientation {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.editor.show_face_orientation = !state.editor.show_face_orientation;
+        state.set_status(if state.editor.show_face_orientation {
             "Face orientation overlay enabled"
         } else {
             "Face orientation overlay disabled"
@@ -3655,9 +4094,9 @@ impl Command for ToggleUvCheckerCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.session.show_uv_checker = !state.session.show_uv_checker;
-        state.set_status(if state.session.show_uv_checker {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.editor.show_uv_checker = !state.editor.show_uv_checker;
+        state.set_status(if state.editor.show_uv_checker {
             "UV checker overlay enabled"
         } else {
             "UV checker overlay disabled"
@@ -3680,10 +4119,10 @@ impl Command for ToggleProportionalEditingCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.session.proportional_editing = !state.session.proportional_editing;
-        state.session.proportional_settings.enabled = state.session.proportional_editing;
-        state.set_status(if state.session.proportional_editing {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.editor.proportional_editing = !state.editor.proportional_editing;
+        state.editor.proportional_settings.enabled = state.editor.proportional_editing;
+        state.set_status(if state.editor.proportional_editing {
             "Proportional editing enabled"
         } else {
             "Proportional editing disabled"
@@ -3706,9 +4145,9 @@ impl Command for ToggleSnapCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.session.snap_enabled = !state.session.snap_enabled;
-        state.set_status(if state.session.snap_enabled {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.editor.snap_enabled = !state.editor.snap_enabled;
+        state.set_status(if state.editor.snap_enabled {
             "Magnet snap enabled"
         } else {
             "Magnet snap disabled"
@@ -3731,7 +4170,7 @@ impl Command for FrameSelectionCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.frame_selection();
         Ok(())
     }
@@ -3750,7 +4189,7 @@ impl Command for ResetCameraCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.camera_frame = None;
         state.camera.reset();
         state.mark_dirty();
@@ -3771,7 +4210,7 @@ impl Command for ToggleProjectionCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.camera_frame = None;
         state.camera.toggle_projection();
         state.mark_dirty();
@@ -3792,7 +4231,7 @@ impl Command for FrameAllCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.frame_all();
         Ok(())
     }
@@ -3811,8 +4250,8 @@ impl Command for ToggleNavHudCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.session.show_nav_hud = !state.session.show_nav_hud;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.editor.show_nav_hud = !state.editor.show_nav_hud;
         state.mark_dirty();
         Ok(())
     }
@@ -3835,6 +4274,7 @@ impl Command for SetViewPresetCmd {
             ViewPreset::IsometricNW => "view isometric nw",
             ViewPreset::IsometricSE => "view isometric se",
             ViewPreset::IsometricSW => "view isometric sw",
+            ViewPreset::PseudoIsometric2To1 => "view pseudo-isometric 2:1",
             ViewPreset::Persp => "view perspective",
         }
     }
@@ -3843,7 +4283,7 @@ impl Command for SetViewPresetCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.camera_frame = None;
         state.camera.set_preset(self.0);
         state.mark_dirty();
@@ -3864,8 +4304,8 @@ impl Command for ToggleReferenceManagerCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.ui.show_reference_manager = !state.ui.show_reference_manager;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.request_ui(UiRequest::ToggleReferenceManager);
         state.mark_dirty();
         Ok(())
     }
@@ -3884,12 +4324,8 @@ impl Command for ToggleCommandPaletteCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.ui.show_command_palette = !state.ui.show_command_palette;
-        if state.ui.show_command_palette {
-            state.ui.command_palette_query.clear();
-            state.ui.command_palette_selected_index = 0;
-        }
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.request_ui(UiRequest::ToggleCommandPalette);
         state.mark_dirty();
         Ok(())
     }
@@ -3908,8 +4344,8 @@ impl Command for ToggleSettingsCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.ui.show_settings = !state.ui.show_settings;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.request_ui(UiRequest::ToggleSettings);
         state.mark_dirty();
         Ok(())
     }
@@ -3928,8 +4364,8 @@ impl Command for ToggleHelpCmd {
         false
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.ui.show_help = !state.ui.show_help;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.request_ui(UiRequest::ToggleHelp);
         state.mark_dirty();
         Ok(())
     }
@@ -3960,8 +4396,8 @@ impl Command for LoopCutCmd {
         "loop cut"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
         if mesh.selected_edges.is_empty() {
             Err("Select an edge on a quad ring")
         } else {
@@ -3969,9 +4405,9 @@ impl Command for LoopCutCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let cuts = self.cuts.clamp(1, 32) as usize;
-        let Some(mesh) = state.project.active_mesh() else {
+        let Some(mesh) = state.document.active_mesh() else {
             return Err(CommandError::NoActiveAsset);
         };
         let seed = mesh
@@ -3988,7 +4424,7 @@ impl Command for LoopCutCmd {
             ring.apply_even(mesh, cuts, self.slide, self.even)
         }
         .map_err(|e| CommandError::Execution(e.to_string()))?;
-        if let Some(dst) = state.project.active_mesh_mut() {
+        if let Some(dst) = state.document.active_mesh_mut() {
             *dst = next;
         }
         state.set_status(format!(
@@ -4017,8 +4453,8 @@ impl Command for UnwrapAutoCmd {
         ProjectChanges::UVS
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let charts = mesh
@@ -4029,14 +4465,27 @@ impl Command for UnwrapAutoCmd {
     }
 }
 
+/// Pack de ilhas UV (website/docs/07-uv/architecture-decision.md, "Pack",
+/// "Padding"). A UI fala em pixels; a conversão para UV usa a resolução da
+/// textura ativa do asset (`Asset::texture_size`). Com seleção UV,
+/// só as ilhas que a tocam se movem; as demais viram obstáculos.
 #[derive(Debug, Clone)]
 pub struct UvPackIslandsCmd {
-    pub padding: f32,
+    /// Distância mínima entre ilhas e até a borda, em pixels.
+    pub padding_px: f32,
+    /// Permite girar 90° ilhas mais altas que largas.
+    pub allow_rotation: bool,
+    /// Ilhas com pin ficam onde estão.
+    pub keep_pinned_islands: bool,
 }
 
 impl Default for UvPackIslandsCmd {
     fn default() -> Self {
-        Self { padding: 0.01 }
+        Self {
+            padding_px: 4.0,
+            allow_rotation: true,
+            keep_pinned_islands: false,
+        }
     }
 }
 
@@ -4049,12 +4498,26 @@ impl Command for UvPackIslandsCmd {
         ProjectChanges::UVS
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(asset) = state.document.active_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        let n = mesh.pack_uv_islands(self.padding);
-        state.set_status(format!("Packed {n} UV islands"));
+        let texture_size = asset.texture_size();
+        let options = petunia_mesh::UvPackOptions {
+            padding_px: self.padding_px,
+            texture_size,
+            allow_rotation: self.allow_rotation,
+            keep_pinned_islands: self.keep_pinned_islands,
+        };
+        let mesh = &mut *asset.mesh;
+        let faces = state.editor.uv_selection.faces(mesh);
+        let report = mesh
+            .pack_uv_islands_with(&faces, &options)
+            .map_err(|e| CommandError::Execution(e.to_string()))?;
+        if report.packed == 0 {
+            return Err(CommandError::NoChange("no UV island to pack".into()));
+        }
+        state.set_status(format!("Packed {} UV islands", report.packed));
         Ok(())
     }
 }
@@ -4071,15 +4534,19 @@ impl Command for UvProjectFromViewCmd {
         ProjectChanges::UVS
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let origin = state.camera.eye();
         let forward = state.camera.forward();
         let up = state.camera.up();
         let right = forward.cross(up).normalize_or_zero();
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(asset) = state.document.active_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        mesh.project_from_view(right, up, origin);
+        // A vista está em mundo: projeta as posições em mundo do objeto.
+        let positions = asset.world_positions();
+        asset
+            .mesh
+            .project_from_view_positions(&positions, right, up, origin);
         state.set_status("Projected UVs from view");
         Ok(())
     }
@@ -4097,8 +4564,8 @@ impl Command for UvProjectFromReferenceCmd {
         ProjectChanges::UVS
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let reference = state.project.refs.iter().find(|r| r.visible).cloned();
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let reference = state.document.refs.iter().find(|r| r.visible).cloned();
         let (right, up, origin) = if let Some(ref_img) = reference {
             let (vx, vy, vz) = match ref_img.axis {
                 crate::RefAxis::Front => (glam::Vec3::X, glam::Vec3::Y, glam::Vec3::Z),
@@ -4123,10 +4590,13 @@ impl Command for UvProjectFromReferenceCmd {
             (right, up, origin)
         };
 
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(asset) = state.document.active_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        mesh.project_from_view(right, up, origin);
+        let positions = asset.world_positions();
+        asset
+            .mesh
+            .project_from_view_positions(&positions, right, up, origin);
         state.set_status("Projected UVs from reference");
         Ok(())
     }
@@ -4144,11 +4614,12 @@ impl Command for UvStitchCmd {
         ProjectChanges::UVS
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        let count = mesh.stitch_uv(&state.session.uv_selected);
+        let faces = state.editor.uv_selection.faces(mesh);
+        let count = mesh.stitch_uv(&faces);
         if count == 0 {
             return Err(CommandError::NoChange("no UV seam edge to stitch".into()));
         }
@@ -4177,15 +4648,127 @@ impl Command for UvRelaxCmd {
         ProjectChanges::UVS
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
-        let count = mesh.relax_uv(&state.session.uv_selected, self.iterations);
+        let faces = state.editor.uv_selection.faces(mesh);
+        let count = mesh.relax_uv(&faces, self.iterations);
         if count == 0 {
             return Err(CommandError::NoChange("no UV face to relax".into()));
         }
         state.set_status(format!("Relaxed {count} UV face(s)"));
+        Ok(())
+    }
+}
+
+/// Move/Rotate/Scale direto dos cantos UV selecionados: um gesto = um Undo
+/// (website/docs/07-uv/architecture-decision.md, "UV Transform", "Pins").
+/// Pins não bloqueiam o gesto explícito; o canto continua fixado.
+#[derive(Debug, Clone)]
+pub struct UvTransformCmd {
+    pub transform: petunia_mesh::UvTransform,
+}
+
+impl Command for UvTransformCmd {
+    fn label(&self) -> &'static str {
+        match self.transform {
+            petunia_mesh::UvTransform::Translate(_) => "move uv",
+            petunia_mesh::UvTransform::Rotate(_) => "rotate uv",
+            petunia_mesh::UvTransform::Scale(_) => "scale uv",
+        }
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if !self.transform.is_finite() {
+            return Err(CommandError::Execution("non-finite UV transform".into()));
+        }
+        if state.editor.uv_selection.is_empty() {
+            return Err(CommandError::EmptySelection);
+        }
+        let corners = state.editor.uv_selection.corner_set();
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        if mesh.transform_uv_corners(&corners, self.transform) == 0 {
+            return Err(CommandError::NoChange("no UV corner to transform".into()));
+        }
+        Ok(())
+    }
+}
+
+/// Set Density: leva as ilhas selecionadas no UV (ou todas) a `px_per_unit`
+/// px/unidade com a resolução da textura ativa
+/// (website/docs/07-uv/architecture-decision.md, "Texel Density").
+#[derive(Debug, Clone)]
+pub struct UvSetTexelDensityCmd {
+    pub px_per_unit: f32,
+}
+
+impl Command for UvSetTexelDensityCmd {
+    fn label(&self) -> &'static str {
+        "set texel density"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if !self.px_per_unit.is_finite() || self.px_per_unit <= 0.0 {
+            return Err(CommandError::Execution(
+                "texel density must be a positive number".into(),
+            ));
+        }
+        let Some(asset) = state.document.active_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let texture_size = asset.texture_size();
+        let mesh = &mut *asset.mesh;
+        let faces = state.editor.uv_selection.faces(mesh);
+        let islands = mesh.set_texel_density(&faces, texture_size, self.px_per_unit);
+        if islands == 0 {
+            return Err(CommandError::NoChange("density already matches".into()));
+        }
+        state.set_status(format!(
+            "Set {:.1} px/unit on {islands} UV island(s)",
+            self.px_per_unit
+        ));
+        Ok(())
+    }
+}
+
+/// Split UV: seam na fronteira das faces totalmente selecionadas no UV, sem
+/// duplicar vértice 3D (website/docs/07-uv/architecture-decision.md, "Split UV").
+#[derive(Debug, Clone, Default)]
+pub struct UvSplitCmd;
+
+impl Command for UvSplitCmd {
+    fn label(&self) -> &'static str {
+        "uv split"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let faces = state.editor.uv_selection.faces(mesh);
+        if faces.is_empty() {
+            return Err(CommandError::EmptySelection);
+        }
+        let count = mesh.split_uv(&faces);
+        if count == 0 {
+            return Err(CommandError::NoChange("selection is already split".into()));
+        }
+        state.set_status(format!("Split UV along {count} edge(s)"));
         Ok(())
     }
 }
@@ -4202,8 +4785,8 @@ impl Command for PaintBakeReferenceCmd {
         ProjectChanges::UVS | ProjectChanges::TEXTURES
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(ref_img) = state.project.refs.iter().find(|r| r.visible).cloned() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(ref_img) = state.document.refs.iter().find(|r| r.visible).cloned() else {
             return Err(CommandError::Execution(
                 "No visible reference image to bake".into(),
             ));
@@ -4229,13 +4812,13 @@ impl Command for PaintBakeReferenceCmd {
         let up = rot * vy;
         let origin = vz * ref_img.offset;
 
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.project_from_view(right, up, origin);
 
-        let active_idx = state.project.active;
-        if let Some(asset) = state.project.assets.get_mut(active_idx) {
+        let active_idx = state.document.active;
+        if let Some(asset) = state.document.assets.get_mut(active_idx) {
             let tex = asset.texture.get_or_insert_with(|| {
                 petunia_project::Canvas::new(ref_img.width, ref_img.height, [255, 255, 255, 255])
             });
@@ -4290,8 +4873,8 @@ impl Command for ConnectLoopsCmd {
         "connect"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
         let n = mesh.faces.iter().filter(|f| f.selected).count();
         if n == 2 || !mesh.selected_edges.is_empty() {
             Ok(())
@@ -4300,10 +4883,10 @@ impl Command for ConnectLoopsCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state.selection_domain() == crate::SelectionDomain::Edge {
             let mesh = state
-                .project
+                .document
                 .active_mesh_mut()
                 .ok_or(CommandError::NoActiveAsset)?;
             mesh.connect_selected_edges_with_options(self.segments, self.twist)
@@ -4315,7 +4898,7 @@ impl Command for ConnectLoopsCmd {
             return Ok(());
         }
         let faces: Vec<usize> = state
-            .project
+            .document
             .active_mesh()
             .map(|m| {
                 m.faces
@@ -4329,7 +4912,7 @@ impl Command for ConnectLoopsCmd {
         if faces.len() != 2 {
             return Err(CommandError::EmptySelection);
         }
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.connect_loops_with_options(faces[0], faces[1], self.segments, self.twist)
@@ -4351,8 +4934,8 @@ impl Command for DissolveCmd {
         "dissolve"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
         let has_sel = !mesh.selected_edges.is_empty()
             || mesh.faces.iter().any(|f| f.selected)
             || mesh.verts.iter().any(|v| v.selected);
@@ -4363,8 +4946,8 @@ impl Command for DissolveCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         let (verts, faces) = (mesh.verts.len(), mesh.faces.len());
@@ -4390,8 +4973,8 @@ impl Command for DeleteOrDissolveSelectionCmd {
         "delete/dissolve selection"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
         if !mesh.selected_edges.is_empty()
             || mesh.faces.iter().any(|face| face.selected)
             || mesh.verts.iter().any(|vertex| vertex.selected)
@@ -4402,8 +4985,8 @@ impl Command for DeleteOrDissolveSelectionCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         // Se houver faces selecionadas, o usuário quer deletar as faces!
@@ -4442,8 +5025,8 @@ impl Command for MakeFaceCmd {
         "make_face"
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let mesh = state.project.active_mesh().ok_or("No active mesh")?;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let mesh = state.document.active_mesh().ok_or("No active mesh")?;
         let vert_count = mesh.verts.iter().filter(|v| v.selected).count();
         let edge_count = mesh.selected_edges.len();
         if edge_count >= 2 || vert_count >= 2 {
@@ -4453,8 +5036,8 @@ impl Command for MakeFaceCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let Some(mesh) = state.project.active_mesh_mut() else {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return Err(CommandError::NoActiveAsset);
         };
         match mesh.make_face_from_selection() {
@@ -4489,8 +5072,8 @@ impl Command for SetDecalTransformCmd {
         ProjectChanges::TEXTURES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(asset) = state.project.active() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(asset) = state.document.active() else {
             return Err("No active asset");
         };
         let Some(stack) = asset.paint_stack.as_ref() else {
@@ -4506,9 +5089,9 @@ impl Command for SetDecalTransformCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let active = state.project.active;
-        let changed = if let Some(asset) = state.project.assets.get_mut(active)
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let active = state.document.active;
+        let changed = if let Some(asset) = state.document.assets.get_mut(active)
             && let Some(stack) = asset.paint_stack.as_mut()
             && stack.set_decal_transform(
                 self.layer_id,
@@ -4528,8 +5111,8 @@ impl Command for SetDecalTransformCmd {
                 "Failed to update decal transform".into(),
             ));
         }
-        state.project.project.composite_paint_stack(active);
-        state.render.canvas_dirty = true;
+        state.document.project.composite_paint_stack(active);
+        state.mark_canvas_dirty();
         state.mark_dirty();
         Ok(())
     }
@@ -4557,8 +5140,8 @@ impl Command for CreateSplineCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        if state.project.project.get_spline(self.spline.id).is_some() {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.project.get_spline(self.spline.id).is_some() {
             Err("Spline id already exists")
         } else if self.spline.validate_authoring().is_err() {
             Err("Spline data is invalid")
@@ -4567,8 +5150,8 @@ impl Command for CreateSplineCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.project.project.add_spline(self.spline.clone())?;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.document.project.add_spline(self.spline.clone())?;
         Ok(())
     }
 }
@@ -4591,8 +5174,8 @@ impl Command for UpdateSplineCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         let current = project
             .get_spline(self.spline.id)
             .ok_or("Spline not found")?;
@@ -4614,9 +5197,9 @@ impl Command for UpdateSplineCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline.id)
             .ok_or(SplineError::SplineNotFound(self.spline.id))?;
@@ -4644,8 +5227,8 @@ impl Command for CreateProfileCmd {
         ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         if project.get_spline(self.spline.id).is_some() {
             return Err("Profile spline id already exists");
         }
@@ -4664,9 +5247,9 @@ impl Command for CreateProfileCmd {
             .map_err(|_| "Profile data is invalid")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.project.project.add_spline(self.spline.clone())?;
-        state.project.project.add_profile(self.profile.clone())?;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.document.project.add_spline(self.spline.clone())?;
+        state.document.project.add_profile(self.profile.clone())?;
         Ok(())
     }
 }
@@ -4686,8 +5269,8 @@ impl Command for UpdateProfileCmd {
         ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         let current = project
             .get_profile(self.profile.id)
             .ok_or("Profile not found")?;
@@ -4705,9 +5288,9 @@ impl Command for UpdateProfileCmd {
             .map_err(|_| "Profile data is invalid")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let profile = state
-            .project
+            .document
             .project
             .get_profile_mut(self.profile.id)
             .ok_or(ProfileError::ProfileNotFound(self.profile.id))?;
@@ -4732,8 +5315,8 @@ impl Command for DeleteProfileCmd {
         ProjectChanges::SPLINES | ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         let profile = project
             .get_profile(self.profile_id)
             .ok_or("Profile not found")?;
@@ -4761,9 +5344,9 @@ impl Command for DeleteProfileCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let profile = state.project.project.remove_profile(self.profile_id)?;
-        state.project.project.remove_spline(profile.spline_id)?;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let profile = state.document.project.remove_profile(self.profile_id)?;
+        state.document.project.remove_spline(profile.spline_id)?;
         Ok(())
     }
 }
@@ -4782,8 +5365,8 @@ impl Command for CreatePathGeneratorCmd {
         ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         if project.get_path_generator(self.generator.id).is_some() {
             return Err("Path generator id already exists");
         }
@@ -4792,9 +5375,9 @@ impl Command for CreatePathGeneratorCmd {
             .map_err(|_| "Path generator data or dependencies are invalid")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
-            .project
+            .document
             .project
             .add_path_generator(self.generator.clone())?;
         Ok(())
@@ -4816,12 +5399,12 @@ impl Command for UpdateSweepGeneratorCmd {
         ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         self.parameters
             .validate()
             .map_err(|_| "Sweep generator parameters are invalid")?;
         let generator = state
-            .project
+            .document
             .project
             .get_path_generator(self.generator_id)
             .ok_or("Path generator not found")?;
@@ -4832,9 +5415,9 @@ impl Command for UpdateSweepGeneratorCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         if state
-            .project
+            .document
             .project
             .set_sweep_generator_parameters(self.generator_id, self.parameters)?
         {
@@ -4861,18 +5444,18 @@ impl Command for DeletePathGeneratorCmd {
         ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         state
-            .project
+            .document
             .project
             .get_path_generator(self.generator_id)
             .map(|_| ())
             .ok_or("Path generator not found")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
-            .project
+            .document
             .project
             .remove_path_generator(self.generator_id)?;
         Ok(())
@@ -4895,17 +5478,17 @@ impl Command for BakePathGeneratorCmd {
         ProjectChanges::GEOMETRY | ProjectChanges::PROCEDURAL
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         state
-            .project
+            .document
             .project
             .validate_path_generator(self.generator_id)
             .map_err(|_| "Path generator or one of its dependencies is invalid")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let mut cache = PathGeneratorEvaluationCache::default();
-        let evaluation = state.project.project.evaluate_path_generator(
+        let evaluation = state.document.project.evaluate_path_generator(
             self.generator_id,
             PathGeneratorQuality::Final,
             &mut cache,
@@ -4914,7 +5497,7 @@ impl Command for BakePathGeneratorCmd {
         let vertices = evaluation.diagnostics.vertices;
         let triangles = evaluation.diagnostics.triangles;
         let fallback_name = state
-            .project
+            .document
             .project
             .get_path_generator(self.generator_id)
             .map(|generator| generator.name.clone())
@@ -4924,9 +5507,9 @@ impl Command for BakePathGeneratorCmd {
         } else {
             self.asset_name.trim().to_string()
         };
-        state.project.project.add(&asset_name, mesh);
+        state.document.project.add(&asset_name, mesh);
         state
-            .project
+            .document
             .project
             .remove_path_generator(self.generator_id)?;
         state.set_status(format!(
@@ -4950,8 +5533,8 @@ impl Command for DeleteSplineCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         project
             .get_spline(self.spline_id)
             .map(|_| ())
@@ -4973,8 +5556,8 @@ impl Command for DeleteSplineCmd {
         Ok(())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        state.project.project.remove_spline(self.spline_id)?;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.document.project.remove_spline(self.spline_id)?;
         Ok(())
     }
 }
@@ -5027,9 +5610,9 @@ impl Command for AddSplinePointCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline(self.spline_id)
             .ok_or("Spline not found")?;
@@ -5050,14 +5633,14 @@ impl Command for AddSplinePointCmd {
         {
             return Err("Spline point data is not finite");
         }
-        validate_profile_edit(&state.project.project, self.spline_id, |spline| {
+        validate_profile_edit(&state.document.project, self.spline_id, |spline| {
             spline.insert_point(index, self.point.clone())
         })
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))?;
@@ -5085,9 +5668,9 @@ impl Command for MoveSplinePointCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline(self.spline_id)
             .ok_or("Spline not found")?;
@@ -5101,15 +5684,15 @@ impl Command for MoveSplinePointCmd {
         } else if point.position == self.position {
             Err("Spline point position is unchanged")
         } else {
-            validate_profile_edit(&state.project.project, self.spline_id, |spline| {
+            validate_profile_edit(&state.document.project, self.spline_id, |spline| {
                 spline.move_point(self.point_id, self.position)
             })
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))?
@@ -5133,9 +5716,9 @@ impl Command for DeleteSplinePointCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         state
-            .project
+            .document
             .project
             .get_spline(self.spline_id)
             .ok_or("Spline not found")?
@@ -5144,9 +5727,9 @@ impl Command for DeleteSplinePointCmd {
             .ok_or("Spline point not found")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))?
@@ -5173,9 +5756,9 @@ impl Command for SetSplineHandlesCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let point = state
-            .project
+            .document
             .project
             .get_spline(self.spline_id)
             .ok_or("Spline not found")?
@@ -5190,15 +5773,15 @@ impl Command for SetSplineHandlesCmd {
         {
             Err("Spline handles are unchanged")
         } else {
-            validate_profile_edit(&state.project.project, self.spline_id, |spline| {
+            validate_profile_edit(&state.document.project, self.spline_id, |spline| {
                 spline.set_handles(self.point_id, self.handle_in, self.handle_out, self.mode)
             })
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))?
@@ -5222,9 +5805,9 @@ impl Command for SetSplineClosedCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline(self.spline_id)
             .ok_or("Spline not found")?;
@@ -5237,9 +5820,9 @@ impl Command for SetSplineClosedCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))?
@@ -5262,9 +5845,9 @@ impl Command for ReverseSplineCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline(self.spline_id)
             .ok_or("Spline not found")?;
@@ -5275,9 +5858,9 @@ impl Command for ReverseSplineCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))?;
@@ -5305,9 +5888,9 @@ impl Command for ConvertSplineToPolylineCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let spline = state
-            .project
+            .document
             .project
             .resolved_spline(self.spline_id)
             .map_err(|_| "Spline or one of its surface attachments is invalid")?;
@@ -5322,11 +5905,11 @@ impl Command for ConvertSplineToPolylineCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let mut spline = state.project.project.resolved_spline(self.spline_id)?;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let mut spline = state.document.project.resolved_spline(self.spline_id)?;
         spline.convert_to_polyline(self.spacing, self.tolerance)?;
         *state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline_id)
             .ok_or(SplineError::SplineNotFound(self.spline_id))? = spline;
@@ -5350,13 +5933,13 @@ impl Command for AttachSplinePointCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         let point = spline_point_for_attachment(state, self.spline_id, self.point_id)?;
-        if spline_owned_by_profile(&state.project.project, self.spline_id) {
+        if spline_owned_by_profile(&state.document.project, self.spline_id) {
             return Err("Profile splines cannot be attached to a surface");
         }
         ensure_attachment_target_editable(state, &self.attachment)?;
-        let frame = evaluate_surface_attachment(&state.project.project, &self.attachment)
+        let frame = evaluate_surface_attachment(&state.document.project, &self.attachment)
             .map_err(|_| "Surface attachment cannot be evaluated")?;
         let mut attachment = self.attachment;
         attachment.last_world_position = frame.position;
@@ -5368,13 +5951,13 @@ impl Command for AttachSplinePointCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let position =
-            evaluate_surface_attachment(&state.project.project, &self.attachment)?.position;
+            evaluate_surface_attachment(&state.document.project, &self.attachment)?.position;
         let mut attachment = self.attachment;
         attachment.last_world_position = position;
         set_spline_point_attachment(
-            &mut state.project.project,
+            &mut state.document.project,
             self.spline_id,
             self.point_id,
             Some(attachment),
@@ -5399,19 +5982,19 @@ impl Command for DetachSplinePointCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         spline_point_attachment(state, self.spline_id, self.point_id).map(|_| ())
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let attachment = spline_point_attachment_for_execute(
-            &state.project.project,
+            &state.document.project,
             self.spline_id,
             self.point_id,
         )?;
-        let position = detach_surface_attachment_keep_world(&state.project.project, &attachment)?;
+        let position = detach_surface_attachment_keep_world(&state.document.project, &attachment)?;
         set_spline_point_attachment(
-            &mut state.project.project,
+            &mut state.document.project,
             self.spline_id,
             self.point_id,
             None,
@@ -5439,12 +6022,12 @@ impl Command for SlideSplinePointAttachmentCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         ensure_attachment_ray(self.ray_origin, self.ray_direction, self.max_distance)?;
         let attachment = spline_point_attachment(state, self.spline_id, self.point_id)?;
         ensure_attachment_target_editable(state, &attachment)?;
         let projected = slide_surface_attachment(
-            &state.project.project,
+            &state.document.project,
             &attachment,
             self.ray_origin,
             self.ray_direction,
@@ -5458,22 +6041,22 @@ impl Command for SlideSplinePointAttachmentCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let attachment = spline_point_attachment_for_execute(
-            &state.project.project,
+            &state.document.project,
             self.spline_id,
             self.point_id,
         )?;
         let projected = slide_surface_attachment(
-            &state.project.project,
+            &state.document.project,
             &attachment,
             self.ray_origin,
             self.ray_direction,
             self.max_distance,
         )?;
-        let position = evaluate_surface_attachment(&state.project.project, &projected)?.position;
+        let position = evaluate_surface_attachment(&state.document.project, &projected)?.position;
         set_spline_point_attachment(
-            &mut state.project.project,
+            &mut state.document.project,
             self.spline_id,
             self.point_id,
             Some(projected),
@@ -5502,7 +6085,7 @@ impl Command for ReprojectSplinePointAttachmentCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         ensure_attachment_ray(self.ray_origin, self.ray_direction, self.max_distance)?;
         let point = spline_point_for_attachment(state, self.spline_id, self.point_id)?;
         let attachment = point
@@ -5513,7 +6096,7 @@ impl Command for ReprojectSplinePointAttachmentCmd {
         }
         ensure_target_editable(state, self.target_id)?;
         let projected = reproject_surface_attachment_to_target(
-            &state.project.project,
+            &state.document.project,
             &attachment,
             self.target_id,
             self.ray_origin,
@@ -5521,7 +6104,7 @@ impl Command for ReprojectSplinePointAttachmentCmd {
             self.max_distance,
         )
         .map_err(|_| "Reprojection ray did not hit the requested surface")?;
-        let position = evaluate_surface_attachment(&state.project.project, &projected)
+        let position = evaluate_surface_attachment(&state.document.project, &projected)
             .map_err(|_| "Reprojected attachment cannot be evaluated")?
             .position
             .map(f64::from);
@@ -5532,23 +6115,23 @@ impl Command for ReprojectSplinePointAttachmentCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let attachment = spline_point_attachment_for_execute(
-            &state.project.project,
+            &state.document.project,
             self.spline_id,
             self.point_id,
         )?;
         let projected = reproject_surface_attachment_to_target(
-            &state.project.project,
+            &state.document.project,
             &attachment,
             self.target_id,
             self.ray_origin,
             self.ray_direction,
             self.max_distance,
         )?;
-        let position = evaluate_surface_attachment(&state.project.project, &projected)?.position;
+        let position = evaluate_surface_attachment(&state.document.project, &projected)?.position;
         set_spline_point_attachment(
-            &mut state.project.project,
+            &mut state.document.project,
             self.spline_id,
             self.point_id,
             Some(projected),
@@ -5574,7 +6157,7 @@ impl Command for RotateSplinePointAttachmentCmd {
         ProjectChanges::SPLINES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if !self.delta_radians.is_finite() {
             return Err("Attachment rotation is not finite");
         }
@@ -5586,21 +6169,21 @@ impl Command for RotateSplinePointAttachmentCmd {
         if rotated == attachment {
             return Err("Attachment rotation is unchanged");
         }
-        evaluate_surface_attachment(&state.project.project, &rotated)
+        evaluate_surface_attachment(&state.document.project, &rotated)
             .map(|_| ())
             .map_err(|_| "Rotated attachment cannot be evaluated")
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         let attachment = spline_point_attachment_for_execute(
-            &state.project.project,
+            &state.document.project,
             self.spline_id,
             self.point_id,
         )?;
         let rotated = attachment.rotated(self.delta_radians)?;
-        let position = evaluate_surface_attachment(&state.project.project, &rotated)?.position;
+        let position = evaluate_surface_attachment(&state.document.project, &rotated)?.position;
         set_spline_point_attachment(
-            &mut state.project.project,
+            &mut state.document.project,
             self.spline_id,
             self.point_id,
             Some(rotated),
@@ -5610,13 +6193,13 @@ impl Command for RotateSplinePointAttachmentCmd {
     }
 }
 
-fn spline_point_for_attachment(
-    state: &AppState,
+fn spline_point_for_attachment<'a>(
+    state: &EditorView<'a>,
     spline_id: uuid::Uuid,
     point_id: uuid::Uuid,
-) -> Result<&SplinePoint, &'static str> {
+) -> Result<&'a SplinePoint, &'static str> {
     state
-        .project
+        .document
         .project
         .get_spline(spline_id)
         .ok_or("Spline not found")?
@@ -5625,7 +6208,7 @@ fn spline_point_for_attachment(
 }
 
 fn spline_point_attachment(
-    state: &AppState,
+    state: &EditorView<'_>,
     spline_id: uuid::Uuid,
     point_id: uuid::Uuid,
 ) -> Result<SurfaceAttachment, &'static str> {
@@ -5662,10 +6245,10 @@ fn set_spline_point_attachment(
 }
 
 fn ensure_attachment_target_editable(
-    state: &AppState,
+    state: &EditorView<'_>,
     attachment: &SurfaceAttachment,
 ) -> Result<(), &'static str> {
-    match attachment.status(&state.project.project) {
+    match attachment.status(&state.document.project) {
         SurfaceAttachmentStatus::Valid => ensure_target_editable(state, attachment.target),
         SurfaceAttachmentStatus::NeedsReattach => Err("Surface attachment needs reattachment"),
         SurfaceAttachmentStatus::MissingTarget => Err("Surface attachment target is missing"),
@@ -5673,9 +6256,9 @@ fn ensure_attachment_target_editable(
     }
 }
 
-fn ensure_target_editable(state: &AppState, target: uuid::Uuid) -> Result<(), &'static str> {
+fn ensure_target_editable(state: &EditorView<'_>, target: uuid::Uuid) -> Result<(), &'static str> {
     let asset = state
-        .project
+        .document
         .project
         .assets
         .iter()
@@ -5720,8 +6303,8 @@ impl Command for BakeDecalCmd {
         ProjectChanges::TEXTURES
     }
 
-    fn can_execute(&self, state: &AppState) -> Result<(), &'static str> {
-        let Some(asset) = state.project.active() else {
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let Some(asset) = state.document.active() else {
             return Err("No active asset");
         };
         let Some(stack) = asset.paint_stack.as_ref() else {
@@ -5737,10 +6320,10 @@ impl Command for BakeDecalCmd {
         }
     }
 
-    fn execute(&self, state: &mut AppState) -> Result<(), CommandError> {
-        let active = state.project.active;
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let active = state.document.active;
         let mut baked = false;
-        if let Some(asset) = state.project.assets.get_mut(active)
+        if let Some(asset) = state.document.assets.get_mut(active)
             && let Some(stack) = asset.paint_stack.as_mut()
         {
             // O raster assado tem o tamanho da textura do objeto (a camada
@@ -5765,8 +6348,8 @@ impl Command for BakeDecalCmd {
         if !baked {
             return Err(CommandError::Execution("Failed to bake decal".into()));
         }
-        state.project.project.composite_paint_stack(active);
-        state.render.canvas_dirty = true;
+        state.document.project.composite_paint_stack(active);
+        state.mark_canvas_dirty();
         state.mark_dirty();
         state.set_status("Decalque convertido para camada raster".to_string());
         Ok(())

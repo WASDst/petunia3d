@@ -60,7 +60,7 @@ pub enum SnapElement {
 }
 
 /// Configurações do sistema de snap mantidas na sessão do editor.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapSettings {
     pub enabled: bool,
     pub target: SnapTarget,

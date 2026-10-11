@@ -100,11 +100,14 @@ pub(crate) struct Transfer {
     pub material: Option<Material>,
 }
 
+/// `b_in_a`: malha autoral de `b` já no frame local de `a` (onde `result`
+/// vive); as amostras de UV são por posição nesse frame.
 pub(crate) fn transfer(
     project: &Project,
     result: &mut Mesh,
     a: &Asset,
     b: &Asset,
+    b_in_a: &Mesh,
 ) -> Option<Transfer> {
     let textures = [a, b].map(|asset| {
         asset.texture.as_ref().or_else(|| {
@@ -131,7 +134,7 @@ pub(crate) fn transfer(
     {
         return None;
     }
-    let sources = surface_sources(result, &a.mesh, &b.mesh);
+    let sources = surface_sources(result, &a.mesh, b_in_a);
     result.layout_uv_charts(petunia_mesh::primitives::DEFAULT_UV_PADDING);
     let size = textures
         .iter()
@@ -163,7 +166,8 @@ pub(crate) fn transfer(
         };
         let asset = if *side == 0 { a } else { b };
         let tex = textures[*side as usize];
-        let sampler = UvSampler::new(&asset.mesh, *source_face);
+        let source_mesh: &Mesh = if *side == 0 { &a.mesh } else { b_in_a };
+        let sampler = UvSampler::new(source_mesh, *source_face);
         let base = asset
             .base_color
             .map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
@@ -210,7 +214,8 @@ pub(crate) fn transfer(
                     continue;
                 };
                 let asset = if *side == 0 { a } else { b };
-                let sampler = UvSampler::new(&asset.mesh, *source_face);
+                let source_mesh: &Mesh = if *side == 0 { &a.mesh } else { b_in_a };
+                let sampler = UvSampler::new(source_mesh, *source_face);
                 let output_sampler = UvSampler::new(result, face);
                 let source_material = asset.material(project);
                 let scalar = match channel {
@@ -295,7 +300,8 @@ mod tests {
             petunia_mesh::boolean::BooleanOp::Difference,
         )
         .unwrap();
-        let atlas = transfer(&state.project.project, &mut result, &a, &b)
+        let b_in_a = b.mesh_in_frame_of(&a);
+        let atlas = transfer(&state.project.project, &mut result, &a, &b, &b_in_a)
             .unwrap()
             .albedo;
         assert!(

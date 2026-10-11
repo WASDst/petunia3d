@@ -91,3 +91,60 @@ fn scene_fingerprint_uses_revisions_after_mutation() {
     let b = petunia_core::fingerprint_scene(&state.project.project, &[], flags);
     assert_ne!(a.mesh, b.mesh);
 }
+
+#[test]
+fn stale_target_ids_fail_instead_of_hitting_the_active_object() {
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    let active_before = state.project.active;
+    let faces_before = state.project.active_mesh().unwrap().faces.len();
+    for stale in [uuid::Uuid::new_v4().to_string(), "not-a-uuid".to_string()] {
+        let result = state.dispatch_intent(&CommandIntent {
+            command: "model.subdivide".into(),
+            asset_id: Some(stale.clone()),
+            args: vec![1.0],
+        });
+        assert!(
+            matches!(result, Err(petunia_core::CommandError::StaleReference(ref id)) if *id == stale)
+        );
+    }
+    assert_eq!(state.project.active, active_before);
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        faces_before
+    );
+}
+
+#[test]
+fn failed_transactions_roll_back_document_and_history() {
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    let assets_before = state.project.assets.len();
+    let depth_before = state.project.undo.depth();
+    let result = state.transaction("plugin batch", |state| {
+        state.dispatch(&AddPrimitiveCmd::new(PrimitiveKind::Plane))?;
+        state.dispatch(&AddPrimitiveCmd::new(PrimitiveKind::Plane))?;
+        Err::<(), _>(petunia_core::CommandError::Execution("boom".into()))
+    });
+    assert!(result.is_err());
+    assert_eq!(state.project.assets.len(), assets_before);
+    assert_eq!(state.project.undo.depth(), depth_before);
+}
+
+#[test]
+fn successful_transactions_are_one_undo_step() {
+    let mut state = AppState::new("en");
+    ProjectService::new_project(&mut state);
+    let assets_before = state.project.assets.len();
+    let (undo_before, _) = state.project.undo.depth();
+    state
+        .transaction("plugin batch", |state| {
+            state.dispatch(&AddPrimitiveCmd::new(PrimitiveKind::Plane))?;
+            state.dispatch(&AddPrimitiveCmd::new(PrimitiveKind::Plane))
+        })
+        .unwrap();
+    assert_eq!(state.project.assets.len(), assets_before + 2);
+    assert_eq!(state.project.undo.depth().0, undo_before + 1);
+    assert!(state.undo());
+    assert_eq!(state.project.assets.len(), assets_before);
+}

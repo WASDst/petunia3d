@@ -22,11 +22,11 @@
 //! confirma o valor (um passo de Undo). Cancelar descarta o draft.
 
 use crate::command::CommandError;
+use crate::context::CommandContext;
 use crate::rig_commands::{
     AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd,
     RemoveMotionCmd, RigPresetKind, SetMotionParamCmd, SetMotionStyleCmd, UpdateMotionCmd,
 };
-use crate::state::AppState;
 use glam::Vec3;
 use petunia_project::{
     BakeOptions, MotionError, MotionEvaluator, MotionGenerator, MotionRecipe, MotionStyle,
@@ -395,13 +395,13 @@ fn no_rig() -> CommandError {
     CommandError::Execution("No rig selected".into())
 }
 
-impl AppState {
+impl CommandContext<'_> {
     /// Mantém a seleção da sessão coerente com o projeto (após Undo/Redo,
     /// importação, remoção…): criatura existente, Motion da criatura, draft do
     /// Motion selecionado. Idempotente e barata; o shell chama a cada frame.
     pub fn animate_resolve(&mut self) {
-        let project = &self.project.project;
-        let a = &mut self.session.animate;
+        let project = &self.document.project;
+        let a = &mut self.editor.animate;
         if a.skeleton
             .is_none_or(|id| project.get_skeleton(id).is_none())
         {
@@ -430,10 +430,10 @@ impl AppState {
 
     /// Foca outra criatura. `false` se o id não existe.
     pub fn animate_select_skeleton(&mut self, id: Uuid) -> bool {
-        if self.project.project.get_skeleton(id).is_none() {
+        if self.document.project.get_skeleton(id).is_none() {
             return false;
         }
-        let a = &mut self.session.animate;
+        let a = &mut self.editor.animate;
         if a.skeleton != Some(id) {
             a.skeleton = Some(id);
             a.motion = None;
@@ -446,10 +446,10 @@ impl AppState {
 
     /// Seleciona um Motion (e a criatura dele). `false` se não existe.
     pub fn animate_select_motion(&mut self, id: Uuid) -> bool {
-        let Some(skeleton_id) = self.project.project.get_motion(id).map(|m| m.skeleton_id) else {
+        let Some(skeleton_id) = self.document.project.get_motion(id).map(|m| m.skeleton_id) else {
             return false;
         };
-        let a = &mut self.session.animate;
+        let a = &mut self.editor.animate;
         a.skeleton = Some(skeleton_id);
         if a.motion != Some(id) {
             a.motion = Some(id);
@@ -466,7 +466,7 @@ impl AppState {
             scale: DEFAULT_RIG_SCALE,
         })?;
         let id = self
-            .project
+            .document
             .project
             .skeletons
             .last()
@@ -480,7 +480,7 @@ impl AppState {
     /// animou vê o resultado no mesmo gesto. Um passo de Undo. O erro
     /// estruturado do rig chega intacto quando o gerador não serve.
     pub fn animate_add_motion(&mut self, generator: MotionGenerator) -> Result<Uuid, CommandError> {
-        let skeleton_id = self.session.animate.skeleton.ok_or_else(no_rig)?;
+        let skeleton_id = self.editor.animate.skeleton.ok_or_else(no_rig)?;
         self.dispatch(&AddMotionCmd {
             skeleton_id,
             generator,
@@ -488,23 +488,23 @@ impl AppState {
             style: MotionStyle::Custom,
         })?;
         let id = self
-            .project
+            .document
             .project
             .motions
             .last()
             .map(|m| m.id)
             .ok_or_else(no_rig)?;
         self.animate_select_motion(id);
-        self.session.animate.playing = true;
+        self.editor.animate.playing = true;
         Ok(id)
     }
 
     /// Duplica o Motion selecionado e seleciona a cópia.
     pub fn animate_duplicate_motion(&mut self) -> Result<Uuid, CommandError> {
-        let motion_id = self.session.animate.motion.ok_or_else(no_rig)?;
+        let motion_id = self.editor.animate.motion.ok_or_else(no_rig)?;
         self.dispatch(&DuplicateMotionCmd { motion_id })?;
         let id = self
-            .project
+            .document
             .project
             .motions
             .last()
@@ -516,9 +516,9 @@ impl AppState {
 
     /// Remove o Motion selecionado e passa ao próximo da criatura.
     pub fn animate_remove_motion(&mut self) -> Result<(), CommandError> {
-        let motion_id = self.session.animate.motion.ok_or_else(no_rig)?;
+        let motion_id = self.editor.animate.motion.ok_or_else(no_rig)?;
         self.dispatch(&RemoveMotionCmd { motion_id })?;
-        self.session.animate.motion = None;
+        self.editor.animate.motion = None;
         self.animate_resolve();
         Ok(())
     }
@@ -527,16 +527,16 @@ impl AppState {
     /// vivo e o histórico não é tocado. `false` se não há Motion ou a chave é
     /// desconhecida.
     pub fn animate_param_preview(&mut self, key: &str, value: f32) -> bool {
-        let Some(motion_id) = self.session.animate.motion else {
+        let Some(motion_id) = self.editor.animate.motion else {
             return false;
         };
-        let Some(recipe) = self.project.project.get_motion(motion_id) else {
+        let Some(recipe) = self.document.project.get_motion(motion_id) else {
             return false;
         };
         if !value.is_finite() || !recipe.generator.specs().iter().any(|s| s.key == key) {
             return false;
         }
-        self.session.animate.draft = Some(ParamDraft {
+        self.editor.animate.draft = Some(ParamDraft {
             motion: motion_id,
             key: key.to_string(),
             value,
@@ -547,7 +547,7 @@ impl AppState {
     /// Confirma o draft (soltar o slider): um único `SetMotionParamCmd`.
     /// `Ok(false)` quando não havia draft ou o valor final é igual ao gravado.
     pub fn animate_param_commit(&mut self) -> Result<bool, CommandError> {
-        let Some(draft) = self.session.animate.draft.take() else {
+        let Some(draft) = self.editor.animate.draft.take() else {
             return Ok(false);
         };
         match self.dispatch(&SetMotionParamCmd {
@@ -563,13 +563,13 @@ impl AppState {
 
     /// Descarta o draft (Esc durante o arrasto).
     pub fn animate_param_cancel(&mut self) {
-        self.session.animate.draft = None;
+        self.editor.animate.draft = None;
     }
 
     /// Ajuste imediato (teclado, campo numérico): um passo de Undo.
     pub fn animate_set_param(&mut self, key: &str, value: f32) -> Result<bool, CommandError> {
-        let motion_id = self.session.animate.motion.ok_or_else(no_rig)?;
-        self.session.animate.draft = None;
+        let motion_id = self.editor.animate.motion.ok_or_else(no_rig)?;
+        self.editor.animate.draft = None;
         match self.dispatch(&SetMotionParamCmd {
             motion_id,
             key: key.to_string(),
@@ -583,8 +583,8 @@ impl AppState {
 
     /// Aplica um Style ao Motion selecionado.
     pub fn animate_set_style(&mut self, style: MotionStyle) -> Result<bool, CommandError> {
-        let motion_id = self.session.animate.motion.ok_or_else(no_rig)?;
-        self.session.animate.draft = None;
+        let motion_id = self.editor.animate.motion.ok_or_else(no_rig)?;
+        self.editor.animate.draft = None;
         match self.dispatch(&SetMotionStyleCmd { motion_id, style }) {
             Ok(()) => Ok(true),
             Err(CommandError::NoChange(_)) => Ok(false),
@@ -595,7 +595,7 @@ impl AppState {
     /// **Fit to model**: ajusta a criatura em foco ao modelo ativo e os liga por
     /// skin, para o viewport mostrar a malha se movendo. Um passo de Undo.
     pub fn animate_fit_to_model(&mut self) -> Result<(), CommandError> {
-        let skeleton_id = self.session.animate.skeleton.ok_or_else(no_rig)?;
+        let skeleton_id = self.editor.animate.skeleton.ok_or_else(no_rig)?;
         self.dispatch(&FitRigToActiveAssetCmd { skeleton_id })
     }
 
@@ -609,11 +609,11 @@ impl AppState {
         self.animate_update_motion(|c| c.root_mode = Some(mode))
     }
 
-    fn animate_update_motion(
+    pub(crate) fn animate_update_motion(
         &mut self,
         fill: impl FnOnce(&mut UpdateMotionCmd),
     ) -> Result<bool, CommandError> {
-        let motion_id = self.session.animate.motion.ok_or_else(no_rig)?;
+        let motion_id = self.editor.animate.motion.ok_or_else(no_rig)?;
         let mut cmd = UpdateMotionCmd {
             motion_id,
             ..Default::default()
@@ -628,13 +628,13 @@ impl AppState {
 
     /// Alterna reprodução. Sem Motion, não toca.
     pub fn animate_toggle_play(&mut self) {
-        let a = &mut self.session.animate;
+        let a = &mut self.editor.animate;
         a.playing = a.motion.is_some() && !a.playing;
     }
 
     /// Posiciona o playhead (segundos) e pausa: arrastar a barra é "scrub".
     pub fn animate_seek(&mut self, time: f32) {
-        let a = &mut self.session.animate;
+        let a = &mut self.editor.animate;
         a.time = if time.is_finite() { time.max(0.0) } else { 0.0 };
         a.playing = false;
     }
@@ -643,8 +643,8 @@ impl AppState {
     /// `keep_motion = true` o Motion vivo continua (Keep Live). Um passo de
     /// Undo; a mensagem de status relata as chaves geradas.
     pub fn animate_apply_now(&mut self, keep_motion: bool) -> Result<(), CommandError> {
-        let motion_id = self.session.animate.motion.ok_or_else(no_rig)?;
-        self.session.animate.draft = None;
+        let motion_id = self.editor.animate.motion.ok_or_else(no_rig)?;
+        self.editor.animate.draft = None;
         self.dispatch(&ApplyMotionNowCmd {
             motion_id,
             options: BakeOptions::default(),

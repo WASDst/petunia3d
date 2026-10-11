@@ -29,8 +29,11 @@ impl Tool for InsetTool {
 
 impl InsetTool {
     pub fn apply(state: &mut AppState) {
-        let f = state.inset_factor;
-        if let Err(err) = state.dispatch(&petunia_core::InsetFacesCmd { factor: f }) {
+        let cmd = petunia_core::InsetFacesCmd {
+            distance: state.inset_distance,
+            mode: Some(state.inset_mode),
+        };
+        if let Err(err) = state.dispatch(&cmd) {
             state.set_status(format!("inset: {err}"));
         }
     }

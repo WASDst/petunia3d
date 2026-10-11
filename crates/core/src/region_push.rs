@@ -11,11 +11,11 @@
 //! Em ambos os casos o gesto inteiro é **uma** entrada de Undo e `Esc`
 //! restaura exatamente o documento anterior (prelúdio do modal).
 
+use crate::context::{CommandContext, EditorView};
 use glam::{DVec3, Vec3};
 use petunia_mesh::arrangement::{Polyline2, Region2, planar_regions, region_at};
 use petunia_mesh::imprint::{ImprintError, imprint_region, imprint_region_general, region_sheet};
 
-use crate::AppState;
 use crate::modal::{ModalError, ModalKind};
 
 /// Tolerância de tessellação dos perfis (unidades de mundo).
@@ -138,9 +138,102 @@ pub fn region_at_ray(
     best
 }
 
-impl AppState {
+impl CommandContext<'_> {
+    /// Prelúdio + Extrude: grava a região na face hospedeira (ou cria uma
+    /// folha num asset novo) fora do histórico e abre a extrusão da face nova.
+    /// Confirmar = 1 Undo; cancelar = documento exatamente como antes.
+    pub fn begin_region_push_pull(&mut self, hit: &RegionHit) -> Result<(), RegionPushError> {
+        if self.modal.is_some() {
+            return Err(ModalError::AlreadyActive.into());
+        }
+        let before = self.document.project.clone();
+        let before_selection = self.editor.selection.clone();
+        let host = self.region_host_face(hit);
+        // Antes do prelúdio: trocar o domínio converte a seleção por vértices,
+        // e o fundo da folha compartilha os vértices do topo.
+        self.set_selection_domain(crate::SelectionDomain::Face);
+        let outer = hit.outer_world();
+        let holes: Vec<Vec<Vec3>> = hit
+            .region
+            .holes
+            .iter()
+            .map(|hole| hole.iter().map(|p| hit.plane.to_world(*p)).collect())
+            .collect();
+        // Região inteira dentro de uma face e sem furos: o imprint com pontes
+        // (topologia mais limpa). Cruzando arestas, ocupando várias faces
+        // coplanares ou com furos: o imprint geral. Nenhuma face coplanar
+        // tocada: folha solta num asset novo.
+        let imprinted = self.document.active().map(|asset| {
+            // O imprint escreve na malha autoral: contornos e plano no frame local.
+            let mesh = &asset.mesh;
+            let outer: Vec<Vec3> = outer.iter().map(|p| asset.to_local_point(*p)).collect();
+            let holes: Vec<Vec<Vec3>> = holes
+                .iter()
+                .map(|hole| hole.iter().map(|p| asset.to_local_point(*p)).collect())
+                .collect();
+            let (origin, normal) = local_point_normal(asset, hit.plane.origin, hit.plane.normal);
+            if let Some(face) = host
+                && holes.is_empty()
+                && let Ok((mesh, _)) = imprint_region(mesh, face, &outer)
+            {
+                return Ok(mesh);
+            }
+            imprint_region_general(mesh, &outer, &holes, origin, normal).map(|(mesh, _)| mesh)
+        });
+        let on_mesh = matches!(imprinted, Some(Ok(_)));
+        let prelude = match imprinted {
+            Some(Ok(mesh)) => {
+                if self.is_active_locked() {
+                    return Err(RegionPushError::Locked);
+                }
+                // Congelar antes: a primitiva paramétrica seria regenerada.
+                self.freeze_active_primitive_for_command();
+                if let Some(active) = self.document.project.active_mesh_mut() {
+                    *active = mesh;
+                }
+                Ok(())
+            }
+            Some(Err(error)) if error != ImprintError::OutsideFace => Err(error),
+            _ => region_sheet(
+                &hit.region.outer,
+                &hit.region.holes,
+                hit.plane.origin,
+                hit.plane.right,
+                hit.plane.up,
+            )
+            .map(|mesh| {
+                let name = self.t_id(petunia_config::text_id::DRAW_SHAPE_NAME);
+                self.document.project.add(&name, mesh);
+            }),
+        };
+        if let Err(error) = prelude {
+            self.document.project = before;
+            self.editor.selection = before_selection;
+            return Err(error.into());
+        }
+        self.emit_project_changed(petunia_project::ProjectChanges::ALL);
+        self.begin_modal_after_prelude(ModalKind::Extrude, before, before_selection)?;
+        if !on_mesh {
+            self.set_modal_flip_when_negative();
+        }
+        Ok(())
+    }
+}
+
+/// Ponto e normal em mundo → frame local do objeto (normal pela
+/// inversa-transposta, para continuar perpendicular sob escala não uniforme).
+fn local_point_normal(asset: &petunia_project::Asset, point: Vec3, normal: Vec3) -> (Vec3, Vec3) {
+    let local_normal = asset
+        .world_matrix()
+        .transpose()
+        .transform_vector3(normal)
+        .normalize_or_zero();
+    (asset.to_local_point(point), local_normal)
+}
+
+impl<'a> EditorView<'a> {
     /// Planos de perfis com suas regiões fechadas (todas as do documento).
-    pub fn profile_region_planes(&self) -> RegionPlanes {
+    pub fn profile_region_planes(self) -> RegionPlanes {
         self.profile_groups(false)
             .into_iter()
             .map(|group| (group.plane, group.regions()))
@@ -151,8 +244,8 @@ impl AppState {
     /// Perfis agrupados por plano. Com `editable_only`, os usados por um Path
     /// Generator (como perfil ou como caminho) ficam de fora: o Shape Builder não
     /// pode substituí-los sem quebrar o gerador.
-    pub(crate) fn profile_groups(&self, editable_only: bool) -> Vec<ProfileGroup> {
-        let project = &self.project.project;
+    pub(crate) fn profile_groups(self, editable_only: bool) -> Vec<ProfileGroup> {
+        let project = &self.document.project;
         let in_use = |profile: &petunia_project::ProfileResource| {
             project.path_generators.iter().any(|generator| {
                 generator.profile_id == profile.id || generator.path_id == profile.spline_id
@@ -238,18 +331,21 @@ impl AppState {
     }
 
     /// Região de perfil mais próxima atravessada pelo raio do cursor.
-    pub fn profile_region_at_ray(&self, origin: Vec3, direction: Vec3) -> Option<RegionHit> {
+    pub fn profile_region_at_ray(self, origin: Vec3, direction: Vec3) -> Option<RegionHit> {
         region_at_ray(
             &self.profile_region_planes(),
             origin,
             direction,
-            self.session.camera.proj == crate::Projection::Perspective,
+            self.editor.camera.proj == crate::Projection::Perspective,
         )
     }
 
     /// Face da malha ativa coplanar à região e que contém o ponto da região.
-    pub fn region_host_face(&self, hit: &RegionHit) -> Option<usize> {
-        let mesh = self.project.active_mesh()?;
+    pub fn region_host_face(self, hit: &RegionHit) -> Option<usize> {
+        let asset = self.document.active()?;
+        let mesh = &asset.mesh;
+        // A região está em mundo; as faces, no frame do objeto.
+        let (point, plane_normal) = local_point_normal(asset, hit.point, hit.plane.normal);
         let tolerance = 1.0e-4_f32.max(hit.depth.abs() * 1.0e-5);
         (0..mesh.faces.len()).find(|&face| {
             let normal = mesh.face_normal(face).normalize_or_zero();
@@ -257,8 +353,8 @@ impl AppState {
                 return false;
             };
             let anchor = mesh.verts[first as usize].vec();
-            if normal.dot(hit.plane.normal).abs() < 0.9999
-                || (hit.point - anchor).dot(normal).abs() > tolerance
+            if normal.dot(plane_normal).abs() < 0.9999
+                || (point - anchor).dot(normal).abs() > tolerance
             {
                 return false;
             }
@@ -274,85 +370,12 @@ impl AppState {
                     [f64::from(d.dot(u)), f64::from(d.dot(v))]
                 })
                 .collect();
-            let d = hit.point - anchor;
+            let d = point - anchor;
             petunia_mesh::arrangement::point_in_polygon(
                 &polygon,
                 [f64::from(d.dot(u)), f64::from(d.dot(v))],
             )
         })
-    }
-
-    /// Prelúdio + Extrude: grava a região na face hospedeira (ou cria uma
-    /// folha num asset novo) fora do histórico e abre a extrusão da face nova.
-    /// Confirmar = 1 Undo; cancelar = documento exatamente como antes.
-    pub fn begin_region_push_pull(&mut self, hit: &RegionHit) -> Result<(), RegionPushError> {
-        if self.modal.is_some() {
-            return Err(ModalError::AlreadyActive.into());
-        }
-        let before = self.project.project.clone();
-        let before_selection = self.session.selection.clone();
-        let host = self.region_host_face(hit);
-        // Antes do prelúdio: trocar o domínio converte a seleção por vértices,
-        // e o fundo da folha compartilha os vértices do topo.
-        self.set_selection_domain(crate::SelectionDomain::Face);
-        let outer = hit.outer_world();
-        let holes: Vec<Vec<Vec3>> = hit
-            .region
-            .holes
-            .iter()
-            .map(|hole| hole.iter().map(|p| hit.plane.to_world(*p)).collect())
-            .collect();
-        // Região inteira dentro de uma face e sem furos: o imprint com pontes
-        // (topologia mais limpa). Cruzando arestas, ocupando várias faces
-        // coplanares ou com furos: o imprint geral. Nenhuma face coplanar
-        // tocada: folha solta num asset novo.
-        let imprinted = self.project.active_mesh().map(|mesh| {
-            if let Some(face) = host
-                && holes.is_empty()
-                && let Ok((mesh, _)) = imprint_region(mesh, face, &outer)
-            {
-                return Ok(mesh);
-            }
-            imprint_region_general(mesh, &outer, &holes, hit.plane.origin, hit.plane.normal)
-                .map(|(mesh, _)| mesh)
-        });
-        let on_mesh = matches!(imprinted, Some(Ok(_)));
-        let prelude = match imprinted {
-            Some(Ok(mesh)) => {
-                if self.is_active_locked() {
-                    return Err(RegionPushError::Locked);
-                }
-                // Congelar antes: a primitiva paramétrica seria regenerada.
-                self.freeze_active_primitive_for_command();
-                if let Some(active) = self.project.project.active_mesh_mut() {
-                    *active = mesh;
-                }
-                Ok(())
-            }
-            Some(Err(error)) if error != ImprintError::OutsideFace => Err(error),
-            _ => region_sheet(
-                &hit.region.outer,
-                &hit.region.holes,
-                hit.plane.origin,
-                hit.plane.right,
-                hit.plane.up,
-            )
-            .map(|mesh| {
-                let name = self.t_id(petunia_config::text_id::DRAW_SHAPE_NAME);
-                self.project.project.add(&name, mesh);
-            }),
-        };
-        if let Err(error) = prelude {
-            self.project.project = before;
-            self.session.selection = before_selection;
-            return Err(error.into());
-        }
-        self.emit_project_changed(petunia_project::ProjectChanges::ALL);
-        self.begin_modal_after_prelude(ModalKind::Extrude, before, before_selection)?;
-        if !on_mesh {
-            self.set_modal_flip_when_negative();
-        }
-        Ok(())
     }
 }
 
@@ -360,6 +383,7 @@ impl AppState {
 mod tests {
     use super::*;
     use crate::ViewPreset;
+    use crate::state::AppState;
     use petunia_project::{ProfileResource, ProfileWorkplane, SplineResource};
 
     fn state_with_profiles(profiles: &[(&[[f64; 2]], ProfileWorkplane)]) -> AppState {

@@ -149,9 +149,10 @@ mod tests {
             let mesh = PrimitiveDescriptor::default_for(kind).build();
             assert!(!mesh.verts.is_empty(), "{kind:?}");
             assert!(!mesh.faces.is_empty(), "{kind:?}");
-            let mut mesh = mesh;
-            mesh.validate();
-            assert!(!mesh.faces.is_empty(), "{kind:?} após validate");
+            // Dados internos de authoring passam por validação estrita, nunca auto-repair.
+            mesh.validate_invariants()
+                .unwrap_or_else(|e| panic!("{kind:?} Inválida: {e}"));
+            assert!(!mesh.faces.is_empty(), "{kind:?} após validação estrita");
         }
     }
 

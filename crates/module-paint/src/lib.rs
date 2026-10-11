@@ -24,7 +24,7 @@ pub use surface_commands::{PaintPathCmd, PathPaintMode, ProjectionPaintCmd};
 use std::collections::VecDeque;
 
 use glam::Vec3;
-use petunia_core::{AppState, Module};
+use petunia_core::{AppState, CommandContext, EditorView, Module};
 use petunia_project::Canvas;
 
 pub use petunia_project::paint_layers::{
@@ -38,7 +38,7 @@ pub use petunia_core::{BrushSettings, BrushType};
 
 /// Lado (px) da textura de pintura criada para um objeto sem textura.
 /// 1024 dá detalhe de decalque e traço sem estourar o orçamento do histórico.
-pub const DEFAULT_TEXTURE_SIDE: u32 = 1024;
+pub const DEFAULT_TEXTURE_SIDE: u32 = petunia_project::Canvas::DEFAULT_SIDE;
 
 /// Lados que o usuário pode escolher para a textura de pintura.
 pub const TEXTURE_SIDES: [u32; 4] = [256, 512, 1024, 2048];
@@ -121,11 +121,11 @@ impl PaintModule {
     }
 
     /// Preenche a seleção de vértices (ou toda a malha se nada estiver selecionado) com a cor atual.
-    pub fn fill_selection(state: &mut AppState) -> usize {
-        let before = state.project.project.clone();
+    pub fn fill_selection_in(state: &mut CommandContext<'_>) -> usize {
+        let before = state.document.project.clone();
         let col = state.paint_color;
         let mut n = 0;
-        if let Some(m) = state.project.active_mesh_mut() {
+        if let Some(m) = state.document.active_mesh_mut() {
             let any = m.verts.iter().any(|v| v.selected);
             for v in &mut m.verts {
                 if v.selected || !any {
@@ -135,13 +135,27 @@ impl PaintModule {
             }
         }
         if n > 0 {
-            state.project.checkpoint_snapshot("fill", &before);
+            state.document.checkpoint_snapshot("fill", &before);
             state.emit_color_changed();
         }
         n
     }
 
+    pub fn fill_selection(state: &mut AppState) -> usize {
+        state.in_context(|ctx| Self::fill_selection_in(ctx))
+    }
+
     /// Pinta cores diretamente nos vértices da malha dentro de um raio esférico no espaço 3D (P3D-150).
+    pub fn paint_vertex_color_3d_in(
+        state: &mut CommandContext<'_>,
+        hit_pos: Vec3,
+        radius_world: f32,
+        strength: f32,
+        color: [f32; 3],
+    ) -> usize {
+        Self::paint_vertex_color_3d_batch_in(state, &[hit_pos], radius_world, strength, color)
+    }
+
     pub fn paint_vertex_color_3d(
         state: &mut AppState,
         hit_pos: Vec3,
@@ -149,19 +163,21 @@ impl PaintModule {
         strength: f32,
         color: [f32; 3],
     ) -> usize {
-        Self::paint_vertex_color_3d_batch(state, &[hit_pos], radius_world, strength, color)
+        state.in_context(|ctx| {
+            Self::paint_vertex_color_3d_in(ctx, hit_pos, radius_world, strength, color)
+        })
     }
 
     /// Aplica todos os dabs de vertex paint e publica uma única revisão de cor.
-    pub fn paint_vertex_color_3d_batch(
-        state: &mut AppState,
+    pub fn paint_vertex_color_3d_batch_in(
+        state: &mut CommandContext<'_>,
         hit_positions: &[Vec3],
         radius_world: f32,
         strength: f32,
         color: [f32; 3],
     ) -> usize {
         let mut affected = 0;
-        let Some(mesh) = state.project.active_mesh_mut() else {
+        let Some(mesh) = state.document.active_mesh_mut() else {
             return 0;
         };
         let r = radius_world.max(0.01);
@@ -188,35 +204,59 @@ impl PaintModule {
         affected
     }
 
+    pub fn paint_vertex_color_3d_batch(
+        state: &mut AppState,
+        hit_positions: &[Vec3],
+        radius_world: f32,
+        strength: f32,
+        color: [f32; 3],
+    ) -> usize {
+        state.in_context(|ctx| {
+            Self::paint_vertex_color_3d_batch_in(ctx, hit_positions, radius_world, strength, color)
+        })
+    }
+
     /// Eyedropper: copia a cor do vértice para o pincel.
-    pub fn eyedrop_vertex(state: &mut AppState, vi: usize) {
+    pub fn eyedrop_vertex_in(state: &mut CommandContext<'_>, vi: usize) {
         if let Some(color) = state
-            .project
+            .document
             .assets
-            .get(state.project.active)
+            .get(state.document.active)
             .and_then(|asset| asset.mesh.verts.get(vi))
             .map(|vertex| vertex.color)
         {
             state.paint_color = color;
-            state.session.tools.paint_color = color;
+            state.editor.tools.paint_color = color;
             state.mark_dirty();
         }
     }
 
+    pub fn eyedrop_vertex(state: &mut AppState, vi: usize) {
+        state.in_context(|ctx| Self::eyedrop_vertex_in(ctx, vi))
+    }
+
     /// Registra cor na palette (recentes, máx 16) no ProjectState.
-    pub fn push_palette(state: &mut AppState, c: [f32; 3]) {
+    pub fn push_palette_in(state: &mut CommandContext<'_>, c: [f32; 3]) {
         state
-            .project
+            .document
             .palette
             .retain(|&x| (x[0] - c[0]).abs() + (x[1] - c[1]).abs() + (x[2] - c[2]).abs() > 1e-3);
-        state.project.palette.insert(0, c);
-        state.project.palette.truncate(16);
+        state.document.palette.insert(0, c);
+        state.document.palette.truncate(16);
+    }
+
+    pub fn push_palette(state: &mut AppState, c: [f32; 3]) {
+        state.in_context(|ctx| Self::push_palette_in(ctx, c))
     }
 
     /// Substitui a paleta atual no ProjectState.
-    pub fn set_palette(state: &mut AppState, pal: Vec<[f32; 3]>) {
-        state.project.palette = pal;
+    pub fn set_palette_in(state: &mut CommandContext<'_>, pal: Vec<[f32; 3]>) {
+        state.document.palette = pal;
         state.mark_dirty();
+    }
+
+    pub fn set_palette(state: &mut AppState, pal: Vec<[f32; 3]>) {
+        state.in_context(|ctx| Self::set_palette_in(ctx, pal))
     }
 
     /// Importa paleta a partir de arquivo (.hex ou .gpl) usando o ProjectService.
@@ -228,12 +268,12 @@ impl PaintModule {
     }
 
     /// Exporta a paleta atual para arquivo (.gpl) usando o ProjectService.
-    pub fn export_palette_file(
-        state: &AppState,
+    pub fn export_palette_file_in(
+        state: EditorView<'_>,
         path: &std::path::Path,
     ) -> Result<(), petunia_core::ProjectServiceError> {
         petunia_core::ProjectService::export_palette(
-            &state.project.palette,
+            &state.document.palette,
             "Petunia Palette",
             path,
         )
@@ -241,14 +281,21 @@ impl PaintModule {
 
     // ---- Pilha de camadas por asset (P3D-061) ----
 
+    pub fn export_palette_file(
+        state: &AppState,
+        path: &std::path::Path,
+    ) -> Result<(), petunia_core::ProjectServiceError> {
+        Self::export_palette_file_in(state.view(), path)
+    }
+
     /// Garante a pilha de camadas do ativo: migra a `texture` existente para
     /// a camada base (sem perda) ou cria base nova. Sem checkpoint aqui —
     /// quem chama decide a transação.
-    pub fn ensure_stack(state: &mut AppState) {
-        Self::ensure_canvas(state);
-        let active_idx = state.project.active;
+    pub fn ensure_stack_in(state: &mut CommandContext<'_>) {
+        Self::ensure_canvas_in(state);
+        let active_idx = state.document.active;
         let needs = !state
-            .project
+            .document
             .assets
             .get(active_idx)
             .is_some_and(|a| a.paint_stack.is_some());
@@ -256,16 +303,20 @@ impl PaintModule {
             return;
         }
         let base = state
-            .project
+            .document
             .assets
             .get(active_idx)
             .and_then(|a| a.texture.clone())
             .unwrap_or_else(|| {
                 Canvas::new(DEFAULT_TEXTURE_SIDE, DEFAULT_TEXTURE_SIDE, [0, 0, 0, 0])
             });
-        if let Some(o) = state.project.assets.get_mut(active_idx) {
+        if let Some(o) = state.document.assets.get_mut(active_idx) {
             o.paint_stack = Some(PaintLayerStack::with_base("Base", base));
         }
+    }
+
+    pub fn ensure_stack(state: &mut AppState) {
+        state.in_context(|ctx| Self::ensure_stack_in(ctx))
     }
 
     /// Recompõe o stack na `texture` do ativo e sincroniza o Albedo.
@@ -273,15 +324,19 @@ impl PaintModule {
     ///
     /// Canonical raster is `Asset.paint_stack`. `Asset.texture` is the composed
     /// cache. `Material.albedo_texture` is a derived alias of that cache.
+    pub fn composite_active_in(state: &mut CommandContext<'_>) {
+        Self::composite_active_tiles_in(state, &[]);
+    }
+
     pub fn composite_active(state: &mut AppState) {
-        Self::composite_active_tiles(state, &[]);
+        state.in_context(|ctx| Self::composite_active_in(ctx))
     }
 
     /// Partial composition of dirty tiles when the stack is tileable.
     /// Empty `dirty_tiles` falls back to a full composite.
-    pub fn composite_active_tiles(state: &mut AppState, dirty_tiles: &[u32]) {
-        let active_idx = state.project.active;
-        let (w, h, tileable, has_stack) = match state.project.assets.get(active_idx) {
+    pub fn composite_active_tiles_in(state: &mut CommandContext<'_>, dirty_tiles: &[u32]) {
+        let active_idx = state.document.active;
+        let (w, h, tileable, has_stack) = match state.document.assets.get(active_idx) {
             Some(a) => {
                 let (w, h) = a
                     .texture
@@ -297,9 +352,9 @@ impl PaintModule {
             return;
         }
         let partial = tileable && !dirty_tiles.is_empty();
-        let time = state.session.decal_time;
+        let time = state.editor.decal_time;
         if partial {
-            if let Some(asset) = state.project.assets.get_mut(active_idx)
+            if let Some(asset) = state.document.assets.get_mut(active_idx)
                 && let Some(stack) = asset.paint_stack.as_ref()
             {
                 let canvas = asset
@@ -309,20 +364,24 @@ impl PaintModule {
             }
         } else {
             state
-                .project
+                .document
                 .project
                 .composite_paint_stack_at(active_idx, time);
         }
         if partial {
-            Self::sync_material_tiles(state, active_idx, dirty_tiles);
+            Self::sync_material_tiles_in(state, active_idx, dirty_tiles);
         }
         if partial {
             state.emit_texture_changed_regions(Self::dirty_tile_regions(dirty_tiles, w, h));
         } else {
             state.emit_texture_changed();
         }
-        state.render.canvas_dirty = true;
+        state.mark_canvas_dirty();
         state.mark_dirty();
+    }
+
+    pub fn composite_active_tiles(state: &mut AppState, dirty_tiles: &[u32]) {
+        state.in_context(|ctx| Self::composite_active_tiles_in(ctx, dirty_tiles))
     }
 
     fn dirty_tile_regions(
@@ -348,10 +407,14 @@ impl PaintModule {
             .collect()
     }
 
-    fn sync_material_tiles(state: &mut AppState, active_idx: usize, dirty_tiles: &[u32]) {
+    fn sync_material_tiles_in(
+        state: &mut CommandContext<'_>,
+        active_idx: usize,
+        dirty_tiles: &[u32],
+    ) {
         use petunia_project::paint_layers::TILE_SIZE;
 
-        let project = &mut state.project.project;
+        let project = &mut state.document.project;
         let (assets, materials) = (&project.assets, &mut project.materials);
         let Some(asset) = assets.get(active_idx) else {
             return;
@@ -397,10 +460,10 @@ impl PaintModule {
 
     /// Redimensiona canvas base + todas as camadas raster (operação explícita;
     /// quem chama faz checkpoint antes).
-    pub fn resize_canvas(state: &mut AppState, w: u32, h: u32) {
-        Self::ensure_stack(state);
-        let active_idx = state.project.active;
-        if let Some(o) = state.project.assets.get_mut(active_idx) {
+    pub fn resize_canvas_in(state: &mut CommandContext<'_>, w: u32, h: u32) {
+        Self::ensure_stack_in(state);
+        let active_idx = state.document.active;
+        if let Some(o) = state.document.assets.get_mut(active_idx) {
             if let Some(cv) = o.texture.as_ref() {
                 o.texture = Some(cv.resized(w, h));
             }
@@ -413,12 +476,16 @@ impl PaintModule {
                 }
             }
         }
-        Self::composite_active(state);
+        Self::composite_active_in(state);
+    }
+
+    pub fn resize_canvas(state: &mut AppState, w: u32, h: u32) {
+        state.in_context(|ctx| Self::resize_canvas_in(ctx, w, h))
     }
 
     /// Retângulo de texels que o decalque ativo cobre na textura do ativo.
-    pub fn active_decal_bounds(state: &AppState) -> Option<[u32; 4]> {
-        let asset = state.project.active()?;
+    pub fn active_decal_bounds_in(state: EditorView<'_>) -> Option<[u32; 4]> {
+        let asset = state.document.active()?;
         let texture = asset.texture.as_ref()?;
         let LayerKind::Decal(decal) = &asset.paint_stack.as_ref()?.active()?.kind else {
             return None;
@@ -426,19 +493,23 @@ impl PaintModule {
         decal.texel_bounds(Some(&*asset.mesh), texture.w, texture.h)
     }
 
+    pub fn active_decal_bounds(state: &AppState) -> Option<[u32; 4]> {
+        Self::active_decal_bounds_in(state.view())
+    }
+
     /// Recompõe só os tiles que o decalque ativo cobria (`before`) ou cobre
     /// agora (P3D-061: mover um decalque não recompõe a textura inteira).
-    pub fn composite_decal_region(state: &mut AppState, before: Option<[u32; 4]>) {
+    pub fn composite_decal_region_in(state: &mut CommandContext<'_>, before: Option<[u32; 4]>) {
         let Some((w, h)) = state
-            .project
+            .document
             .active()
             .and_then(|asset| asset.texture.as_ref())
             .map(|texture| (texture.w, texture.h))
         else {
-            Self::composite_active(state);
+            Self::composite_active_in(state);
             return;
         };
-        let mut tiles: Vec<u32> = [before, Self::active_decal_bounds(state)]
+        let mut tiles: Vec<u32> = [before, Self::active_decal_bounds_in(state.view())]
             .into_iter()
             .flatten()
             .flat_map(|bounds| PaintLayerStack::tiles_for_bounds(bounds, w, h))
@@ -449,13 +520,20 @@ impl PaintModule {
             // Nada coberto antes nem agora: nenhum texel muda.
             return;
         }
-        Self::composite_active_tiles(state, &tiles);
+        Self::composite_active_tiles_in(state, &tiles);
+    }
+
+    pub fn composite_decal_region(state: &mut AppState, before: Option<[u32; 4]>) {
+        state.in_context(|ctx| Self::composite_decal_region_in(ctx, before))
     }
 
     /// Textura composta do ativo com cada variante do decalque `layer_id`
     /// (exportação em quadros do Decal Set, cap. 39 "bake universal").
-    pub fn decal_variant_textures(state: &AppState, layer_id: uuid::Uuid) -> Vec<(String, Canvas)> {
-        let Some(asset) = state.project.active() else {
+    pub fn decal_variant_textures_in(
+        state: EditorView<'_>,
+        layer_id: uuid::Uuid,
+    ) -> Vec<(String, Canvas)> {
+        let Some(asset) = state.document.active() else {
             return Vec::new();
         };
         let Some(stack) = asset.paint_stack.as_ref() else {
@@ -489,46 +567,58 @@ impl PaintModule {
             .collect()
     }
 
+    pub fn decal_variant_textures(state: &AppState, layer_id: uuid::Uuid) -> Vec<(String, Canvas)> {
+        Self::decal_variant_textures_in(state.view(), layer_id)
+    }
+
     /// Troca a resolução da textura de pintura do ativo (quadrada, um dos
     /// [`TEXTURE_SIDES`]), reamostrando todas as camadas raster, numa entrada
     /// do histórico. `false` se o lado não é permitido, já é o atual ou o
     /// objeto está travado.
-    pub fn set_texture_side(state: &mut AppState, side: u32) -> bool {
+    pub fn set_texture_side_in(state: &mut CommandContext<'_>, side: u32) -> bool {
         if !TEXTURE_SIDES.contains(&side) {
             return false;
         }
-        let Some(asset) = state.project.active() else {
+        let Some(asset) = state.document.active() else {
             return false;
         };
         if asset.locked || asset.texture.as_ref().map(|c| (c.w, c.h)) == Some((side, side)) {
             return false;
         }
         state.checkpoint("texture resolution");
-        Self::resize_canvas(state, side, side);
-        state.render.canvas_dirty = true;
+        Self::resize_canvas_in(state, side, side);
+        state.mark_canvas_dirty();
         state.mark_dirty();
         true
     }
 
-    pub fn has_canvas(state: &AppState) -> bool {
-        if let Some(o) = state.project.assets.get(state.project.active) {
+    pub fn set_texture_side(state: &mut AppState, side: u32) -> bool {
+        state.in_context(|ctx| Self::set_texture_side_in(ctx, side))
+    }
+
+    pub fn has_canvas_in(state: EditorView<'_>) -> bool {
+        if let Some(o) = state.document.assets.get(state.document.active) {
             if o.texture.is_some() {
                 return true;
             }
-            if let Some(mat) = o.material(&state.project.project) {
+            if let Some(mat) = o.material(&state.document.project) {
                 return mat.albedo_texture.is_some();
             }
         }
         false
     }
 
+    pub fn has_canvas(state: &AppState) -> bool {
+        Self::has_canvas_in(state.view())
+    }
+
     /// Garante que o canvas existe no asset e no material associado.
-    pub fn ensure_canvas(state: &mut AppState) {
-        let active_idx = state.project.active;
+    pub fn ensure_canvas_in(state: &mut CommandContext<'_>) {
+        let active_idx = state.document.active;
         let mut base_col = [0.75, 0.75, 0.78];
         let mut mat_id = None;
 
-        if let Some(o) = state.project.assets.get(active_idx) {
+        if let Some(o) = state.document.assets.get(active_idx) {
             base_col = o.base_color;
             mat_id = o.material_id;
         }
@@ -542,7 +632,7 @@ impl PaintModule {
 
         // Sincroniza no Material associado se houver
         if let Some(mid) = mat_id
-            && let Some(mat) = state.project.project.get_material_mut(mid)
+            && let Some(mat) = state.document.project.get_material_mut(mid)
             && mat.albedo_texture.is_none()
         {
             mat.albedo_texture = Some(Canvas::new(
@@ -553,7 +643,7 @@ impl PaintModule {
         }
 
         // Sincroniza no Asset
-        if let Some(o) = state.project.active_mut()
+        if let Some(o) = state.document.active_mut()
             && o.texture.is_none()
         {
             o.texture = Some(Canvas::new(
@@ -563,6 +653,10 @@ impl PaintModule {
             ));
             state.mark_dirty();
         }
+    }
+
+    pub fn ensure_canvas(state: &mut AppState) {
+        state.in_context(|ctx| Self::ensure_canvas_in(ctx))
     }
 
     /// Aplica carimbo do pincel rígido pixel-perfect (P3D-056).
@@ -827,8 +921,8 @@ impl PaintModule {
 
     /// Pinta no canvas 2D com suporte aos 5 tipos de pincéis (API legado).
     /// Delega para o descriptor canônico ([`BrushSettings`]).
-    pub fn canvas_brush_advanced(
-        state: &mut AppState,
+    pub fn canvas_brush_advanced_in(
+        state: &mut CommandContext<'_>,
         x: u32,
         y: u32,
         brush: BrushType,
@@ -838,12 +932,23 @@ impl PaintModule {
         let settings = BrushSettings {
             kind: brush,
             size_px: (radius.max(1) * 2) as f32,
-            hardness: state.session.tools.brush_hardness,
+            hardness: state.editor.tools.brush_hardness,
             strength,
-            flow: state.session.tools.brush_flow,
-            spacing: state.session.tools.brush_spacing,
+            flow: state.editor.tools.brush_flow,
+            spacing: state.editor.tools.brush_spacing,
         };
-        Self::canvas_brush_with_settings(state, x, y, settings);
+        Self::canvas_brush_with_settings_in(state, x, y, settings);
+    }
+
+    pub fn canvas_brush_advanced(
+        state: &mut AppState,
+        x: u32,
+        y: u32,
+        brush: BrushType,
+        radius: u32,
+        strength: f32,
+    ) {
+        state.in_context(|ctx| Self::canvas_brush_advanced_in(ctx, x, y, brush, radius, strength))
     }
 
     /// Pinta no canvas 2D com o descriptor canônico (iniciativa Paint).
@@ -851,24 +956,33 @@ impl PaintModule {
     /// Carimba um único dab. A interpolação incremental do traço entre eventos
     /// é responsabilidade de quem alimenta os pontos — use
     /// [`petunia_core::StrokeSampler`] para preservar o residual entre eventos.
+    pub fn canvas_brush_with_settings_in(
+        state: &mut CommandContext<'_>,
+        x: u32,
+        y: u32,
+        settings: BrushSettings,
+    ) {
+        Self::canvas_brush_batch_in(state, &[(x, y)], settings);
+    }
+
     pub fn canvas_brush_with_settings(
         state: &mut AppState,
         x: u32,
         y: u32,
         settings: BrushSettings,
     ) {
-        Self::canvas_brush_batch(state, &[(x, y)], settings);
+        state.in_context(|ctx| Self::canvas_brush_with_settings_in(ctx, x, y, settings))
     }
 
-    fn canvas_brush_batch(
-        state: &mut AppState,
+    fn canvas_brush_batch_in(
+        state: &mut CommandContext<'_>,
         points: &[(u32, u32)],
         settings: BrushSettings,
     ) -> DirtyTiles {
         if points.is_empty() {
             return DirtyTiles::default();
         }
-        Self::ensure_stack(state);
+        Self::ensure_stack_in(state);
         let s = settings.sanitized();
         let color = [
             (state.paint_color[0] * 255.0) as u8,
@@ -877,11 +991,11 @@ impl PaintModule {
             255,
         ];
 
-        let active_idx = state.project.active;
+        let active_idx = state.document.active;
         // Conta-gotas amostra o composto (o que o usuário vê — P3D-060).
         if s.kind == BrushType::Eyedropper {
             if let Some(&(x, y)) = points.last()
-                && let Some(o) = state.project.assets.get(active_idx)
+                && let Some(o) = state.document.assets.get(active_idx)
                 && let Some(cv) = o.texture.as_ref()
                 && x < cv.w
                 && y < cv.h
@@ -893,7 +1007,7 @@ impl PaintModule {
                     c[2] as f32 / 255.0,
                 ];
                 state.paint_color = picked;
-                state.session.tools.paint_color = picked;
+                state.editor.tools.paint_color = picked;
             }
             return DirtyTiles::default();
         }
@@ -904,7 +1018,7 @@ impl PaintModule {
         let mut dirty = if s.kind == BrushType::Fill {
             // O balde preenche uma região conectada: não usa dabs nem buffer.
             let mut dirty = DirtyTiles::default();
-            if let Some(o) = state.project.assets.get_mut(active_idx)
+            if let Some(o) = state.document.assets.get_mut(active_idx)
                 && let Some(stack) = o.paint_stack.as_mut()
                 && let Some(layer) = stack.active_mut()
                 && !layer.locked
@@ -917,28 +1031,37 @@ impl PaintModule {
             }
             dirty
         } else {
-            Self::stamp_dabs_2d(state, points, s)
+            Self::stamp_dabs_2d_in(state, points, s)
         };
         dirty.normalize();
         if !dirty.is_empty() {
-            Self::composite_active_tiles(state, dirty.as_slice());
+            Self::composite_active_tiles_in(state, dirty.as_slice());
         }
         dirty
     }
 
     /// Pinta no canvas 2D aplicando simetria em tempo real nos eixos X e Y se habilitados.
+    pub fn canvas_brush_with_symmetry_in(
+        state: &mut CommandContext<'_>,
+        x: u32,
+        y: u32,
+        settings: BrushSettings,
+    ) {
+        Self::canvas_brush_batch_with_symmetry_in(state, &[(x, y)], settings);
+    }
+
     pub fn canvas_brush_with_symmetry(
         state: &mut AppState,
         x: u32,
         y: u32,
         settings: BrushSettings,
     ) {
-        Self::canvas_brush_batch_with_symmetry(state, &[(x, y)], settings);
+        state.in_context(|ctx| Self::canvas_brush_with_symmetry_in(ctx, x, y, settings))
     }
 
     /// Pinta vários dabs e suas cópias simétricas com uma única composição.
-    pub fn canvas_brush_batch_with_symmetry(
-        state: &mut AppState,
+    pub fn canvas_brush_batch_with_symmetry_in(
+        state: &mut CommandContext<'_>,
         points: &[(u32, u32)],
         settings: BrushSettings,
     ) -> DirtyTiles {
@@ -946,12 +1069,12 @@ impl PaintModule {
             return DirtyTiles::default();
         }
 
-        let sym_x = state.session.tools.paint_symmetry_x;
-        let sym_y = state.session.tools.paint_symmetry_y;
+        let sym_x = state.editor.tools.paint_symmetry_x;
+        let sym_y = state.editor.tools.paint_symmetry_y;
         let (width, height) = match state
-            .project
+            .document
             .assets
-            .get(state.project.active)
+            .get(state.document.active)
             .and_then(|a| a.texture.as_ref())
         {
             Some(t) => (t.w, t.h),
@@ -976,37 +1099,57 @@ impl PaintModule {
             sample.dedup();
             dabs.extend(sample);
         }
-        Self::canvas_brush_batch(state, &dabs, settings)
+        Self::canvas_brush_batch_in(state, &dabs, settings)
+    }
+
+    pub fn canvas_brush_batch_with_symmetry(
+        state: &mut AppState,
+        points: &[(u32, u32)],
+        settings: BrushSettings,
+    ) -> DirtyTiles {
+        state.in_context(|ctx| Self::canvas_brush_batch_with_symmetry_in(ctx, points, settings))
     }
 
     /// Confirma forma (Line/Rectangle) entre dois pontos do canvas.
     /// Roteia o estilo pelo pincel ativo (Pixel=sólido, Soft=suave,
     /// Eraser=apaga). Quem chama faz 1 checkpoint antes.
-    pub fn commit_shape(state: &mut AppState, stroke: ShapeStroke) {
-        let first_face = Self::face_at_texel_of_active(state, stroke.x0, stroke.y0);
-        Self::restricted_edit(state, first_face, |cv| match stroke.brush {
+    pub fn commit_shape_in(state: &mut CommandContext<'_>, stroke: ShapeStroke) {
+        let first_face = Self::face_at_texel_of_active_in(state.view(), stroke.x0, stroke.y0);
+        Self::restricted_edit_in(state, first_face, |cv| match stroke.brush {
             BrushType::Rectangle => Self::stroke_rect(cv, &stroke),
             BrushType::Ellipse => Self::stroke_ellipse(cv, &stroke),
             _ => Self::stroke_line(cv, &stroke),
         });
-        Self::composite_active(state);
+        Self::composite_active_in(state);
+    }
+
+    pub fn commit_shape(state: &mut AppState, stroke: ShapeStroke) {
+        state.in_context(|ctx| Self::commit_shape_in(ctx, stroke))
     }
 
     /// Wrapper compatível com API legado.
-    pub fn canvas_brush(state: &mut AppState, x: u32, y: u32, erase: bool) {
+    pub fn canvas_brush_in(state: &mut CommandContext<'_>, x: u32, y: u32, erase: bool) {
         let brush = if erase {
             BrushType::Eraser
         } else {
             BrushType::Pixel
         };
-        Self::canvas_brush_advanced(state, x, y, brush, state.canvas_brush, 1.0);
+        Self::canvas_brush_advanced_in(state, x, y, brush, state.canvas_brush, 1.0);
+    }
+
+    pub fn canvas_brush(state: &mut AppState, x: u32, y: u32, erase: bool) {
+        state.in_context(|ctx| Self::canvas_brush_in(ctx, x, y, erase))
     }
 
     /// Preenche a camada ativa com a cor selecionada.
+    pub fn canvas_fill_in(state: &mut CommandContext<'_>) {
+        let color = Self::paint_color_rgba_in(state.view());
+        Self::restricted_edit_in(state, None, |cv| cv.fill(color));
+        Self::composite_active_in(state);
+    }
+
     pub fn canvas_fill(state: &mut AppState) {
-        let color = Self::paint_color_rgba(state);
-        Self::restricted_edit(state, None, |cv| cv.fill(color));
-        Self::composite_active(state);
+        state.in_context(|ctx| Self::canvas_fill_in(ctx))
     }
 
     /// Composição "over" (alfa reto) de `src` sobre `dst`.
@@ -1036,8 +1179,8 @@ impl PaintModule {
 
     /// Aplica um gradiente linear na camada ativa de (x0, y0) até (x1, y1) entre duas cores RGBA,
     /// **por cima** do que já existe (a transparência da cor final preserva a pintura abaixo).
-    pub fn canvas_gradient_linear(
-        state: &mut AppState,
+    pub fn canvas_gradient_linear_in(
+        state: &mut CommandContext<'_>,
         x0: u32,
         y0: u32,
         x1: u32,
@@ -1045,9 +1188,9 @@ impl PaintModule {
         color_start: [u8; 4],
         color_end: [u8; 4],
     ) {
-        let first_face = Self::face_at_texel_of_active(state, x0, y0);
-        let dither = state.session.tools.brush_style.dithering;
-        Self::restricted_edit(state, first_face, |cv| {
+        let first_face = Self::face_at_texel_of_active_in(state.view(), x0, y0);
+        let dither = state.editor.tools.brush_style.dithering;
+        Self::restricted_edit_in(state, first_face, |cv| {
             let dx = x1 as f32 - x0 as f32;
             let dy = y1 as f32 - y0 as f32;
             let len_sq = dx * dx + dy * dy;
@@ -1076,22 +1219,36 @@ impl PaintModule {
                 }
             }
         });
-        Self::composite_active(state);
+        Self::composite_active_in(state);
+    }
+
+    pub fn canvas_gradient_linear(
+        state: &mut AppState,
+        x0: u32,
+        y0: u32,
+        x1: u32,
+        y1: u32,
+        color_start: [u8; 4],
+        color_end: [u8; 4],
+    ) {
+        state.in_context(|ctx| {
+            Self::canvas_gradient_linear_in(ctx, x0, y0, x1, y1, color_start, color_end)
+        })
     }
 
     /// Gradiente radial: `color_start` no centro `(cx, cy)` até `color_end` a `radius` texels.
-    pub fn canvas_gradient_radial(
-        state: &mut AppState,
+    pub fn canvas_gradient_radial_in(
+        state: &mut CommandContext<'_>,
         cx: u32,
         cy: u32,
         radius: f32,
         color_start: [u8; 4],
         color_end: [u8; 4],
     ) {
-        let first_face = Self::face_at_texel_of_active(state, cx, cy);
+        let first_face = Self::face_at_texel_of_active_in(state.view(), cx, cy);
         let radius = radius.max(1.0);
-        let dither = state.session.tools.brush_style.dithering;
-        Self::restricted_edit(state, first_face, |cv| {
+        let dither = state.editor.tools.brush_style.dithering;
+        Self::restricted_edit_in(state, first_face, |cv| {
             for y in 0..cv.h {
                 for x in 0..cv.w {
                     let d =
@@ -1114,7 +1271,20 @@ impl PaintModule {
                 }
             }
         });
-        Self::composite_active(state);
+        Self::composite_active_in(state);
+    }
+
+    pub fn canvas_gradient_radial(
+        state: &mut AppState,
+        cx: u32,
+        cy: u32,
+        radius: f32,
+        color_start: [u8; 4],
+        color_end: [u8; 4],
+    ) {
+        state.in_context(|ctx| {
+            Self::canvas_gradient_radial_in(ctx, cx, cy, radius, color_start, color_end)
+        })
     }
 
     /// Preenche uma região delimitada por um polígono UV (scanline par-ímpar).
@@ -1216,17 +1386,18 @@ impl PaintModule {
     ///
     /// `face_hint` é a face sob o cursor, quando existe: sem ela os escopos por
     /// face não têm semente e caem em `Object`.
-    pub fn canvas_fill_scoped(
-        state: &mut AppState,
+    pub fn canvas_fill_scoped_in(
+        state: &mut CommandContext<'_>,
         face_hint: Option<usize>,
         seed: Option<(u32, u32)>,
         scope: petunia_core::FillScope,
     ) {
-        Self::ensure_stack(state);
-        let color = Self::paint_color_rgba(state);
+        Self::ensure_stack_in(state);
+        let color = Self::paint_color_rgba_in(state.view());
         // No canvas 2D não há face sob o cursor: a semente (texel) a revela.
-        let face_hint = face_hint
-            .or_else(|| seed.and_then(|(x, y)| Self::face_at_texel_of_active(state, x, y)));
+        let face_hint = face_hint.or_else(|| {
+            seed.and_then(|(x, y)| Self::face_at_texel_of_active_in(state.view(), x, y))
+        });
         let scope = if face_hint.is_none()
             && matches!(
                 scope,
@@ -1244,14 +1415,14 @@ impl PaintModule {
             petunia_core::FillScope::Face => face_hint
                 .and_then(|face| {
                     state
-                        .project
+                        .document
                         .active_mesh()
                         .and_then(|mesh| mesh.faces.get(face))
                         .map(|face| vec![face.uv.clone()])
                 })
                 .unwrap_or_default(),
             petunia_core::FillScope::SelectedFaces => state
-                .project
+                .document
                 .active_mesh()
                 .map(|mesh| {
                     mesh.faces
@@ -1263,7 +1434,7 @@ impl PaintModule {
                 .unwrap_or_default(),
             petunia_core::FillScope::UvIsland => face_hint
                 .and_then(|face| {
-                    let mesh = state.project.active_mesh()?;
+                    let mesh = state.document.active_mesh()?;
                     let islands = mesh.uv_islands();
                     let island = islands.iter().find(|island| island.faces.contains(&face))?;
                     Some(
@@ -1277,7 +1448,7 @@ impl PaintModule {
                 .unwrap_or_default(),
         };
 
-        Self::restricted_edit(state, face_hint, |cv| match scope {
+        Self::restricted_edit_in(state, face_hint, |cv| match scope {
             petunia_core::FillScope::ConnectedPixels => {
                 if let Some((x, y)) = seed {
                     Self::flood_fill(cv, x, y, color, 16);
@@ -1299,14 +1470,23 @@ impl PaintModule {
             }
         });
 
-        Self::composite_active(state);
+        Self::composite_active_in(state);
+    }
+
+    pub fn canvas_fill_scoped(
+        state: &mut AppState,
+        face_hint: Option<usize>,
+        seed: Option<(u32, u32)>,
+        scope: petunia_core::FillScope,
+    ) {
+        state.in_context(|ctx| Self::canvas_fill_scoped_in(ctx, face_hint, seed, scope))
     }
 
     /// Primeira face (em ordem de índice) cuja UV cobre o texel da camada ativa.
-    fn face_at_texel_of_active(state: &AppState, x: u32, y: u32) -> Option<usize> {
-        let (w, h) = Self::active_canvas_dims(state)?;
+    fn face_at_texel_of_active_in(state: EditorView<'_>, x: u32, y: u32) -> Option<usize> {
+        let (w, h) = Self::active_canvas_dims_in(state)?;
         state
-            .project
+            .document
             .active_mesh()?
             .faces_at_texel(x, y, w, h)
             .first()
@@ -1319,24 +1499,24 @@ impl PaintModule {
     /// camada e depois devolvem os texels fora da máscara ao estado anterior.
     /// Retorna `false` se a camada está travada ou a restrição não deixa
     /// nenhuma face elegível.
-    pub(crate) fn restricted_edit(
-        state: &mut AppState,
+    pub(crate) fn restricted_edit_in(
+        state: &mut CommandContext<'_>,
         first_face: Option<usize>,
         edit: impl FnOnce(&mut Canvas),
     ) -> bool {
-        Self::ensure_stack(state);
-        let in_stroke = state.session.tools.paint_stroke.is_some();
+        Self::ensure_stack_in(state);
+        let in_stroke = state.editor.tools.paint_stroke.is_some();
         if !in_stroke {
-            state.session.tools.paint_restriction = None;
-            state.session.tools.paint_lock_face = None;
+            state.editor.tools.paint_restriction = None;
+            state.editor.tools.paint_lock_face = None;
         }
-        let restriction = Self::resolve_restriction(state, first_face);
+        let restriction = Self::resolve_restriction_in(state, first_face);
         let blocked = Self::restriction_blocks_everything(restriction.as_ref());
-        let alpha_lock = state.session.tools.brush_style.alpha_lock;
+        let alpha_lock = state.editor.tools.brush_style.alpha_lock;
         let mut done = false;
         if !blocked {
-            let active = state.project.active;
-            if let Some(asset) = state.project.assets.get_mut(active)
+            let active = state.document.active;
+            if let Some(asset) = state.document.assets.get_mut(active)
                 && !asset.locked
                 && let Some(stack) = asset.paint_stack.as_mut()
                 && let Some(layer) = stack.active_mut()
@@ -1375,39 +1555,46 @@ impl PaintModule {
             }
         }
         if !in_stroke {
-            state.session.tools.paint_restriction = None;
-            state.session.tools.paint_lock_face = None;
+            state.editor.tools.paint_restriction = None;
+            state.editor.tools.paint_lock_face = None;
         }
         done
     }
 
     /// Limpa a camada ativa (alfa zero).
-    pub fn canvas_clear(state: &mut AppState) {
-        Self::ensure_stack(state);
-        let active_idx = state.project.active;
-        if let Some(o) = state.project.assets.get_mut(active_idx)
+    pub fn canvas_clear_in(state: &mut CommandContext<'_>) {
+        Self::ensure_stack_in(state);
+        let active_idx = state.document.active;
+        if let Some(o) = state.document.assets.get_mut(active_idx)
             && let Some(stack) = o.paint_stack.as_mut()
             && let Some(layer) = stack.active_mut()
             && let Some(cv) = layer.canvas_mut()
         {
             cv.fill([0, 0, 0, 0]);
         }
-        Self::composite_active(state);
+        Self::composite_active_in(state);
     }
 
     // ---- Pintura 3D Direta sobre Malha via UV (P3D-062, P3D-132) ----
 
+    pub fn canvas_clear(state: &mut AppState) {
+        state.in_context(|ctx| Self::canvas_clear_in(ctx))
+    }
+
     /// UV do ponto de impacto numa face (raycast → baricêntricas → UV).
     /// `None` = fora da face ou máscara de isolamento vetou.
-    pub fn face_hit_uv(
-        state: &AppState,
+    pub fn face_hit_uv_in(
+        state: EditorView<'_>,
         face_idx: usize,
         hit_pos: Vec3,
         isolate_selection: bool,
     ) -> Option<[f32; 2]> {
-        let active_asset = state.project.assets.get(state.project.active)?;
+        let active_asset = state.document.assets.get(state.document.active)?;
         let mesh = &active_asset.mesh;
         let face = mesh.faces.get(face_idx)?;
+        // O raio atinge o objeto em mundo; baricêntricas valem no frame local
+        // (transformação afim preserva baricêntricas).
+        let hit_pos = active_asset.to_local_point(hit_pos);
 
         // P3D-132: Paint Masks / Face & Selection Isolation
         if isolate_selection {
@@ -1446,12 +1633,21 @@ impl PaintModule {
         None
     }
 
+    pub fn face_hit_uv(
+        state: &AppState,
+        face_idx: usize,
+        hit_pos: Vec3,
+        isolate_selection: bool,
+    ) -> Option<[f32; 2]> {
+        Self::face_hit_uv_in(state.view(), face_idx, hit_pos, isolate_selection)
+    }
+
     /// Converte UV [0,1] em pixel do canvas (com wrap + flip V).
-    pub fn uv_to_px(state: &AppState, uv: [f32; 2]) -> Option<(u32, u32)> {
+    pub fn uv_to_px_in(state: EditorView<'_>, uv: [f32; 2]) -> Option<(u32, u32)> {
         let (w, h) = state
-            .project
+            .document
             .assets
-            .get(state.project.active)
+            .get(state.document.active)
             .and_then(|o| {
                 o.paint_stack
                     .as_ref()
@@ -1471,19 +1667,25 @@ impl PaintModule {
         ))
     }
 
+    pub fn uv_to_px(state: &AppState, uv: [f32; 2]) -> Option<(u32, u32)> {
+        Self::uv_to_px_in(state.view(), uv)
+    }
+
     /// Encontra as coordenadas UV na malha para uma posição tridimensional arbitrária
     /// varrendo as faces (e triângulos gerados para render/picking).
-    pub fn find_mesh_uv_at_pos(
-        state: &AppState,
+    pub fn find_mesh_uv_at_pos_in(
+        state: EditorView<'_>,
         pos: Vec3,
         isolate_selection: bool,
     ) -> Option<[f32; 2]> {
-        let active_asset = state.project.assets.get(state.project.active)?;
+        let active_asset = state.document.assets.get(state.document.active)?;
         let mesh = &active_asset.mesh;
+        let local_pos = active_asset.to_local_point(pos);
 
-        // 1ª passada: teste exato/tolerante padrão em cada face
+        // 1ª passada: teste exato/tolerante padrão em cada face (recebe `pos`
+        // em mundo; a conversão acontece lá dentro)
         for (fi, _) in mesh.faces.iter().enumerate() {
-            if let Some(uv) = Self::face_hit_uv(state, fi, pos, isolate_selection) {
+            if let Some(uv) = Self::face_hit_uv_in(state, fi, pos, isolate_selection) {
                 return Some(uv);
             }
         }
@@ -1511,7 +1713,8 @@ impl PaintModule {
                     let uv0 = face.uv[a];
                     let uv1 = face.uv[b];
                     let uv2 = face.uv[c];
-                    if let Some(uv) = barycentric_uv_tolerant(pos, v0, v1, v2, uv0, uv1, uv2, -0.05)
+                    if let Some(uv) =
+                        barycentric_uv_tolerant(local_pos, v0, v1, v2, uv0, uv1, uv2, -0.05)
                     {
                         return Some(uv);
                     }
@@ -1521,10 +1724,18 @@ impl PaintModule {
         None
     }
 
+    pub fn find_mesh_uv_at_pos(
+        state: &AppState,
+        pos: Vec3,
+        isolate_selection: bool,
+    ) -> Option<[f32; 2]> {
+        Self::find_mesh_uv_at_pos_in(state.view(), pos, isolate_selection)
+    }
+
     /// Pinta na textura 2D do modelo projetando o ponto de impacto 3D nas
     /// coordenadas UV da face (API legado → descriptor canônico).
-    pub fn paint_mesh_3d(
-        state: &mut AppState,
+    pub fn paint_mesh_3d_in(
+        state: &mut CommandContext<'_>,
         face_idx: usize,
         hit_pos: Vec3,
         brush: BrushType,
@@ -1535,15 +1746,52 @@ impl PaintModule {
         let settings = BrushSettings {
             kind: brush,
             size_px: (radius.max(1) * 2) as f32,
-            hardness: state.session.tools.brush_hardness,
+            hardness: state.editor.tools.brush_hardness,
             strength,
-            flow: state.session.tools.brush_flow,
-            spacing: state.session.tools.brush_spacing,
+            flow: state.editor.tools.brush_flow,
+            spacing: state.editor.tools.brush_spacing,
         };
-        Self::paint_mesh_3d_with_settings(state, face_idx, hit_pos, settings, isolate_selection)
+        Self::paint_mesh_3d_with_settings_in(state, face_idx, hit_pos, settings, isolate_selection)
+    }
+
+    pub fn paint_mesh_3d(
+        state: &mut AppState,
+        face_idx: usize,
+        hit_pos: Vec3,
+        brush: BrushType,
+        radius: u32,
+        strength: f32,
+        isolate_selection: bool,
+    ) -> bool {
+        state.in_context(|ctx| {
+            Self::paint_mesh_3d_in(
+                ctx,
+                face_idx,
+                hit_pos,
+                brush,
+                radius,
+                strength,
+                isolate_selection,
+            )
+        })
     }
 
     /// Pinta na textura via UV com o descriptor canônico (iniciativa Paint).
+    pub fn paint_mesh_3d_with_settings_in(
+        state: &mut CommandContext<'_>,
+        face_idx: usize,
+        hit_pos: Vec3,
+        settings: BrushSettings,
+        isolate_selection: bool,
+    ) -> bool {
+        Self::paint_mesh_3d_batch_with_settings_in(
+            state,
+            &[(face_idx, hit_pos)],
+            settings,
+            isolate_selection,
+        )
+    }
+
     pub fn paint_mesh_3d_with_settings(
         state: &mut AppState,
         face_idx: usize,
@@ -1551,12 +1799,15 @@ impl PaintModule {
         settings: BrushSettings,
         isolate_selection: bool,
     ) -> bool {
-        Self::paint_mesh_3d_batch_with_settings(
-            state,
-            &[(face_idx, hit_pos)],
-            settings,
-            isolate_selection,
-        )
+        state.in_context(|ctx| {
+            Self::paint_mesh_3d_with_settings_in(
+                ctx,
+                face_idx,
+                hit_pos,
+                settings,
+                isolate_selection,
+            )
+        })
     }
 
     /// Pinta vários hits 3D com pincel esférico, respeitando simetria, seleção
@@ -1565,8 +1816,8 @@ impl PaintModule {
     /// `isolate_selection` força a restrição pela seleção mesmo que o isolamento
     /// não esteja ligado na sessão. Fora de um traço (`begin_paint_stroke`) a
     /// restrição e o buffer valem só para esta chamada.
-    pub fn paint_mesh_3d_batch_with_settings(
-        state: &mut AppState,
+    pub fn paint_mesh_3d_batch_with_settings_in(
+        state: &mut CommandContext<'_>,
         hits: &[(usize, Vec3)],
         settings: BrushSettings,
         isolate_selection: bool,
@@ -1575,102 +1826,121 @@ impl PaintModule {
         if hits.is_empty() || s.kind.is_shape() {
             return false;
         }
-        Self::ensure_canvas(state);
-        Self::ensure_stack(state);
+        Self::ensure_canvas_in(state);
+        Self::ensure_stack_in(state);
 
-        let in_stroke = state.session.tools.paint_stroke.is_some();
-        let forced = isolate_selection && !state.session.tools.paint_isolate_selection;
+        let in_stroke = state.editor.tools.paint_stroke.is_some();
+        let forced = isolate_selection && !state.editor.tools.paint_isolate_selection;
         if !in_stroke {
-            state.session.tools.paint_restriction = None;
-            state.session.tools.paint_buffer = None;
+            state.editor.tools.paint_restriction = None;
+            state.editor.tools.paint_buffer = None;
         }
         if forced {
-            state.session.tools.paint_isolate_selection = true;
+            state.editor.tools.paint_isolate_selection = true;
         }
-        let dirty = Self::stamp_dabs_3d(state, hits, s);
+        let dirty = Self::stamp_dabs_3d_in(state, hits, s);
         if forced {
-            state.session.tools.paint_isolate_selection = false;
+            state.editor.tools.paint_isolate_selection = false;
         }
         if !in_stroke {
-            state.session.tools.paint_restriction = None;
-            state.session.tools.paint_buffer = None;
+            state.editor.tools.paint_restriction = None;
+            state.editor.tools.paint_buffer = None;
         }
         let mut dirty = dirty;
         dirty.normalize();
         if dirty.is_empty() {
             return false;
         }
-        Self::composite_active_tiles(state, dirty.as_slice());
+        Self::composite_active_tiles_in(state, dirty.as_slice());
         true
     }
 
-    fn lock_allows_face(state: &AppState, face_idx: usize) -> bool {
+    pub fn paint_mesh_3d_batch_with_settings(
+        state: &mut AppState,
+        hits: &[(usize, Vec3)],
+        settings: BrushSettings,
+        isolate_selection: bool,
+    ) -> bool {
+        state.in_context(|ctx| {
+            Self::paint_mesh_3d_batch_with_settings_in(ctx, hits, settings, isolate_selection)
+        })
+    }
+
+    fn lock_allows_face_in(state: EditorView<'_>, face_idx: usize) -> bool {
         use petunia_core::BrushLock;
-        match state.session.tools.brush_lock {
+        match state.editor.tools.brush_lock {
             BrushLock::None | BrushLock::FirstObject => true,
             BrushLock::FirstFace => state
-                .session
+                .editor
                 .selection
                 .faces
                 .first()
                 .copied()
                 .is_none_or(|f| f == face_idx),
             BrushLock::SelectedFaces => {
-                let Some(mesh) = state.project.active_mesh() else {
+                let Some(mesh) = state.document.active_mesh() else {
                     return false;
                 };
                 mesh.faces.get(face_idx).is_some_and(|f| f.selected)
-                    || state.session.selection.faces.contains(&face_idx)
+                    || state.editor.selection.faces.contains(&face_idx)
             }
         }
     }
 
     /// Screen-space brush: stamp every visible face whose projected UV falls
     /// inside the dab. Reuses the same canvas brush foundation.
-    pub fn paint_screen_space(
-        state: &mut AppState,
+    pub fn paint_screen_space_in(
+        state: &mut CommandContext<'_>,
         hit_pos: Vec3,
         settings: BrushSettings,
     ) -> usize {
-        if !Self::lock_allows_face(state, 0)
+        if !Self::lock_allows_face_in(state.view(), 0)
             && matches!(
-                state.session.tools.brush_lock,
+                state.editor.tools.brush_lock,
                 petunia_core::BrushLock::SelectedFaces | petunia_core::BrushLock::FirstFace
             )
         {
             // still iterate faces below with per-face lock
         }
-        let isolate = state.session.tools.paint_isolate_selection
+        let isolate = state.editor.tools.paint_isolate_selection
             || matches!(
-                state.session.tools.brush_lock,
+                state.editor.tools.brush_lock,
                 petunia_core::BrushLock::SelectedFaces
             );
         let face_count = state
-            .project
+            .document
             .active_mesh()
             .map(|m| m.faces.len())
             .unwrap_or(0);
         let mut hits = Vec::new();
         for fi in 0..face_count {
-            if !Self::lock_allows_face(state, fi) {
+            if !Self::lock_allows_face_in(state.view(), fi) {
                 continue;
             }
-            if Self::face_hit_uv(state, fi, hit_pos, isolate).is_some() {
+            if Self::face_hit_uv_in(state.view(), fi, hit_pos, isolate).is_some() {
                 hits.push((fi, hit_pos));
             }
         }
         let count = hits.len();
         if count > 0 {
-            Self::paint_mesh_3d_batch_with_settings(state, &hits, settings, isolate);
+            Self::paint_mesh_3d_batch_with_settings_in(state, &hits, settings, isolate);
         }
         count
     }
 
-    pub fn fill_scope(state: &mut AppState, scope: petunia_core::FillScope) {
+    pub fn paint_screen_space(
+        state: &mut AppState,
+        hit_pos: Vec3,
+        settings: BrushSettings,
+    ) -> usize {
+        state.in_context(|ctx| Self::paint_screen_space_in(ctx, hit_pos, settings))
+    }
+
+    pub fn fill_scope_in(state: &mut CommandContext<'_>, scope: petunia_core::FillScope) {
         use petunia_core::FillScope;
-        Self::ensure_stack(state);
+        Self::ensure_stack_in(state);
         match scope {
-            FillScope::ConnectedPixels | FillScope::Object => Self::canvas_fill(state),
+            FillScope::ConnectedPixels | FillScope::Object => Self::canvas_fill_in(state),
             FillScope::Face | FillScope::SelectedFaces | FillScope::UvIsland => {
                 let isolate = !matches!(scope, FillScope::Object);
                 let color = [
@@ -1680,21 +1950,21 @@ impl PaintModule {
                     255,
                 ];
                 let uvs: Vec<[f32; 2]> = state
-                    .project
+                    .document
                     .active_mesh()
                     .map(|m| {
                         m.faces
                             .iter()
                             .enumerate()
                             .filter(|(i, f)| {
-                                !isolate || f.selected || state.session.selection.faces.contains(i)
+                                !isolate || f.selected || state.editor.selection.faces.contains(i)
                             })
                             .flat_map(|(_, f)| f.uv.iter().copied())
                             .collect()
                     })
                     .unwrap_or_default();
-                let active = state.project.active;
-                if let Some(o) = state.project.assets.get_mut(active)
+                let active = state.document.active;
+                if let Some(o) = state.document.assets.get_mut(active)
                     && let Some(stack) = o.paint_stack.as_mut()
                     && let Some(layer) = stack.active_mut()
                     && !layer.locked
@@ -1709,9 +1979,32 @@ impl PaintModule {
                         cv.set(x, y, color);
                     }
                 }
-                Self::composite_active(state);
+                Self::composite_active_in(state);
             }
         }
+    }
+
+    pub fn fill_scope(state: &mut AppState, scope: petunia_core::FillScope) {
+        state.in_context(|ctx| Self::fill_scope_in(ctx, scope))
+    }
+
+    pub fn add_decal_in(
+        state: &mut CommandContext<'_>,
+        image: Canvas,
+        center_uv: [f32; 2],
+        scale_uv: [f32; 2],
+        rotation_rad: f32,
+    ) -> Option<uuid::Uuid> {
+        Self::ensure_stack_in(state);
+        state.checkpoint("add decal");
+        let active = state.document.active;
+        let id = state.document.assets.get_mut(active).and_then(|o| {
+            let stack = o.paint_stack.as_mut()?;
+            let decal = DecalLayer::new(image, center_uv, scale_uv, rotation_rad);
+            Some(stack.add_layer(PaintLayer::new_decal("Decal", decal)))
+        });
+        Self::composite_active_in(state);
+        id
     }
 
     pub fn add_decal(
@@ -1721,27 +2014,22 @@ impl PaintModule {
         scale_uv: [f32; 2],
         rotation_rad: f32,
     ) -> Option<uuid::Uuid> {
-        Self::ensure_stack(state);
-        state.checkpoint("add decal");
-        let active = state.project.active;
-        let id = state.project.assets.get_mut(active).and_then(|o| {
-            let stack = o.paint_stack.as_mut()?;
-            let decal = DecalLayer::new(image, center_uv, scale_uv, rotation_rad);
-            Some(stack.add_layer(PaintLayer::new_decal("Decal", decal)))
-        });
-        Self::composite_active(state);
-        id
+        state.in_context(|ctx| Self::add_decal_in(ctx, image, center_uv, scale_uv, rotation_rad))
     }
 
-    pub fn add_layer_group(state: &mut AppState, name: &str) -> Option<uuid::Uuid> {
-        Self::ensure_stack(state);
+    pub fn add_layer_group_in(state: &mut CommandContext<'_>, name: &str) -> Option<uuid::Uuid> {
+        Self::ensure_stack_in(state);
         state.checkpoint("add layer group");
-        let active = state.project.active;
+        let active = state.document.active;
         state
-            .project
+            .document
             .assets
             .get_mut(active)
             .and_then(|o| o.paint_stack.as_mut().map(|s| s.add_group(name)))
+    }
+
+    pub fn add_layer_group(state: &mut AppState, name: &str) -> Option<uuid::Uuid> {
+        state.in_context(|ctx| Self::add_layer_group_in(ctx, name))
     }
 }
 
@@ -2442,7 +2730,7 @@ mod tests {
         state.session.tools.paint_isolate_selection = true;
         state.paint_color = [0.0, 1.0, 0.0];
         PaintModule::ensure_stack(&mut state);
-        let (w, h) = PaintModule::active_canvas_dims(&state).unwrap();
+        let (w, h) = PaintModule::active_canvas_dims_in(state.view()).unwrap();
         // Dab enorme no centro do canvas: só o que cai na UV da face escolhida pinta.
         let settings = BrushSettings {
             kind: BrushType::Pixel,
@@ -2492,11 +2780,11 @@ mod tests {
         assert!(!PaintModule::paint_mesh_3d_with_settings(
             &mut state, front, front_hit, settings, false
         ));
-        PaintModule::reset_stroke_scratch(&mut state);
+        state.in_context(|ctx| PaintModule::reset_stroke_scratch_in(ctx));
         assert!(PaintModule::paint_mesh_3d_with_settings(
             &mut state, right, right_hit, settings, false
         ));
-        PaintModule::reset_stroke_scratch(&mut state);
+        state.in_context(|ctx| PaintModule::reset_stroke_scratch_in(ctx));
         // Tudo selecionado não é uma restrição: pinta em qualquer face.
         for face in &mut state.project.active_mesh_mut().unwrap().faces {
             face.selected = true;
@@ -2512,7 +2800,7 @@ mod tests {
         let (right, _) = face_toward(&state, Vec3::X);
         state.project.active_mesh_mut().unwrap().faces[right].selected = true;
         PaintModule::ensure_stack(&mut state);
-        let (w, h) = PaintModule::active_canvas_dims(&state).unwrap();
+        let (w, h) = PaintModule::active_canvas_dims_in(state.view()).unwrap();
         let restriction = PaintModule::resolve_restriction(&mut state, None).expect("restrição");
         let mesh = state.project.active_mesh().unwrap();
         let mask = restriction.mask(mesh, w, h);

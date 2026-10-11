@@ -32,6 +32,9 @@ pub struct CutSession {
     pub fill_cap: bool,
     /// Se verdadeiro, insere cortes simétricos equilibrados (Dual Balanced Loop Rings).
     pub balanced: bool,
+    /// Frame local do objeto → mundo. `source` é local; câmera, planos e
+    /// linhas de preview são de mundo (P01/G10).
+    pub object_to_world: glam::Mat4,
 }
 
 impl CutSession {
@@ -47,7 +50,14 @@ impl CutSession {
             sliding: false,
             fill_cap: false,
             balanced: false,
+            object_to_world: glam::Mat4::IDENTITY,
         }
+    }
+
+    /// Sessão sobre um objeto transformado (`Asset::world_matrix`).
+    pub fn with_object_to_world(mut self, object_to_world: glam::Mat4) -> Self {
+        self.object_to_world = object_to_world;
+        self
     }
 
     /// Ajusta a quantidade de cortes do loop cut dentro dos limites seguros (1..=32).
@@ -74,7 +84,13 @@ impl CutSession {
         current_mesh: &Mesh,
         view_direction: Vec3,
     ) -> Result<Mesh, String> {
-        petunia_mesh::knife::cut_path(current_mesh, start, end, view_direction)
+        // A direção de vista é de mundo; a malha, local.
+        let local_view = self
+            .object_to_world
+            .inverse()
+            .transform_vector3(view_direction)
+            .normalize_or_zero();
+        petunia_mesh::knife::cut_path(current_mesh, start, end, local_view)
     }
 
     /// Calcula a malha fatiada por um plano gerado pelo arrasto em tela.
@@ -98,7 +114,9 @@ impl CutSession {
         } else {
             normal
         };
-        let center = Vec3::from_array(self.source.selection_center());
+        let center = self
+            .object_to_world
+            .transform_point3(Vec3::from_array(self.source.selection_center()));
         let anchor_ndc = viewport.screen_to_ndc(anchor);
         let (origin, direction) = camera.ray(anchor_ndc[0], anchor_ndc[1]);
         let forward = camera.forward();
@@ -109,8 +127,16 @@ impl CutSession {
         }
 
         let point = origin + direction * ((center - origin).dot(forward) / denominator);
+        // Plano de mundo → local: ponto pela inversa, normal pela transposta
+        // (inversa-transposta de mundo → local).
+        let local_point = self.object_to_world.inverse().transform_point3(point);
+        let local_normal = self
+            .object_to_world
+            .transpose()
+            .transform_vector3(normal)
+            .normalize_or_zero();
         let mut mesh = self.source.clone();
-        mesh.slice_plane(point, normal, self.fill_cap);
+        mesh.slice_plane(local_point, local_normal, self.fill_cap);
         Some(mesh)
     }
 
@@ -122,16 +148,21 @@ impl CutSession {
     }
 
     /// Gera os segmentos de reta 3D correspondentes às linhas de pré-visualização do loop cut.
+    /// Linhas em **mundo** (overlay), calculadas na fonte local.
     pub fn preview_loop_lines(&self, slide: f32) -> Result<Vec<[Vec3; 2]>, LoopCutError> {
-        if let Some(ring) = &self.ring {
-            if self.balanced {
-                ring.preview_balanced(&self.source, self.cuts, slide)
-            } else {
-                ring.preview(&self.source, self.cuts, slide)
-            }
+        let Some(ring) = &self.ring else {
+            return Ok(Vec::new());
+        };
+        let lines = if self.balanced {
+            ring.preview_balanced(&self.source, self.cuts, slide)?
         } else {
-            Ok(Vec::new())
-        }
+            ring.preview(&self.source, self.cuts, slide)?
+        };
+        let m = self.object_to_world;
+        Ok(lines
+            .into_iter()
+            .map(|[a, b]| [m.transform_point3(a), m.transform_point3(b)])
+            .collect())
     }
 
     /// Aplica a inserção do anel de loop na malha original com o fator de deslizamento especificado.

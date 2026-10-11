@@ -13,9 +13,9 @@
 //! [`LastOperation`] guarda o gesto confirmado para ajuste posterior dentro da
 //! mesma entrada de Undo.
 
+use crate::context::{CommandContext, EditorView};
 use glam::Vec3;
 
-use crate::AppState;
 use crate::modal::{ModalConstraint, ModalError, ModalKind};
 
 /// Limiar padrão, em pixels lógicos, entre clique e arrasto.
@@ -500,7 +500,7 @@ impl LastOperation {
     }
 }
 
-impl AppState {
+impl CommandContext<'_> {
     /// Confirma a operação modal ativa como um gesto e devolve a "Última
     /// operação" ajustável. `None` quando nada mudou (sem entrada de Undo).
     pub fn commit_modal_gesture(&mut self) -> Option<LastOperation> {
@@ -524,18 +524,11 @@ impl AppState {
             value,
             components,
             normal,
-            history_depth: self.project.undo.depth(),
-            revision_clock: self.project.project.revision_clock(),
+            history_depth: self.document.undo.depth(),
+            revision_clock: self.document.project.revision_clock(),
             prelude,
             flip_when_negative,
         })
-    }
-
-    /// A última operação ainda é o topo do histórico e nada mudou desde então.
-    pub fn last_operation_is_current(&self, last: &LastOperation) -> bool {
-        self.modal.is_none()
-            && self.project.undo.depth() == last.history_depth
-            && self.project.project.revision_clock() == last.revision_clock
     }
 
     /// Reaplica a última operação com um novo valor, substituindo a entrada de
@@ -568,18 +561,18 @@ impl AppState {
         }
     }
 
-    fn reapply(
+    pub(crate) fn reapply(
         &mut self,
         last: &LastOperation,
         translation: Vec3,
         scalar: f32,
     ) -> Result<(), ModalError> {
         if let Some(prelude) = &last.prelude {
-            let before = self.project.project.clone();
-            let before_selection = self.session.selection.clone();
+            let before = self.document.project.clone();
+            let before_selection = self.editor.selection.clone();
             let (after, selection) = prelude.0.as_ref().clone();
-            self.project.project = after;
-            self.session.selection = selection;
+            self.document.project = after;
+            self.editor.selection = selection;
             self.begin_modal_after_prelude(last.kind, before, before_selection)?;
             if last.flip_when_negative {
                 self.set_modal_flip_when_negative();
@@ -598,10 +591,20 @@ impl AppState {
     }
 }
 
+impl<'a> EditorView<'a> {
+    /// A última operação ainda é o topo do histórico e nada mudou desde então.
+    pub fn last_operation_is_current(self, last: &LastOperation) -> bool {
+        self.modal.is_none()
+            && self.document.undo.depth() == last.history_depth
+            && self.document.project.revision_clock() == last.revision_clock
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::EditMode;
+    use crate::state::AppState;
 
     const A: [f32; 2] = [100.0, 100.0];
 
