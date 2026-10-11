@@ -281,59 +281,33 @@ pub fn generate_cheatsheet_md() -> Result<String> {
     Ok(out)
 }
 
+/// Catálogo de ícones a partir do global `PetuniaIcons` do shell Slint (fonte
+/// única: cada propriedade aponta para o SVG do pack, cuja pasta é o grupo).
 fn generate_icon_tokens_md(root_dir: &Path) -> Result<String> {
-    let icon_registry_path = root_dir.join("crates/ui/src/icon_registry.rs");
-    let content = std::fs::read_to_string(&icon_registry_path)
-        .with_context(|| format!("Falha ao ler {}", icon_registry_path.display()))?;
+    let icon_catalog_path = root_dir.join("crates/ui-slint/ui/petunia_icons.slint");
+    let content = std::fs::read_to_string(&icon_catalog_path)
+        .with_context(|| format!("Falha ao ler {}", icon_catalog_path.display()))?;
 
-    // Parse dos ícones a partir de enum PetuniaIcon e do match em id()
     let mut tokens: Vec<(String, String, String)> = Vec::new();
-
-    let mut in_enum = false;
-    let mut current_group = "Geral".to_string();
-
     for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("pub enum PetuniaIcon {") {
-            in_enum = true;
+        let Some(rest) = line.trim().strip_prefix("out property <image> ") else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect();
+        if name.is_empty() {
             continue;
         }
-        if in_enum {
-            if trimmed.starts_with('}') {
-                break;
-            }
-            if trimmed.starts_with("// ---") {
-                let clean_group = trimmed.trim_matches(['/', '-', ' ']);
-                if !clean_group.is_empty() {
-                    current_group = clean_group.to_string();
-                }
-                continue;
-            }
-            if trimmed.is_empty() || trimmed.starts_with("//") {
-                continue;
-            }
-
-            let variant_name = trimmed
-                .split(',')
-                .next()
-                .unwrap_or("")
-                .trim()
-                .split('(')
-                .next()
-                .unwrap_or("")
-                .trim();
-
-            if !variant_name.is_empty()
-                && variant_name
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_alphabetic())
-            {
-                // Tentar encontrar o id correspondente
-                let id = to_snake_case(variant_name);
-                tokens.push((variant_name.to_string(), id, current_group.clone()));
-            }
-        }
+        let group = rest
+            .split("petunia-outline/svg/")
+            .nth(1)
+            .and_then(|path| path.split('/').next())
+            .filter(|group| !group.ends_with(".svg"))
+            .unwrap_or("geral")
+            .to_string();
+        tokens.push((name.clone(), name.replace('-', "_"), group));
     }
 
     tokens.sort_by(|a, b| a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0)));
@@ -347,42 +321,25 @@ fn generate_icon_tokens_md(root_dir: &Path) -> Result<String> {
     out.push_str("\n\n# Catálogo Canônico de Tokens de Ícones (`IconId`)\n\n");
     out.push_str("> **Single Source of Truth (P3D-086, P3D-119)**\n");
     out.push_str(
-        "> Ícones no Petunia3D são estritamente endereçados por tokens semânticos (`IconId`), ",
+        "> Ícones no Petunia3D são endereçados por tokens semânticos do global Slint `PetuniaIcons` ",
     );
     out.push_str(
-        "permitindo substituição de pacotes gráficos em tempo de execução sem afetar a lógica.\n\n",
+        "(variantes outline/filled trocadas em tempo de execução, sem afetar a lógica).\n\n",
     );
 
     out.push_str(&format!(
-        "Total de tokens declarados em `PetuniaIcon`: **{}**.\n\n",
+        "Total de tokens declarados em `PetuniaIcons`: **{}**.\n\n",
         tokens.len()
     ));
 
-    out.push_str("| Token Enum | Identificador Textual (`IconId`) | Grupo Semântico |\n");
+    out.push_str("| Propriedade Slint | Identificador Textual (`IconId`) | Grupo Semântico |\n");
     out.push_str("| :--- | :--- | :--- |\n");
-    for (variant, id, group) in tokens {
-        out.push_str(&format!(
-            "| `PetuniaIcon::{variant}` | `{id}` | {group} |\n"
-        ));
+    for (name, id, group) in tokens {
+        out.push_str(&format!("| `PetuniaIcons.{name}` | `{id}` | {group} |\n"));
     }
     out.push('\n');
 
     Ok(out)
-}
-
-fn to_snake_case(s: &str) -> String {
-    let mut result = String::new();
-    for (i, c) in s.chars().enumerate() {
-        if c.is_uppercase() {
-            if i > 0 {
-                result.push('_');
-            }
-            result.push(c.to_ascii_lowercase());
-        } else {
-            result.push(c);
-        }
-    }
-    result
 }
 
 fn generate_text_tokens_md(root_dir: &Path) -> Result<String> {
@@ -799,9 +756,9 @@ mod tests {
         let root = test_root_dir();
         let cat = GeneratedCatalog::generate(&root).expect("geração falhou");
 
-        assert!(cat.icon_tokens_md.contains("`PetuniaIcon::SelectBox`"));
-        assert!(cat.icon_tokens_md.contains("`PetuniaIcon::Extrude`"));
-        assert!(cat.icon_tokens_md.contains("`PetuniaIcon::Bevel`"));
+        assert!(cat.icon_tokens_md.contains("`PetuniaIcons.select-box`"));
+        assert!(cat.icon_tokens_md.contains("`PetuniaIcons.extrude`"));
+        assert!(cat.icon_tokens_md.contains("`PetuniaIcons.bevel`"));
         assert!(cat.icon_tokens_md.contains("`select_box`"));
         assert!(cat.icon_tokens_md.contains("`extrude`"));
     }

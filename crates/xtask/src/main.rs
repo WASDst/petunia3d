@@ -2,8 +2,7 @@
 //! Gerencia tarefas de documentação, integridade e drift prevention.
 
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -11,7 +10,6 @@ mod bible;
 mod generator;
 mod icons_check;
 mod slint_lint;
-mod ui_guard;
 use generator::GeneratedCatalog;
 
 fn main() -> Result<()> {
@@ -29,22 +27,9 @@ fn main() -> Result<()> {
         "bible-lock" => bible::check(&root_dir(), true)?,
         "arch-check" => task_arch_check()?,
         "verify" => task_verify()?,
-        "ui-check" => task_ui_check()?,
         "icons-check" => icons_check::run(&root_dir())?,
         "ui-lint" => slint_lint::run(&root_dir())?,
         "ui-metrics" => task_ui_metrics()?,
-        "ui-guard" => {
-            let rest: Vec<String> = args.collect();
-            let strict = rest.iter().any(|a| a == "--strict");
-            let baseline = rest.iter().any(|a| a == "--baseline");
-            let report = ui_guard::run(&root_dir(), strict)?;
-            if baseline {
-                println!(
-                    "\n---8<--- 00-baseline.md (colar em docs/audits/ui-ecosystem-final-push/) ---\n"
-                );
-                print!("{}", ui_guard::markdown(&report));
-            }
-        }
         "help" | "--help" | "-h" => print_help(),
         other => {
             eprintln!("Comando desconhecido: {other}\n");
@@ -72,14 +57,9 @@ COMANDOS:
     bible-lock    Regenera o lock do site congelado (somente após decisão explícita de descongelar)
     arch-check    Valida a integridade dos relatórios da auditoria arquitetural
     verify        Gate backend read-only (fmt, check, tests, clippy, arch-check)
-    ui-check      Valida o mapa de componentes UI (docs/public/ui-map.json) contra o código
     ui-lint       Falha se o markup Slint usar cor #hex, font-size ou sombra literal fora de tokens.slint
     ui-metrics    Mede o shell (plano de UI §11): controles visíveis por workspace em 1800 × 1012
                   e literais de cor/fonte (ui-lint). Falha se POLY passar da meta.
-    ui-guard      Guarda de arquitetura da UI (§36/§37 da diretiva Egui Ecosystem Final Push)
-                  Reporta, por regra, ocorrências em product code versus foundation/adapter.
-                  --strict    falha se um tipo de biblioteca auxiliar escapar do adapter
-                  --baseline  imprime a tabela de baseline em Markdown
     help          Exibe esta mensagem de ajuda
 "#
     );
@@ -321,8 +301,9 @@ fn task_docs_check() -> Result<()> {
         println!("✅ Changelog vivo validado e 100% sincronizado (P3D-117).");
     }
 
-    // 4. Validar mapa de componentes UI contra o código
-    task_ui_check()?;
+    // 4. O mapa de componentes egui (docs/public/ui-map.json) descrevia a UI
+    //    removida; a estrutura do shell Slint é validada pelo `ui-lint` e pelos
+    //    testes de integração de `petunia_ui_slint`.
 
     // 5. Build do VitePress é pulado durante o desenvolvimento com o site congelado (AGENTS.md §1).
     // Para compilar explicitamente o site VitePress, utilize 'cargo run -p xtask -- docs'.
@@ -333,287 +314,8 @@ fn task_docs_check() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
-struct UiMapNode {
-    id: String,
-    kind: String,
-    file: String,
-    entry: String,
-    #[allow(dead_code)]
-    line: Option<u32>,
-    #[allow(dead_code)]
-    position: Option<String>,
-    region: Option<String>,
-    #[serde(default)]
-    children: Vec<String>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    reads: Vec<String>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    writes: Vec<String>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    dispatches: Vec<String>,
-    #[allow(dead_code)]
-    #[serde(default)]
-    opens: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct UiMap {
-    version: u32,
-    #[allow(dead_code)]
-    roots: Vec<String>,
-    nodes: Vec<UiMapNode>,
-}
-
-/// Valida o mapa de componentes UI contra o código (drift prevention).
-///
-/// Falha em: JSON inválido, ids duplicados, kind desconhecido, arquivo
-/// ausente, símbolo de entrada ausente no arquivo, região fora de
-/// `RegionSlot`, filho inexistente, ciclo. Símbolos públicos sem nó são
-/// apenas avisos (guia de cobertura, não quebra).
-fn task_ui_check() -> Result<()> {
-    println!("🗺️ Validando mapa de componentes UI...");
-    let root = root_dir();
-    let map_path = root.join("docs").join("public").join("ui-map.json");
-    let text = std::fs::read_to_string(&map_path)
-        .with_context(|| format!("Falha ao ler {}", map_path.display()))?;
-    let map: UiMap =
-        serde_json::from_str(&text).with_context(|| "docs/public/ui-map.json inválido")?;
-    if map.version != 1 {
-        bail!(
-            "ui-map.json: version {} não suportada (esperado 1)",
-            map.version
-        );
-    }
-    if map.nodes.is_empty() {
-        bail!("ui-map.json: nenhum nó documentado");
-    }
-
-    const KINDS: &[&str] = &[
-        "shell",
-        "shell_bar",
-        "toolbar",
-        "panel",
-        "section",
-        "tab_bar",
-        "tab",
-        "form",
-        "grid",
-        "list",
-        "canvas",
-        "data_table",
-        "button_row",
-        "menu",
-        "modal",
-        "dialog",
-        "file_picker",
-        "overlay",
-        "hud",
-        "gizmo",
-        "viewport_overlay",
-        "measurement_tool",
-        "widget",
-        "token_system",
-        "icon_system",
-        "devtool",
-        "status",
-        "service",
-        "helper",
-    ];
-
-    // Regiões canônicas lidas do próprio RegionSlot (fonte única).
-    let regions_src = std::fs::read_to_string(root.join("crates/ui/src/regions.rs"))?;
-    let mut valid_regions = HashSet::new();
-    let mut in_enum = false;
-    for line in regions_src.lines() {
-        let t = line.trim();
-        if t.starts_with("pub enum RegionSlot") {
-            in_enum = true;
-            continue;
-        }
-        if in_enum {
-            if t.starts_with('}') {
-                break;
-            }
-            let variant: String = t
-                .chars()
-                .take_while(|c| c.is_alphanumeric() || *c == '_')
-                .collect();
-            if !variant.is_empty() {
-                valid_regions.insert(variant);
-            }
-        }
-    }
-    if valid_regions.is_empty() {
-        bail!("RegionSlot não encontrado em crates/ui/src/regions.rs");
-    }
-
-    let mut ids = HashSet::new();
-    let mut by_id: HashMap<&str, &UiMapNode> = HashMap::new();
-    for node in &map.nodes {
-        if !ids.insert(node.id.clone()) {
-            bail!("ui-map.json: id duplicado '{}'", node.id);
-        }
-        if !KINDS.contains(&node.kind.as_str()) {
-            bail!(
-                "ui-map.json: kind desconhecido '{}' no nó '{}'",
-                node.kind,
-                node.id
-            );
-        }
-        if let Some(region) = &node.region
-            && !valid_regions.contains(region)
-        {
-            bail!(
-                "ui-map.json: região '{}' fora de RegionSlot (nó '{}')",
-                region,
-                node.id
-            );
-        }
-        let file_path = root.join(&node.file);
-        if !file_path.exists() {
-            bail!(
-                "ui-map.json: arquivo ausente '{}' (nó '{}')",
-                node.file,
-                node.id
-            );
-        }
-        let content = std::fs::read_to_string(&file_path)?;
-        let probes = [
-            format!("fn {}(", node.entry),
-            format!("struct {}", node.entry),
-            format!("enum {}", node.entry),
-            format!("mod {}", node.entry),
-        ];
-        if !probes.iter().any(|p| content.contains(p.as_str())) {
-            bail!(
-                "ui-map.json: símbolo '{}' ausente em {} (nó '{}')",
-                node.entry,
-                node.file,
-                node.id
-            );
-        }
-        by_id.insert(node.id.as_str(), node);
-    }
-    for node in &map.nodes {
-        for child in &node.children {
-            if !by_id.contains_key(child.as_str()) {
-                bail!(
-                    "ui-map.json: filho '{}' do nó '{}' não existe",
-                    child,
-                    node.id
-                );
-            }
-        }
-    }
-    // Aciclicidade via DFS a partir de cada nó.
-    fn visit<'a>(
-        id: &'a str,
-        by_id: &HashMap<&'a str, &'a UiMapNode>,
-        stack: &mut Vec<&'a str>,
-    ) -> Result<()> {
-        if stack.contains(&id) {
-            bail!("ui-map.json: ciclo envolvendo '{}' ({:?})", id, stack);
-        }
-        stack.push(id);
-        if let Some(node) = by_id.get(id) {
-            for child in &node.children {
-                visit(child, by_id, stack)?;
-            }
-        }
-        stack.pop();
-        Ok(())
-    }
-    for node in &map.nodes {
-        visit(node.id.as_str(), &by_id, &mut Vec::new())?;
-    }
-    println!(
-        "✅ Mapa válido: {} nós, {} regiões, filhos acíclicos.",
-        map.nodes.len(),
-        valid_regions.len()
-    );
-
-    // Cobertura: símbolos públicos de UI sem nó (aviso, não quebra).
-    let covered: HashSet<(String, String)> = map
-        .nodes
-        .iter()
-        .map(|n| (n.file.clone(), n.entry.clone()))
-        .collect();
-    let mut uncovered = Vec::new();
-    collect_ui_symbols(&root.join("crates/ui/src"), &root, &covered, &mut uncovered);
-    uncovered.sort();
-    uncovered.dedup();
-    if !uncovered.is_empty() {
-        println!("⚠️ {} símbolos públicos sem nó no mapa:", uncovered.len());
-        for item in uncovered.iter().take(20) {
-            println!("   - {item}");
-        }
-        if uncovered.len() > 20 {
-            println!("   ... e outros {}", uncovered.len() - 20);
-        }
-    }
-    Ok(())
-}
-
-/// Coleta `arquivo::Simbolo` públicos de topo (`pub fn/struct/enum/mod` sem
-/// indentação) e registra os ausentes da cobertura do mapa.
-fn collect_ui_symbols(
-    dir: &Path,
-    root: &Path,
-    covered: &HashSet<(String, String)>,
-    out: &mut Vec<String>,
-) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_ui_symbols(&path, root, covered, out);
-            continue;
-        }
-        if path.extension().map(|e| e != "rs").unwrap_or(true) {
-            continue;
-        }
-        let Ok(content) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let rel = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-        // Módulos de teste vivem no fim do arquivo por convenção: ignora tudo
-        // a partir do primeiro `#[cfg(test)]`.
-        let body = match content.find("#[cfg(test)]") {
-            Some(pos) => &content[..pos],
-            None => content.as_str(),
-        };
-        for line in body.lines() {
-            for prefix in [
-                "pub fn ",
-                "pub struct ",
-                "pub enum ",
-                "pub mod ",
-                "pub const ",
-            ] {
-                if let Some(rest) = line.strip_prefix(prefix) {
-                    let name: String = rest
-                        .chars()
-                        .take_while(|c| c.is_alphanumeric() || *c == '_')
-                        .collect();
-                    if !name.is_empty() && !covered.contains(&(rel.clone(), name.clone())) {
-                        out.push(format!("{rel}::{name}"));
-                    }
-                    break;
-                }
-            }
-        }
-    }
-}
+/// Único arquivo autorizado a abrir o diálogo nativo de arquivos (Gauntlet G4).
+const FILE_DIALOG_BOUNDARY: &str = "crates/ui-slint/src/files.rs";
 
 fn task_arch_check() -> Result<()> {
     println!("🔍 Validando relatórios da Auditoria Arquitetural...");
@@ -702,9 +404,9 @@ fn task_arch_check() -> Result<()> {
             "petunia_commands não pode depender de UI",
         ),
         (
-            "crates/render-wgpu/Cargo.toml",
-            &["egui", "petunia_ui"][..],
-            "petunia_render_wgpu não pode depender de UI",
+            "crates/render/Cargo.toml",
+            &["slint", "petunia_ui_slint", "petunia_application"][..],
+            "petunia_render não pode depender da UI nem da Application (recebe só RenderFrameInput)",
         ),
         (
             "crates/module-paint/Cargo.toml",
@@ -754,8 +456,40 @@ fn task_arch_check() -> Result<()> {
         }
     }
 
+    // Um único renderer (OpenGL 3.3 via glow) e uma única UI (Slint): nenhum
+    // manifesto pode trazer de volta WGPU ou a pilha egui (04-renderer, decisões 1–2).
+    let mut manifests = vec![root.join("Cargo.toml")];
+    for entry in std::fs::read_dir(root.join("crates"))?.flatten() {
+        let manifest = entry.path().join("Cargo.toml");
+        if manifest.exists() {
+            manifests.push(manifest);
+        }
+    }
+    for manifest in manifests {
+        let content = std::fs::read_to_string(&manifest)
+            .with_context(|| format!("Falha ao ler {}", manifest.display()))?;
+        for line in content.lines().filter(|l| !l.trim_start().starts_with('#')) {
+            let key = line
+                .split('=')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches('"');
+            if key == "wgpu"
+                || key.starts_with("wgpu-")
+                || key.starts_with("egui")
+                || key == "eframe"
+            {
+                bail!(
+                    "Violação em {}: dependência '{key}' proibida (viewport é OpenGL 3.3/glow e a UI é Slint)",
+                    manifest.display()
+                );
+            }
+        }
+    }
+
     println!(
-        "✅ Invariantes de manifesto validados: core, config, mesh, project, commands, render-wgpu e module-paint estão em conformidade."
+        "✅ Invariantes de manifesto validados: core, config, mesh, project, commands, render e módulos em conformidade; sem WGPU/egui no workspace."
     );
 
     println!("🛡️ Validando fronteira de I/O de arquivos (Gauntlet G4)...");
@@ -785,27 +519,22 @@ fn task_arch_check() -> Result<()> {
             .unwrap_or(file_path)
             .to_string_lossy();
 
-        if rel == "crates/ui/src/file_dialog_service.rs" || rel.starts_with("crates/xtask") {
+        if rel == FILE_DIALOG_BOUNDARY || rel.starts_with("crates/xtask") {
             continue;
         }
 
         let content = std::fs::read_to_string(file_path)
             .with_context(|| format!("Falha ao ler {}", file_path.display()))?;
 
-        if content.contains("rfd::FileDialog") {
+        if content.contains("rfd::FileDialog") || content.contains("rfd::AsyncFileDialog") {
             bail!(
-                "Violação de Fronteira de I/O: {rel} instancia rfd::FileDialog fora de file_dialog_service.rs!"
-            );
-        }
-        if content.contains("egui_file_dialog::FileDialog") {
-            bail!(
-                "Violação de Fronteira de I/O: {rel} instancia egui_file_dialog fora de file_dialog_service.rs!"
+                "Violação de Fronteira de I/O: {rel} instancia o diálogo nativo fora de {FILE_DIALOG_BOUNDARY}!"
             );
         }
     }
 
     println!(
-        "✅ Fronteira de I/O validada: nenhum arquivo fora de crates/ui/src/file_dialog_service.rs instancia rfd ou egui-file-dialog."
+        "✅ Fronteira de I/O validada: nenhum arquivo fora de {FILE_DIALOG_BOUNDARY} instancia o diálogo nativo (rfd)."
     );
 
     println!(

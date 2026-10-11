@@ -1,19 +1,19 @@
-# Petunia3D — modelador low-poly shape-first (Rust + Slint + WGPU)
+# Petunia3D — modelador low-poly shape-first (Rust + Slint + OpenGL)
 
 Modelador 3D nativo focado em criação rápida de assets low-poly para games:
 desenhe a silhueta sobre a referência, gere a malha, ajuste/transforme,
 prepare UV, pinte e exporte — sem exigir domínio prévio de um DCC generalista.
 
-A interface padrão é o shell Slint. O domínio geométrico permanece desacoplado
-da UI e é acionado por comandos transacionais com Undo/Redo. A UI egui existe
-apenas como legado de transição.
+A interface é o shell Slint com viewport OpenGL 3.3. O domínio geométrico
+permanece desacoplado da UI e é acionado por comandos transacionais com
+Undo/Redo.
 
 ## Rodar
 
 ```bash
 cargo run --release
-cargo run --release -- --legacy-egui
-PETUNIA_LEGACY_EGUI=1 cargo run --release
+PETUNIA_VIEWPORT_SOFTWARE=1 cargo run --release   # viewport por software
+PETUNIA_MSAA=1 cargo run --release                # sem MSAA (hardware fraco)
 cargo run -p petunia-cli -- help
 ```
 
@@ -38,12 +38,12 @@ UUIDs persistentes.
 
 ## Frontend e renderização
 
-- **Produção:** shell declarativo em Slint 1.18 (`crates/ui-slint/`), com
-  viewport WGPU compartilhado e fallback de software quando não há GPU
-  compatível.
-- **Legado:** UI egui (`crates/ui/`) e host em `crates/app/`, acessíveis apenas
-  por `--legacy-egui` ou `PETUNIA_LEGACY_EGUI=1`; não recebem novas
-  funcionalidades de produto.
+- **UI:** shell declarativo em Slint 1.18 (`crates/ui-slint/`), compondo com
+  FemtoVG/OpenGL.
+- **Viewport:** renderer OpenGL 3.3 Core (glow) em `crates/render/`, no mesmo
+  contexto do Slint, desenhando num FBO próprio (MSAA + resolve) importado sem
+  readback. Fallback de software quando não há OpenGL 3.3. Decisão e passes em
+  [`website/docs/04-renderer/architecture-decision.md`](website/docs/04-renderer/architecture-decision.md).
 - **Contratos visuais toolkit-neutros:** viewport-first, Parts/Context/Asset
   Library, workspaces `MODEL / PAINT / UV`, tokens semânticos,
   keyboard/focus/accessibility. Detalhes em [`docs/ui/README.md`](docs/ui/README.md).
@@ -52,23 +52,20 @@ UUIDs persistentes.
 
 ```
 petunia3d/
-├── src/main.rs            # binário fino (Slint por padrão, egui legado opcional)
+├── src/main.rs            # binário fino (shell Slint)
 ├── crates/
 │   ├── core/              # estado, câmera, comandos, undo/redo, módulos
 │   ├── mesh/              # malha, primitivas, operações, UV e topologia
 │   ├── commands/          # pilha de undo/redo
 │   ├── config/            # i18n, keymaps, temas e ferramentas
 │   ├── project/           # Asset(UUID)/Project, `.petunia`, pipeline OBJ/glTF/GLB/pkg
-│   ├── render/            # tipos e matemática compartilhada de cena
-│   ├── render-gl/         # backend OpenGL do host legado
-│   ├── render-wgpu/       # backend WGPU compartilhado
+│   ├── application/       # sessão, ações e serviços da aplicação
+│   ├── render/            # boundary RenderFrameInput + renderer OpenGL 3.3
 │   ├── module-model/      # ferramentas de modelagem
 │   ├── module-paint/      # pintura 2D/3D, camadas e efeitos
 │   ├── module-uv/         # projeções, ilhas e transformações UV
 │   ├── module-assets/     # biblioteca de assets
-│   ├── ui-slint/          # frontend de produção em Slint
-│   ├── ui/                # frontend egui legado
-│   ├── app/               # host legado, backends e loop render-on-demand
+│   ├── ui-slint/          # frontend em Slint (shell, bridge, viewport GL)
 │   ├── cli/               # CLI headless para automação e pipelines
 │   ├── ffi/               # camada C-ABI e `include/petunia.h`
 │   ├── mcp/               # fronteira MCP para agentes
@@ -90,7 +87,7 @@ petunia3d/
 ## Qualidade e status
 
 Os portões normativos — formato, `check`, testes relevantes, Clippy,
-`arch-check`, `docs-check`, `bible-check` e `ui-guard --strict` — estão
+`arch-check`, `docs-check`, `bible-check` e `ui-lint` — estão
 definidos em [`AGENTS.md`](AGENTS.md). Para mudanças na UI Slint, consulte
 também a matriz de gaps em `docs/ui/slint-modern-audit.md` antes de considerar
 uma funcionalidade concluída.

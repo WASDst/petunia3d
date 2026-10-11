@@ -18,7 +18,7 @@ O guia técnico completo (regras de código, UI, segurança) vive em
    cargo test --workspace --lib
    cargo run -p xtask -- arch-check
    cargo run -p xtask -- docs-check
-   cargo run -p xtask -- ui-check
+   cargo run -p xtask -- ui-lint
    ```
 4. Abra o Pull Request contra `main` descrevendo o quê/porquê e citando issues.
 
@@ -35,9 +35,9 @@ Prefixo + escopo, no imperativo e de forma descritiva. Exemplos do histórico:
 - [ ] Testes adicionados/atualizados e passando (`cargo test --workspace --lib`).
 - [ ] `clippy` e `fmt` limpos (zero warnings; sem `#[allow]` para esconder problema).
 - [ ] `CHANGELOG.md` atualizado na seção `[Unreleased]`.
-- [ ] Docs atualizadas no mesmo PR (atalhos, parâmetros, ferramentas, `docs/public/ui-map.json` se mexer na UI — o `ui-check` valida).
+- [ ] Docs atualizadas no mesmo PR (atalhos, parâmetros, ferramentas; contratos canônicos em `website/docs/`).
 - [ ] i18n: chaves novas em `assets/locales/en.toml` **e** `pt-BR.toml` (paridade cobrada em CI).
-- [ ] UI: sem cores hardcoded (tokens em `crates/ui/src/tokens.rs`), sem glifos-fontes frágeis, foco/teclado preservados.
+- [ ] UI: sem cores hardcoded (tokens em `crates/ui-slint/ui/tokens.slint`, cobrado pelo `ui-lint`), sem glifos-fontes frágeis, foco/teclado preservados.
 - [ ] Sem dependências novas sem justificativa (fronteiras P0/P1 do `arch-check`).
 - [ ] Sem segredos, chaves ou dados pessoais no diff.
 

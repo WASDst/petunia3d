@@ -2,7 +2,7 @@ fn main() {
     // CLI mínimo (o resto é env): --smoke-test | --mcp-stdio | --screenshot ARQ [--frames N] [--size WxH]
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--smoke-test") {
-        match petunia_app::smoke_test() {
+        match petunia_application::smoke_test() {
             Ok(()) => {}
             Err(e) => {
                 eprintln!("SMOKE FAIL: {e:?}");
@@ -47,11 +47,8 @@ fn main() {
         i += 1;
     }
 
-    // A interface moderna em Slint é a UI principal. A interface egui foi arquivada
-    // e permanece acessível para transição via flag --legacy-egui ou env PETUNIA_LEGACY_EGUI=1.
-    if std::env::var("PETUNIA_LEGACY_EGUI").is_ok() || args.iter().any(|a| a == "--legacy-egui") {
-        petunia_app::run();
-    } else if let Err(e) = petunia_ui_slint::run() {
+    // Interface única: shell Slint com viewport OpenGL 3.3 (website/docs/09-ui).
+    if let Err(e) = petunia_ui_slint::run() {
         eprintln!("petunia3d: {e}");
         std::process::exit(1);
     }
