@@ -245,6 +245,11 @@
       "revision": "sem commit (patch sobre ddf87c7, 2026-10-11)",
       "document": "04-renderer/architecture-decision.md",
       "summary": "cargo test -p petunia_render pass — 34 unitários (inclui object_transform_moves_by_model_matrix_without_retriangulating, P01) + 21 de pixel GL em Linux, Mesa zink sobre NVIDIA RTX 3060: Flat/Smooth/Sharp, seleção/hover, arestas de largura constante, HiDPI, X-Ray, workplane, contorno, face orientation, referências, gizmo, MSAA, matcap, AO, uploads parciais, transformação rígida e restauração de estado GL. Backends legados removidos antes dos gates por pedido explícito do usuário (desvio registrado). Not run: Windows, GPU low-end, janela nativa."
+    },
+    "p03-autosave-policy": {
+      "revision": "9c79f99",
+      "document": "11-project/project-persistence.md",
+      "summary": "Parte de P03 da evidência g18-p02-p03-shading-savepoint (mesmo commit): política de autosave separada de AutosaveStorage e coalescida por revisão; save points do UndoStack fiéis a edições posteriores. Gates conforme a evidência de origem."
     }
   },
   "tasks": [
@@ -1068,7 +1073,7 @@
         {
           "title": "Separar política de infraestrutura, recentes e locks",
           "completed": true,
-          "evidence": "g18-p02-p03-shading-savepoint"
+          "evidence": "p03-autosave-policy"
         },
         {
           "title": "coalescer por project/revision, cinco gerações/configuração",
