@@ -1,25 +1,31 @@
-//! Capability-limited Lua 5.4 plugin host (P1-03, `mlua`).
+//! Capability-limited Lua 5.4 plugin host (P1-03 / E01, `mlua`).
 //!
-//! Plugins receive Petunia API contracts, never raw `egui::Context`,
-//! `wgpu::Device`, application state, or unrestricted filesystem. Every
-//! script declares its [`Capabilities`]; the host enforces them before and
-//! during execution:
+//! Website/docs/13-extensions/lua-plugins-public-api.md. Plugins receive
+//! Petunia API contracts, never raw UI/GPU handles, application state, or
+//! unrestricted filesystem:
 //!
 //! ```text
-//! Lua source
-//!     ↓ declare Capabilities
-//! Host validates (allowlisted commands/queries, fs roots, network off)
-//!     ↓
-//! Sandboxed `mlua` state (no io/os/process libs unless granted)
-//!     ↓
-//! Validated CommandIntent / query DTOs out (execution stays with the app)
+//! PluginManifest (named capabilities, deny by default)
+//!     ↓ PluginRegistry: install → grant → enable / revoke / disable
+//! PluginInstance: one isolated Lua 5.4 state per plugin
+//!     (no io/os/package, text-only `load`, instruction + memory budgets)
+//!     ↓ petunia.command / petunia.query / petunia.on(event)
+//! ValidatedIntent (commands checked against live capabilities)
+//!     ↓ apply_intents: one atomic Application transaction per batch
+//! Document / Undo shared with native tools
 //! ```
 
 pub mod dispatch;
 pub mod host;
+pub mod instance;
+pub mod manifest;
+pub mod registry;
 
-pub use dispatch::{answer_query, apply_intents};
+pub use dispatch::{PluginApiError, answer_query, apply_intents};
 pub use host::{
     CapabilityError, Host, HostConfig, LuaCommand, PluginCapabilities, PluginError, PluginId,
     ValidatedIntent,
 };
+pub use instance::{KNOWN_EVENTS, PluginInstance};
+pub use manifest::{Capability, PluginManifest};
+pub use registry::{LifecycleError, PluginRegistry, PluginStatus};

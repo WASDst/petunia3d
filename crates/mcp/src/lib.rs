@@ -7,7 +7,8 @@
 //!     ↓
 //! Petunia MCP adapter (this crate)
 //!     ↓
-//! capability/validation (Command registry + bounded args)
+//! policy (deny-by-default authoring) + validation (registry, bounded args,
+//! stale ObjectIds, revision preconditions)
 //!     ↓
 //! Application API (`AppState::dispatch_intent`)
 //!     ↓
@@ -20,4 +21,6 @@
 pub mod server;
 
 pub use rmcp::ErrorData as McpError;
-pub use server::{PetuniaMcp, serve_stdio, serve_stdio_blocking};
+pub use server::{
+    AuditEntry, McpPolicy, PetuniaMcp, serve_stdio, serve_stdio_blocking, serve_stdio_with,
+};

@@ -1,13 +1,28 @@
 //! Tools-only MCP server over stdio.
 //!
-//! MCP is an adapter: requests validate, then call the Application API
-//! (`AppState::dispatch_intent`). It does not own a parallel Document/Undo.
+//! MCP is an adapter (website/docs/13-extensions/mcp-automation-agents.md):
+//! requests validate, then call the Application API (`AppState::dispatch_intent`
+//! and `AppState::transaction`). It does not own a parallel Document/Undo.
+//!
+//! - **Deny by default:** reads and validation are always available; every
+//!   mutation needs [`McpPolicy::allow_authoring`], decided by the host.
+//! - **ObjectIds and revisions:** DTOs carry stable object ids and the
+//!   document revision; mutations accept `expected_revision` and fail with
+//!   `revision_mismatch` instead of overwriting newer state.
+//! - **Atomic batch / dry run:** `execute_batch` is all-or-nothing with one
+//!   Undo entry; `dry_run` validates without touching the Document.
+//! - **Distinct errors:** `data.code` is `permission_denied`, `bad_shape`,
+//!   `not_allowlisted`, `stale_reference`, `revision_mismatch`, `too_large`
+//!   or `command_failed`.
+//! - **Audit:** a bounded, redacted log (operation, command, outcome — never
+//!   args or paths).
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use petunia_core::{
-    AddPrimitiveCmd, AppState, CommandIntent, PrimitiveKind, ProjectService, SceneItemContract,
-    UndoCmd,
+    AddPrimitiveCmd, AppState, CommandError, CommandIntent, PrimitiveKind, ProjectService,
+    SceneItemContract, UndoCmd,
 };
 use rmcp::ErrorData as McpError;
 use rmcp::handler::server::wrapper::{Json, Parameters};
@@ -15,16 +30,131 @@ use rmcp::{ServiceExt, tool, tool_router, transport::stdio};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+/// Max commands in one batch.
+pub const MAX_BATCH_COMMANDS: usize = 64;
+/// Max retained audit entries.
+pub const MAX_AUDIT_ENTRIES: usize = 256;
+
+/// Authorization policy of an MCP session. Everything that mutates the
+/// Document is denied unless the host enabled authoring explicitly.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct McpPolicy {
+    pub allow_authoring: bool,
+}
+
+impl McpPolicy {
+    /// Read/validate only.
+    pub const fn read_only() -> Self {
+        Self {
+            allow_authoring: false,
+        }
+    }
+
+    /// Reads plus undoable authoring through Application commands.
+    pub const fn authoring() -> Self {
+        Self {
+            allow_authoring: true,
+        }
+    }
+
+    /// Host-side decision for stdio launches: authoring only when
+    /// `PETUNIA_MCP_ALLOW_AUTHORING=1` was set explicitly by the user.
+    pub fn from_env() -> Self {
+        Self {
+            allow_authoring: std::env::var("PETUNIA_MCP_ALLOW_AUTHORING").as_deref() == Ok("1"),
+        }
+    }
+}
+
+/// One redacted audit record.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct AuditEntry {
+    /// Tool name.
+    pub operation: String,
+    /// Command id when the tool ran one (never args or paths).
+    pub command: Option<String>,
+    /// Stable outcome code (`ok`, `dry_run`, or an error code).
+    pub outcome: String,
+    /// Document revision after the operation.
+    pub revision: u64,
+}
+
 /// Shared Application session behind the tool boundary.
 struct McpSession {
     state: AppState,
+    policy: McpPolicy,
+    audit: VecDeque<AuditEntry>,
 }
 
 impl McpSession {
-    fn new() -> Self {
+    fn new(policy: McpPolicy) -> Self {
         let mut state = AppState::new("en");
         ProjectService::new_project(&mut state);
-        Self { state }
+        Self {
+            state,
+            policy,
+            audit: VecDeque::new(),
+        }
+    }
+
+    fn revision(&self) -> u64 {
+        self.state.project.project.revision_id()
+    }
+
+    fn record(&mut self, operation: &str, command: Option<&str>, outcome: &str) {
+        if self.audit.len() >= MAX_AUDIT_ENTRIES {
+            self.audit.pop_front();
+        }
+        let revision = self.revision();
+        self.audit.push_back(AuditEntry {
+            operation: operation.to_string(),
+            command: command.map(str::to_string),
+            outcome: outcome.to_string(),
+            revision,
+        });
+    }
+
+    /// Fails (and audits) when authoring is not allowed.
+    fn require_authoring(&mut self, operation: &str) -> Result<(), McpError> {
+        if self.policy.allow_authoring {
+            return Ok(());
+        }
+        self.record(operation, None, "permission_denied");
+        Err(coded(
+            "permission_denied",
+            format!("{operation}: authoring is not allowed in this MCP session"),
+        ))
+    }
+
+    /// Fails (and audits) when the document moved past `expected`.
+    fn require_revision(&mut self, operation: &str, expected: Option<u64>) -> Result<(), McpError> {
+        let current = self.revision();
+        match expected {
+            Some(expected) if expected != current => {
+                self.record(operation, None, "revision_mismatch");
+                Err(coded(
+                    "revision_mismatch",
+                    format!("expected revision {expected}, document is at {current}"),
+                ))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Error with a stable machine-readable code in `data.code`.
+fn coded(code: &'static str, message: impl Into<String>) -> McpError {
+    McpError::invalid_params(message.into(), Some(serde_json::json!({ "code": code })))
+}
+
+/// Stable code for an Application command error.
+fn command_error_code(error: &CommandError) -> &'static str {
+    match error {
+        CommandError::StaleReference(_) | CommandError::InvalidAssetIndex(_) => "stale_reference",
+        CommandError::UnknownCommand(_) => "not_allowlisted",
+        CommandError::UnknownPrimitive(_) => "bad_shape",
+        CommandError::NoChange(_) => "no_change",
+        _ => "command_failed",
     }
 }
 
@@ -35,21 +165,28 @@ struct AddPrimitiveParams {
     kind: String,
     /// Edge size in world units (0.01..=100). Reserved; V1 uses default mesh.
     size: f64,
+    /// Fail with `revision_mismatch` if the document is not at this revision.
+    #[serde(default)]
+    expected_revision: Option<u64>,
 }
 
 /// Parameters for [`PetuniaMcp::export_obj`].
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ExportObjParams {
-    /// Asset index in scene order.
-    index: usize,
+    /// Asset index in scene order (legacy; prefer `id`).
+    #[serde(default)]
+    index: Option<usize>,
+    /// Stable object id (UUID) from `list_assets`.
+    #[serde(default)]
+    id: Option<String>,
 }
 
-/// Parameters for [`PetuniaMcp::validate_intent`].
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ValidateIntentParams {
+/// One command intent (validate, execute or batch item).
+#[derive(Clone, Debug, Deserialize, schemars::JsonSchema)]
+struct IntentParams {
     /// Command id, e.g. `"model.extrude"`.
     command: String,
-    /// Optional target asset UUID.
+    /// Optional target object UUID (for `model.add_primitive`: the kind).
     #[serde(default)]
     asset_id: Option<String>,
     /// Numeric args in command-defined order.
@@ -60,14 +197,24 @@ struct ValidateIntentParams {
 /// Parameters for [`PetuniaMcp::execute_intent`].
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ExecuteIntentParams {
-    /// Command id, e.g. `"model.extrude"`.
-    command: String,
-    /// Optional target asset UUID.
+    #[serde(flatten)]
+    intent: IntentParams,
+    /// Fail with `revision_mismatch` if the document is not at this revision.
     #[serde(default)]
-    asset_id: Option<String>,
-    /// Numeric args in command-defined order.
+    expected_revision: Option<u64>,
+}
+
+/// Parameters for [`PetuniaMcp::execute_batch`].
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct BatchParams {
+    /// Commands applied in order as one transaction (max 64).
+    commands: Vec<IntentParams>,
+    /// Fail with `revision_mismatch` if the document is not at this revision.
     #[serde(default)]
-    args: Vec<f64>,
+    expected_revision: Option<u64>,
+    /// Validate everything without changing the Document.
+    #[serde(default)]
+    dry_run: bool,
 }
 
 /// Validation report returned by [`PetuniaMcp::validate_intent`].
@@ -75,13 +222,28 @@ struct ExecuteIntentParams {
 struct IntentReport {
     /// Whether the intent is well-formed and registered.
     valid: bool,
-    /// Stable reason code (`"ok"`, `"bad_shape"`, `"not_allowlisted"`).
+    /// Stable reason code (`"ok"`, `"bad_shape"`, `"not_allowlisted"`,
+    /// `"stale_reference"`).
     reason: String,
+    /// Document revision after the call.
+    revision: u64,
+}
+
+/// Result of [`PetuniaMcp::execute_batch`].
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct BatchReport {
+    /// Commands applied (0 on dry run).
+    applied: usize,
+    dry_run: bool,
+    /// Document revision after the call.
+    revision: u64,
 }
 
 /// Asset summary DTO returned by scene tools.
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 struct AssetSummaryDto {
+    /// Stable object id (UUID).
+    id: String,
     /// Display name.
     name: String,
     /// Always `"object"` on this boundary.
@@ -103,20 +265,26 @@ impl std::fmt::Debug for PetuniaMcp {
 }
 
 impl PetuniaMcp {
-    /// Creates a server with a fresh Application session.
+    /// Creates a **read-only** server with a fresh Application session.
     pub fn new() -> Self {
+        Self::with_policy(McpPolicy::read_only())
+    }
+
+    /// Creates a server with an explicit authorization policy.
+    pub fn with_policy(policy: McpPolicy) -> Self {
         Self {
-            session: Arc::new(Mutex::new(McpSession::new())),
+            session: Arc::new(Mutex::new(McpSession::new(policy))),
         }
     }
 
     fn asset_summaries(state: &AppState) -> Vec<AssetSummaryDto> {
         state
-            .query_scene_hierarchy()
+            .project
             .assets
-            .into_iter()
+            .iter()
             .map(|asset| AssetSummaryDto {
-                name: asset.name,
+                id: asset.id.to_string(),
+                name: asset.name.clone(),
                 kind: "object".to_string(),
                 visible: asset.visible,
             })
@@ -131,8 +299,49 @@ impl PetuniaMcp {
             && command
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_')
+            && args.len() <= 16
             && args.iter().all(|a| a.is_finite())
             && asset_ok
+    }
+
+    fn allowlisted(state: &AppState, command: &str) -> bool {
+        state.commands.contains(command)
+            || matches!(
+                command,
+                "model.add_primitive" | "model.add_cube" | "model.scale" | "model.scale_selection"
+            )
+    }
+
+    /// Static checks shared by validate, execute and dry-run: shape,
+    /// allowlist and that an explicit target exists. `Err` holds the code.
+    fn check_intent(state: &AppState, intent: &IntentParams) -> Result<(), &'static str> {
+        if !Self::intent_well_formed(&intent.command, intent.asset_id.as_deref(), &intent.args) {
+            return Err("bad_shape");
+        }
+        if !Self::allowlisted(state, &intent.command) {
+            return Err("not_allowlisted");
+        }
+        let creates = matches!(
+            intent.command.as_str(),
+            "model.add_primitive" | "model.add_cube"
+        );
+        if let Some(id) = intent.asset_id.as_deref().filter(|_| !creates) {
+            let found = uuid::Uuid::parse_str(id)
+                .ok()
+                .and_then(|uuid| state.project.find(uuid));
+            if found.is_none() {
+                return Err("stale_reference");
+            }
+        }
+        Ok(())
+    }
+
+    fn to_command_intent(intent: IntentParams) -> CommandIntent {
+        CommandIntent {
+            command: intent.command,
+            asset_id: intent.asset_id,
+            args: intent.args,
+        }
     }
 }
 
@@ -144,43 +353,56 @@ impl Default for PetuniaMcp {
 
 #[tool_router(server_handler)]
 impl PetuniaMcp {
-    /// Lists scene assets as `{name, kind, visible}` DTOs.
-    #[tool(description = "List scene assets (name, kind, visible).")]
+    /// Lists scene assets as `{id, name, kind, visible}` DTOs.
+    #[tool(description = "List scene assets (id, name, kind, visible).")]
     async fn list_assets(&self) -> Result<Json<Vec<AssetSummaryDto>>, McpError> {
         let session = self.session.lock().await;
         Ok(Json(Self::asset_summaries(&session.state)))
     }
 
+    /// Current document revision (for `expected_revision` preconditions).
+    #[tool(description = "Current document revision, used as expected_revision precondition.")]
+    async fn document_revision(&self) -> Result<Json<u64>, McpError> {
+        let session = self.session.lock().await;
+        Ok(Json(session.revision()))
+    }
+
     /// Adds a primitive through the Application command spine.
-    #[tool(description = "Add a primitive to the scene (undoable).")]
+    #[tool(description = "Add a primitive to the scene (undoable; requires authoring).")]
     async fn add_primitive(
         &self,
         Parameters(params): Parameters<AddPrimitiveParams>,
     ) -> Result<Json<AssetSummaryDto>, McpError> {
         if !params.size.is_finite() || !(0.01..=100.0).contains(&params.size) {
-            return Err(McpError::invalid_params(
-                "size must be finite within 0.01..=100",
-                None,
-            ));
+            return Err(coded("bad_shape", "size must be finite within 0.01..=100"));
         }
         let kind = PrimitiveKind::parse(&params.kind).map_err(|e| {
-            McpError::invalid_params(format!("unknown primitive '{}': {e}", params.kind), None)
+            coded(
+                "bad_shape",
+                format!("unknown primitive '{}': {e}", params.kind),
+            )
         })?;
         let mut session = self.session.lock().await;
-        session
-            .state
-            .dispatch(&AddPrimitiveCmd {
-                kind,
-                name: Some(format!("MCP {}", params.kind)),
-                at_cursor: true,
-            })
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        session.require_authoring("add_primitive")?;
+        session.require_revision("add_primitive", params.expected_revision)?;
+        let result = session.state.dispatch(&AddPrimitiveCmd {
+            kind,
+            name: Some(format!("MCP {}", params.kind)),
+            at_cursor: true,
+        });
+        if let Err(error) = result {
+            let code = command_error_code(&error);
+            session.record("add_primitive", Some("model.add_primitive"), code);
+            return Err(coded(code, error.to_string()));
+        }
+        session.record("add_primitive", Some("model.add_primitive"), "ok");
         let asset = session
             .state
             .project
             .active()
-            .ok_or_else(|| McpError::internal_error("no active asset after add", None))?;
+            .ok_or_else(|| coded("command_failed", "no active asset after add"))?;
         Ok(Json(AssetSummaryDto {
+            id: asset.id.to_string(),
             name: asset.name.clone(),
             kind: "object".to_string(),
             visible: asset.visible,
@@ -188,27 +410,40 @@ impl PetuniaMcp {
     }
 
     /// Undoes the last Application mutation.
-    #[tool(description = "Undo the last scene mutation.")]
+    #[tool(description = "Undo the last scene mutation (requires authoring).")]
     async fn undo(&self) -> Result<Json<bool>, McpError> {
         let mut session = self.session.lock().await;
-        Ok(Json(session.state.dispatch(&UndoCmd).is_ok()))
+        session.require_authoring("undo")?;
+        let undone = session.state.dispatch(&UndoCmd).is_ok();
+        session.record(
+            "undo",
+            Some("global.undo"),
+            if undone { "ok" } else { "no_change" },
+        );
+        Ok(Json(undone))
     }
 
     /// Exports one asset as OBJ text (bounded by scene content).
-    #[tool(description = "Export one scene asset as OBJ text by index.")]
+    #[tool(description = "Export one scene asset as OBJ text by id (or legacy index).")]
     async fn export_obj(
         &self,
         Parameters(params): Parameters<ExportObjParams>,
     ) -> Result<String, McpError> {
         let session = self.session.lock().await;
-        let asset = session
-            .state
-            .project
-            .assets
-            .get(params.index)
-            .ok_or_else(|| {
-                McpError::invalid_params(format!("asset index {} out of range", params.index), None)
-            })?;
+        let assets = &session.state.project.assets;
+        let asset = match (&params.id, params.index) {
+            (Some(id), _) => uuid::Uuid::parse_str(id)
+                .ok()
+                .and_then(|uuid| assets.iter().find(|a| a.id == uuid))
+                .ok_or_else(|| coded("stale_reference", format!("no object with id {id}")))?,
+            (None, Some(index)) => assets.get(index).ok_or_else(|| {
+                coded(
+                    "stale_reference",
+                    format!("asset index {index} out of range"),
+                )
+            })?,
+            (None, None) => return Err(coded("bad_shape", "pass `id` or `index`")),
+        };
         Ok(petunia_project::export::export_obj(asset))
     }
 
@@ -216,63 +451,128 @@ impl PetuniaMcp {
     #[tool(description = "Validate a command intent (id, target, args) without executing.")]
     async fn validate_intent(
         &self,
-        Parameters(params): Parameters<ValidateIntentParams>,
+        Parameters(params): Parameters<IntentParams>,
     ) -> Result<Json<IntentReport>, McpError> {
         let session = self.session.lock().await;
-        let well_formed =
-            Self::intent_well_formed(&params.command, params.asset_id.as_deref(), &params.args);
-        let registered = session.state.commands.contains(&params.command);
-        let (valid, reason) = if !well_formed {
-            (false, "bad_shape")
-        } else if !registered {
-            (false, "not_allowlisted")
-        } else {
-            (true, "ok")
+        let (valid, reason) = match Self::check_intent(&session.state, &params) {
+            Ok(()) => (true, "ok"),
+            Err(code) => (false, code),
         };
         Ok(Json(IntentReport {
             valid,
             reason: reason.to_string(),
+            revision: session.revision(),
         }))
     }
 
     /// Executes a validated command intent through the Application API.
-    #[tool(description = "Execute a command intent through the Application command spine.")]
+    #[tool(
+        description = "Execute a command intent through the Application command spine (requires authoring)."
+    )]
     async fn execute_intent(
         &self,
         Parameters(params): Parameters<ExecuteIntentParams>,
     ) -> Result<Json<IntentReport>, McpError> {
-        let well_formed =
-            Self::intent_well_formed(&params.command, params.asset_id.as_deref(), &params.args);
-        if !well_formed {
-            return Ok(Json(IntentReport {
-                valid: false,
-                reason: "bad_shape".to_string(),
-            }));
-        }
         let mut session = self.session.lock().await;
-        if !session.state.commands.contains(&params.command)
-            && !matches!(
-                params.command.as_str(),
-                "model.add_primitive" | "model.add_cube" | "model.scale" | "model.scale_selection"
-            )
-        {
+        if let Err(code) = Self::check_intent(&session.state, &params.intent) {
+            session.record("execute_intent", Some(params.intent.command.as_str()), code);
             return Ok(Json(IntentReport {
                 valid: false,
-                reason: "not_allowlisted".to_string(),
+                reason: code.to_string(),
+                revision: session.revision(),
             }));
         }
-        let intent = CommandIntent {
-            command: params.command,
-            asset_id: params.asset_id,
-            args: params.args,
-        };
+        session.require_authoring("execute_intent")?;
+        session.require_revision("execute_intent", params.expected_revision)?;
+        let command = params.intent.command.clone();
+        let intent = Self::to_command_intent(params.intent);
         match session.state.dispatch_intent(&intent) {
-            Ok(()) => Ok(Json(IntentReport {
-                valid: true,
-                reason: "ok".to_string(),
-            })),
-            Err(e) => Err(McpError::internal_error(e.to_string(), None)),
+            Ok(()) => {
+                session.record("execute_intent", Some(command.as_str()), "ok");
+                Ok(Json(IntentReport {
+                    valid: true,
+                    reason: "ok".to_string(),
+                    revision: session.revision(),
+                }))
+            }
+            Err(error) => {
+                let code = command_error_code(&error);
+                session.record("execute_intent", Some(command.as_str()), code);
+                Err(coded(code, error.to_string()))
+            }
         }
+    }
+
+    /// Atomic batch: all commands as one transaction and one Undo entry, or
+    /// nothing. `dry_run` validates only.
+    #[tool(
+        description = "Run up to 64 command intents atomically (one Undo entry, all-or-nothing); dry_run validates only."
+    )]
+    async fn execute_batch(
+        &self,
+        Parameters(params): Parameters<BatchParams>,
+    ) -> Result<Json<BatchReport>, McpError> {
+        let mut session = self.session.lock().await;
+        if params.commands.is_empty() || params.commands.len() > MAX_BATCH_COMMANDS {
+            session.record("execute_batch", None, "too_large");
+            return Err(coded(
+                "too_large",
+                format!("batch must have 1..={MAX_BATCH_COMMANDS} commands"),
+            ));
+        }
+        for intent in &params.commands {
+            if let Err(code) = Self::check_intent(&session.state, intent) {
+                session.record("execute_batch", Some(intent.command.as_str()), code);
+                return Err(coded(code, format!("{}: {code}", intent.command)));
+            }
+        }
+        session.require_revision("execute_batch", params.expected_revision)?;
+        if params.dry_run {
+            session.record("execute_batch", None, "dry_run");
+            return Ok(Json(BatchReport {
+                applied: 0,
+                dry_run: true,
+                revision: session.revision(),
+            }));
+        }
+        session.require_authoring("execute_batch")?;
+        let count = params.commands.len();
+        let intents: Vec<CommandIntent> = params
+            .commands
+            .into_iter()
+            .map(Self::to_command_intent)
+            .collect();
+        let result = session.state.transaction("mcp batch", |state| {
+            for intent in &intents {
+                match state.dispatch_intent(intent) {
+                    Ok(()) | Err(CommandError::NoChange(_)) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => {
+                session.record("execute_batch", None, "ok");
+                Ok(Json(BatchReport {
+                    applied: count,
+                    dry_run: false,
+                    revision: session.revision(),
+                }))
+            }
+            Err(error) => {
+                let code = command_error_code(&error);
+                session.record("execute_batch", None, code);
+                Err(coded(code, error.to_string()))
+            }
+        }
+    }
+
+    /// Redacted audit log of this session (newest last).
+    #[tool(description = "Redacted audit log of this MCP session (operation, command, outcome).")]
+    async fn audit_log(&self) -> Result<Json<Vec<AuditEntry>>, McpError> {
+        let session = self.session.lock().await;
+        Ok(Json(session.audit.iter().cloned().collect()))
     }
 
     /// Exposes the scene as query DTOs (mirrors Application Queries shape).
@@ -295,10 +595,10 @@ impl PetuniaMcp {
     }
 }
 
-/// Serves the Petunia MCP server over stdio. The Tokio runtime stays inside
-/// this call; cancel by closing the transport (client disconnect).
-pub async fn serve_stdio() -> Result<(), McpError> {
-    let service = PetuniaMcp::new()
+/// Serves the Petunia MCP server over stdio with an explicit policy. The
+/// Tokio runtime stays inside this call; cancel by closing the transport.
+pub async fn serve_stdio_with(policy: McpPolicy) -> Result<(), McpError> {
+    let service = PetuniaMcp::with_policy(policy)
         .serve(stdio())
         .await
         .map_err(|e| McpError::internal_error(format!("serve: {e}"), None))?;
@@ -307,6 +607,12 @@ pub async fn serve_stdio() -> Result<(), McpError> {
         .await
         .map_err(|e| McpError::internal_error(format!("waiting: {e}"), None))?;
     Ok(())
+}
+
+/// [`serve_stdio_with`] using the host decision from the environment
+/// ([`McpPolicy::from_env`]): read-only unless authoring was enabled.
+pub async fn serve_stdio() -> Result<(), McpError> {
+    serve_stdio_with(McpPolicy::from_env()).await
 }
 
 /// Blocking stdio entry for embedding binaries: builds a current-thread
@@ -323,22 +629,60 @@ pub fn serve_stdio_blocking() -> Result<(), McpError> {
 mod tests {
     use super::*;
 
+    fn author() -> PetuniaMcp {
+        PetuniaMcp::with_policy(McpPolicy::authoring())
+    }
+
+    fn code(error: &McpError) -> Option<&str> {
+        error.data.as_ref()?.get("code")?.as_str()
+    }
+
+    fn intent(command: &str, asset_id: Option<&str>, args: Vec<f64>) -> IntentParams {
+        IntentParams {
+            command: command.to_string(),
+            asset_id: asset_id.map(str::to_string),
+            args,
+        }
+    }
+
     #[tokio::test]
-    async fn list_starts_with_starter_scene() {
+    async fn list_starts_with_starter_scene_and_ids() {
         let server = PetuniaMcp::new();
         let items = server.list_assets().await.unwrap().0;
         assert!(!items.is_empty());
         assert!(items.iter().all(|i| i.kind == "object"));
+        assert!(items.iter().all(|i| uuid::Uuid::parse_str(&i.id).is_ok()));
+    }
+
+    #[tokio::test]
+    async fn mutations_are_denied_by_default() {
+        let server = PetuniaMcp::new();
+        let before = server.list_assets().await.unwrap().0.len();
+        let error = server
+            .add_primitive(Parameters(AddPrimitiveParams {
+                kind: "cube".to_string(),
+                size: 2.0,
+                expected_revision: None,
+            }))
+            .await
+            .err()
+            .expect("expected an error");
+        assert_eq!(code(&error), Some("permission_denied"));
+        assert!(server.undo().await.is_err());
+        assert_eq!(server.list_assets().await.unwrap().0.len(), before);
+        let log = server.audit_log().await.unwrap().0;
+        assert!(log.iter().all(|e| e.outcome == "permission_denied"));
     }
 
     #[tokio::test]
     async fn add_undo_roundtrip() {
-        let server = PetuniaMcp::new();
+        let server = author();
         let before = server.list_assets().await.unwrap().0.len();
         let added = server
             .add_primitive(Parameters(AddPrimitiveParams {
                 kind: "cube".to_string(),
                 size: 2.0,
+                expected_revision: None,
             }))
             .await
             .unwrap()
@@ -352,93 +696,160 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_primitive_params_are_rejected() {
-        let server = PetuniaMcp::new();
-        assert!(
-            server
+        let server = author();
+        for (kind, size) in [("not-a-prim", 1.0), ("cube", f64::NAN)] {
+            let error = server
                 .add_primitive(Parameters(AddPrimitiveParams {
-                    kind: "not-a-prim".to_string(),
-                    size: 1.0,
+                    kind: kind.to_string(),
+                    size,
+                    expected_revision: None,
                 }))
                 .await
-                .is_err()
-        );
-        assert!(
-            server
-                .add_primitive(Parameters(AddPrimitiveParams {
-                    kind: "cube".to_string(),
-                    size: f64::NAN,
-                }))
-                .await
-                .is_err()
-        );
-        assert!(
-            server
-                .export_obj(Parameters(ExportObjParams { index: 9999 }))
-                .await
-                .is_err()
-        );
+                .err()
+                .expect("expected an error");
+            assert_eq!(code(&error), Some("bad_shape"));
+        }
+        let missing = server
+            .export_obj(Parameters(ExportObjParams {
+                index: Some(9999),
+                id: None,
+            }))
+            .await
+            .err()
+            .expect("expected an error");
+        assert_eq!(code(&missing), Some("stale_reference"));
     }
 
     #[tokio::test]
-    async fn export_and_validate_paths() {
+    async fn export_by_id_and_validate_codes() {
         let server = PetuniaMcp::new();
+        let first = server.list_assets().await.unwrap().0.remove(0);
         let obj = server
-            .export_obj(Parameters(ExportObjParams { index: 0 }))
+            .export_obj(Parameters(ExportObjParams {
+                index: None,
+                id: Some(first.id.clone()),
+            }))
             .await
             .unwrap();
         assert!(obj.contains('v'));
 
-        let ok = server
-            .validate_intent(Parameters(ValidateIntentParams {
-                command: "model.extrude".to_string(),
-                asset_id: None,
-                args: vec![0.5],
-            }))
-            .await
-            .unwrap()
-            .0;
-        assert!(ok.valid);
-        assert_eq!(ok.reason, "ok");
-
-        let unknown = server
-            .validate_intent(Parameters(ValidateIntentParams {
-                command: "model.frobnicator".to_string(),
-                asset_id: None,
-                args: vec![],
-            }))
-            .await
-            .unwrap()
-            .0;
-        assert!(!unknown.valid);
-        assert_eq!(unknown.reason, "not_allowlisted");
-
-        let bad = server
-            .validate_intent(Parameters(ValidateIntentParams {
-                command: "rm -rf".to_string(),
-                asset_id: None,
-                args: vec![],
-            }))
-            .await
-            .unwrap()
-            .0;
-        assert!(!bad.valid);
-        assert_eq!(bad.reason, "bad_shape");
+        for (params, want) in [
+            (intent("model.extrude", None, vec![0.5]), "ok"),
+            (intent("model.frobnicator", None, vec![]), "not_allowlisted"),
+            (intent("rm -rf", None, vec![]), "bad_shape"),
+            (
+                intent(
+                    "model.extrude",
+                    Some("00000000-0000-4000-8000-000000000000"),
+                    vec![0.5],
+                ),
+                "stale_reference",
+            ),
+        ] {
+            let report = server.validate_intent(Parameters(params)).await.unwrap().0;
+            assert_eq!(report.reason, want);
+            assert_eq!(report.valid, want == "ok");
+        }
     }
 
     #[tokio::test]
-    async fn execute_intent_uses_application_commands() {
-        let server = PetuniaMcp::new();
+    async fn execute_intent_uses_application_commands_and_revisions() {
+        let server = author();
         let before = server.list_assets().await.unwrap().0.len();
+        let revision = server.document_revision().await.unwrap().0;
         let report = server
             .execute_intent(Parameters(ExecuteIntentParams {
-                command: "model.add_primitive".to_string(),
-                asset_id: Some("Plane".to_string()),
-                args: vec![],
+                intent: intent("model.add_primitive", Some("Plane"), vec![]),
+                expected_revision: Some(revision),
             }))
             .await
             .unwrap()
             .0;
         assert!(report.valid);
+        assert_ne!(report.revision, revision);
         assert_eq!(server.list_assets().await.unwrap().0.len(), before + 1);
+
+        // A precondição antiga agora falha sem aplicar nada.
+        let stale = server
+            .execute_intent(Parameters(ExecuteIntentParams {
+                intent: intent("model.add_primitive", Some("Plane"), vec![]),
+                expected_revision: Some(revision),
+            }))
+            .await
+            .err()
+            .expect("expected an error");
+        assert_eq!(code(&stale), Some("revision_mismatch"));
+        assert_eq!(server.list_assets().await.unwrap().0.len(), before + 1);
+    }
+
+    #[tokio::test]
+    async fn batches_are_atomic_with_one_undo_entry_and_dry_run_changes_nothing() {
+        let server = author();
+        let before = server.list_assets().await.unwrap().0.len();
+        let add = intent("model.add_primitive", Some("Plane"), vec![]);
+
+        let dry = server
+            .execute_batch(Parameters(BatchParams {
+                commands: vec![add.clone(), add.clone()],
+                expected_revision: None,
+                dry_run: true,
+            }))
+            .await
+            .unwrap()
+            .0;
+        assert!(dry.dry_run);
+        assert_eq!(server.list_assets().await.unwrap().0.len(), before);
+
+        let report = server
+            .execute_batch(Parameters(BatchParams {
+                commands: vec![add.clone(), add.clone()],
+                expected_revision: None,
+                dry_run: false,
+            }))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(report.applied, 2);
+        assert_eq!(server.list_assets().await.unwrap().0.len(), before + 2);
+        assert!(server.undo().await.unwrap().0);
+        assert_eq!(server.list_assets().await.unwrap().0.len(), before);
+
+        // Um alvo obsoleto recusa o batch inteiro antes de aplicar qualquer coisa.
+        let error = server
+            .execute_batch(Parameters(BatchParams {
+                commands: vec![
+                    add,
+                    intent(
+                        "model.extrude",
+                        Some("00000000-0000-4000-8000-000000000000"),
+                        vec![0.5],
+                    ),
+                ],
+                expected_revision: None,
+                dry_run: false,
+            }))
+            .await
+            .err()
+            .expect("expected an error");
+        assert_eq!(code(&error), Some("stale_reference"));
+        assert_eq!(server.list_assets().await.unwrap().0.len(), before);
+    }
+
+    #[tokio::test]
+    async fn audit_never_records_args() {
+        let server = author();
+        let _ = server
+            .execute_intent(Parameters(ExecuteIntentParams {
+                intent: intent("model.extrude", None, vec![0.123456]),
+                expected_revision: None,
+            }))
+            .await;
+        let log = server.audit_log().await.unwrap().0;
+        let text = serde_json::to_string(&log).unwrap();
+        assert!(!text.contains("0.123456"));
+        assert!(
+            log.iter()
+                .any(|e| e.command.as_deref() == Some("model.extrude"))
+        );
     }
 }

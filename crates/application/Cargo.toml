@@ -1,0 +1,25 @@
+[package]
+name = "petunia_application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+petunia_core = { workspace = true }
+petunia_mesh = { workspace = true }
+petunia_render = { workspace = true }
+petunia_module_model = { workspace = true }
+petunia_module_paint = { workspace = true }
+petunia_module_uv = { workspace = true }
+petunia_module_assets = { workspace = true }
+petunia_project = { workspace = true }
+glam = { workspace = true }
+anyhow = { workspace = true }
+# Plugins Lua (E01). Fora do build padrão: compila Lua 5.4 em C (mlua vendored).
+petunia_plugins = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[features]
+default = []
+lua-plugins = ["dep:petunia_plugins", "dep:serde_json"]
