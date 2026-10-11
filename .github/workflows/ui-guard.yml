@@ -1,37 +1,30 @@
 name: UI Architecture Guard
 
-# Gate de arquitetura da camada de UI (§36/§37 da Egui Ecosystem Final Push).
+# Gate de arquitetura (04-renderer, decisões 1–2; 09-ui/slint-rescue-plan §26).
 #
-# Duas verificações independentes:
+# A pilha egui (`crates/ui`, `crates/app`) e o renderer WGPU foram removidos.
+# O antigo `xtask ui-guard` (confinamento de bibliotecas egui e Component
+# Gallery) saiu com eles; o equivalente atual é `xtask arch-check`:
 #
-# 1. `ui-guard --strict` — confinamento de bibliotecas: nenhum tipo de
-#    `egui_taffy`, `egui_tiles`, `egui_dnd`, `twill`, `egui_ltreeview`,
-#    `iconflow`, `egui_inbox`, `egui-file-dialog` ou `transform-gizmo` pode
-#    aparecer fora do adapter correspondente.
-# 2. Component Gallery (§38) — o exemplo precisa continuar compilando e a
-#    vitrine precisa renderizar nos 3 presets de densidade sem panic.
+# - nenhum manifesto do workspace pode trazer WGPU, egui ou eframe;
+# - dependências P0/P1 confinadas aos crates donos, incluindo `ui-slint`
+#   e `application`;
+# - fronteiras de persistência, FFI, MCP e command spine.
 #
-# Regras de "cheiro de produto" (`available_width`, `spacing_mut`, ...) são
-# reportadas no relatório e medidas contra a baseline congelada em
-# `docs/audits/ui-ecosystem-final-push/00-baseline.md`; elas ainda não falham a
-# CI, por serem dívida herdada em migração.
+# O job mantém o id `ui-guard` para não quebrar regras de proteção de branch.
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'crates/ui/**'
-      - 'crates/core/**'
-      - 'crates/xtask/**'
+      - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/ui-guard.yml'
   pull_request:
     paths:
-      - 'crates/ui/**'
-      - 'crates/core/**'
-      - 'crates/xtask/**'
+      - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/ui-guard.yml'
@@ -54,15 +47,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # `egui` e as crates auxiliares precisam de headers de sistema para
-      # compilar em runner Linux limpo.
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libxkbcommon-dev libwayland-dev \
-            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
-
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -72,11 +56,5 @@ jobs:
             target
           key: ${{ runner.os }}-ui-guard-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Verify library confinement (strict)
-        run: cargo run -p xtask -- ui-guard --strict
-
-      - name: Verify Component Gallery renders in every density
-        run: "cargo test -p petunia_ui --lib gallery::"
-
-      - name: Verify Component Gallery example compiles
-        run: cargo check -p petunia_ui --example component_gallery
+      - name: Verify architecture invariants (no WGPU/egui, dependency confinement)
+        run: cargo run -p xtask -- arch-check
