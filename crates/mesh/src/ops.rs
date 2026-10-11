@@ -1012,7 +1012,9 @@ impl Mesh {
         }
         // 2. Aplicação sequencial numa cópia; as arestas seguintes são achadas
         //    pela posição original dos extremos. Interação que falha = recusa.
-        let targets: Vec<((u32, u32), [f32; 3], [f32; 3])> = edges
+        // Aresta original e posições dos dois extremos antes da aplicação.
+        type EdgeTarget = ((u32, u32), [f32; 3], [f32; 3]);
+        let targets: Vec<EdgeTarget> = edges
             .iter()
             .map(|&(a, b)| {
                 (

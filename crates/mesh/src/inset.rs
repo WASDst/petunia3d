@@ -149,9 +149,9 @@ impl Mesh {
             }
         }
         let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
-        for i in 0..faces.len() {
+        for (i, &face) in faces.iter().enumerate() {
             let root = find(&mut parent, i);
-            groups.entry(root).or_default().push(faces[i]);
+            groups.entry(root).or_default().push(face);
         }
         let mut out: Vec<Vec<usize>> = groups.into_values().collect();
         out.sort_unstable_by_key(|g| g[0]);

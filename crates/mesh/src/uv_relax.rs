@@ -175,9 +175,8 @@ impl Mesh {
                 let center = (current[0] + current[1] + current[2]) / 3.0;
                 // Rotação de Procrustes 2D: referência → UV atual.
                 let (mut dot, mut cross) = (0.0f32, 0.0f32);
-                for k in 0..3 {
-                    let p = tri.reference[k];
-                    let q = current[k] - center;
+                for (p, c) in tri.reference.iter().zip(current) {
+                    let q = c - center;
                     dot += p.dot(q);
                     cross += p.perp_dot(q);
                 }

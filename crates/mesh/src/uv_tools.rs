@@ -145,7 +145,8 @@ impl Mesh {
     pub fn uv_split_edges(&self) -> HashSet<(u32, u32)> {
         const EPS: f32 = 1.0e-5;
         // edge_key → UVs (no extremo menor, no extremo maior) de cada face.
-        let mut sides: HashMap<(u32, u32), Vec<([f32; 2], [f32; 2])>> = HashMap::new();
+        type UvSides = HashMap<(u32, u32), Vec<([f32; 2], [f32; 2])>>;
+        let mut sides: UvSides = HashMap::new();
         for face in &self.faces {
             let n = face.verts.len();
             if n < 3 || face.uv.len() != n {
