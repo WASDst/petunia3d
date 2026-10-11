@@ -2,6 +2,7 @@
 // Suíte de testes unitários e de integração para o bridge Slint UI e interações do shell.
 
 use super::*;
+use std::sync::{Arc, Mutex};
 
 #[allow(dead_code)]
 fn visible_edge_points(bridge: &SlintUiBridge<PlaceholderViewport>) -> Vec<((u32, u32), [f32; 2])> {
@@ -1180,7 +1181,21 @@ fn uv_statistics_come_from_the_real_diagnostics_not_a_hardcoded_claim() {
     bridge.state.sync_selection();
     bridge.execute_core_command("uv.unwrap").unwrap();
     let stats = bridge.view_model().uv_stats;
-    assert!(stats.contains("Islands: 1"), "unwrap real: {stats}");
+    // A contagem vem do diagnóstico real: ilhas exigem continuidade de UV e o
+    // unwrap marca seams de chart (07-uv, "Islands"), então um cubo aberto
+    // tem várias ilhas — o "1" antigo era o bug da contagem que ignorava splits.
+    let islands = bridge
+        .state
+        .project
+        .active_mesh()
+        .unwrap()
+        .uv_diagnostics()
+        .island_count;
+    assert!(islands >= 1);
+    assert!(
+        stats.contains(&format!("Islands: {islands}")),
+        "unwrap real: {stats}"
+    );
 }
 
 #[test]
@@ -2036,7 +2051,13 @@ fn loop_cut_session_slides_previews_and_commits_one_undo_entry() {
 
     assert!(bridge.begin_loop_cut(), "o anel precisa ser descoberto");
     assert!(bridge.loop_cut.is_some());
-    let preview = bridge.state.project.active_mesh().unwrap().clone();
+    // A prévia viaja pelo contrato de render; o documento não muda até o commit.
+    let preview = bridge.tool_preview_mesh().expect("prévia ativa").clone();
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().verts.len(),
+        original.verts.len(),
+        "a prévia não é gravada no documento"
+    );
     assert!(
         preview.verts.len() > original.verts.len(),
         "o preview precisa inserir vértices: {} -> {}",
@@ -2059,12 +2080,19 @@ fn loop_cut_session_slides_previews_and_commits_one_undo_entry() {
 
     assert!(bridge.set_loop_cut_count(3));
     assert_eq!(bridge.loop_cut.as_ref().unwrap().cuts, 3);
-    assert!(
-        bridge.state.project.active_mesh().unwrap().verts.len()
-            > bridge.state.project.undo.depth().0
+    assert!(bridge.tool_preview_mesh().unwrap().verts.len() > preview.verts.len());
+    assert_eq!(
+        bridge.state.project.undo.depth().0,
+        0,
+        "prévia não empilha Undo"
     );
 
     assert!(bridge.commit_loop_cut());
+    assert!(
+        bridge.tool_preview_mesh().is_none(),
+        "commit encerra a prévia"
+    );
+    assert!(bridge.state.project.active_mesh().unwrap().verts.len() > original.verts.len());
     assert!(bridge.loop_cut.is_none());
     assert_eq!(bridge.state.session.tools.active_tool, "select");
     assert_eq!(bridge.state.project.undo.depth(), (1, 0));
@@ -2964,7 +2992,7 @@ fn gpu_gizmo_shapes_follow_the_handle_geometry_and_state() {
     let cx = center.points.iter().map(|p| p[0]).sum::<f32>() / center.points.len() as f32;
     assert!((cx - gizmo.origin_x).abs() < 0.5);
     // Hover no eixo X muda a cor/largura da haste X.
-    let rod_x = |shapes: &[petunia_render_wgpu::OverlayShape]| {
+    let rod_x = |shapes: &[petunia_render::OverlayShape]| {
         shapes
             .iter()
             .find(|s| {
@@ -4666,8 +4694,14 @@ fn slice_drag_cuts_the_mesh_and_commits_one_undo_entry() {
         bridge.update_slice(400.0, 380.0),
         "arrasto vertical precisa produzir um plano de corte"
     );
-    // Slice divide as faces mas mantém ambos os lados da geometria.
-    let sliced = bridge.state.project.active_mesh().unwrap().clone();
+    // Slice divide as faces mas mantém ambos os lados da geometria; a prévia
+    // viaja pelo contrato de render e o documento só muda no commit.
+    let sliced = bridge.tool_preview_mesh().expect("prévia do slice").clone();
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        6,
+        "a prévia não é gravada no documento"
+    );
     let report = sliced.validate_topology();
     assert!(report.is_manifold, "{report:?}");
     let span = |mesh: &petunia_core::Mesh| {
@@ -4689,6 +4723,11 @@ fn slice_drag_cuts_the_mesh_and_commits_one_undo_entry() {
     assert!(bridge.slice_anchor.is_none());
     assert_eq!(bridge.state.session.tools.active_tool, "select");
     assert_eq!(bridge.state.project.undo.depth(), (1, 0));
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        sliced.faces.len(),
+        "o commit aplica a prévia"
+    );
 
     assert!(bridge.state.undo());
     let restored = span(bridge.state.project.active_mesh().unwrap());
@@ -6654,7 +6693,8 @@ fn lasso_selection_occlusion_and_xray() {
 fn uv_island_90_degree_rotation_in_slint() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.apply(UiIntent::SetWorkspace(Workspace::Uv));
-    bridge.state.session.uv_selected.insert(0);
+    let mesh = bridge.state.project.active_mesh().unwrap().clone();
+    bridge.state.session.uv_selection.set_faces(&mesh, [0]);
 
     let initial_u0 = bridge.state.project.active_mesh().unwrap().faces[0].uv[0][0];
     let initial_v0 = bridge.state.project.active_mesh().unwrap().faces[0].uv[0][1];
@@ -8075,7 +8115,8 @@ fn test_uv_pinning_bridge_and_shortcuts() {
     bridge.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Uv));
 
     // Seleciona a face 0 em UV
-    bridge.state.session.uv_selected.insert(0);
+    let mesh = bridge.state.project.active_mesh().unwrap().clone();
+    bridge.state.session.uv_selection.set_faces(&mesh, [0]);
 
     // Inicialmente sem pins
     assert_eq!(bridge.view_model().uv_editor.pinned_count, 0);
@@ -8122,7 +8163,8 @@ fn test_nudge_selection_with_arrow_keys() {
 
     // 3. No workspace UV: setas movem as faces selecionadas no espaço UV
     bridge.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Uv));
-    bridge.state.session.uv_selected.insert(0);
+    let mesh = bridge.state.project.active_mesh().unwrap().clone();
+    bridge.state.session.uv_selection.set_faces(&mesh, [0]);
     let u_before = bridge.state.project.active_mesh().unwrap().faces[0].uv[0][0];
     assert!(bridge.route_shortcut("Right", false, false, false));
     let u_after = bridge.state.project.active_mesh().unwrap().faces[0].uv[0][0];

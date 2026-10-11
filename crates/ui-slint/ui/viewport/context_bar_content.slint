@@ -1,0 +1,325 @@
+// Extraído de app.slint (Slint Rescue, website/docs/09-ui/slint-rescue-plan.md §5):
+// recebe estado projetado e emite callbacks; não conhece documento nem malha.
+import { IconSet } from "@lucide";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
+import { RailTool, ToolButton, ToolGroup } from "../components/controls.slint";
+import { IconButton } from "../components/base.slint";
+import { ContextBar } from "context_bar.slint";
+import { QuickActionEntry, ShortcutsEntry } from "../types.slint";
+
+export component ViewportContextBar inherits ContextBar {
+    in property <string> active-tool;
+    in property <string> active-workspace;
+    in property <float> brush-opacity;
+    in property <float> brush-size;
+    in property <bool> isolate-active;
+    in property <string> label-model-loop-cut;
+    in property <string> label-model-push-pull;
+    in property <string> label-more-model-tools;
+    in property <string> label-poly-pen;
+    in property <string> label-poly-pen-hint;
+    in property <string> label-quick-action-customize;
+    in property <string> modeling-mode;
+    in property <color> paint-color;
+    in property <bool> paint-symmetry-x;
+    in property <bool> paint-symmetry-y;
+    in property <bool> paint-symmetry-z;
+    in property <[QuickActionEntry]> quick-actions;
+    in-out property <bool> quick-actions-open;
+    in property <[RailTool]> rail-cut-tools;
+    in-out property <string> rail-flyout;
+    in-out property <[RailTool]> rail-flyout-tools;
+    in-out property <length> rail-flyout-x;
+    in-out property <length> rail-flyout-y;
+    in-out property <bool> shelf-overflow-open;
+    in property <ShortcutsEntry> shortcuts;
+    in property <float> viewport-region-width;
+    callback active-tool-changed(string);
+    callback brush-opacity-changed(float);
+    callback brush-size-changed(float);
+    callback command-executed(string);
+    callback paint-symmetry-x-toggled();
+    callback paint-symmetry-y-toggled();
+    callback paint-symmetry-z-toggled();
+    pure callback poly-tool-visible(string) -> bool;
+    callback quick-action-executed(string);
+    callback rail-activate(string);
+    callback rail-flyout-invoke();
+    callback rail-flyout-step(int);
+        // --- MODEL: Ferramentas de modelagem (Shapes / 2D Profiles hero position) ---
+
+
+        // --- MODEL: Ferramentas principais de edição poligonal ---
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("extrude"): ToolButton {
+            icon-svg: PetuniaIcons.tool-extrude;
+            semantic-label: Tr.t("sl.extrude");
+            shortcut: root.shortcuts.model-extrude;
+            description: Tr.t("sl.pull_new_vertices_and_faces_outward_from_sel");
+            clicked => { root.command-executed("model.extrude"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("push_pull"): ToolButton {
+            icon-svg: PetuniaIcons.tool-pushpull;
+            active: active-tool == "push_pull";
+            semantic-label: root.label-model-push-pull;
+            shortcut: root.shortcuts.model-push-pull;
+            description: Tr.t("sl.push_or_pull_faces_along_surface_normals_dir");
+            clicked => { root.command-executed("model.push_pull"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("inset"): ToolButton {
+            icon-svg: PetuniaIcons.tool-inset;
+            semantic-label: Tr.t("sl.inset");
+            shortcut: root.shortcuts.model-inset;
+            description: Tr.t("sl.inset_new_polygonal_boundary_inside_selected");
+            clicked => { root.command-executed("model.inset"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("bevel"): ToolButton {
+            icon-svg: PetuniaIcons.tool-bevel;
+            semantic-label: Tr.t("sl.bevel");
+            shortcut: root.shortcuts.model-bevel;
+            description: Tr.t("sl.round_edges_or_vertices_with_smooth_chamfer_");
+            clicked => { root.command-executed("model.bevel"); }
+        }
+
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY": Rectangle {
+            width: 1px;
+            height: 20px;
+            background: DesignTokens.border;
+        }
+
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("poly_pen"): ToolButton {
+            icon-svg: PetuniaIcons.tool-poly-pen;
+            semantic-label: root.label-poly-pen;
+            description: root.label-poly-pen-hint;
+            active: active-tool == "poly_pen";
+            clicked => { root.active-tool-changed("poly_pen"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("loop_cut"): ToolButton {
+            icon-svg: PetuniaIcons.tool-loopcut;
+            semantic-label: root.label-model-loop-cut;
+            shortcut: root.shortcuts.model-loop-cut;
+            description: Tr.t("sl.insert_a_connected_edge_loop_ring_across_qua");
+            active: active-tool == "loop_cut";
+            clicked => { root.active-tool-changed("loop_cut"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("subdivide"): ToolButton {
+            icon-svg: PetuniaIcons.tool-subdivide;
+            semantic-label: Tr.t("sl.subdivide");
+            shortcut: root.shortcuts.model-subdivide;
+            description: Tr.t("sl.subdivide_faces_into_quad_quarters_creating_");
+            clicked => { root.command-executed("model.subdivide"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("merge"): ToolButton {
+            icon-svg: PetuniaIcons.tool-merge;
+            semantic-label: Tr.t("sl.merge_center");
+            shortcut: root.shortcuts.model-merge;
+            description: Tr.t("sl.collapse_and_merge_all_selected_vertices_to_");
+            clicked => { root.command-executed("model.merge"); }
+        }
+        // Knife e Slice cortam pelo gesto: um grupo com flyout (F0/§11).
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.poly-tool-visible("knife") && root.poly-tool-visible("slice"): ToolGroup {
+            y: (parent.height - self.height) / 2;
+            tools: root.rail-cut-tools;
+            more-hint: Tr.t("sl.rail_more_hint");
+            flyout-open: root.rail-flyout == "cut";
+            activated(id) => { root.rail-activate(id); }
+            more-requested(x, y) => { root.rail-flyout-tools = root.rail-cut-tools; root.rail-flyout-x = x; root.rail-flyout-y = y; root.rail-flyout = "cut"; }
+            flyout-step(delta) => { root.rail-flyout-step(delta); }
+            flyout-invoke => { root.rail-flyout-invoke(); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("connect"): ToolButton {
+            icon-svg: PetuniaIcons.tool-connect;
+            semantic-label: Tr.t("sl.connect");
+            shortcut: root.shortcuts.model-connect;
+            description: Tr.t("sl.bridge_edge_loops_with_configurable_quad_seg");
+            clicked => { root.command-executed("model.connect"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 720 && root.poly-tool-visible("make_face"): ToolButton {
+            icon: IconSet.Square;
+            semantic-label: Tr.t("sl.make_face");
+            shortcut: "F";
+            description: Tr.t("sl.create_face_or_edge_connecting_selected_vert");
+            clicked => { root.command-executed("model.make_face"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("spin"): ToolButton {
+            icon-svg: PetuniaIcons.tool-spin;
+            semantic-label: Tr.t("sl.spin");
+            shortcut: root.shortcuts.model-spin;
+            description: Tr.t("sl.revolve_selection_around_cursor_or_axis_into");
+            clicked => { root.command-executed("model.spin"); }
+        }
+        if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 760 && root.poly-tool-visible("dissolve"): ToolButton {
+            icon-svg: PetuniaIcons.tool-dissolve;
+            semantic-label: Tr.t("sl.dissolve");
+            shortcut: root.shortcuts.model-dissolve;
+            description: Tr.t("sl.dissolve_selected_vertices_edges_or_faces_wi");
+            clicked => { root.command-executed("model.dissolve"); }
+        }
+
+        if active-workspace == "PAINT": ToolButton {
+            icon: root.isolate-active ? IconSet.EyeOff : IconSet.Eye;
+            semantic-label: root.isolate-active ? Tr.t("sl.un_isolate") : Tr.t("sl.isolate");
+            shortcut: root.shortcuts.paint-isolate;
+            description: Tr.t("sl.paint_isolate_description");
+            active: root.isolate-active;
+            clicked => { root.command-executed("view.isolate"); }
+        }
+        // Ajustes do pincel ativo (F6): cor, tamanho, opacidade e simetria.
+        if active-workspace == "PAINT": Rectangle {
+            width: 1px;
+            height: 22px;
+            background: DesignTokens.border;
+        }
+        if active-workspace == "PAINT": Rectangle {
+            y: (parent.height - self.height) / 2;
+            width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            background: root.paint-color;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: image;
+            accessible-label: Tr.t("sl.paint_color");
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.Minus;
+            semantic-label: Tr.t("sl.brush_smaller");
+            clicked => { root.brush-size-changed(Math.max(0.1, root.brush-size - 0.2)); }
+        }
+        if active-workspace == "PAINT": Text {
+            text: Tr.t("sl.size") + " \{Math.round(root.brush-size * 10) / 10}";
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-small;
+            vertical-alignment: center;
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.Plus;
+            semantic-label: Tr.t("sl.brush_larger");
+            clicked => { root.brush-size-changed(Math.min(10.0, root.brush-size + 0.2)); }
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.Minus;
+            semantic-label: Tr.t("sl.opacity_less");
+            clicked => { root.brush-opacity-changed(Math.max(0.05, root.brush-opacity - 0.1)); }
+        }
+        if active-workspace == "PAINT": Text {
+            text: Tr.t("sl.opacity") + " \{Math.round(root.brush-opacity * 100)}%";
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-small;
+            vertical-alignment: center;
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.Plus;
+            semantic-label: Tr.t("sl.opacity_more");
+            clicked => { root.brush-opacity-changed(Math.min(1.0, root.brush-opacity + 0.1)); }
+        }
+        if active-workspace == "PAINT": Rectangle {
+            width: 1px;
+            height: 22px;
+            background: DesignTokens.border;
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.FlipHorizontal2;
+            semantic-label: Tr.t("sl.symmetry_x");
+            label: "X";
+            variant: "toggle";
+            active: root.paint-symmetry-x;
+            clicked => { root.paint-symmetry-x-toggled(); }
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.FlipHorizontal2;
+            semantic-label: Tr.t("sl.symmetry_y");
+            label: "Y";
+            variant: "toggle";
+            active: root.paint-symmetry-y;
+            clicked => { root.paint-symmetry-y-toggled(); }
+        }
+        if active-workspace == "PAINT": IconButton {
+            y: (parent.height - self.height) / 2;
+            icon: IconSet.FlipHorizontal2;
+            semantic-label: Tr.t("sl.symmetry_z");
+            label: "Z";
+            variant: "toggle";
+            active: root.paint-symmetry-z;
+            clicked => { root.paint-symmetry-z-toggled(); }
+        }
+
+        if active-workspace == "UV": ToolButton {
+            icon: IconSet.Maximize2;
+            semantic-label: Tr.t("sl.unwrap");
+            shortcut: root.shortcuts.uv-unwrap;
+            description: Tr.t("sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou");
+            clicked => { root.command-executed("uv.unwrap_auto"); }
+        }
+        if active-workspace == "UV": ToolButton {
+            icon: IconSet.Grid2x2;
+            semantic-label: Tr.t("sl.pack_islands");
+            shortcut: root.shortcuts.uv-pack;
+            description: Tr.t("sl.pack_and_arrange_uv_islands_efficiently_with");
+            clicked => { root.command-executed("uv.pack_islands"); }
+        }
+        if active-workspace == "UV": ToolButton {
+            icon: IconSet.Camera;
+            semantic-label: Tr.t("sl.project_ref");
+            shortcut: root.shortcuts.uv-project-ref;
+            description: Tr.t("sl.project_uv_coordinates_from_active_camera_pe");
+            clicked => { root.command-executed("uv.project_reference"); }
+        }
+        if active-workspace == "UV": ToolButton {
+            icon: IconSet.Link;
+            semantic-label: Tr.t("sl.stitch");
+            shortcut: root.shortcuts.uv-stitch;
+            description: Tr.t("sl.weld_coincident_3d_edges_that_have_split_uv_");
+            clicked => { root.command-executed("uv.stitch"); }
+        }
+        if active-workspace == "UV": ToolButton {
+            icon: IconSet.Minimize2;
+            semantic-label: Tr.t("sl.relax");
+            shortcut: root.shortcuts.uv-relax;
+            description: Tr.t("sl.smooth_unpinned_uv_island_corners_to_minimiz");
+            clicked => { root.command-executed("uv.relax"); }
+        }
+
+        // Ações rápidas do usuário: saíram do Inspector (D2) e moram
+        // aqui, com rótulo. A lixeira saiu da barra (D10): Delete no
+        // teclado e o menu do botão direito continuam excluindo.
+        if active-workspace == "MODEL": Rectangle {
+            width: 1px;
+            height: 22px;
+            background: DesignTokens.border;
+        }
+        if active-workspace == "MODEL": HorizontalLayout {
+            spacing: 4px;
+            for action in root.quick-actions: IconButton {
+                y: (parent.height - self.height) / 2;
+                icon: IconSet.Zap;
+                label: action.label;
+                semantic-label: action.label;
+                enabled: action.enabled;
+                clicked => { root.quick-action-executed(action.id); }
+            }
+            IconButton {
+                y: (parent.height - self.height) / 2;
+                icon: IconSet.SlidersHorizontal;
+                variant: "toggle";
+                semantic-label: root.label-quick-action-customize;
+                active: root.quick-actions-open;
+                clicked => { root.quick-actions-open = !root.quick-actions-open; }
+            }
+        }
+        if active-workspace == "MODEL" && root.viewport-region-width < 760: ToolButton {
+            icon: IconSet.MoreHorizontal;
+            semantic-label: root.label-more-model-tools;
+            shortcut: "";
+            description: Tr.t("sl.open_overflow_menu_with_additional_modeling_");
+            active: root.shelf-overflow-open;
+            clicked => { root.shelf-overflow-open = !root.shelf-overflow-open; }
+        }
+
+}

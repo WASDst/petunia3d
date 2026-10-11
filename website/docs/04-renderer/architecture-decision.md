@@ -25,9 +25,23 @@ Extensões GL 4.x podem ser usadas somente por capability gate e nunca como requ
 
 Não manter WGPU como backend alternativo no destino final.
 
-## Diagnóstico atual
+## Estado de implementação (2026-10-10)
 
-Hoje existem três fontes de comportamento:
+A migração descrita abaixo foi executada no branch `refactor/architecture-foundation`:
+
+- `petunia-render` é o único renderer: OpenGL 3.3 Core via glow (`crates/render/src/gl/`), com os passes da seção "Render passes V1" em módulos próprios (`surfaces`, `edges`, `components`, `grid`, `outline`, `ao`, `references`, `screen`) e GLSL em `crates/render/src/gl/shaders/*.vert|frag`.
+- `RenderFrameInput` carrega `CameraMatrices`, `RenderLight` resolvida, overlays de componente em px lógicos, `RenderOutline`, `WorkplaneOverlay`, overlay de tela (gizmo) e regiões sujas de textura. O `SceneExtractor` é o único adaptador do documento; cache por objeto (revisões de superfície/arestas), transformações rígidas como matriz de modelo e prévias de ferramenta como override de desenho.
+- O viewport Slint (`crates/ui-slint/src/viewport_gl.rs`) desenha no notifier do Slint/FemtoVG num FBO próprio (MSAA + resolve) importado sem readback; o estado GL do host é salvo e restaurado (FBOs, VAO, programa, texturas, viewport/scissor, blend, depth, stencil, unpack).
+- A profundidade de clip do glam (`[0, 1]`) é remapeada para o clip GL nos vertex shaders; o depth buffer guarda o mesmo valor que a projeção, o que permite reconstruir posições no GTAO.
+- `render-wgpu`, `render-gl`, o egui (`crates/ui`) e o host `crates/app` foram removidos por decisão explícita do usuário; o `xtask arch-check` impede o retorno de WGPU/egui em qualquer manifesto.
+
+Gates (seção "Gates para remover WGPU") com evidência em `crates/render/tests/gl_pixels.rs`, rodados em Linux, Mesa 26.1.7 (zink) sobre NVIDIA RTX 3060, OpenGL 4.6 Core em EGL sem janela: Flat/Smooth/Sharp, seleção/hover, arestas de largura constante em DRAW/POLY, HiDPI, X-Ray (alvo opaco), workplane, contorno, face orientation, referências atrás/na frente, gizmo sem depth test, MSAA, matcap, AO (e sua ausência em X-Ray/Wireframe), uploads parciais de textura, transformação rígida sem reenvio e restauração do estado do host — 21 testes de pixel, todos passando.
+
+Não executados: Windows, GPU de baixo desempenho, composição na janela nativa (inspeção visual), performance tiers como preferência de UI e `KHR_debug`.
+
+## Diagnóstico anterior à migração
+
+Antes da migração existiam três fontes de comportamento:
 
 ### render-gl
 

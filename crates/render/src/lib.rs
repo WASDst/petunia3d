@@ -1,10 +1,18 @@
-//! Tipos compartilhados de render: shading, stats e capabilities (§29-30).
-//! Somente `render-gl` / `render-wgpu` executam chamadas gráficas (§27).
+//! Renderer do Petunia3D: boundary neutro (`frame`), adaptador do documento
+//! (`extract`), tipos/tesselação de overlay (`overlays`) e o renderer OpenGL 3.3
+//! Core concreto (`gl`) — o único backend do viewport. Tipos compartilhados de
+//! shading, stats e capabilities (§29-30) também vivem aqui.
 //!
-//! Matemática de cena (grid, quads de referência, luz) vive aqui para os
-//! dois backends usarem a mesma fonte (sem duplicação).
+//! Matemática de cena (grid, quads de referência, luz) vive em `scene` para o
+//! renderer e o viewport por software usarem a mesma fonte.
 
+pub mod extract;
+pub mod frame;
+pub mod gl;
+pub mod overlays;
 pub mod scene;
+
+pub use overlays::{EdgeMode, OverlayShape, WorkplaneOverlay, edge_overlay_visible};
 
 /// Viewport shading. Defined in core (session state); re-exported here so
 /// existing `petunia_render::Shading` call sites keep compiling.
@@ -26,6 +34,32 @@ pub struct GpuCaps {
     pub vendor: String,
     pub renderer: String,
     pub max_texture_size: i32,
+    /// Amostras máximas de MSAA em renderbuffer.
+    pub max_samples: i32,
+    pub major: u32,
+    pub minor: u32,
+    /// Contexto OpenGL ES (não suportado como alvo; só diagnóstico).
+    pub embedded: bool,
+}
+
+impl GpuCaps {
+    /// Baseline do renderer: OpenGL 3.3 Core (desktop).
+    pub fn supports_core_33(&self) -> bool {
+        !self.embedded && (self.major, self.minor) >= (3, 3)
+    }
+
+    /// Resumo de uma linha para log de startup e relatórios.
+    pub fn summary(&self) -> String {
+        format!(
+            "OpenGL {} | GLSL {} | {} — {} | max texture {} | max MSAA {}x",
+            self.gl_version,
+            self.glsl_version,
+            self.vendor,
+            self.renderer,
+            self.max_texture_size,
+            self.max_samples
+        )
+    }
 }
 
 impl Default for GpuCaps {
@@ -36,6 +70,29 @@ impl Default for GpuCaps {
             vendor: "desconhecido".into(),
             renderer: "desconhecido".into(),
             max_texture_size: 2048,
+            max_samples: 1,
+            major: 0,
+            minor: 0,
+            embedded: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn core_33_is_the_floor_and_gles_is_rejected() {
+        let caps = |major, minor, embedded| GpuCaps {
+            major,
+            minor,
+            embedded,
+            ..GpuCaps::default()
+        };
+        assert!(caps(3, 3, false).supports_core_33());
+        assert!(caps(4, 6, false).supports_core_33());
+        assert!(!caps(3, 2, false).supports_core_33());
+        assert!(!caps(3, 3, true).supports_core_33());
     }
 }

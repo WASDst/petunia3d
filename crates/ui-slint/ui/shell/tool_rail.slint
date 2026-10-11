@@ -189,6 +189,26 @@ export component ToolRail inherits Rectangle {
                 description: Tr.t("sl.push_or_pull_faces_along_surface_normals_dir");
                 clicked => { root.execute-command("model.push_pull"); }
             }
+
+            Rectangle { width: 28px; height: 1px; background: DesignTokens.border; }
+
+            // Primitivas são ferramenta comum aos dois perfis (website/docs/03-geometry/
+            // draw-unification-proposal.md, "Gramática de ferramentas"); mesmo contrato de
+            // invocador do POLY: o foco volta a este botão quando o popover fecha.
+            draw-add-action := ToolButton {
+                show-label: root.show-tool-labels;
+                icon: IconSet.Plus;
+                semantic-label: Tr.t("sl.add_primitive");
+                shortcut: root.shortcuts.model-add-primitive;
+                description: Tr.t("sl.quick_menu_to_create_standard_3d_parametric_");
+                active: root.add-menu-open;
+                popup-open: root.add-menu-open;
+                popup-step(delta) => { root.add-menu-step(delta); }
+                popup-invoke => { root.add-menu-invoke(); }
+                property <int> focus-token: root.add-focus-token;
+                changed focus-token => { if root.add-focus-token > 0 { draw-add-action.focus(); } }
+                clicked => { root.add-menu-toggled(!root.add-menu-open); }
+            }
         }
 
         if root.active-workspace == "MODEL" && root.modeling-mode == "POLY": VerticalLayout {

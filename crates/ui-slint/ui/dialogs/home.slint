@@ -1,0 +1,234 @@
+// Tela inicial (Home).
+import { DesignTokens } from "../tokens.slint";
+import { HomeTexts, RecentProject } from "../types.slint";
+import { IconButton } from "../components/base.slint";
+import { IconDisplay, IconSet } from "@lucide";
+import { ModalFocusBoundary } from "../shell/modal_focus_boundary.slint";
+
+export component HomeDialog inherits ModalFocusBoundary {
+    in property <HomeTexts> home-texts;
+    in property <bool> recovery-open;
+    in property <[RecentProject]> recent-projects;
+    in property <bool> show-home-on-start;
+    callback home-closed();
+    callback recovery-keep-requested();
+    callback open-project-requested();
+    callback recovery-recover-requested();
+    callback home-recent-opened(string);
+    callback show-home-on-start-set(bool);
+    callback settings-requested();
+
+    x: 0;
+    y: 0;
+    
+    
+    background: DesignTokens.scrim;
+    accessible-role: groupbox;
+    accessible-label: root.home-texts.title;
+    initial-focus => { home-new.focus(); }
+    first-focus => { home-new.focus(); }
+    last-focus => { home-settings.focus(); }
+    dismiss-requested => { root.home-closed(); }
+    TouchArea { }
+
+    Rectangle {
+        width: min(560px, parent.width - 48px);
+        height: home-layout.preferred-height;
+        x: (parent.width - self.width) / 2;
+        y: max(24px, (parent.height - self.height) / 3);
+        border-radius: DesignTokens.radius-panel;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        drop-shadow-blur: DesignTokens.elevation-2-blur;
+        drop-shadow-color: DesignTokens.elevation-2-color;
+        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+        home-layout := VerticalLayout {
+            padding: 24px;
+            spacing: 14px;
+
+            Text {
+                text: root.home-texts.title;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-exceptional;
+                font-weight: 700;
+            }
+            Text {
+                text: root.home-texts.subtitle;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-default;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                home-new := IconButton {
+                    icon: IconSet.Plus;
+                    label: root.home-texts.new;
+                    semantic-label: root.home-texts.new;
+                    variant: "tool";
+                    active: true;
+                    clicked => {
+                        if root.recovery-open { root.recovery-keep-requested(); }
+                        root.home-closed();
+                    }
+                }
+                IconButton {
+                    icon: IconSet.FolderOpen;
+                    label: root.home-texts.open;
+                    semantic-label: root.home-texts.open;
+                    clicked => {
+                        if root.recovery-open { root.recovery-keep-requested(); }
+                        root.home-closed();
+                        root.open-project-requested();
+                    }
+                }
+                if root.recovery-open: IconButton {
+                    icon: IconSet.History;
+                    label: root.home-texts.recover;
+                    semantic-label: root.home-texts.recover;
+                    clicked => {
+                        root.recovery-recover-requested();
+                        root.home-closed();
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: DesignTokens.border; }
+
+            Text {
+                text: root.home-texts.recent;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-strong;
+                font-weight: 600;
+            }
+            if root.recent-projects.length == 0: Text {
+                text: root.home-texts.no-recent;
+                color: DesignTokens.text-muted;
+                font-size: DesignTokens.font-small;
+                wrap: word-wrap;
+            }
+            for recent in root.recent-projects: Rectangle {
+                height: 40px;
+                border-radius: 6px;
+                background: recent-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-hover.with-alpha(0);
+                accessible-role: button;
+                accessible-label: recent.name;
+                accessible-description: recent.path;
+                forward-focus: recent-key;
+                border-width: recent-key.has-focus ? 2px : 0px;
+                border-color: DesignTokens.focus-ring;
+                recent-key := FocusScope {
+                    key-pressed(event) => {
+                        if event.text == Key.Return || event.text == " " {
+                            if root.recovery-open { root.recovery-keep-requested(); }
+                            root.home-recent-opened(recent.path);
+                            return accept;
+                        }
+                        reject
+                    }
+                }
+                accessible-action-default => {
+                    if root.recovery-open { root.recovery-keep-requested(); }
+                    root.home-recent-opened(recent.path);
+                }
+                recent-touch := TouchArea {
+                    clicked => {
+                        if root.recovery-open { root.recovery-keep-requested(); }
+                        root.home-recent-opened(recent.path);
+                    }
+                }
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 10px;
+                    IconDisplay {
+                        y: (parent.height - self.height) / 2;
+                        icon: IconSet.File;
+                        size: 16px;
+                        stroke: DesignTokens.text-secondary;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: recent.name;
+                            color: DesignTokens.text-primary;
+                            font-size: DesignTokens.font-default;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: recent.path;
+                            color: DesignTokens.text-muted;
+                            font-size: DesignTokens.font-caption;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: DesignTokens.border; }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: space-between;
+                Rectangle {
+                    height: 28px;
+                    width: home-start-row.preferred-width;
+                    accessible-role: checkbox;
+                    accessible-checkable: true;
+                    accessible-checked: root.show-home-on-start;
+                    accessible-label: root.home-texts.show-on-start;
+                    accessible-action-default => { root.show-home-on-start-set(!root.show-home-on-start); }
+                    forward-focus: start-key;
+                    border-width: start-key.has-focus ? 2px : 0px;
+                    border-color: DesignTokens.focus-ring;
+                    border-radius: 4px;
+                    start-key := FocusScope {
+                        key-pressed(event) => {
+                            if event.text == Key.Return || event.text == " " {
+                                root.show-home-on-start-set(!root.show-home-on-start);
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+                    TouchArea { clicked => { root.show-home-on-start-set(!root.show-home-on-start); } }
+                    home-start-row := HorizontalLayout {
+                        spacing: 8px;
+                        Rectangle {
+                            y: (parent.height - self.height) / 2;
+                            width: 16px;
+                            height: 16px;
+                            border-radius: 3px;
+                            border-width: 1px;
+                            border-color: root.show-home-on-start ? DesignTokens.accent : DesignTokens.border-strong;
+                            background: root.show-home-on-start ? DesignTokens.accent : DesignTokens.surface;
+                            if root.show-home-on-start: IconDisplay {
+                                icon: IconSet.Check;
+                                size: 12px;
+                                stroke: DesignTokens.on-accent;
+                            }
+                        }
+                        Text {
+                            text: root.home-texts.show-on-start;
+                            color: DesignTokens.text-secondary;
+                            font-size: DesignTokens.font-small;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                home-settings := IconButton {
+                    icon: IconSet.Settings;
+                    label: root.home-texts.settings;
+                    semantic-label: root.home-texts.settings;
+                    clicked => {
+                        root.home-closed();
+                        root.settings-requested();
+                    }
+                }
+            }
+        }
+    }
+
+}

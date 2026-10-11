@@ -17,7 +17,7 @@
 //!   todos, em qualquer forma (polígono, retângulo, círculo).
 
 use glam::Vec3;
-use petunia_core::{Command, CommandError};
+use petunia_core::Command;
 
 use crate::projection::project_world_point;
 use crate::{ModelingMode, PetuniaViewport, ProfileEditGesture, ProfileHitTarget, SlintUiBridge};
@@ -80,8 +80,8 @@ impl Command for TransformProfileCmd {
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::SPLINES | petunia_project::ProjectChanges::PROCEDURAL
     }
-    fn can_execute(&self, state: &petunia_core::AppState) -> Result<(), &'static str> {
-        let project = &state.project.project;
+    fn can_execute(&self, state: &petunia_core::EditorView<'_>) -> Result<(), &'static str> {
+        let project = &state.document.project;
         let current = project
             .get_profile(self.profile.id)
             .ok_or("Profile not found")?;
@@ -102,9 +102,12 @@ impl Command for TransformProfileCmd {
             .map_err(|_| "Profile spline data is invalid")?;
         Ok(())
     }
-    fn execute(&self, state: &mut petunia_core::AppState) -> Result<(), CommandError> {
+    fn execute(
+        &self,
+        state: &mut petunia_core::CommandContext<'_>,
+    ) -> Result<(), petunia_core::CommandError> {
         let spline = state
-            .project
+            .document
             .project
             .get_spline_mut(self.spline.id)
             .ok_or(petunia_project::SplineError::SplineNotFound(self.spline.id))?;
@@ -112,7 +115,7 @@ impl Command for TransformProfileCmd {
         next_spline.revision = spline.revision.wrapping_add(1);
         *spline = next_spline;
         let profile = state
-            .project
+            .document
             .project
             .get_profile_mut(self.profile.id)
             .ok_or(petunia_project::ProfileError::ProfileNotFound(

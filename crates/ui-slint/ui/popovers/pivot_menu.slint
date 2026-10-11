@@ -1,0 +1,80 @@
+// Menu de pivô.
+import { DesignTokens, Tr } from "../tokens.slint";
+
+export component PivotMenu inherits Rectangle {
+    in property <string> label-model-pivot;
+    in property <string> pivot-median-label;
+    in property <string> pivot-bounds-label;
+    in property <string> pivot-cursor-label;
+    in property <string> pivot-individual-label;
+    in property <string> pivot-id;
+    in property <bool> edit-pivot;
+    in property <string> label-edit-pivot;
+    in property <string> label-origin-to-geometry;
+    in property <string> label-origin-to-bottom;
+    in property <string> label-origin-to-cursor;
+    in property <string> label-origin-to-selection;
+    in property <string> label-geometry-to-origin;
+    callback pivot-set(string);
+    callback pivot-menu-toggled(bool);
+    callback command-executed(string);
+
+    
+    y: 54px;
+    width: 240px;
+    height: 356px;
+    border-radius: 8px;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    VerticalLayout {
+        padding: 10px; spacing: 4px;
+        Text { text: root.label-model-pivot; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+        for item in [
+            { id: "median", label: root.pivot-median-label },
+            { id: "bounds", label: root.pivot-bounds-label },
+            { id: "cursor", label: root.pivot-cursor-label },
+            { id: "individual", label: root.pivot-individual-label },
+        ]: Rectangle {
+            height: 26px; border-radius: 4px;
+            background: root.pivot-id == item.id ? DesignTokens.surface-hover : transparent;
+            Text { text: item.label; x: 8px; color: root.pivot-id == item.id ? DesignTokens.accent : DesignTokens.text-primary; font-size: DesignTokens.font-caption; vertical-alignment: center; }
+            TouchArea { clicked => { root.pivot-set(item.id); root.pivot-menu-toggled(false); } }
+        }
+
+        Rectangle { height: 1px; background: DesignTokens.border; }
+
+        Rectangle {
+            height: 26px; border-radius: 4px;
+            background: root.edit-pivot ? DesignTokens.accent.transparentize(0.8) : transparent;
+            border-width: root.edit-pivot ? 1px : 0px;
+            border-color: DesignTokens.accent;
+            HorizontalLayout {
+                padding-left: 8px; padding-right: 8px;
+                alignment: space-between;
+                Text { text: root.label-edit-pivot; color: root.edit-pivot ? DesignTokens.accent : DesignTokens.text-primary; font-size: DesignTokens.font-caption; vertical-alignment: center; }
+                Text { text: Tr.t("sl.insert"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; vertical-alignment: center; }
+            }
+            TouchArea { clicked => { root.command-executed("object.toggle_edit_pivot"); root.pivot-menu-toggled(false); } }
+        }
+
+        Rectangle { height: 1px; background: DesignTokens.border; }
+
+        Text { text: Tr.t("sl.set_origin"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; font-weight: 700; }
+        for origin-item in [
+            { id: "object.origin_to_geometry", label: root.label-origin-to-geometry },
+            { id: "object.origin_to_bottom", label: root.label-origin-to-bottom },
+            { id: "object.origin_to_cursor", label: root.label-origin-to-cursor },
+            { id: "object.origin_to_selection", label: root.label-origin-to-selection },
+            { id: "object.geometry_to_origin", label: root.label-geometry-to-origin },
+        ]: Rectangle {
+            height: 24px; border-radius: 4px;
+            background: transparent;
+            Text { text: origin-item.label; x: 8px; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; vertical-alignment: center; }
+            TouchArea { clicked => { root.command-executed(origin-item.id); root.pivot-menu-toggled(false); } }
+        }
+    }
+
+}

@@ -1965,7 +1965,7 @@ pub struct UvEditorModel {
     pub island_count: usize,
     pub face_count: usize,
     pub selected_face: i32,
-    /// Faces marcadas em `uv_selected` (seleção de UV, distinta da seleção 3D).
+    /// Faces totalmente selecionadas em `uv_selection` (seleção UV; com Sync desligado, independente da 3D).
     pub uv_selected_count: usize,
     /// `true` quando a malha tem mais faces do que o editor desenha.
     pub truncated: bool,

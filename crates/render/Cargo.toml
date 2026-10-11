@@ -7,4 +7,15 @@ rust-version.workspace = true
 
 [dependencies]
 petunia_core = { workspace = true }
+petunia_config = { workspace = true }
+petunia_project = { workspace = true }
+glow = { workspace = true }
+glam = { workspace = true }
+bytemuck = "1"
+uuid = { workspace = true }
+puffin = { workspace = true }
 
+[dev-dependencies]
+petunia_mesh = { workspace = true }
+# Contexto OpenGL sem janela (EGL surfaceless) para os testes de pixel do renderer.
+glutin = { version = "0.32", default-features = false, features = ["egl"] }

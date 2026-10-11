@@ -628,8 +628,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let render_state = self.viewport_render_state();
         self.viewport
             .queue_texture_updates(self.state.render.take_texture_updates());
+        // A pose do Animate continua sendo avaliada (cache); a prévia de
+        // ferramenta, quando existe, a substitui só no desenho.
         let pose = self.animate_pose_override();
-        self.viewport.set_pose_override(pose);
+        self.viewport
+            .set_pose_override(self.draw_override().or(pose));
         let (outlined, active) = self.outlined_objects();
         self.viewport.set_outlined_objects(&outlined, active);
         self.viewport

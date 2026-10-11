@@ -12,7 +12,6 @@ petunia_core = { workspace = true }
 petunia_mesh = { workspace = true }
 petunia_project = { workspace = true }
 petunia_render = { workspace = true }
-petunia_render_wgpu = { path = "../render-wgpu" }
 puffin = { workspace = true }
 petunia_module_paint = { path = "../module-paint" }
 petunia_module_model = { path = "../module-model" }
@@ -20,8 +19,9 @@ petunia_module_uv = { path = "../module-uv" }
 uuid = { workspace = true }
 serde_json = { workspace = true }
 glam = { workspace = true }
-wgpu = { workspace = true }
-pollster = "0.4"
+glow = { workspace = true }
+# Mesma versão que o Slint usa em `IntSize` (tamanho de textura GL emprestada).
+euclid = "0.22"
 rfd = "=0.17.2"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 slint = { version = "=1.18.0", default-features = false, features = [
@@ -30,9 +30,7 @@ slint = { version = "=1.18.0", default-features = false, features = [
     "accessibility",
     "backend-winit",
     "renderer-femtovg",
-    "renderer-femtovg-wgpu",
     "renderer-software",
-    "unstable-wgpu-30",
     "raw-window-handle-06",
 ] }
 [build-dependencies]
@@ -47,11 +45,3 @@ i-slint-backend-testing = "=1.18.0"
 [features]
 default = []
 animation-workspace = ["petunia_core/animation-workspace"]
-# Mantém a dependência GPL do viewport-lib fora do build padrão até a integração real.
-viewport-lib-backend = ["dep:viewport-lib"]
-
-[dependencies.viewport-lib]
-version = "=0.22.0"
-default-features = false
-features = ["wgpu30"]
-optional = true

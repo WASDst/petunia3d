@@ -89,29 +89,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.state.selection_domain() == SelectionDomain::Object {
             self.state.set_selection_domain(SelectionDomain::Face);
         }
-        let Some(mesh) = self.state.project.active_mesh_mut() else {
+        let Some(mesh) = self.state.project.active_mesh() else {
             return false;
         };
         let first = picked.first().copied();
-        if click {
+        let op = if click {
             let was_selected = first.is_some_and(|face| mesh.faces[face].selected);
-            if !extend {
-                mesh.deselect_all();
+            match (extend, was_selected) {
+                (false, _) => petunia_core::SelectionOp::Replace,
+                (true, true) => petunia_core::SelectionOp::Subtract,
+                (true, false) => petunia_core::SelectionOp::Add,
             }
-            for &face in &picked {
-                mesh.faces[face].selected = !(extend && was_selected);
-            }
+        } else if subtract {
+            petunia_core::SelectionOp::Subtract
+        } else if extend {
+            petunia_core::SelectionOp::Add
         } else {
-            if !extend && !subtract {
-                mesh.deselect_all();
-            }
-            for &face in &picked {
-                mesh.faces[face].selected = !subtract;
-            }
+            petunia_core::SelectionOp::Replace
+        };
+        // A seleção muda pelo core, nunca escrevendo flags da malha daqui.
+        if self
+            .state
+            .apply_component_selection(&petunia_core::ComponentSet::Faces(picked), op)
+            .is_err()
+        {
+            return false;
         }
-        mesh.sync_vert_selection_from_faces();
-        let selected = mesh.faces.iter().filter(|face| face.selected).count();
-        self.state.sync_selection();
+        let selected = self
+            .state
+            .project
+            .active_mesh()
+            .map_or(0, |mesh| mesh.faces.iter().filter(|face| face.selected).count());
         let status = match (click, first) {
             (true, Some(face)) => crate::tr::fill(
                 &self

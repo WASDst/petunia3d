@@ -1,0 +1,115 @@
+// Extraído de app.slint (Slint Rescue, website/docs/09-ui/slint-rescue-plan.md §5):
+// recebe estado projetado e emite callbacks; não conhece documento nem malha.
+import { DesignTokens, Motion } from "../tokens.slint";
+
+export component NavigationGizmo inherits Rectangle {
+    in property <string> label-view-gizmo;
+    in property <string> label-view-gizmo-hint;
+    in property <length> right-clearance;
+    in property <length> view-gizmo-origin-x;
+    in property <length> view-gizmo-origin-y;
+    in property <string> view-gizmo-x-commands;
+    in property <length> view-gizmo-x-end-x;
+    in property <length> view-gizmo-x-end-y;
+    in property <string> view-gizmo-y-commands;
+    in property <length> view-gizmo-y-end-x;
+    in property <length> view-gizmo-y-end-y;
+    in property <string> view-gizmo-z-commands;
+    in property <length> view-gizmo-z-end-x;
+    in property <length> view-gizmo-z-end-y;
+    callback view-axis-clicked(string);
+    callback viewport-orbit(float, float);
+    x: view-gizmo-origin-x - 54px - root.right-clearance;
+    y: view-gizmo-origin-y - 54px;
+    width: 108px;
+    height: 108px;
+    clip: true;
+    background: transparent;
+    accessible-role: groupbox;
+    accessible-label: root.label-view-gizmo;
+    accessible-description: root.label-view-gizmo-hint;
+    animate x { duration: Motion.medium; easing: ease-out; }
+
+    TouchArea {
+        mouse-cursor: self.pressed ? grabbing : grab;
+        property <length> last-x;
+        property <length> last-y;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                self.last-x = self.mouse-x;
+                self.last-y = self.mouse-y;
+            }
+        }
+        moved => {
+            if self.pressed {
+                root.viewport-orbit((self.mouse-x - self.last-x) / 1px, (self.mouse-y - self.last-y) / 1px);
+                self.last-x = self.mouse-x;
+                self.last-y = self.mouse-y;
+            }
+        }
+    }
+
+    Path {
+        commands: root.view-gizmo-x-commands;
+        fit: ImageFit.preserve;
+        stroke: DesignTokens.axis-x;
+        stroke-width: 2px;
+        fill: transparent;
+    }
+    Path {
+        commands: root.view-gizmo-y-commands;
+        fit: ImageFit.preserve;
+        stroke: DesignTokens.axis-y;
+        stroke-width: 2px;
+        fill: transparent;
+    }
+    Path {
+        commands: root.view-gizmo-z-commands;
+        fit: ImageFit.preserve;
+        stroke: DesignTokens.axis-z;
+        stroke-width: 2px;
+        fill: transparent;
+    }
+    for axis in [
+        { id: "x", label: "X", x: root.view-gizmo-x-end-x, y: root.view-gizmo-x-end-y, tint: DesignTokens.axis-x },
+        { id: "y", label: "Y", x: root.view-gizmo-y-end-x, y: root.view-gizmo-y-end-y, tint: DesignTokens.axis-y },
+        { id: "z", label: "Z", x: root.view-gizmo-z-end-x, y: root.view-gizmo-z-end-y, tint: DesignTokens.axis-z },
+    ]: Rectangle {
+        // 24 px: alvo mínimo da WCAG 2.5.8 (plano de UI F8).
+        x: axis.x - 12px;
+        y: axis.y - 12px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: axis.tint;
+        accessible-role: button;
+        accessible-label: axis.label;
+        Text { text: axis.label; color: axis.tint; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+        TouchArea {
+            mouse-cursor: self.pressed ? grabbing : pointer;
+            property <length> last-x;
+            property <length> last-y;
+            property <bool> dragged: false;
+            pointer-event(event) => {
+                if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                    self.last-x = self.mouse-x;
+                    self.last-y = self.mouse-y;
+                    self.dragged = false;
+                }
+            }
+            moved => {
+                if self.pressed {
+                    if abs(self.mouse-x - self.last-x) > 1px || abs(self.mouse-y - self.last-y) > 1px {
+                        self.dragged = true;
+                        root.viewport-orbit((self.mouse-x - self.last-x) / 1px, (self.mouse-y - self.last-y) / 1px);
+                        self.last-x = self.mouse-x;
+                        self.last-y = self.mouse-y;
+                    }
+                }
+            }
+            clicked => { if !self.dragged { root.view-axis-clicked(axis.id); } }
+        }
+    }
+}

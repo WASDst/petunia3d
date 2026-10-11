@@ -92,7 +92,17 @@ impl Rig {
     fn button(&self, label: &str) -> ElementHandle {
         ElementHandle::find_by_accessible_label(&self.shell, label)
             .find(|e| e.accessible_role() == Some(AccessibleRole::Button))
-            .unwrap_or_else(|| panic!("botão acessível '{label}' não encontrado"))
+            .unwrap_or_else(|| {
+                let found: Vec<String> =
+                    i_slint_backend_testing::ElementQuery::from_root(&self.shell)
+                        .match_descendants()
+                        .match_accessible_role(AccessibleRole::Button)
+                        .find_all()
+                        .into_iter()
+                        .filter_map(|e| e.accessible_label().map(|l| l.to_string()))
+                        .collect();
+                panic!("botão acessível '{label}' não encontrado; botões: {found:?}")
+            })
     }
 
     fn slider(&self, label: &str) -> ElementHandle {
@@ -418,7 +428,9 @@ fn the_universal_sliders_fit_the_panel_without_scrolling() {
 
 #[test]
 fn controls_are_reachable_by_keyboard() {
-    let rig = Rig::new();
+    // Com o split Structure/Properties, o fim do painel Properties rola a 800 px;
+    // aqui importa que todo controle seja acessível e focável, não a dobra.
+    let rig = Rig::with_height(1200.0);
     rig.intent(AnimateIntent::AddCreature(RigPresetKind::Humanoid));
     rig.intent(AnimateIntent::AddMotion(MotionGenerator::BipedCycle));
     // Todo controle interativo é botão/slider acessível (focável) — nenhum é

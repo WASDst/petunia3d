@@ -219,7 +219,7 @@ mod tests {
 
         // DRAW ↔ POLY troca a aparência das arestas; a segunda vista precisa acompanhar.
         let features = ViewportRenderState {
-            edge_mode: petunia_render_wgpu::EdgeMode::Features,
+            edge_mode: petunia_render::EdgeMode::Features,
             ..base
         };
         assert_ne!(base.edge_mode, features.edge_mode);

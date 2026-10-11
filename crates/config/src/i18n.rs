@@ -814,6 +814,7 @@ pub mod text_id {
     pub const STATUS_SLICE_CLICK_AND_DRAG_TO_DRAW_THE: TextId =
         TextId::new("status.slice_click_and_drag_to_draw_the");
     pub const STATUS_SLICE_APPLIED: TextId = TextId::new("status.slice_applied");
+    pub const STATUS_TOOL_SOURCE_CHANGED: TextId = TextId::new("status.tool_source_changed");
     pub const STATUS_SLICE_CANCELLED: TextId = TextId::new("status.slice_cancelled");
     pub const STATUS_TEXEL_DENSITY: TextId = TextId::new("status.texel_density");
     pub const STATUS_SHAPE_DELETED: TextId = TextId::new("status.shape_deleted");
@@ -1528,6 +1529,7 @@ pub mod text_id {
         STATUS_SLICE_NO_ACTIVE_MESH,
         STATUS_SLICE_CLICK_AND_DRAG_TO_DRAW_THE,
         STATUS_SLICE_APPLIED,
+        STATUS_TOOL_SOURCE_CHANGED,
         STATUS_SLICE_CANCELLED,
         STATUS_TEXEL_DENSITY,
         STATUS_SHAPE_DELETED,

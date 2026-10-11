@@ -1,0 +1,167 @@
+// Paleta de comandos.
+import { CommandItem } from "../types.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { IconButton } from "../components/base.slint";
+import { IconDisplay, IconSet } from "@lucide";
+import { ModalFocusBoundary } from "../shell/modal_focus_boundary.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component CommandPalette inherits Rectangle {
+    in property <bool> command-focus-active;
+    in-out property <string> command-query;
+    in property <[CommandItem]> command-results;
+    in-out property <int> command-selection;
+    callback click-away-requested();
+    callback escape-requested();
+    callback command-query-changed(string);
+    callback command-file-action(string);
+    callback command-executed(string);
+
+    x: 0;
+    y: 0;
+    
+    
+    z: root.command-focus-active ? 20 : 0;
+    background: DesignTokens.scrim;
+
+    TouchArea {
+        clicked => { root.click-away-requested(); }
+    }
+
+    command-panel := ModalFocusBoundary {
+        active: root.command-focus-active;
+        initial-focus => { search-input.focus(); }
+        first-focus => { search-input.focus(); }
+        last-focus => { command-close.focus(); }
+        dismiss-requested => { root.escape-requested(); }
+        // Slint 1.18 não expõe role dialog; nome e contenção são locais.
+        accessible-role: groupbox;
+        accessible-label: Tr.t("sl.search_commands");
+        width: 480px;
+        height: 320px;
+        x: (parent.width - self.width) / 2;
+        y: 80px;
+        border-radius: 8px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+
+            Rectangle {
+                height: 36px;
+                border-radius: DesignTokens.radius-control;
+                border-width: search-input.has-focus ? 2px : 1px;
+                border-color: search-input.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+                HorizontalLayout {
+                    height: 36px;
+                    spacing: 8px;
+                    alignment: center;
+
+                    IconDisplay {
+                        icon: IconSet.Search;
+                        size: 16px;
+                        stroke: DesignTokens.text-secondary;
+                    }
+
+                    search-input := TextInput {
+                        accessible-role: text-input;
+                        accessible-label: Tr.t("sl.search_commands");
+                        font-size: DesignTokens.font-exceptional;
+                        color: DesignTokens.text-primary;
+                        vertical-alignment: center;
+                        single-line: true;
+                        horizontal-stretch: 1;
+                        text <=> root.command-query;
+                        edited => { root.command-query-changed(self.text); }
+                        key-pressed(event) => {
+                            if event.text == Key.DownArrow && root.command-results.length > 0 {
+                                root.command-selection = Math.min(root.command-selection + 1, root.command-results.length - 1);
+                                return accept;
+                            }
+                            if event.text == Key.UpArrow && root.command-results.length > 0 {
+                                root.command-selection = Math.max(root.command-selection - 1, 0);
+                                return accept;
+                            }
+                            reject
+                        }
+                        accepted => {
+                            if root.command-results.length > 0 {
+                                if !root.command-results[root.command-selection].available {
+                                } else if root.command-results[root.command-selection].id == "draw.import_svg" || root.command-results[root.command-selection].id == "file.save" || root.command-results[root.command-selection].id == "file.save_as" || root.command-results[root.command-selection].id == "file.open" {
+                                    root.command-file-action(root.command-results[root.command-selection].id);
+                                } else {
+                                    root.command-executed(root.command-results[root.command-selection].id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 1px;
+                background: DesignTokens.border;
+            }
+
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 2px;
+                    for cmd[index] in root.command-results: Rectangle {
+                        height: 32px;
+                        border-radius: 4px;
+                        background: index == root.command-selection || item-touch.has-hover ? DesignTokens.surface-hover : transparent;
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            alignment: center;
+
+                            Text {
+                                text: cmd.label;
+                                color: DesignTokens.text-primary;
+                                font-size: DesignTokens.font-default;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            if cmd.shortcut != "": Text {
+                                text: cmd.shortcut;
+                                color: DesignTokens.text-muted;
+                                font-size: DesignTokens.font-caption;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        item-touch := TouchArea {
+                            clicked => {
+                                root.command-selection = index;
+                                if !cmd.available {
+                                } else if cmd.id == "draw.import_svg" || cmd.id == "file.save" || cmd.id == "file.save_as" || cmd.id == "file.open" {
+                                    root.command-file-action(cmd.id);
+                                } else {
+                                    root.command-executed(cmd.id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            HorizontalLayout {
+                height: DesignTokens.control-height;
+                alignment: end;
+                command-close := IconButton {
+                    icon: IconSet.X;
+                    label: Tr.t("sl.close_command_search");
+                    semantic-label: Tr.t("sl.close_command_search");
+                    clicked => { root.escape-requested(); }
+                }
+            }
+        }
+    }
+
+}

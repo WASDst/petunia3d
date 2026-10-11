@@ -1,0 +1,272 @@
+// Popover de shading.
+import { DesignTokens, Tr } from "../tokens.slint";
+import { IconButton } from "../components/base.slint";
+import { IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
+import { PetuniaSlider, ViewportSvgButton } from "../components/controls.slint";
+import { ShortcutsEntry } from "../types.slint";
+
+export component ShadingPopover inherits Rectangle {
+    in property <string> label-view-wireframe;
+    in property <ShortcutsEntry> shortcuts;
+    in property <string> shading-mode;
+    in property <string> label-view-solid;
+    in property <string> label-view-material;
+    in property <string> label-view-lit;
+    in property <bool> show-xray;
+    in property <bool> viewport-matcap;
+    in property <string> label-viewport-matcap;
+    in property <string> label-viewport-matcap-hint;
+    in property <bool> viewport-ambient-occlusion;
+    in property <string> label-viewport-ambient-occlusion;
+    in property <string> label-viewport-ambient-occlusion-hint;
+    in-out property <float> xray-opacity;
+    in property <string> label-xray-opacity;
+    in property <bool> is-wireframe;
+    in property <string> label-wire-overlay;
+    in property <string> label-wire-overlay-hint;
+    in property <bool> show-face-orientation;
+    in property <bool> show-uv-checker;
+    callback shading-popover-toggled(bool);
+    callback shading-mode-set(string);
+    callback toggle-xray-requested();
+    callback viewport-matcap-set(bool);
+    callback viewport-ambient-occlusion-set(bool);
+    callback xray-opacity-set(float);
+    callback toggle-wireframe-requested();
+    callback toggle-face-orientation();
+    callback toggle-uv-checker();
+
+    x: 0;
+    y: 0;
+    
+    
+
+    TouchArea {
+        clicked => { root.shading-popover-toggled(false); }
+    }
+
+    Rectangle {
+        x: min(max(8px, (parent.width - self.width) / 2), parent.width - self.width - 8px);
+        y: 54px;
+        width: 280px;
+        height: shading-options.preferred-height + 24px;
+        border-radius: 8px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        drop-shadow-blur: DesignTokens.elevation-2-blur;
+        drop-shadow-color: DesignTokens.elevation-2-color;
+        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+        // O scrim só fecha ao clicar fora. Capturar o fundo do painel
+        // evita que o clique no slider atravesse para a viewport.
+        TouchArea { clicked => {} }
+
+        shading-options := VerticalLayout {
+            width: parent.width;
+            padding: 12px;
+            spacing: 8px;
+
+            Text {
+                text: Tr.t("sl.shading");
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-default;
+                font-weight: 700;
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: start;
+                ViewportSvgButton { glyph: PetuniaIcons.view-wire; label: root.label-view-wireframe; shortcut: root.shortcuts.view-wireframe; description: Tr.t("sl.display_mesh_edges_with_transparent_wirefram"); active: root.shading-mode == "wireframe"; clicked => { root.shading-mode-set("wireframe"); } }
+                ViewportSvgButton { glyph: PetuniaIcons.view-solid; label: root.label-view-solid; shortcut: root.shortcuts.view-solid; description: Tr.t("sl.standard_matte_shaded_surfaces_with_basic_di"); active: root.shading-mode == "solid"; clicked => { root.shading-mode-set("solid"); } }
+                ViewportSvgButton { glyph: PetuniaIcons.view-material; label: root.label-view-material; shortcut: root.shortcuts.view-material; description: Tr.t("sl.preview_base_color_texture_and_emission_with"); active: root.shading-mode == "material"; clicked => { root.shading-mode-set("material"); } }
+                ViewportSvgButton { glyph: PetuniaIcons.view-lit; label: root.label-view-lit; shortcut: root.shortcuts.view-lit; description: Tr.t("sl.lit_preview_with_a_single_directional_light_"); active: root.shading-mode == "rendered"; clicked => { root.shading-mode-set("rendered"); } }
+                Rectangle { width: 1px; height: 18px; y: 5px; background: DesignTokens.border; }
+                IconButton {
+                    icon: IconSet.Eye;
+                    variant: "toggle";
+                    semantic-label: Tr.t("sl.x_ray");
+                    shortcut: root.shortcuts.view-xray;
+                    description: Tr.t("sl.semi_transparent_surfaces_allowing_selection");
+                    active: root.show-xray;
+                    clicked => { root.toggle-xray-requested(); }
+                }
+            }
+
+            Rectangle { height: 1px; background: DesignTokens.border; }
+
+            // Estilo do Solid: matcap procedural e oclusão ambiente (GTAO).
+            for option in [
+                { on: root.viewport-matcap, label: root.label-viewport-matcap, hint: root.label-viewport-matcap-hint, which: 0 },
+                { on: root.viewport-ambient-occlusion, label: root.label-viewport-ambient-occlusion, hint: root.label-viewport-ambient-occlusion-hint, which: 1 },
+            ]: Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: option.on ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                accessible-role: checkbox;
+                accessible-checkable: true;
+                accessible-label: option.label;
+                accessible-description: option.hint;
+                accessible-checked: option.on;
+                accessible-action-default => {
+                    if option.which == 0 { root.viewport-matcap-set(!option.on); } else { root.viewport-ambient-occlusion-set(!option.on); }
+                }
+                Text {
+                    text: option.label;
+                    color: option.on ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    clicked => {
+                        if option.which == 0 { root.viewport-matcap-set(!option.on); } else { root.viewport-ambient-occlusion-set(!option.on); }
+                    }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 2px;
+                            Text { text: option.label; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                            Text { text: option.hint; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: DesignTokens.border; }
+
+            Text {
+                text: Tr.t("sl.x_ray");
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                font-weight: 600;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                height: 24px;
+                alignment: center;
+                Text {
+                    text: Tr.t("sl.opacity");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    width: 56px;
+                    vertical-alignment: center;
+                }
+                PetuniaSlider {
+                    horizontal-stretch: 1;
+                    min-width: 110px;
+                    minimum: 0.1;
+                    maximum: 0.9;
+                    value <=> root.xray-opacity;
+                    accessible-label: root.label-xray-opacity;
+                    changed(value) => { root.xray-opacity-set(value); }
+                }
+                Text {
+                    text: "\{round(root.xray-opacity * 100)}%";
+                    color: DesignTokens.text-muted;
+                    font-size: DesignTokens.font-caption;
+                    width: 36px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: root.show-xray ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                accessible-role: checkbox;
+                accessible-label: Tr.t("sl.x_ray_enabled");
+                accessible-checked: root.show-xray;
+                Text {
+                    text: root.show-xray ? Tr.t("sl.x_ray_on") : Tr.t("sl.x_ray_off");
+                    color: root.show-xray ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.toggle-xray-requested(); } }
+            }
+
+            Rectangle { height: 1px; background: DesignTokens.border; }
+
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: root.is-wireframe ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                accessible-role: checkbox;
+                accessible-label: root.label-wire-overlay;
+                accessible-checked: root.is-wireframe;
+                Text {
+                    text: root.label-wire-overlay;
+                    color: root.is-wireframe ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    clicked => { root.toggle-wireframe-requested(); }
+                    Tooltip {
+                        VerticalLayout {
+                            padding: 8px;
+                            spacing: 2px;
+                            Text { text: root.label-wire-overlay; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 700; }
+                            Text { text: root.label-wire-overlay-hint; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: DesignTokens.border; }
+
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: root.show-face-orientation ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                accessible-role: checkbox;
+                accessible-label: Tr.t("sl.face_orientation");
+                accessible-checked: root.show-face-orientation;
+                Text {
+                    text: root.show-face-orientation ? Tr.t("sl.face_orientation_front_blue_back_red") : Tr.t("sl.face_orientation_off");
+                    color: root.show-face-orientation ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.toggle-face-orientation(); } }
+            }
+
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: root.show-uv-checker ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                accessible-role: checkbox;
+                accessible-label: Tr.t("sl.uv_checkerboard");
+                accessible-checked: root.show-uv-checker;
+                Text {
+                    text: root.show-uv-checker ? Tr.t("sl.uv_checkerboard_on") : Tr.t("sl.uv_checkerboard_off");
+                    color: root.show-uv-checker ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.toggle-uv-checker(); } }
+            }
+        }
+    }
+
+}

@@ -39,6 +39,19 @@ pub(crate) fn measure<T>(stage: &'static str, work: impl FnOnce() -> T) -> T {
     value
 }
 
+/// A medição está ligada (`PETUNIA_FRAME_TIMING=1`). Permite pular trabalho
+/// extra de diagnóstico, como o `glFinish` que isola a espera da GPU.
+pub(crate) fn enabled() -> bool {
+    timing_enabled()
+}
+
+/// Registra uma duração já medida (ex.: contadores do renderer GL).
+pub(crate) fn record_stage(stage: &'static str, elapsed: Duration) {
+    if timing_enabled() {
+        record(stage, elapsed);
+    }
+}
+
 fn record(stage: &'static str, elapsed: Duration) {
     SAMPLES.with(|samples| {
         let mut samples = samples.borrow_mut();

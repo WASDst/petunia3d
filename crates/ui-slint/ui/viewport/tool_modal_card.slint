@@ -1,0 +1,165 @@
+// Card modal numérico de ferramenta.
+import { DesignTokens, Tr } from "../tokens.slint";
+import { NumericField, ToolCard } from "../components/controls.slint";
+
+export component ToolModalCard inherits ToolCard {
+    in property <string> tool-modal-title;
+    in-out property <bool> tool-properties-collapsed;
+    in property <string> tool-modal-id;
+    in property <float> tool-modal-value;
+    in property <string> tool-modal-label;
+    in property <float> tool-modal-step;
+    in property <string> label-cancel;
+    in property <string> label-apply;
+    callback tool-modal-toggle-extrude-mode();
+    callback tool-modal-text-committed(string) -> bool;
+    callback tool-modal-cancel();
+    callback tool-modal-apply();
+
+    x: 14px;
+    y: 58px;
+    title: root.tool-modal-title;
+    collapsed: root.tool-properties-collapsed;
+    collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
+
+    if root.tool-modal-id == "extrude" || root.tool-modal-id == "extrude_individual": VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 4px;
+            height: 24px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: root.tool-modal-id == "extrude" ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: root.tool-modal-id == "extrude" ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: Tr.t("sl.region");
+                    color: root.tool-modal-id == "extrude" ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    clicked => {
+                        if root.tool-modal-id == "extrude_individual" {
+                            root.tool-modal-toggle-extrude-mode();
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: root.tool-modal-id == "extrude_individual" ? DesignTokens.accent : DesignTokens.surface;
+                border-width: 1px;
+                border-color: root.tool-modal-id == "extrude_individual" ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: Tr.t("sl.individual");
+                    color: root.tool-modal-id == "extrude_individual" ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea {
+                    clicked => {
+                        if root.tool-modal-id == "extrude" {
+                            root.tool-modal-toggle-extrude-mode();
+                        }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            height: 22px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: "+0.2"; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.tool-modal-text-committed("0.2"); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: "+0.5"; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.tool-modal-text-committed("0.5"); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: "+1.0"; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.tool-modal-text-committed("1.0"); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: Tr.t("sl.invert"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.tool-modal-text-committed("\{-root.tool-modal-value}"); } }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text {
+            text: root.tool-modal-label;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-small;
+            width: 56px;
+            vertical-alignment: center;
+        }
+        NumericField {
+            label: "";
+            value: root.tool-modal-value;
+            horizontal-stretch: 1;
+            step: root.tool-modal-step;
+            scrubbed(delta, fine) => { root.tool-modal-text-committed("\{root.tool-modal-value + delta * root.tool-modal-step * (fine ? 0.1 : 1)}"); }
+            scrub-cancelled(value) => { root.tool-modal-text-committed("\{value}"); }
+            text-committed(text) => { root.tool-modal-text-committed(text); }
+        }
+    }
+
+    Text {
+        text: Tr.t("sl.enter_confirm_esc_cancel");
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-caption;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            Text { text: root.label-cancel; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.tool-modal-cancel(); } }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: DesignTokens.accent;
+            Text { text: root.label-apply; color: DesignTokens.on-accent; font-size: DesignTokens.font-small; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.tool-modal-apply(); } }
+        }
+    }
+
+}

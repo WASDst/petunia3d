@@ -1,0 +1,471 @@
+// Card de opções da ferramenta ativa.
+import { BrushChip, NumericField, ToolCard, Vector3Field } from "../components/controls.slint";
+import { DesignTokens, Tr } from "../tokens.slint";
+import { IconDisplay, IconSet } from "@lucide";
+
+export component ToolOptionsCard inherits ToolCard {
+    in property <string> tool-options-title;
+    in-out property <bool> tool-properties-collapsed;
+    in property <bool> last-operation-active;
+    in property <string> label-last-operation;
+    in property <string> last-operation-title;
+    in property <string> last-operation-unit;
+    in property <string> label-last-operation-hint;
+    in property <float> last-operation-value;
+    in property <float> last-operation-step;
+    in property <string> active-tool;
+    in property <string> label-poly-pen-mode;
+    in property <string> label-poly-pen-mode-auto;
+    in property <string> poly-pen-mode;
+    in property <string> label-poly-pen-mode-points;
+    in property <string> label-poly-pen-mode-edges;
+    in property <string> label-poly-pen-mode-polygons;
+    in property <string> label-poly-pen-mode-hint;
+    in property <bool> snap-enabled;
+    in property <string> snap-target;
+    in property <bool> proportional-editing;
+    in property <float> proportional-radius;
+    in property <bool> pivot-menu-open;
+    in property <string> pivot-label;
+    in property <string> label-numeric-field-hint;
+    in property <float> pos-x;
+    in property <float> pos-y;
+    in property <float> pos-z;
+    in property <float> rot-x;
+    in property <float> rot-y;
+    in property <float> rot-z;
+    in property <float> scale-x;
+    in property <float> scale-y;
+    in property <float> scale-z;
+    in property <string> label-cancel;
+    in property <bool> slice-trim;
+    in property <bool> bevel-clamp-overlap;
+    in property <bool> bevel-affect-vertices;
+    in property <float> cursor-x;
+    in property <float> cursor-y;
+    in property <float> cursor-z;
+    callback last-operation-committed(string) -> bool;
+    callback poly-pen-mode-selected(string);
+    callback command-executed(string);
+    callback toggle-snap-enabled();
+    callback toggle-proportional-editing();
+    callback pivot-menu-toggled(bool);
+    callback transform-scrubbed(string, int, float, bool);
+    callback transform-scrub-started(string);
+    callback transform-scrub-finished();
+    callback transform-text-committed(string, int, string) -> bool;
+    callback transform-scrub-cancelled();
+    callback slice-trim-set(bool);
+    callback slice-cancel();
+    callback slice-confirm();
+    callback toggle-bevel-clamp-overlap();
+    callback toggle-bevel-affect-vertices();
+    callback cursor-coord-committed(int, float);
+    callback frame-cursor-requested();
+    callback reset-cursor-requested();
+
+    x: 14px;
+    y: 58px;
+    title: root.tool-options-title != "" ? root.tool-options-title : Tr.t("sl.tool_options");
+    collapsed: root.tool-properties-collapsed;
+    collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
+
+    // Última operação (constituição 11): o valor do gesto confirmado
+    // continua ajustável aqui, dentro da mesma entrada de Undo.
+    if root.last-operation-active: VerticalLayout {
+        spacing: 4px;
+        Text {
+            text: root.label-last-operation + " · " + root.last-operation-title;
+            color: DesignTokens.text-secondary;
+            font-size: DesignTokens.font-caption;
+            font-weight: 600;
+        }
+        NumericField {
+            label: root.last-operation-unit != "" ? root.last-operation-unit : "#";
+            full-label: root.label-last-operation + " — " + root.last-operation-title;
+            hint: root.label-last-operation-hint;
+            value: root.last-operation-value;
+            step: root.last-operation-step;
+            label-color: DesignTokens.accent;
+            text-committed(text) => { root.last-operation-committed(text) }
+        }
+    }
+
+    // Modos do Poly Pen (cap. 46 §4).
+    if root.active-tool == "poly_pen": VerticalLayout {
+        spacing: 6px;
+        Text { text: root.label-poly-pen-mode; color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; font-weight: 600; }
+        HorizontalLayout {
+            spacing: 4px;
+            BrushChip { label: root.label-poly-pen-mode-auto; active: root.poly-pen-mode == "auto"; clicked => { root.poly-pen-mode-selected("auto"); } }
+            BrushChip { label: root.label-poly-pen-mode-points; active: root.poly-pen-mode == "points"; clicked => { root.poly-pen-mode-selected("points"); } }
+            BrushChip { label: root.label-poly-pen-mode-edges; active: root.poly-pen-mode == "edges"; clicked => { root.poly-pen-mode-selected("edges"); } }
+            BrushChip { label: root.label-poly-pen-mode-polygons; active: root.poly-pen-mode == "polygons"; clicked => { root.poly-pen-mode-selected("polygons"); } }
+        }
+        Text { text: root.label-poly-pen-mode-hint; color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+    }
+
+    if root.active-tool == "extrude": VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 4px;
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.accent;
+                Text { text: Tr.t("sl.extrude_region_e"); color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.command-executed("model.extrude"); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: Tr.t("sl.individual_alt_e"); color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; font-weight: 600; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.command-executed("model.extrude_individual"); } }
+            }
+        }
+        Text { text: Tr.t("sl.click_and_drag_or_press_e_alt_e_to_extrude_s"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+    }
+
+    // Common adjustments row (Snap, Proportional Editing and Pivot) / Linha de ajustes comuns (Snap, Proportional Editing e Pivot)
+    if root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale": HorizontalLayout {
+        spacing: 4px;
+        height: 24px;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: root.snap-enabled ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface;
+            border-width: 1px;
+            border-color: root.snap-enabled ? DesignTokens.accent : DesignTokens.border;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 3px;
+                IconDisplay {
+                    icon: IconSet.Magnet;
+                    size: 11px;
+                    stroke: root.snap-enabled ? DesignTokens.accent : DesignTokens.text-secondary;
+                }
+                Text {
+                    text: root.snap-enabled ? root.snap-target : Tr.t("sl.snap_2");
+                    color: root.snap-enabled ? DesignTokens.accent : DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+            TouchArea { clicked => { root.toggle-snap-enabled(); } }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: root.proportional-editing ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface;
+            border-width: 1px;
+            border-color: root.proportional-editing ? DesignTokens.accent : DesignTokens.border;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 3px;
+                IconDisplay {
+                    icon: IconSet.CircleDot;
+                    size: 11px;
+                    stroke: root.proportional-editing ? DesignTokens.accent : DesignTokens.text-secondary;
+                }
+                Text {
+                    text: root.proportional-editing ? "\{round(root.proportional-radius * 10) / 10}" : Tr.t("sl.prop");
+                    color: root.proportional-editing ? DesignTokens.accent : DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+            TouchArea { clicked => { root.toggle-proportional-editing(); } }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: root.pivot-menu-open ? DesignTokens.surface-raised : DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            HorizontalLayout {
+                alignment: center;
+                Text {
+                    text: root.pivot-label != "" ? root.pivot-label : Tr.t("sl.pivot");
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    vertical-alignment: center;
+                }
+            }
+            TouchArea { clicked => { root.pivot-menu-toggled(!root.pivot-menu-open); } }
+        }
+    }
+
+    if root.active-tool == "move": Vector3Field {
+        row-label: Tr.t("sl.position");
+        field-hint: root.label-numeric-field-hint;
+        x-value: root.pos-x;
+        y-value: root.pos-y;
+        z-value: root.pos-z;
+        scrubbed(axis, delta, fine) => { root.transform-scrubbed("pos", axis, delta, fine); }
+        scrub-started => { root.transform-scrub-started("pos"); }
+        scrub-finished => { root.transform-scrub-finished(); }
+        text-committed(axis, text) => { root.transform-text-committed("pos", axis, text) }
+        scrub-cancelled => { root.transform-scrub-cancelled(); }
+    }
+
+    if root.active-tool == "rotate": VerticalLayout {
+        spacing: 6px;
+        Vector3Field {
+            row-label: Tr.t("sl.rotation");
+            field-hint: root.label-numeric-field-hint;
+            step: 1;
+            x-value: root.rot-x;
+            y-value: root.rot-y;
+            z-value: root.rot-z;
+            scrubbed(axis, delta, fine) => { root.transform-scrubbed("rot", axis, delta, fine); }
+            scrub-started => { root.transform-scrub-started("rot"); }
+            scrub-finished => { root.transform-scrub-finished(); }
+            text-committed(axis, text) => { root.transform-text-committed("rot", axis, text) }
+            scrub-cancelled => { root.transform-scrub-cancelled(); }
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            height: 22px;
+            Text { text: Tr.t("sl.step_90"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; vertical-alignment: center; }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: "+90° X"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.transform-scrubbed("rot", 0, 90, false); root.transform-scrub-finished(); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: "+90° Y"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.transform-scrubbed("rot", 1, 90, false); root.transform-scrub-finished(); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 3px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: "+90° Z"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.transform-scrubbed("rot", 2, 90, false); root.transform-scrub-finished(); } }
+            }
+        }
+    }
+
+    if root.active-tool == "scale": Vector3Field {
+        row-label: Tr.t("sl.scale");
+        field-hint: root.label-numeric-field-hint;
+        x-value: root.scale-x;
+        y-value: root.scale-y;
+        z-value: root.scale-z;
+        scrubbed(axis, delta, fine) => { root.transform-scrubbed("scale", axis, delta, fine); }
+        scrub-started => { root.transform-scrub-started("scale"); }
+        scrub-finished => { root.transform-scrub-finished(); }
+        text-committed(axis, text) => { root.transform-text-committed("scale", axis, text) }
+        scrub-cancelled => { root.transform-scrub-cancelled(); }
+    }
+
+    if root.active-tool == "cut": VerticalLayout {
+        spacing: 6px;
+        Text { text: Tr.t("sl.click_vertices_or_edges_to_draw_cut_path"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+        HorizontalLayout {
+            spacing: 6px;
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: root.label-cancel; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.command-executed("model.knife_cancel"); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.accent;
+                Text { text: Tr.t("sl.cut"); color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.command-executed("model.knife_apply"); } }
+            }
+        }
+        Text { text: Tr.t("sl.enter_confirm_esc_cancel"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; }
+    }
+
+    if root.active-tool == "slice": VerticalLayout {
+        spacing: 6px;
+        Text { text: Tr.t("sl.drag_a_cut_line_across_the_mesh_to_bisect"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+        HorizontalLayout {
+            spacing: 4px;
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: !root.slice-trim ? DesignTokens.accent : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: !root.slice-trim ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: Tr.t("sl.split_t");
+                    color: !root.slice-trim ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: !root.slice-trim ? 700 : 400;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.slice-trim-set(false); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: root.slice-trim ? DesignTokens.accent : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: root.slice-trim ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: Tr.t("sl.trim_t");
+                    color: root.slice-trim ? DesignTokens.on-accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: root.slice-trim ? 700 : 400;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.slice-trim-set(true); } }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text { text: root.label-cancel; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.slice-cancel(); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.accent;
+                Text { text: Tr.t("sl.confirm_cut"); color: DesignTokens.on-accent; font-size: DesignTokens.font-caption; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                TouchArea { clicked => { root.slice-confirm(); } }
+            }
+        }
+        Text { text: Tr.t("sl.enter_confirm_esc_cancel_t_toggle_trim"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+    }
+
+    if root.active-tool == "bevel": VerticalLayout {
+        spacing: 6px;
+        Text { text: Tr.t("sl.round_edge_bevel_options"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+        HorizontalLayout {
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: root.bevel-clamp-overlap ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: root.bevel-clamp-overlap ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: root.bevel-clamp-overlap ? Tr.t("sl.clamp_overlap_active") : Tr.t("sl.clamp_overlap_off");
+                    color: root.bevel-clamp-overlap ? DesignTokens.accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: root.bevel-clamp-overlap ? 700 : 400;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.toggle-bevel-clamp-overlap(); } }
+            }
+        }
+        HorizontalLayout {
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: root.bevel-affect-vertices ? DesignTokens.accent.transparentize(0.8) : DesignTokens.surface-raised;
+                border-width: 1px;
+                border-color: root.bevel-affect-vertices ? DesignTokens.accent : DesignTokens.border;
+                Text {
+                    text: root.bevel-affect-vertices ? Tr.t("sl.point_vertex_mode") : Tr.t("sl.point_mode_off");
+                    color: root.bevel-affect-vertices ? DesignTokens.accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    font-weight: root.bevel-affect-vertices ? 700 : 400;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.toggle-bevel-affect-vertices(); } }
+            }
+        }
+    }
+
+    if root.active-tool == "cursor" || root.active-tool == "cursor_3d": VerticalLayout {
+        spacing: 6px;
+        Vector3Field {
+            row-label: Tr.t("sl.cursor");
+            field-hint: root.label-numeric-field-hint;
+            x-value: root.cursor-x;
+            y-value: root.cursor-y;
+            z-value: root.cursor-z;
+            scrubbed(axis, delta, fine) => {
+                root.cursor-coord-committed(axis, (axis == 0 ? root.cursor-x : (axis == 1 ? root.cursor-y : root.cursor-z)) + delta * (fine ? 0.01 : 0.1));
+            }
+            text-committed(axis, text) => {
+                root.cursor-coord-committed(axis, text.to-float());
+                return true;
+            }
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            height: 26px;
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text {
+                    text: Tr.t("sl.focus_camera");
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.frame-cursor-requested(); } }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                border-radius: 4px;
+                background: DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                Text {
+                    text: Tr.t("sl.reset_0_0_0");
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-caption;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                TouchArea { clicked => { root.reset-cursor-requested(); } }
+            }
+        }
+    }
+
+    Text {
+        text: (root.active-tool == "cursor" || root.active-tool == "cursor_3d") ? Tr.t("sl.lmb_click_to_place_shift_rmb_in_any_tool") : ((root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale") ? Tr.t("sl.g_move_r_rotate_s_scale_shift_precision") : "");
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-caption;
+    }
+
+}

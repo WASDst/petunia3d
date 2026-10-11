@@ -1,0 +1,110 @@
+// Popover de criação de primitivas.
+import { DesignTokens, Tr } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
+import { ToolButton } from "../components/controls.slint";
+
+export component AddMenuPopover inherits Rectangle {
+    in property <int> add-menu-highlight;
+    callback add-primitive-requested(string);
+    callback add-menu-changed(bool);
+
+    x: 14px;
+    y: 58px;
+    width: 2 * 34px + 216px;
+    height: 88px;
+    border-radius: 10px;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 6px;
+        alignment: center;
+
+        ToolButton {
+            icon-svg: PetuniaIcons.cube;
+            semantic-label: Tr.t("sl.cube");
+            shortcut: "1";
+            description: Tr.t("sl.parametric_6_sided_hexahedral_box_with_width");
+            highlighted: root.add-menu-highlight == 0;
+            clicked => { root.add-primitive-requested("cube"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.sphere;
+            semantic-label: Tr.t("sl.sphere");
+            shortcut: "2";
+            description: Tr.t("sl.uv_sphere_parameterized_by_longitude_segment");
+            highlighted: root.add-menu-highlight == 1;
+            clicked => { root.add-primitive-requested("sphere"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.cylinder;
+            semantic-label: Tr.t("sl.cylinder");
+            shortcut: "3";
+            description: Tr.t("sl.parametric_circular_cylinder_with_top_bottom");
+            highlighted: root.add-menu-highlight == 2;
+            clicked => { root.add-primitive-requested("cylinder"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.plane;
+            semantic-label: Tr.t("sl.plane_2");
+            shortcut: "4";
+            description: Tr.t("sl.flat_2d_quad_rectangular_plane_surface_posit");
+            highlighted: root.add-menu-highlight == 3;
+            clicked => { root.add-primitive-requested("plane"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.cone;
+            semantic-label: Tr.t("sl.cone");
+            shortcut: "5";
+            description: Tr.t("sl.conical_geometry_tapering_to_a_single_apex_v");
+            highlighted: root.add-menu-highlight == 4;
+            clicked => { root.add-primitive-requested("cone"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.capsule;
+            semantic-label: Tr.t("sl.capsule");
+            shortcut: "6";
+            description: Tr.t("sl.cylindrical_body_capped_by_two_hemispherical");
+            highlighted: root.add-menu-highlight == 5;
+            clicked => { root.add-primitive-requested("capsule"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.torus;
+            semantic-label: Tr.t("sl.torus");
+            shortcut: "7";
+            description: Tr.t("sl.donut_shaped_revolution_ring_with_major_and_");
+            highlighted: root.add-menu-highlight == 6;
+            clicked => { root.add-primitive-requested("torus"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.circle;
+            semantic-label: Tr.t("sl.circle");
+            shortcut: "8";
+            description: Tr.t("sl.2d_planar_boundary_circle_polygon_or_n_gon_d");
+            highlighted: root.add-menu-highlight == 7;
+            clicked => { root.add-primitive-requested("circle"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.icosphere;
+            semantic-label: Tr.t("sl.icosphere");
+            shortcut: "9";
+            description: Tr.t("sl.polyhedral_geodesic_sphere_composed_of_equil");
+            highlighted: root.add-menu-highlight == 8;
+            clicked => { root.add-primitive-requested("icosphere"); root.add-menu-changed(false); }
+        }
+        ToolButton {
+            icon-svg: PetuniaIcons.wedge;
+            semantic-label: Tr.t("sl.wedge");
+            shortcut: "0";
+            description: Tr.t("sl.right_angled_triangular_prism_3d_ramp_mesh");
+            highlighted: root.add-menu-highlight == 9;
+            clicked => { root.add-primitive-requested("wedge"); root.add-menu-changed(false); }
+        }
+    }
+
+}

@@ -56,7 +56,7 @@ pub struct AnimateRuntime {
     preview: RefCell<AnimatePreview>,
     last_tick: Option<Instant>,
     /// Última malha deformada entregue ao renderer e sua revisão (só avança
-    /// quando a geometria muda, para o wgpu não reconstruir buffers à toa).
+    /// quando a geometria muda, para o renderer não reenviar buffers à toa).
     pose: Option<Arc<PoseOverride>>,
     pose_revision: u64,
 }
@@ -1367,7 +1367,7 @@ mod bridge_tests {
         assert!(b.animate_has_posed_model());
         act(&mut b, AnimateIntent::Seek(0.1));
         let first = b.animate_pose_override_now().expect("modelo ligado");
-        // Mesma pose ⇒ mesmo Arc e mesma revisão (o wgpu não reconstrói).
+        // Mesma pose ⇒ mesmo Arc e mesma revisão (o renderer não reenvia).
         let again = b.animate_pose_override_now().unwrap();
         assert!(Arc::ptr_eq(&first, &again));
         assert_eq!(first.revision, again.revision);

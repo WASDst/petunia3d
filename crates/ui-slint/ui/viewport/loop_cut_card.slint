@@ -1,0 +1,129 @@
+// Card de opções do Loop Cut.
+import { DesignTokens, Tr } from "../tokens.slint";
+import { NumericField, ToolCard } from "../components/controls.slint";
+
+export component LoopCutCard inherits ToolCard {
+    in-out property <bool> tool-properties-collapsed;
+    in property <bool> loop-cut-active;
+    in property <float> loop-cut-slide;
+    in property <int> loop-cut-cuts;
+    in property <bool> loop-cut-balanced;
+    in property <string> label-cancel;
+    in property <string> label-apply;
+    callback loop-cut-slide-committed(string) -> bool;
+    callback loop-cut-count-committed(string);
+    callback toggle-loop-cut-balanced();
+    callback loop-cut-cancel();
+    callback loop-cut-apply();
+
+    x: 14px;
+    y: 58px;
+    title: Tr.t("sl.loop_cut");
+    collapsed: root.tool-properties-collapsed;
+    collapse-toggled => { root.tool-properties-collapsed = !root.tool-properties-collapsed; }
+
+    if loop-cut-active: HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text { text: Tr.t("sl.slide"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; width: 44px; vertical-alignment: center; }
+        NumericField {
+            label: "";
+            value: root.loop-cut-slide;
+            horizontal-stretch: 1;
+            step: 0.01;
+            scrubbed(delta, fine) => { root.loop-cut-slide-committed("\{root.loop-cut-slide + delta * (fine ? 0.001 : 0.01)}"); }
+            scrub-cancelled(value) => { root.loop-cut-slide-committed("\{value}"); }
+            text-committed(text) => { root.loop-cut-slide-committed(text); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Text { text: Tr.t("sl.cuts"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-small; width: 44px; vertical-alignment: center; }
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            Text {
+                text: "\{root.loop-cut-cuts}";
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.loop-cut-count-committed("\{max(1, root.loop-cut-cuts - 1)}"); } }
+        }
+        Rectangle {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.loop-cut-count-committed("\{root.loop-cut-cuts + 1}"); } }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: root.loop-cut-balanced ? DesignTokens.accent : DesignTokens.surface;
+            border-width: 1px;
+            border-color: root.loop-cut-balanced ? DesignTokens.accent : DesignTokens.border;
+            Text {
+                text: root.loop-cut-balanced ? Tr.t("sl.dual_balanced_on") : Tr.t("sl.dual_balanced_off");
+                color: root.loop-cut-balanced ? DesignTokens.on-accent : DesignTokens.text-primary;
+                font-size: DesignTokens.font-caption;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea { clicked => { root.toggle-loop-cut-balanced(); } }
+        }
+    }
+
+    Text {
+        text: loop-cut-active ? Tr.t("sl.enter_confirm_esc_cancel_drag_slide") : Tr.t("sl.click_edge_to_cut_scroll_to_adjust_cuts");
+        color: DesignTokens.text-muted;
+        font-size: DesignTokens.font-caption;
+    }
+
+    if loop-cut-active: HorizontalLayout {
+        spacing: 6px;
+        height: 28px;
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: DesignTokens.surface;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            Text { text: root.label-cancel; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.loop-cut-cancel(); } }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: DesignTokens.accent;
+            Text { text: root.label-apply; color: DesignTokens.on-accent; font-size: DesignTokens.font-small; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+            TouchArea { clicked => { root.loop-cut-apply(); } }
+        }
+    }
+
+}

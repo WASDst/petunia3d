@@ -1,0 +1,172 @@
+// Popover de cor de partes.
+import { ColorPresets, DesignTokens, Tr } from "../tokens.slint";
+import { IconDisplay, IconSet } from "@lucide";
+
+export component PartColorPopover inherits Rectangle {
+    in-out property <bool> part-color-popover-open;
+    in property <string> part-color-popover-name;
+    in property <image> color-wheel-image;
+    in property <color> part-color-preview;
+    in property <string> part-color-hex;
+    callback part-color-wheel-interacted(float, float);
+    callback part-color-hex-entered(string);
+    callback part-color-preset-clicked(color);
+    callback part-color-reset-requested();
+
+    x: 0;
+    y: 0;
+    
+    
+
+    TouchArea {
+        clicked => { root.part-color-popover-open = false; }
+    }
+
+    Rectangle {
+        x: min(max(8px, parent.width - self.width - 340px), parent.width - self.width - 8px);
+        y: 80px;
+        width: 220px;
+        height: part-color-layout.preferred-height + 20px;
+        border-radius: 8px;
+        background: DesignTokens.surface-raised;
+        border-width: 1px;
+        border-color: DesignTokens.border;
+        drop-shadow-blur: DesignTokens.elevation-2-blur;
+        drop-shadow-color: DesignTokens.elevation-2-color;
+        drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+
+        TouchArea { clicked => {} }
+
+        part-color-layout := VerticalLayout {
+            width: parent.width;
+            padding: 10px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                Text {
+                    text: root.part-color-popover-name != "" ? "\{Tr.t("sl.part_selection_color")}: \{root.part-color-popover-name}" : Tr.t("sl.part_selection_color");
+                    color: DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                Rectangle {
+                    width: 18px; height: 18px; border-radius: 3px;
+                    IconDisplay { icon: IconSet.X; size: 12px; stroke: DesignTokens.text-secondary; }
+                    TouchArea { clicked => { root.part-color-popover-open = false; } }
+                }
+            }
+
+            // Roda de cores circular interativa
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 130px;
+                    height: 130px;
+                    border-radius: 65px;
+                    clip: true;
+
+                    Image {
+                        width: 130px;
+                        height: 130px;
+                        source: root.color-wheel-image;
+                    }
+
+                    TouchArea {
+                        pointer-event(event) => {
+                            if event.button == PointerEventButton.left && (event.kind == PointerEventKind.down || event.kind == PointerEventKind.move) {
+                                root.part-color-wheel-interacted(self.mouse-x / 1px, self.mouse-y / 1px);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Amostra + Hex
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: center;
+                Rectangle {
+                    width: 24px; height: 24px; border-radius: 4px;
+                    background: root.part-color-preview;
+                    border-width: 1px; border-color: DesignTokens.border;
+                }
+                Rectangle {
+                    width: 90px; height: 24px; border-radius: 4px;
+                    background: DesignTokens.surface;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TextInput {
+                        x: 6px; y: 2px; width: parent.width - 12px; height: parent.height - 4px;
+                        text: root.part-color-hex;
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-small;
+                        single-line: true;
+                        accepted => { root.part-color-hex-entered(self.text); }
+                    }
+                }
+            }
+
+            // Presets
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: center;
+
+                Rectangle {
+                    width: 20px; height: 20px; border-radius: 3px; background: ColorPresets.tag-orange;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TouchArea { clicked => { root.part-color-preset-clicked(ColorPresets.tag-orange); } }
+                }
+                Rectangle {
+                    width: 20px; height: 20px; border-radius: 3px; background: ColorPresets.tag-cyan;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TouchArea { clicked => { root.part-color-preset-clicked(ColorPresets.tag-cyan); } }
+                }
+                Rectangle {
+                    width: 20px; height: 20px; border-radius: 3px; background: ColorPresets.tag-violet;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TouchArea { clicked => { root.part-color-preset-clicked(ColorPresets.tag-violet); } }
+                }
+                Rectangle {
+                    width: 20px; height: 20px; border-radius: 3px; background: ColorPresets.tag-green;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TouchArea { clicked => { root.part-color-preset-clicked(ColorPresets.tag-green); } }
+                }
+                Rectangle {
+                    width: 20px; height: 20px; border-radius: 3px; background: ColorPresets.tag-amber;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TouchArea { clicked => { root.part-color-preset-clicked(ColorPresets.tag-amber); } }
+                }
+                Rectangle {
+                    width: 20px; height: 20px; border-radius: 3px; background: ColorPresets.tag-red;
+                    border-width: 1px; border-color: DesignTokens.border;
+                    TouchArea { clicked => { root.part-color-preset-clicked(ColorPresets.tag-red); } }
+                }
+            }
+
+            // Botão Restaurar cor padrão
+            Rectangle {
+                height: 24px;
+                border-radius: 4px;
+                background: rst-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    IconDisplay { icon: IconSet.RotateCcw; size: 11px; stroke: DesignTokens.text-secondary; }
+                    Text {
+                        text: Tr.t("sl.reset_to_default_color");
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+                rst-touch := TouchArea { clicked => { root.part-color-reset-requested(); } }
+            }
+        }
+    }
+
+}

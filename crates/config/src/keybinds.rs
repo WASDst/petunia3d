@@ -1051,7 +1051,10 @@ mod tests {
         let alt = parse_modifiers("Alt").unwrap();
         kb.set_pointer_modifier(POINTER_ALTERNATE, alt);
         let text = kb.export_to_toml();
-        assert!(text.contains("[pointer]\nalternate = \"Alt\""));
+        // A seção [pointer] lista todas as ações em ordem alfabética: o contrato é que a
+        // ação alterada apareça nela com o valor novo, não que seja a primeira linha.
+        let pointer_section = text.split("[pointer]").nth(1).expect("seção [pointer]");
+        assert!(pointer_section.contains("alternate = \"Alt\""));
         let mut restored = Keybinds::defaults();
         restored.apply_profile_toml(&text);
         assert_eq!(restored.pointer_modifier(POINTER_ALTERNATE), alt);
@@ -1179,5 +1182,4 @@ mod tests {
             "profiles inherit canonical pointer actions unless they override them"
         );
     }
-
 }

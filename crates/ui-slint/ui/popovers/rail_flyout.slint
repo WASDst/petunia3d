@@ -1,0 +1,35 @@
+// Flyout de grupo do Tool Rail.
+import { ContextMenuItem, RailTool } from "../components/controls.slint";
+import { DesignTokens } from "../tokens.slint";
+
+export component RailFlyout inherits Rectangle {
+    in property <length> rail-flyout-x;
+    in property <length> rail-flyout-y;
+    in property <[RailTool]> rail-flyout-tools;
+    in property <int> rail-flyout-highlight;
+    callback rail-activate(string);
+
+    
+    
+    width: 220px;
+    height: fly-col.preferred-height;
+    border-radius: DesignTokens.radius-panel;
+    background: DesignTokens.surface-raised;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    drop-shadow-blur: DesignTokens.elevation-2-blur;
+    drop-shadow-color: DesignTokens.elevation-2-color;
+    drop-shadow-offset-y: DesignTokens.elevation-2-offset;
+    TouchArea { }
+    fly-col := VerticalLayout {
+        padding: 4px;
+        spacing: 2px;
+        for tool[index] in root.rail-flyout-tools: ContextMenuItem {
+            label: tool.label;
+            shortcut: tool.shortcut;
+            highlighted: index == root.rail-flyout-highlight;
+            clicked => { root.rail-activate(tool.id); }
+        }
+    }
+
+}

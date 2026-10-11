@@ -959,6 +959,12 @@ export component ToolButton inherits Rectangle {
         touch-area := TouchArea {
             clicked => { root.clicked(); }
             pointer-event(event) => {
+                // O TouchArea aceita o press antes do FocusScope pai, que então
+                // nunca recebe foco por clique (Slint 1.18). Sem isto, setas,
+                // Enter e Shift+F10 logo após clicar iriam para outro controle.
+                if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                    tool-focus.focus();
+                }
                 if event.button == PointerEventButton.right && event.kind == PointerEventKind.up {
                     root.secondary-clicked();
                 }

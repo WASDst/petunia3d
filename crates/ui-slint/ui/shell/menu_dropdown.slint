@@ -1,0 +1,37 @@
+// Dropdown de um menu da barra superior.
+import { MenuDropdown } from "../components/controls.slint";
+import { MenuEntry } from "../types.slint";
+
+export component MenuDropdownOverlay inherits Rectangle {
+    in property <length> menu-anchor-x;
+    in property <string> menu-open;
+    in property <[MenuEntry]> menu-file-items;
+    in property <[MenuEntry]> menu-edit-items;
+    in property <[MenuEntry]> menu-view-items;
+    in property <[MenuEntry]> menu-window-items;
+    in property <int> menu-highlight;
+    callback click-away-requested();
+    callback menu-item-invoked(string);
+
+    x: 0;
+    y: 42px;
+    
+    
+
+    TouchArea {
+        clicked => { root.click-away-requested(); }
+    }
+
+    MenuDropdown {
+        x: min(max(8px, root.menu-anchor-x), max(8px, parent.width - self.width - 8px));
+        y: 2px;
+        entries: root.menu-open == "file"
+            ? root.menu-file-items
+            : (root.menu-open == "edit"
+                ? root.menu-edit-items
+                : (root.menu-open == "view" ? root.menu-view-items : root.menu-window-items));
+        highlight: root.menu-highlight;
+        invoked(id) => { root.menu-item-invoked(id); }
+    }
+
+}
