@@ -142,7 +142,7 @@ impl PaintModule {
     }
 
     pub fn fill_selection(state: &mut AppState) -> usize {
-        state.in_context(|ctx| Self::fill_selection_in(ctx))
+        state.in_context(Self::fill_selection_in)
     }
 
     /// Pinta cores diretamente nos vértices da malha dentro de um raio esférico no espaço 3D (P3D-150).
@@ -316,7 +316,7 @@ impl PaintModule {
     }
 
     pub fn ensure_stack(state: &mut AppState) {
-        state.in_context(|ctx| Self::ensure_stack_in(ctx))
+        state.in_context(Self::ensure_stack_in)
     }
 
     /// Recompõe o stack na `texture` do ativo e sincroniza o Albedo.
@@ -329,7 +329,7 @@ impl PaintModule {
     }
 
     pub fn composite_active(state: &mut AppState) {
-        state.in_context(|ctx| Self::composite_active_in(ctx))
+        state.in_context(Self::composite_active_in)
     }
 
     /// Partial composition of dirty tiles when the stack is tileable.
@@ -656,7 +656,7 @@ impl PaintModule {
     }
 
     pub fn ensure_canvas(state: &mut AppState) {
-        state.in_context(|ctx| Self::ensure_canvas_in(ctx))
+        state.in_context(Self::ensure_canvas_in)
     }
 
     /// Aplica carimbo do pincel rígido pixel-perfect (P3D-056).
@@ -1149,7 +1149,7 @@ impl PaintModule {
     }
 
     pub fn canvas_fill(state: &mut AppState) {
-        state.in_context(|ctx| Self::canvas_fill_in(ctx))
+        state.in_context(Self::canvas_fill_in)
     }
 
     /// Composição "over" (alfa reto) de `src` sobre `dst`.
@@ -1578,7 +1578,7 @@ impl PaintModule {
     // ---- Pintura 3D Direta sobre Malha via UV (P3D-062, P3D-132) ----
 
     pub fn canvas_clear(state: &mut AppState) {
-        state.in_context(|ctx| Self::canvas_clear_in(ctx))
+        state.in_context(Self::canvas_clear_in)
     }
 
     /// UV do ponto de impacto numa face (raycast → baricêntricas → UV).

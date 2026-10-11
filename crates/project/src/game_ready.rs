@@ -152,7 +152,7 @@ pub fn validate_project(project: &Project, indices: &[usize]) -> Vec<Diagnostic>
         .filter_map(|&i| project.assets.get(i))
         .flat_map(validate_asset)
         .collect();
-    out.sort_by(|a, b| b.severity.cmp(&a.severity));
+    out.sort_by_key(|diagnostic| std::cmp::Reverse(diagnostic.severity));
     out
 }
 

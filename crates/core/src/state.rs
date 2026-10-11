@@ -2077,8 +2077,6 @@ impl AppState {
         }
     }
 
-    /// Cria uma nova instância de um asset da biblioteca na posição do 3D Cursor.
-
     pub fn document_session_mut(&mut self) -> &mut DocumentSession {
         &mut self.project
     }
@@ -2124,8 +2122,6 @@ impl AppState {
         }
     }
 
-    /// Checkpoint de undo ANTES de mutar o projeto + evento.
-
     /// Despacha um comando registrado no CommandDispatcher da aplicação.
     pub fn dispatch_command(&mut self, id: &str) -> Result<(), crate::command::CommandError> {
         let cmd = self
@@ -2134,8 +2130,6 @@ impl AppState {
             .ok_or_else(|| crate::command::CommandError::UnknownCommand(id.to_string()))?;
         crate::command::CommandDispatcher::dispatch(self, cmd.as_ref())
     }
-
-    /// Canonical Application API entry: UI / CLI / FFI / MCP / Lua all land here.
 
     /// Carrega um projeto do disco e atualiza a sessão e os projetos recentes.
     pub fn open_project(
@@ -2777,7 +2771,7 @@ impl CommandContext<'_> {
     pub fn sync_selection(&mut self) -> bool {
         let changed = self
             .editor
-            .sync_selection(&self.document.project, &mut self.events);
+            .sync_selection(&self.document.project, self.events);
         self.document.project.history_selection = self.editor.selection.assets.clone();
         if changed {
             // Sync Selection 3D → UV, só quando o usuário o mantém ligado.
@@ -3984,11 +3978,11 @@ impl<'a> EditorView<'a> {
     }
 
     pub fn document_session(self) -> &'a DocumentSession {
-        &self.document
+        self.document
     }
 
     pub fn editor_session(self) -> &'a EditorSession {
-        &self.editor
+        self.editor
     }
 
     pub fn viewport_session(self) -> ViewportSession {

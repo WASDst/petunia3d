@@ -236,7 +236,7 @@ impl<'a> EditorView<'a> {
 
     /// Consulta imutável do resumo de seleção do objeto ativo.
     pub fn query_selection_details(self) -> SelectionDetailsDto {
-        query_selection_details(&self.document, &self.editor)
+        query_selection_details(self.document, self.editor)
     }
 
     pub fn query_uv_diagnostics(self) -> UvDiagnosticsDto {
