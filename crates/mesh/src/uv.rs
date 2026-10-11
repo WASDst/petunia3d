@@ -1,7 +1,14 @@
 //! Petunia3D mesh — UVs e normais.
 
+use std::collections::HashSet;
+
 use super::Mesh;
-use glam::Vec3;
+use glam::{Vec2, Vec3};
+
+/// Ângulo no plano XZ → `u` em `0..1` (0 em +Z, crescendo em direção a +X).
+fn angle_to_u(polar: Vec2) -> f32 {
+    polar.x.atan2(polar.y) / std::f32::consts::TAU + 0.5
+}
 
 impl Mesh {
     // ---------------- UV ----------------
@@ -101,6 +108,105 @@ impl Mesh {
         }
     }
 
+    /// Projeção cilíndrica em torno do eixo Y que passa pelo centro do bbox das
+    /// faces alvo: `u` = ângulo, `v` = altura normalizada. `faces` vazio = malha
+    /// inteira. Cantos fixados (pins) mantêm o valor.
+    pub fn project_cylindrical(&mut self, faces: &HashSet<usize>) {
+        let Some((center, half)) = self.target_bounds(faces) else {
+            return;
+        };
+        let height = (half.y * 2.0).max(1e-6);
+        self.project_angular(faces, |p| {
+            let d = p - center;
+            let polar = Vec2::new(d.x, d.z);
+            let u = (polar.length_squared() > 1e-12).then(|| angle_to_u(polar));
+            (u, (d.y + half.y) / height)
+        });
+    }
+
+    /// Projeção esférica em torno do centro do bbox das faces alvo:
+    /// `u` = longitude, `v` = latitude. `faces` vazio = malha inteira. Cantos
+    /// fixados (pins) mantêm o valor.
+    pub fn project_spherical(&mut self, faces: &HashSet<usize>) {
+        let Some((center, _)) = self.target_bounds(faces) else {
+            return;
+        };
+        self.project_angular(faces, |p| {
+            let d = p - center;
+            let r = d.length();
+            if r < 1e-12 {
+                return (None, 0.5);
+            }
+            let polar = Vec2::new(d.x, d.z);
+            // No polo a longitude é indefinida: herda a média da face.
+            let u = (polar.length() > r * 1e-4).then(|| angle_to_u(polar));
+            (
+                u,
+                0.5 + (d.y / r).clamp(-1.0, 1.0).asin() / std::f32::consts::PI,
+            )
+        });
+    }
+
+    /// Centro e meia-extensão do bbox dos vértices das faces alvo.
+    fn target_bounds(&self, faces: &HashSet<usize>) -> Option<(Vec3, Vec3)> {
+        let mut min = Vec3::splat(f32::MAX);
+        let mut max = Vec3::splat(f32::MIN);
+        for (fi, face) in self.faces.iter().enumerate() {
+            if !faces.is_empty() && !faces.contains(&fi) {
+                continue;
+            }
+            for &vi in &face.verts {
+                let p = self.verts.get(vi as usize)?.vec();
+                min = min.min(p);
+                max = max.max(p);
+            }
+        }
+        (min.x <= max.x && min.is_finite() && max.is_finite())
+            .then(|| ((min + max) * 0.5, (max - min) * 0.5))
+    }
+
+    /// Núcleo das projeções angulares. `map` devolve `(u, v)` por posição, com
+    /// `u = None` onde o ângulo é indefinido (eixo/polo). Por face: cantos sem
+    /// `u` herdam a média circular dos demais, e uma face que cruza a costura do
+    /// ângulo é desdobrada (`u` pode passar de 1 — diagnóstico, não erro).
+    fn project_angular(
+        &mut self,
+        faces: &HashSet<usize>,
+        map: impl Fn(Vec3) -> (Option<f32>, f32),
+    ) {
+        for fi in 0..self.faces.len() {
+            if !faces.is_empty() && !faces.contains(&fi) {
+                continue;
+            }
+            let mapped: Vec<(Option<f32>, f32)> = self.faces[fi]
+                .verts
+                .iter()
+                .map(|&vi| map(self.verts[vi as usize].vec()))
+                .collect();
+            let known: Vec<f32> = mapped.iter().filter_map(|m| m.0).collect();
+            // Desdobra a costura: se o salto entre cantos passa de meia volta,
+            // os `u` pequenos ganham +1 para a face ficar contígua.
+            let wraps = known
+                .iter()
+                .any(|&a| known.iter().any(|&b| (a - b).abs() > 0.5));
+            let unwrap = |u: f32| if wraps && u < 0.5 { u + 1.0 } else { u };
+            let fallback = if known.is_empty() {
+                0.5
+            } else {
+                known.iter().map(|&u| unwrap(u)).sum::<f32>() / known.len() as f32
+            };
+            let uv: Vec<[f32; 2]> = mapped
+                .iter()
+                .enumerate()
+                .map(|(c, &(u, v))| match self.faces[fi].uv.get(c) {
+                    Some(&existing) if self.uv_pinned.contains(&(fi, c)) => existing,
+                    _ => [u.map_or(fallback, unwrap), v],
+                })
+                .collect();
+            self.faces[fi].uv = uv;
+        }
+    }
+
     /// Executa unwrap automático genérico usando o provider xatlas (P1-06 / P3D-064).
     pub fn unwrap_auto(&mut self) -> Result<usize, crate::uv_xatlas::UnwrapError> {
         crate::uv_xatlas::unwrap_fallback(self)
@@ -174,6 +280,47 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cylindrical_projection_keeps_faces_contiguous_across_the_seam() {
+        let mut mesh = Mesh::cylinder(16, 1.0, 2.0);
+        let sides_before = mesh.faces.len();
+        mesh.project_cylindrical(&HashSet::new());
+        assert_eq!(mesh.faces.len(), sides_before);
+        for (fi, face) in mesh.faces.iter().enumerate() {
+            assert_eq!(face.uv.len(), face.verts.len());
+            assert!(face.uv.iter().flatten().all(|x| x.is_finite()));
+            if mesh.face_normal(fi).y.abs() > 0.5 {
+                continue; // tampa: cobre a volta inteira por definição
+            }
+            let us: Vec<f32> = face.uv.iter().map(|uv| uv[0]).collect();
+            let spread = us.iter().cloned().fold(f32::MIN, f32::max)
+                - us.iter().cloned().fold(f32::MAX, f32::min);
+            assert!(spread <= 0.5, "face crosses the seam unfolded: {us:?}");
+        }
+    }
+
+    #[test]
+    fn spherical_projection_is_finite_at_the_poles_and_respects_pins() {
+        let mut mesh = Mesh::sphere_low(12, 8, 1.0);
+        mesh.faces[0].uv[0] = [0.42, 0.42];
+        mesh.pin_uv(0, 0);
+        mesh.project_spherical(&HashSet::new());
+        assert_eq!(mesh.faces[0].uv[0], [0.42, 0.42]);
+        for face in &mesh.faces {
+            assert!(face.uv.iter().flatten().all(|x| x.is_finite()));
+            assert!(face.uv.iter().all(|uv| (0.0..=1.0).contains(&uv[1])));
+        }
+    }
+
+    #[test]
+    fn angular_projection_only_touches_target_faces() {
+        let mut mesh = Mesh::cube(2.0);
+        mesh.project_cube();
+        let untouched = mesh.faces[1].uv.clone();
+        mesh.project_cylindrical(&HashSet::from([0]));
+        assert_eq!(mesh.faces[1].uv, untouched);
+    }
 
     #[test]
     fn test_uv_to_world_on_plane() {

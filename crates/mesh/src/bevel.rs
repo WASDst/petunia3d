@@ -4,6 +4,21 @@ use std::collections::HashMap;
 
 use crate::{Face, Mesh, Vertex};
 
+/// Limite de segmentos do kernel (a UI comum oferece 1–8).
+pub const MAX_BEVEL_SEGMENTS: u32 = 16;
+
+/// Resultado de [`Mesh::bevel_edges`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BevelReport {
+    pub requested: f32,
+    pub segments: u32,
+    /// Arestas chanfradas (0 quando o conjunto foi recusado).
+    pub beveled_edges: usize,
+    /// Arestas (`edge_key` da malha original) sem solução: com qualquer uma
+    /// aqui, a malha não mudou.
+    pub unsupported_edges: Vec<(u32, u32)>,
+}
+
 /// Não publica geometria parcial: rejeita topologias sem solução implementada.
 #[allow(dead_code)]
 pub(crate) fn bevel_edge(mesh: &Mesh, a: u32, b: u32, amount: f32) -> Option<Mesh> {
@@ -137,7 +152,7 @@ pub(crate) fn bevel_edge_segments_clamped(
     let k = face.verts.iter().position(|&v| v == a)?;
     let winding_reversed = face.verts[(k + 1) % face.verts.len()] == b;
 
-    let segs = segments.clamp(1, 16) as usize;
+    let segs = segments.clamp(1, MAX_BEVEL_SEGMENTS) as usize;
     let mut rings: Vec<(u32, u32)> = Vec::with_capacity(segs + 1);
     rings.push((a1, b1));
 
@@ -659,5 +674,41 @@ mod tests {
         let report = mesh.validate_topology();
         assert!(report.is_manifold && report.is_closed);
         assert_eq!((mesh.verts.len(), mesh.faces.len()), (16, 10));
+    }
+
+    #[test]
+    fn mixed_sets_with_unsupported_edges_change_nothing_and_list_them() {
+        let mut mesh = Mesh::cube(2.0);
+        let mut sheet = Mesh::plane(1.0);
+        for v in &mut sheet.verts {
+            v.pos[0] += 10.0;
+        }
+        mesh.join(&sheet);
+        let open_edge = crate::edge_key(8, 9); // borda aberta do plano
+        let before = format!("{mesh:?}");
+        let report = mesh.bevel_edges(&[(0, 3), open_edge], 0.2, 1, true);
+        assert_eq!(report.beveled_edges, 0);
+        assert_eq!(report.unsupported_edges, vec![open_edge]);
+        assert_eq!(format!("{mesh:?}"), before);
+    }
+
+    #[test]
+    fn edge_order_does_not_change_the_result() {
+        let run = |edges: &[(u32, u32)]| {
+            let mut mesh = Mesh::cube(2.0);
+            let report = mesh.bevel_edges(edges, 0.2, 2, true);
+            (
+                report.beveled_edges,
+                format!("{:?}", mesh.verts.iter().map(|v| v.pos).collect::<Vec<_>>()),
+            )
+        };
+        assert_eq!(run(&[(0, 3), (4, 5)]), run(&[(5, 4), (3, 0)]));
+    }
+
+    #[test]
+    fn segments_above_four_are_accepted() {
+        let mut mesh = Mesh::cube(2.0);
+        let report = mesh.bevel_edges(&[(0, 3)], 0.2, 8, true);
+        assert_eq!((report.beveled_edges, report.segments), (1, 8));
     }
 }

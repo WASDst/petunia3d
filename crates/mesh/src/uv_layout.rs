@@ -189,50 +189,11 @@ impl Mesh {
             });
         }
 
-        // Empacotamento por prateleiras; procura a maior escala que cabe.
-        let order: Vec<usize> = {
-            let mut o: Vec<usize> = (0..locals.len()).collect();
-            o.sort_by(|&a, &b| {
-                locals[b]
-                    .size
-                    .y
-                    .partial_cmp(&locals[a].size.y)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then(a.cmp(&b))
-            });
-            o
-        };
-        let try_pack = |scale: f32| -> Option<Vec<Vec2>> {
-            let mut origins = vec![Vec2::ZERO; locals.len()];
-            let (mut x, mut y, mut row_h) = (padding, padding, 0.0f32);
-            for &i in &order {
-                let w = locals[i].size.x * scale;
-                let h = locals[i].size.y * scale;
-                if x + w + padding > 1.0 {
-                    x = padding;
-                    y += row_h + padding;
-                    row_h = 0.0;
-                }
-                if x + w + padding > 1.0 || y + h + padding > 1.0 {
-                    return None;
-                }
-                origins[i] = Vec2::new(x, y);
-                x += w + padding;
-                row_h = row_h.max(h);
-            }
-            Some(origins)
-        };
-        let total: f32 = locals.iter().map(|l| l.size.x * l.size.y).sum();
-        let mut scale = (1.0 / total.max(1e-9)).sqrt();
-        let mut origins = None;
-        for _ in 0..64 {
-            if let Some(o) = try_pack(scale) {
-                origins = Some(o);
-                break;
-            }
-            scale *= 0.92;
-        }
-        let Some(mut origins) = origins else {
+        // Empacotamento por prateleiras (packer único de `uv_pack`).
+        let sizes: Vec<Vec2> = locals.iter().map(|l| l.size).collect();
+        let Some(crate::uv_pack::ShelfLayout { scale, mut origins }) =
+            crate::uv_pack::shelf_pack(&sizes, Vec2::splat(padding), &[])
+        else {
             return 0;
         };
         // Ajuste final: amplia o layout até ocupar a área útil (`padding..1-padding`)
@@ -808,6 +769,7 @@ mod tests {
             selected_edges: Default::default(),
             uv_seams: Default::default(),
             uv_pinned: Default::default(),
+            sharp_edges: Default::default(),
         };
         m.faces.push(crate::Face::with_uv(
             vec![0, 1, 2, 3],

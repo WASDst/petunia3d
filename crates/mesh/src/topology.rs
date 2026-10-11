@@ -50,19 +50,17 @@ impl ElementRemap {
     }
 
     pub fn map_vertex(&self, old: u32) -> Option<u32> {
-        self.vertices
-            .iter()
-            .find(|(k, _)| *k == old)
-            .and_then(|(_, v)| *v)
-            .or(Some(old))
+        match self.vertices.iter().find(|(k, _)| *k == old) {
+            Some((_, v)) => *v,
+            None => Some(old),
+        }
     }
 
     pub fn map_face(&self, old: usize) -> Option<usize> {
-        self.faces
-            .iter()
-            .find(|(k, _)| *k == old)
-            .and_then(|(_, v)| *v)
-            .or(Some(old))
+        match self.faces.iter().find(|(k, _)| *k == old) {
+            Some((_, v)) => *v,
+            None => Some(old),
+        }
     }
 }
 

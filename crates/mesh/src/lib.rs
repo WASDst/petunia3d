@@ -9,6 +9,12 @@ use std::collections::{HashMap, HashSet};
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 
+pub mod validation;
+
+pub use validation::{
+    MeshValidationError, RepairPolicy, RepairReport, repair_external_mesh, validate_invariants,
+};
+
 /// Vértice expandido p/ render/export: (posição, normal, cor, uv).
 pub type Tri = ([f32; 3], [f32; 3], [f32; 3], [f32; 2]);
 
@@ -71,6 +77,79 @@ impl Face {
             self.uv = vec![[0.0, 0.0]; self.verts.len()];
         }
     }
+
+    /// Constrói uma face a partir de corners (vértice + UV atomicamente ligados).
+    pub fn from_corners(corners: Vec<FaceCorner>) -> Self {
+        let verts = corners.iter().map(|c| c.vertex).collect();
+        let uv = corners.iter().map(|c| c.texture_coordinates).collect();
+        Self::with_uv(verts, uv)
+    }
+
+    /// Corner estrutural completa (vértice + UV) no índice informado.
+    ///
+    /// Une o que hoje vive em dois arrays paralelos, eliminando a possibilidade
+    /// de dessincronia entre `verts[i]` e `uv[i]`.
+    pub fn corner(&self, index: usize) -> Option<FaceCorner> {
+        let vertex = *self.verts.get(index)?;
+        let texture_coordinates = *self.uv.get(index)?;
+        Some(FaceCorner {
+            vertex,
+            texture_coordinates,
+        })
+    }
+
+    /// Versão mutável do corner: permite mover UV e vértice juntos.
+    pub fn corner_mut(&mut self, index: usize) -> Option<(&mut u32, &mut [f32; 2])> {
+        let vertex = self.verts.get_mut(index)?;
+        let uv = self.uv.get_mut(index)?;
+        Some((vertex, uv))
+    }
+
+    /// Itera todas as corners completas da face.
+    pub fn corners(&self) -> impl Iterator<Item = FaceCorner> + '_ {
+        self.verts
+            .iter()
+            .zip(self.uv.iter())
+            .map(|(&vertex, &texture_coordinates)| FaceCorner {
+                vertex,
+                texture_coordinates,
+            })
+    }
+
+    /// Índices de vértice da face (helper de transição).
+    pub fn vertex_indices(&self) -> Vec<u32> {
+        self.verts.clone()
+    }
+
+    /// Coordenadas de textura da face, na mesma ordem dos vértices (helper de transição).
+    pub fn texture_coordinates(&self) -> Vec<[f32; 2]> {
+        self.uv.clone()
+    }
+
+    /// Inverte a ordem das corners (winding), preservando o vínculo vértice↔UV.
+    pub fn reverse_winding(&mut self) {
+        self.verts.reverse();
+        self.uv.reverse();
+    }
+}
+
+/// Corner estrutural autoral: um vértice e sua coordenada UV, atomicamente ligados
+/// (website/docs/03-geometry/uv-face-corners.md).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FaceCorner {
+    /// Índice do vértice na malha.
+    pub vertex: u32,
+    /// Coordenada UV pertencente exclusivamente a este corner da face.
+    pub texture_coordinates: [f32; 2],
+}
+
+impl FaceCorner {
+    pub fn new(vertex: u32, texture_coordinates: [f32; 2]) -> Self {
+        Self {
+            vertex,
+            texture_coordinates,
+        }
+    }
 }
 
 /// Malha. `selected_edges` guarda arestas como `(min, max)`.
@@ -85,10 +164,108 @@ pub struct Mesh {
     /// Vértices UV fixados (pinned): pares (face_idx, corner_idx) estáticos em projeções/unwraps.
     #[serde(default)]
     pub uv_pinned: HashSet<(usize, usize)>,
+    /// Arestas Sharp (`(min, max)`): decisão autoral que delimita smoothing islands.
+    /// Independente de UV seam e de feature edge (website/docs/03-geometry/normals-shading-sharp-edges.md).
+    #[serde(default)]
+    pub sharp_edges: HashSet<(u32, u32)>,
+}
+
+/// Índice tipado de vértice na malha (website/docs/03-geometry/architecture-decision.md §5).
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+pub struct VertexIndex(pub u32);
+
+impl From<u32> for VertexIndex {
+    fn from(val: u32) -> Self {
+        Self(val)
+    }
+}
+
+impl From<VertexIndex> for u32 {
+    fn from(val: VertexIndex) -> Self {
+        val.0
+    }
+}
+
+impl From<VertexIndex> for usize {
+    fn from(val: VertexIndex) -> Self {
+        val.0 as usize
+    }
+}
+
+/// Índice tipado de face na malha (website/docs/03-geometry/architecture-decision.md §5).
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+pub struct FaceIndex(pub usize);
+
+impl From<usize> for FaceIndex {
+    fn from(val: usize) -> Self {
+        Self(val)
+    }
+}
+
+impl From<FaceIndex> for usize {
+    fn from(val: FaceIndex) -> Self {
+        val.0
+    }
+}
+
+/// Um canto de face (FaceCorner): a face e a posição do canto dentro dela
+/// (website/docs/07-uv/architecture-decision.md, "Pins" e "UV Selection").
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct FaceCornerIndex {
+    pub face: usize,
+    pub corner: usize,
+}
+
+impl FaceCornerIndex {
+    pub const fn new(face: usize, corner: usize) -> Self {
+        Self { face, corner }
+    }
+}
+
+impl From<(usize, usize)> for FaceCornerIndex {
+    fn from((face, corner): (usize, usize)) -> Self {
+        Self { face, corner }
+    }
+}
+
+impl From<FaceCornerIndex> for (usize, usize) {
+    fn from(val: FaceCornerIndex) -> Self {
+        (val.face, val.corner)
+    }
+}
+
+/// Chave canônica não-direcionada de aresta `(min, max)` (website/docs/03-geometry/architecture-decision.md §5).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct EdgeKey(pub u32, pub u32);
+
+impl EdgeKey {
+    pub fn new(a: u32, b: u32) -> Self {
+        Self(a.min(b), a.max(b))
+    }
+
+    pub fn to_pair(self) -> (u32, u32) {
+        (self.0, self.1)
+    }
+}
+
+impl From<(u32, u32)> for EdgeKey {
+    fn from((a, b): (u32, u32)) -> Self {
+        Self::new(a, b)
+    }
+}
+
+impl From<EdgeKey> for (u32, u32) {
+    fn from(key: EdgeKey) -> Self {
+        key.to_pair()
+    }
 }
 
 pub fn edge_key(a: u32, b: u32) -> (u32, u32) {
-    (a.min(b), a.max(b))
+    EdgeKey::new(a, b).to_pair()
 }
 
 impl Mesh {
@@ -98,32 +275,18 @@ impl Mesh {
         self.faces.push(f);
     }
 
-    /// Valida/repara malha vinda de fora (arquivo): uvs, índices, arestas.
-    /// Nunca panica; remove o que não tem conserto.
-    pub fn validate(&mut self) {
-        // R2: sanitiza NaN/inf (senão o envenenamento persiste no projeto)
-        for v in &mut self.verts {
-            if !v.pos.iter().all(|x| x.is_finite()) {
-                v.pos = [0.0, 0.0, 0.0];
-            }
-            if !v.color.iter().all(|x| x.is_finite()) {
-                v.color = [0.75, 0.75, 0.78];
-            }
-        }
-        let n = self.verts.len();
-        for f in &mut self.faces {
-            f.fix_uv();
-        }
-        self.faces.retain(|f| {
-            f.verts.len() >= 3 && f.verts.iter().all(|&i| (i as usize) < n) && {
-                let mut u = f.verts.clone();
-                u.sort_unstable();
-                u.dedup();
-                u.len() >= 3
-            }
-        });
-        self.selected_edges
-            .retain(|&(a, b)| (a as usize) < n && (b as usize) < n && a != b);
+    /// Repara malha vinda de fora (arquivo) de acordo com a política de importação.
+    ///
+    /// Delega para `repair_external_mesh` e emite um relatório auditável.
+    /// Para verificação sem mutação de invariantes de authoring, use
+    /// `validate_invariants` (website/docs/03-geometry/validation-repair-cleanup.md).
+    pub fn validate(&mut self) -> RepairReport {
+        repair_external_mesh(self, RepairPolicy::TolerantImport)
+    }
+
+    /// Verificação estrita de invariantes sem mutação de dados.
+    pub fn validate_invariants(&self) -> Result<(), MeshValidationError> {
+        validate_invariants(self)
     }
 
     pub fn vert_count(&self) -> usize {
@@ -224,6 +387,7 @@ pub mod arrangement;
 mod bevel;
 pub mod boolean;
 pub mod boolean_cleanup;
+pub mod cleanup;
 mod connect;
 pub mod curve;
 pub mod half_edge;
@@ -232,17 +396,23 @@ pub mod knife;
 pub mod loop_cut;
 mod loops;
 pub mod obj;
+pub mod inset;
 pub mod ops;
 pub mod path_frames;
 pub mod poly_pen;
 pub mod primitives;
 pub mod profile_geo;
+pub mod shading;
 pub mod shape_ops;
 pub mod sweep;
 pub mod topology;
 pub mod triangulate;
 pub mod uv;
+pub mod uv_hit;
 pub mod uv_layout;
+pub mod uv_pack;
+pub mod uv_relax;
+pub mod uv_stitch;
 pub mod uv_tools;
 pub mod uv_xatlas;
 
@@ -255,6 +425,11 @@ pub use primitives::{CircleFill, PrimitiveAudit, PrimitiveDescriptor, primitive_
 pub use sweep::{SweepFrame, SweepOptions, compute_rmf_frames, generate_sweep};
 pub use topology::{DirtyDomains, ElementRemap, TopologyResult};
 pub use uv_layout::CoverageMask;
+pub use bevel::{BevelReport, MAX_BEVEL_SEGMENTS};
+pub use inset::{InsetMode, InsetReport};
+pub use uv_hit::{UvEdge, UvTransform};
+pub use uv_pack::{UvPackError, UvPackOptions, UvPackReport};
+pub use uv_stitch::UvStitchReport;
 pub use uv_tools::{UvDiagnostics, UvIsland};
 
 impl Mesh {
@@ -362,52 +537,7 @@ impl Mesh {
     /// (pos, normal, cor, uv) por triângulo, com opção de normais suaves (interpoladas por vértice)
     /// ou facetadas (flat).
     pub fn to_triangles_smooth(&self, smooth: bool) -> Vec<Tri> {
-        let vert_normals: Vec<[f32; 3]> = if smooth {
-            let mut v_norms = vec![Vec3::ZERO; self.verts.len()];
-            for (fi, f) in self.faces.iter().enumerate() {
-                let fnorm = self.face_normal(fi);
-                for &vi in &f.verts {
-                    if (vi as usize) < v_norms.len() {
-                        v_norms[vi as usize] += fnorm;
-                    }
-                }
-            }
-            v_norms
-                .into_iter()
-                .map(|vn| vn.normalize_or_zero().to_array())
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        let mut out = Vec::new();
-        for (fi, f) in self.faces.iter().enumerate() {
-            for corners in self.face_triangle_corners(fi) {
-                let [idx0, idx1, idx2] = corners.map(|i| f.verts[i] as usize);
-                let pa = self.verts[idx0].vec();
-                let pb = self.verts[idx1].vec();
-                let pc = self.verts[idx2].vec();
-                let flat_n = (pb - pa).cross(pc - pa).normalize_or_zero().to_array();
-
-                let tri_indices = [idx0, idx1, idx2];
-                let tri_uvs = corners.map(|i| f.uv.get(i).copied().unwrap_or([0.0, 0.0]));
-
-                for (k, &vi) in tri_indices.iter().enumerate() {
-                    let v = &self.verts[vi];
-                    // A cor da geometria é do material, nunca da seleção: pintar
-                    // aqui fazia uma aresta selecionada tingir todas as faces que
-                    // tocam seus vértices. Seleção é uma camada de render à parte.
-                    let col = v.color;
-                    let n = if smooth && vi < vert_normals.len() {
-                        vert_normals[vi]
-                    } else {
-                        flat_n
-                    };
-                    out.push((v.pos, n, col, tri_uvs[k]));
-                }
-            }
-        }
-        out
+        self.to_triangles_shaded(shading::SurfaceShading::from_smooth(smooth))
     }
 
     /// (pos, normal, cor, uv) com normais nulas para renderização unlit (sem iluminação).
@@ -543,7 +673,10 @@ mod tests {
         assert_eq!(edges.len(), mesh.edges_unique().len());
     }
 
-    use crate::{Face, Mesh, triangulate::ear_clip, triangulate::ray_tri_hit};
+    use crate::{
+        EdgeKey, Face, FaceIndex, Mesh, RepairPolicy, VertexIndex, edge_key, triangulate::ear_clip,
+        triangulate::ray_tri_hit, validation::repair_external_mesh,
+    };
     use glam::Vec3;
 
     #[test]
@@ -792,7 +925,7 @@ mod tests {
 
     #[test]
     fn validate_repairs_corrupt() {
-        // M2: invariante quebrado é reparado sem panic
+        // Dados externos corrompidos passam por reparo explícito com relatório.
         let mut m = Mesh::cube(1.0);
         m.faces.push(Face {
             verts: vec![0, 1, 99],
@@ -801,7 +934,13 @@ mod tests {
             material_slot: None,
         });
         m.selected_edges.insert((0, 500));
-        m.validate();
+
+        // Validação estrita rejeita sem mutar (dados de authoring inválidos = bug).
+        assert!(m.validate_invariants().is_err());
+
+        let report = repair_external_mesh(&mut m, RepairPolicy::TolerantImport);
+        assert_eq!(report.faces_dropped, 1);
+        assert_eq!(report.selected_edges_dropped, 1);
         assert!(m.faces.iter().all(|f| f.uv.len() == f.verts.len()));
         assert!(
             m.faces
@@ -813,6 +952,43 @@ mod tests {
                 .iter()
                 .all(|&(a, b)| (a as usize) < m.verts.len() && (b as usize) < m.verts.len())
         );
+        // Após o reparo explícito, a malha volta a satisfazer os invariantes.
+        assert!(m.validate_invariants().is_ok());
+    }
+
+    #[test]
+    fn face_corner_binds_vertex_and_uv_atomically() {
+        let face = Face::with_uv(vec![0, 1, 2], vec![[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]);
+
+        let corners: Vec<_> = face.corners().collect();
+        assert_eq!(corners.len(), 3);
+        assert_eq!(corners[1].vertex, 1);
+        assert_eq!(corners[1].texture_coordinates, [0.3, 0.4]);
+
+        // corner_mut permite alterar UV sem tocar nos vértices.
+        let mut face = face;
+        if let Some((vertex, uv)) = face.corner_mut(2) {
+            uv[0] = 0.9;
+            assert_eq!(*vertex, 2);
+        }
+        assert_eq!(face.corner(2).unwrap().texture_coordinates, [0.9, 0.6]);
+        assert_eq!(face.verts, vec![0, 1, 2], "vértices intactos");
+
+        // Roundtrip por corners preserva o vínculo.
+        let rebuilt = Face::from_corners(face.corners().collect());
+        assert_eq!(rebuilt.verts, face.verts);
+        assert_eq!(rebuilt.uv, face.uv);
+    }
+
+    #[test]
+    fn face_corner_reverse_winding_keeps_pairs() {
+        let face = Face::with_uv(vec![0, 1, 2], vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]);
+        let mut reversed = face.clone();
+        reversed.reverse_winding();
+        assert_eq!(reversed.verts, vec![2, 1, 0]);
+        // Cada vértice mantém a UV do seu corner original.
+        assert_eq!(reversed.corner(0).unwrap().vertex, 2);
+        assert_eq!(reversed.corner(0).unwrap().texture_coordinates, [1.0, 1.0]);
     }
 
     #[test]
@@ -1042,5 +1218,43 @@ mod tests {
             6,
             "dissolver 1 única face isolada não deve deletar nem destruir faces vizinhas"
         );
+    }
+
+    #[test]
+    fn typed_indices_and_edge_key_invariants() {
+        let v_idx = VertexIndex::from(42u32);
+        assert_eq!(v_idx.0, 42);
+        assert_eq!(u32::from(v_idx), 42);
+        assert_eq!(usize::from(v_idx), 42);
+
+        let f_idx = FaceIndex::from(10usize);
+        assert_eq!(f_idx.0, 10);
+        assert_eq!(usize::from(f_idx), 10);
+
+        let key1 = EdgeKey::new(10, 5);
+        let key2 = EdgeKey::new(5, 10);
+        assert_eq!(key1, key2);
+        assert_eq!(key1.to_pair(), (5, 10));
+        assert_eq!(<(u32, u32)>::from(key1), (5, 10));
+        assert_eq!(edge_key(10, 5), (5, 10));
+    }
+
+    #[test]
+    fn decoupled_vertex_transforms_do_not_rely_on_selection_flags() {
+        let mut m = Mesh::cube(2.0);
+        // Nenhum vértice selecionado
+        assert!(m.verts.iter().all(|v| !v.selected));
+
+        let orig = m.verts[0].pos;
+        m.translate_vertices(&[0], [1.0, 2.0, 3.0]);
+        assert_eq!(
+            m.verts[0].pos,
+            [orig[0] + 1.0, orig[1] + 2.0, orig[2] + 3.0]
+        );
+        // Vértice 1 não foi modificado
+        assert_ne!(m.verts[1].pos[0], orig[0] + 1.0);
+
+        let center = m.vertices_center(&[0]);
+        assert_eq!(center, m.verts[0].pos);
     }
 }

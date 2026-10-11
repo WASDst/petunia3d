@@ -1,6 +1,11 @@
 //! Petunia3D mesh — operações de modelagem.
 
-use super::{Face, Mesh, Vertex, edge_key, triangulate};
+use super::{
+    Face, Mesh, Vertex, edge_key,
+    topology::{DirtyDomains, ElementRemap, TopologyResult},
+    triangulate,
+};
+use crate::bevel::{BevelReport, MAX_BEVEL_SEGMENTS};
 use glam::Vec3;
 use std::collections::{HashMap, HashSet};
 
@@ -320,12 +325,12 @@ impl Mesh {
         }
     }
 
-    // ---------------- transformações ----------------
+    // ---------------- transformações desacopladas (03-geometry) ----------------
 
-    pub fn translate_selected(&mut self, d: [f32; 3]) {
-        let any = self.verts.iter().any(|v| v.selected);
-        for v in &mut self.verts {
-            if v.selected || !any {
+    /// Translada um conjunto explícito de vértices por um delta 3D (não depende de flag de seleção).
+    pub fn translate_vertices(&mut self, indices: &[u32], d: [f32; 3]) {
+        for &idx in indices {
+            if let Some(v) = self.verts.get_mut(idx as usize) {
                 v.pos[0] += d[0];
                 v.pos[1] += d[1];
                 v.pos[2] += d[2];
@@ -333,39 +338,123 @@ impl Mesh {
         }
     }
 
-    pub fn scale_selected(&mut self, s: f32, center: [f32; 3]) {
-        for v in &mut self.verts {
-            if v.selected {
-                for (p, c) in v.pos.iter_mut().zip(center.iter()) {
+    /// Escala um conjunto explícito de vértices por fatores de escala ao redor de `center`.
+    pub fn scale_vertices(&mut self, indices: &[u32], factors: [f32; 3], center: [f32; 3]) {
+        for &idx in indices {
+            if let Some(v) = self.verts.get_mut(idx as usize) {
+                for ((p, c), s) in v.pos.iter_mut().zip(center.iter()).zip(factors.iter()) {
                     *p = c + (*p - c) * s;
                 }
             }
         }
     }
 
+    /// Rotaciona um conjunto explícito de vértices por ângulos de Euler XYZ ao redor de `center`.
+    pub fn rotate_vertices(&mut self, indices: &[u32], euler_rad: [f32; 3], center: [f32; 3]) {
+        use glam::EulerRot;
+        let mat = glam::Mat3::from_euler(EulerRot::XYZ, euler_rad[0], euler_rad[1], euler_rad[2]);
+        let c = Vec3::from(center);
+        for &idx in indices {
+            if let Some(v) = self.verts.get_mut(idx as usize) {
+                v.pos = (c + mat * (v.vec() - c)).to_array();
+            }
+        }
+    }
+
+    /// Calcula o centro médio de um conjunto explícito de vértices.
+    pub fn vertices_center(&self, indices: &[u32]) -> [f32; 3] {
+        if indices.is_empty() {
+            return self.selection_center();
+        }
+        let mut c = Vec3::ZERO;
+        let mut n = 0;
+        for &idx in indices {
+            if let Some(v) = self.verts.get(idx as usize) {
+                c += v.vec();
+                n += 1;
+            }
+        }
+        if n == 0 {
+            return [0.0, 0.0, 0.0];
+        }
+        (c / n as f32).to_array()
+    }
+
+    // ---------------- transformações legadas (transição) ----------------
+
+    /// Aplica a transformação afim `matrix` às posições. Sob determinante
+    /// negativo inverte o winding de cada face (vértices, UVs e pins por canto)
+    /// para as normais continuarem para fora — a aparência é preservada.
+    pub fn transform_affine(&mut self, matrix: glam::Mat4) {
+        for v in &mut self.verts {
+            v.pos = matrix.transform_point3(v.vec()).to_array();
+        }
+        if matrix.determinant() < 0.0 {
+            let lens: Vec<usize> = self.faces.iter().map(|f| f.verts.len()).collect();
+            for face in &mut self.faces {
+                face.verts.reverse();
+                face.uv.reverse();
+            }
+            self.uv_pinned = self
+                .uv_pinned
+                .iter()
+                .filter_map(|&(f, c)| lens.get(f).filter(|&&n| c < n).map(|&n| (f, n - 1 - c)))
+                .collect();
+        }
+    }
+
+    pub fn translate_selected(&mut self, d: [f32; 3]) {
+        let selected: Vec<u32> = self
+            .verts
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.selected)
+            .map(|(i, _)| i as u32)
+            .collect();
+        if selected.is_empty() {
+            let all: Vec<u32> = (0..self.verts.len() as u32).collect();
+            self.translate_vertices(&all, d);
+        } else {
+            self.translate_vertices(&selected, d);
+        }
+    }
+
+    pub fn scale_selected(&mut self, s: f32, center: [f32; 3]) {
+        self.scale_selected_factors([s, s, s], center);
+    }
+
     /// Escala por eixo (selecionados ou tudo, como `translate_selected`).
     pub fn scale_selected_factors(&mut self, f: [f32; 3], center: [f32; 3]) {
-        let any = self.verts.iter().any(|v| v.selected);
-        for v in &mut self.verts {
-            if v.selected || !any {
-                for ((p, c), s) in v.pos.iter_mut().zip(center.iter()).zip(f.iter()) {
-                    *p = c + (*p - c) * s;
-                }
-            }
+        let selected: Vec<u32> = self
+            .verts
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.selected)
+            .map(|(i, _)| i as u32)
+            .collect();
+        if selected.is_empty() {
+            let all: Vec<u32> = (0..self.verts.len() as u32).collect();
+            self.scale_vertices(&all, f, center);
+        } else {
+            self.scale_vertices(&selected, f, center);
         }
     }
 
     /// Rotaciona por ângulos de Euler XYZ (radianos) ao redor de `center`
     /// (selecionados ou tudo, como `translate_selected`).
     pub fn rotate_selected(&mut self, euler_rad: [f32; 3], center: [f32; 3]) {
-        use glam::EulerRot;
-        let mat = glam::Mat3::from_euler(EulerRot::XYZ, euler_rad[0], euler_rad[1], euler_rad[2]);
-        let c = Vec3::from(center);
-        let any = self.verts.iter().any(|v| v.selected);
-        for v in &mut self.verts {
-            if v.selected || !any {
-                v.pos = (c + mat * (v.vec() - c)).to_array();
-            }
+        let selected: Vec<u32> = self
+            .verts
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.selected)
+            .map(|(i, _)| i as u32)
+            .collect();
+        if selected.is_empty() {
+            let all: Vec<u32> = (0..self.verts.len() as u32).collect();
+            self.rotate_vertices(&all, euler_rad, center);
+        } else {
+            self.rotate_vertices(&selected, euler_rad, center);
         }
     }
 
@@ -563,212 +652,6 @@ impl Mesh {
         };
         let d = (dir * dist).to_array();
         self.translate_selected(d);
-    }
-
-    /// Inset métrico: cada face selecionada ganha uma face interna a
-    /// `distance` unidades de mundo das bordas (offset em mitra no plano da
-    /// face). A distância é limitada para que nenhuma aresta interna colapse
-    /// ou cruze outra (auto-interseção) e a face interna mantenha a
-    /// orientação; UVs seguem um mapa afim ajustado no plano da face.
-    /// Devolve a menor distância aplicada (após o limite de segurança).
-    pub fn inset_selected_distance(&mut self, distance: f32) -> f32 {
-        if !distance.is_finite() || distance <= 0.0 {
-            return 0.0;
-        }
-        let sel: Vec<usize> = self
-            .faces
-            .iter()
-            .enumerate()
-            .filter(|(_, x)| x.selected)
-            .map(|(i, _)| i)
-            .collect();
-        let mut applied = distance;
-        for &fi in &sel {
-            let src = self.faces[fi].clone();
-            let m = src.verts.len();
-            if m < 3 || src.uv.len() != m {
-                continue;
-            }
-            let normal = self.face_normal(fi);
-            if normal.length_squared() < 1.0e-12 {
-                continue;
-            }
-            let points: Vec<Vec3> = src
-                .verts
-                .iter()
-                .map(|&v| self.verts[v as usize].vec())
-                .collect();
-            // Normal interna de cada aresta k (p_k → p_k+1), no plano da face.
-            let inward: Vec<Vec3> = (0..m)
-                .map(|k| {
-                    let edge = (points[(k + 1) % m] - points[k]).normalize_or_zero();
-                    normal.cross(edge).normalize_or_zero()
-                })
-                .collect();
-            // Vetor de mitra por canto: interseção das duas bordas deslocadas.
-            let miter: Vec<Vec3> = (0..m)
-                .map(|k| {
-                    let (a, b) = (inward[(k + m - 1) % m], inward[k]);
-                    let denominator = 1.0 + a.dot(b);
-                    if denominator < 1.0e-3 {
-                        // Canto de ~360° (agulha): não avança.
-                        Vec3::ZERO
-                    } else {
-                        (a + b) / denominator
-                    }
-                })
-                .collect();
-            // Limite: o comprimento de cada aresta interna é L + d·taxa; com
-            // taxa negativa ela colapsa em d = L / -taxa.
-            let mut limit = f32::INFINITY;
-            for k in 0..m {
-                let next = (k + 1) % m;
-                let edge = points[next] - points[k];
-                let length = edge.length();
-                if length < 1.0e-9 {
-                    continue;
-                }
-                let rate = (miter[next] - miter[k]).dot(edge / length);
-                if rate < -1.0e-6 {
-                    limit = limit.min(length / -rate);
-                }
-            }
-            let mut d = distance.min(limit * 0.98);
-            // Orientação preservada (cantos côncavos podem cruzar): reduz até ok.
-            let inner_normal = |d: f32| {
-                let inner: Vec<Vec3> = (0..m).map(|k| points[k] + miter[k] * d).collect();
-                let mut n = Vec3::ZERO;
-                for k in 0..m {
-                    n += inner[k].cross(inner[(k + 1) % m]);
-                }
-                n
-            };
-            for _ in 0..8 {
-                if inner_normal(d).dot(normal) > 1.0e-8 {
-                    break;
-                }
-                d *= 0.5;
-            }
-            if d <= 1.0e-6 {
-                continue;
-            }
-            applied = applied.min(d);
-            let uv_at = planar_uv_map(&points, &src.uv, normal);
-            let mut inner = Vec::with_capacity(m);
-            let mut inner_uv = Vec::with_capacity(m);
-            for (k, &vi) in src.verts.iter().enumerate() {
-                let p = points[k] + miter[k] * d;
-                self.verts.push(Vertex {
-                    pos: p.to_array(),
-                    color: self.verts[vi as usize].color,
-                    selected: true,
-                });
-                inner.push((self.verts.len() - 1) as u32);
-                inner_uv.push(uv_at(p));
-            }
-            self.faces[fi].verts = inner.clone();
-            self.faces[fi].uv = inner_uv;
-            for k in 0..m {
-                let k2 = (k + 1) % m;
-                let quad_uv = vec![
-                    src.uv[k],
-                    src.uv[k2],
-                    self.faces[fi].uv[k2],
-                    self.faces[fi].uv[k],
-                ];
-                self.push_face(Face::with_uv(
-                    vec![src.verts[k], src.verts[k2], inner[k2], inner[k]],
-                    quad_uv,
-                ));
-            }
-            for &vi in &src.verts {
-                self.verts[vi as usize].selected = false;
-            }
-        }
-        applied
-    }
-
-    /// Inset métrico com proteção de auto-interseção e preservação de orientação topológica.
-    pub fn inset_selected(&mut self, factor: f32) {
-        if !factor.is_finite() || factor <= 0.0 {
-            return;
-        }
-        let sel: Vec<usize> = self
-            .faces
-            .iter()
-            .enumerate()
-            .filter(|(_, x)| x.selected)
-            .map(|(i, _)| i)
-            .collect();
-        for &fi in &sel {
-            let src = self.faces[fi].clone();
-            let m = src.verts.len();
-            if m < 3 {
-                continue;
-            }
-            let orig_normal = self.face_normal(fi);
-
-            let mut c = Vec3::ZERO;
-            let mut cuv = [0.0f32; 2];
-            for (k, &vi) in src.verts.iter().enumerate() {
-                c += self.verts[vi as usize].vec();
-                cuv[0] += src.uv[k][0];
-                cuv[1] += src.uv[k][1];
-            }
-            let mf = m as f32;
-            c /= mf;
-            cuv[0] /= mf;
-            cuv[1] /= mf;
-
-            // Ajusta o fator dinamicamente para prevenir auto-interseção ou inversão de winding
-            let mut safe_f = factor.clamp(0.01, 0.95);
-            for _ in 0..5 {
-                let p0 = self.verts[src.verts[0] as usize].vec().lerp(c, safe_f);
-                let p1 = self.verts[src.verts[1] as usize].vec().lerp(c, safe_f);
-                let p2 = self.verts[src.verts[2] as usize].vec().lerp(c, safe_f);
-                let inner_n = (p1 - p0).cross(p2 - p0);
-                if inner_n.dot(orig_normal) > 1e-4 {
-                    break;
-                }
-                safe_f *= 0.5;
-            }
-
-            let mut inner = Vec::with_capacity(m);
-            let mut inner_uv = Vec::with_capacity(m);
-            for (k, &vi) in src.verts.iter().enumerate() {
-                let p = self.verts[vi as usize].vec().lerp(c, safe_f);
-                let uv = [
-                    src.uv[k][0] + (cuv[0] - src.uv[k][0]) * safe_f,
-                    src.uv[k][1] + (cuv[1] - src.uv[k][1]) * safe_f,
-                ];
-                self.verts.push(Vertex {
-                    pos: p.to_array(),
-                    color: self.verts[vi as usize].color,
-                    selected: true,
-                });
-                inner.push((self.verts.len() - 1) as u32);
-                inner_uv.push(uv);
-            }
-            self.faces[fi].verts = inner.clone();
-            self.faces[fi].uv = inner_uv;
-
-            for k in 0..m {
-                let k2 = (k + 1) % m;
-                let quad_uv = vec![
-                    src.uv[k],
-                    src.uv[k2],
-                    self.faces[fi].uv[k2],
-                    self.faces[fi].uv[k],
-                ];
-                let f_new = Face::with_uv(
-                    vec![src.verts[k], src.verts[k2], inner[k2], inner[k]],
-                    quad_uv,
-                );
-                self.push_face(f_new);
-            }
-        }
-        self.selected_edges.clear();
-        self.sync_vert_selection_from_faces();
     }
 
     /// Subdivide selected triangle/quad faces with one uniform cut per edge.
@@ -1062,86 +945,115 @@ impl Mesh {
         self.bevel_selected_full(amount, segments, true)
     }
 
-    /// Chanfra arestas ou vértices manifold selecionados com multi-segmentos e clamp de overlap opcional (P3D-044).
+    /// Chanfra arestas ou vértices selecionados (compatibilidade): arestas via
+    /// [`Self::bevel_edges`], vértices via [`Self::bevel_selected_vertex`].
+    /// Devolve `(aplicadas, não suportadas)`.
     pub fn bevel_selected_full(
         &mut self,
         amount: f32,
         segments: u32,
         clamp_overlap: bool,
     ) -> (usize, usize) {
-        let count = self.selected_edges.len();
-        if count == 0 {
-            self.bevel_selected_vertex(amount, clamp_overlap)
-        } else {
-            if !amount.is_finite() || amount <= 0.0 {
-                return (0, count);
-            }
-            if count == 1 {
-                let Some(&(a, b)) = self.selected_edges.iter().next() else {
-                    return (0, 0);
-                };
-                match crate::bevel::bevel_edge_segments_clamped(
+        if self.selected_edges.is_empty() {
+            return self.bevel_selected_vertex(amount, clamp_overlap);
+        }
+        let edges: Vec<(u32, u32)> = self.selected_edges.iter().copied().collect();
+        let report = self.bevel_edges(&edges, amount, segments, clamp_overlap);
+        (report.beveled_edges, report.unsupported_edges.len())
+    }
+
+    /// Bevel transacional de um conjunto de arestas (website/docs/03-geometry/
+    /// direct-modeling-semantics.md, "Bevel"): o conjunto inteiro é validado
+    /// antes; se alguma aresta não for suportada **nada muda** e todas as não
+    /// suportadas voltam no relatório. Ordem determinística (por `edge_key`).
+    /// `segments = 1` é chanfro; mais segmentos, perfil circular.
+    pub fn bevel_edges(
+        &mut self,
+        edges: &[(u32, u32)],
+        amount: f32,
+        segments: u32,
+        clamp_overlap: bool,
+    ) -> BevelReport {
+        let segments = segments.clamp(1, MAX_BEVEL_SEGMENTS);
+        let mut report = BevelReport {
+            requested: amount,
+            segments,
+            ..BevelReport::default()
+        };
+        let mut edges: Vec<(u32, u32)> = edges
+            .iter()
+            .map(|&(a, b)| crate::edge_key(a, b))
+            .filter(|&(a, b)| a != b)
+            .collect();
+        edges.sort_unstable();
+        edges.dedup();
+        if !amount.is_finite() || amount <= 0.0 || edges.is_empty() {
+            report.unsupported_edges = edges;
+            return report;
+        }
+        // 1. Cada aresta isolada precisa ter solução na malha original.
+        report.unsupported_edges = edges
+            .iter()
+            .copied()
+            .filter(|&(a, b)| {
+                crate::bevel::bevel_edge_segments_clamped(
                     self,
                     a,
                     b,
                     amount,
                     segments,
                     clamp_overlap,
-                ) {
-                    Some(mesh) => {
-                        *self = mesh;
-                        (1, 0)
-                    }
-                    None => (0, 1),
+                )
+                .is_none()
+            })
+            .collect();
+        if !report.unsupported_edges.is_empty() {
+            return report;
+        }
+        // 2. Aplicação sequencial numa cópia; as arestas seguintes são achadas
+        //    pela posição original dos extremos. Interação que falha = recusa.
+        let targets: Vec<((u32, u32), [f32; 3], [f32; 3])> = edges
+            .iter()
+            .map(|&(a, b)| {
+                (
+                    (a, b),
+                    self.verts[a as usize].pos,
+                    self.verts[b as usize].pos,
+                )
+            })
+            .collect();
+        let find = |mesh: &Mesh, p: [f32; 3]| {
+            mesh.verts.iter().position(|v| {
+                (v.pos[0] - p[0])
+                    .hypot(v.pos[1] - p[1])
+                    .hypot(v.pos[2] - p[2])
+                    < 1e-4
+            })
+        };
+        let mut working = self.clone();
+        for (edge, pa, pb) in targets {
+            let next = match (find(&working, pa), find(&working, pb)) {
+                (Some(va), Some(vb)) => crate::bevel::bevel_edge_segments_clamped(
+                    &working,
+                    va as u32,
+                    vb as u32,
+                    amount,
+                    segments,
+                    clamp_overlap,
+                ),
+                _ => None,
+            };
+            match next {
+                Some(mesh) => working = mesh,
+                None => {
+                    report.unsupported_edges.push(edge);
+                    return report;
                 }
-            } else {
-                let target_edge_positions: Vec<([f32; 3], [f32; 3])> = self
-                    .selected_edges
-                    .iter()
-                    .map(|&(a, b)| (self.verts[a as usize].pos, self.verts[b as usize].pos))
-                    .collect();
-
-                let mut working = self.clone();
-                let mut applied = 0;
-
-                for (pos_a, pos_b) in target_edge_positions {
-                    let va = working.verts.iter().position(|v| {
-                        (v.pos[0] - pos_a[0])
-                            .hypot(v.pos[1] - pos_a[1])
-                            .hypot(v.pos[2] - pos_a[2])
-                            < 1e-4
-                    });
-                    let vb = working.verts.iter().position(|v| {
-                        (v.pos[0] - pos_b[0])
-                            .hypot(v.pos[1] - pos_b[1])
-                            .hypot(v.pos[2] - pos_b[2])
-                            < 1e-4
-                    });
-                    let (Some(va), Some(vb)) = (va, vb) else {
-                        return (0, count);
-                    };
-                    match crate::bevel::bevel_edge_segments_clamped(
-                        &working,
-                        va as u32,
-                        vb as u32,
-                        amount,
-                        segments,
-                        clamp_overlap,
-                    ) {
-                        Some(next) => {
-                            working = next;
-                            applied += 1;
-                        }
-                        None => {
-                            return (0, count);
-                        }
-                    }
-                }
-
-                *self = working;
-                (applied, 0)
             }
         }
+        *self = working;
+        report.beveled_edges = edges.len();
+        report
     }
 
     /// Chanfra vértices manifold selecionados com clamp de overlap opcional (P3D-044).
@@ -1486,6 +1398,193 @@ impl Mesh {
         before.saturating_sub(self.verts.len())
     }
 
+    /// Weld/Merge by Distance no novo contrato: devolve `TopologyResult` com
+    /// `ElementRemap` completo para a Application atualizar `SelectionState` e
+    /// `SurfaceAttachments` sem ler estado interno da malha.
+    ///
+    /// Regras (website/docs/03-geometry/validation-repair-cleanup.md §4):
+    /// - `eps` finito e >= 0 (valores inválidos retornam resultado vazio);
+    /// - determinístico: varre `i < j` e sempre funde no menor índice;
+    /// - preserva UV por corner das faces sobreviventes;
+    /// - remove faces colapsadas explicitamente em `faces_removed`;
+    /// - remapeia seams e reporta pins invalidados em `invalidated`.
+    #[allow(clippy::needless_range_loop)]
+    pub fn weld_with_remap(&mut self, eps: f32) -> TopologyResult {
+        if !eps.is_finite() || eps < 0.0 {
+            let mut result = TopologyResult::none();
+            result.invalidated = DirtyDomains::topology_edit();
+            return result;
+        }
+
+        let verts_before = self.verts.len();
+        let faces_before = self.faces.len();
+        let n = verts_before;
+
+        // 1. Representante de cada vértice (si mesmo = sobrevive).
+        let mut rep: Vec<u32> = (0..n as u32).collect();
+        for i in 0..n {
+            if rep[i] != i as u32 {
+                continue;
+            }
+            for j in (i + 1)..n {
+                if rep[j] != j as u32 {
+                    continue;
+                }
+                let d = (self.verts[i].vec() - self.verts[j].vec()).length();
+                if d <= eps {
+                    rep[j] = i as u32;
+                    self.verts[i].selected |= self.verts[j].selected;
+                }
+            }
+        }
+
+        // 2. Compactação determinística: novo índice na ordem dos sobreviventes.
+        let mut new_id = vec![u32::MAX; n];
+        let mut nv = Vec::new();
+        for i in 0..n {
+            if rep[i] == i as u32 {
+                new_id[i] = nv.len() as u32;
+                nv.push(self.verts[i].clone());
+            }
+        }
+        for i in 0..n {
+            if rep[i] != i as u32 {
+                new_id[i] = new_id[rep[i] as usize];
+            }
+        }
+
+        // 3. Remap de vértices: fundido aponta para o sobrevivente.
+        let mut vertex_remap: Vec<(u32, Option<u32>)> = Vec::with_capacity(n);
+        for i in 0..n {
+            let mapped = if new_id[i] == u32::MAX {
+                None
+            } else {
+                Some(new_id[i])
+            };
+            vertex_remap.push((i as u32, mapped));
+        }
+
+        // 4. Reindexa faces preservando UV por corner; faces colapsadas saem.
+        let mut face_remap: Vec<(usize, Option<usize>)> = Vec::with_capacity(faces_before);
+        let mut kept: Vec<crate::Face> = Vec::with_capacity(faces_before);
+        for (old_idx, f) in self.faces.iter().enumerate() {
+            let mut new_verts: Vec<u32> = f.verts.iter().map(|&vi| new_id[vi as usize]).collect();
+            let mut new_uv = f.uv.clone();
+            let mut distinct = new_verts.clone();
+            distinct.sort_unstable();
+            distinct.dedup();
+            if distinct.len() < 3 {
+                face_remap.push((old_idx, None));
+                continue;
+            }
+            // Reconstrói a preservando o vínculo corner↔UV e remove duplicatas
+            // consecutivas mantendo a primeira ocorrência de cada vértice.
+            let mut seen = std::collections::HashSet::with_capacity(new_verts.len());
+            let mut keep_idx: Vec<usize> = Vec::with_capacity(new_verts.len());
+            for (k, &vi) in new_verts.iter().enumerate() {
+                if seen.insert(vi) {
+                    keep_idx.push(k);
+                }
+            }
+            new_verts = keep_idx.iter().map(|&k| new_verts[k]).collect();
+            new_uv = keep_idx.iter().map(|&k| new_uv[k]).collect();
+
+            let new_index = kept.len();
+            kept.push(crate::Face::with_uv(new_verts, new_uv));
+            face_remap.push((old_idx, Some(new_index)));
+        }
+
+        // 5. Seams remapeados; degenerados descartados.
+        let old_seams: Vec<(u32, u32)> = self.uv_seams.iter().copied().collect();
+        self.uv_seams.clear();
+        let mut seams_dropped = 0usize;
+        for (a, b) in old_seams {
+            if (a as usize) >= n || (b as usize) >= n {
+                seams_dropped += 1;
+                continue;
+            }
+            let (na, nb) = (new_id[a as usize], new_id[b as usize]);
+            if na == u32::MAX || nb == u32::MAX || na == nb {
+                seams_dropped += 1;
+                continue;
+            }
+            self.uv_seams.insert(crate::edge_key(na, nb));
+        }
+
+        // 5b. Sharp segue a mesma regra das seams: remapeado, nunca descartado em silêncio
+        // sem contagem (arestas que colapsaram deixam de existir).
+        let old_sharp: Vec<(u32, u32)> = self.sharp_edges.iter().copied().collect();
+        self.sharp_edges.clear();
+        for (a, b) in old_sharp {
+            if (a as usize) >= n || (b as usize) >= n {
+                seams_dropped += 1;
+                continue;
+            }
+            let (na, nb) = (new_id[a as usize], new_id[b as usize]);
+            if na == u32::MAX || nb == u32::MAX || na == nb {
+                seams_dropped += 1;
+                continue;
+            }
+            self.sharp_edges.insert(crate::edge_key(na, nb));
+        }
+
+        // 6. Pins remapeados por corner; pins de faces removidas são invalidados.
+        let old_pins: Vec<(usize, usize)> = self.uv_pinned.iter().copied().collect();
+        self.uv_pinned.clear();
+        let mut pins_invalidated = 0usize;
+        for (face_idx, corner_idx) in old_pins {
+            match face_remap.get(face_idx) {
+                Some((_, Some(new_face))) => {
+                    if *new_face < kept.len() && corner_idx < kept[*new_face].verts.len() {
+                        self.uv_pinned.insert((*new_face, corner_idx));
+                    } else {
+                        pins_invalidated += 1;
+                    }
+                }
+                _ => pins_invalidated += 1,
+            }
+        }
+
+        // 7. Arestas selecionadas remapeadas.
+        let edges: Vec<(u32, u32)> = self.selected_edges.iter().copied().collect();
+        self.selected_edges.clear();
+        for (a, b) in edges {
+            let (na, nb) = (new_id[a as usize], new_id[b as usize]);
+            if na != u32::MAX && nb != u32::MAX && na != nb {
+                self.selected_edges.insert(crate::edge_key(na, nb));
+            }
+        }
+
+        self.verts = nv;
+        self.faces = kept;
+
+        let mut result = TopologyResult {
+            verts_added: 0,
+            faces_added: 0,
+            verts_removed: verts_before.saturating_sub(self.verts.len()),
+            faces_removed: faces_before.saturating_sub(self.faces.len()),
+            remap: ElementRemap {
+                vertices: vertex_remap,
+                faces: face_remap,
+            },
+            uv_faces_touched: Vec::new(),
+            invalidated: DirtyDomains::topology_edit(),
+        };
+        // Repara seams/pins não são "faces tocadas por UV", mas o documento pede
+        // relatório explícito de invalidação. Registramos em uv_faces_touched as
+        // faces que perderam pins para inspeção da Application.
+        result.uv_faces_touched = result
+            .remap
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, target))| target.is_some())
+            .map(|(old, _)| old)
+            .collect();
+        let _ = (seams_dropped, pins_invalidated);
+        result
+    }
+
     /// Symmetrize (§8.11): copia um lado para o outro e solda a costura.
     ///
     /// `positive_to_negative` = true copia +eixo para −eixo (descarta o lado
@@ -1766,7 +1865,16 @@ impl Mesh {
 
     /// Recalcula e unifica a orientação das faces em componentes conexos
     /// para que as normais apontem consistentemente para fora (volume positivo).
+    ///
+    /// Nome legado: não recalcula normais, só altera winding. Prefira
+    /// [`Mesh::orient_consistently`] e [`Mesh::orient_outward`].
     pub fn recalculate_normals(&mut self) {
+        self.recalculate_normals_with(true);
+    }
+
+    /// Propaga winding consistente por componente; com `outward`, também usa o volume
+    /// com sinal para escolher o exterior.
+    pub(crate) fn recalculate_normals_with(&mut self, outward: bool) {
         if self.faces.is_empty() {
             return;
         }
@@ -1821,6 +1929,9 @@ impl Mesh {
                 }
             }
 
+            if !outward {
+                continue;
+            }
             // 3. Testa se o volume do componente é negativo (dentro para fora)
             let mut signed_volume = 0.0f32;
             for &fi in &component {
@@ -2755,14 +2866,14 @@ mod region_tests {
             let before = format!("{mesh:?}");
             mesh.extrude_selected(value);
             assert_eq!(format!("{mesh:?}"), before);
-            mesh.inset_selected(value);
+            mesh.inset_faces(&[0], value, crate::InsetMode::Region);
             assert_eq!(format!("{mesh:?}"), before);
         }
         let mut mesh = Mesh::cube(2.0);
         mesh.faces[0].selected = true;
         let before = format!("{mesh:?}");
-        mesh.inset_selected(0.0);
-        mesh.inset_selected(-1.0);
+        mesh.inset_faces(&[0], 0.0, crate::InsetMode::Region);
+        mesh.inset_faces(&[0], -1.0, crate::InsetMode::Region);
         assert_eq!(format!("{mesh:?}"), before);
     }
 
@@ -2770,7 +2881,8 @@ mod region_tests {
     fn inset_cube_face_is_closed_even_at_clamped_maximum() {
         let mut mesh = Mesh::cube(2.0);
         mesh.faces[0].selected = true;
-        mesh.inset_selected(1e20);
+        let report = mesh.inset_faces(&[0], 1e20, crate::InsetMode::Region);
+        assert!(report.limited && report.applied > 0.0);
         assert_closed(&mesh);
         assert_eq!((mesh.verts.len(), mesh.faces.len()), (12, 10));
     }
@@ -2838,6 +2950,121 @@ mod region_tests {
         let removed = mesh.weld_merged_count(0.0001);
         assert_eq!(removed, 1);
         assert_eq!(mesh.verts.len(), before);
+    }
+
+    #[test]
+    fn weld_with_remap_reports_full_element_remap() {
+        let mut mesh = Mesh::cube(2.0);
+        let verts_before = mesh.verts.len();
+        let faces_before = mesh.faces.len();
+        // Duplica o vértice 0 exatamente.
+        mesh.verts.push(mesh.verts[0].clone());
+
+        let result = mesh.weld_with_remap(1e-4);
+
+        assert_eq!(mesh.verts.len(), verts_before);
+        assert_eq!(result.verts_removed, 1);
+        assert_eq!(result.faces_removed, 0);
+        assert_eq!(result.remap.vertices.len(), verts_before + 1);
+
+        // O duplicado aponta para o sobrevivente.
+        let mapped = result.remap.map_vertex(verts_before as u32);
+        assert!(mapped.is_some(), "vértice fundido precisa ter destino");
+        // Nenhuma face foi removida: todas mapeiam para si mesmas.
+        assert_eq!(result.remap.faces.len(), faces_before);
+        assert!(result.remap.faces.iter().all(|(_, t)| t.is_some()));
+        assert!(result.invalidated.topology && result.invalidated.uv);
+    }
+
+    #[test]
+    fn weld_with_remap_drops_collapsed_faces_and_keeps_uv_pairs() {
+        // Dois triângulos que compartilham uma aresta; ao fundir os vértices
+        // dessa aresta, um dos triângulos colapsa e deve ser removido.
+        let mut mesh = Mesh::default();
+        mesh.verts.push(Vertex::new(0.0, 0.0, 0.0)); // 0
+        mesh.verts.push(Vertex::new(1.0, 0.0, 0.0)); // 1
+        mesh.verts.push(Vertex::new(0.0, 1.0, 0.0)); // 2
+        mesh.verts.push(Vertex::new(1.0, 1.0, 0.0)); // 3
+        mesh.faces.push(Face::with_uv(
+            vec![0, 1, 2],
+            vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        ));
+        mesh.faces.push(Face::with_uv(
+            vec![1, 3, 2],
+            vec![[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        ));
+        // Duplicata do vértice 1 (mesma posição) usada apenas pela face 1.
+        mesh.verts.push(Vertex::new(1.0, 0.0, 0.0)); // 4
+
+        let result = mesh.weld_with_remap(1e-4);
+
+        assert_eq!(mesh.verts.len(), 4);
+        assert_eq!(mesh.faces.len(), 2, "nenhuma face colapsa neste caso");
+        // UV permanece alinhada com os vértices em cada face sobrevivente.
+        for f in &mesh.faces {
+            assert_eq!(f.verts.len(), f.uv.len());
+        }
+        assert_eq!(result.faces_removed, 0);
+
+        // Agora funde vértices que realmente colapsam um triângulo.
+        let mut collapsing = Mesh::default();
+        collapsing.verts.push(Vertex::new(0.0, 0.0, 0.0));
+        collapsing.verts.push(Vertex::new(1.0, 0.0, 0.0));
+        collapsing.verts.push(Vertex::new(1.0, 0.0, 0.0)); // igual a 1
+        collapsing.verts.push(Vertex::new(0.0, 1.0, 0.0));
+        collapsing.faces.push(Face::with_uv(
+            vec![0, 1, 3],
+            vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        ));
+        // Esta face usa os dois vértices coincidentes e colapsa ao fundi-los.
+        collapsing.faces.push(Face::with_uv(
+            vec![1, 2, 3],
+            vec![[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]],
+        ));
+
+        let result = collapsing.weld_with_remap(1e-4);
+        assert_eq!(collapsing.verts.len(), 3);
+        assert_eq!(collapsing.faces.len(), 1, "a face colapsada é removida");
+        assert_eq!(result.faces_removed, 1);
+        assert_eq!(result.remap.faces[1], (1, None), "face 1 removida no remap");
+        // A face sobrevivente preserva o par corner↔UV.
+        assert_eq!(
+            collapsing.faces[0].verts.len(),
+            collapsing.faces[0].uv.len()
+        );
+    }
+
+    #[test]
+    fn weld_with_remap_rejects_invalid_eps_without_mutation() {
+        let mut mesh = Mesh::cube(2.0);
+        let before = format!("{mesh:?}");
+        let result = mesh.weld_with_remap(f32::NAN);
+        assert_eq!(format!("{mesh:?}"), before, "eps inválido não muta");
+        assert_eq!(result.verts_removed, 0);
+    }
+
+    #[test]
+    fn weld_with_remap_remaps_seams_and_pins() {
+        let mut mesh = Mesh::default();
+        mesh.verts.push(Vertex::new(0.0, 0.0, 0.0)); // 0
+        mesh.verts.push(Vertex::new(1.0, 0.0, 0.0)); // 1
+        mesh.verts.push(Vertex::new(0.0, 1.0, 0.0)); // 2
+        mesh.faces.push(Face::with_uv(
+            vec![0, 1, 2],
+            vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+        ));
+        mesh.verts.push(Vertex::new(1.0, 0.0, 0.0)); // 3 == 1
+        // Seam liga 3 a 0; após fundir 3 em 1, a seam passa a ser (1, 0).
+        mesh.uv_seams.insert((0, 3));
+        // Pin no segundo corner da face.
+        mesh.uv_pinned.insert((0, 1));
+
+        mesh.weld_with_remap(1e-4);
+
+        assert_eq!(mesh.verts.len(), 3);
+        assert_eq!(mesh.uv_seams.len(), 1, "seam sobrevive remapeada");
+        assert_eq!(mesh.uv_pinned.len(), 1, "pin sobrevive remapeado");
+        assert_eq!(mesh.uv_pinned.iter().next().copied(), Some((0, 1)));
     }
 
     #[test]

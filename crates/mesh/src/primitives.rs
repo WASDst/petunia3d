@@ -353,6 +353,7 @@ impl Mesh {
             selected_edges: HashSet::new(),
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
+            sharp_edges: Default::default(),
         };
         m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
@@ -374,6 +375,7 @@ impl Mesh {
             selected_edges: HashSet::new(),
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
+            sharp_edges: Default::default(),
         };
         m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
@@ -490,6 +492,7 @@ impl Mesh {
             selected_edges: HashSet::new(),
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
+            sharp_edges: Default::default(),
         };
         m.layout_uv_charts(DEFAULT_UV_PADDING);
         m
@@ -522,6 +525,7 @@ impl Mesh {
             selected_edges: HashSet::new(),
             uv_seams: HashSet::new(),
             uv_pinned: HashSet::new(),
+            sharp_edges: Default::default(),
         };
         m.layout_uv_charts(DEFAULT_UV_PADDING);
         m

@@ -27,15 +27,30 @@ impl UvIsland {
     }
 }
 
-/// Stretch / overlap / invalid UV report.
-#[derive(Clone, Debug, Default)]
+/// UV Health (website/docs/07-uv/architecture-decision.md, "UV Health").
+///
+/// Somente diagnóstico: UV fora de `0..1` e overlap não são erros (mirrored e
+/// stacked UV são válidos). Stretch é **Area Stretch** por triângulo derivado,
+/// normalizado pela densidade média da malha: `max(r, 1/r) - 1`, em que `r` é a
+/// razão área-UV/área-3D do triângulo dividida pela razão global. `0` = sem
+/// distorção; `1` = o dobro (ou metade) da área esperada.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct UvDiagnostics {
     pub island_count: usize,
+    /// Pares de ilhas cujas caixas UV se cruzam (indício barato; ver `overlap_ratio`).
     pub overlapping_islands: usize,
+    /// Faces sem área UV (ou com UV incompleta).
     pub zero_area_faces: usize,
     pub out_of_range_corners: usize,
+    /// Média do Area Stretch ponderada pela área 3D.
     pub mean_stretch: f32,
     pub max_stretch: f32,
+    /// Fração dos texels cobertos que recebem mais de uma face (`0..=1`).
+    pub overlap_ratio: f32,
+    /// Edges com UV dividida mas sem seam marcada ("UV split without seam").
+    pub splits_without_seam: usize,
+    /// Seams internas cuja UV continua contínua ("Seam without UV split").
+    pub seams_without_split: usize,
 }
 
 impl Mesh {
@@ -123,109 +138,44 @@ impl Mesh {
         true
     }
 
-    /// Costura (stitch / weld) as arestas de costura (seams) no espaço UV, unificando as coordenadas
-    /// UV das faces adjacentes nas arestas compartilhadas da malha 3D.
-    pub fn stitch_uv(&mut self, faces_filter: &HashSet<usize>) -> usize {
-        let all = faces_filter.is_empty();
-        let mut stitched = 0;
-        let edges = self.edges_unique();
-
-        for (u, v) in edges {
-            let adj = self.edge_faces(u, v);
-            if adj.len() == 2 {
-                let (f1_idx, f2_idx) = (adj[0], adj[1]);
-                if (all || faces_filter.contains(&f1_idx))
-                    && (all || faces_filter.contains(&f2_idx))
-                {
-                    let f1 = &self.faces[f1_idx];
-                    let f2 = &self.faces[f2_idx];
-                    let p1_u = f1.verts.iter().position(|&x| x == u);
-                    let p1_v = f1.verts.iter().position(|&x| x == v);
-                    let p2_u = f2.verts.iter().position(|&x| x == u);
-                    let p2_v = f2.verts.iter().position(|&x| x == v);
-
-                    if let (Some(i1_u), Some(i1_v), Some(i2_u), Some(i2_v)) =
-                        (p1_u, p1_v, p2_u, p2_v)
-                        && i1_u < f1.uv.len()
-                        && i1_v < f1.uv.len()
-                        && i2_u < f2.uv.len()
-                        && i2_v < f2.uv.len()
-                    {
-                        let uv1_u = f1.uv[i1_u];
-                        let uv1_v = f1.uv[i1_v];
-                        let uv2_u = f2.uv[i2_u];
-                        let uv2_v = f2.uv[i2_v];
-
-                        let diff_u = (uv1_u[0] - uv2_u[0]).abs() + (uv1_u[1] - uv2_u[1]).abs();
-                        let diff_v = (uv1_v[0] - uv2_v[0]).abs() + (uv1_v[1] - uv2_v[1]).abs();
-
-                        if diff_u > 1e-4 || diff_v > 1e-4 {
-                            let mid_u = [(uv1_u[0] + uv2_u[0]) * 0.5, (uv1_u[1] + uv2_u[1]) * 0.5];
-                            let mid_v = [(uv1_v[0] + uv2_v[0]) * 0.5, (uv1_v[1] + uv2_v[1]) * 0.5];
-
-                            if !self.uv_pinned.contains(&(f1_idx, i1_u)) {
-                                self.faces[f1_idx].uv[i1_u] = mid_u;
-                            }
-                            if !self.uv_pinned.contains(&(f2_idx, i2_u)) {
-                                self.faces[f2_idx].uv[i2_u] = mid_u;
-                            }
-                            if !self.uv_pinned.contains(&(f1_idx, i1_v)) {
-                                self.faces[f1_idx].uv[i1_v] = mid_v;
-                            }
-                            if !self.uv_pinned.contains(&(f2_idx, i2_v)) {
-                                self.faces[f2_idx].uv[i2_v] = mid_v;
-                            }
-                            self.uv_seams.remove(&edge_key(u, v));
-                            stitched += 1;
-                        }
-                    }
-                }
+    /// Edges 3D (`edge_key`) em que faces vizinhas não concordam na UV dos dois
+    /// extremos — onde a UV de fato se divide. Consulta pura: serve para derivar
+    /// seams de chart (Auto Unwrap) e para o diagnóstico "UV split without seam".
+    /// Faces com UV incompleta são ignoradas.
+    pub fn uv_split_edges(&self) -> HashSet<(u32, u32)> {
+        const EPS: f32 = 1.0e-5;
+        // edge_key → UVs (no extremo menor, no extremo maior) de cada face.
+        let mut sides: HashMap<(u32, u32), Vec<([f32; 2], [f32; 2])>> = HashMap::new();
+        for face in &self.faces {
+            let n = face.verts.len();
+            if n < 3 || face.uv.len() != n {
+                continue;
+            }
+            for k in 0..n {
+                let (a, b) = (face.verts[k], face.verts[(k + 1) % n]);
+                let (uv_a, uv_b) = (face.uv[k], face.uv[(k + 1) % n]);
+                let side = if a <= b { (uv_a, uv_b) } else { (uv_b, uv_a) };
+                sides.entry(edge_key(a, b)).or_default().push(side);
             }
         }
-        stitched
+        let differs =
+            |p: [f32; 2], q: [f32; 2]| (p[0] - q[0]).abs() > EPS || (p[1] - q[1]).abs() > EPS;
+        sides
+            .into_iter()
+            .filter(|(_, s)| {
+                s.iter()
+                    .skip(1)
+                    .any(|o| differs(o.0, s[0].0) || differs(o.1, s[0].1))
+            })
+            .map(|(edge, _)| edge)
+            .collect()
     }
 
-    /// Suavização e relaxamento iterativo (Laplacian smoothing) das coordenadas UV não fixadas
-    /// para minimizar distorção e estiramento de texels.
-    pub fn relax_uv(&mut self, faces_filter: &HashSet<usize>, iterations: usize) -> usize {
-        let all = faces_filter.is_empty();
-        let iters = iterations.clamp(1, 20);
-        let mut relaxed = 0;
-
-        for _ in 0..iters {
-            let mut new_uvs: Vec<(usize, usize, [f32; 2])> = Vec::new();
-
-            for (fi, face) in self.faces.iter().enumerate() {
-                if all || faces_filter.contains(&fi) {
-                    let m = face.uv.len();
-                    if m >= 3 {
-                        for c in 0..m {
-                            if !self.uv_pinned.contains(&(fi, c)) {
-                                let prev = face.uv[(c + m - 1) % m];
-                                let next = face.uv[(c + 1) % m];
-                                let curr = face.uv[c];
-                                let target = [(prev[0] + next[0]) * 0.5, (prev[1] + next[1]) * 0.5];
-                                let smoothed = [
-                                    curr[0] * 0.5 + target[0] * 0.5,
-                                    curr[1] * 0.5 + target[1] * 0.5,
-                                ];
-                                new_uvs.push((fi, c, smoothed));
-                            }
-                        }
-                        relaxed += 1;
-                    }
-                }
-            }
-
-            for (fi, c, uv) in new_uvs {
-                self.faces[fi].uv[c] = uv;
-            }
-        }
-        relaxed
-    }
-
-    /// Faces sharing a non-seam UV edge form an island.
+    /// Ilha UV derivada: faces ligadas por edges sem seam **e** com UV contínua
+    /// nos dois extremos (website/docs/07-uv/architecture-decision.md, "Islands").
+    /// Uma divisão de UV sem seam também separa ilhas; o diagnóstico a reporta.
     pub fn uv_islands(&self) -> Vec<UvIsland> {
+        let splits = self.uv_split_edges();
         let mut adj: HashMap<usize, Vec<usize>> = HashMap::new();
         let mut edge_faces: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
         for (fi, face) in self.faces.iter().enumerate() {
@@ -236,13 +186,16 @@ impl Mesh {
             }
         }
         for (edge, faces) in &edge_faces {
-            if self.uv_seams.contains(edge) {
+            if self.uv_seams.contains(edge) || splits.contains(edge) {
                 continue;
             }
             if faces.len() == 2 {
                 adj.entry(faces[0]).or_default().push(faces[1]);
                 adj.entry(faces[1]).or_default().push(faces[0]);
             }
+        }
+        for list in adj.values_mut() {
+            list.sort_unstable();
         }
         let mut seen = vec![false; self.faces.len()];
         let mut islands = Vec::new();
@@ -284,40 +237,6 @@ impl Mesh {
         islands
     }
 
-    /// Pack islands into 0..1 with padding, no overlaps.
-    pub fn pack_uv_islands(&mut self, padding: f32) -> usize {
-        let padding = padding.clamp(0.0, 0.25);
-        let mut islands = self.uv_islands();
-        if islands.is_empty() {
-            return 0;
-        }
-        islands.sort_by(|a, b| {
-            b.area()
-                .partial_cmp(&a.area())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let n = islands.len();
-        let cols = (n as f32).sqrt().ceil().max(1.0) as usize;
-        let cell = (1.0 / cols as f32).max(1e-6);
-        let usable = (cell - padding * 2.0).max(1e-6);
-        for (i, island) in islands.iter().enumerate() {
-            let col = i % cols;
-            let row = i / cols;
-            let ox = col as f32 * cell + padding;
-            let oy = row as f32 * cell + padding;
-            let w = (island.max[0] - island.min[0]).max(1e-6);
-            let h = (island.max[1] - island.min[1]).max(1e-6);
-            let s = (usable / w).min(usable / h);
-            for &fi in &island.faces {
-                for uv in &mut self.faces[fi].uv {
-                    uv[0] = ox + (uv[0] - island.min[0]) * s;
-                    uv[1] = oy + (uv[1] - island.min[1]) * s;
-                }
-            }
-        }
-        n
-    }
-
     /// Average texels-per-unit for selected (or all) faces.
     pub fn texel_density(&self, texture_w: u32, selected_only: bool) -> f32 {
         let (mut world_area, mut uv_area) = (0.0f32, 0.0f32);
@@ -346,6 +265,80 @@ impl Mesh {
         } else {
             (uv_area / world_area).sqrt() * texture_w as f32
         }
+    }
+
+    /// Texel density em px/unidade de mundo das faces (`faces` vazio = todas),
+    /// para uma textura `[largura, altura]`: `sqrt(área UV / área 3D) ·
+    /// sqrt(largura · altura)` — vale também para texturas não quadradas
+    /// (website/docs/07-uv/architecture-decision.md, "Texel Density").
+    pub fn texel_density_px(&self, faces: &HashSet<usize>, texture_size: [u32; 2]) -> f32 {
+        let (world, uv) = self.uv_world_areas(|fi| faces.is_empty() || faces.contains(&fi));
+        if world <= 1e-8 {
+            return 0.0;
+        }
+        (uv / world).sqrt() * ((texture_size[0] as f32) * (texture_size[1] as f32)).sqrt()
+    }
+
+    /// Set Density: escala cada ilha que toca `faces` (vazio = todas) em torno
+    /// do centro da própria caixa UV até `target_px` px/unidade. Ilhas sem área
+    /// são ignoradas. Retorna as ilhas alteradas.
+    pub fn set_texel_density(
+        &mut self,
+        faces: &HashSet<usize>,
+        texture_size: [u32; 2],
+        target_px: f32,
+    ) -> usize {
+        if !target_px.is_finite() || target_px <= 0.0 {
+            return 0;
+        }
+        let mut changed = 0;
+        for island in self.uv_islands() {
+            if !faces.is_empty() && !island.faces.iter().any(|f| faces.contains(f)) {
+                continue;
+            }
+            let members: HashSet<usize> = island.faces.iter().copied().collect();
+            let current = self.texel_density_px(&members, texture_size);
+            if current <= 1e-6 {
+                continue;
+            }
+            let scale = target_px / current;
+            if (scale - 1.0).abs() < 1e-5 {
+                continue;
+            }
+            let center = island.center();
+            for &fi in &island.faces {
+                for uv in &mut self.faces[fi].uv {
+                    uv[0] = center[0] + (uv[0] - center[0]) * scale;
+                    uv[1] = center[1] + (uv[1] - center[1]) * scale;
+                }
+            }
+            changed += 1;
+        }
+        changed
+    }
+
+    /// Soma (área 3D, área UV) dos triângulos derivados das faces aceitas.
+    fn uv_world_areas(&self, accept: impl Fn(usize) -> bool) -> (f32, f32) {
+        let (mut world_area, mut uv_area) = (0.0f32, 0.0f32);
+        for (fi, face) in self.faces.iter().enumerate() {
+            if !accept(fi)
+                || face.uv.len() != face.verts.len()
+                || face.verts.iter().any(|v| *v as usize >= self.verts.len())
+            {
+                continue;
+            }
+            for corners in self.face_triangle_corners(fi) {
+                let [a, b, c] = corners.map(|j| self.verts[face.verts[j] as usize].vec());
+                let world = (b - a).cross(c - a).length() * 0.5;
+                let [ua, ub, uc] = corners.map(|j| glam::Vec2::from_array(face.uv[j]));
+                let uv = (ub - ua).perp_dot(uc - ua).abs() * 0.5;
+                if world > 1e-8 && world.is_finite() && uv.is_finite() {
+                    world_area += world;
+                    uv_area += uv;
+                }
+            }
+        }
+        (world_area, uv_area)
     }
 
     pub fn normalize_texel_density(&mut self, texture_w: u32, target: f32) {
@@ -466,6 +459,23 @@ impl Mesh {
         view_y: glam::Vec3,
         view_origin: glam::Vec3,
     ) {
+        let positions: Vec<glam::Vec3> = self.verts.iter().map(|v| v.vec()).collect();
+        self.project_from_view_positions(&positions, view_x, view_y, view_origin);
+    }
+
+    /// Projeção de vista sobre `positions` (uma por vértice, ex.: posições em
+    /// mundo de um objeto transformado), gravando UV nos cantos autorais.
+    /// `positions` com tamanho diferente de `verts` não faz nada.
+    pub fn project_from_view_positions(
+        &mut self,
+        positions: &[glam::Vec3],
+        view_x: glam::Vec3,
+        view_y: glam::Vec3,
+        view_origin: glam::Vec3,
+    ) {
+        if positions.len() != self.verts.len() {
+            return;
+        }
         let vx = view_x.normalize_or_zero();
         let vy = view_y.normalize_or_zero();
         if vx.length_squared() < 1e-8 || vy.length_squared() < 1e-8 {
@@ -474,8 +484,8 @@ impl Mesh {
         }
         let mut us = Vec::new();
         let mut vs = Vec::new();
-        for v in &self.verts {
-            let p = v.vec() - view_origin;
+        for &position in positions {
+            let p = position - view_origin;
             us.push(p.dot(vx));
             vs.push(p.dot(vy));
         }
@@ -498,6 +508,7 @@ impl Mesh {
     }
 
     pub fn uv_diagnostics(&self) -> UvDiagnostics {
+        const ZERO_UV_AREA: f32 = 1.0e-10;
         let islands = self.uv_islands();
         let mut overlapping = 0;
         for i in 0..islands.len() {
@@ -512,49 +523,86 @@ impl Mesh {
                 }
             }
         }
+
+        // (área 3D, área UV) de cada triângulo derivado com UV completa.
+        let mut triangles: Vec<(f32, f32)> = Vec::new();
         let mut zero_area = 0;
-        let mut oor = 0;
-        let mut stretch_sum = 0.0;
-        let mut stretch_max: f32 = 0.0;
-        let mut stretch_n = 0.0;
-        for face in &self.faces {
-            if face.uv.len() < 3 || face.verts.len() < 3 {
+        let mut out_of_range = 0;
+        for (fi, face) in self.faces.iter().enumerate() {
+            if face.verts.len() < 3 || face.uv.len() != face.verts.len() {
                 zero_area += 1;
                 continue;
             }
-            for uv in &face.uv {
-                if !(0.0..=1.0).contains(&uv[0]) || !(0.0..=1.0).contains(&uv[1]) {
-                    oor += 1;
+            out_of_range += face
+                .uv
+                .iter()
+                .filter(|uv| !(0.0..=1.0).contains(&uv[0]) || !(0.0..=1.0).contains(&uv[1]))
+                .count();
+            let mut face_uv_area = 0.0;
+            for corners in self.face_triangle_corners(fi) {
+                let [a, b, c] = corners.map(|k| self.verts[face.verts[k] as usize].vec());
+                let world = (b - a).cross(c - a).length() * 0.5;
+                let [ua, ub, uc] = corners.map(|k| glam::Vec2::from_array(face.uv[k]));
+                let uv = (ub - ua).perp_dot(uc - ua).abs() * 0.5;
+                if world.is_finite() && uv.is_finite() {
+                    face_uv_area += uv;
+                    triangles.push((world, uv));
                 }
             }
-            let a = self.verts[face.verts[0] as usize].vec();
-            let b = self.verts[face.verts[1] as usize].vec();
-            let world = (b - a).length().max(1e-8);
-            let uv_len = (glam::Vec2::from_array(face.uv[1]) - glam::Vec2::from_array(face.uv[0]))
-                .length()
-                .max(1e-8);
-            let s = (uv_len / world - 1.0).abs();
-            stretch_sum += s;
-            stretch_max = stretch_max.max(s);
-            stretch_n += 1.0;
-            let ua = glam::Vec2::from_array(face.uv[0]);
-            let ub = glam::Vec2::from_array(face.uv[1]);
-            let uc = glam::Vec2::from_array(face.uv[2]);
-            if (ub - ua).perp_dot(uc - ua).abs() < 1e-10 {
+            if face_uv_area < ZERO_UV_AREA {
                 zero_area += 1;
             }
         }
+
+        let (world_total, uv_total) = triangles
+            .iter()
+            .fold((0.0f32, 0.0f32), |(w, u), t| (w + t.0, u + t.1));
+        let (mut stretch_sum, mut stretch_max, mut stretch_weight) = (0.0f32, 0.0f32, 0.0f32);
+        if world_total > 1.0e-12 && uv_total > ZERO_UV_AREA {
+            let density = uv_total / world_total;
+            for &(world, uv) in &triangles {
+                if world <= 1.0e-12 || uv < ZERO_UV_AREA {
+                    continue; // contado em zero_area_faces, não como stretch infinito
+                }
+                let r = (uv / world) / density;
+                let stretch = r.max(1.0 / r) - 1.0;
+                stretch_sum += stretch * world;
+                stretch_weight += world;
+                stretch_max = stretch_max.max(stretch);
+            }
+        }
+
+        let splits = self.uv_split_edges();
+        let mut edge_use: HashMap<(u32, u32), usize> = HashMap::new();
+        for face in &self.faces {
+            let n = face.verts.len();
+            for k in 0..n {
+                *edge_use
+                    .entry(edge_key(face.verts[k], face.verts[(k + 1) % n]))
+                    .or_default() += 1;
+            }
+        }
+        let seams_without_split = self
+            .uv_seams
+            .iter()
+            .filter(|e| edge_use.get(e).is_some_and(|&n| n >= 2) && !splits.contains(e))
+            .count();
+        let splits_without_seam = splits.iter().filter(|e| !self.uv_seams.contains(e)).count();
+
         UvDiagnostics {
             island_count: islands.len(),
             overlapping_islands: overlapping,
             zero_area_faces: zero_area,
-            out_of_range_corners: oor,
-            mean_stretch: if stretch_n == 0.0 {
-                0.0
+            out_of_range_corners: out_of_range,
+            mean_stretch: if stretch_weight > 0.0 {
+                stretch_sum / stretch_weight
             } else {
-                stretch_sum / stretch_n
+                0.0
             },
             max_stretch: stretch_max,
+            overlap_ratio: self.uv_overlap_ratio(),
+            splits_without_seam,
+            seams_without_split,
         }
     }
 }
@@ -633,18 +681,81 @@ mod tests {
     }
 
     #[test]
+    fn area_stretch_ignores_uniform_scale_and_measures_distortion() {
+        let mut m = Mesh::plane(2.0);
+        m.faces[0].uv = vec![[0.0, 0.0], [0.1, 0.0], [0.1, 0.1], [0.0, 0.1]];
+        let d = m.uv_diagnostics();
+        assert!(d.mean_stretch.abs() < 1e-4 && d.max_stretch.abs() < 1e-4);
+
+        // Dois quads lado a lado; um deles recebe o dobro da área UV.
+        let mut two = Mesh::plane(2.0);
+        let mut other = Mesh::plane(2.0);
+        other.translate_selected([5.0, 0.0, 0.0]);
+        two.join(&other);
+        two.faces[0].uv = vec![[0.0, 0.0], [0.2, 0.0], [0.2, 0.2], [0.0, 0.2]];
+        two.faces[1].uv = vec![[0.5, 0.0], [0.7, 0.0], [0.7, 0.4], [0.5, 0.4]];
+        let d = two.uv_diagnostics();
+        assert!(d.max_stretch > 0.3, "max_stretch={}", d.max_stretch);
+        assert_eq!(d.zero_area_faces, 0);
+    }
+
+    #[test]
+    fn diagnostics_report_splits_and_seams_that_disagree() {
+        let mut m = Mesh::cube(2.0);
+        m.project_cube();
+        let base = m.uv_diagnostics();
+        assert_eq!(base.seams_without_split, 0);
+
+        // Sem seams marcadas, toda divisão de UV aparece como "split without seam";
+        // marcar exatamente essas edges zera o diagnóstico.
+        let splits = m.uv_split_edges();
+        assert_eq!(base.splits_without_seam, splits.len());
+        m.uv_seams.extend(splits.iter().copied());
+        assert_eq!(m.uv_diagnostics().splits_without_seam, 0);
+    }
+
+    #[test]
+    fn uv_split_without_seam_separates_islands() {
+        let mut m = Mesh::plane(2.0);
+        let mut other = Mesh::plane(2.0);
+        other.translate_selected([2.0, 0.0, 0.0]);
+        m.join(&other);
+        let _remap = m.weld_with_remap(1e-4);
+        assert_eq!(m.faces.len(), 2);
+        let shared = m.uv_split_edges();
+        // Os planos vieram com UVs independentes (0..1 cada): a edge comum se divide.
+        assert!(!shared.is_empty());
+        assert_eq!(m.uv_islands().len(), 2);
+    }
+
+    #[test]
     fn test_uv_relax_smooths_corners() {
         let mut m = Mesh::cube(2.0);
         m.project_cube();
         let filter = HashSet::new();
         let relaxed = m.relax_uv(&filter, 5);
-        assert_eq!(relaxed, m.faces.len() * 5);
+        assert_eq!(relaxed, m.faces.len());
     }
 }
 
 #[cfg(test)]
 mod density_tests {
     use crate::Mesh;
+    #[test]
+    fn density_px_uses_both_texture_axes_and_set_density_hits_the_target() {
+        use std::collections::HashSet;
+        let mut mesh = Mesh::plane(2.0);
+        let all = HashSet::new();
+        let square = mesh.texel_density_px(&all, [512, 512]);
+        assert!((square - mesh.texel_density(512, false)).abs() < 1e-3);
+        // 1024×256 tem a mesma quantidade de pixels que 512².
+        assert!((mesh.texel_density_px(&all, [1024, 256]) - square).abs() < 1e-3);
+
+        assert_eq!(mesh.set_texel_density(&all, [512, 512], 64.0), 1);
+        assert!((mesh.texel_density_px(&all, [512, 512]) - 64.0).abs() < 1e-2);
+        assert_eq!(mesh.set_texel_density(&all, [512, 512], f32::NAN), 0);
+    }
+
     #[test]
     fn density_scales_with_linear_resolution_and_inverse_world_scale() {
         let mut mesh = Mesh::plane(2.0);

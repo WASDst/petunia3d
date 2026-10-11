@@ -100,6 +100,11 @@ impl Mesh {
             self.uv_seams.insert(edge_key(a, new_index));
             self.uv_seams.insert(edge_key(new_index, b));
         }
+        // Dividir uma aresta Sharp mantém as duas metades Sharp.
+        if self.sharp_edges.remove(&edge_key(a, b)) {
+            self.sharp_edges.insert(edge_key(a, new_index));
+            self.sharp_edges.insert(edge_key(new_index, b));
+        }
         self.selected_edges.remove(&edge_key(a, b));
         Ok(new_index)
     }

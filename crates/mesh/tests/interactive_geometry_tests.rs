@@ -100,8 +100,9 @@ fn test_guarded_inset_extreme_factor_stability() {
     let mut mesh = Mesh::cube(2.0);
     mesh.faces[0].selected = true;
 
-    // Fator extremo que em implementações ingênuas causaria auto-interseção e inversão de normais
-    mesh.inset_selected(5.0);
+    // Distância extrema que em implementações ingênuas causaria auto-interseção e inversão de normais
+    let inset = mesh.inset_faces(&[0], 5.0, petunia_mesh::InsetMode::Region);
+    assert!(inset.limited, "o clamp precisa ser reportado");
 
     let report = mesh.validate_topology();
     assert!(

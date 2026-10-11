@@ -33,6 +33,7 @@ fn triangle_cut_count_produces_n_squared_triangles() {
         selected_edges: HashSet::new(),
         uv_seams: HashSet::new(),
         uv_pinned: HashSet::new(),
+        sharp_edges: Default::default(),
     };
 
     mesh.subdivide_selected_cuts(2);
@@ -67,6 +68,7 @@ fn adjacent_selected_quads_share_edge_split_vertices() {
         selected_edges: HashSet::new(),
         uv_seams: HashSet::new(),
         uv_pinned: HashSet::new(),
+        sharp_edges: Default::default(),
     };
     mesh.select_all();
 
