@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-10",
+  "updated": "2026-10-11",
   "phases": [
     {
       "id": "integrity",
@@ -117,104 +117,124 @@
       "summary": "Separação de DocumentSession, EditorSession, ViewportSession, ToolSessionManager e SelectionState implementada em crates/core/src/state.rs, selection.rs e lib.rs. DocumentSession isola documento, histórico e caminho de arquivo sem carregar câmera/UI/seleção. Imagens de referência (RefAxis, ReferenceImage) migradas para petunia_project como dados autorais do Document (Project::references). ToolSessionManager estruturado com ActiveTool e ActiveToolSessionKind. ViewportSession reúne câmera, shading, grid, overlays, snapping, transform orientation e pivot. Métodos de acesso e CommandContext integrados mantendo compatibilidade retroativa. Testes unitários em state_decomposition_tests.rs; todos os testes de petunia_mesh, petunia_core e petunia_project passam com clippy -D warnings e fmt."
     },
     "r01-render-frame": {
-      "revision": "d381ce5",
+      "revision": "af8112d",
       "document": "04-renderer/architecture-decision.md",
-      "summary": "petunia_render::frame define RenderFrameInput/RenderObject/RenderMesh; SceneExtractor é o adaptador único AppState -> frame; GlRenderer (glow, GL 3.3) consome só o frame e mora em petunia_render; render-gl ficou só com bootstrap glutin/winit. cargo check pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "petunia_render::frame define RenderFrameInput/RenderObject/RenderMesh; SceneExtractor é o adaptador único AppState -> frame; GlRenderer (glow, GL 3.3) consome só o frame e mora em petunia_render; render-gl ficou só com bootstrap glutin/winit. cargo check pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "d381ce5"
     },
     "r02-gl-viewport": {
-      "revision": "1d59473",
+      "revision": "af8112d",
       "document": "04-renderer/architecture-decision.md",
-      "summary": "ui-slint::viewport_gl desenha o frame num FBO (gl::GlTarget) dentro do rendering notifier do Slint/FemtoVG e importa a textura sem glReadPixels, restaurando o estado GL do host; fallback software. WGPU virou a feature opcional wgpu-viewport. Pendente: resize/HiDPI/picking não verificados em GPU. cargo check pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "ui-slint::viewport_gl desenha o frame num FBO (gl::GlTarget) dentro do rendering notifier do Slint/FemtoVG e importa a textura sem glReadPixels, restaurando o estado GL do host; fallback software. WGPU virou a feature opcional wgpu-viewport. Pendente: resize/HiDPI/picking não verificados em GPU. cargo check pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "1d59473"
     },
     "a02-application-host": {
-      "revision": "5209b7d",
+      "revision": "6b030e6",
       "document": "02-application/commands-events-services.md",
-      "summary": "Novo crate petunia_application (Application com Clock injetado, run_action sem tipos winit/egui, construtor sem env/relógio/locks/filesystem); petunia_app::DesktopHost substitui Core e faz bootstrap de idioma, recovery, lock e watcher. Pendente: filesystem/watchers como serviços injetados e aposentar ModuleRegistry. cargo check --workspace pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "Novo crate petunia_application (Application com Clock injetado, run_action sem tipos winit/egui, construtor sem env/relógio/locks/filesystem); petunia_app::DesktopHost substitui Core e faz bootstrap de idioma, recovery, lock e watcher. Pendente: filesystem/watchers como serviços injetados e aposentar ModuleRegistry. cargo check --workspace pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "5209b7d"
     },
     "a04-command-context": {
-      "revision": "3c16a01",
+      "revision": "a931c70",
       "document": "02-application/commands-events-services.md",
-      "summary": "Command::execute recebe CommandContext restrito (sem UiState/RenderResources/dispatcher) e devolve CommandEffects; can_execute lê EditorView; CommandDispatcher::run é a fronteira single-writer. ProjectState.is_dirty removido: UndoStack é a única autoridade de dirty. cargo check --workspace pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "Command::execute recebe CommandContext restrito (sem UiState/RenderResources/dispatcher) e devolve CommandEffects; can_execute lê EditorView; CommandDispatcher::run é a fronteira single-writer. ProjectState.is_dirty removido: UndoStack é a única autoridade de dirty. cargo check --workspace pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "3c16a01"
     },
     "g18-p02-p03-shading-savepoint": {
-      "revision": "1f2408d",
+      "revision": "9c79f99",
       "document": "03-geometry/normals-shading-sharp-edges.md",
-      "summary": "mesh::shading com SurfaceShading por objeto e compute_corner_normals como algoritmo único (render, glTF e OBJ); Sharp edges autorais com remap e comandos undoable Mark/Clear Sharp, Smooth by Angle, Orient, Flip. Save points do UndoStack fiéis a edições posteriores; política de autosave separada de AutosaveStorage e coalescida por revisão. cargo check --workspace pass; testes escritos, Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "mesh::shading com SurfaceShading por objeto e compute_corner_normals como algoritmo único (render, glTF e OBJ); Sharp edges autorais com remap e comandos undoable Mark/Clear Sharp, Smooth by Angle, Orient, Flip. Save points do UndoStack fiéis a edições posteriores; política de autosave separada de AutosaveStorage e coalescida por revisão. cargo check --workspace pass; testes escritos, Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "1f2408d"
     },
     "g17-explicit-cleanup": {
-      "revision": "468a130",
+      "revision": "9c79f99",
       "document": "03-geometry/validation-repair-cleanup.md",
-      "summary": "Operações explícitas e determinísticas de degenerate faces, orphan vertices e Limited Dissolve conservador com TopologyResult/ElementRemap. Pendente: contour cleanup, adaptive resample. cargo check pass; testes escritos, Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "Operações explícitas e determinísticas de degenerate faces, orphan vertices e Limited Dissolve conservador com TopologyResult/ElementRemap. Pendente: contour cleanup, adaptive resample. cargo check pass; testes escritos, Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "468a130"
     },
     "u04-bridge-split": {
-      "revision": "9cd654a",
+      "revision": "af8112d",
       "document": "09-ui/slint-rescue-plan.md",
-      "summary": "lib.rs (16.8k -> ~1.6k linhas) distribuído em 33 módulos src/bridge/; connect_callbacks e sync_window_properties divididos em src/callbacks/ (d4869f2 divide view_model em projeções por área). Movimento puro. cargo check --lib e fmt pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run."
+      "summary": "lib.rs (16.8k -> ~1.6k linhas) distribuído em 33 módulos src/bridge/; connect_callbacks e sync_window_properties divididos em src/callbacks/ (d4869f2 divide view_model em projeções por área). Movimento puro. cargo check --lib e fmt pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
+      "origin_sha": "9cd654a"
     },
     "g01-topology-preserving-unwrap": {
-      "revision": "d0d6731",
+      "revision": "9c79f99",
       "document": "07-uv/architecture-decision.md",
-      "summary": "unwrap_fallback roda o xatlas sobre a triangulação derivada (Mesh::face_triangle_corners) com proveniência triângulo-canto → FaceCorner e devolve UV por canto sem chamar mesh.triangulate(): quads/n-gons e contagem de faces preservados. Política estrita: face cujos triângulos caem em charts diferentes, ou com canto sem UV, aborta com FaceSplitAcrossCharts. Todas as UVs são calculadas antes da escrita (rollback em erro). Seams de chart derivadas por Mesh::uv_split_edges e somadas às manuais. Pendente: pins não são respeitados pelo provider. cargo check -p petunia_mesh --tests pass; testes escritos, not run."
+      "summary": "unwrap_fallback roda o xatlas sobre a triangulação derivada (Mesh::face_triangle_corners) com proveniência triângulo-canto → FaceCorner e devolve UV por canto sem chamar mesh.triangulate(): quads/n-gons e contagem de faces preservados. Política estrita: face cujos triângulos caem em charts diferentes, ou com canto sem UV, aborta com FaceSplitAcrossCharts. Todas as UVs são calculadas antes da escrita (rollback em erro). Seams de chart derivadas por Mesh::uv_split_edges e somadas às manuais. Pendente: pins não são respeitados pelo provider. cargo check -p petunia_mesh --tests pass; testes escritos, not run.",
+      "origin_sha": "d0d6731"
     },
     "v02-uv-geometry-ops": {
-      "revision": "c1a3463",
+      "revision": "9c79f99",
       "document": "07-uv/architecture-decision.md",
-      "summary": "Geometry de V02 em crates/mesh: uv_pack (shelf packer único, padding em pixels, rotação 90°, selected-only, ilhas com pin fixas, determinístico, sem overlap), uv_relax (ARAP leve por ilha respeitando pins/seams, preserva escala), uv_diagnostics com Area Stretch normalizado/overlap_ratio/splits_without_seam/seams_without_split, ilhas por continuidade UV, project_cylindrical/project_spherical. Pendente: integração Application com TextureResource/canal ativo. Não compilado após as últimas edições; testes escritos, not run."
+      "summary": "Geometry de V02 em crates/mesh: uv_pack (shelf packer único, padding em pixels, rotação 90°, selected-only, ilhas com pin fixas, determinístico, sem overlap), uv_relax (ARAP leve por ilha respeitando pins/seams, preserva escala), uv_diagnostics com Area Stretch normalizado/overlap_ratio/splits_without_seam/seams_without_split, ilhas por continuidade UV, project_cylindrical/project_spherical. Pendente: integração Application com TextureResource/canal ativo. Não compilado após as últimas edições; testes escritos, not run.",
+      "origin_sha": "c1a3463"
     },
     "v01-uv-selection-sync": {
-      "revision": "14e95a6",
+      "revision": "a931c70",
       "document": "07-uv/architecture-decision.md",
-      "summary": "UvSelectionState (cantos canônicos; modos Corner/Edge/Face/Island) substitui uv_selected por faces; Sync Selection explícito (ligado por padrão para preservar o fluxo atual) com 3D→UV em CommandContext::sync_selection e UV→3D em uv_click; UvTransformCmd (um gesto = um Undo, pins movidos por transform direto) e UvSplitCmd; Stitch stationary/moving e Split UV na mesh (8f97f2e); module-uv sem espelhamento por evento; ponte Slint despacha comandos. Pendente: controles de modo/Sync na UI (V03), preview modal Enter/Esc, pins tipados no formato persistido (G03). Não compilado; testes escritos, not run."
+      "summary": "UvSelectionState (cantos canônicos; modos Corner/Edge/Face/Island) substitui uv_selected por faces; Sync Selection explícito (ligado por padrão para preservar o fluxo atual) com 3D→UV em CommandContext::sync_selection e UV→3D em uv_click; UvTransformCmd (um gesto = um Undo, pins movidos por transform direto) e UvSplitCmd; Stitch stationary/moving e Split UV na mesh (8f97f2e); module-uv sem espelhamento por evento; ponte Slint despacha comandos. Pendente: controles de modo/Sync na UI (V03), preview modal Enter/Esc, pins tipados no formato persistido (G03). Não compilado; testes escritos, not run.",
+      "origin_sha": "14e95a6"
     },
     "v02-uv-texture-integration": {
-      "revision": "de53db2",
+      "revision": "c22be63",
       "document": "07-uv/architecture-decision.md",
-      "summary": "Pack com padding em pixels convertido pela resolução da textura ativa (Asset::texture_size, Canvas::DEFAULT_SIDE único), só ilhas da seleção UV, rotação/pins; texel_density_px com sqrt(w·h) e Set Density (UvSetTexelDensityCmd); DTO de UV Health com overlap_ratio/splits_without_seam/seams_without_split. Junto com c1a3463 fecha o checkpoint de operações; 'canal' ainda é a textura única do asset até M01. Não compilado; testes escritos, not run."
+      "summary": "Pack com padding em pixels convertido pela resolução da textura ativa (Asset::texture_size, Canvas::DEFAULT_SIDE único), só ilhas da seleção UV, rotação/pins; texel_density_px com sqrt(w·h) e Set Density (UvSetTexelDensityCmd); DTO de UV Health com overlap_ratio/splits_without_seam/seams_without_split. Junto com c1a3463 fecha o checkpoint de operações; 'canal' ainda é a textura única do asset até M01. Não compilado; testes escritos, not run.",
+      "origin_sha": "de53db2"
     },
     "p03-autosave-generations": {
-      "revision": "85dc613",
+      "revision": "c22be63",
       "document": "11-project/project-persistence.md",
-      "summary": "Gerações de autosave por project_id (documentos sem arquivo em temp/petunia3d/untitled-<id>), revisão no nome do snapshot, list_recovery_generations (mais nova primeiro, com data/revisão/origem), discard_generation, ProjectService::inspect_recovery (sem tocar a sessão) e recover_generation. Coalescência por revisão já em 1f2408d; 2 min/5 gerações configuráveis em AutosaveConfig. Pendente: diálogo Recover/Inspect/Discard na UI. Não compilado; testes escritos, not run."
+      "summary": "Gerações de autosave por project_id (documentos sem arquivo em temp/petunia3d/untitled-<id>), revisão no nome do snapshot, list_recovery_generations (mais nova primeiro, com data/revisão/origem), discard_generation, ProjectService::inspect_recovery (sem tocar a sessão) e recover_generation. Coalescência por revisão já em 1f2408d; 2 min/5 gerações configuráveis em AutosaveConfig. Pendente: diálogo Recover/Inspect/Discard na UI. Não compilado; testes escritos, not run.",
+      "origin_sha": "85dc613"
     },
     "p02-load-trust": {
-      "revision": "8e75efc",
+      "revision": "c22be63",
       "document": "11-project/project-persistence.md",
-      "summary": "Codec ZIP V1 + postcard legado e atomic_write preservados; atomic_write agora faz sync_all do temporário antes do rename e sync do diretório (Unix). Leitura ZIP limitada pelo fluxo real (zip bomb), LoadReport com origem/versão/reparos auditáveis, LoadMode Strict × Legacy Repair, documento reparado abre sujo e reparos viram diagnóstico ProjectIo. Pendente: migrations de schema/IDs/refs e round-trip completo. Não compilado; testes escritos, not run."
+      "summary": "Codec ZIP V1 + postcard legado e atomic_write preservados; atomic_write agora faz sync_all do temporário antes do rename e sync do diretório (Unix). Leitura ZIP limitada pelo fluxo real (zip bomb), LoadReport com origem/versão/reparos auditáveis, LoadMode Strict × Legacy Repair, documento reparado abre sujo e reparos viram diagnóstico ProjectIo. Pendente: migrations de schema/IDs/refs e round-trip completo. Não compilado; testes escritos, not run.",
+      "origin_sha": "8e75efc"
     },
     "core-transactions-stale-ids": {
-      "revision": "a522ffd",
+      "revision": "a931c70",
       "document": "13-extensions/lua-plugins-public-api.md",
-      "summary": "UndoStack mark/squash_since/rollback_to e AppState::transaction (um Undo por batch, rollback completo em erro); dispatch_intent recusa asset_id inexistente com CommandError::StaleReference em vez de agir no objeto ativo (bug corrigido); Project.plugin_data namespaced com schema versionado, limite e preservação quando o plugin falta. Não compilado; testes escritos, not run."
+      "summary": "UndoStack mark/squash_since/rollback_to e AppState::transaction (um Undo por batch, rollback completo em erro); dispatch_intent recusa asset_id inexistente com CommandError::StaleReference em vez de agir no objeto ativo (bug corrigido); Project.plugin_data namespaced com schema versionado, limite e preservação quando o plugin falta. Não compilado; testes escritos, not run.",
+      "origin_sha": "a522ffd"
     },
     "e01-plugin-host": {
-      "revision": "02c7753",
+      "revision": "6b030e6",
       "document": "13-extensions/lua-plugins-public-api.md",
-      "summary": "Lua 5.4/mlua, budgets, memória e sandbox preservados e endurecidos (load só texto, sem string.dump — bytecode podia derrubar a VM). Manifest com capabilities nomeadas e cobertura obrigatória, PluginInstance com state persistente e eventos pós-commit, PluginRegistry com install/grant/enable/revoke/disable, batches atômicos via AppState::transaction, alvo com StaleReference, PluginApiError estruturado. Pendente: ligar ao host da Application (eventos e aplicação de intents) e gates. Não compilado; testes escritos, not run."
+      "summary": "Lua 5.4/mlua, budgets, memória e sandbox preservados e endurecidos (load só texto, sem string.dump — bytecode podia derrubar a VM). Manifest com capabilities nomeadas e cobertura obrigatória, PluginInstance com state persistente e eventos pós-commit, PluginRegistry com install/grant/enable/revoke/disable, batches atômicos via AppState::transaction, alvo com StaleReference, PluginApiError estruturado. Pendente: ligar ao host da Application (eventos e aplicação de intents) e gates. Não compilado; testes escritos, not run.",
+      "origin_sha": "02c7753"
     },
     "e03-mcp-adapter": {
-      "revision": "e7dbd40",
+      "revision": "6b030e6",
       "document": "13-extensions/mcp-automation-agents.md",
-      "summary": "Adapter MCP sobre a Application consolidado: McpPolicy deny-by-default para escrita (stdio somente leitura salvo PETUNIA_MCP_ALLOW_AUTHORING=1), ObjectIds nos DTOs, precondição expected_revision, execute_batch atômico via AppState::transaction com dry_run, códigos de erro estáveis e audit log redigido. Pendente: aprovação por request (Approve Once/Scoped Allow) e opt-in duplo de plugin na UI. Não compilado; testes escritos, not run."
+      "summary": "Adapter MCP sobre a Application consolidado: McpPolicy deny-by-default para escrita (stdio somente leitura salvo PETUNIA_MCP_ALLOW_AUTHORING=1), ObjectIds nos DTOs, precondição expected_revision, execute_batch atômico via AppState::transaction com dry_run, códigos de erro estáveis e audit log redigido. Pendente: aprovação por request (Approve Once/Scoped Allow) e opt-in duplo de plugin na UI. Não compilado; testes escritos, not run.",
+      "origin_sha": "e7dbd40"
     },
     "i02-game-ready-validator": {
-      "revision": "7701838",
+      "revision": "c22be63",
       "document": "12-interchange/import-export-game-ready.md",
-      "summary": "Game-Ready Validator (Error/Warning/Info com código, alvo ObjectId, mensagem e ação) compondo invariantes G02, topologia half-edge e UV Health; Errors bloqueiam o export do alvo, Warnings e perdas declaradas por formato vão ao relatório. Export com escrita atômica, nomes únicos case-insensitive no batch, limite de 256 MiB no import, OBJ do pipeline com normais autorais. Pendente: ExportModel agnóstico, resolver de referências externas com consentimento, jobs canceláveis. Não compilado; testes escritos, not run."
+      "summary": "Game-Ready Validator (Error/Warning/Info com código, alvo ObjectId, mensagem e ação) compondo invariantes G02, topologia half-edge e UV Health; Errors bloqueiam o export do alvo, Warnings e perdas declaradas por formato vão ao relatório. Export com escrita atômica, nomes únicos case-insensitive no batch, limite de 256 MiB no import, OBJ do pipeline com normais autorais. Pendente: ExportModel agnóstico, resolver de referências externas com consentimento, jobs canceláveis. Não compilado; testes escritos, not run.",
+      "origin_sha": "7701838"
     },
     "g16-inset-region": {
-      "revision": "6c475fd",
+      "revision": "9c79f99",
       "document": "03-geometry/direct-modeling-semantics.md",
-      "summary": "Kernel único inset_faces: Region padrão (regiões coplanares conectadas, só laços de borda, ilhas independentes, buracos para fora), Individual mantido, distância métrica com clamp reportado (requested/applied/limited), provenance de UV/material/seam/sharp, topologia não suportada recusada por região. Substitui inset_selected_distance e o inset relativo usado pelo InsetFacesCmd. Não compilado; testes escritos, not run."
+      "summary": "Kernel único inset_faces: Region padrão (regiões coplanares conectadas, só laços de borda, ilhas independentes, buracos para fora), Individual mantido, distância métrica com clamp reportado (requested/applied/limited), provenance de UV/material/seam/sharp, topologia não suportada recusada por região. Substitui inset_selected_distance e o inset relativo usado pelo InsetFacesCmd. Não compilado; testes escritos, not run.",
+      "origin_sha": "6c475fd"
     },
     "g16-bevel-transactional": {
-      "revision": "1bb292f",
+      "revision": "9c79f99",
       "document": "03-geometry/direct-modeling-semantics.md",
-      "summary": "bevel_edges valida o conjunto inteiro antes de mudar a malha e lista todas as arestas não suportadas (nenhuma mutação), ordem determinística, 1–8 segmentos na UI; BevelCmd deixou de devolver Ok sem mudança e de rotular contagens erradas. Pendente: clamp de largura reportado, provenance UV/material auditada no kernel, Last Operation. Não compilado; testes escritos, not run."
+      "summary": "bevel_edges valida o conjunto inteiro antes de mudar a malha e lista todas as arestas não suportadas (nenhuma mutação), ordem determinística, 1–8 segmentos na UI; BevelCmd deixou de devolver Ok sem mudança e de rotular contagens erradas. Pendente: clamp de largura reportado, provenance UV/material auditada no kernel, Last Operation. Não compilado; testes escritos, not run.",
+      "origin_sha": "1bb292f"
     },
     "g17-contour-cleanup": {
-      "revision": "132278e",
+      "revision": "c22be63",
       "document": "03-geometry/validation-repair-cleanup.md",
-      "summary": "contour_cleanup encadeia duplicados → colineares → Douglas–Peucker (simplify reaproveitado) → resample adaptativo antes de gerar Mesh, com relatório por etapa; trace_alpha passa a usá-lo. Com weld_with_remap (G04) e degenerate/orphan/Limited Dissolve (468a130) fecha a limpeza explícita; boolean_cleanup preservado. Não compilado; testes escritos, not run."
+      "summary": "contour_cleanup encadeia duplicados → colineares → Douglas–Peucker (simplify reaproveitado) → resample adaptativo antes de gerar Mesh, com relatório por etapa; trace_alpha passa a usá-lo. Com weld_with_remap (G04) e degenerate/orphan/Limited Dissolve (468a130) fecha a limpeza explícita; boolean_cleanup preservado. Não compilado; testes escritos, not run.",
+      "origin_sha": "132278e"
     }
   },
   "tasks": [
