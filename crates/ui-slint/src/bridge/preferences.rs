@@ -107,13 +107,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(message);
             return false;
         }
-        if colors_too_close(rgb, self.effective_accent_rgb()) {
-            let message = self
-                .state
-                .t_id(petunia_config::text_id::UI_COLORS_TOO_CLOSE);
-            self.state.set_status(message);
-            return false;
-        }
         if self.state.ui.selection_rgb == rgb {
             return false;
         }
@@ -142,7 +135,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Define a cor de destaque da interface (`#RRGGBB`); vazio volta ao tema.
-    /// Recusa uma cor parecida demais com a da seleção na viewport (D5).
     pub fn set_accent_color_hex(&mut self, value: &str) -> bool {
         let value = value.trim();
         if value.is_empty() {
@@ -160,13 +152,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.set_status(message);
             return false;
         };
-        if colors_too_close(rgb, self.state.ui.selection_rgb) {
-            let message = self
-                .state
-                .t_id(petunia_config::text_id::UI_COLORS_TOO_CLOSE);
-            self.state.set_status(message);
-            return false;
-        }
         if self.preferences.accent_rgb == Some(rgb) {
             return false;
         }
@@ -217,7 +202,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !scale.is_finite() {
             return false;
         }
-        let scale = scale.clamp(1.0, 2.0);
+        let scale = scale.clamp(0.9, 2.0);
         if (self.preferences.ui_scale - scale).abs() < 0.001 {
             return false;
         }

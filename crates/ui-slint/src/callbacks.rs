@@ -384,7 +384,7 @@ pub(crate) fn apply_ui_scale(window: &PetuniaSlintShell, preference: f32) {
         }
         SYSTEM_SCALE_FACTOR_BITS.store(system.to_bits(), Ordering::Relaxed);
     }
-    let target = system * preference.clamp(1.0, 2.0);
+    let target = system * preference.clamp(0.9, 2.0);
     if (slint_window.scale_factor() - target).abs() > 0.001 {
         slint_window.dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged {
             scale_factor: target,

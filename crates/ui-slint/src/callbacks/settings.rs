@@ -213,6 +213,103 @@ pub(crate) fn connect_settings_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let accent_wheel_bridge = Arc::clone(&bridge);
+    let accent_wheel_window_weak = window.as_weak();
+    let accent_drag_region = std::cell::Cell::new(None);
+    let accent_current_hsv = std::cell::Cell::new(crate::color_wheel::PickerHsv {
+        hue: 0.0,
+        saturation: 1.0,
+        value: 1.0,
+    });
+    window.on_accent_color_wheel_interacted(move |x, y, begin| {
+        if begin {
+            accent_drag_region.set(crate::color_wheel::picker_region_at(
+                x,
+                y,
+                crate::color_wheel::PART_COLOR_PICKER_SIZE,
+            ));
+            if let Ok(bridge) = accent_wheel_bridge.lock() {
+                let current_rgb = bridge.effective_accent_rgb();
+                accent_current_hsv.set(crate::color_wheel::PickerHsv::from_rgb(
+                    current_rgb,
+                    accent_current_hsv.get(),
+                ));
+            }
+        }
+        if let Some(region) = accent_drag_region.get()
+            && let Some(hsv) = crate::color_wheel::sample_picker_color(
+                x,
+                y,
+                crate::color_wheel::PART_COLOR_PICKER_SIZE,
+                accent_current_hsv.get(),
+                region,
+            )
+        {
+            accent_current_hsv.set(hsv);
+            let [r, g, b] = hsv.rgb();
+            let hex = format!("#{:02X}{:02X}{:02X}", r, g, b);
+            if let Ok(mut bridge) = accent_wheel_bridge.lock() {
+                if bridge.set_accent_color_hex(&hex) {
+                    persist_user_preferences(&mut bridge);
+                }
+                if let Some(window) = accent_wheel_window_weak.upgrade() {
+                    sync_window_properties(&window, &bridge.view_model());
+                }
+            }
+        }
+    });
+
+    let sel_wheel_bridge = Arc::clone(&bridge);
+    let sel_wheel_window_weak = window.as_weak();
+    let sel_drag_region = std::cell::Cell::new(None);
+    let sel_current_hsv = std::cell::Cell::new(crate::color_wheel::PickerHsv {
+        hue: 30.0,
+        saturation: 1.0,
+        value: 1.0,
+    });
+    window.on_selection_color_wheel_interacted(move |x, y, begin| {
+        if begin {
+            sel_drag_region.set(crate::color_wheel::picker_region_at(
+                x,
+                y,
+                crate::color_wheel::PART_COLOR_PICKER_SIZE,
+            ));
+            if let Ok(bridge) = sel_wheel_bridge.lock() {
+                let current_rgb = bridge.state.ui.selection_rgb;
+                sel_current_hsv.set(crate::color_wheel::PickerHsv::from_rgb(
+                    current_rgb,
+                    sel_current_hsv.get(),
+                ));
+            }
+        }
+        if let Some(region) = sel_drag_region.get()
+            && let Some(hsv) = crate::color_wheel::sample_picker_color(
+                x,
+                y,
+                crate::color_wheel::PART_COLOR_PICKER_SIZE,
+                sel_current_hsv.get(),
+                region,
+            )
+        {
+            sel_current_hsv.set(hsv);
+            let [r, g, b] = hsv.rgb();
+            let hex = format!("#{:02X}{:02X}{:02X}", r, g, b);
+            if let Ok(mut bridge) = sel_wheel_bridge.lock() {
+                if bridge.set_selection_color_hex(&hex) {
+                    persist_user_preferences(&mut bridge);
+                }
+                let vm = bridge.view_model();
+                let frame = bridge.render_viewport();
+                if let Some(window) = sel_wheel_window_weak.upgrade() {
+                    sync_window_properties(&window, &vm);
+                    if let Some(frame) = frame {
+                        window.set_viewport_image(frame);
+                    }
+                }
+            }
+        }
+    });
+
     window.on_selection_color_set(move |hex| {
         if let Ok(mut bridge) = selection_color_bridge.lock() {
             if bridge.set_selection_color_hex(hex.as_str()) {

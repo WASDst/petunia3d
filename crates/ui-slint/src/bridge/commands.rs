@@ -235,6 +235,46 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 Ok(())
             }
             "model.frame_selection" => self.state.dispatch_command("view.frame_selection"),
+            "view.camera_front" => {
+                self.set_view_preset(petunia_core::ViewPreset::Front);
+                Ok(())
+            }
+            "view.camera_back" => {
+                self.set_view_preset(petunia_core::ViewPreset::Back);
+                Ok(())
+            }
+            "view.camera_right" => {
+                self.set_view_preset(petunia_core::ViewPreset::Right);
+                Ok(())
+            }
+            "view.camera_left" => {
+                self.set_view_preset(petunia_core::ViewPreset::Left);
+                Ok(())
+            }
+            "view.camera_top" => {
+                self.set_view_preset(petunia_core::ViewPreset::Top);
+                Ok(())
+            }
+            "view.camera_bottom" => {
+                self.set_view_preset(petunia_core::ViewPreset::Bottom);
+                Ok(())
+            }
+            "view.camera_iso_2_1" | "view.pseudo_isometric_2to1" => {
+                self.set_view_preset(petunia_core::ViewPreset::PseudoIsometric2To1);
+                Ok(())
+            }
+            "view.camera_persp" => {
+                self.set_view_preset(petunia_core::ViewPreset::Persp);
+                Ok(())
+            }
+            "view.camera_opposite" => {
+                self.toggle_view_opposite();
+                Ok(())
+            }
+            "view.toggle_projection" => {
+                self.apply(UiIntent::ToggleProjection);
+                Ok(())
+            }
             "view.isolate" => {
                 self.state.toggle_isolate();
                 Ok(())

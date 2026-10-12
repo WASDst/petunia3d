@@ -1,8 +1,9 @@
-import { DesignTokens, Tr } from "../tokens.slint";
+import { DesignTokens, Motion, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
 
 /// Projeta estado do shell; não cria outro owner de domínio.
 export component ViewportStatusHud inherits Rectangle {
+    in property <length> right-clearance: 0px;
     in property <string> active-workspace;
     in property <string> active-tool;
     in property <bool> is-instant-tool-mode;
@@ -15,8 +16,8 @@ export component ViewportStatusHud inherits Rectangle {
 
     // Pílula de Ferramenta Ativa e Modo de Operação (Feedback visual contínuo)
     if !root.measure-visible && root.active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "transform" || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
-        width: min(parent.width - 40px, active-tool-hud-row.preferred-width + 24px);
-        x: (parent.width - self.width) / 2;
+        width: min(parent.width - root.right-clearance - 40px, active-tool-hud-row.preferred-width + 24px);
+        x: max(14px, (parent.width - root.right-clearance - self.width) / 2);
         y: 58px;
         height: 28px;
         border-radius: 14px;
@@ -25,6 +26,7 @@ export component ViewportStatusHud inherits Rectangle {
         border-color: root.is-instant-tool-mode ? DesignTokens.accent : DesignTokens.border;
         drop-shadow-blur: DesignTokens.elevation-1-blur;
         drop-shadow-color: DesignTokens.elevation-1-color;
+        animate x { duration: Motion.slow; easing: ease-out; }
 
         active-tool-hud-row := HorizontalLayout {
             padding-left: 12px;
@@ -74,8 +76,8 @@ export component ViewportStatusHud inherits Rectangle {
 
     // Pílula Flutuante de Medição / Dimensões (Centro: Resumo HUD no Topo)
     if root.measure-visible && root.measure-hud-text != "" && root.active-workspace == "MODEL": measure-summary := Rectangle {
-        width: min(parent.width - 40px, measure-hud-row.preferred-width + 24px);
-        x: (parent.width - self.width) / 2;
+        width: min(parent.width - root.right-clearance - 40px, measure-hud-row.preferred-width + 24px);
+        x: max(14px, (parent.width - root.right-clearance - self.width) / 2);
         y: 58px;
         height: 26px;
         border-radius: 6px;
@@ -85,6 +87,7 @@ export component ViewportStatusHud inherits Rectangle {
         drop-shadow-blur: DesignTokens.elevation-1-blur;
         drop-shadow-color: DesignTokens.elevation-1-color;
         drop-shadow-offset-y: DesignTokens.elevation-1-offset;
+        animate x { duration: Motion.slow; easing: ease-out; }
 
         measure-hud-row := HorizontalLayout {
             padding-left: 10px;

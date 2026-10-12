@@ -283,6 +283,7 @@ export component PetuniaSlintShell inherits Window {
     in-out property <[ReferenceSlotData]> reference-slots: [];
     in-out property <int> reference-total-count: 0;
     in-out property <string> active-keymap-id: "petunia-default";
+    in-out property <string> active-keymap-name: "";
     // Pointer semantics projected from the active keymap. Ctrl=1, Shift=2, Alt=4.
     in-out property <int> pointer-precision-mask: 2;
     in-out property <int> pointer-snap-mask: 1;
@@ -1217,6 +1218,8 @@ export component PetuniaSlintShell inherits Window {
     callback selection-color-set(string);
     /// Cor de destaque da interface (`#RRGGBB`; vazio = do tema), D5.
     callback accent-color-set(string);
+    callback accent-color-wheel-interacted(float, float, bool);
+    callback selection-color-wheel-interacted(float, float, bool);
     /// Referências (F7): vista selecionada na grade e confirmação de limpar.
     in-out property <int> ref-selected: 0;
     in-out property <bool> ref-clear-confirm: false;
@@ -2098,6 +2101,7 @@ export component PetuniaSlintShell inherits Window {
                     }
 
                     ViewportStatusHud {
+                        right-clearance: root.right-clearance;
                         active-workspace: root.active-workspace;
                         x: 0px;
                         y: 0px;
@@ -3445,6 +3449,7 @@ export component PetuniaSlintShell inherits Window {
             themes: root.themes;
             ui-scale: root.ui-scale;
             icon-theme: root.icon-theme;
+            color-wheel-image: root.color-wheel-image;
             label-accent-color: root.label-accent-color;
             label-accent-color-hint: root.label-accent-color-hint;
             accent-color-hex: root.accent-color-hex;
@@ -3456,6 +3461,7 @@ export component PetuniaSlintShell inherits Window {
             active-language: root.active-language;
             keymap-profiles: root.keymap-profiles;
             active-keymap-id: root.active-keymap-id;
+            active-keymap-name: root.active-keymap-name;
             keymap-rows: root.keymap-rows;
             tool-activation: root.tool-activation;
             invert-vertical-drag: root.invert-vertical-drag;
@@ -3494,7 +3500,9 @@ export component PetuniaSlintShell inherits Window {
             ui-scale-set(a0) => { root.ui-scale-set(a0); }
             icon-theme-set(a0) => { root.icon-theme-set(a0); }
             accent-color-set(a0) => { root.accent-color-set(a0); }
+            accent-color-wheel-interacted(a0, a1, a2) => { root.accent-color-wheel-interacted(a0, a1, a2); }
             selection-color-set(a0) => { root.selection-color-set(a0); }
+            selection-color-wheel-interacted(a0, a1, a2) => { root.selection-color-wheel-interacted(a0, a1, a2); }
             selection-thickness-set(a0) => { root.selection-thickness-set(a0); }
             selection-thickness-released(a0) => { root.selection-thickness-released(a0); }
             language-changed(a0) => { root.language-changed(a0); }

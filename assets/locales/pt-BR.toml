@@ -1058,6 +1058,10 @@ multiselection_measure_tag = "Exibir tag de média na multiseleção de arestas"
 
 # Textos do shell Slint (Tr.t). Gerado na migração de literais para chaves.
 [sl]
+keymap_default = "Padrão"
+custom_color = "Cor personalizada"
+color_wheel = "Círculo cromático"
+search_shortcuts = "Pesquisar atalhos"
 close_color_picker = "Fechar seletor de cor"
 picker_hue_short = "H"
 picker_hue = "Matiz (graus)"

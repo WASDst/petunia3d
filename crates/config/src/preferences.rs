@@ -281,7 +281,7 @@ impl UserPreferences {
         {
             preferences.snap_radius_px = default_snap_radius_px();
         }
-        if !preferences.ui_scale.is_finite() || !(1.0..=2.0).contains(&preferences.ui_scale) {
+        if !preferences.ui_scale.is_finite() || !(0.9..=2.0).contains(&preferences.ui_scale) {
             preferences.ui_scale = 1.0;
         }
         if preferences.double_tap_interval_ms > 2000 {

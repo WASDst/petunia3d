@@ -86,6 +86,23 @@ pub(crate) fn key_code_from_slint(text: &str) -> Option<KeyCode> {
         "F10" => Some(KeyCode::F10),
         "F11" => Some(KeyCode::F11),
         "F12" => Some(KeyCode::F12),
+        "Numpad0" | "Numpad 0" | "KP_0" | "Keypad0" | "NumPad0" => Some(KeyCode::Numpad0),
+        "Numpad1" | "Numpad 1" | "KP_1" | "Keypad1" | "NumPad1" => Some(KeyCode::Numpad1),
+        "Numpad2" | "Numpad 2" | "KP_2" | "Keypad2" | "NumPad2" => Some(KeyCode::Numpad2),
+        "Numpad3" | "Numpad 3" | "KP_3" | "Keypad3" | "NumPad3" => Some(KeyCode::Numpad3),
+        "Numpad4" | "Numpad 4" | "KP_4" | "Keypad4" | "NumPad4" => Some(KeyCode::Numpad4),
+        "Numpad5" | "Numpad 5" | "KP_5" | "Keypad5" | "NumPad5" => Some(KeyCode::Numpad5),
+        "Numpad6" | "Numpad 6" | "KP_6" | "Keypad6" | "NumPad6" => Some(KeyCode::Numpad6),
+        "Numpad7" | "Numpad 7" | "KP_7" | "Keypad7" | "NumPad7" => Some(KeyCode::Numpad7),
+        "Numpad8" | "Numpad 8" | "KP_8" | "Keypad8" | "NumPad8" => Some(KeyCode::Numpad8),
+        "Numpad9" | "Numpad 9" | "KP_9" | "Keypad9" | "NumPad9" => Some(KeyCode::Numpad9),
+        "Numpad." | "Numpad ." | "KP_Decimal" | "NumpadPeriod" | "NumpadDecimal" => {
+            Some(KeyCode::NumpadPeriod)
+        }
+        "Numpad/" | "Numpad /" | "KP_Divide" | "NumpadDivide" => Some(KeyCode::NumpadDivide),
+        "Numpad*" | "Numpad *" | "KP_Multiply" | "NumpadMultiply" => Some(KeyCode::NumpadMultiply),
+        "Numpad-" | "Numpad -" | "KP_Subtract" | "NumpadSubtract" => Some(KeyCode::NumpadMinus),
+        "Numpad+" | "Numpad +" | "KP_Add" | "NumpadAdd" => Some(KeyCode::NumpadPlus),
         _ => None,
     }
 }

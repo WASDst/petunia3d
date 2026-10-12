@@ -1056,6 +1056,10 @@ multiselection_measure_tag = "Display average measure tag on multiple edge selec
 
 # Textos do shell Slint (Tr.t). Gerado na migração de literais para chaves.
 [sl]
+keymap_default = "Default"
+custom_color = "Custom color"
+color_wheel = "Color wheel"
+search_shortcuts = "Search shortcuts"
 close_color_picker = "Close color picker"
 picker_hue_short = "H"
 picker_hue = "Hue (degrees)"

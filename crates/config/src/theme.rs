@@ -556,7 +556,7 @@ impl ThemeRegistry {
             bg_header: "#e7e7e7".into(),
             bg_panel: "#eeeeee".into(),
             bg_panel_header: "#e4e4e4".into(),
-            bg_surface: "#f6f6f6".into(),
+            bg_surface: "#f5f5f5".into(),
             bg_surface_hover: "#e3e3e3".into(),
             bg_surface_active: "#d6d6d6".into(),
             text_primary: "#252525".into(),

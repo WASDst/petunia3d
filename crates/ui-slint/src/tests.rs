@@ -8763,9 +8763,9 @@ fn test_settings_redesign_language_scale_and_selection_color() {
     assert!((bridge.view_model().ui_scale - 1.5).abs() < 1e-3);
     assert!((bridge.preferences.ui_scale - 1.5).abs() < 1e-3);
 
-    // Clamps below 1.0 and above 2.0
+    // Clamps below 0.9 and above 2.0
     bridge.set_ui_scale(0.5);
-    assert!((bridge.view_model().ui_scale - 1.0).abs() < 1e-3);
+    assert!((bridge.view_model().ui_scale - 0.9).abs() < 1e-3);
     bridge.set_ui_scale(3.0);
     assert!((bridge.view_model().ui_scale - 2.0).abs() < 1e-3);
 
@@ -11891,7 +11891,7 @@ fn everything_removed_from_the_rail_and_bar_stays_in_the_palette() {
 }
 
 #[test]
-fn accent_and_selection_colors_must_stay_distinguishable() {
+fn accent_and_selection_colors_can_be_configured_freely() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     let selection = bridge.state.ui.selection_rgb;
     let hex = format!(
@@ -11899,14 +11899,15 @@ fn accent_and_selection_colors_must_stay_distinguishable() {
         selection[0], selection[1], selection[2]
     );
     assert!(
-        !bridge.set_accent_color_hex(&hex),
-        "destaque igual à seleção é recusado"
+        bridge.set_accent_color_hex(&hex),
+        "destaque igual à seleção é permitido"
     );
+    assert_eq!(bridge.effective_accent_rgb(), selection);
     assert!(bridge.set_accent_color_hex("#5B8CFF"));
     assert_eq!(bridge.effective_accent_rgb(), [0x5B, 0x8C, 0xFF]);
     assert!(
-        !bridge.set_selection_color_hex("#5E8FFF"),
-        "seleção parecida com o destaque é recusada"
+        bridge.set_selection_color_hex("#5E8FFF"),
+        "seleção próxima ao destaque é aceita"
     );
     assert!(bridge.set_accent_color_hex(""), "vazio volta ao tema");
     assert!(bridge.preferences.accent_rgb.is_none());

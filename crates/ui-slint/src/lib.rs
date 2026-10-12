@@ -1389,17 +1389,6 @@ fn parse_hex_rgb(value: &str) -> Option<[u8; 3]> {
     Some(rgb)
 }
 
-/// Destaque e seleção precisam ser distinguíveis à primeira vista (D5).
-/// Distância euclidiana em RGB; 90 separa o violeta padrão de um lilás.
-fn colors_too_close(a: [u8; 3], b: [u8; 3]) -> bool {
-    let distance_sq: i32 = a
-        .iter()
-        .zip(b)
-        .map(|(&x, y)| (x as i32 - y as i32).pow(2))
-        .sum();
-    distance_sq < 90 * 90
-}
-
 #[cfg(test)]
 mod tests;
 

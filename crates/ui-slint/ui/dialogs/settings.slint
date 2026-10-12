@@ -1,6 +1,6 @@
 // Diálogo de Preferências.
 import { ColorPresets, DesignTokens, Tr } from "../tokens.slint";
-import { IconButton } from "../components/base.slint";
+import { DropdownButton, IconButton } from "../components/base.slint";
 import { KeymapActionEntry, KeymapProfileEntry, ThemeEntry } from "../types.slint";
 import { ModalFocusBoundary } from "../shell/modal_focus_boundary.slint";
 import { PanelDragHandle, PanelResizeGrip, PetuniaSlider, TopAction } from "../components/controls.slint";
@@ -20,6 +20,7 @@ export component SettingsDialog inherits Rectangle {
     in property <[ThemeEntry]> themes;
     in property <float> ui-scale;
     in property <string> icon-theme;
+    in property <image> color-wheel-image;
     in property <string> label-accent-color;
     in property <string> label-accent-color-hint;
     in property <string> accent-color-hex;
@@ -69,7 +70,9 @@ export component SettingsDialog inherits Rectangle {
     callback ui-scale-set(float);
     callback icon-theme-set(string);
     callback accent-color-set(string);
+    callback accent-color-wheel-interacted(float, float, bool);
     callback selection-color-set(string);
+    callback selection-color-wheel-interacted(float, float, bool);
     callback selection-thickness-set(float);
     callback selection-thickness-released(float);
     callback language-changed(string);
@@ -97,6 +100,12 @@ export component SettingsDialog inherits Rectangle {
     callback toggle-face-orientation();
     callback toggle-projection-requested();
 
+    in property <string> active-keymap-name: "";
+    property <bool> accent-wheel-open: false;
+    property <bool> selection-wheel-open: false;
+    property <bool> keymap-dropdown-open: false;
+    property <string> shortcut-query: "";
+
     x: 0;
     y: 0;
     
@@ -108,7 +117,7 @@ export component SettingsDialog inherits Rectangle {
         active: root.settings-focus-active;
         initial-focus => { settings-search.focus(); }
         first-focus => { settings-close.focus(); }
-        last-focus => { settings-footer-close.focus(); }
+        last-focus => { settings-close.focus(); }
         dismiss-requested => { root.settings-visible = false; root.settings-closed(); }
         accessible-role: groupbox;
         accessible-label: root.label-preferences != "" ? root.label-preferences : Tr.t("sl.settings");
@@ -443,35 +452,42 @@ export component SettingsDialog inherits Rectangle {
                             HorizontalLayout {
                                 spacing: 8px;
                                 Rectangle {
-                                    width: 60px; height: 28px; border-radius: 4px;
-                                    background: (root.ui-scale <= 1.05) ? DesignTokens.accent : DesignTokens.surface;
+                                    width: 52px; height: 28px; border-radius: 4px;
+                                    background: (root.ui-scale <= 0.95) ? DesignTokens.accent : DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
-                                    Text { text: "100%"; color: (root.ui-scale <= 1.05) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                    Text { text: "90%"; color: (root.ui-scale <= 0.95) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                    TouchArea { clicked => { root.ui-scale-set(0.9); } }
+                                }
+                                Rectangle {
+                                    width: 52px; height: 28px; border-radius: 4px;
+                                    background: (root.ui-scale > 0.95 && root.ui-scale <= 1.12) ? DesignTokens.accent : DesignTokens.surface;
+                                    border-width: 1px; border-color: DesignTokens.border;
+                                    Text { text: "100%"; color: (root.ui-scale > 0.95 && root.ui-scale <= 1.12) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
                                     TouchArea { clicked => { root.ui-scale-set(1.0); } }
                                 }
                                 Rectangle {
-                                    width: 60px; height: 28px; border-radius: 4px;
-                                    background: (root.ui-scale > 1.05 && root.ui-scale <= 1.35) ? DesignTokens.accent : DesignTokens.surface;
+                                    width: 52px; height: 28px; border-radius: 4px;
+                                    background: (root.ui-scale > 1.12 && root.ui-scale <= 1.35) ? DesignTokens.accent : DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
-                                    Text { text: "125%"; color: (root.ui-scale > 1.05 && root.ui-scale <= 1.35) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
+                                    Text { text: "125%"; color: (root.ui-scale > 1.12 && root.ui-scale <= 1.35) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
                                     TouchArea { clicked => { root.ui-scale-set(1.25); } }
                                 }
                                 Rectangle {
-                                    width: 60px; height: 28px; border-radius: 4px;
+                                    width: 52px; height: 28px; border-radius: 4px;
                                     background: (root.ui-scale > 1.35 && root.ui-scale <= 1.6) ? DesignTokens.accent : DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
                                     Text { text: "150%"; color: (root.ui-scale > 1.35 && root.ui-scale <= 1.6) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
                                     TouchArea { clicked => { root.ui-scale-set(1.5); } }
                                 }
                                 Rectangle {
-                                    width: 60px; height: 28px; border-radius: 4px;
+                                    width: 52px; height: 28px; border-radius: 4px;
                                     background: (root.ui-scale > 1.6 && root.ui-scale <= 1.85) ? DesignTokens.accent : DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
                                     Text { text: "175%"; color: (root.ui-scale > 1.6 && root.ui-scale <= 1.85) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
                                     TouchArea { clicked => { root.ui-scale-set(1.75); } }
                                 }
                                 Rectangle {
-                                    width: 60px; height: 28px; border-radius: 4px;
+                                    width: 52px; height: 28px; border-radius: 4px;
                                     background: (root.ui-scale > 1.85) ? DesignTokens.accent : DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
                                     Text { text: "200%"; color: (root.ui-scale > 1.85) ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
@@ -552,13 +568,64 @@ export component SettingsDialog inherits Rectangle {
                                     TouchArea { clicked => { root.accent-color-set("#E86FB0"); } }
                                 }
                                 Rectangle {
-                                    width: 110px; height: 28px; border-radius: 4px;
+                                    height: 28px; min-width: 90px; border-radius: 4px;
+                                    background: root.accent-wheel-open ? DesignTokens.accent : (accent-wheel-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
+                                    border-width: 1px; border-color: root.accent-wheel-open ? DesignTokens.focus-ring : DesignTokens.border;
+                                    accessible-role: button;
+                                    accessible-label: Tr.t("sl.color_wheel");
+                                    HorizontalLayout {
+                                        padding-left: 8px; padding-right: 8px; spacing: 4px; alignment: center;
+                                        Image {
+                                            source: PetuniaIcons.paint-palette;
+                                            width: 13px; height: 13px;
+                                            colorize: root.accent-wheel-open ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                                            image-fit: contain;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                        Text {
+                                            text: Tr.t("sl.color_wheel");
+                                            color: root.accent-wheel-open ? DesignTokens.on-accent : DesignTokens.text-primary;
+                                            font-size: DesignTokens.font-caption; font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                    accent-wheel-touch := TouchArea { clicked => { root.accent-wheel-open = !root.accent-wheel-open; } }
+                                }
+                                Rectangle {
+                                    width: 100px; height: 28px; border-radius: 4px;
                                     background: DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
                                     accessible-role: button;
                                     accessible-label: Tr.t("sl.reset_accent");
                                     Text { text: Tr.t("sl.reset_accent"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; font-weight: 600; vertical-alignment: center; horizontal-alignment: center; }
                                     TouchArea { clicked => { root.accent-color-set(""); } }
+                                }
+                            }
+                            if root.accent-wheel-open: HorizontalLayout {
+                                alignment: start;
+                                Rectangle {
+                                    width: 130px;
+                                    height: 130px;
+                                    border-radius: DesignTokens.radius-pill;
+                                    Image {
+                                        width: 130px;
+                                        height: 130px;
+                                        source: root.color-wheel-image;
+                                        image-fit: contain;
+                                    }
+                                    TouchArea {
+                                        mouse-cursor: crosshair;
+                                        pointer-event(event) => {
+                                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                                root.accent-color-wheel-interacted(self.mouse-x / 1px, self.mouse-y / 1px, true);
+                                            }
+                                        }
+                                        moved => {
+                                            if self.pressed {
+                                                root.accent-color-wheel-interacted(self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -608,30 +675,42 @@ export component SettingsDialog inherits Rectangle {
 
                             HorizontalLayout {
                                 spacing: 8px;
-                                alignment: center;
+                                alignment: start;
                                 Rectangle {
-                                    width: 30px; height: 30px; border-radius: 4px;
+                                    width: 28px; height: 28px; border-radius: 4px;
                                     background: root.selection-color;
                                     border-width: 1px; border-color: DesignTokens.border;
                                 }
                                 Rectangle {
-                                    width: 110px; height: 30px; border-radius: 4px;
-                                    background: DesignTokens.surface;
-                                    border-width: 1px; border-color: DesignTokens.border;
-                                    TextInput {
-                                        x: 8px; y: 5px; width: parent.width - 16px; height: parent.height - 10px;
-                                        text: root.selection-color-hex;
-                                        color: DesignTokens.text-primary;
-                                        font-size: DesignTokens.font-small;
-                                        single-line: true;
-                                        accessible-label: root.label-selection-color;
-                                        accepted => { root.selection-color-set(self.text); }
+                                    height: 28px; min-width: 90px; border-radius: 4px;
+                                    background: root.selection-wheel-open ? DesignTokens.accent : (sel-wheel-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
+                                    border-width: 1px; border-color: root.selection-wheel-open ? DesignTokens.focus-ring : DesignTokens.border;
+                                    accessible-role: button;
+                                    accessible-label: Tr.t("sl.color_wheel");
+                                    HorizontalLayout {
+                                        padding-left: 8px; padding-right: 8px; spacing: 4px; alignment: center;
+                                        Image {
+                                            source: PetuniaIcons.paint-palette;
+                                            width: 13px; height: 13px;
+                                            colorize: root.selection-wheel-open ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                                            image-fit: contain;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                        Text {
+                                            text: Tr.t("sl.color_wheel");
+                                            color: root.selection-wheel-open ? DesignTokens.on-accent : DesignTokens.text-primary;
+                                            font-size: DesignTokens.font-caption; font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
                                     }
+                                    sel-wheel-touch := TouchArea { clicked => { root.selection-wheel-open = !root.selection-wheel-open; } }
                                 }
                                 Rectangle {
-                                    width: 90px; height: 30px; border-radius: 4px;
+                                    width: 90px; height: 28px; border-radius: 4px;
                                     background: DesignTokens.surface;
                                     border-width: 1px; border-color: DesignTokens.border;
+                                    accessible-role: button;
+                                    accessible-label: Tr.t("sl.reset_e96a00");
                                     Text {
                                         text: Tr.t("sl.reset_e96a00");
                                         color: DesignTokens.text-secondary;
@@ -641,6 +720,33 @@ export component SettingsDialog inherits Rectangle {
                                         horizontal-alignment: center;
                                     }
                                     TouchArea { clicked => { root.selection-color-set("#E96A00"); } }
+                                }
+                            }
+                            if root.selection-wheel-open: HorizontalLayout {
+                                alignment: start;
+                                Rectangle {
+                                    width: 130px;
+                                    height: 130px;
+                                    border-radius: DesignTokens.radius-pill;
+                                    Image {
+                                        width: 130px;
+                                        height: 130px;
+                                        source: root.color-wheel-image;
+                                        image-fit: contain;
+                                    }
+                                    TouchArea {
+                                        mouse-cursor: crosshair;
+                                        pointer-event(event) => {
+                                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                                root.selection-color-wheel-interacted(self.mouse-x / 1px, self.mouse-y / 1px, true);
+                                            }
+                                        }
+                                        moved => {
+                                            if self.pressed {
+                                                root.selection-color-wheel-interacted(self.mouse-x / 1px, self.mouse-y / 1px, false);
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -715,39 +821,51 @@ export component SettingsDialog inherits Rectangle {
                             spacing: 12px;
 
                             Text { text: Tr.t("sl.keyboard_shortcut_profile"); color: DesignTokens.text-primary; font-size: DesignTokens.font-default; font-weight: 700; }
-                            // Lista vertical: nunca corta o nome do perfil, qualquer que seja a largura do painel.
-                            VerticalLayout {
-                                spacing: 4px;
-                                for profile in root.keymap-profiles: Rectangle {
-                                    height: 30px;
-                                    border-radius: 4px;
-                                    background: profile.active ? DesignTokens.accent : (profile-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
-                                    border-width: 1px;
-                                    border-color: profile.active ? DesignTokens.focus-ring : DesignTokens.border;
-                                    accessible-role: button;
-                                    accessible-label: profile.name;
-                                    accessible-checked: profile.active;
-                                    HorizontalLayout {
-                                        padding-left: 10px;
-                                        padding-right: 10px;
-                                        spacing: 8px;
-                                        Text {
-                                            text: profile.name;
-                                            color: profile.active ? DesignTokens.on-accent : DesignTokens.text-primary;
-                                            font-size: DesignTokens.font-small;
-                                            font-weight: 600;
-                                            vertical-alignment: center;
-                                            horizontal-stretch: 1;
-                                            overflow: elide;
+                            DropdownButton {
+                                value: root.active-keymap-name != "" ? root.active-keymap-name : Tr.t("sl.keymap_default");
+                                semantic-label: Tr.t("sl.keyboard_shortcut_profile");
+                                open: root.keymap-dropdown-open;
+                                open-requested => { root.keymap-dropdown-open = !root.keymap-dropdown-open; }
+                            }
+                            if root.keymap-dropdown-open: Rectangle {
+                                border-radius: 4px;
+                                background: DesignTokens.surface;
+                                border-width: 1px;
+                                border-color: DesignTokens.border;
+                                VerticalLayout {
+                                    padding: 4px;
+                                    spacing: 2px;
+                                    for profile in root.keymap-profiles: Rectangle {
+                                        height: 28px;
+                                        border-radius: 3px;
+                                        background: profile.active ? DesignTokens.accent : (profile-touch.has-hover ? DesignTokens.surface-hover : transparent);
+                                        HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+                                            spacing: 6px;
+                                            Text {
+                                                text: profile.name;
+                                                color: profile.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+                                                font-size: DesignTokens.font-small;
+                                                font-weight: 600;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            if profile.custom: Text {
+                                                text: Tr.t("sl.keymap_custom_badge");
+                                                color: profile.active ? DesignTokens.on-accent : DesignTokens.text-muted;
+                                                font-size: DesignTokens.font-caption;
+                                                vertical-alignment: center;
+                                            }
                                         }
-                                        if profile.custom: Text {
-                                            text: Tr.t("sl.keymap_custom_badge");
-                                            color: profile.active ? DesignTokens.on-accent : DesignTokens.text-muted;
-                                            font-size: DesignTokens.font-caption;
-                                            vertical-alignment: center;
+                                        profile-touch := TouchArea {
+                                            clicked => {
+                                                root.keymap-dropdown-open = false;
+                                                root.keymap-changed(profile.id);
+                                            }
                                         }
                                     }
-                                    profile-touch := TouchArea { clicked => { root.keymap-changed(profile.id); } }
                                 }
                             }
                             HorizontalLayout {
@@ -778,10 +896,50 @@ export component SettingsDialog inherits Rectangle {
                                 }
                             }
                             Text { text: Tr.t("sl.keymap_editor_hint"); color: DesignTokens.text-secondary; font-size: DesignTokens.font-caption; wrap: word-wrap; }
+
+                            // Busca de atalhos
+                            Rectangle {
+                                height: 30px;
+                                border-radius: 4px;
+                                background: DesignTokens.canvas;
+                                border-width: 1px;
+                                border-color: shortcut-search.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    spacing: 6px;
+                                    Image {
+                                        y: (parent.height - self.height) / 2;
+                                        source: PetuniaIcons.search;
+                                        width: 13px;
+                                        height: 13px;
+                                        colorize: DesignTokens.text-muted;
+                                        image-fit: contain;
+                                    }
+                                    shortcut-search := TextInput {
+                                        text <=> root.shortcut-query;
+                                        color: DesignTokens.text-primary;
+                                        font-size: DesignTokens.font-small;
+                                        vertical-alignment: center;
+                                        single-line: true;
+                                        accessible-label: Tr.t("sl.search_shortcuts");
+                                    }
+                                }
+                                if root.shortcut-query == "": Text {
+                                    x: 27px;
+                                    text: Tr.t("sl.search_shortcuts");
+                                    color: DesignTokens.text-muted;
+                                    font-size: DesignTokens.font-small;
+                                    vertical-alignment: center;
+                                }
+                            }
+
                             VerticalLayout {
                                 spacing: 2px;
                                 for row in root.keymap-rows: Rectangle {
-                                    height: 26px;
+                                    property <bool> matches: root.shortcut-query == "" || root.text-matches(row.label + " " + row.shortcut + " " + row.action, root.shortcut-query);
+                                    visible: self.matches;
+                                    height: self.matches ? 26px : 0px;
                                     border-radius: 4px;
                                     background: row.capturing ? DesignTokens.accent.transparentize(0.8) : (row-touch.has-hover ? DesignTokens.surface-hover : transparent);
                                     HorizontalLayout {
@@ -1254,18 +1412,6 @@ export component SettingsDialog inherits Rectangle {
                             }
                         }
                     }
-                }
-            }
-            HorizontalLayout {
-                height: DesignTokens.control-height + 16px;
-                padding-left: 12px;
-                padding-right: 12px;
-                alignment: end;
-                settings-footer-close := IconButton {
-                    icon-svg: PetuniaIcons.close;
-                    label: Tr.t("sl.close_settings");
-                    semantic-label: Tr.t("sl.close_settings");
-                    clicked => { root.settings-visible = false; root.settings-closed(); }
                 }
             }
         }

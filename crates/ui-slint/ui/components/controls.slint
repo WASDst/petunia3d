@@ -864,7 +864,7 @@ export component ToolCard inherits Rectangle {
     callback collapse-toggled;
 
     width: 264px;
-    height: card-layout.preferred-height;
+    height: root.collapsed ? 40px : card-layout.preferred-height;
     border-radius: 8px;
     background: DesignTokens.surface-raised;
     border-width: 1px;
@@ -909,7 +909,8 @@ export component ToolCard inherits Rectangle {
 
         VerticalLayout {
             visible: !root.collapsed;
-            spacing: 8px;
+            height: root.collapsed ? 0px : self.preferred-height;
+            spacing: root.collapsed ? 0px : 8px;
             alignment: start;
             @children
         }

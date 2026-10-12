@@ -1578,20 +1578,8 @@ pub(crate) fn compute_asset_overlay(
         return SelectionOverlayModel::default();
     };
     // Contorno e faces do objeto na tela: posições no mundo.
+    // A malha avaliada já reflete as posições da prévia modal em tempo real.
     let evaluated = asset.world_mesh();
-    let rigid_matrix = state
-        .rigid_preview_transforms()
-        .iter()
-        .find(|(id, _)| *id == asset.id)
-        .map(|(_, matrix)| *matrix)
-        .unwrap_or(glam::Mat4::IDENTITY);
-    let evaluated = if rigid_matrix != glam::Mat4::IDENTITY {
-        let mut m = evaluated.into_owned();
-        m.transform_affine(rigid_matrix);
-        std::borrow::Cow::Owned(m)
-    } else {
-        evaluated
-    };
     let mesh = &*evaluated;
     if mesh.verts.is_empty() {
         return SelectionOverlayModel::default();

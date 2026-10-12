@@ -36,6 +36,14 @@ pub(super) fn sync_settings(window: &PetuniaSlintShell, vm: &ShellViewModel) {
         crate::refresh::set_model_if_changed(window.get_keymap_profiles(), profiles, |model| {
             window.set_keymap_profiles(model)
         });
+        let active_name = vm
+            .keymap_snapshot
+            .profiles
+            .iter()
+            .find(|p| p.active)
+            .map(|p| p.name.as_str())
+            .unwrap_or("");
+        window.set_active_keymap_name(active_name.into());
         let rows: Vec<KeymapActionEntry> = vm
             .keymap_snapshot
             .rows
