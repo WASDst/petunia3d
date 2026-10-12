@@ -30,16 +30,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Despacha um comando de material; erro vira status (nada muda).
+    fn dispatch_material(&mut self, command: &dyn petunia_core::Command) -> bool {
+        match self.state.dispatch(command) {
+            Ok(()) => true,
+            Err(error) => {
+                self.state.set_status(error.to_string());
+                false
+            }
+        }
+    }
+
+    /// Id do material no slot ativo do Inspector.
+    fn active_material_id(&self) -> Option<uuid::Uuid> {
+        let slot = usize::try_from(self.active_material_slot.max(0)).ok()?;
+        self.state.project.project.materials.get(slot).map(|m| m.id)
+    }
+
+    /// Edita o material do slot ativo por `EditMaterialCmd`.
+    fn edit_active_material(&mut self, edit: petunia_core::MaterialEdit) -> bool {
+        let Some(material) = self.active_material_id() else {
+            return false;
+        };
+        self.dispatch_material(&petunia_core::EditMaterialCmd { material, edit })
+    }
+
     /// Cria um novo material no projeto e o seleciona como ativo.
     pub fn create_material(&mut self) -> bool {
         let count = self.state.project.project.materials.len();
         let name = format!("Material {}", count + 1);
-        self.state.checkpoint("create material");
-        self.state
-            .project
-            .project
-            .materials
-            .push(petunia_project::Material::new(name));
+        if !self.dispatch_material(&petunia_core::CreateMaterialCmd { name }) {
+            return false;
+        }
         self.active_material_slot = count as i32;
         self.state.set_status(crate::tr::fill(
             &self
@@ -47,20 +69,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .t_id(petunia_config::text_id::STATUS_CREATED_MATERIAL),
             &[("0", format!("{}", count + 1))],
         ));
-        self.state.emit_material_changed();
         true
     }
 
     /// Duplica o material do slot indicado e o seleciona como ativo.
     pub fn duplicate_material(&mut self, slot: usize) -> bool {
-        let Some(mat) = self.state.project.project.materials.get(slot).cloned() else {
+        let Some(material) = self.state.project.project.materials.get(slot).map(|m| m.id) else {
             return false;
         };
-        let mut dup = mat;
-        dup.id = uuid::Uuid::new_v4();
-        dup.name = format!("{} Copy", dup.name);
-        self.state.checkpoint("duplicate material");
-        self.state.project.project.materials.push(dup);
+        if !self.dispatch_material(&petunia_core::DuplicateMaterialCmd { material }) {
+            return false;
+        }
         let new_idx = self.state.project.project.materials.len() - 1;
         self.active_material_slot = new_idx as i32;
         self.state.set_status(crate::tr::fill(
@@ -69,7 +88,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .t_id(petunia_config::text_id::STATUS_DUPLICATED_MATERIAL_TO_SLOT),
             &[("new_idx", format!("{new_idx}"))],
         ));
-        self.state.emit_material_changed();
         true
     }
 
@@ -85,19 +103,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn remove_material(&mut self, slot: i32) -> bool {
-        let Ok(slot) = usize::try_from(slot) else {
+        let Ok(index) = usize::try_from(slot) else {
             return false;
         };
-        if self.state.project.project.materials.len() <= 1
-            || !self.state.project.project.materials.get(slot).is_some()
-        {
+        // O comando também recusa remover o último material; aqui a recusa é
+        // silenciosa, como antes (o botão fica desabilitado).
+        if self.state.project.project.materials.len() <= 1 {
             return false;
         }
-        let material_id = self.state.project.project.materials[slot].id;
-        self.state.checkpoint("remove material");
-        self.state.project.project.remove_material(material_id);
-        self.active_material_slot = (slot as i32 - 1).max(0);
-        self.state.emit_material_changed();
+        let Some(material) = self
+            .state
+            .project
+            .project
+            .materials
+            .get(index)
+            .map(|m| m.id)
+        else {
+            return false;
+        };
+        if !self.dispatch_material(&petunia_core::RemoveMaterialCmd { material }) {
+            return false;
+        }
+        self.active_material_slot = (slot - 1).max(0);
         true
     }
 
@@ -105,49 +132,23 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if [red, green, blue].iter().any(|value| !value.is_finite()) {
             return false;
         }
-        let slot = self.active_material_slot.max(0) as usize;
-        if !self.state.project.project.materials.get(slot).is_some() {
-            return false;
-        }
-        self.state.checkpoint("change material color");
-        let Some(material) = self.state.project.project.materials.get_mut(slot) else {
-            return false;
-        };
-        material.base_color[0] = red.clamp(0.0, 1.0);
-        material.base_color[1] = green.clamp(0.0, 1.0);
-        material.base_color[2] = blue.clamp(0.0, 1.0);
-        material.base_color[3] = 1.0;
-        self.state.emit_material_changed();
-        true
+        self.edit_active_material(petunia_core::MaterialEdit::BaseColor([red, green, blue]))
     }
 
     pub fn set_active_material_scalar(&mut self, field: &str, value: f32) -> bool {
+        use petunia_core::MaterialEdit as Edit;
         if !value.is_finite() {
             return false;
         }
-        let slot = self.active_material_slot.max(0) as usize;
-        if !matches!(
-            field,
-            "roughness" | "metallic" | "normal-scale" | "emission-strength" | "alpha-cutoff"
-        ) || !self.state.project.project.materials.get(slot).is_some()
-        {
-            return false;
-        }
-        self.state.checkpoint("change material");
-        let Some(material) = self.state.project.project.materials.get_mut(slot) else {
-            return false;
-        };
-        match field {
-            "roughness" => material.roughness = value.clamp(0.0, 1.0),
-            "metallic" => material.metallic = value.clamp(0.0, 1.0),
-            "normal-scale" => material.normal_scale = value.clamp(0.0, 10.0),
-            "emission-strength" => material.emission_strength = value.clamp(0.0, 10.0),
-            "alpha-cutoff" => material.alpha_cutoff = value.clamp(0.0, 1.0),
+        let edit = match field {
+            "roughness" => Edit::Roughness(value),
+            "metallic" => Edit::Metallic(value),
+            "normal-scale" => Edit::NormalScale(value),
+            "emission-strength" => Edit::EmissionStrength(value),
+            "alpha-cutoff" => Edit::AlphaCutoff(value),
             _ => return false,
-        }
-        material.validate();
-        self.state.emit_material_changed();
-        true
+        };
+        self.edit_active_material(edit)
     }
 
     pub fn set_active_material_profile(&mut self, profile: i32) -> bool {
@@ -159,17 +160,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             4 => ShaderProfile::Emissive,
             _ => return false,
         };
-        let slot = self.active_material_slot.max(0) as usize;
-        if !self.state.project.project.materials.get(slot).is_some() {
-            return false;
-        }
-        self.state.checkpoint("change material profile");
-        let Some(material) = self.state.project.project.materials.get_mut(slot) else {
-            return false;
-        };
-        material.profile = profile;
-        self.state.emit_material_changed();
-        true
+        self.edit_active_material(petunia_core::MaterialEdit::Profile(profile))
     }
 
     pub fn set_active_material_alpha_mode(&mut self, mode: i32) -> bool {
@@ -179,65 +170,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             2 => AlphaMode::Blend,
             _ => return false,
         };
-        let slot = self.active_material_slot.max(0) as usize;
-        if !self.state.project.project.materials.get(slot).is_some() {
-            return false;
-        }
-        self.state.checkpoint("change material alpha");
-        let Some(material) = self.state.project.project.materials.get_mut(slot) else {
-            return false;
-        };
-        material.alpha_mode = mode;
-        self.state.emit_material_changed();
-        true
+        self.edit_active_material(petunia_core::MaterialEdit::AlphaMode(mode))
     }
 
     pub fn create_albedo_texture(&mut self) -> bool {
-        let slot = self.active_material_slot.max(0) as usize;
-        let Some(material) = self.state.project.project.materials.get(slot) else {
-            return false;
-        };
-        let color = material.base_color;
-        self.state.checkpoint("create albedo texture");
-        let Some(material) = self.state.project.project.materials.get_mut(slot) else {
-            return false;
-        };
-        material.albedo_texture = Some(petunia_project::Canvas::new(
-            256,
-            256,
-            [
-                (color[0].clamp(0.0, 1.0) * 255.0) as u8,
-                (color[1].clamp(0.0, 1.0) * 255.0) as u8,
-                (color[2].clamp(0.0, 1.0) * 255.0) as u8,
-                255,
-            ],
-        ));
-        self.state.emit_project_changed(
-            petunia_project::ProjectChanges::MATERIALS | petunia_project::ProjectChanges::TEXTURES,
-        );
-        true
+        self.edit_active_material(petunia_core::MaterialEdit::CreateAlbedo)
     }
 
     pub fn clear_albedo_texture(&mut self) -> bool {
-        let slot = self.active_material_slot.max(0) as usize;
-        if !self
-            .state
-            .project
-            .project
-            .materials
-            .get(slot)
-            .is_some_and(|material| material.albedo_texture.is_some())
-        {
+        let has_texture = self
+            .active_material_id()
+            .and_then(|id| {
+                self.state
+                    .project
+                    .project
+                    .materials
+                    .iter()
+                    .find(|m| m.id == id)
+            })
+            .is_some_and(|material| material.albedo_texture.is_some());
+        if !has_texture {
             return false;
         }
-        self.state.checkpoint("clear albedo texture");
-        let Some(material) = self.state.project.project.materials.get_mut(slot) else {
-            return false;
-        };
-        material.albedo_texture = None;
-        self.state.emit_project_changed(
-            petunia_project::ProjectChanges::MATERIALS | petunia_project::ProjectChanges::TEXTURES,
-        );
-        true
+        self.edit_active_material(petunia_core::MaterialEdit::ClearAlbedo)
     }
 }

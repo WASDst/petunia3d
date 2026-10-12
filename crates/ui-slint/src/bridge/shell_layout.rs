@@ -320,12 +320,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// as seções, devolvendo o shell ao trilho de pílulas. É um comando
     /// explícito do usuário, por isso ignora o pin — diferente do recolhimento
     /// automático do peek, que o pin protege (ADR 005 §5).
+    /// O botão "»" esconde a coluna inteira; as seções abertas do acordeão
+    /// ficam como estavam para quando a coluna voltar.
     pub fn collapse_inspector(&mut self) {
-        for id in petunia_config::InspectorSectionId::all() {
-            section_layout::set_open(&mut self.section_layouts, id, false);
-            section_layout::set_pin_open(&mut self.section_layouts, id, false);
-        }
-        self.persist_section_layouts();
+        self.inspector_visible = false;
+        self.state.mark_dirty();
     }
 
     /// Alterna estado aberto/fechado de uma seção do Inspector (persistido).

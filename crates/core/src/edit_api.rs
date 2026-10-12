@@ -227,6 +227,67 @@ impl Command for ApplyMeshEditCmd {
     }
 }
 
+/// Objeto novo com a malha de uma prévia de criação (volume de perfil etc.):
+/// a prévia nunca entra no documento, só este comando. Uma entrada de Undo;
+/// o objeto novo vira o ativo. A malha já está no mundo (transformação
+/// identidade).
+#[derive(Clone, Debug)]
+pub struct AddMeshAssetCmd {
+    pub label: &'static str,
+    pub name: String,
+    pub mesh: Mesh,
+}
+
+impl Command for AddMeshAssetCmd {
+    fn label(&self) -> &'static str {
+        self.label
+    }
+
+    fn can_execute(&self, _state: &EditorView<'_>) -> Result<(), &'static str> {
+        if self.mesh.faces.is_empty() {
+            Err("generated mesh has no faces")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        self.mesh
+            .validate_invariants()
+            .map_err(|e| CommandError::Execution(format!("invalid generated mesh: {e}")))?;
+        state.document.add(&self.name, self.mesh.clone());
+        Ok(())
+    }
+}
+
+/// Insere um objeto já montado (colar objeto: cópia com material,
+/// modificadores e pintura). Uma entrada de Undo; o objeto novo vira o ativo.
+#[derive(Clone, Debug)]
+pub struct InsertAssetCmd {
+    pub label: &'static str,
+    pub asset: Box<petunia_project::Asset>,
+}
+
+impl Command for InsertAssetCmd {
+    fn label(&self) -> &'static str {
+        self.label
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.assets.iter().any(|asset| asset.id == self.asset.id) {
+            Err("an object with this id already exists")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.document.assets.push((*self.asset).clone());
+        state.document.active = state.document.assets.len() - 1;
+        Ok(())
+    }
+}
+
 /// Operação sobre seams UV.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeamOp {

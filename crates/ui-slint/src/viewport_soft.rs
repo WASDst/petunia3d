@@ -302,12 +302,32 @@ impl PetuniaViewport for Software3dViewport {
             }
         }
         let pose = self.pose.clone();
+        // Prévia de objeto novo: só desenho, nunca o objeto ativo.
+        let transient: Vec<petunia_project::Asset> = pose
+            .as_deref()
+            .map_or(&[][..], PoseOverride::transient)
+            .iter()
+            .map(|(id, mesh)| {
+                let mut asset = petunia_project::Asset::new("preview", mesh.clone());
+                asset.id = *id;
+                asset
+            })
+            .collect();
         let meshes: Vec<_> = project
             .assets
             .iter()
             .enumerate()
             .filter(|(_, a)| a.visible)
-            .map(|(index, asset)| (index, asset, mesh_to_draw(pose.as_deref(), asset)))
+            .chain(transient.iter().map(|asset| (usize::MAX, asset)))
+            .map(|(index, asset)| {
+                // Fallback de CPU: leva a malha ao mundo uma vez; posições,
+                // normais de face e linhas abaixo ficam todas no mundo.
+                let mut mesh = mesh_to_draw(pose.as_deref(), asset);
+                if !asset.transform.is_identity() {
+                    mesh.to_mut().transform_affine(asset.world_matrix());
+                }
+                (index, asset, mesh)
+            })
             .collect();
         let scene_light = if state.shading.uses_scene_light() {
             project.active_light()

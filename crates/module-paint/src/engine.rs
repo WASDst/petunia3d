@@ -101,7 +101,8 @@ impl DabParams {
 }
 
 fn stencil_weight(stencil: &petunia_core::brush::SurfaceStencil, position: Vec3) -> f32 {
-    let clip = stencil.world_to_clip * position.extend(1.0);
+    // `position` é local ao objeto, como toda a malha do carimbo.
+    let clip = stencil.object_to_clip * position.extend(1.0);
     if !clip.is_finite() || clip.w <= 1e-6 {
         return 0.0;
     }

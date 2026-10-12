@@ -33,8 +33,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             if !asset.visible {
                 continue;
             }
+            let world = asset.world_matrix();
             for v in &asset.mesh.verts {
-                let p = v.vec();
+                let p = world.transform_point3(v.vec());
                 let v_rel = p - origin;
                 let t = v_rel.dot(dir);
                 if t > 0.0 {
@@ -203,7 +204,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let center = mesh.selection_center();
         if center.iter().all(|value| value.is_finite()) {
-            Some(glam::Vec3::from_array(center))
+            // Centro local da seleção levado ao mundo, como o pivô do core.
+            Some(
+                crate::projection::active_world_matrix(&self.state)
+                    .transform_point3(glam::Vec3::from_array(center)),
+            )
         } else {
             None
         }

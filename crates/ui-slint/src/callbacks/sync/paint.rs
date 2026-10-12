@@ -63,6 +63,9 @@ pub(super) fn sync_paint(window: &PetuniaSlintShell, vm: &ShellViewModel) {
             active: layer.active,
             is_group: layer.is_group,
             kind_label: layer.kind_label.as_str().into(),
+            kind: layer.kind.as_str().into(),
+            blend: layer.blend,
+            depth: layer.depth,
         })
         .collect();
     window.set_paint_layers(layer_entries.as_slice().into());

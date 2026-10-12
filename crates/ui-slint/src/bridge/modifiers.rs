@@ -39,189 +39,121 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .position(|asset| asset.modifiers.iter().any(|modifier| modifier.id == id))
     }
 
+    /// Despacha uma operação da pilha; recusa (inclusive "nada mudaria") não
+    /// empilha Undo e vira status.
+    fn dispatch_modifier(&mut self, op: petunia_core::ModifierOp) -> bool {
+        match self.state.dispatch(&petunia_core::ModifierCmd { op }) {
+            Ok(()) => true,
+            Err(error) => {
+                self.state.set_status(error.to_string());
+                false
+            }
+        }
+    }
+
     pub fn add_modifier(&mut self, kind: &str) -> bool {
         // Creation follows the displayed Modifiers section: pinned asset when
         // set, active selection otherwise. / A criação segue a seção exibida.
-        let asset_index = self
+        let Some(asset) = self
             .section_asset(petunia_config::InspectorSectionId::Modifiers)
             .map(|asset| asset.id)
-            .and_then(|id| {
-                self.state
-                    .project
-                    .assets
-                    .iter()
-                    .position(|asset| asset.id == id)
-            });
-        let Some(asset_index) = asset_index else {
+        else {
             return false;
         };
-        if self.state.project.assets.get(asset_index).is_none() {
-            return false;
-        }
-        let modifier = match kind {
+        let instance = match kind {
             "mirror" => petunia_project::ModifierInstance::mirror(0, 0.001),
             "symmetry" => petunia_project::ModifierInstance::symmetry(0, true, 0.001),
             _ => return false,
         };
-        self.state.checkpoint("add modifier");
-        if let Some(asset) = self.state.project.assets.get_mut(asset_index) {
-            asset.modifiers.push(modifier);
-        }
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::Add { asset, instance })
     }
 
     pub fn set_modifier_enabled(&mut self, id: &str, enabled: bool) -> bool {
-        let Ok(id) = uuid::Uuid::parse_str(id) else {
+        let Ok(modifier) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let Some(asset_index) = self.find_modifier_owner(id) else {
-            return false;
-        };
-        let Some(asset) = self.state.project.assets.get_mut(asset_index) else {
-            return false;
-        };
-        let Some(modifier) = asset.modifiers.iter_mut().find(|item| item.id == id) else {
-            return false;
-        };
-        if modifier.enabled == enabled {
+        // Já no estado pedido: nada a fazer, sem status de erro.
+        let unchanged = self.find_modifier_owner(modifier).is_none_or(|index| {
+            self.state.project.assets[index]
+                .modifiers
+                .iter()
+                .any(|item| item.id == modifier && item.enabled == enabled)
+        });
+        if unchanged {
             return false;
         }
-        self.state.checkpoint("toggle modifier");
-        if let Some(modifier) = self.state.project.assets[asset_index]
-            .modifiers
-            .iter_mut()
-            .find(|item| item.id == id)
-        {
-            modifier.enabled = enabled;
-        }
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::SetEnabled { modifier, enabled })
     }
 
     pub fn remove_modifier(&mut self, id: &str) -> bool {
-        let Ok(id) = uuid::Uuid::parse_str(id) else {
+        let Ok(modifier) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let Some(asset_index) = self.find_modifier_owner(id) else {
-            return false;
-        };
-        if !self.state.project.assets[asset_index]
-            .modifiers
-            .iter()
-            .any(|item| item.id == id)
-        {
+        if self.find_modifier_owner(modifier).is_none() {
             return false;
         }
-        self.state.checkpoint("remove modifier");
-        self.state.project.assets[asset_index]
-            .modifiers
-            .retain(|item| item.id != id);
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::Remove { modifier })
     }
 
     pub fn move_modifier(&mut self, id: &str, direction: i32) -> bool {
-        let Ok(id) = uuid::Uuid::parse_str(id) else {
+        let Ok(modifier) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let Some(asset_index) = self.find_modifier_owner(id) else {
+        let Some(index) = self.find_modifier_owner(modifier) else {
             return false;
         };
-        let Some(current) = self.state.project.assets[asset_index]
-            .modifiers
-            .iter()
-            .position(|item| item.id == id)
-        else {
-            return false;
-        };
-        let target = if direction < 0 {
-            if current == 0 {
-                return false;
+        // Na borda: o botão não faz nada (sem status de erro), como antes.
+        let stack = &self.state.project.assets[index].modifiers;
+        let position = stack.iter().position(|item| item.id == modifier);
+        let movable = position.is_some_and(|m| {
+            if direction < 0 {
+                m > 0
+            } else {
+                m + 1 < stack.len()
             }
-            current - 1
-        } else {
-            current + 1
-        };
-        if target >= self.state.project.assets[asset_index].modifiers.len() {
+        });
+        if !movable {
             return false;
         }
-        self.state.checkpoint("reorder modifier");
-        self.state.project.assets[asset_index]
-            .modifiers
-            .swap(current, target);
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::Move {
+            modifier,
+            up: direction < 0,
+        })
     }
 
     pub fn set_modifier_axis(&mut self, id: &str, axis: i32) -> bool {
-        let Ok(id) = uuid::Uuid::parse_str(id) else {
+        let Ok(modifier) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let Some(asset_index) = self.find_modifier_owner(id) else {
+        if self.find_modifier_owner(modifier).is_none() {
             return false;
-        };
-        let axis_value = (axis.clamp(0, 2)) as usize;
-        self.state.checkpoint("change modifier axis");
-        let Some(asset) = self.state.project.assets.get_mut(asset_index) else {
-            return false;
-        };
-        let Some(modifier) = asset.modifiers.iter_mut().find(|item| item.id == id) else {
-            return false;
-        };
-        match &mut modifier.kind {
-            petunia_project::ModifierKind::Mirror { axis, .. } => *axis = axis_value,
-            petunia_project::ModifierKind::Symmetry { axis, .. } => *axis = axis_value,
         }
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::SetAxis {
+            modifier,
+            axis: axis.clamp(0, 2) as usize,
+        })
     }
 
     pub fn set_modifier_direction(&mut self, id: &str, direction_value: bool) -> bool {
-        let Ok(id) = uuid::Uuid::parse_str(id) else {
+        let Ok(modifier) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let Some(asset_index) = self.find_modifier_owner(id) else {
+        if self.find_modifier_owner(modifier).is_none() {
             return false;
-        };
-        self.state.checkpoint("change modifier direction");
-        let Some(asset) = self.state.project.assets.get_mut(asset_index) else {
-            return false;
-        };
-        let Some(modifier) = asset.modifiers.iter_mut().find(|item| item.id == id) else {
-            return false;
-        };
-        match &mut modifier.kind {
-            petunia_project::ModifierKind::Symmetry {
-                positive_to_negative,
-                ..
-            } => *positive_to_negative = direction_value,
-            petunia_project::ModifierKind::Mirror { .. } => return false,
         }
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::SetDirection {
+            modifier,
+            positive_to_negative: direction_value,
+        })
     }
 
     pub fn apply_modifier(&mut self, id: &str) -> bool {
-        let Ok(id) = uuid::Uuid::parse_str(id) else {
+        let Ok(modifier) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let Some(asset_index) = self.find_modifier_owner(id) else {
-            return false;
-        };
-        let Some(asset) = self.state.project.assets.get(asset_index) else {
-            return false;
-        };
-        if !asset.modifiers.iter().any(|item| item.id == id) {
+        if self.find_modifier_owner(modifier).is_none() {
             return false;
         }
-        let evaluated = asset.evaluated_mesh();
-        self.state.checkpoint("apply modifier");
-        if let Some(asset) = self.state.project.assets.get_mut(asset_index) {
-            asset.mesh = evaluated.into();
-            asset.modifiers.retain(|item| item.id != id);
-        }
-        self.state.emit_mesh_changed();
-        true
+        self.dispatch_modifier(petunia_core::ModifierOp::Apply { modifier })
     }
 }

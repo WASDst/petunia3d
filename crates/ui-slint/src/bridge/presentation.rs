@@ -762,10 +762,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .get(self.state.project.active)
             .and_then(|asset| asset.paint_stack.as_ref())
         {
+            // Topo da pilha primeiro (convenção de Affinity/Photoshop): "subir"
+            // na lista é subir na composição.
+            let depth_of = |layer: &petunia_project::paint_layers::PaintLayer| {
+                let mut depth = 0;
+                let mut parent = layer.group_id;
+                while let Some(id) = parent {
+                    depth += 1;
+                    parent = stack
+                        .layers
+                        .iter()
+                        .find(|l| l.id == id)
+                        .and_then(|l| l.group_id);
+                    if depth > 16 {
+                        break;
+                    }
+                }
+                depth
+            };
             vm.paint_layers = stack
                 .layers
                 .iter()
                 .enumerate()
+                .rev()
                 .map(|(index, layer)| PaintLayerModel {
                     id: layer.id.to_string(),
                     name: layer.name.clone(),
@@ -780,6 +799,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         petunia_project::paint_layers::LayerKind::Effect(_) => "Effect",
                     }
                     .to_string(),
+                    kind: if layer.is_group {
+                        "group"
+                    } else {
+                        match layer.kind {
+                            petunia_project::paint_layers::LayerKind::Raster(_) => "raster",
+                            petunia_project::paint_layers::LayerKind::Decal(_) => "decal",
+                            petunia_project::paint_layers::LayerKind::Effect(_) => "effect",
+                        }
+                    }
+                    .to_string(),
+                    blend: layer.blend as i32,
+                    depth: depth_of(layer),
                 })
                 .collect();
             let (width, height) = self
@@ -793,6 +824,27 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .unwrap_or((0, 0));
             vm.paint_layer_count =
                 format!("{} layer(s)  ·  {width} × {height}", stack.layers.len());
+        } else if let Some(asset) = self.state.project.assets.get(self.state.project.active) {
+            // Sem pilha ainda: a textura é a camada base (como o "Background"
+            // do Affinity). Linha só de leitura, id vazio; a primeira operação
+            // de camada converte textura → pilha com a mesma "Base".
+            vm.paint_layers = vec![PaintLayerModel {
+                id: String::new(),
+                name: "Base".to_string(),
+                visible: true,
+                locked: false,
+                opacity: 1.0,
+                active: true,
+                is_group: false,
+                kind_label: "Raster".to_string(),
+                kind: "raster".to_string(),
+                blend: 0,
+                depth: 0,
+            }];
+            vm.paint_layer_count = match &asset.texture {
+                Some(canvas) => format!("1 layer(s)  ·  {} × {}", canvas.w, canvas.h),
+                None => "1 layer(s)".to_string(),
+            };
         }
         if let Some(session) = &self.loop_cut {
             vm.loop_cut_active = true;
@@ -809,13 +861,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     .preview(&session.source, session.cuts, session.slide)
             };
             if let Ok(segments) = preview_res {
+                // Segmentos saem da malha local; a projeção espera mundo.
+                let world = crate::projection::active_world_matrix(&self.state);
                 let mut commands = String::new();
                 for [a, b] in segments {
                     project_preview_segment(
                         &self.state.session.camera,
                         self.viewport_size,
-                        a,
-                        b,
+                        world.transform_point3(a),
+                        world.transform_point3(b),
                         &mut commands,
                     );
                 }
@@ -1292,13 +1346,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "model.loop_cut" => self.state.t_id(petunia_config::text_id::UI_ACTION_LOOP_CUT),
             _ => id.to_string(),
         };
+        // Disponibilidade pelo registro; o motivo da recusa vira descrição
+        // acessível do botão desabilitado (U06). Slice abre a ferramenta.
+        let availability = |id: &str| -> Result<(), String> {
+            if id == "model.slice" {
+                return Ok(());
+            }
+            self.state
+                .commands
+                .can_execute(id, &self.state)
+                .map_err(|error| error.to_string())
+        };
         vm.quick_actions = pinned_ids
             .iter()
             .map(|id| QuickActionModel {
                 id: id.clone(),
                 label: quick_label(id),
-                enabled: self.state.commands.can_execute(id, &self.state).is_ok()
-                    || id == "model.slice",
+                enabled: availability(id).is_ok(),
+                disabled_reason: availability(id).err().unwrap_or_default(),
                 active: self.state.session.tools.active_tool == id.as_str(),
                 pinned: true,
             })
@@ -1308,8 +1373,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .map(|id| QuickActionModel {
                 id: (*id).to_string(),
                 label: quick_label(id),
-                enabled: self.state.commands.can_execute(id, &self.state).is_ok()
-                    || *id == "model.slice",
+                enabled: availability(id).is_ok(),
+                disabled_reason: availability(id).err().unwrap_or_default(),
                 active: self.state.session.tools.active_tool == *id,
                 pinned: pinned_ids.iter().any(|pinned| pinned == id),
             })
@@ -1362,6 +1427,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .map(|entry| entry.id.presentation_id().to_owned())
             .unwrap_or_default();
         vm.scene_drawer_visible = self.scene_drawer_visible;
+        vm.inspector_visible = self.inspector_visible;
+        vm.planar_navigation = self.planar_navigation_active();
         vm.reference_manager_open = self.reference_manager_open;
         for slot in &mut vm.reference_slots {
             if let Some((w, h, rgba)) = self.reference_thumbnails.get(&slot.axis) {
@@ -1375,6 +1442,37 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.viewport.set_workspace(self.state.workspace);
         self.viewport
             .set_selection_domain(self.state.selection_domain());
+        self.sync_planar_navigation();
+    }
+
+    /// Navegação planar do DRAW (03-geometry/draw-unification-proposal.md,
+    /// "Navegação planar"): ao entrar, guarda a câmera e alinha a vista ao
+    /// Workplane; ao sair (POLY, outro workspace ou vista livre), devolve a
+    /// câmera guardada. Só a vista muda: Workplane e objetos ficam intactos.
+    pub(crate) fn planar_navigation_active(&self) -> bool {
+        self.state.workspace == Workspace::Model
+            && self.modeling_mode == crate::ModelingMode::Draw
+            && self.draw_planar_navigation
+    }
+
+    fn sync_planar_navigation(&mut self) {
+        let wanted = self.planar_navigation_active();
+        match (wanted, self.planar_saved_camera.is_some()) {
+            (true, false) => {
+                self.planar_saved_camera = Some(self.state.session.camera.clone());
+                petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
+                self.state.mark_dirty();
+            }
+            (false, true) => {
+                if let Some(mut camera) = self.planar_saved_camera.take() {
+                    // A janela pode ter mudado de proporção nesse meio-tempo.
+                    camera.aspect = self.state.session.camera.aspect;
+                    self.state.session.camera = camera;
+                    self.state.mark_dirty();
+                }
+            }
+            _ => {}
+        }
     }
 
     pub(crate) fn hide_overlay(&mut self, id: OverlayId) {

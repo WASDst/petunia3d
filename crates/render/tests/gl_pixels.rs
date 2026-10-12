@@ -1041,3 +1041,64 @@ fn rigid_preview_moves_the_object_without_reuploading_it() {
     assert!(luminance(start.at(h.width / 2 - 30, probe_y)) > 20.0);
     assert!(luminance(after.at(h.width / 2 - 30, probe_y)) < 5.0);
 }
+
+#[test]
+fn painted_texture_shows_in_solid_shading_even_when_it_appears_later() {
+    // QA de 2026-10-11: no PAINT o canvas tinha o traço, mas o cubo seguia
+    // cinza. Sombreamento Solid + `textured` (o padrão do PAINT) precisa
+    // amostrar a textura, inclusive quando ela nasce depois do 1º quadro.
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(160, 120) else {
+        return;
+    };
+    let mut project = cube_project();
+    let camera = h.camera(ViewPreset::Front, 3.0);
+    let textured = |parts: &mut SceneParts<'_>| {
+        parts.settings.textured = true;
+        parts.settings.show_wireframe_overlay = false;
+    };
+    let plain = h.render(textured, &project, &camera).center();
+
+    let index = project.assets.len() - 1;
+    project.assets[index].texture = Some(Canvas::new(32, 32, [230, 20, 20, 255]));
+    project.bump_textures();
+    let red = h.render(textured, &project, &camera).center();
+    assert!(
+        i32::from(red[0]) > i32::from(red[1]) + 60,
+        "a textura vermelha aparece: antes {plain:?}, depois {red:?}"
+    );
+}
+
+#[test]
+fn painted_face_shows_in_render() {
+    let _gpu = gpu_guard();
+    let Some(mut h) = Harness::new(160, 120) else {
+        return;
+    };
+    let mut project = cube_project();
+    let camera = h.camera(ViewPreset::Front, 3.0);
+    let textured = |parts: &mut SceneParts<'_>| {
+        parts.settings.textured = true;
+        parts.settings.show_wireframe_overlay = false;
+    };
+    let plain = h.render(textured, &project, &camera).center();
+
+    let index = project.assets.len() - 1;
+    let mut canvas = petunia_project::Canvas::new(128, 128, [191, 191, 198, 255]);
+    let hit = glam::Vec3::new(0.0, 0.0, 1.0);
+    let mut painted_pixels = 0;
+    project.assets[index].mesh.rasterize_face_near(1, hit, 0.5, 128, 128, 0.0, |x, y, _, _, _| {
+        let idx = ((y * 128 + x) * 4) as usize;
+        canvas.pixels[idx..idx + 4].copy_from_slice(&[255, 0, 0, 255]);
+        painted_pixels += 1;
+    });
+    assert!(painted_pixels > 0, "rasterize_face_near deve pintar pixels");
+    project.assets[index].texture = Some(canvas);
+    project.bump_textures();
+    let painted = h.render(textured, &project, &camera).center();
+    assert!(
+        i32::from(painted[0]) > i32::from(painted[1]) + 60,
+        "a face pintada de vermelho precisa renderizar vermelho! antes {plain:?}, depois {painted:?}"
+    );
+}
+

@@ -1,30 +1,30 @@
 export global DesignTokens {
     // Fundo da viewport: mais escuro e mais neutro que os painéis, para a área
     // de trabalho parecer um espaço independente (item 39 da spec).
-    in-out property <color> canvas: #101114;
+    in-out property <color> canvas: #121212;
     /// Realce de hover sobre a geometria, mais sutil que a seleção.
     /// Mesma família do hover 3D ([0.62,0.72,0.88]) e do hover legado
     /// egui (#7DDCFF): ciano claro, nunca confundido com seleção.
     in-out property <color> hover: #7ddcff;
-    in-out property <color> surface: #1d1f23;
-    in-out property <color> surface-raised: #25282e;
-    in-out property <color> surface-hover: #30343b;
-    in-out property <color> surface-pressed: #3a3f48;
-    in-out property <color> border: #3a3f48;
-    in-out property <color> border-strong: #545b67;
-    in-out property <color> text-primary: #edf0f4;
-    in-out property <color> text-secondary: #aeb5c0;
-    in-out property <color> text-muted: #969daa;
+    in-out property <color> surface: #202020;
+    in-out property <color> surface-raised: #292929;
+    in-out property <color> surface-hover: #353535;
+    in-out property <color> surface-pressed: #404040;
+    in-out property <color> border: #404040;
+    in-out property <color> border-strong: #5a5a5a;
+    in-out property <color> text-primary: #eeeeee;
+    in-out property <color> text-secondary: #b5b5b5;
+    in-out property <color> text-muted: #9e9e9e;
     in-out property <color> accent: #b58cff;
     /// Texto/ícone sobre `accent` (estado selecionado/ativo).
-    in-out property <color> on-accent: #101114;
+    in-out property <color> on-accent: #121212;
     in-out property <color> focus-ring: #d1b8ff;
     in-out property <color> success: #73d59b;
     in-out property <color> warning: #e5bd67;
     in-out property <color> danger: #ef6b73;
     in-out property <color> info: #6cb6ff;
     in-out property <color> scrim: #00000099;
-    in-out property <color> disabled: #565d68;
+    in-out property <color> disabled: #5d5d5d;
     in-out property <color> axis-x: #ff6e6e;
     in-out property <color> axis-y: #69db7c;
     in-out property <color> axis-z: #4dabf7;
@@ -37,8 +37,8 @@ export global DesignTokens {
     in-out property <color> selection-active: #ffaf29;
     in-out property <color> shadow: #00000088;
     in-out property <color> shadow-subtle: #00000055;
-    in-out property <color> hud-surface: #14141ee6;
-    in-out property <color> hud-border: #3a3f48;
+    in-out property <color> hud-surface: #181818e6;
+    in-out property <color> hud-border: #404040;
     in-out property <color> badge-precision-bg: #3e63dd33;
     in-out property <color> badge-precision-border: #3e63dd;
     in-out property <color> badge-precision-text: #3e63dd;
@@ -78,11 +78,11 @@ export global DesignTokens {
     in-out property <length> icon-rail: 20px;
 
     // Tipografia (cap. 36): nunca abaixo de `font-caption`.
-    in-out property <length> font-caption: 10px;
-    in-out property <length> font-small: 11px;
-    in-out property <length> font-default: 12px;
-    in-out property <length> font-strong: 13px;
-    in-out property <length> font-exceptional: 14px;
+    in-out property <length> font-caption: 12px;
+    in-out property <length> font-small: 12px;
+    in-out property <length> font-default: 13px;
+    in-out property <length> font-strong: 14px;
+    in-out property <length> font-exceptional: 16px;
 
     // Elevação (plano de UI 2026-10-04 §6.3): só dois níveis com sombra.
     // 1 = painel/HUD encostado na viewport; 2 = popover, menu, card flutuante.
@@ -98,6 +98,16 @@ export global DesignTokens {
     in-out property <length> control-height: 28px;
     in-out property <length> radius-control: 4px;
     in-out property <length> radius-panel: 8px;
+    // Cápsulas apenas em escolhas curtas; o layout limita o raio à altura.
+    in-out property <length> radius-pill: 999px;
+    // Relevo de bordas/tons locais. Alto contraste mantém os controles sólidos.
+    in-out property <bool> soft-depth: true;
+    out property <color> control-top: self.soft-depth ? self.surface-raised : self.surface;
+    out property <color> control-bottom: self.surface;
+    out property <color> control-highlight: self.soft-depth ? #ffffff14 : transparent;
+    out property <color> control-shadow: self.soft-depth ? #00000059 : transparent;
+    out property <color> pill-selected: self.accent;
+    out property <color> input-surface: self.soft-depth ? self.canvas.with-alpha(0.28) : self.surface;
     in-out property <length> space-xs: 4px;
     in-out property <length> space-sm: 8px;
     in-out property <length> space-md: 12px;

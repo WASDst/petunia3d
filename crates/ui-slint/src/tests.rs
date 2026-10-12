@@ -1006,6 +1006,43 @@ fn paint_stroke_is_continuous_and_commits_one_undo_step() {
 }
 
 #[test]
+fn paint_stroke_lays_paint_along_the_whole_drag() {
+    // Mesmos números da QA no app real (2026-10-11): um arrasto de 40
+    // atualizações que atravessa o cubo. O teste vizinho só conferia Undo e
+    // dirty state, e não pegou o pincel 60× menor.
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.resize_viewport(1213, 940);
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.apply(UiIntent::SetActiveTool("brush".into()));
+    // Pixels diferentes do fundo (o primeiro pixel fica fora do traço).
+    let painted = |bridge: &SlintUiBridge<PlaceholderViewport>| {
+        let asset = &bridge.state.project.assets[bridge.state.project.active];
+        let Some(canvas) = asset.texture.as_ref() else {
+            return 0;
+        };
+        let pixels = canvas.pixels.to_vec();
+        pixels.chunks(4).filter(|p| *p != &pixels[..4]).count()
+    };
+
+    // Começa fora do cubo, como um arrasto real que entra na malha.
+    let (y, from, to) = (470.0, 364.0, 849.0);
+    assert!(bridge.begin_paint_stroke_at(from, y));
+    for step in 1..=40 {
+        let x = from + (to - from) * step as f32 / 40.0;
+        bridge.paint_stroke_to(x, y);
+    }
+    assert!(bridge.end_paint_stroke_at(to, y));
+    // "Size 0.8" ≈ 12,8 px de tela ≈ 10 texels de largura numa textura de
+    // 1024 ao longo de ~400 px de cubo: milhares de pixels. O pincel encolhido
+    // pelo fov convertido duas vezes pintava ~325 (um fio de 1 texel).
+    let total = painted(&bridge);
+    assert!(
+        total > 2000,
+        "o arrasto pinta uma faixa visível: {total} pixels"
+    );
+}
+
+#[test]
 fn escape_cancels_paint_stroke_without_history() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.resize_viewport(800, 600);
@@ -1031,6 +1068,16 @@ fn keymap_routes_the_model_shortcut_table() {
     assert!(bridge.route_shortcut("M", false, false, false));
     assert!(bridge.route_shortcut("K", false, false, false));
     assert!(bridge.route_shortcut("Z", true, false, false));
+    // Wireframe toggle via Z and Shift+Z
+    assert_ne!(bridge.state.shading, petunia_core::Shading::Wireframe);
+    assert!(bridge.route_shortcut("Z", false, false, false));
+    assert_eq!(bridge.state.shading, petunia_core::Shading::Wireframe);
+    assert!(bridge.route_shortcut("Z", false, false, false));
+    assert_eq!(bridge.state.shading, petunia_core::Shading::Solid);
+    assert!(bridge.route_shortcut("Z", false, true, false));
+    assert_eq!(bridge.state.shading, petunia_core::Shading::Wireframe);
+    assert!(bridge.route_shortcut("Z", false, true, false));
+    assert_eq!(bridge.state.shading, petunia_core::Shading::Solid);
     assert!(bridge.route_shortcut("1", false, false, false));
     assert!(!bridge.route_shortcut("Ω", false, false, false));
 }
@@ -1877,12 +1924,13 @@ fn placing_an_unknown_asset_is_refused_and_says_so() {
 #[test]
 fn autosave_respects_interval_and_dirty_state() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
-    bridge.autosave = petunia_core::AutosaveService::new(petunia_core::AutosaveConfig {
-        enabled: true,
-        interval_secs: 0,
-        keep_n: 2,
-        only_when_dirty: true,
-    });
+    bridge.application_mut().autosave =
+        petunia_core::AutosaveService::new(petunia_core::AutosaveConfig {
+            enabled: true,
+            interval_secs: 0,
+            keep_n: 2,
+            only_when_dirty: true,
+        });
 
     assert!(
         !bridge.autosave_tick(),
@@ -1991,11 +2039,20 @@ fn knife_takes_two_viewport_picks_and_commits_one_cut() {
         "segundo ponto precisa cortar"
     );
 
-    let mesh = bridge.state.project.active_mesh().unwrap();
+    // O segmento vive só na prévia: o documento não muda antes do commit.
+    let preview_faces = bridge
+        .tool_preview_mesh()
+        .expect("prévia do corte")
+        .faces
+        .len();
     assert!(
-        mesh.faces.len() > faces_before,
-        "o corte precisa criar faces: antes {faces_before}, depois {}",
-        mesh.faces.len()
+        preview_faces > faces_before,
+        "o corte precisa criar faces na prévia: antes {faces_before}, depois {preview_faces}"
+    );
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        faces_before,
+        "a prévia da faca não escreve no documento"
     );
     assert!(
         bridge.state.session.tools.cut_session.is_some(),
@@ -2003,6 +2060,15 @@ fn knife_takes_two_viewport_picks_and_commits_one_cut() {
     );
     assert!(bridge.commit_knife());
     assert!(bridge.state.session.tools.cut_session.is_none());
+    assert!(
+        bridge.tool_preview_mesh().is_none(),
+        "o commit consome a prévia"
+    );
+    assert_eq!(
+        bridge.state.project.active_mesh().unwrap().faces.len(),
+        preview_faces,
+        "o commit grava exatamente a prévia"
+    );
     assert_eq!(bridge.state.project.undo.depth(), (1, 0));
     assert!(bridge.state.project.undo.can_undo());
 }
@@ -2604,6 +2670,56 @@ fn draw_and_poly_share_the_modeling_workspace() {
 }
 
 #[test]
+fn draw_planar_navigation_aligns_view_and_restores_the_previous_camera() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    let positions = |bridge: &SlintUiBridge<PlaceholderViewport>| -> Vec<[f32; 3]> {
+        let mesh = bridge.state.project.active_mesh().unwrap();
+        mesh.verts.iter().map(|vertex| vertex.pos).collect()
+    };
+    bridge.state.session.camera.orbit(30.0, -20.0);
+    let free = bridge.state.session.camera.clone();
+    let workplane = (bridge.state.profile.origin, bridge.state.profile.normal);
+    let vertices = positions(&bridge);
+
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    let planar = bridge.state.session.camera.clone();
+    assert!(bridge.view_model().planar_navigation);
+    assert_eq!(
+        planar.proj,
+        petunia_core::Projection::Ortho,
+        "DRAW é ortográfico"
+    );
+    assert_ne!(planar, free, "a vista se alinha ao Workplane");
+
+    // Orbit livre desligado: o arrasto desloca sem girar.
+    bridge.apply_viewport_gesture(crate::ViewportGesture::Orbit { dx: 40.0, dy: 10.0 });
+    let panned = &bridge.state.session.camera;
+    assert_eq!((panned.yaw, panned.pitch), (planar.yaw, planar.pitch));
+    assert_ne!(panned.target, planar.target);
+
+    // Só a vista muda: Workplane e geometria intactos.
+    assert_eq!(
+        (bridge.state.profile.origin, bridge.state.profile.normal),
+        workplane
+    );
+    assert_eq!(positions(&bridge), vertices);
+
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Poly));
+    assert_eq!(
+        bridge.state.session.camera, free,
+        "POLY devolve a câmera de antes"
+    );
+    assert!(!bridge.view_model().planar_navigation);
+
+    // Vista livre dentro do DRAW: mesma restauração, e o orbit volta.
+    bridge.apply(UiIntent::SetModelingMode(crate::ModelingMode::Draw));
+    bridge.execute_command(crate::commands::CommandId::TogglePlanarNavigation);
+    assert_eq!(bridge.state.session.camera, free);
+    bridge.apply_viewport_gesture(crate::ViewportGesture::Orbit { dx: 40.0, dy: 0.0 });
+    assert_ne!(bridge.state.session.camera.yaw, free.yaw);
+}
+
+#[test]
 fn switching_mode_drops_a_tool_the_new_rail_does_not_offer() {
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
     bridge.activate_parametric_tool(ToolModalKind::Extrude);
@@ -3141,27 +3257,28 @@ fn paint_layer_panel_adds_removes_reorders_and_composites() {
     assert!(bridge.add_paint_layer());
     let layers = bridge.view_model().paint_layers;
     assert_eq!(layers.len(), 2, "base + nova camada");
-    assert!(layers[1].active, "a camada nova vira ativa");
-    assert_eq!(layers[1].name, "Layer 2");
-    assert_eq!(layers[0].kind_label, "Raster");
+    // A lista vem do topo da pilha para a base (convenção Affinity).
+    assert!(layers[0].active, "a camada nova vira ativa e fica no topo");
+    assert_eq!(layers[0].name, "Layer 2");
+    assert_eq!(layers[1].kind_label, "Raster");
 
-    let base_id = layers[0].id.clone();
-    let new_id = layers[1].id.clone();
+    let base_id = layers[1].id.clone();
+    let new_id = layers[0].id.clone();
 
     assert!(bridge.toggle_paint_layer_visibility(&new_id));
-    assert!(!bridge.view_model().paint_layers[1].visible);
+    assert!(!bridge.view_model().paint_layers[0].visible);
     assert!(bridge.toggle_paint_layer_visibility(&new_id));
 
     assert!(bridge.toggle_paint_layer_lock(&new_id));
-    assert!(bridge.view_model().paint_layers[1].locked);
+    assert!(bridge.view_model().paint_layers[0].locked);
 
     assert!(bridge.set_paint_layer_opacity(&new_id, 0.25));
-    assert!((bridge.view_model().paint_layers[1].opacity - 0.25).abs() < 1.0e-6);
+    assert!((bridge.view_model().paint_layers[0].opacity - 0.25).abs() < 1.0e-6);
 
     assert!(bridge.move_paint_layer(&new_id, -1));
     let moved = bridge.view_model().paint_layers;
-    assert_eq!(moved[0].id, new_id, "desceu na ordem de composição");
-    assert_eq!(moved[1].id, base_id);
+    assert_eq!(moved[1].id, new_id, "desceu na ordem de composição");
+    assert_eq!(moved[0].id, base_id);
 
     assert!(bridge.remove_paint_layer(&new_id));
     assert_eq!(bridge.view_model().paint_layers.len(), 1);
@@ -3218,7 +3335,10 @@ fn paint_layer_panel_refuses_to_remove_the_last_layer() {
     bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
     bridge.add_paint_layer();
     let layers = bridge.view_model().paint_layers;
-    assert!(bridge.remove_paint_layer(&layers[1].id));
+    assert!(
+        bridge.remove_paint_layer(&layers[0].id),
+        "remove a nova (topo)"
+    );
     let remaining = bridge.view_model().paint_layers;
     assert_eq!(remaining.len(), 1);
 
@@ -3227,6 +3347,32 @@ fn paint_layer_panel_refuses_to_remove_the_last_layer() {
         "a base do raster precisa sobreviver"
     );
     assert_eq!(bridge.view_model().paint_layers.len(), 1);
+}
+
+#[test]
+fn paint_layer_panel_shows_base_before_stack_and_sets_blend() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    bridge.apply(UiIntent::SetWorkspace(Workspace::Paint));
+    bridge.state.project.assets[0].paint_stack = None;
+
+    let layers = bridge.view_model().paint_layers;
+    assert_eq!(layers.len(), 1, "sem pilha a textura aparece como Base");
+    assert_eq!(layers[0].name, "Base");
+    assert!(layers[0].id.is_empty(), "placeholder não é endereçável");
+    assert!(!bridge.set_paint_layer_blend("", 1));
+
+    assert!(bridge.add_paint_layer());
+    let top = bridge.view_model().paint_layers[0].id.clone();
+    assert!(bridge.set_paint_layer_blend(&top, 1));
+    assert_eq!(bridge.view_model().paint_layers[0].blend, 1, "Multiply");
+    assert!(
+        !bridge.set_paint_layer_blend(&top, 1),
+        "mesma mesclagem não gera Undo vazio"
+    );
+    assert!(
+        !bridge.set_paint_layer_blend(&top, 9),
+        "índice fora da faixa"
+    );
 }
 
 #[test]
@@ -3267,7 +3413,13 @@ fn decal_layer_transform_and_bake_workflow() {
     assert_eq!(vm.decal_scale_u, width);
     assert_eq!(vm.decal_scale_v, width);
 
-    let decal_id = vm.paint_layers.last().unwrap().id.clone();
+    let decal_id = vm
+        .paint_layers
+        .iter()
+        .find(|l| l.kind == "decal" || l.kind_label == "Decal")
+        .expect("decal layer present")
+        .id
+        .clone();
 
     // Decalque UV (projetos antigos): o Inspector edita centro e escala no atlas.
     {
@@ -4559,7 +4711,7 @@ fn effect_layers_change_the_composited_raster() {
     assert!(bridge.add_paint_effect_layer("Invert"));
     let layers = bridge.view_model().paint_layers;
     assert_eq!(layers.len(), 2);
-    assert_eq!(layers[1].kind_label, "Effect");
+    assert_eq!(layers[0].kind_label, "Effect", "efeito novo no topo");
     assert_eq!(bridge.view_model().paint_effect_kind, "Invert");
 
     let after = bridge.state.project.assets[0].texture.clone().unwrap();
@@ -6470,8 +6622,21 @@ fn modifier_stack_supports_live_rows_and_apply() {
     assert!(bridge.set_modifier_enabled(&rows[0].id, false));
     assert_eq!(bridge.view_model().modifier_rows[0].axis, 1);
     assert!(bridge.move_modifier(&rows[1].id, -1));
+    // Recusas validadas pelo comando não empilham Undo vazio.
+    let depth = bridge.state.project.undo.depth();
+    assert!(!bridge.set_modifier_axis(&rows[0].id, 1), "eixo já é 1");
+    assert!(
+        !bridge.apply_modifier(&rows[0].id),
+        "Mirror desligado não aplica"
+    );
+    assert_eq!(bridge.state.project.undo.depth(), depth);
     assert!(bridge.apply_modifier(&rows[1].id));
     assert_eq!(bridge.view_model().modifier_rows.len(), 1);
+    assert_eq!(
+        bridge.view_model().modifier_rows[0].id,
+        rows[0].id,
+        "só o aplicado sai"
+    );
     assert!(bridge.state.undo());
 }
 
@@ -7837,8 +8002,8 @@ fn test_merge_down_paint_layer() {
 
     assert!(bridge.add_paint_layer());
     assert_eq!(bridge.view_model().paint_layers.len(), 2);
-    let new_id = bridge.view_model().paint_layers[1].id.clone();
-    let base_id = bridge.view_model().paint_layers[0].id.clone();
+    let new_id = bridge.view_model().paint_layers[0].id.clone();
+    let base_id = bridge.view_model().paint_layers[1].id.clone();
 
     // Tentar merge down da camada base (índice 0) deve falhar
     assert!(!bridge.merge_down_paint_layer(&base_id));
@@ -9036,19 +9201,28 @@ fn test_profile_interactive_volume_flow() {
         bridge.profile_volume_mode,
         Some(petunia_module_model::ProfileVolumeMode::Extrude)
     );
-    assert!(bridge.profile_preview_asset_id.is_some());
+    assert!(bridge.profile_preview_id.is_some());
     assert_eq!(bridge.view_model().profile_volume_mode, "extrude");
 
-    // Check that preview asset exists in project
-    let preview_id = bridge.profile_preview_asset_id.unwrap();
-    let preview_asset = bridge
-        .state
-        .project
-        .assets
-        .iter()
-        .find(|a| a.id == preview_id);
-    assert!(preview_asset.is_some());
-    assert_eq!(preview_asset.unwrap().name, "Profile Preview");
+    // A prévia existe só no viewport: o documento não ganha objeto nenhum.
+    let preview_id = bridge.profile_preview_id.unwrap();
+    assert!(
+        bridge
+            .new_object_preview_mesh()
+            .is_some_and(|mesh| !mesh.faces.is_empty()),
+        "volume visível como prévia"
+    );
+    assert_eq!(
+        bridge
+            .state
+            .project
+            .assets
+            .iter()
+            .map(|asset| asset.id)
+            .collect::<Vec<_>>(),
+        initial_asset_ids,
+        "a prévia não entra no documento"
+    );
 
     // 2. Adjust depth interactively
     bridge.set_profile_depth(2.5);
@@ -9820,7 +9994,8 @@ fn test_profile_extrude_card_depth_and_generate() {
         bridge.profile_volume_mode,
         Some(petunia_module_model::ProfileVolumeMode::Extrude)
     );
-    assert!(bridge.profile_preview_asset_id.is_some());
+    assert!(bridge.profile_preview_id.is_some());
+    assert!(bridge.new_object_preview_mesh().is_some());
     assert_eq!(bridge.state.profile.depth, 3.5);
 
     // Further adjustments update the live extrude preview mesh
@@ -9853,7 +10028,8 @@ fn test_profile_shortcut_and_shelf_extrude() {
         bridge.profile_volume_mode,
         Some(petunia_module_model::ProfileVolumeMode::Extrude)
     );
-    assert!(bridge.profile_preview_asset_id.is_some());
+    assert!(bridge.profile_preview_id.is_some());
+    assert!(bridge.new_object_preview_mesh().is_some());
 
     // Triggering it again commits the volume
     let _ = bridge.execute_core_command("model.extrude");
@@ -10177,28 +10353,32 @@ fn test_slider_and_preference_responsiveness() {
 }
 
 #[test]
-fn collapse_inspector_closes_and_unpins_every_section() {
+fn collapse_hides_the_whole_inspector_and_keeps_open_sections() {
     use petunia_config::InspectorSectionId;
 
     let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
-    // Pílula clicada = seção aberta e fixada (ADR 005).
     for id in [InspectorSectionId::Parts, InspectorSectionId::Material] {
-        bridge.set_section_pin_open(id, true);
         bridge.set_section_open(id, true);
     }
+    assert!(bridge.view_model().inspector_visible);
+
+    // "»" esconde a coluna inteira; o acordeão não é tocado.
     bridge.collapse_inspector();
-    for id in InspectorSectionId::all() {
+    let vm = bridge.view_model();
+    assert!(!vm.inspector_visible, "a coluna some por inteiro");
+    for id in [InspectorSectionId::Parts, InspectorSectionId::Material] {
         let layout = &bridge.section_layouts[crate::section_layout::section_index(id)];
-        assert!(!layout.open, "{id:?} deveria fechar");
-        assert!(!layout.pin_open, "{id:?} deveria soltar o pin");
+        assert!(
+            layout.open,
+            "{id:?} continua aberta para quando a coluna voltar"
+        );
     }
-    assert!(
-        bridge
-            .view_model()
-            .section_states
-            .iter()
-            .all(|state| !state.open && !state.pin_open)
-    );
+
+    // O mesmo comando (atalho N, palette) traz a coluna de volta.
+    bridge.apply(UiIntent::ExecuteCommand(
+        crate::commands::CommandId::ToggleInspector,
+    ));
+    assert!(bridge.view_model().inspector_visible);
 }
 
 #[test]
@@ -11886,4 +12066,118 @@ fn add_popover_participates_in_click_away_order_without_closing_the_drawer() {
     assert_eq!(bridge.view_model().overlay_top_id, "scene_drawer");
     assert!(bridge.handle_click_away());
     assert!(!bridge.scene_drawer_visible);
+}
+
+#[test]
+fn paint_pointer_actions_follow_the_keymap_not_fixed_keys() {
+    use petunia_config::keybinds::{self as kb, Keybinds, Mods2};
+    // Padrão: reta/escalar no Shift, origem do clone/girar no Ctrl.
+    let defaults = Keybinds::default();
+    let shift = crate::PaintPointerActions::resolve(&defaults, true, false, false);
+    assert!(shift.straight && shift.decal_scale);
+    assert!(!shift.clone_source && !shift.decal_rotate);
+    let ctrl = crate::PaintPointerActions::resolve(&defaults, false, true, false);
+    assert!(ctrl.clone_source && ctrl.decal_rotate && !ctrl.straight);
+    assert_eq!(
+        crate::PaintPointerActions::resolve(&defaults, false, false, false),
+        crate::PaintPointerActions::default(),
+        "sem tecla, nenhuma ação"
+    );
+
+    // Perfil que move a origem do clone para Alt: Ctrl deixa de defini-la.
+    let mut remapped = Keybinds::default();
+    remapped.set_pointer_modifier(
+        kb::POINTER_CLONE_SOURCE,
+        Mods2 {
+            alt: true,
+            ..Mods2::default()
+        },
+    );
+    assert!(!crate::PaintPointerActions::resolve(&remapped, false, true, false).clone_source);
+    assert!(crate::PaintPointerActions::resolve(&remapped, false, false, true).clone_source);
+}
+
+#[test]
+fn production_bridge_adopts_the_application_without_a_second_state() {
+    let mut app = petunia_application::Application::default();
+    app.execute_registered_command("model.add_cube").unwrap();
+    let active = app.state.project.active().unwrap().id;
+    let history = app.state.project.undo.depth();
+    let clock = std::sync::Arc::clone(&app.state.clock);
+    let mut bridge = SlintUiBridge::from_application(app, PlaceholderViewport::default());
+
+    assert!(std::ptr::eq::<AppState>(
+        &*bridge.state,
+        &bridge.application().state
+    ));
+    assert_eq!(bridge.state.project.active().unwrap().id, active);
+    assert_eq!(bridge.state.project.undo.depth(), history);
+    assert!(std::sync::Arc::ptr_eq(&bridge.state.clock, &clock));
+
+    bridge.state.ui.reduced_motion = true;
+    assert!(bridge.application().state.ui.reduced_motion);
+}
+
+#[test]
+fn bridge_commands_and_application_share_one_undo_redo_history() {
+    let mut bridge = SlintUiBridge::from_application(
+        petunia_application::Application::default(),
+        PlaceholderViewport::default(),
+    );
+    let count = bridge.state.project.assets.len();
+    let depth = bridge.state.project.undo.depth();
+
+    bridge.execute_core_command("model.add_cube").unwrap();
+    assert_eq!(bridge.application().state.project.assets.len(), count + 1);
+    assert_eq!(
+        bridge.application().state.project.undo.depth(),
+        (depth.0 + 1, 0)
+    );
+    assert!(bridge.application().state.is_document_dirty());
+
+    bridge.apply(UiIntent::ExecuteCommand(CommandId::Undo));
+    assert_eq!(bridge.application().state.project.assets.len(), count);
+    assert!(!bridge.application().state.is_document_dirty());
+
+    bridge.apply(UiIntent::ExecuteCommand(CommandId::Redo));
+    assert_eq!(bridge.application().state.project.assets.len(), count + 1);
+    assert_eq!(
+        bridge.application().state.project.undo.depth(),
+        (depth.0 + 1, 0)
+    );
+    assert!(bridge.application().state.is_document_dirty());
+
+    let revision = bridge.state.project.project.revision_id();
+    assert_eq!(
+        bridge.execute_core_command("unknown.command"),
+        Err(petunia_core::CommandError::UnknownCommand(
+            "unknown.command".into()
+        ))
+    );
+    assert_eq!(
+        bridge.application().state.project.project.revision_id(),
+        revision
+    );
+    assert_eq!(
+        bridge.application().state.project.undo.depth(),
+        (depth.0 + 1, 0)
+    );
+}
+
+#[test]
+fn paint_workspace_always_shows_the_painted_texture() {
+    let mut bridge = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+    assert!(
+        !bridge.state.session.textured,
+        "o padrão do toggle continua desligado"
+    );
+    assert!(
+        !bridge.viewport_render_state().textured,
+        "MODEL em Solid: textura opcional"
+    );
+    bridge.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Paint));
+    assert!(
+        bridge.viewport_render_state().textured,
+        "PAINT mostra a textura sendo pintada mesmo em Solid"
+    );
 }

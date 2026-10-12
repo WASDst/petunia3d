@@ -102,10 +102,7 @@ impl ProjectService {
         }
         state.events.emit(AppEvent::ProjectLoaded);
         state.sync_selection();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now = state.clock.now_secs();
         let name = path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
@@ -128,10 +125,7 @@ impl ProjectService {
         state.project.project_path = Some(path.to_string_lossy().to_string());
         state.project.mark_saved(save_point);
         state.events.emit(AppEvent::ProjectSaved);
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        let now = state.clock.now_secs();
         let name = path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())

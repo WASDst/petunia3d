@@ -1,5 +1,5 @@
 import { InspectorSplitLayout } from "../../shell/inspector_split.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../../petunia_icons.slint";
 import { DesignTokens, Tr } from "../../tokens.slint";
 import { NumericField } from "../../components/controls.slint";
 import { InspectorSection } from "../../inspector/sections.slint";
@@ -76,7 +76,12 @@ export component UvInspector inherits Rectangle {
                         background: DesignTokens.accent;
                         HorizontalLayout {
                             spacing: 6px;
-                            IconDisplay { icon: IconSet.Maximize2; size: 14px; stroke: DesignTokens.on-accent; }
+                            Image {
+                                source: PetuniaIcons.uv-unwrap;
+                                width: 14px;
+                                height: 14px;
+                                colorize: DesignTokens.on-accent;
+                            }
                             Text { text: root.label-unwrap-mesh; color: DesignTokens.on-accent; font-size: DesignTokens.font-small; font-weight: 700; vertical-alignment: center; }
                         }
                         TouchArea { clicked => { root.command-executed("uv.unwrap"); } }
@@ -91,7 +96,12 @@ export component UvInspector inherits Rectangle {
                         HorizontalLayout {
                             alignment: center;
                             spacing: 6px;
-                            IconDisplay { icon: IconSet.Grid2x2; size: 14px; stroke: DesignTokens.text-primary; }
+                            Image {
+                                source: PetuniaIcons.uv-pack;
+                                width: 14px;
+                                height: 14px;
+                                colorize: DesignTokens.text-primary;
+                            }
                             Text { text: root.label-pack-islands; color: DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                         }
                         TouchArea { clicked => { root.command-executed("uv.pack_islands"); } }

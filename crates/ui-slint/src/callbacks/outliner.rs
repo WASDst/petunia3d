@@ -1,6 +1,53 @@
 //! Outliner, renomear, filtros de assets, prefabs e cor das partes.
 
 use super::*;
+use crate::color_wheel::{PART_COLOR_PICKER_SIZE, PickerHsv};
+
+fn picker_hsv(window: &PetuniaSlintShell) -> PickerHsv {
+    PickerHsv {
+        hue: window.get_part_color_hue(),
+        saturation: window.get_part_color_saturation(),
+        value: window.get_part_color_value(),
+    }
+}
+
+fn sync_picker_hsv(window: &PetuniaSlintShell, hsv: PickerHsv) {
+    let rgb = hsv.rgb();
+    window.set_part_color_hue(hsv.hue);
+    window.set_part_color_saturation(hsv.saturation);
+    window.set_part_color_value(hsv.value);
+    window.set_part_color_preview(slint::Color::from_rgb_u8(rgb[0], rgb[1], rgb[2]));
+    window.set_part_color_hex(format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]).into());
+    window.set_color_wheel_image(crate::color_wheel::generate_color_wheel_image(
+        PART_COLOR_PICKER_SIZE,
+        hsv,
+    ));
+}
+
+fn commit_picker_hsv<V: PetuniaViewport + 'static>(
+    window: &PetuniaSlintShell,
+    bridge: &Arc<Mutex<SlintUiBridge<V>>>,
+    hsv: PickerHsv,
+) -> bool {
+    let id = window.get_part_color_popover_id().to_string();
+    let Ok(mut bridge) = bridge.lock() else {
+        return false;
+    };
+    // Preserve the existing color-authoring entrypoint. Its migration to an
+    // Application command/Undo transaction is separate from this visual slice.
+    if !bridge.set_part_selection_color(&id, Some(hsv.rgb())) {
+        return false;
+    }
+    sync_picker_hsv(window, hsv);
+    window.set_part_color_has_custom(true);
+    let vm = bridge.view_model();
+    let new_frame = bridge.render_viewport();
+    sync_window_properties(window, &vm);
+    if let Some(frame) = new_frame {
+        window.set_viewport_image(frame);
+    }
+    true
+}
 
 pub(crate) fn connect_outliner_callbacks<V: PetuniaViewport + 'static>(
     window: &PetuniaSlintShell,
@@ -289,39 +336,36 @@ pub(crate) fn connect_outliner_callbacks<V: PetuniaViewport + 'static>(
         {
             let custom_color = asset.selection_overlay_color;
             let eff = custom_color.unwrap_or(bridge.state.ui.selection_rgb);
-            let hex = format!("#{:02X}{:02X}{:02X}", eff[0], eff[1], eff[2]);
             window.set_part_color_popover_id(id_str.as_str().into());
             window.set_part_color_popover_name(asset.name.as_str().into());
-            window.set_part_color_preview(slint::Color::from_rgb_u8(eff[0], eff[1], eff[2]));
-            window.set_part_color_hex(hex.into());
+            sync_picker_hsv(&window, PickerHsv::from_rgb(eff, picker_hsv(&window)));
             window.set_part_color_has_custom(custom_color.is_some());
-            window.set_color_wheel_image(crate::color_wheel::generate_color_wheel_image(130));
             window.set_part_color_popover_open(true);
         }
     });
 
     let wheel_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
-    window.on_part_color_wheel_interacted(move |x, y| {
-        if let Some(window) = window_weak.upgrade() {
-            let id = window.get_part_color_popover_id().to_string();
-            let dx = x - 65.0;
-            let dy = y - 65.0;
-            let rgb = crate::color_wheel::sample_wheel_color(dx, dy, 64.0);
-            let hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
-            window.set_part_color_preview(slint::Color::from_rgb_u8(rgb[0], rgb[1], rgb[2]));
-            window.set_part_color_hex(hex.into());
-            window.set_part_color_has_custom(true);
-
-            if let Ok(mut bridge) = wheel_bridge.lock() {
-                bridge.set_part_selection_color(&id, Some(rgb));
-                let vm = bridge.view_model();
-                let new_frame = bridge.render_viewport();
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
-            }
+    let drag_region = std::cell::Cell::new(None);
+    window.on_part_color_wheel_interacted(move |x, y, begin| {
+        if begin {
+            drag_region.set(crate::color_wheel::picker_region_at(
+                x,
+                y,
+                PART_COLOR_PICKER_SIZE,
+            ));
+        }
+        if let Some(window) = window_weak.upgrade()
+            && let Some(region) = drag_region.get()
+            && let Some(hsv) = crate::color_wheel::sample_picker_color(
+                x,
+                y,
+                PART_COLOR_PICKER_SIZE,
+                picker_hsv(&window),
+                region,
+            )
+        {
+            commit_picker_hsv(&window, &wheel_bridge, hsv);
         }
     });
 
@@ -329,6 +373,9 @@ pub(crate) fn connect_outliner_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_part_color_hex_entered(move |hex| {
         let clean = hex.trim().strip_prefix('#').unwrap_or(hex.trim());
+        if !matches!(clean.len(), 3 | 6) || !clean.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return false;
+        }
         if let Ok(val) = u32::from_str_radix(clean, 16) {
             let rgb = match clean.len() {
                 6 => [
@@ -341,22 +388,62 @@ pub(crate) fn connect_outliner_callbacks<V: PetuniaViewport + 'static>(
                     (((val >> 4) & 0xF) * 17) as u8,
                     ((val & 0xF) * 17) as u8,
                 ],
-                _ => return,
+                _ => return false,
             };
             if let Some(window) = window_weak.upgrade() {
-                let id = window.get_part_color_popover_id().to_string();
-                window.set_part_color_preview(slint::Color::from_rgb_u8(rgb[0], rgb[1], rgb[2]));
-                window.set_part_color_has_custom(true);
-                if let Ok(mut bridge) = hex_bridge.lock() {
-                    bridge.set_part_selection_color(&id, Some(rgb));
-                    let vm = bridge.view_model();
-                    let new_frame = bridge.render_viewport();
-                    sync_window_properties(&window, &vm);
-                    if let Some(frame) = new_frame {
-                        window.set_viewport_image(frame);
-                    }
-                }
+                return commit_picker_hsv(
+                    &window,
+                    &hex_bridge,
+                    PickerHsv::from_rgb(rgb, picker_hsv(&window)),
+                );
             }
+        }
+        false
+    });
+
+    let hsv_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_hsv_entered(move |channel, text| {
+        let Some(window) = window_weak.upgrade() else {
+            return false;
+        };
+        let mut hsv = picker_hsv(&window);
+        let base = match channel {
+            0 => hsv.hue,
+            1 => hsv.saturation * 100.0,
+            2 => hsv.value * 100.0,
+            _ => return false,
+        };
+        let Ok(value) = crate::numeric::parse_numeric_with_base(text.as_str(), base) else {
+            return false;
+        };
+        let maximum = if channel == 0 { 360.0 } else { 100.0 };
+        if !(0.0..=maximum).contains(&value) {
+            return false;
+        }
+        match channel {
+            0 => hsv.hue = value.rem_euclid(360.0),
+            1 => hsv.saturation = value / 100.0,
+            _ => hsv.value = value / 100.0,
+        }
+        commit_picker_hsv(&window, &hsv_bridge, hsv)
+    });
+
+    let hsv_adjust_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_part_color_hsv_adjusted(move |channel, delta| {
+        if !delta.is_finite() {
+            return;
+        }
+        if let Some(window) = window_weak.upgrade() {
+            let mut hsv = picker_hsv(&window);
+            match channel {
+                0 => hsv.hue = (hsv.hue + delta).rem_euclid(360.0),
+                1 => hsv.saturation = (hsv.saturation + delta / 100.0).clamp(0.0, 1.0),
+                2 => hsv.value = (hsv.value + delta / 100.0).clamp(0.0, 1.0),
+                _ => return,
+            }
+            commit_picker_hsv(&window, &hsv_adjust_bridge, hsv);
         }
     });
 
@@ -364,22 +451,12 @@ pub(crate) fn connect_outliner_callbacks<V: PetuniaViewport + 'static>(
     let window_weak = window.as_weak();
     window.on_part_color_preset_clicked(move |color| {
         if let Some(window) = window_weak.upgrade() {
-            let id = window.get_part_color_popover_id().to_string();
             let rgb = [color.red(), color.green(), color.blue()];
-            let hex = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
-            window.set_part_color_preview(color);
-            window.set_part_color_hex(hex.into());
-            window.set_part_color_has_custom(true);
-
-            if let Ok(mut bridge) = preset_bridge.lock() {
-                bridge.set_part_selection_color(&id, Some(rgb));
-                let vm = bridge.view_model();
-                let new_frame = bridge.render_viewport();
-                sync_window_properties(&window, &vm);
-                if let Some(frame) = new_frame {
-                    window.set_viewport_image(frame);
-                }
-            }
+            commit_picker_hsv(
+                &window,
+                &preset_bridge,
+                PickerHsv::from_rgb(rgb, picker_hsv(&window)),
+            );
         }
     });
 
@@ -389,18 +466,14 @@ pub(crate) fn connect_outliner_callbacks<V: PetuniaViewport + 'static>(
         if let Some(window) = window_weak.upgrade() {
             let id = window.get_part_color_popover_id().to_string();
             if let Ok(mut bridge) = reset_bridge.lock() {
-                bridge.set_part_selection_color(&id, None);
+                if !bridge.set_part_selection_color(&id, None) {
+                    return;
+                }
                 let default_rgb = bridge.state.ui.selection_rgb;
-                let hex = format!(
-                    "#{:02X}{:02X}{:02X}",
-                    default_rgb[0], default_rgb[1], default_rgb[2]
+                sync_picker_hsv(
+                    &window,
+                    PickerHsv::from_rgb(default_rgb, picker_hsv(&window)),
                 );
-                window.set_part_color_preview(slint::Color::from_rgb_u8(
-                    default_rgb[0],
-                    default_rgb[1],
-                    default_rgb[2],
-                ));
-                window.set_part_color_hex(hex.into());
                 window.set_part_color_has_custom(false);
 
                 let vm = bridge.view_model();

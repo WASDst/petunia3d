@@ -1,7 +1,7 @@
 // Painel flutuante do gerenciador de referências.
 import { DesignTokens, Tr } from "../tokens.slint";
 import { IconButton } from "../components/base.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { PanelDragHandle, PanelResizeGrip, TopAction } from "../components/controls.slint";
 import { ReferenceDetails, ReferenceTile } from "../dialogs/references.slint";
 import { ReferenceSlotData } from "../types.slint";
@@ -84,10 +84,13 @@ export component ReferenceManagerPanel inherits Rectangle {
                     VerticalLayout { alignment: center; HorizontalLayout {
                         spacing: 8px;
                         alignment: center;
-                        IconDisplay {
-                            icon: IconSet.Image;
-                            size: 16px;
-                            stroke: DesignTokens.accent;
+                        Image {
+                            source: PetuniaIcons.reference-image;
+                            width: 16px;
+                            height: 16px;
+                            colorize: DesignTokens.accent;
+                            y: (parent.height - self.height) / 2;
+                            image-fit: contain;
                         }
                         Text {
                             text: Tr.t("sl.reference_images");
@@ -109,7 +112,7 @@ export component ReferenceManagerPanel inherits Rectangle {
                         alignment: center;
 
                         if !root.ref-clear-confirm && root.reference-total-count > 0: IconButton {
-                            icon: IconSet.Trash2;
+                            icon-svg: PetuniaIcons.trash;
                             label: Tr.t("sl.clear_all");
                             semantic-label: Tr.t("sl.clear_all");
                             clicked => { root.ref-clear-confirm = true; }
@@ -121,7 +124,7 @@ export component ReferenceManagerPanel inherits Rectangle {
                             vertical-alignment: center;
                         }
                         if root.ref-clear-confirm: IconButton {
-                            icon: IconSet.Trash2;
+                            icon-svg: PetuniaIcons.trash;
                             label: Tr.t("sl.ref_clear_yes");
                             semantic-label: Tr.t("sl.ref_clear_yes");
                             clicked => {
@@ -130,14 +133,14 @@ export component ReferenceManagerPanel inherits Rectangle {
                             }
                         }
                         if root.ref-clear-confirm: IconButton {
-                            icon: IconSet.X;
+                            icon-svg: PetuniaIcons.close;
                             label: Tr.t("sl.cancel");
                             semantic-label: Tr.t("sl.cancel");
                             clicked => { root.ref-clear-confirm = false; }
                         }
 
                         TopAction {
-                            icon: IconSet.X;
+                            icon-svg: PetuniaIcons.close;
                             semantic-label: Tr.t("sl.close_reference_manager");
                             clicked => {
                                 root.reference-manager-visible = false;

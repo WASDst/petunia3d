@@ -424,3 +424,85 @@ mod tests {
         assert_eq!(state.project.undo.depth(), depth);
     }
 }
+
+/// Forma (linha/retângulo/elipse) na textura do objeto ativo. Uma entrada de
+/// Undo por forma; a UI só monta o traço.
+#[derive(Clone, Copy, Debug)]
+pub struct ShapePaintCmd {
+    pub stroke: crate::ShapeStroke,
+}
+
+impl Command for ShapePaintCmd {
+    fn label(&self) -> &'static str {
+        "paint shape"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::TEXTURES
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        crate::PaintModule::commit_shape_in(state, self.stroke);
+        Ok(())
+    }
+}
+
+/// Forma do gradiente, em texels da textura ativa.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GradientShape {
+    Linear { from: (u32, u32), to: (u32, u32) },
+    Radial { center: (u32, u32), radius: f32 },
+}
+
+/// Gradiente de `color_start` a `color_end` por cima do que existe. Uma
+/// entrada de Undo.
+#[derive(Clone, Copy, Debug)]
+pub struct GradientPaintCmd {
+    pub shape: GradientShape,
+    pub color_start: [u8; 4],
+    pub color_end: [u8; 4],
+}
+
+impl Command for GradientPaintCmd {
+    fn label(&self) -> &'static str {
+        "paint gradient"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::TEXTURES
+    }
+
+    fn can_execute(&self, _state: &EditorView<'_>) -> Result<(), &'static str> {
+        match self.shape {
+            GradientShape::Radial { radius, .. } if !radius.is_finite() => {
+                Err("gradient radius must be finite")
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        match self.shape {
+            GradientShape::Linear { from, to } => crate::PaintModule::canvas_gradient_linear_in(
+                state,
+                from.0,
+                from.1,
+                to.0,
+                to.1,
+                self.color_start,
+                self.color_end,
+            ),
+            GradientShape::Radial { center, radius } => {
+                crate::PaintModule::canvas_gradient_radial_in(
+                    state,
+                    center.0,
+                    center.1,
+                    radius,
+                    self.color_start,
+                    self.color_end,
+                );
+            }
+        }
+        Ok(())
+    }
+}

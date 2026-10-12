@@ -115,6 +115,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             CommandId::OpenSettings => self.apply(UiIntent::OpenSettings),
             CommandId::ToggleSceneDrawer => self.apply(UiIntent::ToggleSceneDrawer),
+            CommandId::ToggleInspector => self.apply(UiIntent::ToggleInspector),
+            CommandId::TogglePlanarNavigation => self.apply(UiIntent::TogglePlanarNavigation),
             CommandId::DuplicateSelected => self.apply(UiIntent::DuplicateActiveAsset),
             CommandId::SelectAll => self.apply(UiIntent::SelectAll),
             CommandId::ClearSelection => self.apply(UiIntent::ClearSelection),
@@ -409,6 +411,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 match key {
                     "1" if opposite => return self.set_view_preset(V::Back),
                     "1" if plain => return self.set_view_preset(V::Front),
+                    "2" if plain => return self.set_view_preset(V::PseudoIsometric2To1),
                     "3" if opposite => return self.set_view_preset(V::Left),
                     "3" if plain => return self.set_view_preset(V::Right),
                     "7" if opposite => return self.set_view_preset(V::Bottom),
@@ -543,6 +546,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             } else if self.toggle_selected_uv_pins() {
                 return true;
             }
+        }
+        if text.eq_ignore_ascii_case("z")
+            && !ctrl
+            && !alt
+            && self.state.session.tools.modal.is_none()
+            && self.drag.is_none()
+            && self.rename_draft.is_none()
+        {
+            if let Err(error) = self.execute_core_command("view.toggle_wireframe") {
+                self.state.set_status(error.to_string());
+            }
+            return true;
         }
         if self.state.workspace == Workspace::Model
             && self.state.session.tools.modal.is_none()
@@ -749,6 +764,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "global.redo" => self.apply(UiIntent::Redo),
             "global.reset_camera" => self.apply(UiIntent::ResetCamera),
             "global.toggle_projection" => self.apply(UiIntent::ToggleProjection),
+            "global.toggle_wireframe" | "view.toggle_wireframe" => {
+                if let Err(error) = self.execute_core_command("view.toggle_wireframe") {
+                    self.state.set_status(error.to_string());
+                }
+            }
             "model.select_object" => {
                 self.apply(UiIntent::SetSelectionDomain(SelectionDomain::Object))
             }

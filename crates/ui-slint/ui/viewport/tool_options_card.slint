@@ -1,7 +1,7 @@
 // Card de opções da ferramenta ativa.
 import { BrushChip, NumericField, ToolCard, Vector3Field } from "../components/controls.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 
 export component ToolOptionsCard inherits ToolCard {
     in property <string> tool-options-title;
@@ -131,7 +131,7 @@ export component ToolOptionsCard inherits ToolCard {
     }
 
     // Common adjustments row (Snap, Proportional Editing and Pivot) / Linha de ajustes comuns (Snap, Proportional Editing e Pivot)
-    if root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale": HorizontalLayout {
+    if root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "transform": HorizontalLayout {
         spacing: 4px;
         height: 24px;
 
@@ -144,10 +144,11 @@ export component ToolOptionsCard inherits ToolCard {
             HorizontalLayout {
                 alignment: center;
                 spacing: 3px;
-                IconDisplay {
-                    icon: IconSet.Magnet;
-                    size: 11px;
-                    stroke: root.snap-enabled ? DesignTokens.accent : DesignTokens.text-secondary;
+                Image {
+                    source: PetuniaIcons.snap-magnet;
+                    width: 11px;
+                    height: 11px;
+                    colorize: root.snap-enabled ? DesignTokens.accent : DesignTokens.text-secondary;
                 }
                 Text {
                     text: root.snap-enabled ? root.snap-target : Tr.t("sl.snap_2");
@@ -169,10 +170,11 @@ export component ToolOptionsCard inherits ToolCard {
             HorizontalLayout {
                 alignment: center;
                 spacing: 3px;
-                IconDisplay {
-                    icon: IconSet.CircleDot;
-                    size: 11px;
-                    stroke: root.proportional-editing ? DesignTokens.accent : DesignTokens.text-secondary;
+                Image {
+                    source: PetuniaIcons.proportional-editing;
+                    width: 11px;
+                    height: 11px;
+                    colorize: root.proportional-editing ? DesignTokens.accent : DesignTokens.text-secondary;
                 }
                 Text {
                     text: root.proportional-editing ? "\{round(root.proportional-radius * 10) / 10}" : Tr.t("sl.prop");
@@ -193,6 +195,13 @@ export component ToolOptionsCard inherits ToolCard {
             border-color: DesignTokens.border;
             HorizontalLayout {
                 alignment: center;
+                spacing: 3px;
+                Image {
+                    source: PetuniaIcons.pivot-median;
+                    width: 11px;
+                    height: 11px;
+                    colorize: DesignTokens.text-secondary;
+                }
                 Text {
                     text: root.pivot-label != "" ? root.pivot-label : Tr.t("sl.pivot");
                     color: DesignTokens.text-secondary;
@@ -277,6 +286,82 @@ export component ToolOptionsCard inherits ToolCard {
         scrub-finished => { root.transform-scrub-finished(); }
         text-committed(axis, text) => { root.transform-text-committed("scale", axis, text) }
         scrub-cancelled => { root.transform-scrub-cancelled(); }
+    }
+
+    if root.active-tool == "transform": VerticalLayout {
+        spacing: 6px;
+        Vector3Field {
+            row-label: Tr.t("sl.position");
+            field-hint: root.label-numeric-field-hint;
+            x-value: root.pos-x;
+            y-value: root.pos-y;
+            z-value: root.pos-z;
+            scrubbed(axis, delta, fine) => { root.transform-scrubbed("pos", axis, delta, fine); }
+            scrub-started => { root.transform-scrub-started("pos"); }
+            scrub-finished => { root.transform-scrub-finished(); }
+            text-committed(axis, text) => { root.transform-text-committed("pos", axis, text) }
+            scrub-cancelled => { root.transform-scrub-cancelled(); }
+        }
+        VerticalLayout {
+            spacing: 4px;
+            Vector3Field {
+                row-label: Tr.t("sl.rotation");
+                field-hint: root.label-numeric-field-hint;
+                step: 1;
+                x-value: root.rot-x;
+                y-value: root.rot-y;
+                z-value: root.rot-z;
+                scrubbed(axis, delta, fine) => { root.transform-scrubbed("rot", axis, delta, fine); }
+                scrub-started => { root.transform-scrub-started("rot"); }
+                scrub-finished => { root.transform-scrub-finished(); }
+                text-committed(axis, text) => { root.transform-text-committed("rot", axis, text) }
+                scrub-cancelled => { root.transform-scrub-cancelled(); }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                height: 22px;
+                Text { text: Tr.t("sl.step_90"); color: DesignTokens.text-muted; font-size: DesignTokens.font-caption; vertical-alignment: center; }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 3px;
+                    background: DesignTokens.surface;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    Text { text: "+90° X"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.transform-scrubbed("rot", 0, 90, false); root.transform-scrub-finished(); } }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 3px;
+                    background: DesignTokens.surface;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    Text { text: "+90° Y"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.transform-scrubbed("rot", 1, 90, false); root.transform-scrub-finished(); } }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 3px;
+                    background: DesignTokens.surface;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    Text { text: "+90° Z"; color: DesignTokens.text-primary; font-size: DesignTokens.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                    TouchArea { clicked => { root.transform-scrubbed("rot", 2, 90, false); root.transform-scrub-finished(); } }
+                }
+            }
+        }
+        Vector3Field {
+            row-label: Tr.t("sl.scale");
+            field-hint: root.label-numeric-field-hint;
+            x-value: root.scale-x;
+            y-value: root.scale-y;
+            z-value: root.scale-z;
+            scrubbed(axis, delta, fine) => { root.transform-scrubbed("scale", axis, delta, fine); }
+            scrub-started => { root.transform-scrub-started("scale"); }
+            scrub-finished => { root.transform-scrub-finished(); }
+            text-committed(axis, text) => { root.transform-text-committed("scale", axis, text) }
+            scrub-cancelled => { root.transform-scrub-cancelled(); }
+        }
     }
 
     if root.active-tool == "cut": VerticalLayout {
@@ -463,7 +548,7 @@ export component ToolOptionsCard inherits ToolCard {
     }
 
     Text {
-        text: (root.active-tool == "cursor" || root.active-tool == "cursor_3d") ? Tr.t("sl.lmb_click_to_place_shift_rmb_in_any_tool") : ((root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale") ? Tr.t("sl.g_move_r_rotate_s_scale_shift_precision") : "");
+        text: (root.active-tool == "cursor" || root.active-tool == "cursor_3d") ? Tr.t("sl.lmb_click_to_place_shift_rmb_in_any_tool") : ((root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale" || root.active-tool == "transform") ? Tr.t("sl.g_move_r_rotate_s_scale_shift_precision") : "");
         color: DesignTokens.text-muted;
         font-size: DesignTokens.font-caption;
     }

@@ -48,14 +48,46 @@ impl GpuCaps {
         !self.embedded && (self.major, self.minor) >= (3, 3)
     }
 
+    /// Detecta se está rodando sobre o Zink (implementação OpenGL sobre Vulkan do Mesa).
+    pub fn is_zink(&self) -> bool {
+        self.renderer.to_ascii_lowercase().contains("zink")
+    }
+
+    /// Detecta se está rodando sobre o driver Vulkan NVK (NVIDIA open-source no Mesa).
+    pub fn is_nvk(&self) -> bool {
+        self.renderer.to_ascii_lowercase().contains("nvk")
+    }
+
+    /// Detecta rasterizador por software puro (llvmpipe, softpipe, swrast, lavapipe).
+    pub fn is_software(&self) -> bool {
+        let r = self.renderer.to_ascii_lowercase();
+        r.contains("llvmpipe") || r.contains("softpipe") || r.contains("swrast") || r.contains("lavapipe")
+    }
+
     /// Resumo de uma linha para log de startup e relatórios.
     pub fn summary(&self) -> String {
+        let mut notes = Vec::new();
+        if self.is_zink() {
+            notes.push("Zink");
+        }
+        if self.is_nvk() {
+            notes.push("NVK");
+        }
+        if self.is_software() {
+            notes.push("software rasterizer");
+        }
+        let note_suffix = if notes.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", notes.join(", "))
+        };
         format!(
-            "OpenGL {} | GLSL {} | {} — {} | max texture {} | max MSAA {}x",
+            "OpenGL {} | GLSL {} | {} — {}{} | max texture {} | max MSAA {}x",
             self.gl_version,
             self.glsl_version,
             self.vendor,
             self.renderer,
+            note_suffix,
             self.max_texture_size,
             self.max_samples
         )

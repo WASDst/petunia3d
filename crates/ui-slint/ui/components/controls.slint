@@ -1,5 +1,6 @@
-import { Icon, IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { RichTooltip } from "feedback.slint";
+import { ControlRelief, IconButton } from "base.slint";
 import { DesignTokens, Motion, Tr } from "../tokens.slint";
 import { MenuEntry } from "../types.slint";
 
@@ -12,8 +13,8 @@ export component SplitterHorizontal inherits Rectangle {
     callback moved(length);
 
     width: 100%;
-    height: DesignTokens.control-height;
-    background: touch-area.has-hover || touch-area.pressed ? DesignTokens.surface-hover : DesignTokens.surface;
+    height: 8px;
+    background: touch-area.has-hover || touch-area.pressed ? DesignTokens.focus-ring.with-alpha(0.3) : transparent;
     accessible-role: slider;
     accessible-label: Tr.t("sl.resize_panel_height");
     accessible-value: root.value / 1px;
@@ -25,11 +26,12 @@ export component SplitterHorizontal inherits Rectangle {
     forward-focus: splitter-focus;
 
     Rectangle {
-        width: 32px;
-        height: 2px;
+        width: 36px;
+        height: 3px;
+        border-radius: 1.5px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        background: splitter-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border-strong;
+        background: splitter-focus.has-focus ? DesignTokens.focus-ring : (touch-area.has-hover || touch-area.pressed ? DesignTokens.accent : DesignTokens.border-strong);
     }
     splitter-focus := FocusScope {
         key-pressed(event) => {
@@ -63,7 +65,6 @@ export component SplitterHorizontal inherits Rectangle {
 
 /// Botão compacto da barra da viewport (visão e domínio de seleção).
 export component ViewportBarButton inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> label;
     in property <string> shortcut: "";
@@ -77,8 +78,8 @@ export component ViewportBarButton inherits Rectangle {
     accessible-label: root.label;
     accessible-checked: root.active;
     forward-focus: bar-focus;
-    width: root.emphasized ? 32px : max(26px, 12px + 14px + 12px);
-    height: root.emphasized ? 28px : 26px;
+    width: root.emphasized ? 32px : max(DesignTokens.control-height, 12px + 14px + 12px);
+    height: DesignTokens.control-height;
     border-radius: 5px;
     background: root.active
         ? DesignTokens.accent
@@ -90,19 +91,20 @@ export component ViewportBarButton inherits Rectangle {
     transform-scale: bar-touch.pressed ? 0.94 : 1.0;
     animate transform-scale { duration: Motion.fast; easing: ease-out; }
 
+    ControlRelief {
+        radius: DesignTokens.radius-control + 1px;
+        visible: root.active || bar-touch.has-hover || bar-touch.pressed;
+        pressed: bar-touch.pressed;
+    }
+
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
         colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
-        width: 16px;
-        height: 16px;
+        width: DesignTokens.icon-control;
+        height: DesignTokens.icon-control;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    if root.icon-svg.width == 0: bar-icon := IconDisplay {
-        icon: root.icon;
-        size: 14px;
-        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
     }
     bar-focus := FocusScope {
         key-pressed(event) => {
@@ -153,6 +155,12 @@ export component ViewportSvgButton inherits Rectangle {
     animate border-color { duration: Motion.fast; easing: ease-out; }
     transform-scale: touch.pressed ? 0.94 : 1.0;
     animate transform-scale { duration: Motion.fast; easing: ease-out; }
+    ControlRelief {
+        radius: DesignTokens.radius-control + 1px;
+        visible: root.active || root.live-mode || touch.has-hover || touch.pressed;
+        pressed: touch.pressed;
+    }
+
     Image {
         source: root.glyph;
         colorize: (root.active || root.live-mode) ? DesignTokens.on-accent : DesignTokens.text-primary;
@@ -206,7 +214,7 @@ export component MenuButton inherits Rectangle {
     accessible-role: button;
     accessible-label: root.label;
     accessible-expanded: root.open;
-    height: 26px;
+    height: DesignTokens.control-height;
     width: max(46px, menu-label.preferred-width + 20px);
     border-radius: 4px;
     background: root.open
@@ -350,7 +358,6 @@ export component BrushStepper inherits HorizontalLayout {
     in property <string> value-text;
     callback minus();
     callback plus();
-    alignment: center;
     Text {
         text: root.label + ": " + root.value-text;
         color: DesignTokens.text-secondary;
@@ -358,26 +365,22 @@ export component BrushStepper inherits HorizontalLayout {
         horizontal-stretch: 1;
         overflow: elide;
     }
-    Rectangle {
-        width: 24px;
-        height: 24px;
-        border-radius: 4px;
-        background: minus-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
-        accessible-role: button;
-        accessible-label: root.label + " −";
-        Text { text: "-"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-        minus-touch := TouchArea { clicked => { root.minus(); } }
+    IconButton {
+        icon-svg: PetuniaIcons.minus;
+        size: DesignTokens.control-height;
+        horizontal-stretch: 0;
+        semantic-label: root.label + " −";
+        background: DesignTokens.control-top;
+        clicked => { root.minus(); }
     }
     Rectangle { width: 4px; }
-    Rectangle {
-        width: 24px;
-        height: 24px;
-        border-radius: 4px;
-        background: plus-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised;
-        accessible-role: button;
-        accessible-label: root.label + " +";
-        Text { text: "+"; color: DesignTokens.text-primary; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-        plus-touch := TouchArea { clicked => { root.plus(); } }
+    IconButton {
+        icon-svg: PetuniaIcons.plus;
+        size: DesignTokens.control-height;
+        horizontal-stretch: 0;
+        semantic-label: root.label + " +";
+        background: DesignTokens.control-top;
+        clicked => { root.plus(); }
     }
 }
 
@@ -389,8 +392,12 @@ export component BrushChip inherits Rectangle {
     callback clicked();
     height: DesignTokens.control-height;
     horizontal-stretch: 1;
-    border-radius: 4px;
-    background: root.active ? DesignTokens.accent : (chip-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised);
+    border-radius: DesignTokens.radius-pill;
+    background: root.active ? DesignTokens.pill-selected
+        : chip-touch.pressed ? DesignTokens.surface-pressed
+        : chip-touch.has-hover ? DesignTokens.surface-hover
+        : DesignTokens.soft-depth ? @linear-gradient(180deg, DesignTokens.control-top, DesignTokens.control-bottom)
+        : DesignTokens.control-top;
     accessible-role: button;
     accessible-label: root.label;
     accessible-checked: root.active;
@@ -398,7 +405,12 @@ export component BrushChip inherits Rectangle {
     accessible-action-default => { if root.enabled { root.clicked(); } }
     forward-focus: chip-focus;
     border-width: chip-focus.has-focus ? 2px : 0px;
-    border-color: DesignTokens.focus-ring;
+    border-color: root.active ? DesignTokens.on-accent : DesignTokens.focus-ring;
+    ControlRelief {
+        radius: DesignTokens.radius-pill;
+        pressed: chip-touch.pressed;
+        visible: root.enabled;
+    }
     Text {
         text: root.label;
         color: !root.enabled ? DesignTokens.disabled : root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
@@ -508,10 +520,13 @@ export component ContextMenuItem inherits Rectangle {
 
         Rectangle {
             width: 14px;
-            if root.checked: IconDisplay {
-                icon: IconSet.Check;
-                size: 12px;
-                stroke: DesignTokens.accent;
+            if root.checked: Image {
+                source: PetuniaIcons.check;
+                width: 12px;
+                height: 12px;
+                colorize: DesignTokens.accent;
+                image-fit: contain;
+                y: (parent.height - self.height) / 2;
             }
         }
         Text {
@@ -589,7 +604,6 @@ export component MenuDropdown inherits Rectangle {
 }
 
 export component TopAction inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> semantic-label;
     in property <string> shortcut: "";
@@ -602,6 +616,8 @@ export component TopAction inherits Rectangle {
 
     accessible-role: button;
     accessible-label: root.semantic-label;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
     accessible-checkable: root.toggle-button;
     accessible-checked: root.active;
     forward-focus: top-focus;
@@ -616,21 +632,23 @@ export component TopAction inherits Rectangle {
     transform-scale: touch-area.pressed ? 0.94 : 1.0;
     animate transform-scale { duration: Motion.fast; easing: ease-out; }
 
+    ControlRelief {
+        radius: DesignTokens.radius-control + 1px;
+        visible: root.enabled && (root.active || touch-area.has-hover || touch-area.pressed);
+        pressed: touch-area.pressed;
+    }
+
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
-        colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
-        width: 18px;
-        height: 18px;
+        colorize: !root.enabled ? DesignTokens.disabled : root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
+        width: DesignTokens.icon-control;
+        height: DesignTokens.icon-control;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
     }
-    if root.icon-svg.width == 0: IconDisplay {
-        icon: root.icon;
-        size: 16px;
-        stroke: root.active ? DesignTokens.on-accent : DesignTokens.text-secondary;
-    }
     top-focus := FocusScope {
+        enabled: root.enabled;
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") && root.enabled {
                 root.clicked();
@@ -659,7 +677,7 @@ export component TopAction inherits Rectangle {
 
 /// Segmented control para a seleção de workspaces com pill deslizante.
 export component WorkspaceSegment inherits Rectangle {
-    /// "DRAW", "POLY", "PAINT" ou "UV".
+    /// "DRAW", "POLY", "PAINT" ou "ANIMATE" (quando disponível).
     in property <string> active: "POLY";
     in property <bool> reduced-motion: false;
     in property <string> draw-title: "Draw";
@@ -675,35 +693,65 @@ export component WorkspaceSegment inherits Rectangle {
 
     accessible-role: tab-list;
     accessible-label: Tr.t("sl.workspaces");
+    forward-focus: workspace-focus;
     width: root.animate-available ? 327px : 246px;
     height: 30px;
-    border-radius: 6px;
-    background: DesignTokens.surface-raised;
+    border-radius: DesignTokens.radius-pill;
+    background: DesignTokens.soft-depth
+        ? @linear-gradient(180deg, DesignTokens.control-top, DesignTokens.control-bottom)
+        : DesignTokens.control-top;
     border-width: 1px;
     border-color: DesignTokens.border;
 
     // Sliding pill
     Rectangle {
         x: root.active == "DRAW" ? 2px : (root.active == "POLY" ? 83px : (root.active == "PAINT" ? 164px : 245px));
-        y: 2px;
+        y: 1px;
         width: 80px;
-        height: 24px;
-        border-radius: 4px;
-        background: DesignTokens.accent;
-        animate x { duration: root.reduced-motion ? 0ms : 160ms; easing: ease-out-quad; }
+        height: DesignTokens.control-height;
+        border-radius: DesignTokens.radius-pill;
+        background: DesignTokens.pill-selected;
+        border-width: workspace-focus.has-focus ? 2px : 0px;
+        border-color: DesignTokens.on-accent;
+        ControlRelief { radius: DesignTokens.radius-pill; }
+        animate x { duration: root.reduced-motion ? 0ms : Motion.medium; easing: ease-out-quad; }
+    }
+
+    workspace-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.LeftArrow {
+                if root.active == "POLY" { root.changed("DRAW"); }
+                else if root.active == "PAINT" { root.changed("POLY"); }
+                else if root.active == "ANIMATE" { root.changed("PAINT"); }
+                return accept;
+            }
+            if event.text == Key.RightArrow {
+                if root.active == "DRAW" { root.changed("POLY"); }
+                else if root.active == "POLY" { root.changed("PAINT"); }
+                else if root.active == "PAINT" && root.animate-available { root.changed("ANIMATE"); }
+                return accept;
+            }
+            if event.text == Key.Home { root.changed("DRAW"); return accept; }
+            if event.text == Key.End { root.changed(root.animate-available ? "ANIMATE" : "PAINT"); return accept; }
+            reject
+        }
     }
 
     HorizontalLayout {
-        padding: 2px;
+        padding-left: 2px;
+        padding-right: 2px;
+        padding-top: 1px;
+        padding-bottom: 1px;
         spacing: 1px;
         Rectangle {
             width: 80px;
-            height: 24px;
+            height: DesignTokens.control-height;
             background: transparent;
             accessible-role: tab;
             accessible-label: root.draw-title;
             accessible-description: root.draw-description;
             accessible-checked: root.active == "DRAW";
+            accessible-action-default => { root.changed("DRAW"); }
             Text {
                 text: Tr.t("sl.draw");
                 color: root.active == "DRAW" ? DesignTokens.on-accent : DesignTokens.text-secondary;
@@ -713,7 +761,7 @@ export component WorkspaceSegment inherits Rectangle {
                 vertical-alignment: center;
             }
             TouchArea {
-                clicked => { root.changed("DRAW"); }
+                clicked => { workspace-focus.focus(); root.changed("DRAW"); }
                 Tooltip {
                     RichTooltip {
                         title: root.draw-title;
@@ -725,22 +773,23 @@ export component WorkspaceSegment inherits Rectangle {
         }
         Rectangle {
             width: 80px;
-            height: 24px;
+            height: DesignTokens.control-height;
             background: transparent;
             accessible-role: tab;
             accessible-label: root.poly-title;
             accessible-description: root.poly-description;
             accessible-checked: root.active == "POLY";
+            accessible-action-default => { root.changed("POLY"); }
             Text {
                 text: Tr.t("sl.poly");
-                color: root.active == "POLY" ? DesignTokens.canvas : DesignTokens.text-secondary;
+                color: root.active == "POLY" ? DesignTokens.on-accent : DesignTokens.text-secondary;
                 font-size: DesignTokens.font-small;
                 font-weight: 700;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
             TouchArea {
-                clicked => { root.changed("POLY"); }
+                clicked => { workspace-focus.focus(); root.changed("POLY"); }
                 Tooltip {
                     RichTooltip {
                         title: root.poly-title;
@@ -752,11 +801,12 @@ export component WorkspaceSegment inherits Rectangle {
         }
         Rectangle {
             width: 80px;
-            height: 24px;
+            height: DesignTokens.control-height;
             background: transparent;
             accessible-role: tab;
             accessible-label: Tr.t("sl.paint_workspace");
             accessible-checked: root.active == "PAINT";
+            accessible-action-default => { root.changed("PAINT"); }
             Text {
                 text: Tr.t("sl.paint");
                 color: root.active == "PAINT" ? DesignTokens.on-accent : DesignTokens.text-secondary;
@@ -766,7 +816,7 @@ export component WorkspaceSegment inherits Rectangle {
                 vertical-alignment: center;
             }
             TouchArea {
-                clicked => { root.changed("PAINT"); }
+                clicked => { workspace-focus.focus(); root.changed("PAINT"); }
                 Tooltip {
                     RichTooltip {
                         title: Tr.t("sl.paint_workspace");
@@ -778,12 +828,13 @@ export component WorkspaceSegment inherits Rectangle {
         }
         if root.animate-available: Rectangle {
             width: 80px;
-            height: 24px;
+            height: DesignTokens.control-height;
             background: transparent;
             accessible-role: tab;
             accessible-label: root.animate-label;
             accessible-description: root.animate-tip;
             accessible-checked: root.active == "ANIMATE";
+            accessible-action-default => { root.changed("ANIMATE"); }
             Text {
                 text: root.animate-label;
                 color: root.active == "ANIMATE" ? DesignTokens.on-accent : DesignTokens.text-secondary;
@@ -793,7 +844,7 @@ export component WorkspaceSegment inherits Rectangle {
                 vertical-alignment: center;
             }
             TouchArea {
-                clicked => { root.changed("ANIMATE"); }
+                clicked => { workspace-focus.focus(); root.changed("ANIMATE"); }
                 Tooltip {
                     RichTooltip {
                         title: root.animate-label;
@@ -843,10 +894,14 @@ export component ToolCard inherits Rectangle {
                 height: 20px;
                 accessible-role: button;
                 accessible-label: root.collapsed ? Tr.t("sl.expand") : Tr.t("sl.collapse");
-                IconDisplay {
-                    icon: root.collapsed ? IconSet.ChevronDown : IconSet.ChevronUp;
-                    size: 13px;
-                    stroke: DesignTokens.text-secondary;
+                Image {
+                    source: root.collapsed ? PetuniaIcons.chevron-down : PetuniaIcons.chevron-up;
+                    width: 13px;
+                    height: 13px;
+                    colorize: DesignTokens.text-secondary;
+                    image-fit: contain;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
                 }
                 TouchArea { clicked => { root.collapse-toggled(); } }
             }
@@ -863,7 +918,6 @@ export component ToolCard inherits Rectangle {
 
 
 export component ToolButton inherits Rectangle {
-    in property <Icon> icon;
     in property <image> icon-svg;
     in property <string> semantic-label;
     in property <string> shortcut: "";
@@ -901,20 +955,20 @@ export component ToolButton inherits Rectangle {
     border-width: tool-focus.has-focus ? 2px : (root.double-tap-armed ? 2px : ((!active && touch-area.has-hover) ? 1px : 0px));
     border-color: root.double-tap-armed ? DesignTokens.armed-ring : DesignTokens.focus-ring;
 
+    ControlRelief {
+        radius: DesignTokens.radius-control + 2px;
+        visible: root.active || touch-area.has-hover || touch-area.pressed || root.highlighted;
+        pressed: touch-area.pressed;
+    }
+
     if root.icon-svg.width > 0: Image {
         source: root.icon-svg;
         colorize: root.active ? DesignTokens.on-accent : DesignTokens.text-primary;
-        width: 18px;
-        height: 18px;
+        width: DesignTokens.icon-control;
+        height: DesignTokens.icon-control;
         x: root.show-label ? 7px : (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         image-fit: contain;
-    }
-    if root.icon-svg.width == 0: IconDisplay {
-        x: root.show-label ? 8px : (parent.width - self.width) / 2;
-        icon: root.icon;
-        size: 16px;
-        stroke: active ? DesignTokens.on-accent : DesignTokens.text-primary;
     }
     if root.show-label: Text {
         x: 32px;
@@ -988,7 +1042,7 @@ export struct RailTool {
     label: string,
     shortcut: string,
     description: string,
-    icon: Icon,
+    icon-svg: image,
     active: bool,
 }
 
@@ -1014,7 +1068,7 @@ export component ToolGroup inherits Rectangle {
     height: button.height;
 
     button := ToolButton {
-        icon: root.tools[root.shown].icon;
+        icon-svg: root.tools[root.shown].icon-svg;
         semantic-label: root.tools[root.shown].label;
         shortcut: root.tools[root.shown].shortcut;
         description: root.tools[root.shown].description;
@@ -1102,7 +1156,7 @@ export component NumericField inherits Rectangle {
     accessible-value: Math.round(root.value * 100) / 100;
     forward-focus: field-focus;
     border-radius: 4px;
-    background: touch.pressed ? DesignTokens.surface-hover : DesignTokens.surface-raised;
+    background: touch.pressed ? DesignTokens.surface-hover : DesignTokens.input-surface;
     border-width: field-focus.has-focus ? 2px : 1px;
     border-color: root.invalid ? DesignTokens.danger : (field-focus.has-focus ? DesignTokens.focus-ring : (root.editing || touch.is-scrubbing ? DesignTokens.accent : DesignTokens.border));
 
@@ -1134,7 +1188,6 @@ export component NumericField inherits Rectangle {
             padding-left: 6px;
             padding-right: 6px;
             spacing: 4px;
-            alignment: center;
             Text {
                 text: root.label;
                 color: root.label-color;
@@ -1152,6 +1205,7 @@ export component NumericField inherits Rectangle {
                 horizontal-stretch: 1;
             }
             if root.editing: TextInput {
+                accessible-label: root.full-label;
                 text <=> root.draft;
                 color: DesignTokens.text-primary;
                 font-size: DesignTokens.font-small;
@@ -1263,7 +1317,6 @@ export component Vector3Field inherits HorizontalLayout {
     in property <float> step: 0.1;
 
     spacing: 6px;
-    alignment: center;
     height: 28px;
 
     Text {

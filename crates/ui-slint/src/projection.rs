@@ -4,6 +4,49 @@
 use crate::*;
 use petunia_core::{AppState, Camera, PivotPoint, SelectionDomain, Workspace};
 
+/// Matriz objeto→mundo do asset ativo (identidade sem asset). Posições lidas
+/// de `active_mesh()` são locais: tudo que vai para a tela ou mede distâncias
+/// passa por ela; tudo que volta da tela para editar a malha usa a inversa.
+pub(crate) fn active_world_matrix(state: &AppState) -> glam::Mat4 {
+    state
+        .project
+        .active()
+        .map_or(glam::Mat4::IDENTITY, petunia_project::Asset::world_matrix)
+}
+
+/// Malha base do asset ativo nas coordenadas do mundo, com os mesmos índices
+/// da malha editável (ao contrário de `world_mesh`, que usa a malha avaliada
+/// com modificadores). Só copia quando a transformação não é identidade.
+pub(crate) fn active_mesh_in_world(
+    state: &AppState,
+) -> Option<std::borrow::Cow<'_, petunia_core::Mesh>> {
+    Some(mesh_in_world(state, state.project.active_mesh()?))
+}
+
+/// `mesh` (do objeto ativo: a do documento ou uma prévia) no mundo.
+pub(crate) fn mesh_in_world<'a>(
+    state: &AppState,
+    mesh: &'a petunia_core::Mesh,
+) -> std::borrow::Cow<'a, petunia_core::Mesh> {
+    match state.project.active() {
+        Some(asset) if !asset.transform.is_identity() => {
+            let mut world = mesh.clone();
+            world.transform_affine(asset.world_matrix());
+            std::borrow::Cow::Owned(world)
+        }
+        _ => std::borrow::Cow::Borrowed(mesh),
+    }
+}
+
+/// Normal local da malha ativa levada ao mundo pela matriz normal (inversa
+/// transposta), correta também sob escala não uniforme.
+pub(crate) fn active_world_normal(state: &AppState, local: glam::Vec3) -> glam::Vec3 {
+    let normal_matrix = glam::Mat3::from_mat4(active_world_matrix(state))
+        .inverse()
+        .transpose();
+    (normal_matrix * local).normalize_or_zero()
+}
+
 /// Projeta um ponto do mundo para pixels da viewport; `None` atrás da câmera
 /// ou fora do frustum de profundidade.
 pub(crate) fn project_world_point(
@@ -802,37 +845,30 @@ pub(crate) fn compute_world_axis_labels(
         return Vec::new();
     }
 
-    let view_proj = state.session.camera.view_proj();
-    let project = |pos: glam::Vec3| -> Option<[f32; 2]> {
-        let clip = view_proj * pos.extend(1.0);
-        if clip.w <= 0.05 {
-            return None;
-        }
-        let inv_w = 1.0 / clip.w;
-        let sx = (clip.x * inv_w * 0.5 + 0.5) * width;
-        let sy = (1.0 - (clip.y * inv_w * 0.5 + 0.5)) * height;
-        if sx >= 24.0 && sx <= width - 24.0 && sy >= 24.0 && sy <= height - 24.0 {
-            Some([sx, sy])
-        } else {
-            None
-        }
-    };
+    let camera = &state.session.camera;
+    let extent = (camera.distance * 0.85).clamp(2.5, state.grid_settings.size.max(20.0));
 
-    let mut labels = Vec::new();
-    const EXTENT: f32 = 8.0;
     let candidates = [
-        (glam::Vec3::new(EXTENT, 0.0, 0.0), "+X", [229, 77, 66]),
-        (glam::Vec3::new(-EXTENT, 0.0, 0.0), "-X", [229, 77, 66]),
-        (glam::Vec3::new(0.0, 0.0, EXTENT), "+Z", [62, 99, 221]),
-        (glam::Vec3::new(0.0, 0.0, -EXTENT), "-Z", [62, 99, 221]),
+        (glam::Vec3::new(extent, 0.0, 0.0), "+X", [229, 77, 66]),
+        (glam::Vec3::new(-extent, 0.0, 0.0), "-X", [229, 77, 66]),
+        (glam::Vec3::new(0.0, extent, 0.0), "+Y", [70, 167, 88]),
+        (glam::Vec3::new(0.0, -extent, 0.0), "-Y", [70, 167, 88]),
+        (glam::Vec3::new(0.0, 0.0, extent), "+Z", [62, 99, 221]),
+        (glam::Vec3::new(0.0, 0.0, -extent), "-Z", [62, 99, 221]),
     ];
 
+    let mut labels = Vec::new();
     for (pos, text, color) in candidates {
-        if let Some([x, y]) = project(pos) {
+        if let Some([sx, sy]) = project_world_point(camera, [width, height], pos)
+            && sx >= 16.0
+            && sx <= width - 16.0
+            && sy >= 16.0
+            && sy <= height - 16.0
+        {
             labels.push(WorldAxisLabelModel {
                 text: text.to_string(),
-                x,
-                y,
+                x: sx,
+                y: sy,
                 color,
             });
         }
@@ -970,6 +1006,7 @@ pub(crate) fn compute_quick_measure(
 
     use std::fmt::Write as _;
     let view_proj = state.session.camera.view_proj();
+    let world = active_world_matrix(state);
 
     // Helper closure para projetar ponto 3D para espaço de tela (pixels)
     let project_pt = |p: glam::Vec3| -> Option<[f32; 2]> {
@@ -1110,8 +1147,8 @@ pub(crate) fn compute_quick_measure(
             if idx0 >= mesh.verts.len() || idx1 >= mesh.verts.len() || idx0 == idx1 {
                 return QuickMeasureModel::default();
             }
-            let p0 = mesh.verts[idx0].vec();
-            let p1 = mesh.verts[idx1].vec();
+            let p0 = world.transform_point3(mesh.verts[idx0].vec());
+            let p1 = world.transform_point3(mesh.verts[idx1].vec());
             let delta = p1 - p0;
             let distance = delta.length();
             if distance < 1e-4 {
@@ -1192,8 +1229,8 @@ pub(crate) fn compute_quick_measure(
                 if idx0 >= mesh.verts.len() || idx1 >= mesh.verts.len() || idx0 == idx1 {
                     continue;
                 }
-                let p0 = mesh.verts[idx0].vec();
-                let p1 = mesh.verts[idx1].vec();
+                let p0 = world.transform_point3(mesh.verts[idx0].vec());
+                let p1 = world.transform_point3(mesh.verts[idx1].vec());
                 let edge_dist = (p1 - p0).length();
                 if edge_dist < 1e-4 {
                     continue;
@@ -1245,11 +1282,11 @@ pub(crate) fn compute_quick_measure(
             let center_pt =
                 if let Some((&best_v, &max_c)) = vert_counts.iter().max_by_key(|entry| *entry.1) {
                     if max_c >= 2 && vert_counts.values().filter(|&&c| c == max_c).count() == 1 {
-                        mesh.verts[best_v as usize].vec()
+                        world.transform_point3(mesh.verts[best_v as usize].vec())
                     } else {
                         let sum: glam::Vec3 = vert_counts
                             .keys()
-                            .map(|&v| mesh.verts[v as usize].vec())
+                            .map(|&v| world.transform_point3(mesh.verts[v as usize].vec()))
                             .sum();
                         sum / (vert_counts.len() as f32)
                     }
@@ -1301,8 +1338,8 @@ pub(crate) fn compute_quick_measure(
         if idx0 >= mesh.verts.len() || idx1 >= mesh.verts.len() || idx0 == idx1 {
             return QuickMeasureModel::default();
         }
-        let p_start = mesh.verts[idx0].vec();
-        let p_end = mesh.verts[idx1].vec();
+        let p_start = world.transform_point3(mesh.verts[idx0].vec());
+        let p_end = world.transform_point3(mesh.verts[idx1].vec());
         let delta = p_end - p_start;
         let distance = delta.length();
         if distance < 1e-4 {
@@ -1540,7 +1577,21 @@ pub(crate) fn compute_asset_overlay(
     let Some(asset) = state.project.assets.get(index) else {
         return SelectionOverlayModel::default();
     };
-    let evaluated = asset.evaluated_mesh_ref();
+    // Contorno e faces do objeto na tela: posições no mundo.
+    let evaluated = asset.world_mesh();
+    let rigid_matrix = state
+        .rigid_preview_transforms()
+        .iter()
+        .find(|(id, _)| *id == asset.id)
+        .map(|(_, matrix)| *matrix)
+        .unwrap_or(glam::Mat4::IDENTITY);
+    let evaluated = if rigid_matrix != glam::Mat4::IDENTITY {
+        let mut m = evaluated.into_owned();
+        m.transform_affine(rigid_matrix);
+        std::borrow::Cow::Owned(m)
+    } else {
+        evaluated
+    };
     let mesh = &*evaluated;
     if mesh.verts.is_empty() {
         return SelectionOverlayModel::default();
@@ -1729,11 +1780,15 @@ pub(crate) fn pick_face_hit_cull(
     direction: glam::Vec3,
     cull_backfaces: bool,
 ) -> Option<(usize, glam::Vec3)> {
+    // O raio vem da câmera (mundo): os triângulos vão para o mundo e o ponto
+    // devolvido também é do mundo (`face_hit_uv` converte para o local).
     let mesh = state.project.active_mesh()?;
+    let world = active_world_matrix(state);
     let mut best = None;
     for (face_index, face) in mesh.faces.iter().enumerate() {
         for corners in mesh.face_triangle_corners(face_index) {
-            let [p0, p1, p2] = corners.map(|i| mesh.verts[face.verts[i] as usize].vec());
+            let [p0, p1, p2] =
+                corners.map(|i| world.transform_point3(mesh.verts[face.verts[i] as usize].vec()));
             if let Some(distance) = ray_triangle_cull(origin, direction, p0, p1, p2, cull_backfaces)
                 && best.is_none_or(|(_, current)| distance < current)
             {

@@ -61,6 +61,29 @@ impl I18n {
         }
     }
 
+    /// Só as traduções embutidas no binário, sem tocar no disco: é o que os
+    /// construtores usam (efeitos de filesystem pertencem ao host, que pode
+    /// trocar por [`I18n::load`] para ler `assets/locales` sobrepostos).
+    pub fn embedded_only(lang: &str) -> Self {
+        let fallback = Self::parse(embedded("en"));
+        let map = if lang == "en" {
+            fallback.clone()
+        } else {
+            let m = Self::parse(embedded(lang));
+            if m.is_empty() { fallback.clone() } else { m }
+        };
+        Self {
+            lang: lang.to_string(),
+            map,
+            fallback,
+        }
+    }
+
+    /// Idioma atual (`en`, `pt-BR`).
+    pub fn lang(&self) -> &str {
+        &self.lang
+    }
+
     pub fn set_lang(&mut self, lang: &str) {
         *self = Self::load(lang);
     }
@@ -505,6 +528,7 @@ pub mod text_id {
     pub const VIEW_RESET_CAMERA: TextId = TextId::new("camera.reset");
     pub const VIEW_TOGGLE_WIREFRAME: TextId = TextId::new("shading.wire");
     pub const VIEW_TOGGLE_SPLIT: TextId = TextId::new("view.toggle_split");
+    pub const VIEW_PSEUDO_ISOMETRIC_2TO1: TextId = TextId::new("camera.pseudo_iso_2to1");
 
     pub const UV_TITLE: TextId = TextId::new("uv.title");
     pub const UV_SELECTED: TextId = TextId::new("uv.selected");
@@ -1278,6 +1302,7 @@ pub mod text_id {
         VIEW_RESET_CAMERA,
         VIEW_TOGGLE_WIREFRAME,
         VIEW_TOGGLE_SPLIT,
+        VIEW_PSEUDO_ISOMETRIC_2TO1,
         UV_TITLE,
         UV_SELECTED,
         UV_FACES,

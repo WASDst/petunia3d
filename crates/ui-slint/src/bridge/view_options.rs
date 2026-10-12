@@ -86,6 +86,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             "left" => ViewPreset::Left,
             "right" => ViewPreset::Right,
             "top" => ViewPreset::Top,
+            "iso21" | "2:1" | "pseudo_iso" => ViewPreset::PseudoIsometric2To1,
             _ => return false,
         };
         self.split.set_preset(preset);

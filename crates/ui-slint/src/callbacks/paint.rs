@@ -286,6 +286,24 @@ pub(crate) fn connect_paint_callbacks<V: PetuniaViewport + 'static>(
         }
     });
 
+    let paint_blend_bridge = Arc::clone(&bridge);
+    let window_weak = window.as_weak();
+    window.on_paint_layer_blend_set(move |id, blend| {
+        if let Ok(mut bridge) = paint_blend_bridge.lock()
+            && bridge.set_paint_layer_blend(id.as_str(), blend)
+        {
+            let vm = bridge.view_model();
+            let new_frame = bridge.render_viewport();
+            if let Some(window) = window_weak.upgrade() {
+                sync_window_properties(&window, &vm);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
+                bridge.publish_canvas_image(&window);
+            }
+        }
+    });
+
     let color_bridge = Arc::clone(&bridge);
     let window_weak = window.as_weak();
     window.on_paint_color_changed(move |r, g, b| {

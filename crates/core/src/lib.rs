@@ -11,7 +11,10 @@ mod context_api;
 pub mod cutting_session;
 pub mod diagnostics;
 pub mod docs;
+pub mod clock;
 pub mod edit_api;
+pub mod material_commands;
+pub mod modifier_commands;
 pub mod events;
 pub mod handles;
 pub mod inference;
@@ -124,9 +127,15 @@ pub use brush::{
 };
 pub use camera::{Camera, Projection, ViewPreset};
 pub use edit_api::{
+    AddMeshAssetCmd, InsertAssetCmd,
     ApplyMeshEditCmd, AssignMaterialSlotCmd, ComponentSet, NudgeCmd, PinOp, SeamOp, SelectionOp,
     UvPinCmd, UvSeamCmd,
 };
+pub use modifier_commands::{ModifierCmd, ModifierOp};
+pub use material_commands::{
+    CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, MaterialEdit, RemoveMaterialCmd,
+};
+pub use clock::{Clock, FixedClock, SystemClock};
 pub use events::{AppEvent, EventBus};
 pub use inference::{
     DEFAULT_SNAP_RADIUS_PIXELS, ScreenSnapHit, ScreenSnapQuery, SnapAccel, SnapAnchor, SnapGrid,

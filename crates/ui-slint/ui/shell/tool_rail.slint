@@ -1,5 +1,4 @@
 import { RegionFocusAnchor } from "focus_anchor.slint";
-import { IconSet } from "@lucide";
 import { AnimateRowEntry, AnimTile } from "../animate.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
@@ -76,7 +75,6 @@ export component ToolRail inherits Rectangle {
         padding-left: 6px;
         padding-right: 6px;
         spacing: 5px;
-        alignment: start;
 
         if root.active-workspace == "MODEL" && root.modeling-mode == "DRAW": VerticalLayout {
             spacing: 5px;
@@ -166,7 +164,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Square;
+                icon-svg: PetuniaIcons.paint-rect;
                 semantic-label: Tr.t("sl.2d_rectangle");
                 description: Tr.t("sl.create_2d_rectangle_profile_on_active_workpl");
                 active: false;
@@ -174,7 +172,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Circle;
+                icon-svg: PetuniaIcons.circle;
                 semantic-label: Tr.t("sl.2d_circle");
                 description: Tr.t("sl.create_2d_circle_profile_on_active_workplane");
                 active: false;
@@ -197,7 +195,7 @@ export component ToolRail inherits Rectangle {
             // invocador do POLY: o foco volta a este botão quando o popover fecha.
             draw-add-action := ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Plus;
+                icon-svg: PetuniaIcons.plus;
                 semantic-label: Tr.t("sl.add_primitive");
                 shortcut: root.shortcuts.model-add-primitive;
                 description: Tr.t("sl.quick_menu_to_create_standard_3d_parametric_");
@@ -282,7 +280,7 @@ export component ToolRail inherits Rectangle {
 
             add-action := ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Plus;
+                icon-svg: PetuniaIcons.plus;
                 semantic-label: Tr.t("sl.add_primitive");
                 shortcut: root.shortcuts.model-add-primitive;
                 description: Tr.t("sl.quick_menu_to_create_standard_3d_parametric_");
@@ -300,7 +298,7 @@ export component ToolRail inherits Rectangle {
             spacing: 6px;
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.MousePointer2;
+                icon-svg: PetuniaIcons.select-box;
                 semantic-label: Tr.t("sl.select");
                 shortcut: "";
                 description: Tr.t("sl.select");
@@ -319,7 +317,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Eraser;
+                icon-svg: PetuniaIcons.paint-eraser;
                 semantic-label: Tr.t("sl.eraser");
                 shortcut: root.shortcuts.paint-eraser;
                 description: Tr.t("sl.eraser");
@@ -328,7 +326,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Pipette;
+                icon-svg: PetuniaIcons.paint-picker;
                 semantic-label: Tr.t("sl.color_picker");
                 shortcut: root.shortcuts.paint-picker;
                 description: Tr.t("sl.color_picker");
@@ -337,7 +335,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.PaintBucket;
+                icon-svg: PetuniaIcons.paint-fill;
                 semantic-label: Tr.t("sl.fill_bucket");
                 shortcut: root.shortcuts.paint-fill;
                 description: Tr.t("sl.fill_bucket");
@@ -366,7 +364,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.MousePointerClick;
+                icon-svg: PetuniaIcons.select;
                 semantic-label: Tr.t("sl.uv_select");
                 shortcut: "";
                 description: Tr.t("sl.uv_select");
@@ -379,7 +377,7 @@ export component ToolRail inherits Rectangle {
             spacing: 6px;
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.MousePointer2;
+                icon-svg: PetuniaIcons.select;
                 semantic-label: Tr.t("sl.uv_select");
                 shortcut: root.shortcuts.uv-select;
                 description: Tr.t("sl.select_uv_vertices_edges_and_polygon_islands");
@@ -388,7 +386,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Maximize2;
+                icon-svg: PetuniaIcons.uv-unwrap;
                 semantic-label: Tr.t("sl.unwrap");
                 shortcut: root.shortcuts.uv-unwrap;
                 description: Tr.t("sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou");
@@ -397,7 +395,7 @@ export component ToolRail inherits Rectangle {
             }
             ToolButton {
                 show-label: root.show-tool-labels;
-                icon: IconSet.Grid2x2;
+                icon-svg: PetuniaIcons.uv-pack;
                 semantic-label: Tr.t("sl.pack_islands");
                 shortcut: root.shortcuts.uv-pack;
                 description: Tr.t("sl.pack_and_arrange_uv_islands_efficiently_with");
@@ -419,7 +417,7 @@ export component ToolRail inherits Rectangle {
         Rectangle { width: 28px; height: 1px; background: DesignTokens.border; }
         ToolButton {
             show-label: root.show-tool-labels;
-            icon: IconSet.FolderArchive;
+            icon-svg: PetuniaIcons.asset-library;
             semantic-label: root.label-asset-library;
             shortcut: "Shift+F5";
             description: Tr.t("sl.open_or_collapse_the_bottom_project_asset_li");

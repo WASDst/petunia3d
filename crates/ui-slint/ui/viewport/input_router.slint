@@ -34,6 +34,10 @@ export component ViewportInputRouter inherits Rectangle {
     in property <int> cursor-place-mask: 2;
     in property <int> adjust-mask: 1;
     in property <int> loop-mask: 4;
+    in property <int> paint-straight-mask: 2;
+    in property <int> clone-source-mask: 1;
+    in property <int> decal-scale-mask: 2;
+    in property <int> decal-rotate-mask: 1;
     in property <int> orbit-left-mask: 0;
     in property <bool> depth-handle-visible: false;
     in property <length> depth-handle-x: 0px;
@@ -69,9 +73,13 @@ export component ViewportInputRouter inherits Rectangle {
     callback viewport-hover-clear;
     callback viewport-lasso-select(string, bool, bool);
     callback viewport-orbit(float, float);
-    callback viewport-paint-begin(float, float, bool, bool);
+    // (x, y, straight, clone-source, decal-scale, decal-rotate)
+    callback viewport-paint-begin(float, float, bool, bool, bool, bool);
     callback viewport-paint-end(float, float);
-    callback viewport-paint-update(float, float, bool, bool);
+    callback viewport-paint-update(float, float);
+    // Cancelamento do sistema (foco perdido etc.) durante um traço: descarta
+    // o traço parcial com restauração exata, como o Esc (§11).
+    callback viewport-paint-cancel();
     callback viewport-pan(float, float);
     callback viewport-place-cursor(float, float);
     callback viewport-select(float, float, bool, bool);
@@ -227,6 +235,9 @@ input-touch := TouchArea {
                                 if is-tool-gesture || root.tool-gesture-latched {
                                     root.tool-pointer(3, self.mouse-x / 1px, self.mouse-y / 1px, false, false, false);
                                 }
+                                if is-painting {
+                                    root.viewport-paint-cancel();
+                                }
                                 // Cancelamento do sistema nunca deve abrir o menu contextual.
                                 self.clear-gesture();
                             } else if event.kind == PointerEventKind.down && event.button == PointerEventButton.right {
@@ -307,7 +318,12 @@ input-touch := TouchArea {
                                         consume-click = true;
                                     } else if root.active-workspace == "PAINT" && root.active-tool != "select" {
                                         is-painting = true;
-                                        root.viewport-paint-begin(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
+                                        root.viewport-paint-begin(
+                                            self.mouse-x / 1px, self.mouse-y / 1px,
+                                            root.modifier-active(root.paint-straight-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt),
+                                            root.modifier-active(root.clone-source-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt),
+                                            root.modifier-active(root.decal-scale-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt),
+                                            root.modifier-active(root.decal-rotate-mask, event.modifiers.shift, event.modifiers.control, event.modifiers.alt));
                                     } else if root.loop-cut-active {
                                         is-loop-drag = true;
                                         tool-drag-fine = precision;
@@ -416,7 +432,7 @@ input-touch := TouchArea {
                                     root.viewport-transform-update(self.mouse-x / 1px, self.mouse-y / 1px, root.precision-mode, root.snap-mode);
                                 } else if is-painting {
                                     moved-since-down = true;
-                                    root.viewport-paint-update(self.mouse-x / 1px, self.mouse-y / 1px, event.modifiers.shift, event.modifiers.control);
+                                    root.viewport-paint-update(self.mouse-x / 1px, self.mouse-y / 1px);
                                 } else if is-tool-drag {
                                     moved-since-down = true;
                                     root.tool-modal-scrubbed((self.mouse-y - last-y) / 1px, tool-drag-fine, self.mouse-x / 1px, self.mouse-y / 1px);

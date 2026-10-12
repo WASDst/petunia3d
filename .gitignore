@@ -15,3 +15,6 @@ docs/.vitepress/.temp/
 .env*
 /.commandcode/
 .cargo/
+3854B63454B5F52A/
+*.tar.gz
+petunia3d-0.1.0-*

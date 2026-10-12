@@ -35,9 +35,11 @@ pub(crate) fn connect_navigation_callbacks<V: PetuniaViewport + 'static>(
         if let Ok(mut bridge) = orbit_bridge.lock() {
             bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Orbit { dx, dy }));
             let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
+            if let Some(window) = window_weak.upgrade() {
                 sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
@@ -48,9 +50,11 @@ pub(crate) fn connect_navigation_callbacks<V: PetuniaViewport + 'static>(
         if let Ok(mut bridge) = pan_bridge.lock() {
             bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Pan { dx, dy }));
             let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
+            if let Some(window) = window_weak.upgrade() {
                 sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
@@ -61,9 +65,11 @@ pub(crate) fn connect_navigation_callbacks<V: PetuniaViewport + 'static>(
         if let Ok(mut bridge) = zoom_bridge.lock() {
             bridge.apply(UiIntent::ViewportGesture(ViewportGesture::Zoom { delta }));
             let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
+            if let Some(window) = window_weak.upgrade() {
                 sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
@@ -84,9 +90,11 @@ pub(crate) fn connect_navigation_callbacks<V: PetuniaViewport + 'static>(
         if let Ok(mut bridge) = resize_bridge.lock() {
             bridge.resize_viewport_scaled(width, height, ratio);
             let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
+            if let Some(window) = window_weak.upgrade() {
                 sync_viewport_overlays(&window, &bridge);
-                window.set_viewport_image(frame);
+                if let Some(frame) = new_frame {
+                    window.set_viewport_image(frame);
+                }
             }
         }
     });
@@ -118,6 +126,7 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
 
             if let Some(window) = box_window.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
+                sync_viewport_overlays(&window, &bridge);
                 if let Some(frame) = bridge.render_viewport() {
                     window.set_viewport_image(frame);
                 }
@@ -140,6 +149,7 @@ pub(crate) fn connect_selection_callbacks<V: PetuniaViewport + 'static>(
             ));
             if let Some(window) = lasso_window.upgrade() {
                 sync_window_properties(&window, &bridge.view_model());
+                sync_viewport_overlays(&window, &bridge);
                 if let Some(frame) = bridge.render_viewport() {
                     window.set_viewport_image(frame);
                 }
@@ -536,6 +546,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Navegação da câmera. Nunca é suspensa por ferramenta; a roda sempre faz zoom.
     pub fn apply_viewport_gesture(&mut self, gesture: ViewportGesture) {
         match gesture {
+            // Na navegação planar do DRAW o orbit livre fica desligado; o
+            // mesmo arrasto desloca a vista para não deixar o gesto morto.
+            ViewportGesture::Orbit { dx, dy } if self.planar_navigation_active() => {
+                self.state.session.camera.pan(dx, dy);
+            }
             ViewportGesture::Orbit { dx, dy } => {
                 self.orbit_viewport(dx, dy);
                 return;
@@ -575,6 +590,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.viewport.resize(width, height);
         }
         self.viewport_size = [width as f32, height as f32];
+        // O núcleo converte pixels de pincel em mundo por esta altura; sem
+        // ela caía no padrão de 1080 px (resto do shell egui).
+        self.state.session.viewport_rect = Some(petunia_core::LogicalRect {
+            min: [0.0, 0.0],
+            max: [width as f32, height as f32],
+        });
         self.state.session.camera.aspect = width as f32 / height as f32;
         self.state.mark_dirty();
     }
@@ -603,7 +624,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             shading: self.state.session.shading,
             xray: self.state.session.show_xray,
             show_triangulation: self.state.session.show_triangulation,
-            textured: self.state.session.textured,
+            // Na PAINT a textura que se pinta aparece sempre; nos outros
+            // workspaces ela segue opcional (toggle ou Material/Rendered).
+            // Sem isto o traço era gravado e o viewport seguia liso (Solid).
+            textured: self.state.session.textured || self.state.workspace == Workspace::Paint,
             show_wireframe_overlay: self.state.session.show_wireframe_overlay,
             show_face_orientation: self.state.session.show_face_orientation,
             show_uv_checker: self.state.session.show_uv_checker,

@@ -95,11 +95,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .enumerate()
             .filter(|(_, asset)| asset.visible)
             .map(|(index, asset)| {
+                // `SnapSource` não carrega matriz: o snap é de mundo, então as
+                // malhas entram no mundo (índices preservados para `moving`).
                 let mesh = match modal {
                     Some(modal) if index == project.active => {
-                        std::borrow::Cow::Borrowed(modal.source_mesh())
+                        if asset.transform.is_identity() {
+                            std::borrow::Cow::Borrowed(modal.source_mesh())
+                        } else {
+                            let mut source = modal.source_mesh().clone();
+                            source.transform_affine(asset.world_matrix());
+                            std::borrow::Cow::Owned(source)
+                        }
                     }
-                    _ => asset.evaluated_mesh_ref(),
+                    _ => asset.world_mesh(),
                 };
                 (index, mesh)
             })

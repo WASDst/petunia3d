@@ -17,7 +17,7 @@ export component WorkspaceDrawer inherits Rectangle {
 
     if root.open: SplitterHorizontal {
         x: root.left-offset;
-        y: parent.height - root.bottom-offset - root.effective-height - DesignTokens.control-height;
+        y: parent.height - root.bottom-offset - root.effective-height - 6px;
         width: parent.width - root.left-offset - root.right-clearance;
         value: root.effective-height;
         minimum: 132px;

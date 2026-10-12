@@ -2,7 +2,7 @@
 import { CommandItem } from "../types.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { IconButton } from "../components/base.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { ModalFocusBoundary } from "../shell/modal_focus_boundary.slint";
 import { ScrollView } from "std-widgets.slint";
 
@@ -58,12 +58,14 @@ export component CommandPalette inherits Rectangle {
                 HorizontalLayout {
                     height: 36px;
                     spacing: 8px;
-                    alignment: center;
 
-                    IconDisplay {
-                        icon: IconSet.Search;
-                        size: 16px;
-                        stroke: DesignTokens.text-secondary;
+                    Image {
+                        source: PetuniaIcons.search;
+                        width: 16px;
+                        height: 16px;
+                        colorize: DesignTokens.text-secondary;
+                        y: (parent.height - self.height) / 2;
+                        image-fit: contain;
                     }
 
                     search-input := TextInput {
@@ -118,7 +120,6 @@ export component CommandPalette inherits Rectangle {
                         HorizontalLayout {
                             padding-left: 8px;
                             padding-right: 8px;
-                            alignment: center;
 
                             Text {
                                 text: cmd.label;
@@ -155,7 +156,7 @@ export component CommandPalette inherits Rectangle {
                 height: DesignTokens.control-height;
                 alignment: end;
                 command-close := IconButton {
-                    icon: IconSet.X;
+                    icon-svg: PetuniaIcons.close;
                     label: Tr.t("sl.close_command_search");
                     semantic-label: Tr.t("sl.close_command_search");
                     clicked => { root.escape-requested(); }

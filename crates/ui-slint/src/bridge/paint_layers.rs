@@ -5,7 +5,7 @@ use crate::*;
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Cria uma camada de efeito com parâmetros padrão para o tipo pedido.
     pub fn add_paint_effect_layer(&mut self, kind: &str) -> bool {
-        use petunia_project::paint_layers::{PaintEffect, PaintLayer};
+        use petunia_project::paint_layers::PaintEffect;
         let effect = match kind {
             "Pixelate" => PaintEffect::Pixelate { cell_size: 4 },
             "Posterize" => PaintEffect::Posterize { levels: 6 },
@@ -31,10 +31,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             },
             _ => return false,
         };
-        self.mutate_paint_stack("add effect layer", |stack| {
-            stack.add_layer(PaintLayer::new_effect(kind.to_string(), effect));
-            true
-        })
+        self.dispatch_paint_stack(
+            "add effect layer",
+            petunia_module_paint::PaintStackOp::AddEffect {
+                name: kind.to_string(),
+                effect,
+            },
+        )
     }
 
     /// Ajusta um parâmetro do efeito da camada ativa.
@@ -42,109 +45,49 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !value.is_finite() {
             return false;
         }
-        self.mutate_paint_stack("effect parameter", |stack| {
-            let Some(layer) = stack.active_mut() else {
-                return false;
-            };
-            let petunia_project::paint_layers::LayerKind::Effect(effect) = &mut layer.kind else {
-                return false;
-            };
-            use petunia_project::paint_layers::PaintEffect;
-            match (effect, key) {
-                (PaintEffect::Pixelate { cell_size }, "cell_size") => {
-                    *cell_size = (value.round() as u32).clamp(1, 64);
-                }
-                (PaintEffect::Posterize { levels }, "levels") => {
-                    *levels = (value.round() as u8).clamp(2, 32);
-                }
-                (PaintEffect::Grain { intensity, .. }, "intensity") => {
-                    *intensity = value.clamp(0.0, 1.0);
-                }
-                (PaintEffect::Grain { seed, .. }, "seed") => {
-                    *seed = value.max(0.0).round() as u32;
-                }
-                (PaintEffect::Levels { in_min, in_max, .. }, "in_min") => {
-                    *in_min = value.clamp(0.0, (*in_max - 0.01).max(0.0));
-                }
-                (PaintEffect::Levels { in_min, in_max, .. }, "in_max") => {
-                    *in_max = value.clamp((*in_min + 0.01).min(1.0), 1.0);
-                }
-                (PaintEffect::Levels { gamma, .. }, "gamma") => {
-                    *gamma = value.clamp(0.1, 4.0);
-                }
-                (PaintEffect::Levels { out_min, .. }, "out_min") => {
-                    *out_min = value.clamp(0.0, 1.0);
-                }
-                (PaintEffect::Levels { out_max, .. }, "out_max") => {
-                    *out_max = value.clamp(0.0, 1.0);
-                }
-                (PaintEffect::BrightnessContrast { brightness, .. }, "brightness") => {
-                    *brightness = value.clamp(-1.0, 1.0);
-                }
-                (PaintEffect::BrightnessContrast { contrast, .. }, "contrast") => {
-                    *contrast = value.clamp(-1.0, 1.0);
-                }
-                (PaintEffect::HueSaturation { hue_shift_deg, .. }, "hue_shift_deg") => {
-                    *hue_shift_deg = value.clamp(-180.0, 180.0);
-                }
-                (PaintEffect::HueSaturation { saturation, .. }, "saturation") => {
-                    *saturation = value.clamp(-1.0, 1.0);
-                }
-                _ => return false,
-            }
-            true
-        })
+        self.dispatch_paint_stack(
+            "effect parameter",
+            petunia_module_paint::PaintStackOp::SetEffectParam {
+                key: key.to_string(),
+                value,
+            },
+        )
     }
 
-    /// Mutações do stack de camadas do workspace PAINT.
-    ///
-    /// Todas passam por `ensure_stack` + checkpoint + recomposição: o raster
-    /// canônico é `Asset.paint_stack` e `Asset.texture` é só o cache composto.
-    pub(crate) fn mutate_paint_stack(
+    /// Operações na pilha de camadas do workspace PAINT, por `PaintStackCmd`
+    /// (uma entrada de Undo, recomposição da textura). O raster canônico é
+    /// `Asset.paint_stack`; `Asset.texture` é só o cache composto. Recusa
+    /// ("nada mudaria", objeto travado) devolve `false` sem Undo nem status.
+    pub(crate) fn dispatch_paint_stack(
         &mut self,
-        label: &str,
-        mutate: impl FnOnce(&mut petunia_project::paint_layers::PaintLayerStack) -> bool,
+        label: &'static str,
+        op: petunia_module_paint::PaintStackOp,
     ) -> bool {
-        if self.state.project.active().is_none_or(|a| a.locked) {
-            return false;
-        }
-        petunia_module_paint::PaintModule::ensure_stack(&mut self.state);
-        let before = self.state.project.project.clone();
-        let active = self.state.project.active;
-        let Some(asset) = self.state.project.assets.get_mut(active) else {
-            return false;
-        };
-        let Some(stack) = asset.paint_stack.as_mut() else {
-            return false;
-        };
-        if !mutate(stack) {
-            return false;
-        }
-        self.state.project.checkpoint_snapshot(label, &before);
-        petunia_module_paint::PaintModule::composite_active(&mut self.state);
-        self.state.mark_dirty();
-        true
+        self.state
+            .dispatch(&petunia_module_paint::PaintStackCmd { label, op })
+            .is_ok()
     }
 
     pub fn add_paint_layer(&mut self) -> bool {
         let side = petunia_module_paint::DEFAULT_TEXTURE_SIDE;
         let (w, h) = self.paint_canvas_dimensions().unwrap_or((side, side));
-        self.mutate_paint_stack("add paint layer", |stack| {
-            stack.add_layer(petunia_project::paint_layers::PaintLayer::new(
-                format!("Layer {}", stack.layers.len() + 1),
-                w,
-                h,
-                [0, 0, 0, 0],
-            ));
-            true
-        })
+        let name = format!("Layer {}", self.paint_layer_count() + 1);
+        self.dispatch_paint_stack(
+            "add paint layer",
+            petunia_module_paint::PaintStackOp::AddLayer {
+                name,
+                width: w,
+                height: h,
+            },
+        )
     }
 
     pub fn add_paint_group(&mut self) -> bool {
-        self.mutate_paint_stack("add paint group", |stack| {
-            stack.add_group(format!("Group {}", stack.layers.len() + 1));
-            true
-        })
+        let name = format!("Group {}", self.paint_layer_count() + 1);
+        self.dispatch_paint_stack(
+            "add paint group",
+            petunia_module_paint::PaintStackOp::AddGroup { name },
+        )
     }
 
     /// Importa uma imagem do disco como camada de decalque projetada (P3D-133).
@@ -170,21 +113,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         } else {
             "import decal"
         };
-        let ok = self.mutate_paint_stack(label, |stack| {
-            let mut decal = petunia_project::paint_layers::DecalLayer::new(
-                source.image,
-                [0.5, 0.5],
-                scale_uv,
-                0.0,
-            );
-            decal.source_svg = source.source_svg;
-            decal.anchor = anchor;
-            stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
-                source.name,
-                decal,
-            ));
-            true
-        });
+        let mut decal =
+            petunia_project::paint_layers::DecalLayer::new(source.image, [0.5, 0.5], scale_uv, 0.0);
+        decal.source_svg = source.source_svg;
+        decal.anchor = anchor;
+        let ok = self.dispatch_paint_stack(
+            label,
+            petunia_module_paint::PaintStackOp::AddDecal {
+                name: source.name,
+                decal: Box::new(decal),
+            },
+        );
         if ok {
             self.state.set_status(crate::tr::fill(
                 &self
@@ -198,84 +137,73 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     pub fn add_decal_layer(&mut self) -> bool {
         let anchor = self.new_decal_anchor();
-        self.mutate_paint_stack("add decal layer", |stack| {
-            let decal_img = petunia_project::Canvas::new(64, 64, [255, 200, 50, 255]);
-            let mut decal = petunia_project::paint_layers::DecalLayer::new(
-                decal_img,
-                [0.5, 0.5],
-                [0.25, 0.25],
-                0.0,
-            );
-            decal.anchor = anchor;
-            stack.add_layer(petunia_project::paint_layers::PaintLayer::new_decal(
-                format!("Decal {}", stack.layers.len() + 1),
-                decal,
-            ));
-            true
-        })
+        let decal_img = petunia_project::Canvas::new(64, 64, [255, 200, 50, 255]);
+        let mut decal = petunia_project::paint_layers::DecalLayer::new(
+            decal_img,
+            [0.5, 0.5],
+            [0.25, 0.25],
+            0.0,
+        );
+        decal.anchor = anchor;
+        let name = format!("Decal {}", self.paint_layer_count() + 1);
+        self.dispatch_paint_stack(
+            "add decal layer",
+            petunia_module_paint::PaintStackOp::AddDecal {
+                name,
+                decal: Box::new(decal),
+            },
+        )
     }
 
     pub fn set_paint_layer_active(&mut self, id: &str) -> bool {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        self.mutate_paint_stack("activate paint layer", |stack| stack.set_active(id))
+        self.dispatch_paint_stack(
+            "activate paint layer",
+            petunia_module_paint::PaintStackOp::SetActive { layer: id },
+        )
     }
 
     pub fn toggle_paint_layer_visibility(&mut self, id: &str) -> bool {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        self.mutate_paint_stack("toggle paint layer visibility", |stack| {
-            let Some(layer) = stack.layers.iter_mut().find(|layer| layer.id == id) else {
-                return false;
-            };
-            layer.visible = !layer.visible;
-            true
-        })
+        self.dispatch_paint_stack(
+            "toggle paint layer visibility",
+            petunia_module_paint::PaintStackOp::ToggleVisible { layer: id },
+        )
     }
 
     pub fn toggle_paint_layer_lock(&mut self, id: &str) -> bool {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        self.mutate_paint_stack("toggle paint layer lock", |stack| {
-            let Some(layer) = stack.layers.iter_mut().find(|layer| layer.id == id) else {
-                return false;
-            };
-            layer.locked = !layer.locked;
-            true
-        })
+        self.dispatch_paint_stack(
+            "toggle paint layer lock",
+            petunia_module_paint::PaintStackOp::ToggleLock { layer: id },
+        )
     }
 
     pub fn remove_paint_layer(&mut self, id: &str) -> bool {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        self.mutate_paint_stack("remove paint layer", |stack| {
-            // A última camada é a base do raster: removê-la deixaria o asset sem
-            // superfície de pintura.
-            if stack.layers.len() <= 1 {
-                return false;
-            }
-            stack.remove_layer(id)
-        })
+        // A última camada é a base do raster: o comando recusa removê-la.
+        self.dispatch_paint_stack(
+            "remove paint layer",
+            petunia_module_paint::PaintStackOp::Remove { layer: id },
+        )
     }
 
     pub fn merge_down_paint_layer(&mut self, id: &str) -> bool {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let mesh = self.state.project.active().map(|asset| asset.mesh.clone());
-        self.mutate_paint_stack("merge down paint layer", |stack| {
-            let Some(pos) = stack.layers.iter().position(|layer| layer.id == id) else {
-                return false;
-            };
-            if pos == 0 {
-                return false;
-            }
-            stack.merge_down_on(pos, mesh.as_deref())
-        })
+        self.dispatch_paint_stack(
+            "merge down paint layer",
+            petunia_module_paint::PaintStackOp::MergeDown { layer: id },
+        )
     }
 
     /// Move a camada em `delta` posições na ordem de composição.
@@ -283,16 +211,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        self.mutate_paint_stack("reorder paint layer", |stack| {
-            let Some(from) = stack.layers.iter().position(|layer| layer.id == id) else {
-                return false;
-            };
-            let to = from as i32 + delta;
-            if to < 0 || to as usize >= stack.layers.len() {
-                return false;
-            }
-            stack.move_layer(from, to as usize)
-        })
+        self.dispatch_paint_stack(
+            "reorder paint layer",
+            petunia_module_paint::PaintStackOp::Move { layer: id, delta },
+        )
     }
 
     pub fn set_paint_layer_opacity(&mut self, id: &str, opacity: f32) -> bool {
@@ -302,16 +224,38 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Ok(id) = uuid::Uuid::parse_str(id) else {
             return false;
         };
-        let opacity = opacity.clamp(0.0, 1.0);
-        self.mutate_paint_stack("paint layer opacity", |stack| {
-            let Some(layer) = stack.layers.iter_mut().find(|layer| layer.id == id) else {
-                return false;
-            };
-            if (layer.opacity - opacity).abs() < f32::EPSILON {
-                return false;
-            }
-            layer.opacity = opacity;
-            true
-        })
+        self.dispatch_paint_stack(
+            "paint layer opacity",
+            petunia_module_paint::PaintStackOp::SetOpacity { layer: id, opacity },
+        )
+    }
+
+    /// Modo de mesclagem da camada (índice de `LayerBlendMode`).
+    pub fn set_paint_layer_blend(&mut self, id: &str, blend: i32) -> bool {
+        use petunia_project::paint_layers::LayerBlendMode as Blend;
+        let Ok(id) = uuid::Uuid::parse_str(id) else {
+            return false;
+        };
+        let blend = match blend {
+            0 => Blend::Normal,
+            1 => Blend::Multiply,
+            2 => Blend::Add,
+            3 => Blend::Screen,
+            _ => return false,
+        };
+        self.dispatch_paint_stack(
+            "paint layer blend",
+            petunia_module_paint::PaintStackOp::SetBlend { layer: id, blend },
+        )
+    }
+
+    /// Camadas que a pilha do objeto ativo terá ao executar o comando (nomes
+    /// padrão "Layer N"): sem pilha, a conversão cria a camada "Base".
+    fn paint_layer_count(&self) -> usize {
+        self.state
+            .project
+            .active()
+            .and_then(|asset| asset.paint_stack.as_ref())
+            .map_or(1, |stack| stack.layers.len())
     }
 }

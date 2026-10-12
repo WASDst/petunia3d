@@ -46,6 +46,11 @@ export struct PaintLayerEntry {
     active: bool,
     is-group: bool,
     kind-label: string,
+    // raster | group | decal | effect
+    kind: string,
+    // Normal, Multiply, Add, Screen
+    blend: int,
+    depth: int,
 }
 
 export struct MenuEntry {
@@ -89,6 +94,7 @@ export struct QuickActionEntry {
     id: string,
     label: string,
     enabled: bool,
+    disabled-reason: string,
     pinned: bool,
 }
 

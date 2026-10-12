@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 pub mod animate;
 mod bridge;
+pub use bridge::{ApplicationState, PaintPointerActions};
 mod brush_panel;
 pub mod color_wheel;
 pub mod commands;
@@ -595,6 +596,10 @@ pub enum UiIntent {
     CloseSettings,
     SetKeymap(String),
     ToggleSceneDrawer,
+    /// Mostra/esconde a coluna direita inteira (sem trilha de pílulas).
+    ToggleInspector,
+    /// DRAW: vista planar ↔ câmera livre (só a vista muda).
+    TogglePlanarNavigation,
     ExecuteCommand(CommandId),
     DismissTopOverlay,
     ScrubTransform {
@@ -895,17 +900,22 @@ impl PetuniaViewport for Box<dyn PetuniaViewport> {
     }
 }
 
-/// Bridge entre callbacks Slint e a aplicação. O bridge só aplica intenção
-/// semântica ao `AppState`; algoritmos geométricos permanecem no core/commands.
+/// Bridge entre callbacks Slint e a aplicação. A Application possui a sessão
+/// única; o adapter `state` preserva os consumidores durante a migração dos
+/// intents. Comandos e histórico passam pela Application, que reutiliza o
+/// dispatcher canônico do Core.
 /// Miniaturas RGBA por (prefab, revisão); `None` = prefab sem geometria.
 type PrefabThumbCache =
     std::collections::HashMap<(uuid::Uuid, u32), Option<std::sync::Arc<Vec<u8>>>>;
 
 pub struct SlintUiBridge<V: PetuniaViewport> {
-    pub state: AppState,
+    pub state: ApplicationState,
     pub viewport: V,
     pub overlays: OverlayStack,
     pub scene_drawer_visible: bool,
+    /// Coluna direita visível. Escondida, a viewport ocupa a largura toda;
+    /// o acordeão das seções é independente disto.
+    pub inspector_visible: bool,
     pub asset_library_visible: bool,
     pub asset_query: String,
     pub asset_sort_by_name: bool,
@@ -1013,8 +1023,6 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub(crate) tool_preview: Option<std::sync::Arc<petunia_project::PoseOverride>>,
     pub(crate) tool_preview_revision: u64,
     pub active_material_slot: i32,
-    /// Autosave rotativo do shell (P3D-002). Nunca sobrescreve o arquivo oficial.
-    pub autosave: petunia_core::AutosaveService,
     /// Snapshot de recuperação detectado no arranque, aguardando decisão.
     pub pending_recovery: Option<petunia_core::RecoveryInfo>,
     pub paint_pixel_grid: bool,
@@ -1071,6 +1079,12 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     /// DRAW ou POLY: mesmos documento, seleção, câmera e Inspector; muda o
     /// trilho de ferramentas (ADR 007).
     pub modeling_mode: ModelingMode,
+    /// DRAW usa navegação planar (ortográfica, normal ao Workplane, sem
+    /// orbit) enquanto isto for verdadeiro; desligar volta à câmera livre.
+    pub draw_planar_navigation: bool,
+    /// Câmera de antes da navegação planar, restaurada ao sair dela
+    /// (estado de ViewportSession; nunca vai para o documento).
+    pub(crate) planar_saved_camera: Option<petunia_core::Camera>,
     /// Regiões por plano, recalculadas só quando o documento muda.
     region_planes_cache: std::cell::RefCell<Option<draw_shapes::ShapeCache>>,
     /// Planos editáveis do Shape Builder, por revisão (perfis em uso por geradores ficam de fora).
@@ -1087,14 +1101,15 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     snap_accel_cache: std::cell::RefCell<Option<(u64, std::sync::Arc<petunia_core::SnapAccel>)>>,
     /// Edição de atalhos (perfis do usuário, captura de tecla).
     pub keymap_editor: keymap_edit::KeymapEditor,
-    pub profile_preview_asset_id: Option<uuid::Uuid>,
+    /// Id do objeto de prévia do volume de perfil (só desenho; ver
+    /// `show_new_object_preview`). `Some` enquanto há prévia.
+    pub profile_preview_id: Option<uuid::Uuid>,
     profile_edit_gesture: Option<ProfileEditGesture>,
     profile_transform_gesture: Option<ProfileTransformGesture>,
     profile_dimension_gesture: Option<(
         petunia_project::ProfileResource,
         petunia_project::SplineResource,
     )>,
-    profile_volume_original: Option<Project>,
     pub reference_manager_open: bool,
     pub reference_thumbnails: std::collections::HashMap<String, (u32, u32, Vec<u8>)>,
     pub clipboard: Option<GeometryClipboard>,
@@ -1137,7 +1152,14 @@ impl ModelingMode {
 
     /// A ferramenta persistente pertence ao trilho deste modo.
     pub fn offers_tool(self, tool: &str) -> bool {
-        const SHARED: [&str; 5] = ["select", "move", "rotate", "scale", "push_pull"];
+        const SHARED: [&str; 6] = [
+            "select",
+            "move",
+            "rotate",
+            "scale",
+            "transform",
+            "push_pull",
+        ];
         const DRAW: [&str; 2] = ["draw_profile", "shape_builder"];
         SHARED.contains(&tool)
             || match self {
@@ -1262,6 +1284,11 @@ impl MenuKind {
                 ("view.reset_camera", T::VIEW_RESET_CAMERA, "Shift+Home"),
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),
                 ("view.toggle_projection", T::VIEW_TOGGLE_PROJECTION, "O"),
+                (
+                    "view.pseudo_isometric_2to1",
+                    T::VIEW_PSEUDO_ISOMETRIC_2TO1,
+                    "Numpad 2",
+                ),
                 ("view.toggle_wireframe", T::VIEW_TOGGLE_WIREFRAME, "Z"),
                 ("view.toggle_split", T::VIEW_TOGGLE_SPLIT, ""),
                 (MENU_SEPARATOR, T::UI_CLOSE, ""),

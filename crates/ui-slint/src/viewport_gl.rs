@@ -235,6 +235,26 @@ fn before_rendering(shared: &SharedGl, weak: &slint::Weak<PetuniaSlintShell>) {
         crate::perf::measure("gl_draw_into_cpu", || {
             renderer.draw_into(target, &frame.as_input());
         });
+        // Diagnóstico opt-in: o que cada desenho recebeu e enviou à GPU.
+        if std::env::var_os("PETUNIA_GL_TRACE").is_some() {
+            let input = frame.as_input();
+            let stats = renderer.stats;
+            eprintln!(
+                "petunia3d: gl draw texturas={} com_pixels={} objetos_texturizados={}/{} \
+                 uploads_full={} uploads_parciais={} pulados={}",
+                input.textures.len(),
+                input
+                    .textures
+                    .iter()
+                    .filter(|t| t.pixels.len() >= t.width as usize * t.height as usize * 4)
+                    .count(),
+                input.objects.iter().filter(|o| o.texture.is_some()).count(),
+                input.objects.len(),
+                stats.full_texture_uploads,
+                stats.partial_texture_uploads,
+                stats.skipped_uploads,
+            );
+        }
         if crate::perf::enabled() {
             let stats = renderer.stats;
             crate::perf::record_stage(

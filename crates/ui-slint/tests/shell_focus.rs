@@ -182,6 +182,48 @@ fn hidden_regions_are_skipped_and_disappearing_regions_restore_surface() {
 }
 
 #[test]
+fn workspace_selector_keeps_keyboard_focus_when_context_region_disappears() {
+    let shell = shell();
+    shell.set_inspector_visible(false);
+    shell.set_animate_available(true);
+    shell.set_active_workspace("PAINT".into());
+    shell.set_animate_texts(petunia_ui_slint::AnimateTexts {
+        workspace_label: "ANIMATE".into(),
+        ..shell.get_animate_texts()
+    });
+    let weak = shell.as_weak();
+    shell.on_workspace_changed(move |workspace| {
+        let shell = weak.upgrade().unwrap();
+        if workspace == "DRAW" || workspace == "POLY" {
+            shell.set_modeling_mode(workspace);
+            shell.set_active_workspace("MODEL".into());
+        } else {
+            shell.set_active_workspace(workspace);
+        }
+    });
+
+    key(&shell, Key::F6.into());
+    assert_eq!(shell.get_focus_region(), 6);
+    let animate =
+        i_slint_backend_testing::ElementHandle::find_by_accessible_label(&shell, "ANIMATE")
+            .find(|item| {
+                item.accessible_role() == Some(i_slint_backend_testing::AccessibleRole::Tab)
+            })
+            .expect("available workspace tab");
+    animate.mock_single_click(PointerEventButton::Left);
+    key(&shell, Key::LeftArrow.into());
+    assert_eq!(shell.get_active_workspace(), "PAINT");
+    assert_eq!(shell.get_focus_region(), 0);
+
+    key(&shell, Key::End.into());
+    assert_eq!(shell.get_active_workspace(), "ANIMATE");
+    key(&shell, Key::LeftArrow.into());
+    assert_eq!(shell.get_active_workspace(), "PAINT");
+    key(&shell, Key::F6.into());
+    assert_eq!(shell.get_focus_region(), 1, "F6 resumes from Header");
+}
+
+#[test]
 fn overlays_block_regional_navigation_and_restore_the_invoking_region() {
     let shell = shell();
     shell.set_model_parts_open(true);

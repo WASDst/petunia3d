@@ -2,6 +2,43 @@
 
 use crate::*;
 
+/// Ações de ponteiro do PAINT no início do traço (U05). A UI as resolve pelo
+/// keymap `[pointer]`; o bridge nunca lê Shift/Ctrl para decidir semântica.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PaintPointerActions {
+    /// Reta desde o último ponto pintado.
+    pub straight: bool,
+    /// Ferramenta Clone: o clique define a origem.
+    pub clone_source: bool,
+    /// Decalque: o arrasto escala.
+    pub decal_scale: bool,
+    /// Decalque: o arrasto gira.
+    pub decal_rotate: bool,
+}
+
+impl PaintPointerActions {
+    /// Ações ativas para as teclas físicas, segundo o keymap.
+    pub fn resolve(
+        keybinds: &petunia_config::keybinds::Keybinds,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+    ) -> Self {
+        use petunia_config::keybinds as kb;
+        let held = |action: &str| {
+            let mods = keybinds.pointer_modifier(action);
+            let any = mods.shift || mods.ctrl || mods.alt;
+            any && (!mods.shift || shift) && (!mods.ctrl || ctrl) && (!mods.alt || alt)
+        };
+        Self {
+            straight: held(kb::POINTER_PAINT_STRAIGHT),
+            clone_source: held(kb::POINTER_CLONE_SOURCE),
+            decal_scale: held(kb::POINTER_DECAL_SCALE),
+            decal_rotate: held(kb::POINTER_DECAL_ROTATE),
+        }
+    }
+}
+
 impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Inicia um traço de pintura ou manipulação de decalque contínuo.
     pub fn begin_paint_stroke_at(&mut self, x: f32, y: f32) -> bool {
@@ -9,12 +46,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     /// Inicia um traço de pintura ou manipulação interativa de decalque com modificadores (Shift: escala, Ctrl: rotação).
+    /// Adaptador de teclas físicas (testes, entradas legadas): resolve as
+    /// ações pelo keymap `[pointer]` — nenhuma tecla tem significado fixo.
     pub fn begin_paint_stroke_with_modifiers(
         &mut self,
         x: f32,
         y: f32,
         is_shift: bool,
         is_ctrl: bool,
+    ) -> bool {
+        let actions =
+            PaintPointerActions::resolve(&self.state.ui.keybinds, is_shift, is_ctrl, false);
+        self.begin_paint_stroke_actions(x, y, actions)
+    }
+
+    /// Início do traço PAINT com as ações já resolvidas pela UI (U05).
+    pub fn begin_paint_stroke_actions(
+        &mut self,
+        x: f32,
+        y: f32,
+        actions: PaintPointerActions,
     ) -> bool {
         self.validate_surface_target();
         if self.state.workspace != Workspace::Paint {
@@ -40,20 +91,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         if self.active_layer_is_decal() {
-            return self.decal_drag_begin(x, y, is_shift, is_ctrl);
+            return self.decal_drag_begin(x, y, actions.decal_scale, actions.decal_rotate);
         }
         if self.state.session.tools.active_tool == "picker" {
             return self.pick_paint_color_at(x, y);
         }
         if self.state.session.tools.active_tool == "clone"
-            && (is_ctrl || self.state.session.tools.clone_source.is_none())
+            && (actions.clone_source || self.state.session.tools.clone_source.is_none())
         {
             return self.set_clone_source_at(x, y);
         }
         if self.is_shape_tool() {
             return self.begin_paint_shape_at(x, y);
         }
-        if is_shift {
+        if actions.straight {
             let [w, h] = self.viewport_size;
             let (origin, direction) = self.state.camera.ray(x / w * 2.0 - 1.0, 1.0 - y / h * 2.0);
             if let Some((_, hit)) = self.paint_pick(origin, direction) {
@@ -101,30 +152,24 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .map(|channel| (channel * 255.0).clamp(0.0, 255.0) as u8);
         let color_start = [rgb[0], rgb[1], rgb[2], (opacity * 255.0).round() as u8];
         let color_end = [rgb[0], rgb[1], rgb[2], 0];
-        self.state.checkpoint("paint gradient");
-        if radial {
+        let shape = if radial {
             let radius = (to.0 as f32 - from.0 as f32).hypot(to.1 as f32 - from.1 as f32);
-            petunia_module_paint::PaintModule::canvas_gradient_radial(
-                &mut self.state,
-                from.0,
-                from.1,
+            petunia_module_paint::GradientShape::Radial {
+                center: from,
                 radius,
-                color_start,
-                color_end,
-            );
+            }
         } else {
-            petunia_module_paint::PaintModule::canvas_gradient_linear(
-                &mut self.state,
-                from.0,
-                from.1,
-                to.0,
-                to.1,
-                color_start,
-                color_end,
-            );
+            petunia_module_paint::GradientShape::Linear { from, to }
+        };
+        let command = petunia_module_paint::GradientPaintCmd {
+            shape,
+            color_start,
+            color_end,
+        };
+        if let Err(error) = self.state.dispatch(&command) {
+            self.state.set_status(error.to_string());
+            return;
         }
-        self.state.emit_texture_changed();
-        self.state.mark_dirty();
         self.state.set_status(
             self.state
                 .t_id(petunia_config::text_id::STATUS_GRADIENT_COMMITTED),
@@ -189,10 +234,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             255,
         ];
         let strength = self.state.session.tools.paint_strength;
-        self.state.checkpoint("paint shape");
-        petunia_module_paint::PaintModule::commit_shape(
-            &mut self.state,
-            petunia_module_paint::ShapeStroke {
+        let command = petunia_module_paint::ShapePaintCmd {
+            stroke: petunia_module_paint::ShapeStroke {
                 x0,
                 y0,
                 x1,
@@ -201,9 +244,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 color,
                 strength,
             },
-        );
-        self.state.emit_texture_changed();
-        self.state.mark_dirty();
+        };
+        if let Err(error) = self.state.dispatch(&command) {
+            self.state.set_status(error.to_string());
+            return false;
+        }
         self.state.set_status(crate::tr::fill(
             &self
                 .state

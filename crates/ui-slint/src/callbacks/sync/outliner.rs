@@ -115,4 +115,6 @@ pub(super) fn sync_outliner(window: &PetuniaSlintShell, vm: &ShellViewModel) {
     window.set_inspector_width(vm.inspector_width);
     window.set_asset_library_height(vm.asset_library_height);
     window.set_scene_drawer_visible(vm.scene_drawer_visible);
+    window.set_inspector_visible(vm.inspector_visible);
+    window.set_planar_navigation(vm.planar_navigation);
 }

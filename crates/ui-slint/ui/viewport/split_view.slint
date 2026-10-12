@@ -1,7 +1,7 @@
 // Extraído de app.slint (Slint Rescue, website/docs/09-ui/slint-rescue-plan.md §5):
 // recebe estado projetado e emite callbacks; não conhece documento nem malha.
-import { IconSet } from "@lucide";
 import { DesignTokens, Motion, Tr } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { TopAction } from "../components/controls.slint";
 
 export component SplitViewRegion inherits Rectangle {
@@ -82,6 +82,7 @@ export component SplitViewRegion inherits Rectangle {
                 { id: "left", label: Tr.t("sl.split_left") },
                 { id: "right", label: Tr.t("sl.split_right") },
                 { id: "top", label: Tr.t("sl.split_top") },
+                { id: "iso21", label: "2:1" },
             ]: Rectangle {
                 width: max(34px, pill-text.preferred-width + 14px);
                 border-radius: DesignTokens.radius-control;
@@ -94,7 +95,7 @@ export component SplitViewRegion inherits Rectangle {
                 pill-touch := TouchArea { clicked => { root.split-preset-requested(entry.id); } }
             }
             TopAction {
-                icon: IconSet.X;
+                icon-svg: PetuniaIcons.close;
                 semantic-label: Tr.t("sl.split_close");
                 width: 24px;
                 height: 22px;

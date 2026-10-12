@@ -501,6 +501,34 @@ impl SceneExtractor {
             );
             objects.push(object);
         }
+        // Prévia de objeto novo: só desenho, com a aparência padrão de um
+        // objeto recém-criado (é o que o commit vai criar). Mesmo cache por id.
+        for (id, mesh) in pose.map_or(&[][..], PoseOverride::transient) {
+            let mut asset = Asset::new("preview", mesh.clone());
+            asset.id = *id;
+            let surface_key = surface_key(project, &asset, mesh, settings, samples_textures);
+            let edge_key = edge_key(mesh, settings);
+            let object = match previous.remove(id) {
+                Some(cached)
+                    if cached.surface_key == surface_key && cached.edge_key == edge_key =>
+                {
+                    cached.object
+                }
+                _ => {
+                    self.object_rebuilds += 1;
+                    build_object(project, &asset, mesh, settings, samples_textures)
+                }
+            };
+            self.cache.insert(
+                *id,
+                CachedObject {
+                    surface_key,
+                    edge_key,
+                    object: object.clone(),
+                },
+            );
+            objects.push(object);
+        }
         self.objects = Arc::new(objects);
     }
 

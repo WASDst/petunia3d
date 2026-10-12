@@ -77,6 +77,10 @@ Aprovar ADR-C01...C09 **não** informa que um crate, feature, UI ou pipeline est
 
 **Ordem indica dependências prioritárias, não licença para apagar recursos existentes ou bloquear trabalho independente.**
 
+## Guideline visual aprovado em 2026-10-11
+
+Spectrum é a referência principal para a hierarquia de atenção da GUI. O usuário aprovou pílulas seletivas, color wheel preciso, ícones sucintos, superfícies neutras e relevo suave, preservando o macro-layout. O contrato visual canônico está em [Design system — guideline visual](../09-ui/design-system-guideline.md), acompanhado por U08. Aprovação de aparência não fecha aceitação nativa, acessibilidade, performance ou plataforma.
+
 ## Governança de mudanças
 
 Toda revisão estrutural posterior documenta:

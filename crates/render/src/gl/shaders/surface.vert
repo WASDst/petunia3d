@@ -14,5 +14,5 @@ void main() {
     // Normal nula continua nula: marca superfícies unlit.
     vNormal = uNormalMatrix * aNormal;
     vColor = aColor;
-    vUv = aUv;
+    vUv = vec2(aUv.x, 1.0 - aUv.y);
 }

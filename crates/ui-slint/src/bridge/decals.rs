@@ -18,7 +18,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.viewport_size[0].max(1.0),
             self.viewport_size[1].max(1.0),
         ];
-        let matrix = self.state.session.camera.view_proj();
+        // Âncora e malha vivem no espaço do objeto: projeta com view_proj × mundo.
+        let matrix = self.state.session.camera.view_proj()
+            * crate::projection::active_world_matrix(&self.state);
         let project = |point: glam::Vec3| -> Option<[f32; 2]> {
             let clip = matrix * point.extend(1.0);
             if !clip.is_finite() || clip.w <= 0.05 || clip.z < 0.0 || clip.z > clip.w {
@@ -287,8 +289,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let camera = &self.state.session.camera;
         let (origin, direction) = camera.ray(x / width_px * 2.0 - 1.0, 1.0 - y / height_px * 2.0);
         let (face, hit) = pick_face_hit(&self.state, origin, direction)?;
+        self.local_decal_anchor(face, hit, width)
+    }
+
+    /// Âncora no espaço do objeto a partir do acerto `hit_world` na face:
+    /// `surface_samples_of` compara a âncora com posições locais da malha,
+    /// então o decalque acompanha o objeto quando a transformação muda.
+    /// `width` já está em unidades do objeto.
+    fn local_decal_anchor(
+        &self,
+        face: usize,
+        hit_world: glam::Vec3,
+        width: f32,
+    ) -> Option<petunia_project::paint_layers::DecalAnchor> {
+        let to_local = crate::projection::active_world_matrix(&self.state).inverse();
         let normal = self.state.project.active_mesh()?.face_normal(face);
-        petunia_project::paint_layers::DecalAnchor::new(hit, normal, camera.up(), width)
+        let up = to_local.transform_vector3(self.state.session.camera.up());
+        petunia_project::paint_layers::DecalAnchor::new(
+            to_local.transform_point3(hit_world),
+            normal,
+            up,
+            width,
+        )
     }
 
     /// Fixação de um decalque novo: o ponto do objeto sob o centro da vista
@@ -308,16 +330,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let center = [self.viewport_size[0] * 0.5, self.viewport_size[1] * 0.5];
         self.decal_anchor_at(center[0], center[1], width)
             .or_else(|| {
-                let camera = &self.state.session.camera;
-                let eye = camera.eye();
-                let direction = ((min + max) * 0.5 - eye).normalize_or_zero();
+                // `min`/`max` são locais: o centro vai ao mundo antes de mirar.
+                let eye = self.state.session.camera.eye();
+                let center = crate::projection::active_world_matrix(&self.state)
+                    .transform_point3((min + max) * 0.5);
+                let direction = (center - eye).normalize_or_zero();
                 let (face, hit) = pick_face_hit(&self.state, eye, direction)?;
-                petunia_project::paint_layers::DecalAnchor::new(
-                    hit,
-                    mesh.face_normal(face),
-                    camera.up(),
-                    width,
-                )
+                self.local_decal_anchor(face, hit, width)
             })
     }
 

@@ -73,7 +73,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if width <= 1.0 || height <= 1.0 {
             return None;
         }
-        let mesh = self.state.project.active_mesh()?;
+        // Tudo aqui é mundo: o core converte `PenPoint::New` para o local.
+        let mesh = crate::projection::active_mesh_in_world(&self.state)?;
+        let mesh = &*mesh;
         let last = self.poly_pen_points.last().map(|point| match *point {
             petunia_core::PenPoint::Existing(index) => mesh
                 .verts
@@ -161,7 +163,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Divide a aresta `a–b` no ponto mais próximo do clique (px da viewport).
     pub(crate) fn poly_pen_split_edge_at(&mut self, a: u32, b: u32, at: [f32; 2]) -> bool {
-        let (pa, pb) = match self.state.project.active_mesh() {
+        // Projeção na tela: extremos no mundo.
+        let (pa, pb) = match crate::projection::active_mesh_in_world(&self.state) {
             Some(mesh) => match (mesh.verts.get(a as usize), mesh.verts.get(b as usize)) {
                 (Some(va), Some(vb)) => (va.vec(), vb.vec()),
                 _ => return false,
@@ -263,7 +266,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Contorno dos pontos coletados até o cursor, em px da viewport.
     pub(crate) fn poly_pen_preview_commands(&self) -> String {
         use std::fmt::Write as _;
-        let Some(mesh) = self.state.project.active_mesh() else {
+        // Pontos existentes vão ao mundo; `PenPoint::New` já é do mundo.
+        let Some(mesh) = crate::projection::active_mesh_in_world(&self.state) else {
             return String::new();
         };
         if self.poly_pen_points.is_empty() {
@@ -301,7 +305,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         let (a, b) = strip.edge();
-        let tip = self.state.project.active_mesh().and_then(|mesh| {
+        // Âncora do plano no mundo: `poly_pen_strip_to` converte o alvo.
+        let tip = crate::projection::active_mesh_in_world(&self.state).and_then(|mesh| {
             Some((mesh.verts.get(a as usize)?.vec() + mesh.verts.get(b as usize)?.vec()) * 0.5)
         });
         let changed = match tip.and_then(|tip| self.poly_pen_plane_point(current, tip)) {

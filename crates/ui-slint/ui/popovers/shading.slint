@@ -1,7 +1,6 @@
 // Popover de shading.
 import { DesignTokens, Tr } from "../tokens.slint";
 import { IconButton } from "../components/base.slint";
-import { IconSet } from "@lucide";
 import { PetuniaIcons } from "../petunia_icons.slint";
 import { PetuniaSlider, ViewportSvgButton } from "../components/controls.slint";
 import { ShortcutsEntry } from "../types.slint";
@@ -83,7 +82,7 @@ export component ShadingPopover inherits Rectangle {
                 ViewportSvgButton { glyph: PetuniaIcons.view-lit; label: root.label-view-lit; shortcut: root.shortcuts.view-lit; description: Tr.t("sl.lit_preview_with_a_single_directional_light_"); active: root.shading-mode == "rendered"; clicked => { root.shading-mode-set("rendered"); } }
                 Rectangle { width: 1px; height: 18px; y: 5px; background: DesignTokens.border; }
                 IconButton {
-                    icon: IconSet.Eye;
+                    icon-svg: PetuniaIcons.eye;
                     variant: "toggle";
                     semantic-label: Tr.t("sl.x_ray");
                     shortcut: root.shortcuts.view-xray;
@@ -147,7 +146,6 @@ export component ShadingPopover inherits Rectangle {
             HorizontalLayout {
                 spacing: 8px;
                 height: 24px;
-                alignment: center;
                 Text {
                     text: Tr.t("sl.opacity");
                     color: DesignTokens.text-secondary;

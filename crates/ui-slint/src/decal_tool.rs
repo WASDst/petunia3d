@@ -153,12 +153,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         lx: f32,
         ly: f32,
     ) -> Option<Vec3> {
+        // Âncora e malha estão no espaço do objeto.
+        let world = crate::projection::active_world_matrix(&self.state);
         if let Some(anchor) = decal.anchor {
             let (right, up, _) = anchor.frame(decal.rotation_rad);
             let height = decal.surface_height(anchor.width);
-            return Some(
+            return Some(world.transform_point3(
                 Vec3::from(anchor.point) + right * (lx * anchor.width) - up * (ly * height),
-            );
+            ));
         }
         let (sin, cos) = decal.rotation_rad.sin_cos();
         let du = lx * decal.scale_uv[0] * cos - ly * decal.scale_uv[1] * sin;
@@ -171,7 +173,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             .project
             .active_mesh()?
             .uv_to_world(uv)
-            .map(|(p, _)| p)
+            .map(|(p, _)| world.transform_point3(p))
     }
 
     fn project_px(&self, point: Vec3) -> Option<[f32; 2]> {
@@ -706,22 +708,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         })
     }
 
-    /// Muta o decalque ativo numa transação da pilha (uma entrada de Undo).
-    fn mutate_active_decal(
+    /// Edita o decalque ativo por `PaintStackCmd` (uma entrada de Undo).
+    fn edit_active_decal(
         &mut self,
-        label: &str,
-        mutate: impl FnOnce(&mut DecalLayer, &str) -> bool,
+        label: &'static str,
+        edit: petunia_module_paint::DecalEdit,
     ) -> bool {
-        self.mutate_paint_stack(label, |stack| {
-            let Some(layer) = stack.active_mut() else {
-                return false;
-            };
-            let name = layer.name.clone();
-            match &mut layer.kind {
-                LayerKind::Decal(decal) => mutate(decal, &name),
-                _ => false,
-            }
-        })
+        self.dispatch_paint_stack(
+            label,
+            petunia_module_paint::PaintStackOp::EditActiveDecal(edit),
+        )
     }
 
     /// Acrescenta a imagem em `path` como variante do decalque ativo e passa
@@ -734,17 +730,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         let name = source.name.clone();
-        let added = self.mutate_active_decal("add decal variant", |decal, base| {
-            let index = decal.add_variant(
-                base,
-                DecalVariant {
+        let added = self.edit_active_decal(
+            "add decal variant",
+            petunia_module_paint::DecalEdit::AddVariant {
+                variant: Box::new(DecalVariant {
                     name: source.name,
                     image: source.image,
                     source_svg: source.source_svg,
-                },
-            );
-            decal.set_variant(index)
-        });
+                }),
+            },
+        );
         if added {
             self.state.session.decal_time = None;
             self.state.set_status(crate::tr::fill(
@@ -767,37 +762,36 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         self.decal_playing = false;
         self.state.session.decal_time = None;
-        self.mutate_active_decal("set decal variant", |decal, _| decal.set_variant(index))
+        self.edit_active_decal(
+            "set decal variant",
+            petunia_module_paint::DecalEdit::SetVariant { index },
+        )
     }
 
     /// Remove a variante mostrada (a última não sai).
     pub fn remove_decal_variant(&mut self) -> bool {
-        self.mutate_active_decal("remove decal variant", |decal, _| {
-            decal.remove_variant(decal.variant_index)
-        })
+        self.edit_active_decal(
+            "remove decal variant",
+            petunia_module_paint::DecalEdit::RemoveShownVariant,
+        )
     }
 
     /// Grava a variante mostrada no quadro atual da trilha.
     pub fn set_decal_key(&mut self) -> bool {
         let frame = self.decal_frame;
-        self.mutate_active_decal("set decal key", |decal, _| {
-            let variant = decal.variant_index as u32;
-            let track = decal.track.get_or_insert_with(Default::default);
-            let before = track.clone();
-            track.set_key(frame, variant);
-            *track != before
-        })
+        self.edit_active_decal(
+            "set decal key",
+            petunia_module_paint::DecalEdit::SetKey { frame },
+        )
     }
 
     /// Apaga a chave do quadro atual.
     pub fn remove_decal_key(&mut self) -> bool {
         let frame = self.decal_frame;
-        self.mutate_active_decal("remove decal key", |decal, _| {
-            decal
-                .track
-                .as_mut()
-                .is_some_and(|track| track.remove_key(frame))
-        })
+        self.edit_active_decal(
+            "remove decal key",
+            petunia_module_paint::DecalEdit::RemoveKey { frame },
+        )
     }
 
     /// Quadros por segundo da trilha (1–60).
@@ -805,26 +799,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !fps.is_finite() {
             return false;
         }
-        let fps = fps.round().clamp(1.0, 60.0);
-        self.mutate_active_decal("decal track fps", |decal, _| {
-            let track = decal.track.get_or_insert_with(Default::default);
-            let changed = track.fps != fps;
-            track.fps = fps;
-            changed
-        })
+        self.edit_active_decal(
+            "decal track fps",
+            petunia_module_paint::DecalEdit::TrackFps { fps },
+        )
     }
 
     /// Duração do ciclo em quadros (1–600), nunca menor que a última chave.
     pub fn set_decal_track_length(&mut self, frames: i32) -> bool {
         let frames = frames.clamp(1, 600) as u32;
-        let changed = self.mutate_active_decal("decal track length", |decal, _| {
-            let track = decal.track.get_or_insert_with(Default::default);
-            let last_key = track.keys.last().map_or(0, |key| key.frame + 1);
-            let length = frames.max(last_key);
-            let changed = track.length_frames != length;
-            track.length_frames = length;
-            changed
-        });
+        let changed = self.edit_active_decal(
+            "decal track length",
+            petunia_module_paint::DecalEdit::TrackLength { frames },
+        );
         let length = self
             .active_decal()
             .and_then(|decal| decal.track.map(|track| track.length_frames))

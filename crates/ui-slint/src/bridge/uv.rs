@@ -29,11 +29,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Some(face) = hit else {
             return false;
         };
+        // A câmera vive no mundo: a face é enquadrada na posição do objeto.
+        let world = crate::projection::active_world_matrix(&self.state);
         let points: Vec<glam::Vec3> = face
             .verts
             .iter()
             .filter_map(|&i| mesh.verts.get(i as usize))
-            .map(|v| glam::Vec3::from_array(v.pos))
+            .map(|v| world.transform_point3(glam::Vec3::from_array(v.pos)))
             .collect();
         if points.is_empty() {
             return false;

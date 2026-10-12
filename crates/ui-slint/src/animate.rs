@@ -599,12 +599,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Animate referencia `variant_index`).
     pub fn animate_advance(&mut self, dt: f32) -> bool {
         self.state.animate_resolve();
-        let project = &self.state.project.project;
-        let posed =
-            self.animate
-                .preview
-                .get_mut()
-                .advance(project, &mut self.state.session.animate, dt);
+        // Projeta uma vez a sessão para preservar borrows disjuntos de
+        // documento e transporte através do adapter da Application.
+        let state: &mut petunia_core::AppState = &mut self.state;
+        let project = &state.project.project;
+        let posed = self
+            .animate
+            .preview
+            .get_mut()
+            .advance(project, &mut state.session.animate, dt);
         let time = self.state.session.animate.time;
         let decals = self.show_decal_time(Some(time));
         posed || decals

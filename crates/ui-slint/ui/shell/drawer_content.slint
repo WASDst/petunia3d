@@ -1,6 +1,6 @@
-import { IconSet } from "@lucide";
 import { TopAction } from "../components/controls.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { ScrollView } from "std-widgets.slint";
 
 /// Chrome comum; o shell guarda a aba e cada workspace fornece seu conteúdo.
@@ -33,12 +33,16 @@ export component WorkspaceDrawerContent inherits Rectangle {
                     spacing: 6px;
                     alignment: start;
                     for label[index] in root.tabs: Rectangle {
-                        width: max(104px, tab-label.preferred-width + 20px);
+                        width: tab-label.preferred-width + 28px;
                         height: DesignTokens.control-height;
-                        border-radius: DesignTokens.radius-control;
-                        background: root.selected-tab == index ? DesignTokens.accent : tab-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface;
-                        border-width: tab-focus.has-focus ? 2px : 1px;
-                        border-color: tab-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.border;
+                        // Pílulas (guideline): seleção por realce suave, não preenchimento sólido.
+                        border-radius: DesignTokens.radius-pill;
+                        // Uma aba só é o título da gaveta: sem pílula, mas continua
+                        // focável (o F6 entra na gaveta pela aba selecionada).
+                        property <bool> single: root.tabs.length == 1;
+                        background: self.single ? transparent : root.selected-tab == index ? DesignTokens.accent-subtle : tab-touch.has-hover ? DesignTokens.surface-hover : transparent;
+                        border-width: tab-focus.has-focus ? 2px : (root.selected-tab == index && !self.single ? 1px : 0px);
+                        border-color: tab-focus.has-focus ? DesignTokens.focus-ring : DesignTokens.accent;
                         accessible-role: tab;
                         accessible-label: label;
                         accessible-checked: root.selected-tab == index;
@@ -48,7 +52,8 @@ export component WorkspaceDrawerContent inherits Rectangle {
                         forward-focus: tab-focus;
                         tab-label := Text {
                             text: label;
-                            color: root.selected-tab == index ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            color: parent.single ? DesignTokens.text-primary : root.selected-tab == index ? DesignTokens.accent : DesignTokens.text-secondary;
+                            font-weight: parent.single ? 700 : 400;
                             font-size: DesignTokens.font-default;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -72,7 +77,7 @@ export component WorkspaceDrawerContent inherits Rectangle {
                 }
             }
             TopAction {
-                icon: IconSet.X;
+                icon-svg: PetuniaIcons.close;
                 semantic-label: Tr.t("sl.close_workspace_drawer");
                 clicked => { root.close-requested(); }
             }

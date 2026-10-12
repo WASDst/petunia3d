@@ -158,12 +158,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let camera = &self.state.session.camera;
         let (origin, direction) = camera.ray(x / width * 2.0 - 1.0, 1.0 - y / height * 2.0);
         let (face, hit) = pick_face_hit(&self.state, origin, direction)?;
-        let normal = self
-            .state
-            .project
-            .active_mesh()?
-            .face_normal(face)
-            .normalize_or_zero();
+        // `hit` é do mundo; a normal da face é local e vai ao mundo também.
+        let normal = crate::projection::active_world_normal(
+            &self.state,
+            self.state.project.active_mesh()?.face_normal(face),
+        );
         let to_eye = camera.eye() - hit;
         let distance = to_eye.length();
         if normal == glam::Vec3::ZERO || !(distance.is_finite() && distance > 1.0e-6) {

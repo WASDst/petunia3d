@@ -1434,7 +1434,8 @@ impl UiState {
             timeline_end: 250,
             timeline_playing: false,
             status: String::new(),
-            i18n: I18n::load(lang),
+            // Construtor sem filesystem: o host pode recarregar do disco.
+            i18n: I18n::embedded_only(lang),
             keybinds: Keybinds::load(),
         }
     }
@@ -1946,6 +1947,9 @@ pub struct AppState {
     pub render: RenderResources,
     pub events: EventBus,
     pub commands: crate::command::CommandDispatcher,
+    /// Fonte de tempo injetada (projetos recentes, autosave). O host troca;
+    /// testes usam `FixedClock`.
+    pub clock: std::sync::Arc<dyn crate::clock::Clock>,
 }
 
 impl std::ops::Deref for AppState {
@@ -1972,6 +1976,7 @@ impl AppState {
             render: RenderResources::new(),
             events: EventBus::new(),
             commands: crate::command::CommandDispatcher::canonical(),
+            clock: std::sync::Arc::new(crate::clock::SystemClock),
         }
     }
 }
@@ -3964,10 +3969,17 @@ impl<'a> EditorView<'a> {
     /// tela na profundidade de `hit`.
     pub fn world_radius_for_px(self, hit: Vec3, size_px: f32) -> f32 {
         let camera = &self.editor.camera;
-        let view_dir = camera.forward();
-        let depth = (hit - camera.eye()).dot(view_dir).max(0.05);
-        let half_fov = (camera.fov_y * 0.5).to_radians();
-        let world_height = 2.0 * depth * half_fov.tan();
+        // `fov_y` já está em radianos (é o que `Camera::proj` passa ao glam);
+        // converter de novo encolhia o pincel ~60× (QA de 2026-10-11: um
+        // traço de "Size 0.8" virava um fio de 1 texel). Na ortográfica a
+        // altura visível não depende da profundidade.
+        let world_height = match camera.proj {
+            crate::Projection::Ortho => 2.0 * camera.ortho_half_h,
+            crate::Projection::Perspective => {
+                let depth = (hit - camera.eye()).dot(camera.forward()).max(0.05);
+                2.0 * depth * (camera.fov_y * 0.5).tan()
+            }
+        };
         let px_height = self
             .editor
             .viewport_rect

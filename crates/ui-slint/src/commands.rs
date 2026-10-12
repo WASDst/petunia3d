@@ -29,6 +29,10 @@ pub enum CommandId {
     ToggleWireOverlay,
     OpenSettings,
     ToggleSceneDrawer,
+    /// Mostra/esconde a coluna direita inteira (decisão de 2026-10-11).
+    ToggleInspector,
+    /// DRAW: alterna navegação planar (ortográfica no Workplane) e câmera livre.
+    TogglePlanarNavigation,
     DuplicateSelected,
     SelectAll,
     ClearSelection,
@@ -80,6 +84,8 @@ impl CommandId {
             Self::ToggleWireOverlay => "view.toggle_wire_overlay",
             Self::OpenSettings => "global.settings",
             Self::ToggleSceneDrawer => "window.scene_drawer",
+            Self::ToggleInspector => "window.inspector",
+            Self::TogglePlanarNavigation => "view.planar_navigation",
             Self::DuplicateSelected => "model.duplicate",
             Self::SelectAll => "select.all",
             Self::ClearSelection => "select.clear",
@@ -131,6 +137,8 @@ impl CommandId {
             "view.toggle_wire_overlay" => Some(Self::ToggleWireOverlay),
             "global.settings" => Some(Self::OpenSettings),
             "window.scene_drawer" => Some(Self::ToggleSceneDrawer),
+            "window.inspector" => Some(Self::ToggleInspector),
+            "view.planar_navigation" => Some(Self::TogglePlanarNavigation),
             "model.duplicate" => Some(Self::DuplicateSelected),
             "select.all" => Some(Self::SelectAll),
             "select.clear" => Some(Self::ClearSelection),
@@ -330,6 +338,18 @@ impl CommandRegistry {
                 label_key: "commands.scene_drawer",
                 shortcut: Some("F4"),
                 workspace: None,
+            },
+            CommandDescriptor {
+                id: CommandId::ToggleInspector,
+                label_key: "commands.inspector",
+                shortcut: Some("N"),
+                workspace: None,
+            },
+            CommandDescriptor {
+                id: CommandId::TogglePlanarNavigation,
+                label_key: "commands.planar_navigation",
+                shortcut: None,
+                workspace: Some(Workspace::Model),
             },
             CommandDescriptor {
                 id: CommandId::DuplicateSelected,

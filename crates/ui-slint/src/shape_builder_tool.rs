@@ -105,9 +105,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
         }
         let hit = best?;
-        let occluder = self.state.project.active_mesh().and_then(|mesh| {
+        // Oclusor comparado com raio de mundo: malha ativa no mundo.
+        let occluder = crate::projection::active_mesh_in_world(&self.state).and_then(|mesh| {
             petunia_core::picking::pick_mesh(
-                mesh,
+                &mesh,
                 camera,
                 Vec2::new(width, height),
                 ndc,

@@ -4,7 +4,7 @@
 //! Tudo que é plataforma fica aqui: backend/renderer do Slint, janela, contexto
 //! OpenGL do viewport, variáveis de ambiente, relógio do sistema, preferências em
 //! disco, marcador de sessão/recuperação e os timers do loop. O estado do editor
-//! (`AppState`) é construído e configurado com valores já resolvidos; ele não lê
+//! é possuído pela Application e configurado com valores já resolvidos; ele não lê
 //! ambiente, relógio nem filesystem por conta própria.
 
 use std::sync::{Arc, Mutex};
@@ -116,31 +116,54 @@ impl DesktopHost {
 
     /// Cria janela, viewport e bridge e roda o loop até a janela fechar.
     pub fn run(self) -> Result<(), slint::PlatformError> {
-        // OpenGL via FemtoVG: o contexto é do Slint. Se não houver, o padrão do
-        // Slint decide e o viewport cai para software.
-        let _ = slint::BackendSelector::new()
+        // OpenGL via FemtoVG: o contexto é do Slint. Sem pedido explícito o
+        // Slint cria OpenGL ES (2.0 pedido; Mesa entrega ES 3.2) e o renderer,
+        // que exige OpenGL 3.3 Core, caía para o viewport de CPU — a causa da
+        // lentidão observada em 2026-10-11. Pede-se OpenGL de desktop 3.3
+        // (perfil Core é o padrão de EGL/WGL para ≥ 3.2); se o driver recusar,
+        // o Slint usa os atributos padrão e o viewport cai para software.
+        let strict = slint::BackendSelector::new()
             .backend_name("winit".into())
             .renderer_name("femtovg".into())
+            .require_opengl_with_version(3, 3)
             .select();
+        if let Err(error) = strict {
+            eprintln!(
+                "petunia3d: OpenGL 3.3 indisponível no seletor ({error}); usando o padrão do Slint"
+            );
+            let _ = slint::BackendSelector::new()
+                .backend_name("winit".into())
+                .renderer_name("femtovg".into())
+                .select();
+        }
 
         println!("Petunia3D - Slint production frontend");
         let window = PetuniaSlintShell::new()?;
-        let mut state = AppState::default();
-        Self::apply_preferences(&mut state, &self.preferences);
+        let mut application = petunia_application::Application {
+            // Catálogo configurado em disco é responsabilidade do host; a
+            // Application recém-construída só contém o catálogo nativo puro.
+            tools: petunia_module_model::ToolRegistry::with_defaults(),
+            ..Default::default()
+        };
+        // O construtor só usa as traduções embutidas; o host decide ler
+        // `assets/locales` do disco (sobreposição sem recompilar).
+        let lang = application.state.ui.i18n.lang().to_string();
+        application.state.ui.i18n.set_lang(&lang);
+        Self::apply_preferences(&mut application.state, &self.preferences);
 
         let mut viewport = self.create_viewport(&window);
-        let render_state = self.initial_render_state(&state);
+        let render_state = self.initial_render_state(&application.state);
         if let Some(frame) = viewport.render_frame(
-            &state.project,
-            &state.project.refs,
-            &state.session.camera,
+            &application.state.project,
+            &application.state.project.refs,
+            &application.state.session.camera,
             render_state,
         ) {
             window.set_viewport_image(frame);
         }
         window.set_has_gpu_viewport(true);
 
-        let mut startup_bridge = SlintUiBridge::new(state, viewport);
+        let mut startup_bridge = SlintUiBridge::from_application(application, viewport);
         // Layouts de seção persistem por módulo: restaura no estado runtime e
         // semeia o cache para mutações futuras persistirem tudo.
         startup_bridge.restore_section_layouts(&self.preferences);
@@ -157,6 +180,7 @@ impl DesktopHost {
             .view_model();
         sync_window_properties(&window, &vm);
         schedule_first_frame(&window, &bridge);
+        schedule_startup_commands(&window, &bridge);
         let timers = start_timers(&window, &bridge);
 
         println!("Petunia3D window ready");
@@ -201,6 +225,129 @@ fn schedule_first_frame(window: &PetuniaSlintShell, bridge: &SharedBridge) {
             }
         }
     });
+}
+
+/// QA visual sem injetar entrada: `PETUNIA_STARTUP_COMMANDS` executa, depois
+/// do primeiro quadro, ids separados por vírgula — comandos (`window.asset_library`),
+/// `workspace:PAINT|MODEL|UV`, `ui:add_menu`, `ui:no_home`, `ui:no_recovery` e
+/// `ui:stroke` (traço de pincel cronometrado).
+/// Sem a variável, nada muda.
+fn schedule_startup_commands(window: &PetuniaSlintShell, bridge: &SharedBridge) {
+    let Some(list) = std::env::var_os("PETUNIA_STARTUP_COMMANDS") else {
+        return;
+    };
+    let list = list.to_string_lossy().into_owned();
+    let startup_bridge = Arc::clone(bridge);
+    let startup_window = window.as_weak();
+    slint::Timer::single_shot(std::time::Duration::from_millis(400), move || {
+        let Some(window) = startup_window.upgrade() else {
+            return;
+        };
+        let Ok(mut bridge) = startup_bridge.lock() else {
+            return;
+        };
+        for id in list.split(',').map(str::trim).filter(|id| !id.is_empty()) {
+            match id {
+                "ui:add_menu" => window.set_add_menu_open(true),
+                // Executado depois, sem o lock (os callbacks o pegam).
+                "ui:stroke" => {}
+                "ui:no_home" => bridge.home_open = false,
+                // Só oculta o aviso; os snapshots ficam no disco.
+                "ui:no_recovery" => bridge.pending_recovery = None,
+                _ if id.starts_with("workspace:") => {
+                    let workspace = match &id["workspace:".len()..] {
+                        "PAINT" => Some(petunia_core::Workspace::Paint),
+                        "UV" => Some(petunia_core::Workspace::Uv),
+                        "MODEL" => Some(petunia_core::Workspace::Model),
+                        _ => None,
+                    };
+                    if let Some(workspace) = workspace {
+                        bridge.apply(crate::UiIntent::SetWorkspace(workspace));
+                    }
+                }
+                _ => match crate::commands::CommandId::from_id_str(id) {
+                    Some(command) => bridge.execute_command(command),
+                    None => {
+                        if let Err(error) = bridge.execute_core_command(id) {
+                            eprintln!("petunia3d: PETUNIA_STARTUP_COMMANDS {id}: {error}");
+                        }
+                    }
+                },
+            }
+        }
+        sync_window_properties(&window, &bridge.view_model());
+        if let Some(frame) = bridge.render_viewport() {
+            window.set_viewport_image(frame);
+        }
+        drop(bridge);
+        if list.split(',').any(|id| id.trim() == "ui:stroke") {
+            // Depois de o compositor dar o tamanho final à janela.
+            let stroke_window = window.as_weak();
+            let stroke_bridge = Arc::clone(&startup_bridge);
+            slint::Timer::single_shot(std::time::Duration::from_millis(2500), move || {
+                if let Some(window) = stroke_window.upgrade() {
+                    run_startup_stroke(&window, &stroke_bridge);
+                }
+            });
+        }
+    });
+}
+
+/// Traço horizontal no centro da viewport pelos mesmos callbacks do
+/// ponteiro (begin → updates → end), com o tempo médio por atualização e a
+/// prova do resultado: o raio do meio acerta a malha? quantos pixels mudaram?
+fn run_startup_stroke(window: &PetuniaSlintShell, bridge: &SharedBridge) {
+    let Some([width, height]) = bridge.lock().ok().map(|bridge| bridge.viewport_size) else {
+        return;
+    };
+    eprintln!(
+        "petunia3d: QA viewport bridge={width}x{height} região={}x{}",
+        window.get_viewport_region_width(),
+        window.get_viewport_region_height()
+    );
+    let texture = |bridge: &SharedBridge| {
+        let bridge = bridge.lock().ok()?;
+        let asset = bridge
+            .state
+            .project
+            .assets
+            .get(bridge.state.project.active)?;
+        asset.texture.as_ref().map(|canvas| canvas.pixels.to_vec())
+    };
+    let before = texture(bridge);
+    let (y, from, to) = (height * 0.5, width * 0.3, width * 0.7);
+    if let Ok(bridge) = bridge.lock() {
+        let (origin, direction) = bridge.state.session.camera.ray(0.0, 0.0);
+        eprintln!(
+            "petunia3d: QA raio central: pick={:?} ferramenta={} viewport={width}x{height}",
+            bridge.paint_pick(origin, direction).map(|(face, _)| face),
+            bridge.state.session.tools.active_tool,
+        );
+    }
+    let steps = 40;
+    window.invoke_viewport_paint_begin(from, y, false, false, false, false);
+    let started = std::time::Instant::now();
+    for step in 1..=steps {
+        let x = from + (to - from) * step as f32 / steps as f32;
+        window.invoke_viewport_paint_update(x, y + (step as f32 * 0.3).sin() * 20.0);
+    }
+    let per_update = started.elapsed().as_secs_f64() * 1000.0 / f64::from(steps);
+    window.invoke_viewport_paint_end(to, y);
+    eprintln!("petunia3d: traço de QA {steps} atualizações, {per_update:.2} ms/atualização");
+    let after = texture(bridge);
+    let changed = match (&before, &after) {
+        (Some(a), Some(b)) if a.len() == b.len() => {
+            a.chunks(4).zip(b.chunks(4)).filter(|(p, q)| p != q).count()
+        }
+        // Sem textura antes: conta o que difere do fundo (primeiro pixel).
+        (None, Some(b)) if b.len() >= 4 => b.chunks(4).filter(|p| *p != &b[..4]).count(),
+        _ => usize::MAX,
+    };
+    eprintln!(
+        "petunia3d: QA textura antes={:?} depois={:?} pixels alterados={changed}",
+        before.as_ref().map(Vec::len),
+        after.as_ref().map(Vec::len)
+    );
 }
 
 /// Timers do loop: só oferecem oportunidades; o domínio decide se age

@@ -117,11 +117,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             _ => return false,
         };
 
-        if self.profile_volume_mode.is_none() {
-            self.state.project.project.history_selection =
-                self.state.session.selection.assets.clone();
-            self.profile_volume_original = Some(self.state.project.project.clone());
-        }
         self.profile_volume_mode = Some(mode);
         self.update_profile_volume_preview();
         self.state.set_status(match mode {
@@ -148,28 +143,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 petunia_module_model::build_revolve_mesh(&profile)
             }
             petunia_module_model::ProfileVolumeMode::Sweep => {
-                petunia_module_model::build_sweep_mesh(&profile, self.state.project.active_mesh())
+                // O resultado vira objeto novo (identidade): caminho no mundo.
+                petunia_module_model::build_sweep_mesh(
+                    &profile,
+                    crate::projection::active_mesh_in_world(&self.state).as_deref(),
+                )
             }
         };
 
         match mesh_res {
             Ok(mesh) => {
-                if let Some(id) = self.profile_preview_asset_id {
-                    if let Some(asset) = self.state.project.assets.iter_mut().find(|a| a.id == id) {
-                        asset.mesh = mesh.into();
-                    } else {
-                        self.state.project.add("Profile Preview", mesh);
-                        self.profile_preview_asset_id =
-                            self.state.project.assets.last().map(|a| a.id);
-                    }
-                } else {
-                    self.state.project.add("Profile Preview", mesh);
-                    self.profile_preview_asset_id = self.state.project.assets.last().map(|a| a.id);
-                }
-                self.state.sync_selection();
-                self.state.emit_mesh_changed();
-                self.state.mark_dirty();
-                true
+                // Prévia só no viewport: o documento recebe o objeto no commit.
+                let id = *self
+                    .profile_preview_id
+                    .get_or_insert_with(uuid::Uuid::new_v4);
+                self.show_new_object_preview(id, mesh)
             }
             Err(e) => {
                 self.state.set_status(crate::tr::fill(
@@ -187,18 +175,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.profile_volume_mode.is_none() {
             return false;
         }
-        let had_preview = self.profile_preview_asset_id.is_some();
-        let Some(original) = self.profile_volume_original.take() else {
-            self.state.set_status(self.state.t_id(
-                petunia_config::text_id::STATUS_PROFILE_VOLUME_TRANSACTION_HAS_NO_INITIAL_SNAPSHOT,
-            ));
-            return false;
-        };
-
-        if let Some(id) = self.profile_preview_asset_id.take() {
-            if let Some(asset) = self.state.project.assets.iter_mut().find(|a| a.id == id) {
-                asset.name = "Profile".to_string();
-            }
+        // A prévia é o resultado; sem ela (erro de geração), gera agora.
+        let preview = self
+            .profile_preview_id
+            .take()
+            .and_then(|_| self.new_object_preview_mesh().cloned());
+        self.clear_tool_preview();
+        let generated = if let Some(mesh) = preview {
+            Some(mesh)
         } else if let Some(mode) = self.profile_volume_mode {
             let Some(profile) = self.active_profile_state() else {
                 return false;
@@ -211,19 +195,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     petunia_module_model::build_revolve_mesh(&profile)
                 }
                 petunia_module_model::ProfileVolumeMode::Sweep => {
+                    // O resultado vira objeto novo (identidade): caminho no mundo.
                     petunia_module_model::build_sweep_mesh(
                         &profile,
-                        self.state.project.active_mesh(),
+                        crate::projection::active_mesh_in_world(&self.state).as_deref(),
                     )
                 }
             };
-            if let Ok(mesh) = mesh_res {
-                self.state.project.add("Profile", mesh);
+            mesh_res.ok()
+        } else {
+            None
+        };
+        // Objeto novo por comando: uma entrada de Undo, invariantes validadas.
+        if let Some(mesh) = generated {
+            let command = petunia_core::AddMeshAssetCmd {
+                label: "draw profile",
+                name: "Profile".to_string(),
+                mesh,
+            };
+            if let Err(error) = self.state.dispatch(&command) {
+                self.state.set_status(format!("draw profile: {error}"));
+                return false;
             }
         }
-        self.state
-            .project
-            .checkpoint_snapshot("draw profile", &original);
 
         self.state.profile.clear();
         self.active_profile_id = None;
@@ -235,25 +229,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.sync_viewport_context();
         self.state.session.tools.active_tool = "select".to_string();
         self.state.sync_selection();
-        if !had_preview {
-            self.state.emit_mesh_changed();
-        }
         self.state.mark_dirty();
         self.state.set_status(self.state.t("profile.generated"));
         true
     }
 
     pub fn cancel_profile_volume(&mut self) -> bool {
-        let had_preview =
-            self.profile_preview_asset_id.is_some() || self.profile_volume_mode.is_some();
-        self.profile_preview_asset_id = None;
-        if let Some(mut original) = self.profile_volume_original.take() {
-            let revision_clock = self.state.project.project.revision_clock();
-            original.rebase_revisions_after_restore(revision_clock);
-            self.state.session.selection.assets = original.history_selection.clone();
-            self.state.project.project = original;
-            self.state.sync_selection();
-            self.state.emit_mesh_changed();
+        let had_preview = self.profile_preview_id.is_some() || self.profile_volume_mode.is_some();
+        // O documento nunca recebeu a prévia: basta descartá-la.
+        if self.profile_preview_id.take().is_some() {
+            self.clear_tool_preview();
         }
         self.profile_volume_mode = None;
         if had_preview {

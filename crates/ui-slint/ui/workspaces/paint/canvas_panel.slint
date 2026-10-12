@@ -1,6 +1,6 @@
 // Painel flutuante do canvas PAINT.
 import { DesignTokens, Motion, Tr } from "../../tokens.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../../petunia_icons.slint";
 import { PaintCanvasSurface } from "../../components/paint_canvas.slint";
 import { PanelDragHandle, PanelResizeGrip, TopAction } from "../../components/controls.slint";
 
@@ -78,7 +78,7 @@ export component PaintCanvasPanel inherits Rectangle {
                     padding-left: 12px;
                     padding-right: 8px;
                     spacing: 6px;
-                    VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Image; size: 14px; stroke: DesignTokens.accent; } }
+                    VerticalLayout { alignment: center; Image { source: PetuniaIcons.texture; width: 14px; height: 14px; colorize: DesignTokens.accent; } }
                     Text { text: Tr.t("sl.canvas") + "  " + root.paint-canvas-size; color: DesignTokens.text-primary; font-size: DesignTokens.font-default; font-weight: 700; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
                     VerticalLayout {
                         alignment: center;
@@ -98,7 +98,7 @@ export component PaintCanvasPanel inherits Rectangle {
                         }
                     }
                     TopAction {
-                        icon: IconSet.X;
+                        icon-svg: PetuniaIcons.close;
                         semantic-label: Tr.t("sl.paint_canvas_close");
                         clicked => { root.paint-canvas-panel-visible = false; }
                     }

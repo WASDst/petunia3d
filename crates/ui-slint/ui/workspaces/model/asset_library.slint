@@ -1,4 +1,4 @@
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../../petunia_icons.slint";
 import { ScrollView } from "std-widgets.slint";
 import { PetuniaSlider, TopAction } from "../../components/controls.slint";
 import { DesignTokens, Motion, Tr } from "../../tokens.slint";
@@ -13,6 +13,8 @@ export component AssetLibraryContent inherits VerticalLayout {
     in property <string> sort-label: "";
     in property <string> thumbnail-size-label: "";
     in property <bool> show-close-button: true;
+    /// Dentro da gaveta o título já está no cabeçalho dela; não repetir.
+    in property <bool> show-title: true;
 
     in-out property <string> query: "";
     in-out property <bool> only-favorites: false;
@@ -38,12 +40,17 @@ export component AssetLibraryContent inherits VerticalLayout {
         spacing: 8px;
         height: 28px;
 
-        VerticalLayout {
+        if root.show-title: VerticalLayout {
             alignment: center;
-            IconDisplay { icon: IconSet.FolderArchive; size: 16px; stroke: DesignTokens.accent; }
+            Image {
+                source: PetuniaIcons.folder;
+                width: 16px;
+                height: 16px;
+                colorize: DesignTokens.accent;
+            }
         }
 
-        Text {
+        if root.show-title: Text {
             text: root.title;
             color: DesignTokens.text-primary;
             font-size: DesignTokens.font-default;
@@ -52,7 +59,7 @@ export component AssetLibraryContent inherits VerticalLayout {
         }
 
         Text {
-            text: "({root.items.length})";
+            text: "(\{root.items.length})";
             color: DesignTokens.text-muted;
             font-size: DesignTokens.font-small;
             vertical-alignment: center;
@@ -78,7 +85,12 @@ export component AssetLibraryContent inherits VerticalLayout {
                     alignment: center;
                     VerticalLayout {
                         alignment: center;
-                        IconDisplay { icon: IconSet.BookmarkPlus; size: 12px; stroke: DesignTokens.on-accent; }
+                        Image {
+                            source: PetuniaIcons.pin;
+                            width: 12px;
+                            height: 12px;
+                            colorize: DesignTokens.on-accent;
+                        }
                     }
                     save-label := Text {
                         text: root.save-active-label;
@@ -94,7 +106,7 @@ export component AssetLibraryContent inherits VerticalLayout {
         }
 
         if root.show-close-button: TopAction {
-            icon: IconSet.X;
+            icon-svg: PetuniaIcons.close;
             semantic-label: Tr.t("sl.close_asset_library");
             clicked => { root.close-requested(); }
         }
@@ -123,7 +135,12 @@ export component AssetLibraryContent inherits VerticalLayout {
                 spacing: 5px;
                 VerticalLayout {
                     alignment: center;
-                    IconDisplay { icon: IconSet.Search; size: 13px; stroke: DesignTokens.text-muted; }
+                    Image {
+                        source: PetuniaIcons.search;
+                        width: 13px;
+                        height: 13px;
+                        colorize: DesignTokens.text-muted;
+                    }
                 }
                 asset-search-input := TextInput {
                     text: root.query;
@@ -149,10 +166,11 @@ export component AssetLibraryContent inherits VerticalLayout {
             accessible-role: button;
             accessible-label: Tr.t("sl.prefab_only_favorites");
             accessible-checked: root.only-favorites;
-            IconDisplay {
-                icon: IconSet.Star;
-                size: 13px;
-                stroke: root.only-favorites ? DesignTokens.on-accent : DesignTokens.text-primary;
+            Image {
+                source: PetuniaIcons.pin;
+                width: 13px;
+                height: 13px;
+                colorize: root.only-favorites ? DesignTokens.on-accent : DesignTokens.text-primary;
             }
             fav-filter-touch := TouchArea {
                 clicked => { root.only-favorites-changed(!root.only-favorites); }
@@ -180,10 +198,11 @@ export component AssetLibraryContent inherits VerticalLayout {
             accessible-role: button;
             accessible-label: root.sort-label;
             accessible-checked: root.sort-by-name;
-            IconDisplay {
-                icon: IconSet.ArrowDownAz;
-                size: 14px;
-                stroke: root.sort-by-name ? DesignTokens.on-accent : DesignTokens.text-primary;
+            Image {
+                source: PetuniaIcons.filter;
+                width: 14px;
+                height: 14px;
+                colorize: root.sort-by-name ? DesignTokens.on-accent : DesignTokens.text-primary;
             }
             sort-touch := TouchArea {
                 clicked => { root.sort-changed(!root.sort-by-name); }
@@ -275,10 +294,11 @@ export component AssetLibraryContent inherits VerticalLayout {
                             height: 100%;
                             image-fit: contain;
                         }
-                        if !item.has-thumbnail: IconDisplay {
-                            icon: IconSet.Box;
-                            size: 24px;
-                            stroke: DesignTokens.text-muted;
+                        if !item.has-thumbnail: Image {
+                            source: PetuniaIcons.cube;
+                            width: 24px;
+                            height: 24px;
+                            colorize: DesignTokens.text-muted;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
                         }
@@ -296,10 +316,11 @@ export component AssetLibraryContent inherits VerticalLayout {
                             accessible-checked: item.favorite;
                             opacity: (item.favorite || card-touch.has-hover || fav-touch.has-hover) ? 1.0 : 0.0;
                             animate opacity { duration: Motion.fast; easing: ease-out; }
-                            IconDisplay {
-                                icon: IconSet.Star;
-                                size: 12px;
-                                stroke: item.favorite ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            Image {
+                                source: PetuniaIcons.pin;
+                                width: 12px;
+                                height: 12px;
+                                colorize: item.favorite ? DesignTokens.on-accent : DesignTokens.text-primary;
                             }
                             fav-touch := TouchArea {
                                 clicked => { root.favorite-requested(item.id, !item.favorite); }
@@ -316,7 +337,7 @@ export component AssetLibraryContent inherits VerticalLayout {
                             border-width: 1px;
                             border-color: DesignTokens.border;
                             inst-text := Text {
-                                text: "×{item.instances}";
+                                text: "×\{item.instances}";
                                 color: DesignTokens.text-secondary;
                                 font-size: DesignTokens.font-caption;
                                 font-weight: 700;
@@ -340,7 +361,12 @@ export component AssetLibraryContent inherits VerticalLayout {
                                 background: upd-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface-raised.with-alpha(0.92);
                                 accessible-role: button;
                                 accessible-label: Tr.t("sl.prefab_update");
-                                IconDisplay { icon: IconSet.RefreshCw; size: 12px; stroke: DesignTokens.text-primary; }
+                                Image {
+                                    source: PetuniaIcons.refresh;
+                                    width: 12px;
+                                    height: 12px;
+                                    colorize: DesignTokens.text-primary;
+                                }
                                 upd-touch := TouchArea {
                                     clicked => { root.update-requested(item.id); }
                                     Tooltip {
@@ -359,10 +385,11 @@ export component AssetLibraryContent inherits VerticalLayout {
                                 background: del-touch.has-hover ? DesignTokens.danger : DesignTokens.surface-raised.with-alpha(0.92);
                                 accessible-role: button;
                                 accessible-label: Tr.t("sl.prefab_delete");
-                                IconDisplay {
-                                    icon: IconSet.Trash2;
-                                    size: 12px;
-                                    stroke: del-touch.has-hover ? DesignTokens.on-accent : DesignTokens.text-primary;
+                                Image {
+                                    source: PetuniaIcons.trash;
+                                    width: 12px;
+                                    height: 12px;
+                                    colorize: del-touch.has-hover ? DesignTokens.on-accent : DesignTokens.text-primary;
                                 }
                                 del-touch := TouchArea {
                                     clicked => { root.delete-requested(item.id); }
@@ -385,7 +412,7 @@ export component AssetLibraryContent inherits VerticalLayout {
                         overflow: elide;
                     }
                     Text {
-                        text: "{item.parts} " + Tr.t("sl.prefab_parts") + "  ·  {item.tris} tris";
+                        text: "\{item.parts} " + Tr.t("sl.prefab_parts") + "  ·  \{item.tris} tris";
                         color: DesignTokens.text-muted;
                         font-size: DesignTokens.font-caption;
                         overflow: elide;

@@ -1,5 +1,4 @@
 import { RegionFocusAnchor } from "focus_anchor.slint";
-import { IconSet } from "@lucide";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
 import { CommandSearchField } from "../components/base.slint";
@@ -154,7 +153,6 @@ export component ShellHeader inherits Rectangle {
             spacing: 4px;
 
             TopAction {
-                icon: IconSet.Undo;
                 icon-svg: PetuniaIcons.undo;
                 semantic-label: Tr.t("sl.undo");
                 shortcut: root.shortcut-undo;
@@ -163,7 +161,6 @@ export component ShellHeader inherits Rectangle {
                 clicked => { root.undo-requested(); }
             }
             TopAction {
-                icon: IconSet.Redo;
                 icon-svg: PetuniaIcons.redo;
                 semantic-label: Tr.t("sl.redo");
                 shortcut: root.shortcut-redo;
@@ -181,7 +178,6 @@ export component ShellHeader inherits Rectangle {
             }
 
             settings-action := TopAction {
-                icon: IconSet.Settings;
                 icon-svg: PetuniaIcons.settings;
                 semantic-label: Tr.t("sl.settings");
                 shortcut: root.shortcut-settings;

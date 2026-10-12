@@ -5,8 +5,8 @@
 
 use petunia_core::events::AppEvent;
 use petunia_core::{
-    ClearSelectionCmd, DeleteSelectionCmd, DuplicateSelectionCmd, EditMode, InvertSelectionCmd,
-    SelectAllCmd, SelectMode,
+    ClearSelectionCmd, Command, CommandError, DeleteSelectionCmd, DuplicateSelectionCmd, EditMode,
+    InvertSelectionCmd, SelectAllCmd, SelectMode,
 };
 
 use crate::Application;
@@ -23,15 +23,36 @@ pub enum ActionOutcome {
 }
 
 impl Application {
+    /// Fronteira para comandos tipados: preserva a validação, o checkpoint e
+    /// a propagação de efeitos do único dispatcher da sessão.
+    pub fn execute_command(&mut self, command: &dyn Command) -> Result<(), CommandError> {
+        self.state.dispatch(command)
+    }
+
+    /// Fronteira para comandos registrados; desconhecidos ou indisponíveis
+    /// devolvem o erro canônico sem alterar documento nem histórico.
+    pub fn execute_registered_command(&mut self, id: &str) -> Result<(), CommandError> {
+        self.state.dispatch_command(id)
+    }
+
+    /// Undo e Redo usam o histórico e as sessões de preview já existentes.
+    pub fn undo(&mut self) -> bool {
+        self.state.undo()
+    }
+
+    pub fn redo(&mut self) -> bool {
+        self.state.redo()
+    }
+
     /// Executa a ação nomeada. Ações desconhecidas são ignoradas.
     pub fn run_action(&mut self, action: &str) -> ActionOutcome {
         let mut outcome = ActionOutcome::None;
         match action {
             "global.undo" => {
-                self.state.undo();
+                self.undo();
             }
             "global.redo" => {
-                self.state.redo();
+                self.redo();
             }
             "global.save_project" => {
                 outcome = ActionOutcome::SaveRequested;

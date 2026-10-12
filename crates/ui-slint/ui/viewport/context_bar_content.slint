@@ -1,6 +1,5 @@
 // Extraído de app.slint (Slint Rescue, website/docs/09-ui/slint-rescue-plan.md §5):
 // recebe estado projetado e emite callbacks; não conhece documento nem malha.
-import { IconSet } from "@lucide";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { PetuniaIcons } from "../petunia_icons.slint";
 import { RailTool, ToolButton, ToolGroup } from "../components/controls.slint";
@@ -135,7 +134,7 @@ export component ViewportContextBar inherits ContextBar {
             clicked => { root.command-executed("model.connect"); }
         }
         if active-workspace == "MODEL" && root.modeling-mode == "POLY" && root.viewport-region-width >= 720 && root.poly-tool-visible("make_face"): ToolButton {
-            icon: IconSet.Square;
+            icon-svg: PetuniaIcons.select-face;
             semantic-label: Tr.t("sl.make_face");
             shortcut: "F";
             description: Tr.t("sl.create_face_or_edge_connecting_selected_vert");
@@ -157,7 +156,7 @@ export component ViewportContextBar inherits ContextBar {
         }
 
         if active-workspace == "PAINT": ToolButton {
-            icon: root.isolate-active ? IconSet.EyeOff : IconSet.Eye;
+            icon-svg: root.isolate-active ? PetuniaIcons.eye-hidden : PetuniaIcons.eye;
             semantic-label: root.isolate-active ? Tr.t("sl.un_isolate") : Tr.t("sl.isolate");
             shortcut: root.shortcuts.paint-isolate;
             description: Tr.t("sl.paint_isolate_description");
@@ -183,7 +182,7 @@ export component ViewportContextBar inherits ContextBar {
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.Minus;
+            icon-svg: PetuniaIcons.minus;
             semantic-label: Tr.t("sl.brush_smaller");
             clicked => { root.brush-size-changed(Math.max(0.1, root.brush-size - 0.2)); }
         }
@@ -195,13 +194,13 @@ export component ViewportContextBar inherits ContextBar {
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.Plus;
+            icon-svg: PetuniaIcons.plus;
             semantic-label: Tr.t("sl.brush_larger");
             clicked => { root.brush-size-changed(Math.min(10.0, root.brush-size + 0.2)); }
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.Minus;
+            icon-svg: PetuniaIcons.minus;
             semantic-label: Tr.t("sl.opacity_less");
             clicked => { root.brush-opacity-changed(Math.max(0.05, root.brush-opacity - 0.1)); }
         }
@@ -213,7 +212,7 @@ export component ViewportContextBar inherits ContextBar {
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.Plus;
+            icon-svg: PetuniaIcons.plus;
             semantic-label: Tr.t("sl.opacity_more");
             clicked => { root.brush-opacity-changed(Math.min(1.0, root.brush-opacity + 0.1)); }
         }
@@ -224,7 +223,7 @@ export component ViewportContextBar inherits ContextBar {
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.FlipHorizontal2;
+            icon-svg: PetuniaIcons.symmetry-axis;
             semantic-label: Tr.t("sl.symmetry_x");
             label: "X";
             variant: "toggle";
@@ -233,7 +232,7 @@ export component ViewportContextBar inherits ContextBar {
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.FlipHorizontal2;
+            icon-svg: PetuniaIcons.symmetry-axis;
             semantic-label: Tr.t("sl.symmetry_y");
             label: "Y";
             variant: "toggle";
@@ -242,7 +241,7 @@ export component ViewportContextBar inherits ContextBar {
         }
         if active-workspace == "PAINT": IconButton {
             y: (parent.height - self.height) / 2;
-            icon: IconSet.FlipHorizontal2;
+            icon-svg: PetuniaIcons.symmetry-axis;
             semantic-label: Tr.t("sl.symmetry_z");
             label: "Z";
             variant: "toggle";
@@ -251,35 +250,35 @@ export component ViewportContextBar inherits ContextBar {
         }
 
         if active-workspace == "UV": ToolButton {
-            icon: IconSet.Maximize2;
+            icon-svg: PetuniaIcons.uv-unwrap;
             semantic-label: Tr.t("sl.unwrap");
             shortcut: root.shortcuts.uv-unwrap;
             description: Tr.t("sl.unfold_3d_mesh_surface_into_flat_2d_uv_layou");
             clicked => { root.command-executed("uv.unwrap_auto"); }
         }
         if active-workspace == "UV": ToolButton {
-            icon: IconSet.Grid2x2;
+            icon-svg: PetuniaIcons.uv-pack;
             semantic-label: Tr.t("sl.pack_islands");
             shortcut: root.shortcuts.uv-pack;
             description: Tr.t("sl.pack_and_arrange_uv_islands_efficiently_with");
             clicked => { root.command-executed("uv.pack_islands"); }
         }
         if active-workspace == "UV": ToolButton {
-            icon: IconSet.Camera;
+            icon-svg: PetuniaIcons.uv-project-reference;
             semantic-label: Tr.t("sl.project_ref");
             shortcut: root.shortcuts.uv-project-ref;
             description: Tr.t("sl.project_uv_coordinates_from_active_camera_pe");
             clicked => { root.command-executed("uv.project_reference"); }
         }
         if active-workspace == "UV": ToolButton {
-            icon: IconSet.Link;
+            icon-svg: PetuniaIcons.uv-stitch;
             semantic-label: Tr.t("sl.stitch");
             shortcut: root.shortcuts.uv-stitch;
             description: Tr.t("sl.weld_coincident_3d_edges_that_have_split_uv_");
             clicked => { root.command-executed("uv.stitch"); }
         }
         if active-workspace == "UV": ToolButton {
-            icon: IconSet.Minimize2;
+            icon-svg: PetuniaIcons.uv-relax;
             semantic-label: Tr.t("sl.relax");
             shortcut: root.shortcuts.uv-relax;
             description: Tr.t("sl.smooth_unpinned_uv_island_corners_to_minimiz");
@@ -298,15 +297,16 @@ export component ViewportContextBar inherits ContextBar {
             spacing: 4px;
             for action in root.quick-actions: IconButton {
                 y: (parent.height - self.height) / 2;
-                icon: IconSet.Zap;
+                icon-svg: PetuniaIcons.jump-start;
                 label: action.label;
                 semantic-label: action.label;
                 enabled: action.enabled;
+                disabled-reason: action.disabled-reason;
                 clicked => { root.quick-action-executed(action.id); }
             }
             IconButton {
                 y: (parent.height - self.height) / 2;
-                icon: IconSet.SlidersHorizontal;
+                icon-svg: PetuniaIcons.settings;
                 variant: "toggle";
                 semantic-label: root.label-quick-action-customize;
                 active: root.quick-actions-open;
@@ -314,7 +314,7 @@ export component ViewportContextBar inherits ContextBar {
             }
         }
         if active-workspace == "MODEL" && root.viewport-region-width < 760: ToolButton {
-            icon: IconSet.MoreHorizontal;
+            icon-svg: PetuniaIcons.more-vert;
             semantic-label: root.label-more-model-tools;
             shortcut: "";
             description: Tr.t("sl.open_overflow_menu_with_additional_modeling_");

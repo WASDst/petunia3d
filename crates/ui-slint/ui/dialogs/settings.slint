@@ -1,7 +1,6 @@
 // Diálogo de Preferências.
 import { ColorPresets, DesignTokens, Tr } from "../tokens.slint";
 import { IconButton } from "../components/base.slint";
-import { IconDisplay, IconSet } from "@lucide";
 import { KeymapActionEntry, KeymapProfileEntry, ThemeEntry } from "../types.slint";
 import { ModalFocusBoundary } from "../shell/modal_focus_boundary.slint";
 import { PanelDragHandle, PanelResizeGrip, PetuniaSlider, TopAction } from "../components/controls.slint";
@@ -166,10 +165,13 @@ export component SettingsDialog inherits Rectangle {
                     VerticalLayout { alignment: center; HorizontalLayout {
                         spacing: 8px;
                         alignment: center;
-                        IconDisplay {
-                            icon: IconSet.Settings2;
-                            size: 16px;
-                            stroke: DesignTokens.accent;
+                        Image {
+                            source: PetuniaIcons.settings;
+                            width: 16px;
+                            height: 16px;
+                            colorize: DesignTokens.accent;
+                            y: (parent.height - self.height) / 2;
+                            image-fit: contain;
                         }
                         Text {
                             text: root.label-preferences != "" ? root.label-preferences : Tr.t("sl.settings");
@@ -182,7 +184,7 @@ export component SettingsDialog inherits Rectangle {
 
                     VerticalLayout { alignment: center;
                     settings-close := TopAction {
-                        icon: IconSet.X;
+                        icon-svg: PetuniaIcons.close;
                         semantic-label: Tr.t("sl.close_settings");
                         clicked => {
                             root.settings-visible = false;
@@ -221,7 +223,14 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 8px;
                                 padding-right: 8px;
                                 spacing: 6px;
-                                IconDisplay { y: (parent.height - self.height) / 2; icon: IconSet.Search; size: 13px; stroke: DesignTokens.text-muted; }
+                                Image {
+                                    y: (parent.height - self.height) / 2;
+                                    source: PetuniaIcons.search;
+                                    width: 13px;
+                                    height: 13px;
+                                    colorize: DesignTokens.text-muted;
+                                    image-fit: contain;
+                                }
                                 settings-search := TextInput {
                                     text <=> root.settings-query;
                                     color: DesignTokens.text-primary;
@@ -252,7 +261,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Palette; size: 14px; stroke: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.paint-palette; width: 14px; height: 14px; colorize: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.appearance"); color: root.settings-tab == 0 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab0-touch := TouchArea { clicked => { root.settings-tab = 0; } }
@@ -269,7 +278,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Globe; size: 14px; stroke: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.language; width: 14px; height: 14px; colorize: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.language_region"); color: root.settings-tab == 1 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab1-touch := TouchArea { clicked => { root.settings-tab = 1; } }
@@ -286,7 +295,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Keyboard; size: 14px; stroke: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.keyboard; width: 14px; height: 14px; colorize: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.keyboard_shortcuts"); color: root.settings-tab == 2 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab2-touch := TouchArea { clicked => { root.settings-tab = 2; } }
@@ -303,7 +312,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Eye; size: 14px; stroke: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.eye; width: 14px; height: 14px; colorize: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.accessibility"); color: root.settings-tab == 3 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab3-touch := TouchArea { clicked => { root.settings-tab = 3; } }
@@ -320,7 +329,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Box; size: 14px; stroke: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.cube; width: 14px; height: 14px; colorize: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.tools"); color: root.settings-tab == 4 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab4-touch := TouchArea { clicked => { root.settings-tab = 4; } }
@@ -337,7 +346,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Monitor; size: 14px; stroke: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.display; width: 14px; height: 14px; colorize: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.3d_viewport"); color: root.settings-tab == 5 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab5-touch := TouchArea { clicked => { root.settings-tab = 5; } }
@@ -354,7 +363,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Cpu; size: 14px; stroke: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.cpu; width: 14px; height: 14px; colorize: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.plugins"); color: root.settings-tab == 6 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab6-touch := TouchArea { clicked => { root.settings-tab = 6; } }
@@ -371,7 +380,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Terminal; size: 14px; stroke: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.terminal; width: 14px; height: 14px; colorize: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.mcp_automation"); color: root.settings-tab == 7 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab7-touch := TouchArea { clicked => { root.settings-tab = 7; } }
@@ -388,7 +397,7 @@ export component SettingsDialog inherits Rectangle {
                                 padding-left: 10px;
                                 spacing: 8px;
                                 alignment: start;
-                                VerticalLayout { alignment: center; IconDisplay { icon: IconSet.Info; size: 14px; stroke: root.settings-tab == 8 ? DesignTokens.on-accent : DesignTokens.text-secondary; } }
+                                VerticalLayout { alignment: center; Image { source: PetuniaIcons.help; width: 14px; height: 14px; colorize: root.settings-tab == 8 ? DesignTokens.on-accent : DesignTokens.text-secondary; image-fit: contain; } }
                                 Text { text: Tr.t("sl.settings_about"); color: root.settings-tab == 8 ? DesignTokens.on-accent : DesignTokens.text-primary; font-size: DesignTokens.font-small; font-weight: 600; vertical-alignment: center; }
                             }
                             tab8-touch := TouchArea { clicked => { root.settings-tab = 8; } }
@@ -640,7 +649,6 @@ export component SettingsDialog inherits Rectangle {
                             Text { text: root.label-highlight-thickness; color: DesignTokens.text-primary; font-size: DesignTokens.font-default; font-weight: 700; }
                             HorizontalLayout {
                                 spacing: 8px;
-                                alignment: center;
                                 PetuniaSlider {
                                     horizontal-stretch: 1;
                                     minimum: 1; maximum: 6;
@@ -817,7 +825,15 @@ export component SettingsDialog inherits Rectangle {
                                             background: reset-row-touch.has-hover ? DesignTokens.surface-hover : transparent;
                                             accessible-role: button;
                                             accessible-label: Tr.t("sl.keymap_reset_binding");
-                                            IconDisplay { icon: IconSet.X; size: 11px; stroke: DesignTokens.text-muted; x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; }
+                                            Image {
+                                                source: PetuniaIcons.close;
+                                                width: 11px;
+                                                height: 11px;
+                                                colorize: DesignTokens.text-muted;
+                                                x: (parent.width - self.width) / 2;
+                                                y: (parent.height - self.height) / 2;
+                                                image-fit: contain;
+                                            }
                                             reset-row-touch := TouchArea { clicked => { root.keymap-binding-reset(row.action); } }
                                         }
                                     }
@@ -901,7 +917,7 @@ export component SettingsDialog inherits Rectangle {
                             }
 
                             HorizontalLayout {
-                                spacing: 8px; alignment: center;
+                                spacing: 8px;
                                 PetuniaSlider {
                                     horizontal-stretch: 1; minimum: 0; maximum: 1000;
                                     value: root.double-tap-interval-ms;
@@ -920,7 +936,7 @@ export component SettingsDialog inherits Rectangle {
 
                             Text { text: root.label-drag-threshold; color: DesignTokens.text-primary; font-size: DesignTokens.font-default; font-weight: 700; }
                             HorizontalLayout {
-                                spacing: 8px; alignment: center;
+                                spacing: 8px;
                                 PetuniaSlider {
                                     horizontal-stretch: 1; minimum: 2; maximum: 16;
                                     value: root.drag-threshold-px;
@@ -936,7 +952,7 @@ export component SettingsDialog inherits Rectangle {
 
                             Text { text: root.label-snap-radius; color: DesignTokens.text-primary; font-size: DesignTokens.font-default; font-weight: 700; }
                             HorizontalLayout {
-                                spacing: 8px; alignment: center;
+                                spacing: 8px;
                                 PetuniaSlider {
                                     horizontal-stretch: 1; minimum: 4; maximum: 48;
                                     value: root.snap-radius-px;
@@ -1246,7 +1262,7 @@ export component SettingsDialog inherits Rectangle {
                 padding-right: 12px;
                 alignment: end;
                 settings-footer-close := IconButton {
-                    icon: IconSet.X;
+                    icon-svg: PetuniaIcons.close;
                     label: Tr.t("sl.close_settings");
                     semantic-label: Tr.t("sl.close_settings");
                     clicked => { root.settings-visible = false; root.settings-closed(); }

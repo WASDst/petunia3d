@@ -15,7 +15,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }
         let cursor_px = [normalized_x * width, normalized_y * height];
         let camera = &self.state.session.camera;
-        let view_proj = camera.view_proj();
+        // Vértices locais projetados com view_proj × mundo.
+        let view_proj = camera.view_proj() * crate::projection::active_world_matrix(&self.state);
 
         let project_pos = |p: glam::Vec3| -> Option<[f32; 2]> {
             let ndc = view_proj.project_point3(p);
@@ -111,13 +112,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         }) else {
             return String::new();
         };
+        // Segmentos saem da malha local; a projeção espera mundo.
+        let world = crate::projection::active_world_matrix(&self.state);
         let mut commands = String::new();
         for [a, b] in segments {
             project_preview_segment(
                 &self.state.session.camera,
                 self.viewport_size,
-                a,
-                b,
+                world.transform_point3(a),
+                world.transform_point3(b),
                 &mut commands,
             );
         }
@@ -291,7 +294,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 session.source.verts.get(first_edge.0 as usize),
                 session.source.verts.get(first_edge.1 as usize),
             ) {
-                let vp = self.state.session.camera.view_proj();
+                let vp = self.state.session.camera.view_proj()
+                    * crate::projection::active_world_matrix(&self.state);
                 let pa = vp.project_point3(va.vec());
                 let pb = vp.project_point3(vb.vec());
                 let screen_dir = glam::Vec2::new(pb.x - pa.x, pb.y - pa.y);

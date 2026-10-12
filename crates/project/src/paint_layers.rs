@@ -22,8 +22,8 @@ pub const TILE_SIZE: u32 = 32;
 
 /// Modo de mesclagem de camadas de pintura (P3D-061).
 ///
-/// V1 usa `Normal`; demais modos existem para compatibilidade de
-/// serialização e testes, sem UI dedicada.
+/// Aplicado na composição (`blend_pixels`) e exposto no painel de camadas
+/// da PAINT junto com a opacidade da camada ativa.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum LayerBlendMode {
     #[default]
@@ -69,13 +69,13 @@ pub enum PaintEffect {
 /// colocado, atravessa costuras e mantém a proporção da imagem.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DecalAnchor {
-    /// Centro do decalque na superfície (mundo).
+    /// Centro do decalque na superfície, no espaço do objeto (como a malha).
     pub point: [f32; 3],
     /// Direção de projeção (normal da superfície no ponto, unitária).
     pub normal: [f32; 3],
     /// Direção "direita" da imagem antes da rotação (unitária, ⟂ normal).
     pub tangent: [f32; 3],
-    /// Largura da imagem em unidades de mundo; a altura segue a proporção.
+    /// Largura da imagem em unidades do objeto; a altura segue a proporção.
     pub width: f32,
     /// Alcance do projetor ao longo da normal, para os dois lados (mundo).
     pub depth: f32,

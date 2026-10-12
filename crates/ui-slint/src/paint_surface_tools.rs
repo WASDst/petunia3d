@@ -106,17 +106,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             "paint.svg_resolution_512" | "paint.svg_resolution_1024" => {
                 let size = if id.ends_with("1024") { 1024 } else { 512 };
-                self.mutate_paint_stack("SVG resolution", |stack| {
-                    stack
-                        .active_mut()
-                        .and_then(|layer| match &mut layer.kind {
-                            petunia_project::paint_layers::LayerKind::Decal(decal) => {
-                                decal.rerasterize(size).ok()
-                            }
-                            _ => None,
-                        })
-                        .unwrap_or(false)
-                });
+                self.dispatch_paint_stack(
+                    "SVG resolution",
+                    petunia_module_paint::PaintStackOp::EditActiveDecal(
+                        petunia_module_paint::DecalEdit::Rerasterize { size },
+                    ),
+                );
             }
             "paint.pixel_perfect" => {
                 self.state.session.tools.brush_style.pixel_perfect =
@@ -180,10 +175,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     let name = self
                         .state
                         .t_id(petunia_config::TextId::new("surface.stencil_name"));
-                    self.mutate_paint_stack("stencil paint layer", |stack| {
-                        stack.add_layer(petunia_project::PaintLayer::new(&name, w, h, [0; 4]));
-                        true
-                    });
+                    self.dispatch_paint_stack(
+                        "stencil paint layer",
+                        petunia_module_paint::PaintStackOp::AddLayer {
+                            name,
+                            width: w,
+                            height: h,
+                        },
+                    );
                     self.apply(UiIntent::SetActiveTool("brush".into()));
                     self.sync_surface_stencil(false);
                 }
@@ -268,7 +267,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.session.tools.paint_stencil = Some(petunia_core::brush::SurfaceStencil {
             target,
             image,
-            world_to_clip: self.state.camera.view_proj(),
+            // O motor de pincel trabalha no frame local do objeto.
+            object_to_clip: self.state.camera.view_proj()
+                * crate::projection::active_world_matrix(&self.state),
             center: [p.center_px[0] / w, p.center_px[1] / h],
             size: [p.size_px[0] / w, p.size_px[1] / h],
             rotation: p.rotation_rad,
@@ -465,8 +466,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .assets
                 .iter()
                 .filter(|a| a.visible)
+                // Oclusão no mundo, como a malha ativa em `ProjectionPaintCmd`.
                 .flat_map(|a| {
-                    petunia_module_paint::projection::mesh_world_triangles(&a.evaluated_mesh())
+                    petunia_module_paint::projection::mesh_world_triangles(&a.world_mesh())
                         .collect::<Vec<_>>()
                 })
                 .collect();
@@ -654,9 +656,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let mut dirty_tiles = Vec::new();
         let sx = self.state.session.tools.paint_symmetry_x;
         let sy = self.state.session.tools.paint_symmetry_y;
-        if let Some(buffer) = self.state.session.tools.paint_buffer.as_mut()
-            && let Some(canvas) = self
-                .state
+        // Um único borrow do adapter permite separar sessão e documento.
+        let state: &mut petunia_core::AppState = &mut self.state;
+        if let Some(buffer) = state.session.tools.paint_buffer.as_mut()
+            && let Some(canvas) = state
                 .project
                 .active_mut()
                 .and_then(|a| a.paint_stack.as_mut())

@@ -13,6 +13,13 @@ pub fn apply_theme(window: &PetuniaSlintShell, theme_id: &str) {
     let registry = ThemeRegistry::global();
     let theme = registry.get_theme(theme_id).cloned().unwrap_or_default();
     let tokens = window.global::<DesignTokens>();
+    // O relevo é acabamento visual; High Contrast usa superfícies sólidas.
+    tokens.set_soft_depth(
+        theme
+            .manifest
+            .as_ref()
+            .is_none_or(|manifest| manifest.id != "petunia-high-contrast"),
+    );
 
     let to_slint = |token: ThemeToken| -> slint::Color {
         let c = theme.colors.get_token_color(token);

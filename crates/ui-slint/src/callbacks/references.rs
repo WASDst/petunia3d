@@ -128,7 +128,9 @@ pub(crate) fn connect_references_callbacks<V: PetuniaViewport + 'static>(
         if let Ok(mut bridge) = ref_param_bridge.lock() {
             bridge.set_reference_param(axis.as_str(), param.as_str(), val);
             let new_frame = bridge.render_viewport();
-            if let (Some(window), Some(frame)) = (window_weak.upgrade(), new_frame) {
+            if let Some(window) = window_weak.upgrade()
+                && let Some(frame) = new_frame
+            {
                 window.set_viewport_image(frame);
             }
         }

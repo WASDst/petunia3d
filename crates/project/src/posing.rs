@@ -31,6 +31,10 @@ pub const DEFAULT_BLEND_FRACTION: f32 = 0.06;
 pub struct PoseOverride {
     pub revision: u64,
     meshes: HashMap<Uuid, Mesh>,
+    /// Objetos que só existem no desenho — prévia de um objeto novo (volume de
+    /// perfil etc.). Nunca entram no projeto; o commit cria o objeto por
+    /// comando. Transformação identidade: a malha já está no mundo.
+    transient: Vec<(Uuid, Mesh)>,
 }
 
 impl PoseOverride {
@@ -38,7 +42,19 @@ impl PoseOverride {
         Self {
             revision,
             meshes: HashMap::new(),
+            transient: Vec::new(),
         }
+    }
+
+    /// Acrescenta um objeto só de desenho (ver `transient`).
+    pub fn insert_transient(&mut self, id: Uuid, mesh: Mesh) {
+        self.transient.retain(|(existing, _)| *existing != id);
+        self.transient.push((id, mesh));
+    }
+
+    /// Objetos só de desenho, na ordem de inserção.
+    pub fn transient(&self) -> &[(Uuid, Mesh)] {
+        &self.transient
     }
 
     pub fn insert(&mut self, asset: Uuid, mesh: Mesh) {
@@ -51,24 +67,33 @@ impl PoseOverride {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.meshes.is_empty()
+        self.meshes.is_empty() && self.transient.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.meshes.len()
+        self.meshes.len() + self.transient.len()
     }
 
     /// Mesmos assets e mesmas posições de vértice (ignora `revision`). Quem
     /// produz o override usa isto para só avançar a revisão — e o renderer só
     /// reconstruir buffers — quando a pose realmente mudou.
     pub fn same_geometry(&self, other: &PoseOverride) -> bool {
+        let same = |a: &Mesh, b: &Mesh| {
+            a.verts.len() == b.verts.len()
+                && a.faces.len() == b.faces.len()
+                && a.verts.iter().zip(&b.verts).all(|(x, y)| x.pos == y.pos)
+        };
         self.meshes.len() == other.meshes.len()
-            && self.meshes.iter().all(|(id, a)| {
-                other.meshes.get(id).is_some_and(|b| {
-                    a.verts.len() == b.verts.len()
-                        && a.verts.iter().zip(&b.verts).all(|(x, y)| x.pos == y.pos)
-                })
-            })
+            && self
+                .meshes
+                .iter()
+                .all(|(id, a)| other.meshes.get(id).is_some_and(|b| same(a, b)))
+            && self.transient.len() == other.transient.len()
+            && self
+                .transient
+                .iter()
+                .zip(&other.transient)
+                .all(|((ia, a), (ib, b))| ia == ib && same(a, b))
     }
 }
 

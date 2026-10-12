@@ -54,6 +54,28 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         true
     }
 
+    /// Mostra `mesh` como objeto novo, só no viewport (prévia de criação: o
+    /// objeto nasce no commit, por `AddMeshAssetCmd`). `id` estável durante a
+    /// sessão deixa o renderer reaproveitar o objeto entre quadros.
+    pub(crate) fn show_new_object_preview(
+        &mut self,
+        id: uuid::Uuid,
+        mesh: petunia_core::Mesh,
+    ) -> bool {
+        self.tool_preview_revision = self.tool_preview_revision.wrapping_add(1);
+        let mut preview = PoseOverride::new(TOOL_PREVIEW_REVISION_BIT | self.tool_preview_revision);
+        preview.insert_transient(id, mesh);
+        self.tool_preview = Some(Arc::new(preview));
+        self.state.mark_dirty();
+        true
+    }
+
+    /// Malha da prévia de objeto novo, se houver (HUD e testes).
+    pub fn new_object_preview_mesh(&self) -> Option<&petunia_core::Mesh> {
+        let preview = self.tool_preview.as_ref()?;
+        preview.transient().first().map(|(_, mesh)| mesh)
+    }
+
     /// Remove a prévia; `true` se havia uma.
     pub(crate) fn clear_tool_preview(&mut self) -> bool {
         let had = self.tool_preview.take().is_some();

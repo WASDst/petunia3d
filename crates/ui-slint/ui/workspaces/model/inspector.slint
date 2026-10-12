@@ -204,14 +204,13 @@ export component ModelInspector inherits Rectangle {
             focus-token: root.structure-focus-token;
             focus-enabled: root.regional-focus-enabled;
             collapse-requested(collapsed) => { root.pane-collapsed-set(0, collapsed); }
-            InspectorSection {
-                title: root.label-parts;
-                section-id: "parts";
-                open: root.model-parts-open || root.hovered-inspector-section == "parts";
-                pin-open: root.section-states.length > 0 ? root.section-states[0].pin-open : false;
-                toggled => { root.section-open-toggled("parts"); }
-                toggle-all => { root.toggle-all-sections(); }
-                pin-toggled(id) => { root.section-pin-open-toggled(id); }
+            // O cabeçalho do painel já é o acordeão de Parts (Structure do MODEL
+            // só tem Parts); uma seção "Parts" dentro dele duplicava o título.
+            VerticalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                padding-top: 6px;
+                padding-bottom: 6px;
 
                 PartsBody {
                     search-label: root.label-search-parts;
@@ -272,7 +271,7 @@ export component ModelInspector inherits Rectangle {
             if root.object-has-selection && root.selection-domain == "OBJECT": InspectorSection {
                 title: root.label-tab-transform;
                 section-id: "transform";
-                open: root.model-transform-open || root.hovered-inspector-section == "transform";
+                open: root.model-transform-open;
                 pin-open: root.section-states.length > 1 ? root.section-states[1].pin-open : false;
                 toggled => { root.section-open-toggled("transform"); }
                 toggle-all => { root.toggle-all-sections(); }
@@ -299,7 +298,7 @@ export component ModelInspector inherits Rectangle {
             InspectorSection {
                 title: root.label-tab-material;
                 section-id: "material";
-                open: root.model-material-open || root.hovered-inspector-section == "material";
+                open: root.model-material-open;
                 pin-open: root.section-states.length > 2 ? root.section-states[2].pin-open : false;
                 toggled => { root.section-open-toggled("material"); }
                 toggle-all => { root.toggle-all-sections(); }
@@ -362,7 +361,7 @@ export component ModelInspector inherits Rectangle {
             if root.object-has-selection: InspectorSection {
                 title: root.label-tab-object;
                 section-id: "object";
-                open: root.model-object-open || root.hovered-inspector-section == "object";
+                open: root.model-object-open;
                 pin-open: root.section-states.length > 3 ? root.section-states[3].pin-open : false;
                 toggled => { root.section-open-toggled("object"); }
                 toggle-all => { root.toggle-all-sections(); }

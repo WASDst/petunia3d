@@ -1,4 +1,4 @@
-import { Icon, IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { PetuniaSlider } from "../components/controls.slint";
 import { DesignTokens, Tr } from "../tokens.slint";
 import { ReferenceSlotData } from "../types.slint";
@@ -15,10 +15,12 @@ export component ReferenceSlotCard inherits Rectangle {
     in-out property <float> local-opacity: slot.opacity;
     in-out property <float> local-size: slot.size;
     in-out property <float> local-offset: slot.offset;
+    in-out property <float> local-rotation: slot.rotation;
     changed slot => {
         root.local-opacity = slot.opacity;
         root.local-size = slot.size;
         root.local-offset = slot.offset;
+        root.local-rotation = slot.rotation;
     }
 
     border-radius: 6px;
@@ -76,10 +78,14 @@ export component ReferenceSlotCard inherits Rectangle {
                     align-touch := TouchArea {
                         clicked => { root.align-view(); }
                     }
-                    IconDisplay {
-                        icon: IconSet.Camera;
-                        size: 13px;
-                        stroke: DesignTokens.text-secondary;
+                    Image {
+                        source: PetuniaIcons.camera;
+                        width: 13px;
+                        height: 13px;
+                        colorize: DesignTokens.text-secondary;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        image-fit: contain;
                     }
                 }
 
@@ -92,10 +98,14 @@ export component ReferenceSlotCard inherits Rectangle {
                     vis-touch := TouchArea {
                         clicked => { root.toggle-visible(); }
                     }
-                    IconDisplay {
-                        icon: slot.visible ? IconSet.Eye : IconSet.EyeOff;
-                        size: 13px;
-                        stroke: slot.visible ? DesignTokens.accent : DesignTokens.text-muted;
+                    Image {
+                        source: slot.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
+                        width: 13px;
+                        height: 13px;
+                        colorize: slot.visible ? DesignTokens.accent : DesignTokens.text-muted;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        image-fit: contain;
                     }
                 }
 
@@ -108,10 +118,14 @@ export component ReferenceSlotCard inherits Rectangle {
                     lock-touch := TouchArea {
                         clicked => { root.toggle-lock(); }
                     }
-                    IconDisplay {
-                        icon: slot.locked ? IconSet.Lock : IconSet.LockOpen;
-                        size: 13px;
-                        stroke: slot.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                    Image {
+                        source: slot.locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
+                        width: 13px;
+                        height: 13px;
+                        colorize: slot.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        image-fit: contain;
                     }
                 }
 
@@ -124,10 +138,14 @@ export component ReferenceSlotCard inherits Rectangle {
                     remove-touch := TouchArea {
                         clicked => { root.remove-image(); }
                     }
-                    IconDisplay {
-                        icon: IconSet.Trash2;
-                        size: 13px;
-                        stroke: DesignTokens.danger;
+                    Image {
+                        source: PetuniaIcons.trash;
+                        width: 13px;
+                        height: 13px;
+                        colorize: DesignTokens.danger;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        image-fit: contain;
                     }
                 }
             }
@@ -161,10 +179,13 @@ export component ReferenceSlotCard inherits Rectangle {
                 if !slot.has-image: VerticalLayout {
                     alignment: center;
                     spacing: 4px;
-                    IconDisplay {
-                        icon: IconSet.Plus;
-                        size: 16px;
-                        stroke: DesignTokens.text-muted;
+                    Image {
+                        source: PetuniaIcons.plus;
+                        width: 16px;
+                        height: 16px;
+                        colorize: DesignTokens.text-muted;
+                        x: (parent.width - self.width) / 2;
+                        image-fit: contain;
                     }
                     Text {
                         text: Tr.t("sl.load_image");
@@ -254,6 +275,24 @@ export component ReferenceSlotCard inherits Rectangle {
                     }
                 }
 
+                if slot.has-image: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Tr.t("sl.rotation") + ": \{round(root.local-rotation)}°";
+                        color: DesignTokens.text-secondary;
+                        font-size: DesignTokens.font-caption;
+                        width: 72px;
+                        vertical-alignment: center;
+                    }
+                    PetuniaSlider {
+                        horizontal-stretch: 1;
+                        minimum: -180.0;
+                        maximum: 180.0;
+                        value <=> root.local-rotation;
+                        changed(v) => { root.set-param("rotation", v); }
+                    }
+                }
+
                 if !slot.has-image: Text {
                     text: Tr.t("sl.no_reference_image_loaded_click_the_box_to_l");
                     color: DesignTokens.text-muted;
@@ -268,7 +307,7 @@ export component ReferenceSlotCard inherits Rectangle {
 }
 
 component TileAction inherits Rectangle {
-    in property <Icon> icon;
+    in property <image> icon-svg;
     in property <string> label;
     in property <bool> on: false;
     in property <bool> danger: false;
@@ -281,10 +320,14 @@ component TileAction inherits Rectangle {
     accessible-label: root.label;
     accessible-action-default => { root.clicked(); }
     tile-action := TouchArea { clicked => { root.clicked(); } }
-    IconDisplay {
-        icon: root.icon;
-        size: 13px;
-        stroke: root.danger ? DesignTokens.danger : (root.on ? DesignTokens.accent : DesignTokens.text-secondary);
+    Image {
+        source: root.icon-svg;
+        width: 13px;
+        height: 13px;
+        colorize: root.danger ? DesignTokens.danger : (root.on ? DesignTokens.accent : DesignTokens.text-secondary);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
     }
 }
 
@@ -391,10 +434,13 @@ export component ReferenceTile inherits Rectangle {
             if !slot.has-image: VerticalLayout {
                 alignment: center;
                 spacing: 4px;
-                IconDisplay {
-                    icon: IconSet.Plus;
-                    size: 16px;
-                    stroke: DesignTokens.text-muted;
+                Image {
+                    source: PetuniaIcons.plus;
+                    width: 16px;
+                    height: 16px;
+                    colorize: DesignTokens.text-muted;
+                    x: (parent.width - self.width) / 2;
+                    image-fit: contain;
                 }
                 Text {
                     text: root.load-label;
@@ -407,27 +453,26 @@ export component ReferenceTile inherits Rectangle {
 
         HorizontalLayout {
             spacing: 2px;
-            alignment: start;
             TileAction {
-                icon: IconSet.Camera;
+                icon-svg: PetuniaIcons.camera;
                 label: Tr.t("sl.ref_align_view");
                 clicked => { root.align-view(); }
             }
             if slot.has-image: TileAction {
-                icon: slot.visible ? IconSet.Eye : IconSet.EyeOff;
+                icon-svg: slot.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
                 label: Tr.t("sl.ref_toggle_visible");
                 on: slot.visible;
                 clicked => { root.toggle-visible(); }
             }
             if slot.has-image: TileAction {
-                icon: slot.locked ? IconSet.Lock : IconSet.LockOpen;
+                icon-svg: slot.locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
                 label: Tr.t("sl.lock");
                 on: slot.locked;
                 clicked => { root.toggle-lock(); }
             }
             Rectangle { horizontal-stretch: 1; }
             if slot.has-image: TileAction {
-                icon: IconSet.Trash2;
+                icon-svg: PetuniaIcons.trash;
                 label: Tr.t("sl.ref_remove");
                 danger: true;
                 clicked => { root.remove-image(); }
@@ -446,11 +491,13 @@ export component ReferenceDetails inherits Rectangle {
     in-out property <float> local-opacity: slot.opacity;
     in-out property <float> local-size: slot.size;
     in-out property <float> local-offset: slot.offset;
+    in-out property <float> local-rotation: slot.rotation;
 
     changed slot => {
         root.local-opacity = slot.opacity;
         root.local-size = slot.size;
         root.local-offset = slot.offset;
+        root.local-rotation = slot.rotation;
     }
 
     border-radius: 6px;
@@ -498,6 +545,13 @@ export component ReferenceDetails inherits Rectangle {
             maximum: 10.0;
             value <=> root.local-offset;
             changed(v) => { root.set-param("offset", v); }
+        }
+        DetailSlider {
+            label: Tr.t("sl.rotation") + ": \{round(root.local-rotation)}°";
+            minimum: -180.0;
+            maximum: 180.0;
+            value <=> root.local-rotation;
+            changed(v) => { root.set-param("rotation", v); }
         }
     }
 }

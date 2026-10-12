@@ -2,7 +2,7 @@
 import { DesignTokens } from "../tokens.slint";
 import { HomeTexts, RecentProject } from "../types.slint";
 import { IconButton } from "../components/base.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { ModalFocusBoundary } from "../shell/modal_focus_boundary.slint";
 
 export component HomeDialog inherits ModalFocusBoundary {
@@ -64,7 +64,7 @@ export component HomeDialog inherits ModalFocusBoundary {
                 spacing: 8px;
                 alignment: start;
                 home-new := IconButton {
-                    icon: IconSet.Plus;
+                    icon-svg: PetuniaIcons.plus;
                     label: root.home-texts.new;
                     semantic-label: root.home-texts.new;
                     variant: "tool";
@@ -75,7 +75,7 @@ export component HomeDialog inherits ModalFocusBoundary {
                     }
                 }
                 IconButton {
-                    icon: IconSet.FolderOpen;
+                    icon-svg: PetuniaIcons.open-project;
                     label: root.home-texts.open;
                     semantic-label: root.home-texts.open;
                     clicked => {
@@ -85,7 +85,7 @@ export component HomeDialog inherits ModalFocusBoundary {
                     }
                 }
                 if root.recovery-open: IconButton {
-                    icon: IconSet.History;
+                    icon-svg: PetuniaIcons.refresh;
                     label: root.home-texts.recover;
                     semantic-label: root.home-texts.recover;
                     clicked => {
@@ -143,11 +143,13 @@ export component HomeDialog inherits ModalFocusBoundary {
                     padding-left: 10px;
                     padding-right: 10px;
                     spacing: 10px;
-                    IconDisplay {
+                    Image {
                         y: (parent.height - self.height) / 2;
-                        icon: IconSet.File;
-                        size: 16px;
-                        stroke: DesignTokens.text-secondary;
+                        source: PetuniaIcons.file;
+                        width: 16px;
+                        height: 16px;
+                        colorize: DesignTokens.text-secondary;
+                        image-fit: contain;
                     }
                     VerticalLayout {
                         alignment: center;
@@ -204,10 +206,14 @@ export component HomeDialog inherits ModalFocusBoundary {
                             border-width: 1px;
                             border-color: root.show-home-on-start ? DesignTokens.accent : DesignTokens.border-strong;
                             background: root.show-home-on-start ? DesignTokens.accent : DesignTokens.surface;
-                            if root.show-home-on-start: IconDisplay {
-                                icon: IconSet.Check;
-                                size: 12px;
-                                stroke: DesignTokens.on-accent;
+                            if root.show-home-on-start: Image {
+                                source: PetuniaIcons.check;
+                                width: 12px;
+                                height: 12px;
+                                colorize: DesignTokens.on-accent;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                image-fit: contain;
                             }
                         }
                         Text {
@@ -219,7 +225,7 @@ export component HomeDialog inherits ModalFocusBoundary {
                     }
                 }
                 home-settings := IconButton {
-                    icon: IconSet.Settings;
+                    icon-svg: PetuniaIcons.settings;
                     label: root.home-texts.settings;
                     semantic-label: root.home-texts.settings;
                     clicked => {

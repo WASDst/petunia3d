@@ -1,6 +1,5 @@
-// Micro Inspector flutuante.
 import { DesignTokens, Tr } from "../tokens.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 
 export component MicroInspector inherits Rectangle {
     in property <length> micro-inspector-x;
@@ -51,10 +50,11 @@ export component MicroInspector inherits Rectangle {
                 height: 18px;
                 border-radius: 4px;
                 background: close-touch.has-hover ? DesignTokens.surface-hover : transparent;
-                IconDisplay {
-                    icon: IconSet.X;
-                    size: 12px;
-                    stroke: DesignTokens.text-muted;
+                Image {
+                    source: PetuniaIcons.close;
+                    width: 12px;
+                    height: 12px;
+                    colorize: DesignTokens.text-muted;
                 }
                 close-touch := TouchArea {
                     clicked => { root.micro-inspector-toggle(); }
@@ -67,11 +67,11 @@ export component MicroInspector inherits Rectangle {
             spacing: 4px;
             alignment: stretch;
             for tool in [
-                { id: "select", label: Tr.t("sl.select"), icon: IconSet.MousePointer2 },
-                { id: "move", label: Tr.t("sl.move"), icon: IconSet.Move3d },
-                { id: "rotate", label: Tr.t("sl.rotate"), icon: IconSet.RotateCcw },
-                { id: "scale", label: Tr.t("sl.scale"), icon: IconSet.Maximize2 },
-                { id: "measure", label: Tr.t("sl.measure"), icon: IconSet.ArrowUpDown },
+                { id: "select", label: Tr.t("sl.select"), icon: PetuniaIcons.select },
+                { id: "move", label: Tr.t("sl.move"), icon: PetuniaIcons.move },
+                { id: "rotate", label: Tr.t("sl.rotate"), icon: PetuniaIcons.rotate },
+                { id: "scale", label: Tr.t("sl.scale"), icon: PetuniaIcons.scale },
+                { id: "measure", label: Tr.t("sl.measure"), icon: PetuniaIcons.measure },
             ]: Rectangle {
                 horizontal-stretch: 1;
                 height: 28px;
@@ -82,10 +82,11 @@ export component MicroInspector inherits Rectangle {
                 HorizontalLayout {
                     alignment: center;
                     spacing: 4px;
-                    IconDisplay {
-                        icon: tool.icon;
-                        size: 13px;
-                        stroke: root.active-tool == tool.id ? DesignTokens.accent : DesignTokens.text-primary;
+                    Image {
+                        source: tool.icon;
+                        width: 13px;
+                        height: 13px;
+                        colorize: root.active-tool == tool.id ? DesignTokens.accent : DesignTokens.text-primary;
                     }
                 }
                 tool-touch := TouchArea {

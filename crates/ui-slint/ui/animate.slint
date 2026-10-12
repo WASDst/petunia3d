@@ -9,7 +9,7 @@ import { InspectorSplitLayout } from "shell/inspector_split.slint";
 // Regras herdadas do AGENTS.md §0.1: cores só por `DesignTokens`, tamanhos por
 // layout nativo, controles focáveis por teclado (Tab, Enter/Espaço, setas).
 
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "petunia_icons.slint";
 import { DesignTokens } from "tokens.slint";
 import { InspectorSection } from "inspector/sections.slint";
 import { StructureHost, PropertiesHost } from "shell/right_column.slint";
@@ -74,18 +74,20 @@ component AnimIcon inherits Rectangle {
     in property <color> stroke: DesignTokens.text-primary;
     width: root.size;
     height: root.size;
-    IconDisplay {
-        icon: root.icon-id == "footprints" ? IconSet.Footprints
-            : root.icon-id == "paw-print" ? IconSet.PawPrint
-            : root.icon-id == "waves-horizontal" ? IconSet.WavesHorizontal
-            : root.icon-id == "wind" ? IconSet.Wind
-            : root.icon-id == "person-standing" ? IconSet.PersonStanding
-            : root.icon-id == "bug" ? IconSet.Bug
-            : root.icon-id == "fish" ? IconSet.Fish
-            : root.icon-id == "bird" ? IconSet.Bird
-            : IconSet.Bone;
-        size: root.size;
-        stroke: root.stroke;
+    Image {
+        width: root.size;
+        height: root.size;
+        colorize: root.stroke;
+        image-fit: contain;
+        source: root.icon-id == "waves-horizontal" ? PetuniaIcons.spline-curve
+            : root.icon-id == "wind" ? PetuniaIcons.timeline
+            : root.icon-id == "footprints" ? PetuniaIcons.pointer
+            : root.icon-id == "paw-print" ? PetuniaIcons.select-vertex
+            : root.icon-id == "person-standing" ? PetuniaIcons.keyframe
+            : root.icon-id == "bug" ? PetuniaIcons.shape-circle
+            : root.icon-id == "fish" ? PetuniaIcons.spline-curve
+            : root.icon-id == "bird" ? PetuniaIcons.cloth
+            : PetuniaIcons.bone;
     }
 }
 
@@ -367,7 +369,7 @@ component AnimCard inherits Rectangle {
             Text {
                 text: root.entry.label;
                 color: root.entry.available ? DesignTokens.text-primary : DesignTokens.disabled;
-                font-size: root.compact ? 11px : 12px;
+                font-size: DesignTokens.font-small;
                 font-weight: 700;
                 overflow: elide;
             }
@@ -725,10 +727,12 @@ export component AnimateTransport inherits Rectangle {
             accessible-action-default => { root.action("toggle-play", "", 0); }
             forward-focus: play-focus;
 
-            IconDisplay {
-                icon: root.playing ? IconSet.Pause : IconSet.Play;
-                size: 14px;
-                stroke: root.has-motion ? DesignTokens.on-accent : DesignTokens.disabled;
+            Image {
+                source: root.playing ? PetuniaIcons.pause : PetuniaIcons.play;
+                width: 14px;
+                height: 14px;
+                colorize: root.has-motion ? DesignTokens.on-accent : DesignTokens.disabled;
+                image-fit: contain;
             }
             play-focus := FocusScope {
                 enabled: root.has-motion;

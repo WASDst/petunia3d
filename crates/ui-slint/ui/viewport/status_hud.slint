@@ -1,5 +1,5 @@
 import { DesignTokens, Tr } from "../tokens.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 
 /// Projeta estado do shell; não cria outro owner de domínio.
 export component ViewportStatusHud inherits Rectangle {
@@ -14,7 +14,7 @@ export component ViewportStatusHud inherits Rectangle {
     background: transparent;
 
     // Pílula de Ferramenta Ativa e Modo de Operação (Feedback visual contínuo)
-    if !root.measure-visible && root.active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
+    if !root.measure-visible && root.active-workspace == "MODEL" && (root.tool-modal-active || root.active-tool == "transform" || root.active-tool == "extrude" || root.active-tool == "bevel" || root.active-tool == "inset" || root.active-tool == "push_pull" || root.active-tool == "cut" || root.active-tool == "loop_cut" || root.active-tool == "slice" || root.active-tool == "move" || root.active-tool == "rotate" || root.active-tool == "scale"): Rectangle {
         width: min(parent.width - 40px, active-tool-hud-row.preferred-width + 24px);
         x: (parent.width - self.width) / 2;
         y: 58px;
@@ -92,10 +92,11 @@ export component ViewportStatusHud inherits Rectangle {
             spacing: 6px;
             alignment: center;
 
-            IconDisplay {
-                icon: IconSet.ArrowUpDown;
-                size: 12px;
-                stroke: DesignTokens.measure;
+            Image {
+                source: PetuniaIcons.measure;
+                width: 12px;
+                height: 12px;
+                colorize: DesignTokens.measure;
             }
 
             Text {

@@ -89,21 +89,27 @@ impl ToolRegistry {
 
     pub fn with_defaults() -> Self {
         let enabled = load_tools_config();
+        Self::from_enabled(&enabled)
+    }
+
+    /// Constrói o catálogo com configuração já resolvida, sem filesystem.
+    /// Ausência de um ID mantém a ferramenta habilitada.
+    pub fn from_enabled(enabled: &HashMap<String, bool>) -> Self {
         let mut r = Self::new();
-        r.register::<SelectTool>(&enabled);
-        r.register::<TransformTool>(&enabled);
-        r.register::<PrimitivesTool>(&enabled);
-        r.register::<DrawProfileTool>(&enabled);
-        r.register::<ExtrudeTool>(&enabled);
-        r.register::<PushPullTool>(&enabled);
-        r.register::<InsetTool>(&enabled);
-        r.register::<BevelTool>(&enabled);
-        r.register::<SubdivideTool>(&enabled);
-        r.register::<SliceTool>(&enabled);
-        r.register::<ConnectTool>(&enabled);
-        r.register::<DissolveTool>(&enabled);
-        r.register::<MergeTool>(&enabled);
-        r.register::<PaintTool>(&enabled);
+        r.register::<SelectTool>(enabled);
+        r.register::<TransformTool>(enabled);
+        r.register::<PrimitivesTool>(enabled);
+        r.register::<DrawProfileTool>(enabled);
+        r.register::<ExtrudeTool>(enabled);
+        r.register::<PushPullTool>(enabled);
+        r.register::<InsetTool>(enabled);
+        r.register::<BevelTool>(enabled);
+        r.register::<SubdivideTool>(enabled);
+        r.register::<SliceTool>(enabled);
+        r.register::<ConnectTool>(enabled);
+        r.register::<DissolveTool>(enabled);
+        r.register::<MergeTool>(enabled);
+        r.register::<PaintTool>(enabled);
         r
     }
 
@@ -119,6 +125,14 @@ impl ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tool_catalog_uses_the_configuration_supplied_by_the_host() {
+        let enabled = HashMap::from([("select".to_string(), false)]);
+        let registry = ToolRegistry::from_enabled(&enabled);
+        assert!(registry.get("select").is_none());
+        assert!(registry.get("transform").is_some());
+    }
 
     #[test]
     fn activating_any_model_tool_preserves_geometry_and_history() {

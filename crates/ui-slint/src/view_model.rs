@@ -41,6 +41,8 @@ pub struct QuickActionModel {
     pub id: String,
     pub label: String,
     pub enabled: bool,
+    /// Por que está desabilitada (vazio quando habilitada); vai ao leitor de tela.
+    pub disabled_reason: String,
     pub active: bool,
     pub pinned: bool,
 }
@@ -251,6 +253,8 @@ pub struct ShellViewModel {
     pub workspace: Workspace,
     pub selection_domain: SelectionDomain,
     pub inspector_visible: bool,
+    /// DRAW com navegação planar ativa (botão Planar/Livre da barra).
+    pub planar_navigation: bool,
     pub shortcuts: ShortcutsModel,
     pub saved: bool,
     pub can_undo: bool,
@@ -873,6 +877,11 @@ pub struct ShellViewModel {
     pub pointer_adjust_mask: i32,
     pub pointer_loop_mask: i32,
     pub pointer_orbit_left_mask: i32,
+    /// PAINT: ações de ponteiro (U05), máscaras como as demais `[pointer]`.
+    pub pointer_paint_straight_mask: i32,
+    pub pointer_clone_source_mask: i32,
+    pub pointer_decal_scale_mask: i32,
+    pub pointer_decal_rotate_mask: i32,
     /// Painel do workspace Animate (cap. 45 F2).
     pub animate: crate::animate::AnimateViewModel,
 }
@@ -1285,6 +1294,7 @@ impl ShellViewModel {
             reference_slots,
             reference_total_count: state.project.refs.len() as i32,
             inspector_visible: true,
+            planar_navigation: false,
             shortcuts: ShortcutsModel::from_keybinds(&state.ui.keybinds),
             saved: !state.is_document_dirty(),
             can_undo: state.project.undo.can_undo(),
@@ -1936,6 +1946,30 @@ impl ShellViewModel {
                     .keybinds
                     .pointer_modifier(petunia_config::keybinds::POINTER_ORBIT_LEFT),
             ),
+            pointer_paint_straight_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PAINT_STRAIGHT),
+            ),
+            pointer_clone_source_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_CLONE_SOURCE),
+            ),
+            pointer_decal_scale_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_DECAL_SCALE),
+            ),
+            pointer_decal_rotate_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_DECAL_ROTATE),
+            ),
             animate: crate::animate::AnimateViewModel::default(),
         }
     }
@@ -2016,6 +2050,12 @@ pub struct PaintLayerModel {
     pub active: bool,
     pub is_group: bool,
     pub kind_label: String,
+    /// `raster`, `group`, `decal` ou `effect` (ícone por tipo, não pelo nome).
+    pub kind: String,
+    /// Índice de `LayerBlendMode` (Normal, Multiply, Add, Screen).
+    pub blend: i32,
+    /// Profundidade no grupo (recuo da linha).
+    pub depth: i32,
 }
 
 #[derive(Debug, Clone, PartialEq)]

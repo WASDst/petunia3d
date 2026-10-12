@@ -224,7 +224,10 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             vm.operation_hud_hint = tr(t::HUD_CUT_HINT);
             vm.context_hint = vm.operation_hud_hint.clone();
             if let Some(point) = session.edge_start {
-                let clip = self.state.session.camera.view_proj() * point.position.extend(1.0);
+                // Ponto do corte é local: projeta com view_proj × mundo.
+                let clip = self.state.session.camera.view_proj()
+                    * crate::projection::active_world_matrix(&self.state)
+                    * point.position.extend(1.0);
                 if clip.w > 0.0 {
                     let x = (clip.x / clip.w * 0.5 + 0.5) * self.viewport_size[0];
                     let y = (0.5 - clip.y / clip.w * 0.5) * self.viewport_size[1];

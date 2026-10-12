@@ -5,6 +5,7 @@ pub(crate) mod viewport;
 pub(crate) mod viewport_actions;
 
 mod application;
+pub use application::ApplicationState;
 mod booleans;
 mod commands;
 mod decals;
@@ -19,6 +20,7 @@ mod outliner;
 mod paint_canvas;
 mod paint_layers;
 mod paint_strokes;
+pub use paint_strokes::PaintPointerActions;
 mod picking;
 mod pivot;
 mod poly_pen;

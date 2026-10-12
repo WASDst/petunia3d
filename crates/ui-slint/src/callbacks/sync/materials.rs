@@ -50,6 +50,7 @@ pub(super) fn sync_materials(window: &PetuniaSlintShell, vm: &ShellViewModel) {
             id: action.id.as_str().into(),
             label: action.label.as_str().into(),
             enabled: action.enabled,
+            disabled_reason: action.disabled_reason.as_str().into(),
             pinned: action.pinned,
         })
         .collect();
@@ -63,6 +64,7 @@ pub(super) fn sync_materials(window: &PetuniaSlintShell, vm: &ShellViewModel) {
             id: action.id.as_str().into(),
             label: action.label.as_str().into(),
             enabled: action.enabled,
+            disabled_reason: action.disabled_reason.as_str().into(),
             pinned: action.pinned,
         })
         .collect();

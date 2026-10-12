@@ -87,6 +87,10 @@ pub(super) fn sync_settings(window: &PetuniaSlintShell, vm: &ShellViewModel) {
     window.set_pointer_adjust_mask(vm.pointer_adjust_mask);
     window.set_pointer_loop_mask(vm.pointer_loop_mask);
     window.set_pointer_orbit_left_mask(vm.pointer_orbit_left_mask);
+    window.set_pointer_paint_straight_mask(vm.pointer_paint_straight_mask);
+    window.set_pointer_clone_source_mask(vm.pointer_clone_source_mask);
+    window.set_pointer_decal_scale_mask(vm.pointer_decal_scale_mask);
+    window.set_pointer_decal_rotate_mask(vm.pointer_decal_rotate_mask);
 
     theme::apply_theme(window, &vm.current_theme);
     if let Some(rgb) = vm.accent_rgb {

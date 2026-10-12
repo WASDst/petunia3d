@@ -158,6 +158,11 @@
       "summary": "lib.rs (16.8k -> ~1.6k linhas) distribuído em 33 módulos src/bridge/; connect_callbacks e sync_window_properties divididos em src/callbacks/ (d4869f2 divide view_model em projeções por área). Movimento puro. cargo check --lib e fmt pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
       "origin_sha": "9cd654a"
     },
+    "u08-petunia-icons": {
+      "revision": "HEAD",
+      "document": "09-ui/design-system-guideline.md",
+      "summary": "Migração completa de 100% dos ícones Lucide (@lucide / lucide-slint) para o catálogo proprietário Petunia Dual SVG (PetuniaIcons). Remoção definitiva da dependência lucide-slint do Cargo.toml e build.rs. Atualizados gallery.slint, animate.slint, app.slint, components/base.slint, components/controls.slint, dialogs/references.slint, dialogs/command_palette.slint. Gates executados e aprovados: cargo fmt -p petunia_ui_slint -- --check (pass), cargo run -p xtask -- ui-lint (pass, 63 arquivos .slint sem cor/fonte/sombra literal), cargo clippy -p petunia_ui_slint --all-targets -- -D warnings (pass, zero warnings), cargo check --tests -p petunia_ui_slint (pass)."
+    },
     "g01-topology-preserving-unwrap": {
       "revision": "9c79f99",
       "document": "07-uv/architecture-decision.md",
@@ -250,6 +255,11 @@
       "revision": "9c79f99",
       "document": "11-project/project-persistence.md",
       "summary": "Parte de P03 da evidência g18-p02-p03-shading-savepoint (mesmo commit): política de autosave separada de AutosaveStorage e coalescida por revisão; save points do UndoStack fiéis a edições posteriores. Gates conforme a evidência de origem."
+    },
+    "gui-codex-visual-application": {
+      "revision": "alterações locais sobre 186a6e0a77ab7a76bbc8e2e341917b8ec9968f1b, 2026-10-11",
+      "document": "09-ui/slint-rescue-plan.md",
+      "summary": "§28: guideline aprovado, acabamento dos componentes existentes, reconciliação limitada de layout/a11y, picker HSV e integração Application. ui-lint pass (62 arquivos); fmt focado pass. cargo check -p petunia_ui_slint -p petunia_application -p petunia_module_model --lib --tests pass (exit 0, 4m50s, sem warnings; /tmp/petunia-gui-codex-check-final.log), sem execução de testes. verify-progress, verify-agent-docs e git diff --check pass. Testes comportamentais, animation-workspace, janela nativa, Windows, screen reader e baixo desempenho not run. Nenhum checkpoint fechado por presença de código."
     }
   },
   "tasks": [
@@ -429,7 +439,7 @@
       "document": "09-ui/viewport-input-boundary.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-11",
-      "baseline": "Regressões de DTOs de viewport executadas: viewport_gestures 15 e lib 513 pass (2026-10-11). Decomposição completa ainda pendente. Anterior: Slice escrito e cargo check default --lib pass sobre fbe5aa7: shell_layout extraído; DTOs select/hover/box/lasso/tool pointer e execução no bridge, API antiga e picking/keymap/ToolSession preservados. Quatro regressões escritas, not run por adiamento do usuário. Decomposição completa/gates pendentes (§22 Viewport Input Boundary).",
+      "baseline": "Regressões de DTOs de viewport executadas: viewport_gestures 15 e lib 513 pass (2026-10-11). Decomposição completa ainda pendente. Anterior: Slice escrito e cargo check default --lib pass sobre fbe5aa7: shell_layout extraído; DTOs select/hover/box/lasso/tool pointer e execução no bridge, API antiga e picking/keymap/ToolSession preservados. Quatro regressões escritas, not run por adiamento do usuário. Decomposição completa/gates pendentes (§22 Viewport Input Boundary). Retomada Codex 2026-10-11: bridge possui uma Application única; comandos, Undo/Redo e autosave encaminhados pelo adapter de migração. Acesso mutável legado ao AppState ainda transitório; não conclui todos os intents/DTOs. Evidência gui-codex-visual-application; §28 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Decompor lib.rs/callbacks.rs por responsabilidade",
@@ -464,9 +474,9 @@
       "title": "Input PAINT",
       "description": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas; fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split.",
       "document": "09-ui/viewport-input-boundary.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
-      "baseline": "Parcial. crates/ui-slint/src/bridge/paint.rs:25. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-11",
+      "baseline": "Parcial. crates/ui-slint/src/bridge/paint.rs:25. Estado da migração a confirmar; preservar as capacidades existentes. Retomada Codex 2026-10-11 preservou o delta local de PAINT semântico/commands e coordenadas de mundo da sessão Claude. Nova bateria comportamental não executada; não usar testes históricos como prova do conjunto atual. §28 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas",
@@ -663,13 +673,13 @@
       "description": "Substituir controles ad-hoc gradualmente; fechar todos os estados, texto operacional >=12 logical px, alvos >=28px, escala 100–200%, temas/contraste/motion, overflow, listas virtualizadas e NumericField sem wheel incidental.",
       "document": "09-ui/slint-reassessment.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-09",
-      "baseline": "Correções limitadas U02/U03 escritas: alças/chips/swatches com alvo 28px e teclado/ações acessíveis; hosts/drawer/chips usam texto operacional 12px. Auditoria global de estados/escala/contraste/input numérico e testes adiados, ainda pendentes. §20 Slint Rescue.",
+      "updated": "2026-10-11",
+      "baseline": "Correções limitadas U02/U03 escritas: alças/chips/swatches com alvo 28px e teclado/ações acessíveis; hosts/drawer/chips usam texto operacional 12px. Auditoria global de estados/escala/contraste/input numérico e testes adiados, ainda pendentes. §20 Slint Rescue. Correções recuperadas de alignment e alvos/foco; pílulas, tipografia >=12, temas neutros, relevo passivo (desligado em High Contrast), picker HSV/HEX e alternativas numéricas escritos. Regressões geométricas, foco e recuperação HEX preparadas; comportamento e aceite nativo not run. Evidência gui-codex-visual-application; §28 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Substituir controles ad-hoc gradualmente",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u08-petunia-icons"
         },
         {
           "title": "fechar todos os estados, texto operacional >=12 logical px, alvos >=28px, escala 100–200%, temas/contraste/motion, overflow, listas virtualizadas e NumericField sem wheel incidental",
@@ -685,7 +695,8 @@
       "documents": [
         "09-ui/slint-reassessment.md",
         "09-ui/slint-rescue-plan.md",
-        "09-ui/workspaces-feedback-accessibility.md"
+        "09-ui/workspaces-feedback-accessibility.md",
+        "09-ui/design-system-guideline.md"
       ]
     },
     {
@@ -761,7 +772,7 @@
       "document": "02-application/commands-events-services.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-11",
-      "baseline": "crates/app removido com o egui; DesktopHost vive em crates/ui-slint/src/host.rs sobre petunia_application. Injeção de filesystem/watchers e aposentadoria do ModuleRegistry pendentes.",
+      "baseline": "crates/app removido com o egui; DesktopHost vive em crates/ui-slint/src/host.rs sobre petunia_application. Injeção de filesystem/watchers e aposentadoria do ModuleRegistry pendentes. DesktopHost agora constrói/configura Application e a transfere ao bridge; from_state adota sessão existente sem recriar documento/histórico/relógio. Catálogo nativo puro; carregamento de tools.toml no host; política de autosave única na Application. Acesso AppState transitório, filesystem/watchers/locks e ModuleRegistry ainda pendentes. Evidência gui-codex-visual-application; §28 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Substituir app::Core por Application neutra e DesktopHost",
@@ -831,8 +842,8 @@
       "description": "Restringir contextos hoje baseados em AppState; centralizar mutations single-writer; separar intents de fatos; devolver DTOs, diagnostics e invalidações pós-commit.",
       "document": "02-application/commands-events-services.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Parcial. crates/core/src/command.rs, crates/core/src/events.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "updated": "2026-10-11",
+      "baseline": "Parcial. crates/core/src/command.rs, crates/core/src/events.rs. Estado da migração a confirmar; preservar as capacidades existentes. Retomada Codex 2026-10-11: comandos existentes do bridge entram por Application; Undo/Redo permanecem no mesmo histórico. Isso não migra todos os setters legados; cor de seleção da parte conserva dívida de command/Undo. Regressões de identidade/recusa preparadas, not run. Evidência gui-codex-visual-application; §28 Slint Rescue.",
       "checkpoints": [
         {
           "title": "Restringir contextos hoje baseados em AppState",

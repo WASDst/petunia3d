@@ -221,6 +221,14 @@ pub const POINTER_ADJUST: &str = "pointer.adjust";
 pub const POINTER_LOOP: &str = "pointer.loop";
 /// Modificador que transforma LMB em orbit; usado pelo perfil Maya-like.
 pub const POINTER_ORBIT_LEFT: &str = "pointer.orbit_left";
+/// PAINT: o clique traça uma reta desde o último ponto pintado.
+pub const POINTER_PAINT_STRAIGHT: &str = "pointer.paint_straight";
+/// PAINT (Clone): o clique define a origem do clone.
+pub const POINTER_CLONE_SOURCE: &str = "pointer.clone_source";
+/// PAINT (decalque): o arrasto escala em vez de mover.
+pub const POINTER_DECAL_SCALE: &str = "pointer.decal_scale";
+/// PAINT (decalque): o arrasto gira em vez de mover.
+pub const POINTER_DECAL_ROTATE: &str = "pointer.decal_rotate";
 
 /// Mapa ação -> binding, ex. `"model.extrude"`.
 #[derive(Debug, Default, Clone)]
@@ -604,11 +612,17 @@ impl Keybinds {
     /// Modificador de uma ação de ponteiro (`pointer.alternate`, ...).
     pub fn pointer_modifier(&self, action: &str) -> Mods2 {
         self.pointer.get(action).copied().unwrap_or(match action {
-            POINTER_ALTERNATE | POINTER_SNAP | POINTER_SUBTRACT | POINTER_ADJUST => Mods2 {
+            POINTER_ALTERNATE | POINTER_SNAP | POINTER_SUBTRACT | POINTER_ADJUST
+            | POINTER_CLONE_SOURCE | POINTER_DECAL_ROTATE => Mods2 {
                 ctrl: true,
                 ..Mods2::default()
             },
-            POINTER_EXTEND | POINTER_PRECISION | POINTER_PAN | POINTER_CURSOR_PLACE => Mods2 {
+            POINTER_EXTEND
+            | POINTER_PRECISION
+            | POINTER_PAN
+            | POINTER_CURSOR_PLACE
+            | POINTER_PAINT_STRAIGHT
+            | POINTER_DECAL_SCALE => Mods2 {
                 shift: true,
                 ..Mods2::default()
             },

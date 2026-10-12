@@ -3,7 +3,7 @@ import "fonts/InterVariable.ttf";
 // `cargo run -p petunia_ui_slint --example gallery` abre esta janela para
 // revisar estados e temas sem subir o shell inteiro.
 
-import { IconSet } from "@lucide";
+import { PetuniaIcons } from "petunia_icons.slint";
 import { ScrollView } from "std-widgets.slint";
 import { DesignTokens, Motion, Tr } from "tokens.slint";
 import {
@@ -61,13 +61,13 @@ export component ComponentGallery inherits Window {
                 HorizontalLayout {
                     spacing: DesignTokens.space-sm;
                     alignment: start;
-                    IconButton { icon: IconSet.Undo2; semantic-label: Tr.t("gallery.ghost"); shortcut: Tr.t("gallery.key_undo"); }
-                    IconButton { icon: IconSet.Magnet; variant: "toggle"; active: root.snap-on; semantic-label: Tr.t("gallery.toggle_on"); clicked => { root.snap-on = !root.snap-on; } }
-                    IconButton { icon: IconSet.Magnet; variant: "toggle"; active: false; semantic-label: Tr.t("gallery.toggle_off"); }
-                    IconButton { icon: IconSet.Move3d; variant: "tool"; active: true; semantic-label: Tr.t("gallery.tool_active"); }
-                    IconButton { icon: IconSet.Move3d; variant: "tool"; semantic-label: Tr.t("gallery.tool_idle"); }
-                    IconButton { icon: IconSet.Trash2; enabled: false; semantic-label: Tr.t("gallery.disabled"); }
-                    IconButton { icon: IconSet.ArrowUpFromLine; label: Tr.t("gallery.labelled"); semantic-label: Tr.t("gallery.labelled"); }
+                    IconButton { icon-svg: PetuniaIcons.undo; semantic-label: Tr.t("gallery.ghost"); shortcut: Tr.t("gallery.key_undo"); }
+                    IconButton { icon-svg: PetuniaIcons.snap-magnet; variant: "toggle"; active: root.snap-on; semantic-label: Tr.t("gallery.toggle_on"); clicked => { root.snap-on = !root.snap-on; } }
+                    IconButton { icon-svg: PetuniaIcons.snap-magnet; variant: "toggle"; active: false; semantic-label: Tr.t("gallery.toggle_off"); }
+                    IconButton { icon-svg: PetuniaIcons.tool-position; variant: "tool"; active: true; semantic-label: Tr.t("gallery.tool_active"); }
+                    IconButton { icon-svg: PetuniaIcons.tool-position; variant: "tool"; semantic-label: Tr.t("gallery.tool_idle"); }
+                    IconButton { icon-svg: PetuniaIcons.trash; enabled: false; semantic-label: Tr.t("gallery.disabled"); }
+                    IconButton { icon-svg: PetuniaIcons.export-glb; label: Tr.t("gallery.labelled"); semantic-label: Tr.t("gallery.labelled"); }
                 }
             }
 

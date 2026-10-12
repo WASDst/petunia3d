@@ -1,6 +1,6 @@
 // Gaveta de cena no shell compacto.
 import { DesignTokens, Tr } from "../tokens.slint";
-import { IconDisplay, IconSet } from "@lucide";
+import { PetuniaIcons } from "../petunia_icons.slint";
 import { PartsFilterRow, PartsRowSizeControl } from "../inspector/sections.slint";
 import { SceneItem } from "../types.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -58,7 +58,7 @@ export component SceneDrawerOverlay inherits Rectangle {
             }
             Rectangle { horizontal-stretch: 1; }
             TopAction {
-                icon: IconSet.Pin;
+                icon-svg: PetuniaIcons.pin;
                 semantic-label: scene-drawer-pinned ? Tr.t("sl.unpin_parts") : Tr.t("sl.pin_parts");
                 clicked => {
                     root.scene-drawer-pinned = !root.scene-drawer-pinned;
@@ -66,7 +66,7 @@ export component SceneDrawerOverlay inherits Rectangle {
                 }
             }
             TopAction {
-                icon: IconSet.X;
+                icon-svg: PetuniaIcons.close;
                 semantic-label: Tr.t("sl.close_scene_drawer");
                 clicked => { root.scene-requested(); }
             }
@@ -160,10 +160,11 @@ export component SceneDrawerOverlay inherits Rectangle {
                             HorizontalLayout {
                                 spacing: 6px;
 
-                                 IconDisplay {
-                                     icon: item.tris == 0 ? IconSet.Spline : IconSet.Box;
-                                     size: 12px;
-                                     stroke: item.selected ? DesignTokens.accent : DesignTokens.text-muted;
+                                 Image {
+                                     source: item.tris == 0 ? PetuniaIcons.draw-profile : PetuniaIcons.cube;
+                                     width: 12px;
+                                     height: 12px;
+                                     colorize: item.selected ? DesignTokens.accent : DesignTokens.text-muted;
                                  }
 
                                  if root.rename-active && item.selected: TextInput {
@@ -199,10 +200,11 @@ export component SceneDrawerOverlay inherits Rectangle {
                         Rectangle {
                             width: 20px;
                             height: 20px;
-                            IconDisplay {
-                                icon: item.visible ? IconSet.Eye : IconSet.EyeOff;
-                                size: 13px;
-                                stroke: item.visible ? DesignTokens.text-secondary : DesignTokens.text-muted;
+                            Image {
+                                source: item.visible ? PetuniaIcons.eye : PetuniaIcons.eye-hidden;
+                                width: 13px;
+                                height: 13px;
+                                colorize: item.visible ? DesignTokens.text-secondary : DesignTokens.text-muted;
                             }
                             TouchArea {
                                 clicked => { root.scene-toggle-visibility(item.id); }
@@ -212,10 +214,11 @@ export component SceneDrawerOverlay inherits Rectangle {
                          Rectangle {
                              width: 20px;
                              height: 20px;
-                             IconDisplay {
-                                 icon: item.locked ? IconSet.Lock : IconSet.LockOpen;
-                                 size: 13px;
-                                 stroke: item.locked ? DesignTokens.accent : DesignTokens.text-muted;
+                             Image {
+                                 source: item.locked ? PetuniaIcons.lock : PetuniaIcons.unlock;
+                                 width: 13px;
+                                 height: 13px;
+                                 colorize: item.locked ? DesignTokens.accent : DesignTokens.text-muted;
                              }
                              TouchArea {
                                  clicked => { root.scene-toggle-lock(item.id); }

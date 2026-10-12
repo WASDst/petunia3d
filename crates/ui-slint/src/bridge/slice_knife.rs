@@ -41,7 +41,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 );
                 return false;
             };
-            let mut session = petunia_core::CutSession::new(mesh);
+            // Plano vem da tela (mundo); a sessão converte para o local.
+            let mut session = petunia_core::CutSession::new(mesh)
+                .with_object_to_world(crate::projection::active_world_matrix(&self.state));
             session.fill_cap = self.slice_trim;
             self.state.session.tools.cut_session = Some(session);
         }
@@ -194,6 +196,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     ///
     /// O ponto vem de `AppState::pick_edge`, então a faca corta a aresta que o
     /// usuário realmente apontou. O corte é aplicado como uma única transação.
+    /// Prévia da faca com os segmentos já cortados, enquanto a faca está armada.
+    /// Os segmentos nunca entram no documento antes do commit.
+    pub(crate) fn knife_preview_mesh(&self) -> Option<&petunia_core::Mesh> {
+        (self.state.session.tools.active_tool == "cut")
+            .then(|| self.tool_preview_mesh())
+            .flatten()
+    }
+
     pub fn knife_click(&mut self, normalized_x: f32, normalized_y: f32) -> bool {
         if self.state.session.tools.cut_session.is_none() {
             return false;
@@ -210,10 +220,17 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             );
             return false;
         };
-        let Some(mesh) = self.state.project.active_mesh() else {
+        // Índices da aresta são da prévia (ou do documento no 1º segmento).
+        let Some(mesh) = self
+            .knife_preview_mesh()
+            .or_else(|| self.state.project.active_mesh())
+        else {
             return false;
         };
-        let vp = self.state.session.camera.view_proj();
+        // Extremos locais projetados com view_proj × mundo; `position` (abaixo)
+        // continua local porque o corte é aplicado na malha local.
+        let vp = self.state.session.camera.view_proj()
+            * crate::projection::active_world_matrix(&self.state);
         let va = mesh.verts[a as usize].vec();
         let vb = mesh.verts[b as usize].vec();
         let ca = vp * va.extend(1.0);
@@ -243,10 +260,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let point = petunia_core::CutEdgePoint { edge, position };
 
         let cut_result = {
-            let Some(session) = self.state.session.tools.cut_session.as_mut() else {
-                return false;
-            };
-            let Some(start) = session.edge_start else {
+            // Resolve a âncora e os dados de leitura antes do borrow mutável:
+            // a prévia consulta o bridge e a câmera permanece da sessão.
+            let Some(start) = self
+                .state
+                .session
+                .tools
+                .cut_session
+                .as_ref()
+                .and_then(|session| session.edge_start)
+            else {
+                let Some(session) = self.state.session.tools.cut_session.as_mut() else {
+                    return false;
+                };
                 session.edge_start = Some(point);
                 session.anchor = Some([normalized_x, normalized_y]);
                 self.state.set_status(
@@ -257,35 +283,42 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 return true;
             };
 
-            let Some(mesh) = self.state.project.active_mesh().cloned() else {
+            let Some(mesh) = self
+                .knife_preview_mesh()
+                .or_else(|| self.state.project.active_mesh())
+                .cloned()
+            else {
                 return false;
             };
             // O corte atravessa as faces entre os dois cliques seguindo o que o
             // usuário vê como reta (plano que contém a direção de visão).
             let camera = &self.state.session.camera;
-            let middle = (start.position + point.position) * 0.5;
+            // Pontos do corte são locais; a direção de vista é de mundo
+            // (`cut_knife_path` converte com `object_to_world`).
+            let middle = crate::projection::active_world_matrix(&self.state)
+                .transform_point3((start.position + point.position) * 0.5);
             let view_direction = if camera.proj == petunia_core::Projection::Perspective {
                 (middle - camera.eye()).normalize_or_zero()
             } else {
                 camera.forward()
+            };
+            let Some(session) = self.state.session.tools.cut_session.as_mut() else {
+                return false;
             };
             session.cut_knife_path(start, point, &mesh, view_direction)
         };
 
         match cut_result {
             Ok(cut) => {
-                self.state.freeze_active_primitive();
                 if let Some(session) = self.state.session.tools.cut_session.as_mut() {
                     session.segments += 1;
                     session.edge_start = None;
                     session.anchor = None;
                 }
-                if let Some(active) = self.state.project.active_mesh_mut() {
-                    *active = cut;
-                }
+                // Segmento só na prévia; o commit grava tudo (e congela uma
+                // primitiva paramétrica) por `ApplyMeshEditCmd`.
+                self.show_tool_preview(cut);
                 self.state.session.tools.hover = petunia_core::HoverTarget::None;
-                self.state.sync_selection();
-                self.state.emit_mesh_changed();
                 self.state
                     .set_status(self.state.t_id(petunia_config::text_id::STATUS_CUT_PREVIEW_CHOOSE_ANOTHER_SEGMENT_ENTER_APPLIES));
                 true
@@ -309,23 +342,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         };
         self.state.session.tools.active_tool = "select".into();
-        if session.segments > 0 {
-            // Lacuna conhecida (A06): a faca escolhe o próximo ponto sobre a
-            // malha já cortada, então os segmentos ficam no documento até a
-            // Tool Session oferecer picking sobre a prévia. O commit volta à
-            // fonte e grava o resultado pelo ponto único de commit.
-            let Some(result) = self.state.project.active_mesh().cloned() else {
-                return false;
-            };
-            if let Some(mesh) = self.state.project.active_mesh_mut() {
-                *mesh = session.source.clone();
+        // A prévia acumula os segmentos (o picking da faca mira nela); o
+        // documento só muda aqui, numa entrada de Undo.
+        let preview = self.tool_preview_mesh().cloned();
+        match preview {
+            Some(result) if session.segments > 0 => {
+                if !self.commit_tool_result("cut segments", &session.source, result) {
+                    return false;
+                }
             }
-            if !self.commit_tool_result("cut segments", &session.source, result) {
-                return false;
+            _ => {
+                self.clear_tool_preview();
             }
-        } else {
-            self.state.sync_selection();
-            self.state.emit_mesh_changed();
         }
         self.state
             .set_status(self.state.t_id(petunia_config::text_id::STATUS_CUT_APPLIED));
@@ -333,15 +361,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub fn cancel_knife(&mut self) -> bool {
-        let Some(session) = self.state.session.tools.cut_session.take() else {
+        if self.state.session.tools.cut_session.take().is_none() {
             return false;
-        };
-        if let Some(mesh) = self.state.project.active_mesh_mut() {
-            *mesh = session.source;
         }
+        // O documento nunca recebeu os segmentos: basta descartar a prévia.
+        self.clear_tool_preview();
         self.state.session.tools.active_tool = "select".into();
-        self.state.sync_selection();
-        self.state.emit_mesh_changed();
         self.state.set_status(
             self.state
                 .t_id(petunia_config::text_id::STATUS_CUT_CANCELLED),

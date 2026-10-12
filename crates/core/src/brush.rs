@@ -55,7 +55,9 @@ pub enum BrushType {
 pub struct SurfaceStencil {
     pub target: uuid::Uuid,
     pub image: std::sync::Arc<petunia_project::Canvas>,
-    pub world_to_clip: glam::Mat4,
+    /// Do espaço do objeto `target` (onde o pincel trabalha) para clip:
+    /// `view_proj × world_matrix`.
+    pub object_to_clip: glam::Mat4,
     pub center: [f32; 2],
     pub size: [f32; 2],
     pub rotation: f32,

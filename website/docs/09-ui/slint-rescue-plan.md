@@ -625,3 +625,74 @@ Rodada final executada num clone isolado com este patch aplicado sobre `ddf87c7`
 **Not run:** Windows; GPU de baixo desempenho; inspeção visual da composição na janela nativa; leitor de tela (Orca/NVDA); gate de performance. Gap de acessibilidade conhecido: rolar o painel até a região focada por F6 quando ela está fora da área visível.
 
 **Controle de versão:** a reorganização de pastas de 2026-10-10 (~22h20) removeu o `.git` local antes do push; os commits locais daquele dia (`360647c`, `698f591`, `4babc87`, `94a30a3` e os de outras sessões) não chegaram ao remoto (`31fe654`). O conteúdo está preservado na árvore de trabalho; o histórico precisa ser recomposto em novos commits.
+
+## 27. Fase 7 — fronteira da UI: comandos tipados, prévias fora do Document e coordenadas de mundo (2026-10-11)
+
+**Decisões do usuário nesta rodada:** branch único `refactor/architecture-foundation`; meta de 45 controles em POLY mantida (cortar um controle, não elevar a meta); integrar a auditoria de `alignment` após revisão; testes (automáticos e manuais) só depois de esgotar a refatoração.
+
+### Escritas diretas do bridge → comandos
+
+Seguindo [02-application — Commands](../02-application/commands-events-services.md#commands) (trait `Command` existente, sem hierarquias antecipadas), cada operação é um valor tipado; o dispatcher faz Undo, rollback e evento de mudança:
+
+| Área | Antes | Agora |
+|---|---|---|
+| Materiais | `checkpoint` + mutação direta (9 operações) | `CreateMaterialCmd`, `DuplicateMaterialCmd`, `RemoveMaterialCmd`, `EditMaterialCmd(MaterialEdit)`; alvo por id |
+| Modificadores | `checkpoint` + mutação (7) | `ModifierCmd(ModifierOp)`; `ModifierInstance::apply_to` é a fonte única da avaliação |
+| Colar | `checkpoint` + `project.add`/`assets.push` | `AddMeshAssetCmd`, `InsertAssetCmd` |
+| Pintura | `checkpoint` + funções sobre `AppState` | `GradientPaintCmd`, `ShapePaintCmd` (módulo PAINT) |
+| Camadas/decalques | closure + snapshot do projeto (16 operações) | `PaintStackCmd(PaintStackOp / DecalEdit)`; recusa desfaz também a conversão textura → pilha |
+| Volume de perfil | objeto "Profile Preview" gravado no Document + snapshot | objeto **transitório** no contrato de render (`PoseOverride::insert_transient`); commit por `AddMeshAssetCmd` |
+| Faca | segmentos gravados no Document entre cliques | segmentos só na prévia; picking da faca mira a prévia; commit único (fecha a lacuna A06 registrada no §26) |
+
+Bugs corrigidos pelo caminho: modificador — eixo/direção inalterados e Mirror sem direção empilhavam Undo vazio; "aplicar" gravava a pilha inteira e removia só um modificador (efeito aplicado duas vezes). Agora aplica só aquele modificador (desligado é recusado). Permanecem fora de comando, por serem transações já fechadas: gesto de decalque ao vivo, correção "pixel perfect" durante o traço, re-rasterização de SVG por resolução (dado derivado) e gesto de transformação de perfil.
+
+### P01 — coordenadas de mundo no bridge
+
+Regra: saída para a tela e picking pela câmera usam mundo; edição continua local. Helpers em `projection.rs`: `active_world_matrix`, `active_world_normal` (inversa transposta), `active_mesh_in_world`/`mesh_in_world` (malha base no mundo, índices preservados). Corrigidos: medida rápida, contorno do objeto, raycast de face (`pick_face_hit` devolve mundo, como `face_hit_uv` espera), picking de componentes, snap (`SnapSource` não carrega matriz), cursor 3D e pivô da seleção, prévias de loop cut, faca/slice (as duas sessões criadas pelo bridge não recebiam `with_object_to_world`), Poly Pen (`PenPoint::New` é mundo), decalques (âncora no espaço do objeto, como `surface_samples_of` já assumia; doc de `DecalAnchor` corrigida), oclusão da pintura projetada, viewport de CPU. `SurfaceStencil.world_to_clip` → `object_to_clip` (o motor de pincel trabalha no frame local).
+
+Lacunas registradas: o esqueleto do ANIMATE é recurso compartilhado por objetos que podem ter transformações diferentes — onde os ossos vivem no mundo é decisão de design; com transformação ≠ identidade o picking copia a malha a cada hover — a fase 2b deve passar `object_to_world` ao picking do core.
+
+### U05 — PAINT por ações
+
+`[pointer]` ganha `paint_straight`, `clone_source`, `decal_scale`, `decal_rotate` (padrões Shift/Ctrl/Shift/Ctrl). O router calcula as ações pelas máscaras do keymap e `viewport-paint-begin` recebe ações, não teclas; a atualização do traço não usa modificadores. `PaintPointerActions::resolve` é o adaptador para entradas físicas. Cancelamento do sistema durante o traço chama `viewport-paint-cancel` e descarta o traço parcial com restauração exata ([Viewport Input Boundary §11](./viewport-input-boundary.md#11-cancel)).
+
+### U06 — motivo de desabilitado
+
+`IconButton.disabled-reason` vai para `accessible-description` enquanto desabilitado; as ações rápidas da barra de contexto levam o motivo de `can_execute`. Os motivos ainda vêm em inglês do core (mesmo texto do Command Palette).
+
+### Evidência
+
+**Pendente:** este lote foi escrito sem compilação nem testes intermediários, por pedido do usuário; a rodada de testes ao final da refatoração registra o resultado aqui.
+
+## 28. Retomada Codex — guideline visual e Application (2026-10-11)
+
+**Intent / Sources:** continuar U08/U04/A02/A04, preservando U05, a partir da sessão Claude “Refatoração GUI (fork)” (`4fa3370e-9220-4a34-a0f1-90a3624fd942`), incorporando o [guideline visual aprovado](./design-system-guideline.md). Autoridade: este plano §§10–14, [Application](../02-application/architecture-decision.md), registro de decisões e protocolo de implementação.
+
+**Baseline / Gap:** `petunia3d-refact` contém uma árvore sem `.git`; o repositório recuperado é `/home/raillen/Documentos/petunia3d-git`, branch `refactor/architecture-foundation`, HEAD `186a6e0a77ab7a76bbc8e2e341917b8ec9968f1b`, com alterações locais anteriores desta retomada. Não confundir esse HEAD com o conteúdo modificado. Reconciliar somente o delta de layout/a11y do snapshot, preservando commands/PAINT semântico/prévias e coordenadas de mundo mais recentes. A roda antiga fixava V=1; o shell normal ainda construía AppState diretamente e tinha política de autosave no bridge.
+
+**Changed — escrito neste incremento:**
+
+- Reconciliação limitada dos layouts do snapshot: busca/listas/Inspector/PAINT/HUD/Settings e outros hosts que declaravam stretch sob alignment incompatível. `layout_fill.rs` recuperado e ampliado; o scanner de `ui-lint` agora considera os dois eixos e Layout filho direto, sem interpretar expressões nem promover stretch do neto.
+- Guideline canônico, temas Dark/Light neutros, texto operacional mínimo de 12 px, pílulas em escolhas segmentadas e relevo passivo nos controles compartilhados. High Contrast desliga o acabamento opcional. Alvos do recorte restilizado têm 28 px; WorkspaceSegment mantém altura externa de 30 px. Foco sobre preenchimento ativo usa on-accent; iluminação branca e sombra preta não invertem no tema claro.
+- Albedo Create/Clear e BrushStepper recebem foco/teclado/ações acessíveis; o campo interno de edição de NumericField recebe seu nome completo. Seletor de workspace mantém foco ao trocar para ANIMATE depois de uma região F6 desaparecer, com regressão preparada.
+- Picker de cor de seleção da parte: anel H e triângulo S/V compartilham raster/hit geometry, drag fica latched e hover não aplica cor; HSV digitável, RGB/HEX, marcadores de contraste e presets. Preto/branco/cor escura são alcançáveis; estado de apresentação preserva matiz acromática. Ação válida restaura o HEX canônico e limpa erro anterior, mesmo se a cor não mudou. Outros pickers continuam fora deste slice.
+- `DesktopHost → Application → SlintUiBridge`: Application única adotada por `ApplicationState`, comandos/Undo/Redo encaminhados por ela e política duplicada de autosave removida do bridge. O host carrega o catálogo configurado; construção nativa do ToolRegistry é pura. Métodos de compatibilidade mantêm os borrows em duas fases; leituras da faca precedem o borrow mutável da sessão. Nenhum clone de documento/histórico/relógio para resolver a migração.
+
+O macro-layout permanece o aprovado. O delta anterior de commands/PAINT semântico/prévias/coordenadas de mundo foi preservado. Revisões independentes cobriram tema/layout/foco e Application/picker; regressões recuperadas e novas foram preparadas, sem execução comportamental.
+
+**Verification:** Linux x86_64, Rust 1.98.1, um Cargo por vez, `CARGO_BUILD_JOBS=1`, `CARGO_TARGET_DIR=/home/raillen/.cache/petunia-refact-target`, `CARGO_INCREMENTAL=0`. A primeira compilação revelou incompatibilidades de borrow do adapter, reparadas nas fontes finais; import PAINT não usado removido. A bateria comportamental adiada permanece separada de compilação.
+
+| Comando / gate | Resultado deste incremento |
+|---|---|
+| `cargo check -p petunia_ui_slint -p petunia_application -p petunia_module_model --lib --tests` | pass — exit 0, 4m50s, sem warnings; `/tmp/petunia-gui-codex-check-final.log`; compila fontes de teste sem executá-las |
+| `cargo fmt -p petunia_ui_slint -p petunia_application -p petunia_module_model -p petunia_config -p xtask -- --check` | pass |
+| `cargo run -p xtask -- ui-lint` | pass — 62 arquivos, `/tmp/petunia-gui-codex-ui-lint.log` |
+| `node website/scripts/verify-progress.cjs` | pass — 66 processos, 67 documentos; nenhum checkpoint novo fechado |
+| `python3 website/scripts/verify-agent-docs.py` | pass — 67 routes; links/catalog consistente |
+| `git diff --check` | pass |
+| Testes comportamentais Rust/Slint, Clippy e feature `animation-workspace` das fontes finais | not run — etapa de bateria adiada |
+| Janela nativa, temas/idiomas/escala 100–200%, screen reader, Windows e baixo desempenho | not run |
+
+**Risks:** Application/Core ainda requerem migração gradual de ownership, DTOs/intents e serviços; DerefMut do adapter é transitório. Cor de seleção da parte conserva setter imediato e dívida de Command/Undo/cancel transacional. Controles legados fora do recorte e a auditoria global de estados/contraste/escala continuam abertos. O fail histórico `ui_metrics` com ANIMATE (POLY 46 > meta 45, §26) não foi reexecutado nem teve orçamento relaxado. Compilação não confirma geometria/foco/reader nem paridade nativa. U08/U04/U05/A02/A04 continuam IN PROGRESS.
+
+**Next checkpoint:** continuar migração de intents/setters e componentes legados preservando estado; executar a bateria das fontes finais na etapa combinada, começando por `layout_fill`, `color_picker`, `shell_focus` e os testes de Application/catálogo, depois integrações/lib/feature e gates aplicáveis. Registrar aceite nativo separadamente. Alterações permanecem locais no repositório recuperado junto ao delta anterior da sessão, sem novo commit isolado deste incremento.

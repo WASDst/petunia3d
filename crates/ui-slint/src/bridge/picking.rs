@@ -71,12 +71,22 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             || self.state.session.shading == petunia_core::Shading::Wireframe;
         let viewport = glam::Vec2::new(width, height);
         let cursor = glam::Vec2::from_array(ndc);
+        // O picking compara posições com a câmera (mundo): malha editável no
+        // mundo, mesmos índices. Copia só com transformação ≠ identidade;
+        // TODO(P01 2b): passar `object_to_world` ao picking do core.
+        // Faca: os segmentos vivem só na prévia, então o próximo ponto é
+        // escolhido sobre a malha já cortada (índices da prévia).
+        let knife_preview = self.knife_preview_mesh();
+        let Some(base) = knife_preview.or_else(|| self.state.project.active_mesh()) else {
+            return Target::None;
+        };
+        let mesh = crate::projection::mesh_in_world(&self.state, base);
         // A cena em cache tem a BVH da malha avaliada: com modifiers os
         // índices de face não batem com a malha editável e o picking volta
         // ao caminho que triangula a própria malha.
-        let hit = if asset.has_enabled_modifiers() {
+        let hit = if asset.has_enabled_modifiers() || knife_preview.is_some() {
             petunia_core::picking::pick_mesh_filtered(
-                &asset.mesh,
+                &mesh,
                 camera,
                 viewport,
                 cursor,
@@ -86,7 +96,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             )
         } else {
             petunia_core::picking::pick_mesh_in_scene(
-                &asset.mesh,
+                &mesh,
                 self.state.project.project.active,
                 &scene,
                 camera,

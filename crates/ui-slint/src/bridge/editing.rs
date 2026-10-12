@@ -301,9 +301,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
                 mesh.select_all();
 
-                self.state
-                    .checkpoint(&format!("paste geometry: {new_name}"));
-                self.state.project.add(&new_name, mesh);
+                let command = petunia_core::AddMeshAssetCmd {
+                    label: "paste geometry",
+                    name: new_name.clone(),
+                    mesh,
+                };
+                if let Err(error) = self.state.dispatch(&command) {
+                    self.state.set_status(error.to_string());
+                    return false;
+                }
                 let new_index = self.state.project.assets.len() - 1;
                 self.state.set_selection_domain(SelectionDomain::Object);
                 self.state.select_object(Some(new_index), false);
@@ -324,8 +330,14 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                     v.pos[0] += 0.5;
                 }
                 let copy_name = copy.name.clone();
-                self.state.checkpoint(&format!("paste asset: {copy_name}"));
-                self.state.project.assets.push(copy);
+                let command = petunia_core::InsertAssetCmd {
+                    label: "paste asset",
+                    asset: Box::new(copy),
+                };
+                if let Err(error) = self.state.dispatch(&command) {
+                    self.state.set_status(error.to_string());
+                    return false;
+                }
                 let new_index = self.state.project.assets.len() - 1;
                 self.state.set_selection_domain(SelectionDomain::Object);
                 self.state.select_object(Some(new_index), false);
