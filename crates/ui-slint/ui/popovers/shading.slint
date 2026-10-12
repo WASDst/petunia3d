@@ -36,16 +36,17 @@ export component ShadingPopover inherits Rectangle {
     callback toggle-face-orientation();
     callback toggle-uv-checker();
 
+    z: 50;
     x: 0;
     y: 0;
-    
-    
 
     TouchArea {
+        z: 0;
         clicked => { root.shading-popover-toggled(false); }
     }
 
     Rectangle {
+        z: 1;
         x: min(max(8px, (parent.width - self.width) / 2), parent.width - self.width - 8px);
         y: 54px;
         width: 280px;

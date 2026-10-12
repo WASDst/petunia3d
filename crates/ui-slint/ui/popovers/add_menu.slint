@@ -78,6 +78,7 @@ export component AddMenuPopover inherits Rectangle {
     property <length> column-width: 156px;
     property <int> rows: Math.ceil(root.entries.length / 2);
 
+    z: 50;
     x: 14px;
     y: 58px;
     width: 2 * root.column-width + 3 * 6px;

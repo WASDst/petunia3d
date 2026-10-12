@@ -45,11 +45,15 @@ export component PartColorPopover inherits Rectangle {
         if root.part-color-popover-open { root.restore-hex-display(); }
     }
 
+    z: 50;
+
     TouchArea {
+        z: 0;
         clicked => { root.part-color-popover-open = false; }
     }
 
     Rectangle {
+        z: 1;
         x: min(max(8px, parent.width - self.width - 340px), parent.width - self.width - 8px);
         y: 80px;
         width: 220px;

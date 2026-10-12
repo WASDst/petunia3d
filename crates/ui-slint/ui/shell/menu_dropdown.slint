@@ -13,16 +13,17 @@ export component MenuDropdownOverlay inherits Rectangle {
     callback click-away-requested();
     callback menu-item-invoked(string);
 
+    z: 100;
     x: 0;
     y: 42px;
-    
-    
 
     TouchArea {
+        z: 0;
         clicked => { root.click-away-requested(); }
     }
 
     MenuDropdown {
+        z: 1;
         x: min(max(8px, root.menu-anchor-x), max(8px, parent.width - self.width - 8px));
         y: 2px;
         entries: root.menu-open == "file"

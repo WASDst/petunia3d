@@ -3164,6 +3164,7 @@ export component PetuniaSlintShell inherits Window {
 
         // Dropdown de um menu da barra superior.
         if root.menu-open != "": MenuDropdownOverlay {
+            z: 100;
             width: parent.width;
             height: parent.height - 42px;
             menu-anchor-x: root.menu-anchor-x;
@@ -3180,6 +3181,7 @@ export component PetuniaSlintShell inherits Window {
 
         // Popover de shading.
         if shading-popover-open: ShadingPopover {
+            z: 50;
             width: parent.width;
             height: parent.height;
             label-view-wireframe: root.label-view-wireframe;
@@ -3215,6 +3217,7 @@ export component PetuniaSlintShell inherits Window {
 
         // Popover de cor de partes.
         if part-color-popover-open: PartColorPopover {
+            z: 50;
             width: parent.width;
             height: parent.height;
             part-color-popover-open <=> root.part-color-popover-open;
@@ -3235,6 +3238,7 @@ export component PetuniaSlintShell inherits Window {
 
         // Menu de contexto.
         if context-menu-open: ContextMenuOverlay {
+            z: 100;
             width: parent.width;
             height: parent.height;
             context-menu-open <=> root.context-menu-open;

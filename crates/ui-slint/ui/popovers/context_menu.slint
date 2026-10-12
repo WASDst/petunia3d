@@ -24,12 +24,12 @@ export component ContextMenuOverlay inherits Rectangle {
     callback click-away-requested();
     callback context-menu-action(string);
 
+    z: 100;
     x: 0;
     y: 0;
-    
-    
 
     TouchArea {
+        z: 0;
         pointer-event(event) => {
             if event.kind == PointerEventKind.down {
                 root.context-menu-open = false;
@@ -43,6 +43,7 @@ export component ContextMenuOverlay inherits Rectangle {
     }
 
     context-menu-panel := Rectangle {
+        z: 1;
         x: min(root.context-menu-x, max(0px, parent.width - self.width - 8px));
         y: min(root.context-menu-y, max(0px, parent.height - self.height - 8px));
         width: 220px;
