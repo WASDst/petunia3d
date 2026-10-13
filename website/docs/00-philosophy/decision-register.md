@@ -92,3 +92,7 @@ Toda revisão estrutural posterior documenta:
 - atualização do manifest/site e status da implementação.
 
 Decisão sem evidência de viabilidade não vira conclusão de testes. O caderno em **website/docs/** é a referência desta branch; **docs/bible/** é legado histórico e não recebe novas especificações desta refatoração.
+
+## ADR-C10 — base funcional única e integração Qt (2026-10-13)
+
+O usuário autorizou trazer o adapter Qt para o repositório da implementação funcional, evitando duas cópias independentes do motor. `refactor/architecture-foundation` é a linha funcional; `codex/qt-integration` trabalha em worktree do mesmo repositório. As features compartilhadas vivem em Core/Application/Geometry/Project/Renderer; Qt é consumidor desses contratos, não uma segunda implementação do domínio. Slint permanece a entrada padrão durante a integração. Aceitação de produção Qt, paridade, Windows/Linux, a11y e performance continuam independentes deste transporte. Protocolo e evidências: [Integração Qt](../09-ui/qt-integration.md).

@@ -1,0 +1,29 @@
+[package]
+name = "petunia_ui_cxxqt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+petunia_application = { workspace = true }
+petunia_config = { workspace = true }
+petunia_core = { workspace = true }
+petunia_mesh = { workspace = true }
+petunia_project = { workspace = true }
+petunia_render = { workspace = true }
+petunia_module_model = { path = "../module-model" }
+petunia_module_paint = { path = "../module-paint" }
+petunia_module_uv = { path = "../module-uv" }
+glam = { workspace = true }
+glow = { workspace = true }
+cxx = "1.0"
+cxx-qt = "0.10.0"
+cxx-qt-lib = { version = "0.10.0", features = ["qt_gui", "qt_qml", "qt_quickcontrols"] }
+
+[build-dependencies]
+cxx-qt-build = "0.10.0"
+
+[features]
+default = []

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-11",
+  "updated": "2026-10-13",
   "phases": [
     {
       "id": "integrity",
@@ -260,6 +260,26 @@
       "revision": "alterações locais sobre 186a6e0a77ab7a76bbc8e2e341917b8ec9968f1b, 2026-10-11",
       "document": "09-ui/slint-rescue-plan.md",
       "summary": "§28: guideline aprovado, acabamento dos componentes existentes, reconciliação limitada de layout/a11y, picker HSV e integração Application. ui-lint pass (62 arquivos); fmt focado pass. cargo check -p petunia_ui_slint -p petunia_application -p petunia_module_model --lib --tests pass (exit 0, 4m50s, sem warnings; /tmp/petunia-gui-codex-check-final.log), sem execução de testes. verify-progress, verify-agent-docs e git diff --check pass. Testes comportamentais, animation-workspace, janela nativa, Windows, screen reader e baixo desempenho not run. Nenhum checkpoint fechado por presença de código."
+    },
+    "preserved-n01-20261013-1": {
+      "revision": "a8d60cd72ab28ef7d430279b1ed3100ee5d98eae",
+      "document": "10-animation/workspace-ux.md",
+      "summary": "Relato preexistente preservado no snapshot funcional, não revalidado pela integração Qt: Preservado e expandido com Posing manual direto no Viewport: picking de ossos/juntas no viewport (pick_bone), destaque visual de seleção (animate-selected-bone-commands), draft em tempo real sem poluir Undo, gizmo de transformação no viewport posicionado na junta do osso, e comandos transacionais com Undo (SetBoneTransformCmd, ResetBonePoseCmd). Testado via animate_session_tests (18 passed)."
+    },
+    "preserved-n01-20261013-2": {
+      "revision": "a8d60cd72ab28ef7d430279b1ed3100ee5d98eae",
+      "document": "10-animation/workspace-ux.md",
+      "summary": "Relato preexistente preservado no snapshot funcional, não revalidado pela integração Qt: Structure e Properties separados. Adicionada seção 'Selected Bone' no AnimateInspector exibindo nome do osso, botão Reset Pose e toggle IK Mode acessíveis via teclado/F6 e i18n em pt-BR e en-US. Verificado via animate_shell tests (13 passed) e xtask ui-lint."
+    },
+    "preserved-n01-20261013-3": {
+      "revision": "a8d60cd72ab28ef7d430279b1ed3100ee5d98eae",
+      "document": "10-animation/workspace-ux.md",
+      "summary": "Relato preexistente preservado no snapshot funcional, não revalidado pela integração Qt: Gates executados e aprovados: cargo test -p petunia_core --test animate_session_tests (18 passed), cargo test -p petunia_ui_slint --features animation-workspace --test animate_shell (13 passed), cargo run -p xtask -- ui-lint (pass, 63 arquivos sem literais), cargo clippy -p petunia_core -p petunia_ui_slint --features animation-workspace --all-targets -- -D warnings (pass, zero warnings), cargo fmt -p petunia_ui_slint -p petunia_core -- --check (pass)."
+    },
+    "qt-consolidation-20261013": {
+      "revision": "a8d60cd72ab28ef7d430279b1ed3100ee5d98eae + be18831dddc997e652a8888b0123ec221246d196 (integration working tree)",
+      "document": "09-ui/qt-integration.md",
+      "summary": "Consolidação limitada a histórico/checkout/build: snapshots preservados, Qt integrado na base funcional e worktree codex/qt-integration do mesmo repo; 1329 arquivos funcionais intactos; cargo check --locked --offline all-targets pass e 10 testes FFI Qt pass (1 janela filtrada/not run); 6 testes tracker e validadores pass. Sem aceite de paridade/native/Windows/a11y/performance."
     }
   },
   "tasks": [
@@ -2040,17 +2060,17 @@
         {
           "title": "Preservar AnimateIntent, rigs/motions/preview/fit/styles/transport/Keep Live/Bake",
           "completed": true,
-          "evidence": "Preservado e expandido com Posing manual direto no Viewport: picking de ossos/juntas no viewport (pick_bone), destaque visual de seleção (animate-selected-bone-commands), draft em tempo real sem poluir Undo, gizmo de transformação no viewport posicionado na junta do osso, e comandos transacionais com Undo (SetBoneTransformCmd, ResetBonePoseCmd). Testado via animate_session_tests (18 passed)."
+          "evidence": "preserved-n01-20261013-1"
         },
         {
           "title": "separar Creature/Motion Structure de Properties, evitar picker duplicado, drawer mínimo e precisão numérica/F6",
           "completed": true,
-          "evidence": "Structure e Properties separados. Adicionada seção 'Selected Bone' no AnimateInspector exibindo nome do osso, botão Reset Pose e toggle IK Mode acessíveis via teclado/F6 e i18n em pt-BR e en-US. Verificado via animate_shell tests (13 passed) e xtask ui-lint."
+          "evidence": "preserved-n01-20261013-2"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
           "completed": true,
-          "evidence": "Gates executados e aprovados: cargo test -p petunia_core --test animate_session_tests (18 passed), cargo test -p petunia_ui_slint --features animation-workspace --test animate_shell (13 passed), cargo run -p xtask -- ui-lint (pass, 63 arquivos sem literais), cargo clippy -p petunia_core -p petunia_ui_slint --features animation-workspace --all-targets -- -D warnings (pass, zero warnings), cargo fmt -p petunia_ui_slint -p petunia_core -- --check (pass)."
+          "evidence": "preserved-n01-20261013-3"
         }
       ],
       "documents": [
@@ -2507,6 +2527,42 @@
       ],
       "documents": [
         "17-reimplementation/index.md"
+      ]
+    },
+    {
+      "id": "Q05",
+      "phase": "slint-gl",
+      "title": "Consolidação do adapter Qt na base funcional",
+      "description": "Preservar snapshots dos dois checkouts; integrar Qt no repositório funcional e preparar worktree compartilhado sem substituir o motor por versões antigas.",
+      "document": "09-ui/qt-integration.md",
+      "documents": [
+        "09-ui/qt-integration.md",
+        "00-philosophy/decision-register.md"
+      ],
+      "status": "DONE",
+      "updated": "2026-10-13",
+      "baseline": "Features snapshot a8d60cd72ab28ef7d430279b1ed3100ee5d98eae; Qt snapshot be18831dddc997e652a8888b0123ec221246d196. Paridade e aceite de produção fora deste transporte.",
+      "checkpoints": [
+        {
+          "title": "Preservar os trabalhos locais e criar worktree Qt no mesmo repositório funcional.",
+          "completed": true,
+          "evidence": "qt-consolidation-20261013"
+        },
+        {
+          "title": "Portar somente frontend/build e confirmar preservação dos módulos funcionais.",
+          "completed": true,
+          "evidence": "qt-consolidation-20261013"
+        },
+        {
+          "title": "Executar build e testes focados Qt sobre a base funcional capturada.",
+          "completed": true,
+          "evidence": "qt-consolidation-20261013"
+        },
+        {
+          "title": "Registrar documentação, tracker, gates e protocolo de sincronização.",
+          "completed": true,
+          "evidence": "qt-consolidation-20261013"
+        }
       ]
     }
   ]

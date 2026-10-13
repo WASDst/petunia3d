@@ -227,6 +227,10 @@
         {
           "path": "09-ui/viewport-input-boundary.md",
           "title": "Viewport Input Boundary — aprovado"
+        },
+        {
+          "path": "09-ui/qt-integration.md",
+          "title": "Qt — integração sobre a base funcional única"
         }
       ]
     },

@@ -2,9 +2,13 @@
 
 > **Branch-specific authoritative entrypoint (2026-10-08).** Read before inspecting or editing code. This replaces obsolete directions that referred to docs/bible as canonical for this branch. It applies to any AI coding assistant or human contributor operating on `refactor/architecture-foundation`.
 
+## Integração Qt autorizada em 2026-10-13
+
+O usuário autorizou consolidar o frontend Qt sobre a base funcional deste repositório. `refactor/architecture-foundation` continua como linha funcional; `codex/qt-integration` é a branch de trabalho Qt em worktree do mesmo repositório, autorizada para este escopo. Essa exceção permite integração local de código/build/docs Qt; não autoriza merge em main nem declara Qt como frontend de produção aceito. Slint continua sendo a entrada padrão até os gates de substituição. Ver [integração Qt](website/docs/09-ui/qt-integration.md).
+
 ## Hard boundaries
 
-1. **Only work on `refactor/architecture-foundation`** for this initiative. Do not commit to, rebase onto, merge into, or force-update `main`. The existing CI-only draft PR must never be merged without a separate explicit human instruction.
+1. **Work on `refactor/architecture-foundation` for the functional initiative; `codex/qt-integration` is authorized only for the Qt integration above.** Do not commit to, rebase onto, merge into, or force-update `main`. The existing CI-only draft PR must never be merged without a separate explicit human instruction.
 2. **Canonical decisions live in `website/docs/`.** Open `website/docs/manifest.json` and `website/docs/00-philosophy/decision-register.md`. `docs/bible/` and historic egui/WGPU policies are legacy reference material, NOT source of new decisions for this branch.
 3. **Read `website/docs/16-code-agents/index.md` and `reading-navigation.md` before planning.** Follow the domain-specific pages in the site manifest. `website/docs/16-code-agents/implementation-protocol.md` governs evidence, testing and scope; `prompt-library.md` is reusable task guidance.
 4. **One source of truth per responsibility.** Core and Geometry do not depend on Slint, GUI, GPU or platform. UI emits typed intents; Application validates and dispatches commands/queries; Geometry executes algorithms; Renderer draws; Document is single-writer; Undo covers mutations.

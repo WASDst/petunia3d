@@ -18,6 +18,7 @@ members = [
     "crates/xtask",
     "crates/cli",
     "crates/ffi",
+    "crates/ui-cxxqt",
 ]
 resolver = "2"
 
@@ -63,6 +64,7 @@ petunia_module_paint = { path = "crates/module-paint" }
 petunia_module_uv = { path = "crates/module-uv" }
 petunia_module_assets = { path = "crates/module-assets" }
 petunia_ui_slint = { path = "crates/ui-slint" }
+petunia_ui_cxxqt = { path = "crates/ui-cxxqt" }
 petunia_cli = { path = "crates/cli" }
 petunia_ffi = { path = "crates/ffi" }
 petunia_mcp = { path = "crates/mcp" }

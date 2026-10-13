@@ -1,0 +1,18 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>tokens/DesignTokens.qml</file>
+        <file>components/PetuniaButton.qml</file>
+        <file>components/PetuniaIconButton.qml</file>
+        <file>components/NumericInput.qml</file>
+        <file>components/PetuniaSlider.qml</file>
+        <file>components/ColorSwatch.qml</file>
+        <file>shell/Header.qml</file>
+        <file>shell/ToolRail.qml</file>
+        <file>shell/StatusBar.qml</file>
+        <file>viewport/NavigationGizmo.qml</file>
+        <file>viewport/LoopCutCard.qml</file>
+        <file>viewport/PrimitiveCard.qml</file>
+        <file>viewport/CommandPalette.qml</file>
+    </qresource>
+</RCC>
