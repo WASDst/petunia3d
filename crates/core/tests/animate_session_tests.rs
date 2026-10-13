@@ -554,3 +554,122 @@ fn entering_the_animate_workspace_resolves_the_selection() {
     state.switch_workspace(Workspace::Animate);
     assert!(state.session.animate.skeleton.is_some());
 }
+
+#[test]
+fn bone_picking_and_draft_preview_updates_pose_without_undo() {
+    use petunia_core::pick_bone;
+    use petunia_project::Transform3D;
+
+    let mut state = state_with(RigPresetKind::Humanoid);
+    let _sid = state.session.animate.skeleton.unwrap();
+    let mut preview = AnimatePreview::default();
+    let initial_pose = preview.pose(&state.project.project, &state.session.animate).unwrap();
+    assert!(!initial_pose.bones.is_empty());
+
+    // Projeta o primeiro osso na tela e testa pick_bone
+    let first_bone = &initial_pose.bones[0];
+    let bone_id = first_bone.id;
+    let vp_size = [800.0, 600.0];
+    let camera = &state.session.camera;
+    let view_proj = camera.view_proj();
+    let clip = view_proj * glam::Vec4::new(first_bone.head[0], first_bone.head[1], first_bone.head[2], 1.0);
+    let inv_w = 1.0 / clip.w;
+    let screen_x = (clip.x * inv_w * 0.5 + 0.5) * vp_size[0];
+    let screen_y = (1.0 - (clip.y * inv_w * 0.5 + 0.5)) * vp_size[1];
+
+    let picked = pick_bone(&initial_pose, camera, vp_size, [screen_x, screen_y], 20.0);
+    assert!(picked.is_some(), "pick_bone deve encontrar o osso perto da cabeça");
+
+    // Seleciona o osso
+    state.animate_select_bone(Some(bone_id));
+    assert_eq!(state.session.animate.selected_bone(), Some(bone_id));
+
+    let depth_before = depth(&state);
+    // Aplica draft de rotação
+    let rotated = Transform3D::from_euler_degrees(45.0, 0.0, 0.0);
+    state.session.animate.set_bone_draft(bone_id, rotated);
+    assert_eq!(depth(&state), depth_before, "draft não polui o histórico de Undo");
+
+    // O preview reflete o draft
+    let draft_pose = preview.pose(&state.project.project, &state.session.animate).unwrap();
+    let posed_bone = draft_pose.bone_by_id(bone_id).unwrap();
+    // A pose é recalculada
+    assert_ne!(posed_bone.tail, first_bone.tail, "tail deve ter mudado pela rotação do draft");
+
+    // Limpa draft: volta à pose original
+    state.session.animate.clear_bone_draft();
+    let reverted_pose = preview.pose(&state.project.project, &state.session.animate).unwrap();
+    assert_eq!(
+        reverted_pose.bone_by_id(bone_id).unwrap().tail,
+        first_bone.tail,
+        "limpar o draft restaura a pose sem Undo"
+    );
+}
+
+#[test]
+fn bone_transform_commits_single_undo_step_and_resets() {
+    use petunia_project::Transform3D;
+
+    let mut state = state_with(RigPresetKind::Humanoid);
+    let sid = state.session.animate.skeleton.unwrap();
+    let (bone_id, initial_t) = {
+        let skel = state.project.project.get_skeleton(sid).unwrap();
+        (skel.bones[1].id, skel.bones[1].local_transform)
+    };
+
+    state.animate_select_bone(Some(bone_id));
+    let initial_depth = depth(&state).0;
+
+    let mut rotated = initial_t;
+    rotated.rotation = Transform3D::from_euler_degrees(30.0, 15.0, 0.0).rotation;
+    state.animate_set_bone_transform(bone_id, rotated).unwrap();
+
+    assert_eq!(depth(&state).0, initial_depth + 1, "commit gera exatamente 1 passo de Undo");
+    let current_t = state
+        .project
+        .project
+        .get_skeleton(sid)
+        .unwrap()
+        .get_bone(bone_id)
+        .unwrap()
+        .local_transform;
+    assert_eq!(current_t, rotated);
+
+    // Reset bone pose
+    state.animate_reset_bone_pose(bone_id).unwrap();
+    assert_eq!(depth(&state).0, initial_depth + 2);
+    let reset_t = state
+        .project
+        .project
+        .get_skeleton(sid)
+        .unwrap()
+        .get_bone(bone_id)
+        .unwrap()
+        .local_transform;
+    assert_eq!(reset_t, initial_t);
+
+    // Undo volta para o transform modificado
+    assert!(state.undo());
+    let undone_t = state
+        .project
+        .project
+        .get_skeleton(sid)
+        .unwrap()
+        .get_bone(bone_id)
+        .unwrap()
+        .local_transform;
+    assert_eq!(undone_t, rotated);
+
+    // Undo volta para o estado inicial
+    assert!(state.undo());
+    let orig_t = state
+        .project
+        .project
+        .get_skeleton(sid)
+        .unwrap()
+        .get_bone(bone_id)
+        .unwrap()
+        .local_transform;
+    assert_eq!(orig_t, initial_t);
+}
+

@@ -380,10 +380,12 @@ fn command_palette_rows_put_the_shortcut_on_the_right() {
 #[test]
 fn settings_input_sliders_fill_the_content_column() {
     let shell = model_shell();
+    shell.window().set_size(LogicalSize::new(1280.0, 2400.0));
     shell.set_label_double_tap_interval("Double tap interval".into());
     shell.set_label_drag_threshold("Drag threshold".into());
     shell.set_label_snap_radius("Snap radius".into());
     shell.set_settings_tab(2);
+    shell.set_settings_panel_h(2200.0);
     shell.set_settings_visible(true);
     settle();
 
@@ -478,6 +480,7 @@ fn settings_thickness_slider_fills_the_content_column() {
     let shell = model_shell();
     shell.set_label_highlight_thickness("Highlight thickness".into());
     shell.set_settings_tab(0);
+    shell.set_settings_panel_h(900.0);
     shell.set_settings_visible(true);
     settle();
 
@@ -558,11 +561,13 @@ fn workspace_capsules_keep_pointer_and_keyboard_selection_in_sync() {
     key(&shell, slint::platform::Key::RightArrow);
     assert_eq!(&*changes.borrow(), &["POLY", "PAINT"]);
     key(&shell, slint::platform::Key::RightArrow);
-    assert_eq!(changes.borrow().len(), 2, "no unavailable workspace");
+    assert_eq!(&*changes.borrow(), &["POLY", "PAINT", "UV"]);
+    key(&shell, slint::platform::Key::RightArrow);
+    assert_eq!(changes.borrow().len(), 3, "no unavailable workspace");
     key(&shell, slint::platform::Key::Home);
     assert_eq!(shell.get_modeling_mode(), "DRAW");
     key(&shell, slint::platform::Key::End);
-    assert_eq!(shell.get_active_workspace(), "PAINT");
+    assert_eq!(shell.get_active_workspace(), "UV");
     let poly = element(&shell, "Poly mode", AccessibleRole::Tab);
     poly.invoke_accessible_default_action();
     assert_eq!(shell.get_modeling_mode(), "POLY");

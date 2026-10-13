@@ -25,7 +25,8 @@ use crate::command::CommandError;
 use crate::context::CommandContext;
 use crate::rig_commands::{
     AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd,
-    RemoveMotionCmd, RigPresetKind, SetMotionParamCmd, SetMotionStyleCmd, UpdateMotionCmd,
+    RemoveMotionCmd, ResetBonePoseCmd, RigPresetKind, SetBoneTransformCmd, SetMotionParamCmd,
+    SetMotionStyleCmd, UpdateMotionCmd,
 };
 use glam::Vec3;
 use petunia_project::{
@@ -37,6 +38,13 @@ use uuid::Uuid;
 
 /// Escala padrão dos rigs criados pelo seletor de criaturas.
 pub const DEFAULT_RIG_SCALE: f32 = 1.0;
+
+/// Valor provisório da transformação de um osso durante manipulação no viewport.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoneDraft {
+    pub bone_id: u32,
+    pub transform: Transform3D,
+}
 
 /// Valor provisório de um parâmetro durante o arrasto de um slider.
 #[derive(Debug, Clone, PartialEq)]
@@ -60,7 +68,12 @@ pub struct AnimateSession {
     pub show_advanced: bool,
     /// Desenha o esqueleto posado no viewport.
     pub show_skeleton: bool,
+    /// Osso selecionado para posing direto e manipulação com gizmo.
+    pub selected_bone: Option<u32>,
+    /// Modo IK ativo para posar cadeias articulares (se disponível).
+    pub ik_mode: bool,
     draft: Option<ParamDraft>,
+    bone_draft: Option<BoneDraft>,
 }
 
 impl Default for AnimateSession {
@@ -72,7 +85,10 @@ impl Default for AnimateSession {
             playing: false,
             show_advanced: false,
             show_skeleton: true,
+            selected_bone: None,
+            ik_mode: false,
             draft: None,
+            bone_draft: None,
         }
     }
 }
@@ -101,6 +117,32 @@ impl AnimateSession {
             let _ = out.set_param(&d.key, d.value);
         }
         out
+    }
+
+    /// Osso atualmente selecionado no viewport, se houver.
+    pub fn selected_bone(&self) -> Option<u32> {
+        self.selected_bone
+    }
+
+    /// Altera a seleção de osso e limpa qualquer draft ativo.
+    pub fn select_bone(&mut self, bone: Option<u32>) {
+        self.selected_bone = bone;
+        self.bone_draft = None;
+    }
+
+    /// Rascunho da transformação do osso durante o arrasto do gizmo.
+    pub fn bone_draft(&self) -> Option<&BoneDraft> {
+        self.bone_draft.as_ref()
+    }
+
+    /// Define o rascunho temporário do osso durante interação interativa.
+    pub fn set_bone_draft(&mut self, bone_id: u32, transform: Transform3D) {
+        self.bone_draft = Some(BoneDraft { bone_id, transform });
+    }
+
+    /// Descarta o rascunho de transformação do osso (ex: cancelamento por Esc).
+    pub fn clear_bone_draft(&mut self) {
+        self.bone_draft = None;
     }
 }
 
@@ -189,6 +231,7 @@ pub fn motion_catalog(project: &Project, skeleton: Option<Uuid>) -> Vec<MotionCa
 /// Um osso posado, em coordenadas do mundo.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PreviewBone {
+    pub id: u32,
     pub head: [f32; 3],
     pub tail: [f32; 3],
     /// Índice do pai dentro de [`PosePreview::bones`].
@@ -214,6 +257,7 @@ impl PosePreview {
                 let head = m.transform_point3(Vec3::from(bone.head));
                 let tail = m.transform_point3(Vec3::from(bone.tail));
                 PreviewBone {
+                    id: bone.id,
                     head: head.to_array(),
                     tail: tail.to_array(),
                     parent: bone.parent.and_then(index_of),
@@ -221,6 +265,11 @@ impl PosePreview {
             })
             .collect();
         Some(Self { bones })
+    }
+
+    /// Busca um osso posado pelo ID de osso.
+    pub fn bone_by_id(&self, id: u32) -> Option<&PreviewBone> {
+        self.bones.iter().find(|b| b.id == id)
     }
 
     /// Pose de repouso: cada osso na sua posição original.
@@ -242,6 +291,65 @@ impl PosePreview {
         }
         Some((lo, hi))
     }
+}
+
+/// Testa picking de osso no espaço da tela a partir dos segmentos projetados da pose.
+pub fn pick_bone(
+    pose: &PosePreview,
+    camera: &crate::camera::Camera,
+    viewport_size: [f32; 2],
+    screen_point: [f32; 2],
+    max_dist_px: f32,
+) -> Option<u32> {
+    if viewport_size[0] <= 1.0 || viewport_size[1] <= 1.0 {
+        return None;
+    }
+    let view_proj = camera.view_proj();
+    let project = |p: [f32; 3]| -> Option<[f32; 2]> {
+        let clip = view_proj * glam::Vec4::new(p[0], p[1], p[2], 1.0);
+        if clip.w <= 0.05 {
+            return None;
+        }
+        let inv_w = 1.0 / clip.w;
+        Some([
+            (clip.x * inv_w * 0.5 + 0.5) * viewport_size[0],
+            (1.0 - (clip.y * inv_w * 0.5 + 0.5)) * viewport_size[1],
+        ])
+    };
+
+    let p = glam::Vec2::new(screen_point[0], screen_point[1]);
+    let mut best_bone = None;
+    let mut best_dist = max_dist_px;
+
+    for bone in &pose.bones {
+        if let (Some(h), Some(t)) = (project(bone.head), project(bone.tail)) {
+            let h_vec = glam::Vec2::new(h[0], h[1]);
+            let t_vec = glam::Vec2::new(t[0], t[1]);
+
+            let d_head = p.distance(h_vec);
+            if d_head < best_dist {
+                best_dist = d_head;
+                best_bone = Some(bone.id);
+            }
+
+            let seg = t_vec - h_vec;
+            let seg_len_sq = seg.length_squared();
+            let d_seg = if seg_len_sq > 1e-4 {
+                let u = ((p - h_vec).dot(seg) / seg_len_sq).clamp(0.0, 1.0);
+                let proj = h_vec + seg * u;
+                p.distance(proj)
+            } else {
+                d_head
+            };
+
+            if d_seg < best_dist {
+                best_dist = d_seg;
+                best_bone = Some(bone.id);
+            }
+        }
+    }
+
+    best_bone
 }
 
 /// Insumos que determinam o avaliador; se algum mudar, ele é reconstruído.
@@ -313,40 +421,49 @@ impl AnimatePreview {
     }
 
     /// Pose do Motion no tempo da sessão; sem Motion, a pose de repouso da
-    /// criatura em foco; sem criatura, `None`.
+    /// criatura em foco; sem criatura, `None`. Aplica qualquer `bone_draft` ativo.
     pub fn pose(&mut self, project: &Project, session: &AnimateSession) -> Option<PosePreview> {
-        if session.motion.is_some() {
-            let skeleton = self.refresh(project, session)?;
-            if let Some(Ok(evaluator)) = self.evaluator.as_ref() {
-                let local = evaluator.pose_at(session.time);
-                return PosePreview::from_pose(skeleton, &local);
-            }
-            // Erro de contrato: mostra o repouso; a UI lê `error()`.
-            return Some(PosePreview::rest(skeleton));
-        }
-        let skeleton = project.get_skeleton(session.skeleton?)?;
-        Some(PosePreview::rest(skeleton))
+        let (skeleton_id, local) = self.local_pose(project, session)?;
+        let skeleton = project.get_skeleton(skeleton_id)?;
+        PosePreview::from_pose(skeleton, &local)
     }
 
     /// Pose **local** (uma transformação por osso) da criatura em foco: a do
     /// Motion no tempo da sessão ou, sem Motion (ou com rig incompatível), o
-    /// repouso. Devolve também o id do esqueleto.
+    /// repouso. Devolve também o id do esqueleto. Se houver `bone_draft` da sessão,
+    /// a transformação provisória substitui o osso em tempo real.
     pub fn local_pose(
         &mut self,
         project: &Project,
         session: &AnimateSession,
     ) -> Option<(Uuid, Vec<Transform3D>)> {
-        if session.motion.is_some()
-            && let Some(skeleton) = self.refresh(project, session)
-            && let Some(Ok(evaluator)) = self.evaluator.as_ref()
+        let (skeleton_id, mut local) = if session.motion.is_some() {
+            let skeleton = self.refresh(project, session)?;
+            if let Some(Ok(evaluator)) = self.evaluator.as_ref() {
+                (skeleton.id, evaluator.pose_at(session.time))
+            } else {
+                (
+                    skeleton.id,
+                    skeleton.bones.iter().map(|b| b.local_transform).collect(),
+                )
+            }
+        } else {
+            let skeleton = project.get_skeleton(session.skeleton?)?;
+            (
+                skeleton.id,
+                skeleton.bones.iter().map(|b| b.local_transform).collect(),
+            )
+        };
+
+        if let Some(draft) = session.bone_draft()
+            && let Some(skeleton) = project.get_skeleton(skeleton_id)
+            && let Some(idx) = skeleton.bone_index(draft.bone_id)
+            && idx < local.len()
         {
-            return Some((skeleton.id, evaluator.pose_at(session.time)));
+            local[idx] = draft.transform;
         }
-        let skeleton = project.get_skeleton(session.skeleton?)?;
-        Some((
-            skeleton.id,
-            skeleton.bones.iter().map(|b| b.local_transform).collect(),
-        ))
+
+        Some((skeleton_id, local))
     }
 
     /// Malhas deformadas pela pose atual, para o renderer desenhar no lugar das
@@ -426,6 +543,18 @@ impl CommandContext<'_> {
         if a.draft.as_ref().is_some_and(|d| Some(d.motion) != a.motion) {
             a.draft = None;
         }
+        if let (Some(skel_id), Some(bone_id)) = (a.skeleton, a.selected_bone) {
+            let bone_ok = project
+                .get_skeleton(skel_id)
+                .is_some_and(|s| s.get_bone(bone_id).is_some());
+            if !bone_ok {
+                a.selected_bone = None;
+                a.bone_draft = None;
+            }
+        } else if a.skeleton.is_none() {
+            a.selected_bone = None;
+            a.bone_draft = None;
+        }
     }
 
     /// Foca outra criatura. `false` se o id não existe.
@@ -438,10 +567,47 @@ impl CommandContext<'_> {
             a.skeleton = Some(id);
             a.motion = None;
             a.draft = None;
+            a.selected_bone = None;
+            a.bone_draft = None;
             a.time = 0.0;
         }
         self.animate_resolve();
         true
+    }
+
+    /// Seleciona um osso da criatura ativa para manipulação no viewport.
+    pub fn animate_select_bone(&mut self, bone_id: Option<u32>) {
+        self.editor.animate.select_bone(bone_id);
+    }
+
+    /// Altera o modo IK da sessão de animação.
+    pub fn animate_set_ik_mode(&mut self, ik_mode: bool) {
+        self.editor.animate.ik_mode = ik_mode;
+    }
+
+    /// Define a pose/transformação de um osso via dispatcher (1 passo de Undo).
+    pub fn animate_set_bone_transform(
+        &mut self,
+        bone_id: u32,
+        transform: Transform3D,
+    ) -> Result<(), CommandError> {
+        let skeleton_id = self.editor.animate.skeleton.ok_or_else(no_rig)?;
+        self.editor.animate.clear_bone_draft();
+        self.dispatch(&SetBoneTransformCmd {
+            skeleton_id,
+            bone_id,
+            transform,
+        })
+    }
+
+    /// Restaura a pose de repouso de um osso via dispatcher (1 passo de Undo).
+    pub fn animate_reset_bone_pose(&mut self, bone_id: u32) -> Result<(), CommandError> {
+        let skeleton_id = self.editor.animate.skeleton.ok_or_else(no_rig)?;
+        self.editor.animate.clear_bone_draft();
+        self.dispatch(&ResetBonePoseCmd {
+            skeleton_id,
+            bone_id,
+        })
     }
 
     /// Seleciona um Motion (e a criatura dele). `false` se não existe.

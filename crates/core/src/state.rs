@@ -4146,6 +4146,29 @@ impl<'a> EditorView<'a> {
         }
     }
 
+    /// Ponto de articulação (head) do osso selecionado na pose avaliada atual.
+    pub fn animate_selected_bone_pivot(self) -> Option<glam::Vec3> {
+        let bone_id = self.editor.animate.selected_bone?;
+        let skel_id = self.editor.animate.skeleton?;
+        let skeleton = self.document.skeletons.iter().find(|s| s.id == skel_id)?;
+        let mut local = skeleton
+            .bones
+            .iter()
+            .map(|b| b.local_transform)
+            .collect::<Vec<_>>();
+        if let Some(draft) = &self.editor.animate.bone_draft()
+            && let Some(idx) = skeleton.bones.iter().position(|b| b.id == draft.bone_id)
+        {
+            local[idx] = draft.transform;
+        }
+        let skin = skeleton.compute_skinning_matrices(&local).ok()?;
+        let bone_idx = skeleton.bones.iter().position(|b| b.id == bone_id)?;
+        let bone = &skeleton.bones[bone_idx];
+        let m = skin.get(bone_idx)?;
+        let head = m.transform_point3(glam::Vec3::from(bone.head));
+        Some(head)
+    }
+
     /// Constrói o descritor de feedback da ferramenta modal ativa para renderização (P3D-131).
     pub fn current_tool_feedback(self) -> Option<crate::modal_feedback::ToolFeedback> {
         let modal = self.modal.as_ref()?;

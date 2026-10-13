@@ -695,7 +695,7 @@ export component WorkspaceSegment inherits Rectangle {
     accessible-role: tab-list;
     accessible-label: Tr.t("sl.workspaces");
     forward-focus: workspace-focus;
-    width: root.animate-available ? 327px : 246px;
+    width: root.animate-available ? 408px : 327px;
     height: 30px;
     border-radius: DesignTokens.radius-pill;
     background: DesignTokens.soft-depth
@@ -706,7 +706,7 @@ export component WorkspaceSegment inherits Rectangle {
 
     // Sliding pill
     Rectangle {
-        x: root.active == "DRAW" ? 2px : (root.active == "POLY" ? 83px : (root.active == "PAINT" ? 164px : 245px));
+        x: root.active == "DRAW" ? 2px : (root.active == "POLY" ? 83px : (root.active == "PAINT" ? 164px : (root.active == "UV" ? 245px : 326px)));
         y: 1px;
         width: 80px;
         height: DesignTokens.control-height;
@@ -723,17 +723,19 @@ export component WorkspaceSegment inherits Rectangle {
             if event.text == Key.LeftArrow {
                 if root.active == "POLY" { root.changed("DRAW"); }
                 else if root.active == "PAINT" { root.changed("POLY"); }
-                else if root.active == "ANIMATE" { root.changed("PAINT"); }
+                else if root.active == "UV" { root.changed("PAINT"); }
+                else if root.active == "ANIMATE" { root.changed("UV"); }
                 return accept;
             }
             if event.text == Key.RightArrow {
                 if root.active == "DRAW" { root.changed("POLY"); }
                 else if root.active == "POLY" { root.changed("PAINT"); }
-                else if root.active == "PAINT" && root.animate-available { root.changed("ANIMATE"); }
+                else if root.active == "PAINT" { root.changed("UV"); }
+                else if root.active == "UV" && root.animate-available { root.changed("ANIMATE"); }
                 return accept;
             }
             if event.text == Key.Home { root.changed("DRAW"); return accept; }
-            if event.text == Key.End { root.changed(root.animate-available ? "ANIMATE" : "PAINT"); return accept; }
+            if event.text == Key.End { root.changed(root.animate-available ? "ANIMATE" : "UV"); return accept; }
             reject
         }
     }
@@ -823,6 +825,33 @@ export component WorkspaceSegment inherits Rectangle {
                         title: Tr.t("sl.paint_workspace");
                         shortcut: "F2";
                         description: Tr.t("sl.texture_painting_layer_management_and_brush_");
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 80px;
+            height: DesignTokens.control-height;
+            background: transparent;
+            accessible-role: tab;
+            accessible-label: Tr.t("sl.uv_workspace");
+            accessible-checked: root.active == "UV";
+            accessible-action-default => { root.changed("UV"); }
+            Text {
+                text: "UV";
+                color: root.active == "UV" ? DesignTokens.on-accent : DesignTokens.text-secondary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                clicked => { workspace-focus.focus(); root.changed("UV"); }
+                Tooltip {
+                    RichTooltip {
+                        title: Tr.t("sl.uv_workspace");
+                        shortcut: "F3";
+                        description: Tr.t("sl.uv_projection_unwrapping_seams_and_island_pa");
                     }
                 }
             }

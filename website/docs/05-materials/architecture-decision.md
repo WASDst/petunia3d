@@ -820,3 +820,5 @@ Não da quantidade de knobs de shader.
 9. SurfaceRecipe permanece authoring CPU de textura, não material node graph GPU.
 10. Normal/tangent continuam dados derivados no boundary de render/export.
 11. Material/Texture validation segue strict validation + explicit repair.
+12. **Material Inspector em MODEL (Aparência Rápida):** Foco em Base Color, Lit/Unlit, Emissive, textura albedo e CTA direto para abrir Paint; remoção de controles redundantes ("Assign material"), sliders placebo e perfis inoperantes.
+13. **Efeitos Toon/Vidro Delegados aos Nós:** Toon Shading, Glass/Refraction e efeitos de shader são atribuídos exclusivamente ao futuro Workspace de Nós (Shader Graph / Compositor).

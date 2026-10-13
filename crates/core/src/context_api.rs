@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use super::*;
 use crate::region_push::ProfileGroup;
-use petunia_project::{MotionGenerator, MotionStyle, Project, ProjectChanges, RootMode};
+use petunia_project::{
+    MotionGenerator, MotionStyle, Project, ProjectChanges, RootMode, Transform3D,
+};
 
 impl AppState {
     #[inline]
@@ -30,6 +32,30 @@ impl AppState {
     #[inline]
     pub fn animate_select_skeleton(&mut self, id: Uuid) -> bool {
         self.in_context(|ctx| ctx.animate_select_skeleton(id))
+    }
+
+    #[inline]
+    pub fn animate_select_bone(&mut self, bone_id: Option<u32>) {
+        self.in_context(|ctx| ctx.animate_select_bone(bone_id))
+    }
+
+    #[inline]
+    pub fn animate_set_ik_mode(&mut self, ik_mode: bool) {
+        self.in_context(|ctx| ctx.animate_set_ik_mode(ik_mode))
+    }
+
+    #[inline]
+    pub fn animate_set_bone_transform(
+        &mut self,
+        bone_id: u32,
+        transform: Transform3D,
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_set_bone_transform(bone_id, transform))
+    }
+
+    #[inline]
+    pub fn animate_reset_bone_pose(&mut self, bone_id: u32) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_reset_bone_pose(bone_id))
     }
 
     #[inline]
@@ -549,6 +575,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn animate_selected_bone_pivot(&self) -> Option<glam::Vec3> {
+        self.view().animate_selected_bone_pivot()
+    }
+
+    #[inline]
     pub fn set_origin_geometry(&mut self) -> Result<(), &'static str> {
         self.in_context(|ctx| ctx.set_origin_geometry())
     }
@@ -881,6 +912,11 @@ impl CommandContext<'_> {
     #[inline]
     pub fn calculate_pivot(&self, pivot: PivotPoint) -> glam::Vec3 {
         self.view().calculate_pivot(pivot)
+    }
+
+    #[inline]
+    pub fn animate_selected_bone_pivot(&self) -> Option<glam::Vec3> {
+        self.view().animate_selected_bone_pivot()
     }
 
     #[inline]

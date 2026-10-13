@@ -424,3 +424,8 @@ O editor existente deve ser promovido e reorganizado, preservando seus algoritmo
 ## Checkpoint de apresentação U02/U03 — 2026-10-09
 
 O drawer auxiliar recebe o diagnóstico já projetado pela Application, com ações Pack/Equalize existentes. A promoção do editor UV a Work Surface, lista de Islands e diagnóstico acionável por alvo permanecem pendentes. **Código escrito, não compilado/testado:** bateria e aceite nativo adiados pelo usuário. Registro e limites: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).
+
+## 24. Promoção Definitiva a Workspace de Primeira Classe — 2026-10-13
+
+1. **Aba Global UV:** UV possui cápsula de navegação dedicada no cabeçalho global da aplicação (`DRAW` · `POLY` · `PINTAR` · `UV`), acessível por teclado (Setas, Home, End) e atalhos rápidos.
+2. **Isolamento de Pintura:** Removida a subseção redundante "Preparar superfície" de dentro do Paint Inspector, eliminando qualquer conflito operacional entre o mapeamento UV e a pintura de textura.

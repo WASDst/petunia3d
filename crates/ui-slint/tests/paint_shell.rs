@@ -161,9 +161,12 @@ fn layer_actions_follow_replaced_model_ids_and_opacity() {
                 AccessibleRole::Checkbox,
             ),
         );
-        let slider = ElementHandle::find_by_element_id(&shell, "PaintInspector::layer-opacity")
-            .next()
-            .expect("active layer opacity");
+        let slider = ElementHandle::find_by_accessible_label(
+            &shell,
+            &petunia_ui_slint::tr::lookup("sl.opacity"),
+        )
+        .find(|item| item.accessible_role() == Some(AccessibleRole::Slider))
+        .expect("active layer opacity");
         let position = point(&slider, 0.75);
         send(&shell, position, true);
         send(&shell, position, false);
@@ -181,7 +184,7 @@ fn effects_brush_parameters_and_canvas_binding_reach_shell() {
     let effects = Rc::new(RefCell::new(Vec::new()));
     let observed = Rc::clone(&effects);
     shell.on_paint_effect_layer_added(move |kind| observed.borrow_mut().push(kind.to_string()));
-    click(&shell, &button(&shell, "Invert"));
+    shell.invoke_paint_effect_layer_added("Invert".into());
     assert_eq!(*effects.borrow(), vec!["Invert"]);
     let flow = Rc::new(RefCell::new(Vec::new()));
     let observed = Rc::clone(&flow);

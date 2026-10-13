@@ -46,8 +46,8 @@ pub mod viewport;
 pub mod viewport_query;
 
 pub use animate_session::{
-    AnimatePreview, AnimateSession, MotionCatalogEntry, MotionUnavailable, PosePreview,
-    PreviewBone, motion_catalog,
+    AnimatePreview, AnimateSession, BoneDraft, MotionCatalogEntry, MotionUnavailable, PosePreview,
+    PreviewBone, motion_catalog, pick_bone,
 };
 pub use cutting_session::CutSession;
 pub use diagnostics::{DiagnosticCategory, DiagnosticEvent, log_event};
@@ -115,8 +115,9 @@ pub use rig_commands::{
     AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd,
     AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearRigRoleCmd, DeleteBoneKeyCmd, DuplicateMotionCmd,
     FitBlocked, FitRigToActiveAssetCmd, InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd,
-    RemoveMotionCmd, RemoveSkeletonCmd, RigPresetKind, SetBoneKeyCmd, SetMotionParamCmd,
-    SetMotionStyleCmd, UpdateIkChainCmd, UpdateMotionCmd, fit_availability,
+    RemoveMotionCmd, RemoveSkeletonCmd, ResetBonePoseCmd, RigPresetKind, SetBoneKeyCmd,
+    SetBoneTransformCmd, SetMotionParamCmd, SetMotionStyleCmd, UpdateIkChainCmd, UpdateMotionCmd,
+    fit_availability,
 };
 
 pub use brush::{

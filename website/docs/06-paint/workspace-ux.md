@@ -611,3 +611,15 @@ O motor atual será reaproveitado e reorganizado progressivamente; não haverá 
 ## Checkpoint de apresentação U02/U03 — 2026-10-09
 
 Presets e paleta foram transferidos do Inspector para abas no Workspace Drawer; Layers ocupa Structure e decal ocupa Properties. Canvas como Work Surface e os modos 3D/2D/Split/PiP completos permanecem no processo de workspace. **Código escrito, não compilado/testado:** bateria e aceite nativo adiados pelo usuário. Registro e limites: [Slint Rescue §20](../09-ui/slint-rescue-plan.md#20-wave-u02u03--regioes-independentes-e-drawer-2026-10-09).
+
+## 27. Refinamento de Escopo e Arquitetura Dual — 2026-10-13
+
+1. **Separação UV e PAINT:** UV reassume papel de workspace de primeira classe dedicado (`DRAW` · `POLY` · `PINTAR` · `UV`) na barra de navegação global. A seção redundante "Preparar superfície" dentro do inspector de Paint foi formalmente removida.
+2. **"Pintura apenas para pintura":**
+   - A ferramenta de pincel (`brush`) tem precedência estrita na superfície 3D e nunca é sequestrada para movimentar imagens/decalques.
+   - Decalques expõem alças de gizmo na viewport que só são manipuladas ao clicar/arrastar diretamente na alça (`decal_handle_at`) ou com ferramenta de transformação ativa.
+   - Pinceladas direcionadas à malha ativam e pintam na camada raster correspondente.
+3. **Delegação de Efeitos para Nós:** A grade inoperante de botões de efeitos (Invert, Pixelate, Posterize, etc.) no inspector lateral foi removida. Filtros, shaders estilizados e geradores procedurais são formalmente delegados ao futuro **Sistema de Nós (Shader Graph / Compositor)**.
+4. **Camadas como Nós com Fachada Amigável (Dual Representation):**
+   - **Frontend (Paint):** Pilha simples e linear de camadas (Layer Stack) com opacidade e modos de mesclagem, sem curvas de aprendizado desnecessárias.
+   - **Engine/Core:** Cada camada e projeção de decalque é um nó (`RasterCanvasNode`, `DecalProjectorNode`, `BlendNode`), garantindo total coerência matemática e procedural sem sobrecarregar a UX de quem só deseja pintar.

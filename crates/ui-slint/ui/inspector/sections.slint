@@ -1011,39 +1011,7 @@ export component MaterialBody inherits VerticalLayout {
         }
     }
 
-    // Assign primeiro: fluxo slot → atribuir → editar.
-    Rectangle {
-        height: 28px;
-        border-radius: 5px;
-        background: DesignTokens.accent;
-        accessible-role: button;
-        accessible-label: root.assign-label;
-        HorizontalLayout {
-            alignment: center;
-            spacing: 4px;
-            Image {
-                source: PetuniaIcons.check;
-                colorize: DesignTokens.on-accent;
-                width: 12px;
-                height: 12px;
-                y: (parent.height - self.height) / 2;
-                image-fit: contain;
-            }
-            Text {
-                text: root.assign-label;
-                color: DesignTokens.on-accent;
-                font-size: DesignTokens.font-small;
-                font-weight: 700;
-                vertical-alignment: center;
-            }
-        }
-        TouchArea {
-            clicked => { root.assign-material-slot(root.active-slot); }
-        }
-    }
-
-    // Perfil em grade 2 colunas com o rótulo acima: os cinco nomes cabem
-    // inteiros em 280 px (plano de UI F4, princípio 5 — nunca truncar).
+    // Perfil de sombreamento com nomes reais suportados pelo renderer.
     VerticalLayout {
         spacing: DesignTokens.space-xs;
         Text {
@@ -1055,16 +1023,7 @@ export component MaterialBody inherits VerticalLayout {
             spacing: DesignTokens.space-xs;
             ProfileChip { label: root.profile-pbr-label; selected: root.profile == "pbr"; clicked => { root.material-profile-changed(0); } }
             ProfileChip { label: root.profile-unlit-label; selected: root.profile == "unlit"; clicked => { root.material-profile-changed(1); } }
-        }
-        HorizontalLayout {
-            spacing: DesignTokens.space-xs;
-            ProfileChip { label: root.profile-toon-label; selected: root.profile == "toon"; clicked => { root.material-profile-changed(2); } }
-            ProfileChip { label: root.profile-glass-label; selected: root.profile == "glass"; clicked => { root.material-profile-changed(3); } }
-        }
-        HorizontalLayout {
-            spacing: DesignTokens.space-xs;
             ProfileChip { label: root.profile-emissive-label; selected: root.profile == "emissive"; clicked => { root.material-profile-changed(4); } }
-            Rectangle { horizontal-stretch: 1; }
         }
     }
 
@@ -1095,40 +1054,7 @@ export component MaterialBody inherits VerticalLayout {
         }
     }
 
-    HorizontalLayout {
-        spacing: 6px;
-        height: 28px;
-        Text {
-            text: root.roughness-label;
-            color: DesignTokens.text-secondary;
-            font-size: DesignTokens.font-caption;
-            width: 64px;
-            vertical-alignment: center;
-        }
-        NumericField {
-            label: "";
-            value: root.roughness;
-            step: 0.01;
-            horizontal-stretch: 1;
-            text-committed(text) => { root.material-scalar-committed("roughness", root.active-slot, text); }
-        }
-        Text {
-            text: root.metallic-label;
-            color: DesignTokens.text-secondary;
-            font-size: DesignTokens.font-caption;
-            width: 64px;
-            vertical-alignment: center;
-        }
-        NumericField {
-            label: "";
-            value: root.metallic;
-            step: 0.01;
-            horizontal-stretch: 1;
-            text-committed(text) => { root.material-scalar-committed("metallic", root.active-slot, text); }
-        }
-    }
-
-    if root.profile == "emissive" || root.profile == "pbr": HorizontalLayout {
+    if root.profile == "emissive": HorizontalLayout {
         spacing: 6px;
         height: 28px;
         Text {
@@ -1144,93 +1070,6 @@ export component MaterialBody inherits VerticalLayout {
             step: 0.05;
             horizontal-stretch: 1;
             text-committed(text) => { root.material-scalar-committed("emission-strength", root.active-slot, text); }
-        }
-    }
-
-
-    // Avançado: Normal, Alfa e Cutoff.
-    Rectangle {
-        height: 24px;
-        border-radius: 4px;
-        background: DesignTokens.surface;
-        Text {
-            text: root.advanced-label;
-            color: DesignTokens.text-secondary;
-            font-size: DesignTokens.font-caption;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-        TouchArea { clicked => { root.advanced-open = !root.advanced-open; } }
-    }
-    if root.advanced-open: VerticalLayout {
-        spacing: 6px;
-        HorizontalLayout {
-            spacing: 6px;
-            height: 28px;
-            Text {
-                text: root.normal-scale-label;
-                color: DesignTokens.text-secondary;
-                font-size: DesignTokens.font-caption;
-                width: 64px;
-                vertical-alignment: center;
-            }
-            NumericField {
-                label: "";
-                value: root.normal-scale;
-                step: 0.01;
-                horizontal-stretch: 1;
-                text-committed(text) => { root.material-scalar-committed("normal-scale", root.active-slot, text); }
-            }
-        }
-        HorizontalLayout {
-            spacing: 6px;
-            height: 28px;
-            Text {
-                text: root.alpha-mode-label;
-                color: DesignTokens.text-secondary;
-                font-size: DesignTokens.font-caption;
-                width: 64px;
-                vertical-alignment: center;
-            }
-            for alpha[index] in [
-            { id: "opaque", label: root.alpha-opaque-label },
-            { id: "mask", label: root.alpha-mask-label },
-            { id: "blend", label: root.alpha-blend-label },
-            ]: Rectangle {
-                horizontal-stretch: 1;
-                height: 26px;
-                border-radius: 4px;
-                background: root.alpha-mode == alpha.id ? DesignTokens.accent : DesignTokens.surface-raised;
-                border-width: 1px;
-                border-color: root.alpha-mode == alpha.id ? DesignTokens.accent : DesignTokens.border;
-                Text {
-                    text: alpha.label;
-                    color: root.alpha-mode == alpha.id ? DesignTokens.on-accent : DesignTokens.text-secondary;
-                    font-size: DesignTokens.font-caption;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
-                TouchArea { clicked => { root.material-alpha-mode-changed(index); } }
-            }
-        }
-        if root.alpha-mode == "mask": HorizontalLayout {
-            spacing: 6px;
-            height: 28px;
-            Text {
-                text: root.alpha-cutoff-label;
-                color: DesignTokens.text-secondary;
-                font-size: DesignTokens.font-caption;
-                width: 64px;
-                vertical-alignment: center;
-            }
-            NumericField {
-                label: "";
-                value: root.alpha-cutoff;
-                step: 0.01;
-                horizontal-stretch: 1;
-                text-committed(text) => { root.material-scalar-committed("alpha-cutoff", root.active-slot, text); }
-            }
         }
     }
 

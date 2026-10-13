@@ -220,7 +220,7 @@ export component PartColorPopover inherits Rectangle {
             }
 
             Text {
-                text: "\{Tr.t("sl.picker_rgb_short")}: \{Math.round(root.part-color-preview.red * 255)} / \{Math.round(root.part-color-preview.green * 255)} / \{Math.round(root.part-color-preview.blue * 255)}";
+                text: "\{Tr.t("sl.picker_rgb_short")}: \{root.part-color-preview.red} / \{root.part-color-preview.green} / \{root.part-color-preview.blue}";
                 color: DesignTokens.text-secondary;
                 font-size: DesignTokens.font-small;
                 horizontal-alignment: center;
@@ -233,7 +233,7 @@ export component PartColorPopover inherits Rectangle {
                     ColorPresets.tag-green, ColorPresets.tag-amber, ColorPresets.tag-red]: ColorSwatch {
                     swatch-color: preset;
                     selected: root.part-color-preview == preset;
-                    semantic-label: "\{Tr.t("sl.color_swatch")} · \{Tr.t("sl.picker_rgb_short")}: \{Math.round(preset.red * 255)} / \{Math.round(preset.green * 255)} / \{Math.round(preset.blue * 255)}";
+                    semantic-label: "\{Tr.t("sl.color_swatch")} · \{Tr.t("sl.picker_rgb_short")}: \{preset.red} / \{preset.green} / \{preset.blue}";
                     clicked => {
                         root.part-color-preset-clicked(preset);
                         root.restore-hex-display();

@@ -73,6 +73,7 @@ component LayerRow inherits Rectangle {
             variant: "toggle";
             active: !root.layer.visible;
             semantic-label: Tr.t("sl.layer_visible");
+            accessible-role: checkbox;
             clicked => { root.visibility-toggled(); }
         }
         if root.layer.id != "": IconButton {
@@ -83,6 +84,7 @@ component LayerRow inherits Rectangle {
             variant: "toggle";
             active: root.layer.locked;
             semantic-label: Tr.t("sl.layer_locked");
+            accessible-role: checkbox;
             clicked => { root.lock-toggled(); }
         }
         // Ações secundárias só quando relevantes (spec: nada de sete botões fixos).
@@ -174,12 +176,13 @@ export component PaintLayersPanel inherits VerticalLayout {
                     vertical-alignment: center;
                     width: 64px;
                 }
-                PetuniaSlider {
+                layer-opacity := PetuniaSlider {
                     horizontal-stretch: 1;
                     minimum: 0.0;
                     maximum: 1.0;
                     value: layer.opacity;
                     controlled: true;
+                    accessible-label: Tr.t("sl.opacity");
                     changed(value) => { root.opacity-set(layer.id, value); }
                 }
                 Text {

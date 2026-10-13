@@ -265,10 +265,9 @@ mod tests {
     fn strip() -> Mesh {
         let mut a = Mesh::plane(2.0);
         let mut b = Mesh::plane(2.0);
+        a.faces[0].uv = vec![[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]];
+        b.faces[0].uv = vec![[1.0, 0.0], [1.0, 1.0], [2.0, 1.0], [2.0, 0.0]];
         b.translate_selected([2.0, 0.0, 0.0]);
-        for uv in &mut b.faces[0].uv {
-            uv[0] += 1.0;
-        }
         a.join(&b);
         let _remap = a.weld_with_remap(1e-4);
         a

@@ -1095,3 +1095,121 @@ impl Command for ApplyMotionNowCmd {
         Ok(())
     }
 }
+
+/// Define a transformação local de um osso no esqueleto com histórico de Undo.
+#[derive(Debug, Clone)]
+pub struct SetBoneTransformCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub transform: Transform3D,
+}
+
+impl Command for SetBoneTransformCmd {
+    fn label(&self) -> &'static str {
+        "set bone transform"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        let t = &self.transform;
+        if !finite3(&t.translation)
+            || !finite3(&t.scale)
+            || !t.rotation.iter().all(|x| x.is_finite())
+        {
+            return Err("Transform values are not finite");
+        }
+        let q = t.rotation;
+        if q.iter().map(|x| x * x).sum::<f32>() < 1e-8 {
+            return Err("Rotation quaternion is zero");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+        let bone = skel
+            .get_bone_mut(self.bone_id)
+            .ok_or_else(|| exec_err("Bone not found"))?;
+        if bone.local_transform == self.transform {
+            return Err(CommandError::NoChange(
+                "Bone transform already has those values".into(),
+            ));
+        }
+        bone.local_transform = self.transform;
+        state.set_status("Bone transform set");
+        Ok(())
+    }
+}
+
+/// Restaura a transformação de um osso para a identidade / rest pose.
+#[derive(Debug, Clone)]
+pub struct ResetBonePoseCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+}
+
+impl Command for ResetBonePoseCmd {
+    fn label(&self) -> &'static str {
+        "reset bone pose"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let skel = state
+            .document
+            .project
+            .skeletons
+            .iter_mut()
+            .find(|s| s.id == self.skeleton_id)
+            .ok_or_else(|| exec_err("Skeleton not found"))?;
+        let bone = skel
+            .get_bone_mut(self.bone_id)
+            .ok_or_else(|| exec_err("Bone not found"))?;
+        let identity_rot = [0.0, 0.0, 0.0, 1.0];
+        let identity_scale = [1.0, 1.0, 1.0];
+        if bone.local_transform.rotation == identity_rot
+            && bone.local_transform.scale == identity_scale
+        {
+            return Err(CommandError::NoChange(
+                "Bone is already in rest pose".into(),
+            ));
+        }
+        bone.local_transform.rotation = identity_rot;
+        bone.local_transform.scale = identity_scale;
+        state.set_status("Bone reset to rest pose");
+        Ok(())
+    }
+}
+

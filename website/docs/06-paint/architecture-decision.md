@@ -405,3 +405,6 @@ A arquitetura interna pode ser robusta sem expor complexidade de Photoshop/Subst
 12. Shared Material/Texture exige UX explícita de Paint Shared versus Make Unique.
 13. Vertex Paint permanece separado de Texture Paint.
 14. PaintModule deixa de depender de AppState diretamente.
+15. **Pintura apenas para pintura:** ferramentas de pincel raster (`brush`, `eraser`, etc.) têm precedência absoluta na superfície 3D; cliques e arrastes nunca são sequestrados para movimentar decalques. A manipulação de decalques na viewport é restrita a ferramentas de transformação (`move`, `transform`, `select`) ou clique direto sobre alças do gizmo (`decal_handle_at`).
+16. **Delegação de Efeitos para o Subsistema de Nós:** filtros raster inoperantes (Invert, Pixelate, Posterize) são removidos do inspector de pintura e delegados formalmente ao subsistema de Nós (Shader Graph / Compositor).
+17. **Arquitetura Dual (Layer Stack vs. Node Graph):** na interface de pintura, o usuário opera uma pilha simples e limpa de camadas (camadas raster, decalques, opacidade, blend modes); no Core Engine, a pilha é um Grafo Acíclico Dirigido (DAG) composto por `RasterCanvasNode`, `DecalProjectorNode` e `BlendNode`, permitindo expansão sem adicionar complexidade à UX básica.

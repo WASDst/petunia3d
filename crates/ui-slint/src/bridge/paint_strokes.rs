@@ -91,7 +91,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             return false;
         }
         if self.active_layer_is_decal() {
-            return self.decal_drag_begin(x, y, actions.decal_scale, actions.decal_rotate);
+            let is_paint_tool = matches!(
+                self.state.session.tools.active_tool.as_str(),
+                "brush" | "eraser" | "airbrush" | "pixel" | "smudge" | "blur" | "dodge" | "burn" | "spray" | "clone" | "fill"
+            );
+            let handle_hit = self.decal_handle_at(x, y).is_some() || actions.decal_scale || actions.decal_rotate;
+            if handle_hit || !is_paint_tool {
+                return self.decal_drag_begin(x, y, actions.decal_scale, actions.decal_rotate);
+            }
+            let active = self.state.project.active;
+            let raster_id = self
+                .state
+                .project
+                .assets
+                .get(active)
+                .and_then(|a| a.paint_stack.as_ref())
+                .and_then(|stack| {
+                    stack.layers.iter().find(|l| matches!(l.kind, petunia_project::paint_layers::LayerKind::Raster(_))).map(|l| l.id)
+                });
+            if let Some(id) = raster_id {
+                let id_str = id.to_string();
+                self.set_paint_layer_active(&id_str);
+            } else {
+                self.add_paint_layer();
+            }
         }
         if self.state.session.tools.active_tool == "picker" {
             return self.pick_paint_color_at(x, y);
