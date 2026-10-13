@@ -353,6 +353,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let ndc_y = 1.0 - normalized_y.clamp(0.0, 1.0) * 2.0;
         let (origin, direction) = self.state.session.camera.ray(ndc_x, ndc_y);
 
+        if self.state.workspace.is_animate() {
+            let screen_point = [
+                normalized_x * self.viewport_size[0],
+                normalized_y * self.viewport_size[1],
+            ];
+            let picked = {
+                let mut preview = self.animate.preview.borrow_mut();
+                let pose = preview.pose(&self.state.project.project, &self.state.session.animate);
+                pose.and_then(|p| {
+                    petunia_core::pick_bone(
+                        &p,
+                        &self.state.session.camera,
+                        self.viewport_size,
+                        screen_point,
+                        16.0,
+                    )
+                })
+            };
+            self.state.animate_select_bone(picked);
+            self.state.mark_dirty();
+            return;
+        }
+
         if self.state.workspace == Workspace::Paint {
             if self.state.session.tools.active_tool == "select" {
                 self.paint_select_at(normalized_x, normalized_y, extend, loop_select);

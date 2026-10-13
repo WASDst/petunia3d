@@ -495,3 +495,34 @@ fn the_production_callback_path_keeps_the_workspace_and_shows_the_pill() {
     );
     assert!(shell.get_animate_has_motion() && shell.get_animate_playing());
 }
+
+#[test]
+fn selecting_bone_shows_inspector_and_supports_reset_and_ik_mode() {
+    let rig = Rig::new();
+    rig.intent(AnimateIntent::AddCreature(RigPresetKind::Humanoid));
+
+    // Seleciona o osso 0
+    rig.intent(AnimateIntent::SelectBone(Some(0)));
+
+    assert!(rig.shell.get_animate_has_selected_bone());
+    let bone_name = rig.shell.get_animate_selected_bone_name();
+    assert!(!bone_name.is_empty(), "osso tem nome");
+    assert!(
+        !rig.shell.get_animate_selected_bone_commands().is_empty(),
+        "tem comandos visuais de highlight do osso"
+    );
+
+    // Ativa modo IK
+    rig.intent(AnimateIntent::SetIkMode(true));
+    assert!(rig.shell.get_animate_ik_mode());
+
+    // Clica no botão de Reset Pose
+    let reset = ElementHandle::find_by_accessible_label(&rig.shell, "Reset Pose")
+        .find(|e| e.accessible_role() == Some(AccessibleRole::Button))
+        .expect("botão Reset Pose");
+    reset.mock_single_click(PointerEventButton::Left);
+
+    // Desseleciona o osso
+    rig.intent(AnimateIntent::SelectBone(None));
+    assert!(!rig.shell.get_animate_has_selected_bone());
+}

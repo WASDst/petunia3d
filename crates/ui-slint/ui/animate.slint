@@ -36,6 +36,31 @@ export struct AnimateParamEntry {
     choice-index: int,
 }
 
+export struct AnimateKeyframeEntry {
+    time: float,
+    frame: int,
+    normalized-pos: float,
+    selected: bool,
+    interp-kind: int,
+}
+
+export struct AnimateTrackEntry {
+    bone-id: int,
+    bone-name: string,
+    selected: bool,
+    keyframes: [AnimateKeyframeEntry],
+}
+
+export struct AnimateLayerEntry {
+    id: string,
+    name: string,
+    weight: float,
+    is-additive: bool,
+    enabled: bool,
+    is-tweak: bool,
+    selected: bool,
+}
+
 export struct AnimateTexts {
     workspace-label: string,
     workspace-tip: string,
@@ -65,6 +90,33 @@ export struct AnimateTexts {
     play-tip: string,
     fit-model: string,
     linked-model: string,
+    title-bone: string,
+    reset-bone: string,
+    ik-mode: string,
+    insert-keyframe: string,
+    delete-keyframe: string,
+    interp-linear: string,
+    interp-step: string,
+    interp-cubic: string,
+    clear-track: string,
+    title-timeline: string,
+    title-curves: string,
+    title-dope-sheet: string,
+    channel-trans-x: string,
+    channel-trans-y: string,
+    channel-trans-z: string,
+    channel-rot-x: string,
+    channel-rot-y: string,
+    channel-rot-z: string,
+    channel-scale: string,
+    title-layers: string,
+    add-layer: string,
+    add-tweak: string,
+    blend-override: string,
+    blend-additive: string,
+    layer-weight: string,
+    onion-skin: string,
+    motion-trails: string,
 }
 
 /// Ícone por id estável (o Rust fala em `IconId`, nunca em desenho).
@@ -804,8 +856,11 @@ export component AnimateInspector inherits Rectangle {
     in property <bool> show-advanced;
     in property <bool> show-bones;
     in property <bool> stepped;
-    in property <bool> root-motion;
-    in property <bool> root-motion-supported;
+    in property <bool> root-motion: false;
+    in property <bool> root-motion-supported: false;
+    in property <string> selected-bone-name: "";
+    in property <bool> has-selected-bone: false;
+    in property <bool> ik-mode: false;
 
     callback action(string, string, float);
     in property <float> structure-ratio: 0.4;
@@ -876,6 +931,40 @@ export component AnimateInspector inherits Rectangle {
             collapse-requested(collapsed) => { root.pane-collapsed-set(1, collapsed); }
             spacing: 10px;
 
+            if root.has-selected-bone: InspectorSection {
+                title: root.texts.title-bone;
+                open: true;
+                toggled => { self.open = !self.open; }
+
+                VerticalLayout {
+                    spacing: 8px;
+                    padding: 4px;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        alignment: start;
+                        AnimIcon { icon-id: "bone"; }
+                        Text {
+                            text: root.selected-bone-name;
+                            color: DesignTokens.text-primary;
+                            font-size: DesignTokens.font-default;
+                            vertical-alignment: center;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        AnimButton {
+                            label: root.texts.reset-bone;
+                            clicked => { root.action("reset-bone", "", 0); }
+                        }
+                        AnimChip {
+                            label: root.texts.ik-mode;
+                            selected: root.ik-mode;
+                            clicked => { root.action("set-ik-mode", "", root.ik-mode ? 0 : 1); }
+                        }
+                    }
+                }
+            }
+
             if root.has-motion: InspectorSection {
                 title: root.texts.title-motion;
                 open: true;
@@ -899,7 +988,7 @@ export component AnimateInspector inherits Rectangle {
     }
 }
 
-/// Drawer procedural: transporte existente + motions projetadas, sem novo motor/keyframes.
+/// Drawer de Animação: Transporte, Timeline, Editor de Curvas, Camadas e Blending.
 export component AnimateDrawerContent inherits VerticalLayout {
     in property <AnimateTexts> texts;
     in property <[AnimateRowEntry]> motions;
@@ -907,8 +996,22 @@ export component AnimateDrawerContent inherits VerticalLayout {
     in property <bool> has-motion;
     in property <float> progress;
     in property <string> time-label;
+    in property <string> frame-label: "";
+    in property <bool> can-keyframe: false;
+    in property <bool> has-keyframe-at-playhead: false;
+    in property <int> current-interp: 1;
+    in property <[AnimateTrackEntry]> tracks: [];
+    in-out property <int> drawer-tab: 0; // 0 = DopeSheet, 1 = Curves, 2 = Layers
+    in property <int> active-curve-channel: 0; // 0..2 Pos, 3..5 Rot, 6 Scale
+    in property <string> curve-path: "";
+    in property <[AnimateKeyframeEntry]> curve-points: [];
+    in property <[AnimateLayerEntry]> layers: [];
+    in property <bool> onion-skin-enabled: false;
+    in property <bool> motion-trails-enabled: false;
     callback action(string, string, float);
+
     spacing: 8px;
+
     transport := AnimateTransport {
         texts: root.texts;
         playing: root.playing;
@@ -917,22 +1020,440 @@ export component AnimateDrawerContent inherits VerticalLayout {
         time-label: root.time-label;
         action(a, b, v) => { root.action(a, b, v); }
     }
-    if !root.has-motion: Text {
-        text: root.texts.empty-motion;
-        color: DesignTokens.text-secondary;
-        font-size: DesignTokens.font-small;
-        wrap: word-wrap;
-    }
-    for motion in root.motions: AnimChip {
-        label: motion.label;
-        selected: motion.selected;
-        enabled: motion.available;
-        tip: motion.detail;
-        clicked => { root.action("select-motion", motion.id, 0); }
-    }
-    if root.has-motion: HorizontalLayout {
+
+    // Seletor de Modo do Drawer + Toggles de Overlays do Viewport
+    HorizontalLayout {
+        height: 28px;
         spacing: 6px;
-        AnimButton { label: root.texts.duplicate; clicked => { root.action("duplicate-motion", "", 0); } }
-        AnimButton { label: root.texts.remove; danger: true; clicked => { root.action("remove-motion", "", 0); } }
+        alignment: space-between;
+
+        HorizontalLayout {
+            spacing: 6px;
+            AnimChip {
+                label: root.texts.title-dope-sheet;
+                selected: root.drawer-tab == 0;
+                clicked => { root.drawer-tab = 0; }
+            }
+            AnimChip {
+                label: root.texts.title-curves;
+                selected: root.drawer-tab == 1;
+                clicked => {
+                    root.drawer-tab = 1;
+                    root.action("set-curve-mode", "", 1);
+                }
+            }
+            AnimChip {
+                label: root.texts.title-layers;
+                selected: root.drawer-tab == 2;
+                clicked => { root.drawer-tab = 2; }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            AnimChip {
+                label: root.texts.onion-skin;
+                selected: root.onion-skin-enabled;
+                clicked => {
+                    root.action("toggle-onion-skin", "", root.onion-skin-enabled ? 0 : 1);
+                }
+            }
+            AnimChip {
+                label: root.texts.motion-trails;
+                selected: root.motion-trails-enabled;
+                clicked => {
+                    root.action("toggle-motion-trails", "", root.motion-trails-enabled ? 0 : 1);
+                }
+            }
+        }
+    }
+
+    // ABA 0: DOPE SHEET / TIMELINE COMPLETA
+    if root.drawer-tab == 0: VerticalLayout {
+        spacing: 6px;
+
+        // Barra de ferramentas da Timeline
+        HorizontalLayout {
+            height: 28px;
+            spacing: 6px;
+            alignment: start;
+
+            AnimIcon {
+                icon-id: "wind";
+                size: 16px;
+            }
+
+            Text {
+                text: root.texts.title-timeline;
+                color: DesignTokens.text-primary;
+                font-size: DesignTokens.font-small;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            if root.frame-label != "": Text {
+                text: root.frame-label;
+                color: DesignTokens.text-secondary;
+                font-size: DesignTokens.font-caption;
+                vertical-alignment: center;
+            }
+
+            Rectangle { width: 12px; }
+
+            AnimButton {
+                label: "<<";
+                clicked => { root.action("jump-start", "", 0); }
+            }
+            AnimButton {
+                label: "<";
+                clicked => { root.action("step-frame", "", -1); }
+            }
+            AnimButton {
+                label: ">";
+                clicked => { root.action("step-frame", "", 1); }
+            }
+            AnimButton {
+                label: ">>";
+                clicked => { root.action("jump-end", "", 0); }
+            }
+
+            Rectangle { width: 8px; }
+
+            AnimButton {
+                label: root.texts.insert-keyframe;
+                primary: true;
+                enabled: root.can-keyframe;
+                clicked => { root.action("insert-keyframe", "", 0); }
+            }
+
+            AnimButton {
+                label: root.texts.delete-keyframe;
+                danger: true;
+                enabled: root.can-keyframe && root.has-keyframe-at-playhead;
+                clicked => { root.action("delete-keyframe", "", 0); }
+            }
+
+            Rectangle { width: 8px; }
+
+            AnimChip {
+                label: root.texts.interp-linear;
+                selected: root.current-interp == 1;
+                clicked => { root.action("set-keyframe-interp", "linear", 0); }
+            }
+            AnimChip {
+                label: root.texts.interp-step;
+                selected: root.current-interp == 0;
+                clicked => { root.action("set-keyframe-interp", "step", 0); }
+            }
+            AnimChip {
+                label: root.texts.interp-cubic;
+                selected: root.current-interp == 2;
+                clicked => { root.action("set-keyframe-interp", "cubic", 0); }
+            }
+
+            if root.can-keyframe: AnimButton {
+                label: root.texts.clear-track;
+                clicked => { root.action("clear-bone-track", "", 0); }
+            }
+        }
+
+        // Pistas da Dope Sheet por Osso
+        if root.tracks.length > 0: VerticalLayout {
+            spacing: 4px;
+            for track in root.tracks: HorizontalLayout {
+                height: 24px;
+                spacing: 8px;
+
+                bone-btn := Rectangle {
+                    width: 140px;
+                    border-radius: 4px;
+                    background: track.selected ? DesignTokens.accent : (bone-touch.has-hover ? DesignTokens.surface-hover : DesignTokens.surface);
+                    border-width: 1px;
+                    border-color: track.selected ? DesignTokens.focus-ring : DesignTokens.border;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        spacing: 4px;
+                        alignment: start;
+
+                        AnimIcon {
+                            icon-id: "bone";
+                            size: 12px;
+                            stroke: track.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
+                        }
+                        Text {
+                            text: track.bone-name;
+                            color: track.selected ? DesignTokens.on-accent : DesignTokens.text-primary;
+                            font-size: DesignTokens.font-caption;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+
+                    bone-touch := TouchArea {
+                        clicked => { root.action("select-bone", track.bone-id, 0); }
+                    }
+                }
+
+                lane := Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: DesignTokens.surface-raised;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    clip: true;
+
+                    Rectangle {
+                        y: (parent.height - 2px) / 2;
+                        height: 2px;
+                        background: DesignTokens.border;
+                    }
+
+                    Rectangle {
+                        x: (parent.width - 2px) * root.progress;
+                        width: 2px;
+                        height: parent.height;
+                        background: DesignTokens.live-mode-ring;
+                    }
+
+                    for kf in track.keyframes: Rectangle {
+                        x: max(0px, (parent.width - 14px) * kf.normalized-pos);
+                        y: (parent.height - 12px) / 2;
+                        width: 12px;
+                        height: 12px;
+                        border-radius: 2px;
+                        border-width: 1px;
+                        border-color: kf.selected ? DesignTokens.focus-ring : DesignTokens.border-strong;
+                        background: kf.selected ? DesignTokens.selection-active
+                            : (kf.interp-kind == 0 ? DesignTokens.warning
+                            : (kf.interp-kind == 2 ? DesignTokens.accent
+                            : DesignTokens.focus-ring));
+
+                        kf-touch := TouchArea {
+                            clicked => {
+                                root.action("select-keyframe", track.bone-id, kf.time);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ABA 1: CURVE / GRAPH EDITOR (Fatia 3)
+    if root.drawer-tab == 1: VerticalLayout {
+        spacing: 6px;
+
+        // Seletor de canal da curva ativa
+        HorizontalLayout {
+            height: 26px;
+            spacing: 6px;
+            alignment: start;
+
+            AnimChip {
+                label: root.texts.channel-trans-x;
+                selected: root.active-curve-channel == 0;
+                clicked => { root.action("set-curve-channel", "trans_x", 0); }
+            }
+            AnimChip {
+                label: root.texts.channel-trans-y;
+                selected: root.active-curve-channel == 1;
+                clicked => { root.action("set-curve-channel", "trans_y", 1); }
+            }
+            AnimChip {
+                label: root.texts.channel-trans-z;
+                selected: root.active-curve-channel == 2;
+                clicked => { root.action("set-curve-channel", "trans_z", 2); }
+            }
+            AnimChip {
+                label: root.texts.channel-rot-x;
+                selected: root.active-curve-channel == 3;
+                clicked => { root.action("set-curve-channel", "rot_x", 3); }
+            }
+            AnimChip {
+                label: root.texts.channel-rot-y;
+                selected: root.active-curve-channel == 4;
+                clicked => { root.action("set-curve-channel", "rot_y", 4); }
+            }
+            AnimChip {
+                label: root.texts.channel-rot-z;
+                selected: root.active-curve-channel == 5;
+                clicked => { root.action("set-curve-channel", "rot_z", 5); }
+            }
+            AnimChip {
+                label: root.texts.channel-scale;
+                selected: root.active-curve-channel == 6;
+                clicked => { root.action("set-curve-channel", "scale", 6); }
+            }
+        }
+
+        // Canvas do Editor de Curvas
+        curve-canvas := Rectangle {
+            height: 110px;
+            background: DesignTokens.surface-raised;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            clip: true;
+
+            // Linha central zero
+            Rectangle {
+                y: parent.height / 2;
+                height: 1px;
+                background: DesignTokens.border-strong;
+            }
+
+            // Grade horizontal
+            Rectangle {
+                y: parent.height / 4;
+                height: 1px;
+                background: DesignTokens.border;
+            }
+            Rectangle {
+                y: parent.height * 3 / 4;
+                height: 1px;
+                background: DesignTokens.border;
+            }
+
+            // Playhead
+            Rectangle {
+                x: (parent.width - 2px) * root.progress;
+                width: 2px;
+                height: parent.height;
+                background: DesignTokens.live-mode-ring;
+            }
+
+            // Traçado contínuo da curva
+            if root.curve-path != "": Path {
+                width: parent.width;
+                height: parent.height;
+                commands: root.curve-path;
+                stroke: DesignTokens.accent;
+                stroke-width: 2px;
+            }
+
+            // Pontos de controle e tangentes nos keyframes
+            for pt in root.curve-points: Rectangle {
+                x: max(0px, (parent.width - 10px) * pt.normalized-pos);
+                y: (parent.height - 10px) / 2;
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: pt.selected ? DesignTokens.selection-active : DesignTokens.accent;
+                border-width: 1.5px;
+                border-color: DesignTokens.surface;
+
+                TouchArea {
+                    clicked => {
+                        root.action("select-keyframe", "", pt.time);
+                    }
+                }
+            }
+        }
+    }
+
+    // ABA 2: MOTION LAYERS & BLENDING (Fatia 4)
+    if root.drawer-tab == 2: VerticalLayout {
+        spacing: 6px;
+
+        HorizontalLayout {
+            height: 26px;
+            spacing: 8px;
+            alignment: start;
+
+            AnimButton {
+                label: root.texts.add-layer;
+                primary: true;
+                clicked => { root.action("add-motion-layer", "Layer", 0); }
+            }
+            AnimButton {
+                label: root.texts.add-tweak;
+                clicked => { root.action("add-tweak-layer", "Tweak", 1); }
+            }
+        }
+
+        if root.layers.length > 0: VerticalLayout {
+            spacing: 4px;
+            for layer in root.layers: HorizontalLayout {
+                height: 26px;
+                spacing: 8px;
+                alignment: start;
+
+                AnimChip {
+                    label: layer.enabled ? "ON" : "OFF";
+                    selected: layer.enabled;
+                    clicked => { root.action("toggle-layer-enabled", layer.id, 0); }
+                }
+
+                Text {
+                    text: layer.name;
+                    color: layer.selected ? DesignTokens.accent : DesignTokens.text-primary;
+                    font-size: DesignTokens.font-small;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    width: 110px;
+                    overflow: elide;
+                }
+
+                AnimChip {
+                    label: layer.is-additive ? root.texts.blend-additive : root.texts.blend-override;
+                    selected: layer.is-additive;
+                    clicked => {
+                        root.action("set-layer-blend-mode", layer.id, layer.is-additive ? 0 : 1);
+                    }
+                }
+
+                Text {
+                    text: root.texts.layer-weight + ": " + Math.round(layer.weight * 100) + "%";
+                    color: DesignTokens.text-secondary;
+                    font-size: DesignTokens.font-caption;
+                    vertical-alignment: center;
+                    width: 80px;
+                }
+
+                AnimButton {
+                    label: "-10%";
+                    clicked => {
+                        root.action("set-layer-weight", layer.id, max(0.0, layer.weight - 0.1));
+                    }
+                }
+                AnimButton {
+                    label: "+10%";
+                    clicked => {
+                        root.action("set-layer-weight", layer.id, min(1.0, layer.weight + 0.1));
+                    }
+                }
+
+                AnimButton {
+                    label: "X";
+                    danger: true;
+                    clicked => { root.action("remove-motion-layer", layer.id, 0); }
+                }
+            }
+        }
+    }
+
+    if root.motions.length > 0: HorizontalLayout {
+        spacing: 6px;
+        padding-top: 4px;
+        alignment: start;
+        for motion in root.motions: AnimChip {
+            label: motion.label;
+            selected: motion.selected;
+            enabled: motion.available;
+            tip: motion.detail;
+            clicked => { root.action("select-motion", motion.id, 0); }
+        }
+        if root.has-motion: AnimButton {
+            label: root.texts.duplicate;
+            clicked => { root.action("duplicate-motion", "", 0); }
+        }
+        if root.has-motion: AnimButton {
+            label: root.texts.remove;
+            danger: true;
+            clicked => { root.action("remove-motion", "", 0); }
+        }
     }
 }
+

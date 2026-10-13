@@ -125,6 +125,18 @@ impl Workspace {
             Workspace::Animate => "ws.animate",
         }
     }
+
+    /// Retorna verdadeiro se o workspace ativo é ANIMATE.
+    pub fn is_animate(&self) -> bool {
+        #[cfg(feature = "animation-workspace")]
+        {
+            *self == Workspace::Animate
+        }
+        #[cfg(not(feature = "animation-workspace"))]
+        {
+            false
+        }
+    }
 }
 
 /// Seleção atual (sincronizada entre viewport e UV via eventos).

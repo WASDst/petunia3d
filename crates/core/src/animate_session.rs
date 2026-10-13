@@ -24,15 +24,18 @@
 use crate::command::CommandError;
 use crate::context::CommandContext;
 use crate::rig_commands::{
-    AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd,
-    RemoveMotionCmd, ResetBonePoseCmd, RigPresetKind, SetBoneTransformCmd, SetMotionParamCmd,
-    SetMotionStyleCmd, UpdateMotionCmd,
+    AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd, ApplyMotionNowCmd, ClearBoneTrackCmd,
+    DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitRigToActiveAssetCmd, InsertBoneKeyframeCmd,
+    RemoveMotionCmd, RemoveMotionLayerCmd, ResetBonePoseCmd, RigPresetKind,
+    SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd, SetMotionLayerBlendModeCmd,
+    SetMotionLayerWeightCmd, SetMotionParamCmd, SetMotionStyleCmd, ToggleMotionLayerEnabledCmd,
+    UpdateMotionCmd,
 };
 use glam::Vec3;
 use petunia_project::{
-    BakeOptions, MotionError, MotionEvaluator, MotionGenerator, MotionRecipe, MotionStyle,
-    PoseOverride, Project, RigRoleMap, RoleContractError, RootMode, Skeleton, Transform3D,
-    posed_meshes,
+    BakeOptions, Interpolation, MotionError, MotionEvaluator, MotionGenerator, MotionRecipe,
+    MotionStyle, PoseOverride, Project, RigRoleMap, RoleContractError, RootMode, Skeleton,
+    Transform3D, posed_meshes,
 };
 use uuid::Uuid;
 
@@ -61,6 +64,10 @@ pub struct AnimateSession {
     pub skeleton: Option<Uuid>,
     /// Motion selecionado (sempre pertence a `skeleton`).
     pub motion: Option<Uuid>,
+    /// Clipe de animação selecionado na timeline (se `None`, usa o do esqueleto).
+    pub active_clip: Option<Uuid>,
+    /// Chave selecionada na timeline `(bone_id, time)`.
+    pub selected_keyframe: Option<(u32, f32)>,
     /// Playhead em segundos, dentro de `[0, ciclo)`.
     pub time: f32,
     pub playing: bool,
@@ -72,6 +79,21 @@ pub struct AnimateSession {
     pub selected_bone: Option<u32>,
     /// Modo IK ativo para posar cadeias articulares (se disponível).
     pub ik_mode: bool,
+    /// Modo de exibição de curvas (Curve/Graph Editor) vs Dope Sheet (Fatia 3).
+    pub curve_mode: bool,
+    /// Canal de curva ativo no Curve Editor (Fatia 3).
+    pub active_curve_channel: petunia_project::CurveChannel,
+    /// Camada de animação selecionada na pilha (Fatia 4).
+    pub selected_layer: Option<Uuid>,
+    /// Habilita fantasmas temporais (Onion Skinning) no viewport (Fatia 5).
+    pub onion_skin_enabled: bool,
+    /// Quantidade de quadros passados/futuros para Onion Skinning.
+    pub onion_skin_frames_before: u32,
+    pub onion_skin_frames_after: u32,
+    /// Habilita rastro de movimento (Motion Trails) no viewport (Fatia 5).
+    pub motion_trails_enabled: bool,
+    /// Passos de amostragem ao longo do ciclo para o rastro espacial.
+    pub motion_trail_steps: u32,
     draft: Option<ParamDraft>,
     bone_draft: Option<BoneDraft>,
 }
@@ -81,12 +103,22 @@ impl Default for AnimateSession {
         Self {
             skeleton: None,
             motion: None,
+            active_clip: None,
+            selected_keyframe: None,
             time: 0.0,
             playing: false,
             show_advanced: false,
             show_skeleton: true,
             selected_bone: None,
             ik_mode: false,
+            curve_mode: false,
+            active_curve_channel: petunia_project::CurveChannel::TranslationX,
+            selected_layer: None,
+            onion_skin_enabled: false,
+            onion_skin_frames_before: 2,
+            onion_skin_frames_after: 2,
+            motion_trails_enabled: false,
+            motion_trail_steps: 24,
             draft: None,
             bone_draft: None,
         }
@@ -411,13 +443,25 @@ impl AnimatePreview {
         Some(skeleton)
     }
 
-    /// Duração do ciclo do Motion selecionado, em segundos.
+    /// Duração do ciclo do Motion selecionado ou da animação por keyframes, em segundos.
     pub fn cycle_seconds(&mut self, project: &Project, session: &AnimateSession) -> Option<f32> {
-        self.refresh(project, session)?;
-        match self.evaluator.as_ref()? {
-            Ok(e) => Some(e.cycle_seconds()),
-            Err(_) => None,
+        if session.motion.is_some() {
+            if self.refresh(project, session).is_some() {
+                if let Some(Ok(e)) = self.evaluator.as_ref() {
+                    return Some(e.cycle_seconds());
+                }
+            }
         }
+        if let Some(skel_id) = session.skeleton {
+            if let Some(asset) = session
+                .active_clip
+                .and_then(|id| project.get_animation(id))
+                .or_else(|| project.get_animation_for_skeleton(skel_id))
+            {
+                return Some(asset.clip.duration.max(0.1));
+            }
+        }
+        Some(2.0)
     }
 
     /// Pose do Motion no tempo da sessão; sem Motion, a pose de repouso da
@@ -429,9 +473,8 @@ impl AnimatePreview {
     }
 
     /// Pose **local** (uma transformação por osso) da criatura em foco: a do
-    /// Motion no tempo da sessão ou, sem Motion (ou com rig incompatível), o
-    /// repouso. Devolve também o id do esqueleto. Se houver `bone_draft` da sessão,
-    /// a transformação provisória substitui o osso em tempo real.
+    /// Motion no tempo da sessão, do clipe de animação, ou o repouso. Devolve também o id do esqueleto.
+    /// Se houver `bone_draft` da sessão, a transformação provisória substitui o osso em tempo real.
     pub fn local_pose(
         &mut self,
         project: &Project,
@@ -449,11 +492,83 @@ impl AnimatePreview {
             }
         } else {
             let skeleton = project.get_skeleton(session.skeleton?)?;
-            (
-                skeleton.id,
-                skeleton.bones.iter().map(|b| b.local_transform).collect(),
-            )
+            let local = if let Some(asset) = session
+                .active_clip
+                .and_then(|id| project.get_animation(id))
+                .or_else(|| project.get_animation_for_skeleton(skeleton.id))
+            {
+                asset.clip.sample_pose(skeleton, session.time)
+            } else {
+                skeleton.bones.iter().map(|b| b.local_transform).collect()
+            };
+            (skeleton.id, local)
         };
+
+        // Sobrepõe trilhas com keyframes do clipe se estiver tocando junto com um motion procedural
+        if session.motion.is_some() {
+            if let Some(skeleton) = project.get_skeleton(skeleton_id) {
+                if let Some(asset) = session
+                    .active_clip
+                    .and_then(|id| project.get_animation(id))
+                    .or_else(|| project.get_animation_for_skeleton(skeleton_id))
+                {
+                    for (bi, bone) in skeleton.bones.iter().enumerate() {
+                        if let Some(track) = asset.clip.get_track(bone.id) {
+                            if !track.translations.is_empty()
+                                || !track.rotations.is_empty()
+                                || !track.scales.is_empty()
+                            {
+                                if bi < local.len() {
+                                    local[bi] =
+                                        track.sample_transform_over(session.time, &local[bi]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Blending de camadas concorrentes (Fatia 4: Motion Layers / Tweak Layers)
+        if let Some(skeleton) = project.get_skeleton(skeleton_id) {
+            for layer in &project.motion_layers {
+                if !layer.enabled || layer.blend_weight <= 1e-4 {
+                    continue;
+                }
+                let layer_pose = if let Some(m_id) = layer.motion_id {
+                    if let Some(recipe) = project.get_motion(m_id) {
+                        let roles = project
+                            .rig_roles_of(skeleton.id)
+                            .cloned()
+                            .unwrap_or_else(|| RigRoleMap::new(skeleton.id));
+                        if let Ok(eval) = MotionEvaluator::new(recipe, skeleton, &roles) {
+                            eval.pose_at(session.time)
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                } else if let Some(clip_id) = layer.clip_id {
+                    if let Some(asset) = project.get_animation(clip_id) {
+                        asset.clip.sample_pose(skeleton, session.time)
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                };
+
+                for bi in 0..local.len().min(layer_pose.len()) {
+                    local[bi] = petunia_project::blend_transforms(
+                        &local[bi],
+                        &layer_pose[bi],
+                        layer.blend_weight,
+                        layer.blend_mode,
+                    );
+                }
+            }
+        }
 
         if let Some(draft) = session.bone_draft()
             && let Some(skeleton) = project.get_skeleton(skeleton_id)
@@ -464,6 +579,69 @@ impl AnimatePreview {
         }
 
         Some((skeleton_id, local))
+    }
+
+    /// Produz poses fantasmas (Onion Skinning) para os deltas de quadros informados (Fatia 5).
+    pub fn ghost_poses(
+        &mut self,
+        project: &Project,
+        session: &AnimateSession,
+        delta_frames: &[i32],
+        fps: f32,
+    ) -> Vec<(i32, PosePreview)> {
+        if !session.onion_skin_enabled {
+            return Vec::new();
+        }
+        let cycle = self.cycle_seconds(project, session).unwrap_or(2.0).max(0.1);
+        let mut ghosts = Vec::new();
+        let current_time = session.time;
+        for &f in delta_frames {
+            if f == 0 {
+                continue;
+            }
+            let dt = (f as f32) / fps.max(1.0);
+            let mut t = (current_time + dt) % cycle;
+            if t < 0.0 {
+                t += cycle;
+            }
+            let mut ghost_session = session.clone();
+            ghost_session.time = t;
+            ghost_session.onion_skin_enabled = false;
+            ghost_session.motion_trails_enabled = false;
+            if let Some(pose) = self.pose(project, &ghost_session) {
+                ghosts.push((f, pose));
+            }
+        }
+        ghosts
+    }
+
+    /// Amostra o rastro espacial (Motion Trail) de um osso em coordenadas do mundo (Fatia 5).
+    pub fn motion_trail(
+        &mut self,
+        project: &Project,
+        session: &AnimateSession,
+        bone_id: u32,
+        steps: usize,
+    ) -> Vec<[f32; 3]> {
+        if !session.motion_trails_enabled {
+            return Vec::new();
+        }
+        let cycle = self.cycle_seconds(project, session).unwrap_or(2.0).max(0.1);
+        let count = steps.clamp(4, 64);
+        let dt = cycle / (count as f32);
+        let mut trail = Vec::with_capacity(count);
+        let mut trail_session = session.clone();
+        trail_session.onion_skin_enabled = false;
+        trail_session.motion_trails_enabled = false;
+        for i in 0..count {
+            trail_session.time = i as f32 * dt;
+            if let Some(pose) = self.pose(project, &trail_session) {
+                if let Some(bone) = pose.bones.iter().find(|b| b.id == bone_id) {
+                    trail.push(bone.head);
+                }
+            }
+        }
+        trail
     }
 
     /// Malhas deformadas pela pose atual, para o renderer desenhar no lugar das
@@ -536,7 +714,10 @@ impl CommandContext<'_> {
                 .find(|m| Some(m.skeleton_id) == a.skeleton)
                 .map(|m| m.id);
         }
-        if a.motion.is_none() {
+        let has_clip = a.skeleton.is_some_and(|skel_id| {
+            project.get_animation_for_skeleton(skel_id).is_some()
+        });
+        if a.motion.is_none() && !has_clip {
             a.playing = false;
             a.time = 0.0;
         }
@@ -555,6 +736,175 @@ impl CommandContext<'_> {
             a.selected_bone = None;
             a.bone_draft = None;
         }
+    }
+
+    /// Grava um keyframe para o osso selecionado na posição atual da timeline (1 passo de Undo).
+    pub fn animate_insert_keyframe(&mut self) -> Result<(), CommandError> {
+        let a = &self.editor.animate;
+        let skeleton_id = a.skeleton.ok_or_else(no_rig)?;
+        let bone_id = a
+            .selected_bone
+            .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
+        let time = a.time;
+
+        let transform = if let Some(draft) = a.bone_draft() {
+            if draft.bone_id == bone_id {
+                draft.transform
+            } else {
+                let skel = self
+                    .document
+                    .project
+                    .get_skeleton(skeleton_id)
+                    .ok_or_else(no_rig)?;
+                let bone = skel
+                    .get_bone(bone_id)
+                    .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
+                bone.local_transform
+            }
+        } else {
+            let skel = self
+                .document
+                .project
+                .get_skeleton(skeleton_id)
+                .ok_or_else(no_rig)?;
+            let bone = skel
+                .get_bone(bone_id)
+                .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
+            bone.local_transform
+        };
+
+        self.editor.animate.clear_bone_draft();
+        self.dispatch(&InsertBoneKeyframeCmd {
+            skeleton_id,
+            bone_id,
+            time,
+            transform,
+            interpolation: Interpolation::Linear,
+        })
+    }
+
+    /// Remove o keyframe do osso selecionado na posição atual (ou informada) da timeline (1 passo de Undo).
+    pub fn animate_delete_keyframe(&mut self, time: Option<f32>) -> Result<(), CommandError> {
+        let a = &self.editor.animate;
+        let skeleton_id = a.skeleton.ok_or_else(no_rig)?;
+        let bone_id = a
+            .selected_bone
+            .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
+        let t = time.unwrap_or(a.time);
+
+        self.dispatch(&DeleteBoneKeyframeCmd {
+            skeleton_id,
+            bone_id,
+            time: t,
+            tolerance: 0.05,
+        })
+    }
+
+    /// Altera o tipo de interpolação do keyframe no tempo atual.
+    pub fn animate_set_keyframe_interp(
+        &mut self,
+        interp: Interpolation,
+    ) -> Result<(), CommandError> {
+        let a = &self.editor.animate;
+        let skeleton_id = a.skeleton.ok_or_else(no_rig)?;
+        let bone_id = a
+            .selected_bone
+            .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
+        let time = a.time;
+
+        self.dispatch(&SetBoneKeyframeInterpolationCmd {
+            skeleton_id,
+            bone_id,
+            time,
+            interpolation: interp,
+        })
+    }
+
+    /// Limpa toda a trilha do osso selecionado.
+    pub fn animate_clear_bone_track(&mut self) -> Result<(), CommandError> {
+        let a = &self.editor.animate;
+        let skeleton_id = a.skeleton.ok_or_else(no_rig)?;
+        let bone_id = a
+            .selected_bone
+            .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
+
+        self.dispatch(&ClearBoneTrackCmd {
+            skeleton_id,
+            bone_id,
+        })
+    }
+
+    /// Alterna o modo Curve/Graph Editor vs Dope Sheet (Fatia 3).
+    pub fn animate_set_curve_mode(&mut self, active: bool) {
+        self.editor.animate.curve_mode = active;
+    }
+
+    /// Define o canal escalar ativo no Curve Editor (Fatia 3).
+    pub fn animate_set_curve_channel(&mut self, channel: petunia_project::CurveChannel) {
+        self.editor.animate.active_curve_channel = channel;
+    }
+
+    /// Adiciona uma camada de animação ou tweak layer à pilha com Undo atômico (Fatia 4).
+    pub fn animate_add_motion_layer(
+        &mut self,
+        name: &str,
+        is_tweak: bool,
+    ) -> Result<Uuid, CommandError> {
+        let mut layer = if is_tweak {
+            petunia_project::MotionLayer::tweak(name)
+        } else {
+            petunia_project::MotionLayer::new(name)
+        };
+        layer.motion_id = self.editor.animate.motion;
+        layer.clip_id = self.editor.animate.active_clip;
+        let id = layer.id;
+        self.dispatch(&AddMotionLayerCmd { layer })?;
+        self.editor.animate.selected_layer = Some(id);
+        Ok(id)
+    }
+
+    /// Remove uma camada de animação com Undo atômico (Fatia 4).
+    pub fn animate_remove_motion_layer(&mut self, layer_id: Uuid) -> Result<(), CommandError> {
+        self.dispatch(&RemoveMotionLayerCmd { layer_id })
+    }
+
+    /// Ajusta o peso de blend de uma camada com Undo atômico (Fatia 4).
+    pub fn animate_set_motion_layer_weight(
+        &mut self,
+        layer_id: Uuid,
+        weight: f32,
+    ) -> Result<(), CommandError> {
+        self.dispatch(&SetMotionLayerWeightCmd { layer_id, weight })
+    }
+
+    /// Alterna o modo de blend (Override / Additive) de uma camada com Undo atômico (Fatia 4).
+    pub fn animate_set_motion_layer_blend_mode(
+        &mut self,
+        layer_id: Uuid,
+        mode: petunia_project::BlendMode,
+    ) -> Result<(), CommandError> {
+        self.dispatch(&SetMotionLayerBlendModeCmd {
+            layer_id,
+            blend_mode: mode,
+        })
+    }
+
+    /// Alterna a ativação de uma camada de animação com Undo atômico (Fatia 4).
+    pub fn animate_toggle_motion_layer_enabled(
+        &mut self,
+        layer_id: Uuid,
+    ) -> Result<(), CommandError> {
+        self.dispatch(&ToggleMotionLayerEnabledCmd { layer_id })
+    }
+
+    /// Ativa/desativa fantasmas (Onion Skinning) no viewport (Fatia 5).
+    pub fn animate_set_onion_skin(&mut self, enabled: bool) {
+        self.editor.animate.onion_skin_enabled = enabled;
+    }
+
+    /// Ativa/desativa o rastro de movimento (Motion Trails) no viewport (Fatia 5).
+    pub fn animate_set_motion_trails(&mut self, enabled: bool) {
+        self.editor.animate.motion_trails_enabled = enabled;
     }
 
     /// Foca outra criatura. `false` se o id não existe.

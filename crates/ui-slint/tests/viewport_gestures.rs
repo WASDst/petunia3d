@@ -397,54 +397,17 @@ fn loop_cut_armed_tool_routes_hover_scroll_and_click_without_navigating() {
 }
 
 #[test]
-fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
+fn single_tool_card_with_collapse_options() {
     i_slint_backend_testing::init_no_event_loop();
     let shell = PetuniaSlintShell::new().expect("Slint shell");
     petunia_ui_slint::tr::install(&shell, "en");
     shell.window().set_size(LogicalSize::new(1280.0, 800.0));
     shell.show().expect("headless window");
     shell.set_active_workspace("MODEL".into());
-    shell.set_label_tab_parts("Parts".into());
-    shell.set_label_tab_transform("Transform".into());
-    shell.set_label_tab_material("Material".into());
-    shell.set_label_tab_object("Object".into());
-    shell.set_label_tab_modifiers("Modifiers".into());
     shell.set_label_tool_options_collapse("Collapse tool options".into());
     shell.set_label_tool_options_expand("Expand tool options".into());
 
-    // Rail colapsado: pílulas de ícone separadas, sem textos rotacionados.
-    // Modifiers virou subseção de Object (plano de UI F4, D2): sem pílula própria.
-    shell.set_inspector_collapsed(true);
-    let mut tops = Vec::new();
-    for label in ["Parts", "Transform", "Material", "Object"] {
-        let pill = ElementHandle::find_by_accessible_label(&shell, label)
-            .find(|element| {
-                element.accessible_role() == Some(AccessibleRole::Button)
-                    && (element.size().width - 36.0).abs() < 0.5
-                    && (element.size().height - 36.0).abs() < 0.5
-            })
-            .unwrap_or_else(|| panic!("pílula 36x36 {label} ausente no rail colapsado"));
-        tops.push(pill.absolute_position().y + pill.size().height);
-    }
-    assert!(
-        ElementHandle::find_by_accessible_label(&shell, "Modifiers").all(|element| (element
-            .size()
-            .width
-            - 36.0)
-            .abs()
-            >= 0.5),
-        "Modifiers não tem mais pílula no rail"
-    );
-    for (i, pair) in tops.windows(2).enumerate() {
-        assert!(
-            pair[1] - pair[0] >= 8.0,
-            "pílulas {i} e {} precisam de respiro",
-            i + 1
-        );
-    }
-
     // Card único de ferramenta: oculto em repouso.
-    shell.set_inspector_collapsed(false);
     shell.set_tool_modal_active(false);
     shell.set_loop_cut_active(false);
     shell.set_loop_cut_armed(false);
@@ -464,74 +427,6 @@ fn inspector_collapsed_rail_uses_spaced_icon_pills_and_single_tool_card() {
         .filter(|element| element.accessible_role() == Some(AccessibleRole::Button))
         .collect();
     assert_eq!(collapses.len(), 1, "um único card de ferramenta no modal");
-}
-
-#[test]
-fn inspector_rail_collapsed_by_default_and_expands_on_hover() {
-    i_slint_backend_testing::init_no_event_loop();
-    let shell = PetuniaSlintShell::new().expect("Slint shell");
-    petunia_ui_slint::tr::install(&shell, "en");
-    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
-    shell.show().expect("headless window");
-    shell.set_active_workspace("MODEL".into());
-
-    // By default, no sections are pinned open, and nothing is hovered -> flyout closed.
-    assert!(
-        !shell.get_inspector_flyout_open(),
-        "flyout deve iniciar fechado/recolhido no rail de 56px"
-    );
-
-    // Hovering over an inspector section opens the flyout for peek-on-hover.
-    shell.set_hovered_inspector_section("material".into());
-    assert!(
-        shell.get_inspector_flyout_open(),
-        "passar mouse sobre uma seção deve abrir o flyout para visualização rápida"
-    );
-
-    // Leaving hover closes the flyout again.
-    shell.set_hovered_inspector_section("".into());
-    assert!(
-        !shell.get_inspector_flyout_open(),
-        "remover o hover deve fechar o flyout automaticamente"
-    );
-
-    // Hovering over the rail directly also expands the flyout.
-    shell.set_rail_hovered(true);
-    assert!(
-        shell.get_inspector_flyout_open(),
-        "hover sobre o rail deve abrir o flyout"
-    );
-    shell.set_rail_hovered(false);
-    assert!(
-        !shell.get_inspector_flyout_open(),
-        "sair do rail deve fechar o flyout"
-    );
-}
-
-#[test]
-fn inspector_pinned_section_keeps_flyout_open_without_hover() {
-    i_slint_backend_testing::init_no_event_loop();
-    let shell = PetuniaSlintShell::new().expect("Slint shell");
-    petunia_ui_slint::tr::install(&shell, "en");
-    shell.window().set_size(LogicalSize::new(1280.0, 800.0));
-    shell.show().expect("headless window");
-    shell.set_active_workspace("MODEL".into());
-
-    assert!(!shell.get_inspector_flyout_open());
-
-    // Pinning open a section keeps the flyout open even without hovering.
-    shell.set_model_material_open(true);
-    assert!(
-        shell.get_inspector_flyout_open(),
-        "seção fixada (pin) deve manter o painel aberto sem necessidade de hover"
-    );
-
-    // Unpinning minimizes it back to rail if not hovered.
-    shell.set_model_material_open(false);
-    assert!(
-        !shell.get_inspector_flyout_open(),
-        "desafixar (unpin) sem hover deve recolher o painel de volta para o rail"
-    );
 }
 
 #[test]
@@ -616,7 +511,6 @@ fn collapse_inspector_button_is_clickable_and_returns_to_the_rail() {
     shell.set_label_tab_transform("Transform".into());
     shell.set_label_tab_material("Material".into());
     shell.set_label_tab_object("Object".into());
-    shell.set_model_material_open(true);
     assert!(shell.get_inspector_flyout_open());
 
     let requests = Rc::new(Cell::new(0));
@@ -624,9 +518,9 @@ fn collapse_inspector_button_is_clickable_and_returns_to_the_rail() {
     let weak = shell.as_weak();
     shell.on_inspector_collapse_requested(move || {
         requests_callback.set(requests_callback.get() + 1);
-        // O bridge real fecha todas as seções; aqui basta o efeito visível.
+        // O bridge real recolhe a coluna tornando o inspector invisível (ADR 2026-10-11).
         if let Some(shell) = weak.upgrade() {
-            shell.set_model_material_open(false);
+            shell.set_inspector_visible(false);
         }
     });
 
@@ -649,89 +543,31 @@ fn collapse_inspector_button_is_clickable_and_returns_to_the_rail() {
     assert_eq!(requests.get(), 1, "o clique chega ao callback de recolher");
     assert!(
         !shell.get_inspector_flyout_open(),
-        "recolher fecha o painel mesmo com o ponteiro ainda sobre ele"
+        "recolher fecha o painel"
     );
 
-    let openings = Rc::new(RefCell::new(Vec::new()));
-    let observed = Rc::clone(&openings);
-    let weak = shell.as_weak();
-    shell.on_section_pill_clicked(move |id| {
-        observed.borrow_mut().push(id.to_string());
-        if let Some(shell) = weak.upgrade() {
-            match id.as_str() {
-                "parts" => shell.set_model_parts_open(true),
-                "transform" => shell.set_model_transform_open(true),
-                "material" => shell.set_model_material_open(true),
-                "object" => shell.set_model_object_open(true),
-                _ => panic!("unexpected Inspector section"),
-            }
-        }
+    // Quando recolhido/oculto, o botão de reabertura aparece na borda
+    let executed_commands = Rc::new(RefCell::new(Vec::new()));
+    let cmd_cb = Rc::clone(&executed_commands);
+    shell.on_command_executed(move |cmd| {
+        cmd_cb.borrow_mut().push(cmd.to_string());
     });
-    for reduced in [false, true] {
-        shell.set_reduced_motion(reduced);
-        shell
-            .global::<petunia_ui_slint::Motion>()
-            .set_reduced(reduced);
-        for width in [1280.0, 1024.0] {
-            shell.window().set_size(LogicalSize::new(width, 800.0));
-            for (label, id) in [
-                ("Parts", "parts"),
-                ("Transform", "transform"),
-                ("Material", "material"),
-                ("Object", "object"),
-            ] {
-                shell.set_model_parts_open(false);
-                shell.set_model_transform_open(false);
-                shell.set_model_material_open(false);
-                shell.set_model_object_open(false);
-                shell.set_hovered_inspector_section("".into());
-                shell.set_flyout_hovered(false);
-                shell.set_rail_hovered(false);
-                move_pointer(&shell, 600.0, 400.0);
-                i_slint_backend_testing::testing_backend::mock_elapsed_time(300);
-                let pill = ElementHandle::find_by_accessible_label(&shell, label)
-                    .find(|element| {
-                        element.accessible_role() == Some(AccessibleRole::Button)
-                            && (element.size().width - 36.0).abs() < 0.5
-                    })
-                    .expect("section pill must remain reachable after collapse");
-                let pos = pill.absolute_position();
-                let size = pill.size();
-                let point =
-                    LogicalPosition::new(pos.x + size.width / 2.0, pos.y + size.height / 2.0);
-                move_pointer(&shell, point.x, point.y);
-                assert!(
-                    pill.computed_opacity() > 0.95,
-                    "{label} remains visible during peek"
-                );
-                let flyout =
-                    ElementHandle::find_by_element_id(&shell, "RightColumnShell::inspector-flyout")
-                        .next()
-                        .expect("Inspector flyout");
-                let _ = flyout.absolute_position();
-                i_slint_backend_testing::testing_backend::mock_elapsed_time(40);
-                assert!(
-                    flyout.absolute_position().x + flyout.size().width
-                        <= pill.absolute_position().x,
-                    "hover preview must not overlap {label}"
-                );
-                shell.window().dispatch_event(WindowEvent::PointerPressed {
-                    position: point,
-                    button: PointerEventButton::Left,
-                });
-                shell.window().dispatch_event(WindowEvent::PointerReleased {
-                    position: point,
-                    button: PointerEventButton::Left,
-                });
-                assert_eq!(
-                    openings.borrow().last().map(String::as_str),
-                    Some(id),
-                    "hover must not hide or cover {label} before its click"
-                );
-                assert!(shell.get_inspector_flyout_open());
-            }
-        }
-    }
+    let show_button = ElementHandle::find_by_accessible_label(&shell, "Show Inspector")
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Button))
+        .expect("botão Mostrar Inspector deve estar visível após recolhimento");
+    let pos = show_button.absolute_position();
+    let size = show_button.size();
+    let (x, y) = (pos.x + size.width / 2.0, pos.y + size.height / 2.0);
+    move_pointer(&shell, x, y);
+    shell.window().dispatch_event(WindowEvent::PointerPressed {
+        position: LogicalPosition::new(x, y),
+        button: PointerEventButton::Left,
+    });
+    shell.window().dispatch_event(WindowEvent::PointerReleased {
+        position: LogicalPosition::new(x, y),
+        button: PointerEventButton::Left,
+    });
+    assert_eq!(*executed_commands.borrow(), vec!["window.inspector"]);
 }
 
 #[test]

@@ -132,11 +132,14 @@ impl BoneTrack {
                     return k0.value;
                 }
                 let dt = k1.time - k0.time;
-                let factor = if dt > 1e-5 {
+                let mut factor = if dt > 1e-5 {
                     (time - k0.time) / dt
                 } else {
                     0.0
                 };
+                if k0.interpolation == Interpolation::Cubic {
+                    factor = factor * factor * (3.0 - 2.0 * factor);
+                }
                 let v0 = Vec3::from(k0.value);
                 let v1 = Vec3::from(k1.value);
                 let res = v0.lerp(v1, factor);
@@ -166,11 +169,14 @@ impl BoneTrack {
                     return k0.value;
                 }
                 let dt = k1.time - k0.time;
-                let factor = if dt > 1e-5 {
+                let mut factor = if dt > 1e-5 {
                     (time - k0.time) / dt
                 } else {
                     0.0
                 };
+                if k0.interpolation == Interpolation::Cubic {
+                    factor = factor * factor * (3.0 - 2.0 * factor);
+                }
                 let q0 = Quat::from_xyzw(k0.value[0], k0.value[1], k0.value[2], k0.value[3]);
                 let q1 = Quat::from_xyzw(k1.value[0], k1.value[1], k1.value[2], k1.value[3]);
                 let res = q0.slerp(q1, factor).normalize();
@@ -200,11 +206,14 @@ impl BoneTrack {
                     return k0.value;
                 }
                 let dt = k1.time - k0.time;
-                let factor = if dt > 1e-5 {
+                let mut factor = if dt > 1e-5 {
                     (time - k0.time) / dt
                 } else {
                     0.0
                 };
+                if k0.interpolation == Interpolation::Cubic {
+                    factor = factor * factor * (3.0 - 2.0 * factor);
+                }
                 let v0 = Vec3::from(k0.value);
                 let v1 = Vec3::from(k1.value);
                 let res = v0.lerp(v1, factor);
@@ -247,7 +256,271 @@ impl BoneTrack {
             },
         }
     }
+
+    /// Remove qualquer keyframe nos canais desta trilha cujo tempo esteja a menos de `tol` de `time`.
+    pub fn remove_keyframe_at(&mut self, time: f32, tol: f32) -> bool {
+        let before_len = self.translations.len() + self.rotations.len() + self.scales.len();
+        self.translations.retain(|k| (k.time - time).abs() > tol);
+        self.rotations.retain(|k| (k.time - time).abs() > tol);
+        self.scales.retain(|k| (k.time - time).abs() > tol);
+        let after_len = self.translations.len() + self.rotations.len() + self.scales.len();
+        after_len < before_len
+    }
+
+    /// Retorna todos os tempos únicos onde existem keyframes nesta trilha, ordenados crescentemente.
+    pub fn keyframe_times(&self) -> Vec<f32> {
+        let mut times: Vec<f32> = Vec::new();
+        for k in &self.translations {
+            if !times.iter().any(|&t: &f32| (t - k.time).abs() < 1e-4) {
+                times.push(k.time);
+            }
+        }
+        for k in &self.rotations {
+            if !times.iter().any(|&t: &f32| (t - k.time).abs() < 1e-4) {
+                times.push(k.time);
+            }
+        }
+        for k in &self.scales {
+            if !times.iter().any(|&t: &f32| (t - k.time).abs() < 1e-4) {
+                times.push(k.time);
+            }
+        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        times
+    }
+
+    /// Verifica se existe algum keyframe por volta de `time`.
+    pub fn has_keyframe_at(&self, time: f32, tol: f32) -> bool {
+        self.translations.iter().any(|k| (k.time - time).abs() <= tol)
+            || self.rotations.iter().any(|k| (k.time - time).abs() <= tol)
+            || self.scales.iter().any(|k| (k.time - time).abs() <= tol)
+    }
+
+    /// Atualiza o modo de interpolação dos keyframes próximos a `time`.
+    pub fn set_keyframe_interpolation(&mut self, time: f32, interp: Interpolation, tol: f32) {
+        for k in &mut self.translations {
+            if (k.time - time).abs() <= tol {
+                k.interpolation = interp;
+            }
+        }
+        for k in &mut self.rotations {
+            if (k.time - time).abs() <= tol {
+                k.interpolation = interp;
+            }
+        }
+        for k in &mut self.scales {
+            if (k.time - time).abs() <= tol {
+                k.interpolation = interp;
+            }
+        }
+    }
+
+    /// Move um keyframe existente de `old_time` para `new_time`.
+    pub fn move_keyframe(&mut self, old_time: f32, new_time: f32, tol: f32) {
+        for k in &mut self.translations {
+            if (k.time - old_time).abs() <= tol {
+                k.time = new_time;
+            }
+        }
+        self.translations.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        for k in &mut self.rotations {
+            if (k.time - old_time).abs() <= tol {
+                k.time = new_time;
+            }
+        }
+        self.rotations.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        for k in &mut self.scales {
+            if (k.time - old_time).abs() <= tol {
+                k.time = new_time;
+            }
+        }
+        self.scales.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+    }
+
+    /// Limpa todos os keyframes da trilha.
+    pub fn clear(&mut self) {
+        self.translations.clear();
+        self.rotations.clear();
+        self.scales.clear();
+    }
+
+    /// Amostra o valor escalar de um canal específico em um determinado tempo.
+    pub fn sample_channel_scalar(&self, channel: CurveChannel, time: f32) -> f32 {
+        match channel {
+            CurveChannel::TranslationX => self.sample_translation(time)[0],
+            CurveChannel::TranslationY => self.sample_translation(time)[1],
+            CurveChannel::TranslationZ => self.sample_translation(time)[2],
+            CurveChannel::RotationX => {
+                let q = Quat::from_array(self.sample_rotation(time));
+                let (pitch, _, _) = q.to_euler(glam::EulerRot::XYZ);
+                pitch.to_degrees()
+            }
+            CurveChannel::RotationY => {
+                let q = Quat::from_array(self.sample_rotation(time));
+                let (_, yaw, _) = q.to_euler(glam::EulerRot::XYZ);
+                yaw.to_degrees()
+            }
+            CurveChannel::RotationZ => {
+                let q = Quat::from_array(self.sample_rotation(time));
+                let (_, _, roll) = q.to_euler(glam::EulerRot::XYZ);
+                roll.to_degrees()
+            }
+            CurveChannel::ScaleX => self.sample_scale(time)[0],
+            CurveChannel::ScaleY => self.sample_scale(time)[1],
+            CurveChannel::ScaleZ => self.sample_scale(time)[2],
+        }
+    }
+
+    /// Amostra uma série de pontos da curva para renderização contínua no Curve Editor.
+    pub fn sample_curve(
+        &self,
+        channel: CurveChannel,
+        start_time: f32,
+        end_time: f32,
+        count: usize,
+    ) -> Vec<CurvePoint> {
+        let count = count.max(2);
+        let dt = if count > 1 {
+            (end_time - start_time) / (count - 1) as f32
+        } else {
+            0.0
+        };
+        (0..count)
+            .map(|i| {
+                let t = start_time + i as f32 * dt;
+                CurvePoint {
+                    time: t,
+                    value: self.sample_channel_scalar(channel, t),
+                }
+            })
+            .collect()
+    }
 }
+
+/// Canais escalares de curvas de animação para o Curve/Graph Editor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CurveChannel {
+    TranslationX,
+    TranslationY,
+    TranslationZ,
+    RotationX,
+    RotationY,
+    RotationZ,
+    ScaleX,
+    ScaleY,
+    ScaleZ,
+}
+
+/// Ponto 2D avaliado em uma curva de animação (tempo vs valor escalar).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CurvePoint {
+    pub time: f32,
+    pub value: f32,
+}
+
+/// Modo de mesclagem para camadas concorrentes de animação (Fatia 4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BlendMode {
+    #[default]
+    Override,
+    Additive,
+}
+
+/// Camada de animação na pilha de movimento da criatura (Motion Stack / Blending / Tweak).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MotionLayer {
+    pub id: Uuid,
+    pub name: String,
+    pub motion_id: Option<Uuid>,
+    pub clip_id: Option<Uuid>,
+    pub blend_weight: f32,
+    pub blend_mode: BlendMode,
+    pub enabled: bool,
+    pub is_tweak: bool,
+}
+
+impl MotionLayer {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            motion_id: None,
+            clip_id: None,
+            blend_weight: 1.0,
+            blend_mode: BlendMode::Override,
+            enabled: true,
+            is_tweak: false,
+        }
+    }
+
+    pub fn tweak(name: impl Into<String>) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            motion_id: None,
+            clip_id: None,
+            blend_weight: 1.0,
+            blend_mode: BlendMode::Additive,
+            enabled: true,
+            is_tweak: true,
+        }
+    }
+}
+
+/// Mescla duas transformações locais com um fator de peso e modo de blend (Fatia 4).
+pub fn blend_transforms(
+    base: &Transform3D,
+    layer: &Transform3D,
+    weight: f32,
+    mode: BlendMode,
+) -> Transform3D {
+    let w = weight.clamp(0.0, 1.0);
+    if w <= 1e-4 {
+        return *base;
+    }
+    match mode {
+        BlendMode::Override => {
+            let p0 = Vec3::from(base.translation);
+            let p1 = Vec3::from(layer.translation);
+            let p = p0.lerp(p1, w);
+
+            let q0 = Quat::from_array(base.rotation);
+            let q1 = Quat::from_array(layer.rotation);
+            let q = q0.slerp(q1, w).normalize();
+
+            let s0 = Vec3::from(base.scale);
+            let s1 = Vec3::from(layer.scale);
+            let s = s0.lerp(s1, w);
+
+            Transform3D {
+                translation: [p.x, p.y, p.z],
+                rotation: [q.x, q.y, q.z, q.w],
+                scale: [s.x, s.y, s.z],
+            }
+        }
+        BlendMode::Additive => {
+            let p0 = Vec3::from(base.translation);
+            let dp = Vec3::from(layer.translation) * w;
+            let p = p0 + dp;
+
+            let q0 = Quat::from_array(base.rotation);
+            let q_add = Quat::IDENTITY.slerp(Quat::from_array(layer.rotation), w);
+            let q = (q_add * q0).normalize();
+
+            let s0 = Vec3::from(base.scale);
+            let s_layer = Vec3::from(layer.scale);
+            let ds = Vec3::ONE.lerp(s_layer, w);
+            let s = s0 * ds;
+
+            Transform3D {
+                translation: [p.x, p.y, p.z],
+                rotation: [q.x, q.y, q.z, q.w],
+                scale: [s.x, s.y, s.z],
+            }
+        }
+    }
+}
+
 
 /// Clipe de animação contendo trilhas para múltiplos ossos.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -340,6 +613,29 @@ impl AnimationClip {
     ) -> Result<Vec<Mat4>, RigError> {
         let pose = self.sample_pose(skeleton, time);
         skeleton.compute_skinning_matrices(&pose)
+    }
+
+    /// Remove keyframe do osso `bone_id` no tempo `time`.
+    pub fn remove_keyframe_on_bone(&mut self, bone_id: u32, time: f32, tol: f32) -> bool {
+        if let Some(track) = self.get_track_mut(bone_id) {
+            track.remove_keyframe_at(time, tol)
+        } else {
+            false
+        }
+    }
+
+    /// Retorna todos os tempos únicos onde existem keyframes em qualquer trilha do clipe.
+    pub fn all_keyframe_times(&self) -> Vec<f32> {
+        let mut times: Vec<f32> = Vec::new();
+        for track in &self.tracks {
+            for t in track.keyframe_times() {
+                if !times.iter().any(|&existing: &f32| (existing - t).abs() < 1e-4) {
+                    times.push(t);
+                }
+            }
+        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        times
     }
 }
 

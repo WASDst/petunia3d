@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::*;
 use crate::region_push::ProfileGroup;
 use petunia_project::{
-    MotionGenerator, MotionStyle, Project, ProjectChanges, RootMode, Transform3D,
+    Interpolation, MotionGenerator, MotionStyle, Project, ProjectChanges, RootMode, Transform3D,
 };
 
 impl AppState {
@@ -56,6 +56,89 @@ impl AppState {
     #[inline]
     pub fn animate_reset_bone_pose(&mut self, bone_id: u32) -> Result<(), CommandError> {
         self.in_context(|ctx| ctx.animate_reset_bone_pose(bone_id))
+    }
+
+    #[inline]
+    pub fn animate_insert_keyframe(&mut self) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_insert_keyframe())
+    }
+
+    #[inline]
+    pub fn animate_delete_keyframe(&mut self, time: Option<f32>) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_delete_keyframe(time))
+    }
+
+    #[inline]
+    pub fn animate_set_keyframe_interp(
+        &mut self,
+        interp: Interpolation,
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_set_keyframe_interp(interp))
+    }
+
+    #[inline]
+    pub fn animate_clear_bone_track(&mut self) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_clear_bone_track())
+    }
+
+    #[inline]
+    pub fn animate_set_curve_mode(&mut self, active: bool) {
+        self.in_context(|ctx| ctx.animate_set_curve_mode(active))
+    }
+
+    #[inline]
+    pub fn animate_set_curve_channel(&mut self, channel: petunia_project::CurveChannel) {
+        self.in_context(|ctx| ctx.animate_set_curve_channel(channel))
+    }
+
+    #[inline]
+    pub fn animate_add_motion_layer(
+        &mut self,
+        name: &str,
+        is_tweak: bool,
+    ) -> Result<Uuid, CommandError> {
+        self.in_context(|ctx| ctx.animate_add_motion_layer(name, is_tweak))
+    }
+
+    #[inline]
+    pub fn animate_remove_motion_layer(&mut self, layer_id: Uuid) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_remove_motion_layer(layer_id))
+    }
+
+    #[inline]
+    pub fn animate_set_motion_layer_weight(
+        &mut self,
+        layer_id: Uuid,
+        weight: f32,
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_set_motion_layer_weight(layer_id, weight))
+    }
+
+    #[inline]
+    pub fn animate_set_motion_layer_blend_mode(
+        &mut self,
+        layer_id: Uuid,
+        mode: petunia_project::BlendMode,
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_set_motion_layer_blend_mode(layer_id, mode))
+    }
+
+    #[inline]
+    pub fn animate_toggle_motion_layer_enabled(
+        &mut self,
+        layer_id: Uuid,
+    ) -> Result<(), CommandError> {
+        self.in_context(|ctx| ctx.animate_toggle_motion_layer_enabled(layer_id))
+    }
+
+    #[inline]
+    pub fn animate_set_onion_skin(&mut self, enabled: bool) {
+        self.in_context(|ctx| ctx.animate_set_onion_skin(enabled))
+    }
+
+    #[inline]
+    pub fn animate_set_motion_trails(&mut self, enabled: bool) {
+        self.in_context(|ctx| ctx.animate_set_motion_trails(enabled))
     }
 
     #[inline]

@@ -86,7 +86,13 @@ export component ViewportGuideOverlays inherits Rectangle {
     }
 
     Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.profile-preview-commands;
         fill: transparent;
         stroke: DesignTokens.selection;
@@ -96,7 +102,13 @@ export component ViewportGuideOverlays inherits Rectangle {
     // Cordão da ferramenta ativa: tracejado amarelo da base da
     // seleção até o mouse. Cresce/encolhe com a distância.
     if root.drag-link-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.drag-link-commands;
         fill: transparent;
         stroke: DesignTokens.selection-active;
@@ -105,7 +117,13 @@ export component ViewportGuideOverlays inherits Rectangle {
 
     // Círculo pontilhado do raio de influência para Proportional Editing
     if root.proportional-circle-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.proportional-circle-commands;
         fill: transparent;
         stroke: DesignTokens.guide-neutral;
@@ -114,7 +132,13 @@ export component ViewportGuideOverlays inherits Rectangle {
 
     // Infinite Axis Guide Line (Fase 4: Linhas de Guia Infinitas)
     if root.axis-guide-visible && root.axis-guide-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.axis-guide-commands;
         fill: transparent;
         stroke: root.axis-guide-color;
@@ -146,7 +170,13 @@ export component ViewportGuideOverlays inherits Rectangle {
 
     // Dimension Line (Fase 4: Cotas Blueprint)
     if root.dimension-visible && root.dimension-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.dimension-commands;
         fill: transparent;
         stroke: DesignTokens.badge-precision-border;
@@ -155,7 +185,13 @@ export component ViewportGuideOverlays inherits Rectangle {
 
     // Quick Measure Line (Fase 6: Fita Métrica 3D)
     if root.measure-visible && root.measure-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.measure-commands;
         fill: transparent;
         stroke: DesignTokens.measure.with-alpha(0.67);
@@ -164,14 +200,26 @@ export component ViewportGuideOverlays inherits Rectangle {
 
     // Protractor (Transferidor Visual de Ângulo para Rotação Modal)
     if root.protractor-visible && root.protractor-wedge-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.protractor-wedge-commands;
         fill: DesignTokens.accent.transparentize(0.85);
         stroke: DesignTokens.accent;
         stroke-width: 1.5px;
     }
     if root.protractor-visible && root.protractor-ticks-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.protractor-ticks-commands;
         fill: transparent;
         stroke: DesignTokens.accent.transparentize(0.4);
@@ -180,7 +228,13 @@ export component ViewportGuideOverlays inherits Rectangle {
 
     // 3D Decal Live Projection Manipulator (Sprint C: P3D-133 / P3D-160)
     if root.active-workspace == "PAINT" && root.active-layer-is-decal && root.decal-preview-commands != "": Path {
-        fit: ImageFit.preserve;
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: max(1.0, root.width / 1px);
+        viewbox-height: max(1.0, root.height / 1px);
+        fit: ImageFit.fill;
         commands: root.decal-preview-commands;
         fill: DesignTokens.accent.transparentize(0.90);
         stroke: DesignTokens.accent;

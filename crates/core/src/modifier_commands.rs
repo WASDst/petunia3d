@@ -13,12 +13,16 @@ use crate::context::{CommandContext, EditorView};
 
 /// (índice do objeto, índice do modificador na pilha).
 fn locate(document: &Project, modifier: Uuid) -> Option<(usize, usize)> {
-    document.assets.iter().enumerate().find_map(|(asset, item)| {
-        item.modifiers
-            .iter()
-            .position(|instance| instance.id == modifier)
-            .map(|index| (asset, index))
-    })
+    document
+        .assets
+        .iter()
+        .enumerate()
+        .find_map(|(asset, item)| {
+            item.modifiers
+                .iter()
+                .position(|instance| instance.id == modifier)
+                .map(|index| (asset, index))
+        })
 }
 
 /// Operação sobre a pilha de modificadores.
@@ -29,12 +33,23 @@ pub enum ModifierOp {
         asset: Uuid,
         instance: ModifierInstance,
     },
-    SetEnabled { modifier: Uuid, enabled: bool },
-    Remove { modifier: Uuid },
+    SetEnabled {
+        modifier: Uuid,
+        enabled: bool,
+    },
+    Remove {
+        modifier: Uuid,
+    },
     /// Troca com o vizinho de cima (`up`) ou de baixo.
-    Move { modifier: Uuid, up: bool },
+    Move {
+        modifier: Uuid,
+        up: bool,
+    },
     /// Eixo `0..=2` de Mirror/Symmetry.
-    SetAxis { modifier: Uuid, axis: usize },
+    SetAxis {
+        modifier: Uuid,
+        axis: usize,
+    },
     /// Direção da Symmetry; Mirror não tem direção.
     SetDirection {
         modifier: Uuid,
@@ -42,7 +57,9 @@ pub enum ModifierOp {
     },
     /// Grava só este modificador na malha base (como se fosse o primeiro) e o
     /// remove; os demais continuam na pilha. Modificador desligado é recusado.
-    Apply { modifier: Uuid },
+    Apply {
+        modifier: Uuid,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -66,12 +83,16 @@ impl ModifierCmd {
                     .then_some(())
                     .ok_or("modifier already in that state")
             }
-            ModifierOp::Remove { modifier } => locate(document, *modifier).map(|_| ()).ok_or(MISSING),
+            ModifierOp::Remove { modifier } => {
+                locate(document, *modifier).map(|_| ()).ok_or(MISSING)
+            }
             ModifierOp::Move { modifier, up } => {
                 let (a, m) = locate(document, *modifier).ok_or(MISSING)?;
                 let len = document.assets[a].modifiers.len();
                 let movable = if *up { m > 0 } else { m + 1 < len };
-                movable.then_some(()).ok_or("modifier is already at the edge")
+                movable
+                    .then_some(())
+                    .ok_or("modifier is already at the edge")
             }
             ModifierOp::SetAxis { modifier, axis } => {
                 if *axis > 2 {

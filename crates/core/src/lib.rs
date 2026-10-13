@@ -5,24 +5,24 @@ pub mod animate_session;
 pub mod brush;
 pub mod bvh;
 pub mod camera;
+pub mod clock;
 pub mod command;
 pub mod context;
 mod context_api;
 pub mod cutting_session;
 pub mod diagnostics;
 pub mod docs;
-pub mod clock;
 pub mod edit_api;
-pub mod material_commands;
-pub mod modifier_commands;
 pub mod events;
 pub mod handles;
 pub mod inference;
 pub mod jobs;
 pub mod loop_cut;
+pub mod material_commands;
 pub mod mesh_preview;
 pub mod modal;
 pub mod modal_feedback;
+pub mod modifier_commands;
 pub mod module;
 pub mod picking;
 pub mod poly_pen;
@@ -112,11 +112,14 @@ pub use project_service::{
     ProjectService, ProjectServiceError, RecoverySummary, sanitize_filename,
 };
 pub use rig_commands::{
-    AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddRigPresetCmd, ApplyMotionNowCmd,
-    AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearRigRoleCmd, DeleteBoneKeyCmd, DuplicateMotionCmd,
-    FitBlocked, FitRigToActiveAssetCmd, InferRigRolesCmd, RemoveAnimationCmd, RemoveIkChainCmd,
-    RemoveMotionCmd, RemoveSkeletonCmd, ResetBonePoseCmd, RigPresetKind, SetBoneKeyCmd,
-    SetBoneTransformCmd, SetMotionParamCmd, SetMotionStyleCmd, UpdateIkChainCmd, UpdateMotionCmd,
+    AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd,
+    ApplyMotionNowCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearBoneTrackCmd,
+    ClearRigRoleCmd, DeleteBoneKeyCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitBlocked,
+    FitRigToActiveAssetCmd, InferRigRolesCmd, InsertBoneKeyframeCmd, RemoveAnimationCmd,
+    RemoveIkChainCmd, RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd,
+    ResetBonePoseCmd, RigPresetKind, SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd,
+    SetBoneTransformCmd, SetMotionLayerBlendModeCmd, SetMotionLayerWeightCmd, SetMotionParamCmd,
+    SetMotionStyleCmd, ToggleMotionLayerEnabledCmd, UpdateIkChainCmd, UpdateMotionCmd,
     fit_availability,
 };
 
@@ -127,22 +130,21 @@ pub use brush::{
     brush_type_from_kind, hash01, kind_from_brush_type,
 };
 pub use camera::{Camera, Projection, ViewPreset};
-pub use edit_api::{
-    AddMeshAssetCmd, InsertAssetCmd,
-    ApplyMeshEditCmd, AssignMaterialSlotCmd, ComponentSet, NudgeCmd, PinOp, SeamOp, SelectionOp,
-    UvPinCmd, UvSeamCmd,
-};
-pub use modifier_commands::{ModifierCmd, ModifierOp};
-pub use material_commands::{
-    CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, MaterialEdit, RemoveMaterialCmd,
-};
 pub use clock::{Clock, FixedClock, SystemClock};
+pub use edit_api::{
+    AddMeshAssetCmd, ApplyMeshEditCmd, AssignMaterialSlotCmd, ComponentSet, InsertAssetCmd,
+    NudgeCmd, PinOp, SeamOp, SelectionOp, UvPinCmd, UvSeamCmd,
+};
 pub use events::{AppEvent, EventBus};
 pub use inference::{
     DEFAULT_SNAP_RADIUS_PIXELS, ScreenSnapHit, ScreenSnapQuery, SnapAccel, SnapAnchor, SnapGrid,
     SnapKind, SnapMask, SnapSource, clamp_snap_radius, snap_screen, snap_screen_with,
 };
+pub use material_commands::{
+    CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, MaterialEdit, RemoveMaterialCmd,
+};
 pub use modal_feedback::ToolFeedback;
+pub use modifier_commands::{ModifierCmd, ModifierOp};
 pub use module::{Module, ModuleRegistry};
 pub use petunia_mesh::poly_pen::PenPoint;
 pub use poly_pen::{PenStrip, PolyPenCommandError};

@@ -99,8 +99,9 @@ pub mod surface_recipe;
 pub mod svg;
 
 pub use animation::{
-    AnimationAsset, AnimationClip, AnimationLibrary, BoneTrack, Interpolation, Keyframe,
-    RetargetProfile, RigPreset, auto_fit_humanoid, compute_auto_skin_weights,
+    AnimationAsset, AnimationClip, AnimationLibrary, BlendMode, BoneTrack, CurveChannel,
+    CurvePoint, Interpolation, Keyframe, MotionLayer, RetargetProfile, RigPreset,
+    auto_fit_humanoid, blend_transforms, compute_auto_skin_weights,
 };
 pub use autosave::{
     AutosaveConfig, AutosaveService, AutosaveStorage, FileAutosaveStorage, RecoveryCandidate,
@@ -1209,6 +1210,9 @@ pub struct Project {
     /// quando o plugin está ausente).
     #[serde(default)]
     pub plugin_data: plugin_data::PluginDataStore,
+    /// Camadas de movimento, mesclagem e tweaks manuais (P3D-170, Fatia 4). Append-only.
+    #[serde(default)]
+    pub motion_layers: Vec<MotionLayer>,
 }
 
 impl Project {
@@ -1257,6 +1261,7 @@ impl Default for Project {
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
+            motion_layers: Vec::new(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -1786,6 +1791,7 @@ impl Project {
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
+            motion_layers: Vec::new(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2002,6 +2008,52 @@ impl Project {
 
     pub fn remove_animation(&mut self, id: Uuid) {
         self.animations.retain(|a| a.id != id);
+    }
+
+    /// Busca ou cria uma animação associada a um esqueleto.
+    pub fn get_or_create_animation_clip(
+        &mut self,
+        skeleton_id: Uuid,
+        name: &str,
+        duration: f32,
+    ) -> &mut AnimationClip {
+        let tag = format!("skeleton:{}", skeleton_id);
+        if let Some(pos) = self
+            .animations
+            .iter()
+            .position(|a| a.tags.iter().any(|t| t == &tag))
+        {
+            return &mut self.animations[pos].clip;
+        }
+        let mut asset = AnimationAsset::new(name, AnimationClip::new(name, duration));
+        asset.tags.push(tag);
+        self.animations.push(asset);
+        &mut self.animations.last_mut().unwrap().clip
+    }
+
+    /// Busca o primeiro clipe associado a um esqueleto, se existir.
+    pub fn get_animation_for_skeleton(&self, skeleton_id: Uuid) -> Option<&AnimationAsset> {
+        let tag = format!("skeleton:{}", skeleton_id);
+        self.animations
+            .iter()
+            .find(|a| a.tags.iter().any(|t| t == &tag))
+    }
+
+    /// Adiciona uma camada de animação à pilha (Fatia 4).
+    pub fn add_motion_layer(&mut self, layer: MotionLayer) {
+        self.motion_layers.push(layer);
+    }
+
+    /// Busca uma camada de animação por id mutável.
+    pub fn get_motion_layer_mut(&mut self, id: Uuid) -> Option<&mut MotionLayer> {
+        self.motion_layers.iter_mut().find(|l| l.id == id)
+    }
+
+    /// Remove uma camada de animação por id.
+    pub fn remove_motion_layer(&mut self, id: Uuid) -> bool {
+        let before = self.motion_layers.len();
+        self.motion_layers.retain(|l| l.id != id);
+        self.motion_layers.len() != before
     }
 
     pub fn add_annotation(&mut self, item: AnnotationItem) {

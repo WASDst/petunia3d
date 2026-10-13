@@ -361,6 +361,7 @@ fn test_hostile_gltf_malformed_json() {
 fn batch_names_never_collide_inside_one_export() {
     let dir = tempdir().expect("tempdir");
     let mut proj = Project::new();
+    proj.assets.clear();
     proj.add("Crate", Mesh::cube(1.0));
     proj.add("Crate", Mesh::cube(2.0));
     proj.add("crate", Mesh::plane(1.0));

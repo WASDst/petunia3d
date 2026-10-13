@@ -93,9 +93,20 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.active_layer_is_decal() {
             let is_paint_tool = matches!(
                 self.state.session.tools.active_tool.as_str(),
-                "brush" | "eraser" | "airbrush" | "pixel" | "smudge" | "blur" | "dodge" | "burn" | "spray" | "clone" | "fill"
+                "brush"
+                    | "eraser"
+                    | "airbrush"
+                    | "pixel"
+                    | "smudge"
+                    | "blur"
+                    | "dodge"
+                    | "burn"
+                    | "spray"
+                    | "clone"
+                    | "fill"
             );
-            let handle_hit = self.decal_handle_at(x, y).is_some() || actions.decal_scale || actions.decal_rotate;
+            let handle_hit =
+                self.decal_handle_at(x, y).is_some() || actions.decal_scale || actions.decal_rotate;
             if handle_hit || !is_paint_tool {
                 return self.decal_drag_begin(x, y, actions.decal_scale, actions.decal_rotate);
             }
@@ -107,7 +118,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 .get(active)
                 .and_then(|a| a.paint_stack.as_ref())
                 .and_then(|stack| {
-                    stack.layers.iter().find(|l| matches!(l.kind, petunia_project::paint_layers::LayerKind::Raster(_))).map(|l| l.id)
+                    stack
+                        .layers
+                        .iter()
+                        .find(|l| {
+                            matches!(l.kind, petunia_project::paint_layers::LayerKind::Raster(_))
+                        })
+                        .map(|l| l.id)
                 });
             if let Some(id) = raster_id {
                 let id_str = id.to_string();

@@ -1879,12 +1879,11 @@ mod tests {
     #[test]
     fn edit_mode_moves_are_world_deltas_on_transformed_objects() {
         let mut state = selected_face();
-        state.project.active_mut().unwrap().transform =
-            petunia_project::ObjectTransform::from_trs(
-                Vec3::new(3.0, 0.0, 0.0),
-                Quat::from_rotation_y(0.5),
-                Vec3::splat(2.0),
-            );
+        state.project.active_mut().unwrap().transform = petunia_project::ObjectTransform::from_trs(
+            Vec3::new(3.0, 0.0, 0.0),
+            Quat::from_rotation_y(0.5),
+            Vec3::splat(2.0),
+        );
         let before = state.project.active().unwrap().world_positions();
         let selected: Vec<bool> = state
             .project

@@ -86,6 +86,104 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 (pointer - drag.last_pointer[axis]) * precision * direction;
             drag.last_pointer[axis] = pointer;
         }
+        if self.state.workspace.is_animate() {
+            let Some(bone_id) = self.state.session.animate.selected_bone else {
+                return false;
+            };
+            let Some(skel_id) = self.state.session.animate.skeleton else {
+                return false;
+            };
+            let Some(skeleton) = self
+                .state
+                .project
+                .skeletons
+                .iter()
+                .find(|s| s.id == skel_id)
+            else {
+                return false;
+            };
+            let Some(bone) = skeleton.bones.iter().find(|b| b.id == bone_id) else {
+                return false;
+            };
+
+            let camera = &self.state.session.camera;
+            let viewport = glam::Vec2::from_array(drag.viewport);
+            let start = glam::Vec2::from_array(drag.start);
+            let current = glam::Vec2::from_array(drag.virtual_pointer);
+            let delta = current - start;
+            let pivot = self
+                .state
+                .animate_selected_bone_pivot()
+                .unwrap_or(glam::Vec3::from(bone.head));
+
+            let handle = self.gizmo_drag.unwrap_or(GizmoHandle::Center);
+            let axis_vec = match handle {
+                GizmoHandle::X => glam::Vec3::X,
+                GizmoHandle::Y => glam::Vec3::Y,
+                GizmoHandle::Z => glam::Vec3::Z,
+                _ => -camera.forward(),
+            };
+
+            let mut transform = bone.local_transform;
+
+            match drag.kind {
+                TransformKind::Rotation => {
+                    let normal = axis_vec;
+                    let angle = petunia_core::transform_projection::rotation_angle(
+                        camera, viewport, start, current, pivot, normal,
+                    )
+                    .unwrap_or(delta.x * 0.5);
+                    let change = (angle - drag.last_angle + 180.0).rem_euclid(360.0) - 180.0;
+                    drag.rotation_angle += change;
+                    drag.last_angle = angle;
+                    let angle_deg = if snap {
+                        (drag.rotation_angle / 15.0).round() * 15.0
+                    } else {
+                        drag.rotation_angle
+                    };
+                    let delta_rot =
+                        glam::Quat::from_axis_angle(normal.normalize(), angle_deg.to_radians());
+                    let initial_rot = glam::Quat::from_array(bone.local_transform.rotation);
+                    let new_rot = (delta_rot * initial_rot).normalize();
+                    transform.rotation = new_rot.to_array();
+                }
+                TransformKind::Position => {
+                    let d = match handle {
+                        GizmoHandle::X | GizmoHandle::Y | GizmoHandle::Z => {
+                            let val = petunia_core::transform_projection::axis_delta(
+                                camera, viewport, start, current, pivot, axis_vec,
+                            )
+                            .unwrap_or(delta.x * 0.01);
+                            axis_vec * val
+                        }
+                        _ => petunia_core::transform_projection::plane_delta(
+                            camera,
+                            viewport,
+                            start,
+                            current,
+                            pivot,
+                            -camera.forward(),
+                        )
+                        .unwrap_or(glam::Vec3::ZERO),
+                    };
+                    let initial_pos = glam::Vec3::from(bone.local_transform.translation);
+                    transform.translation = (initial_pos + d).to_array();
+                }
+                TransformKind::Scale => {
+                    let factor = (1.0 + delta.x * 0.01).max(0.01);
+                    let initial_scale = glam::Vec3::from(bone.local_transform.scale);
+                    transform.scale = (initial_scale * factor).to_array();
+                }
+            }
+
+            self.drag = Some(drag);
+            self.state
+                .session
+                .animate
+                .set_bone_draft(bone_id, transform);
+            self.state.mark_dirty();
+            return true;
+        }
         let Some(modal) = self.state.session.tools.modal.as_ref() else {
             return false;
         };
@@ -260,6 +358,18 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if self.drag.take().is_none() {
             return false;
         }
+        if self.state.workspace.is_animate() {
+            if let Some(draft) = self.state.session.animate.bone_draft().copied() {
+                let _ = self
+                    .state
+                    .animate_set_bone_transform(draft.bone_id, draft.transform);
+                self.state.session.animate.clear_bone_draft();
+            }
+            self.gizmo_drag = None;
+            self.reset_transform_fields();
+            self.state.mark_dirty();
+            return true;
+        }
         self.commit_transform();
         self.reset_transform_fields();
         true
@@ -269,6 +379,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.release_latched_session();
         if self.drag.take().is_none() {
             return false;
+        }
+        if self.state.workspace.is_animate() {
+            self.state.session.animate.clear_bone_draft();
+            self.gizmo_drag = None;
+            self.state.mark_dirty();
+            return true;
         }
         self.cancel_transform()
     }

@@ -563,7 +563,9 @@ fn bone_picking_and_draft_preview_updates_pose_without_undo() {
     let mut state = state_with(RigPresetKind::Humanoid);
     let _sid = state.session.animate.skeleton.unwrap();
     let mut preview = AnimatePreview::default();
-    let initial_pose = preview.pose(&state.project.project, &state.session.animate).unwrap();
+    let initial_pose = preview
+        .pose(&state.project.project, &state.session.animate)
+        .unwrap();
     assert!(!initial_pose.bones.is_empty());
 
     // Projeta o primeiro osso na tela e testa pick_bone
@@ -572,13 +574,22 @@ fn bone_picking_and_draft_preview_updates_pose_without_undo() {
     let vp_size = [800.0, 600.0];
     let camera = &state.session.camera;
     let view_proj = camera.view_proj();
-    let clip = view_proj * glam::Vec4::new(first_bone.head[0], first_bone.head[1], first_bone.head[2], 1.0);
+    let clip = view_proj
+        * glam::Vec4::new(
+            first_bone.head[0],
+            first_bone.head[1],
+            first_bone.head[2],
+            1.0,
+        );
     let inv_w = 1.0 / clip.w;
     let screen_x = (clip.x * inv_w * 0.5 + 0.5) * vp_size[0];
     let screen_y = (1.0 - (clip.y * inv_w * 0.5 + 0.5)) * vp_size[1];
 
     let picked = pick_bone(&initial_pose, camera, vp_size, [screen_x, screen_y], 20.0);
-    assert!(picked.is_some(), "pick_bone deve encontrar o osso perto da cabeça");
+    assert!(
+        picked.is_some(),
+        "pick_bone deve encontrar o osso perto da cabeça"
+    );
 
     // Seleciona o osso
     state.animate_select_bone(Some(bone_id));
@@ -588,17 +599,28 @@ fn bone_picking_and_draft_preview_updates_pose_without_undo() {
     // Aplica draft de rotação
     let rotated = Transform3D::from_euler_degrees(45.0, 0.0, 0.0);
     state.session.animate.set_bone_draft(bone_id, rotated);
-    assert_eq!(depth(&state), depth_before, "draft não polui o histórico de Undo");
+    assert_eq!(
+        depth(&state),
+        depth_before,
+        "draft não polui o histórico de Undo"
+    );
 
     // O preview reflete o draft
-    let draft_pose = preview.pose(&state.project.project, &state.session.animate).unwrap();
+    let draft_pose = preview
+        .pose(&state.project.project, &state.session.animate)
+        .unwrap();
     let posed_bone = draft_pose.bone_by_id(bone_id).unwrap();
     // A pose é recalculada
-    assert_ne!(posed_bone.tail, first_bone.tail, "tail deve ter mudado pela rotação do draft");
+    assert_ne!(
+        posed_bone.tail, first_bone.tail,
+        "tail deve ter mudado pela rotação do draft"
+    );
 
     // Limpa draft: volta à pose original
     state.session.animate.clear_bone_draft();
-    let reverted_pose = preview.pose(&state.project.project, &state.session.animate).unwrap();
+    let reverted_pose = preview
+        .pose(&state.project.project, &state.session.animate)
+        .unwrap();
     assert_eq!(
         reverted_pose.bone_by_id(bone_id).unwrap().tail,
         first_bone.tail,
@@ -624,7 +646,11 @@ fn bone_transform_commits_single_undo_step_and_resets() {
     rotated.rotation = Transform3D::from_euler_degrees(30.0, 15.0, 0.0).rotation;
     state.animate_set_bone_transform(bone_id, rotated).unwrap();
 
-    assert_eq!(depth(&state).0, initial_depth + 1, "commit gera exatamente 1 passo de Undo");
+    assert_eq!(
+        depth(&state).0,
+        initial_depth + 1,
+        "commit gera exatamente 1 passo de Undo"
+    );
     let current_t = state
         .project
         .project
@@ -671,5 +697,88 @@ fn bone_transform_commits_single_undo_step_and_resets() {
         .unwrap()
         .local_transform;
     assert_eq!(orig_t, initial_t);
+}
+
+#[test]
+fn manual_keyframing_timeline_inserts_evaluates_and_deletes_with_undo() {
+    use petunia_core::AnimatePreview;
+    use petunia_project::{Interpolation, Transform3D};
+
+    let mut state = state_with(RigPresetKind::Humanoid);
+    let sid = state.session.animate.skeleton.unwrap();
+    let bone_id = {
+        let skel = state.project.project.get_skeleton(sid).unwrap();
+        skel.bones[1].id
+    };
+
+    state.animate_select_bone(Some(bone_id));
+    let initial_depth = depth(&state).0;
+
+    // No tempo 0.0, insere keyframe de repouso
+    state.session.animate.time = 0.0;
+    state.animate_insert_keyframe().unwrap();
+    assert_eq!(
+        depth(&state).0,
+        initial_depth + 1,
+        "1 passo de Undo para keyframe"
+    );
+
+    // No tempo 1.0, insere keyframe rotacionado a 90 graus
+    state.session.animate.time = 1.0;
+    let rotated = Transform3D::from_euler_degrees(90.0, 0.0, 0.0);
+    state.session.animate.set_bone_draft(bone_id, rotated);
+    state.animate_insert_keyframe().unwrap();
+    assert_eq!(depth(&state).0, initial_depth + 2);
+
+    // Avalia o preview no tempo 0.5 (deve estar interpolado)
+    state.session.animate.time = 0.5;
+    let mut preview = AnimatePreview::default();
+    let (_, local_pose) = preview
+        .local_pose(&state.project.project, &state.session.animate)
+        .unwrap();
+    let skel = state.project.project.get_skeleton(sid).unwrap();
+    let bone_idx = skel.bone_index(bone_id).unwrap();
+    let interp_transform = local_pose[bone_idx];
+
+    // No tempo 0.5, a rotação deve estar a meio caminho (~45 graus)
+    let q = glam::Quat::from_array(interp_transform.rotation);
+    let (x, _, _) = q.to_euler(glam::EulerRot::XYZ);
+    assert!(
+        (x.to_degrees() - 45.0).abs() < 2.0,
+        "interpolação a 0.5s deve estar ~45 graus, deu {:.2}",
+        x.to_degrees()
+    );
+
+    // Altera interpolação para Step
+    state.session.animate.time = 0.0;
+    state
+        .animate_set_keyframe_interp(Interpolation::Step)
+        .unwrap();
+    assert_eq!(depth(&state).0, initial_depth + 3);
+
+    // Avalia com Step em 0.5s: deve manter o valor de t=0.0 (sem rotação)
+    state.session.animate.time = 0.5;
+    let (_, local_step) = preview
+        .local_pose(&state.project.project, &state.session.animate)
+        .unwrap();
+    let q_step = glam::Quat::from_array(local_step[bone_idx].rotation);
+    let (x_step, _, _) = q_step.to_euler(glam::EulerRot::XYZ);
+    assert!(
+        x_step.to_degrees().abs() < 1.0,
+        "interpolação Step em 0.5s deve manter valor inicial, deu {:.2}",
+        x_step.to_degrees()
+    );
+
+    // Deleta o keyframe em t=1.0
+    state.animate_delete_keyframe(Some(1.0)).unwrap();
+    assert_eq!(depth(&state).0, initial_depth + 4);
+
+    // Undo restaura o keyframe deletado
+    assert!(state.undo());
+    assert_eq!(depth(&state).0, initial_depth + 3);
+
+    // Undo restaura a interpolação Linear
+    assert!(state.undo());
+    assert_eq!(depth(&state).0, initial_depth + 2);
 }
 

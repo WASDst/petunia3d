@@ -12,7 +12,10 @@ use crate::command::{Command, CommandError};
 use crate::context::{CommandContext, EditorView};
 
 fn material_index(document: &petunia_project::Project, id: Uuid) -> Option<usize> {
-    document.materials.iter().position(|material| material.id == id)
+    document
+        .materials
+        .iter()
+        .position(|material| material.id == id)
 }
 
 /// Novo material com `name`, ao fim da lista.
@@ -205,8 +208,11 @@ impl Command for EditMaterialCmd {
             MaterialEdit::CreateAlbedo => {
                 let [red, green, blue, _] = material.base_color;
                 let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0) as u8;
-                material.albedo_texture =
-                    Some(Canvas::new(256, 256, [byte(red), byte(green), byte(blue), 255]));
+                material.albedo_texture = Some(Canvas::new(
+                    256,
+                    256,
+                    [byte(red), byte(green), byte(blue), 255],
+                ));
             }
             MaterialEdit::ClearAlbedo => material.albedo_texture = None,
         }

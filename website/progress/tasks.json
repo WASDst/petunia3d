@@ -2033,24 +2033,24 @@
       "title": "ANIMATE procedural",
       "description": "Preservar AnimateIntent, rigs/motions/preview/fit/styles/transport/Keep Live/Bake; separar Creature/Motion Structure de Properties, evitar picker duplicado, drawer mínimo e precisão numérica/F6.",
       "document": "10-animation/workspace-ux.md",
-      "status": "TODO",
-      "updated": "2026-10-09",
-      "baseline": "Parcial verificado. crates/ui-slint/ui/animate.slint, crates/ui-slint/src/animate.rs, crates/ui-slint/tests/animate_shell.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-13",
+      "baseline": "Verificado e expandido. crates/ui-slint/ui/animate.slint, crates/ui-slint/src/animate.rs, crates/ui-slint/tests/animate_shell.rs, crates/core/src/animate_session.rs.",
       "checkpoints": [
         {
           "title": "Preservar AnimateIntent, rigs/motions/preview/fit/styles/transport/Keep Live/Bake",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "Preservado e expandido com Posing manual direto no Viewport: picking de ossos/juntas no viewport (pick_bone), destaque visual de seleção (animate-selected-bone-commands), draft em tempo real sem poluir Undo, gizmo de transformação no viewport posicionado na junta do osso, e comandos transacionais com Undo (SetBoneTransformCmd, ResetBonePoseCmd). Testado via animate_session_tests (18 passed)."
         },
         {
           "title": "separar Creature/Motion Structure de Properties, evitar picker duplicado, drawer mínimo e precisão numérica/F6",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "Structure e Properties separados. Adicionada seção 'Selected Bone' no AnimateInspector exibindo nome do osso, botão Reset Pose e toggle IK Mode acessíveis via teclado/F6 e i18n em pt-BR e en-US. Verificado via animate_shell tests (13 passed) e xtask ui-lint."
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "Gates executados e aprovados: cargo test -p petunia_core --test animate_session_tests (18 passed), cargo test -p petunia_ui_slint --features animation-workspace --test animate_shell (13 passed), cargo run -p xtask -- ui-lint (pass, 63 arquivos sem literais), cargo clippy -p petunia_core -p petunia_ui_slint --features animation-workspace --all-targets -- -D warnings (pass, zero warnings), cargo fmt -p petunia_ui_slint -p petunia_core -- --check (pass)."
         }
       ],
       "documents": [

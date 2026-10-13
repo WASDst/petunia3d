@@ -7,10 +7,13 @@ import {
     AnimateCreatureBody,
     AnimateDrawerContent,
     AnimateInspector,
+    AnimateKeyframeEntry,
+    AnimateLayerEntry,
     AnimateMotionBody,
     AnimateParamEntry,
     AnimateRowEntry,
     AnimateTexts,
+    AnimateTrackEntry,
     AnimateTransport,
     AnimateTweakBody,
 } from "animate.slint";
@@ -1097,6 +1100,10 @@ export component PetuniaSlintShell inherits Window {
     in-out property <string> animate-time-label: "";
     in-out property <string> animate-bone-commands: "";
     in-out property <string> animate-joint-commands: "";
+    in-out property <string> animate-selected-bone-commands: "";
+    in-out property <string> animate-selected-bone-name: "";
+    in-out property <bool> animate-has-selected-bone: false;
+    in-out property <bool> animate-ik-mode: false;
     in-out property <AnimateTexts> animate-texts;
     in-out property <[AnimateRowEntry]> animate-creatures;
     in-out property <[AnimateRowEntry]> animate-creature-presets;
@@ -1104,6 +1111,19 @@ export component PetuniaSlintShell inherits Window {
     in-out property <[AnimateRowEntry]> animate-motions;
     in-out property <[AnimateRowEntry]> animate-styles;
     in-out property <[AnimateParamEntry]> animate-params;
+    in-out property <bool> animate-can-keyframe: false;
+    in-out property <bool> animate-has-keyframe-at-playhead: false;
+    in-out property <string> animate-frame-label: "";
+    in-out property <int> animate-current-interp: 1;
+    in-out property <[AnimateTrackEntry]> animate-tracks: [];
+    in-out property <int> animate-active-curve-channel: 0;
+    in-out property <string> animate-curve-path: "";
+    in-out property <[AnimateKeyframeEntry]> animate-curve-points: [];
+    in-out property <[AnimateLayerEntry]> animate-layers: [];
+    in-out property <bool> animate-onion-skin-enabled: false;
+    in-out property <bool> animate-motion-trails-enabled: false;
+    in-out property <string> animate-ghost-commands: "";
+    in-out property <string> animate-motion-trail-commands: "";
     callback animate-action(string, string, float);
 
     callback workspace-changed(string);
@@ -1822,6 +1842,9 @@ export component PetuniaSlintShell inherits Window {
                         animate-bones-visible: root.active-workspace == "ANIMATE" && root.animate-show-bones;
                         animate-bone-commands: root.animate-bone-commands;
                         animate-joint-commands: root.animate-joint-commands;
+                        animate-selected-bone-commands: root.animate-selected-bone-commands;
+                        animate-ghost-commands: root.animate-ghost-commands;
+                        animate-motion-trail-commands: root.animate-motion-trail-commands;
 
                         operation-preview: root.operation-preview-commands;
                         loop-cut-preview: root.loop-cut-preview-commands;
@@ -2979,6 +3002,9 @@ export component PetuniaSlintShell inherits Window {
                                 stepped: root.animate-stepped;
                                 root-motion: root.animate-root-motion;
                                 root-motion-supported: root.animate-root-motion-supported;
+                                selected-bone-name: root.animate-selected-bone-name;
+                                has-selected-bone: root.animate-has-selected-bone;
+                                ik-mode: root.animate-ik-mode;
                                 action(a, b, v) => { root.animate-action(a, b, v); }
                             }
 
@@ -3351,6 +3377,18 @@ export component PetuniaSlintShell inherits Window {
                             has-motion: root.animate-has-motion;
                             progress: root.animate-progress;
                             time-label: root.animate-time-label;
+                            frame-label: root.animate-frame-label;
+                            can-keyframe: root.animate-can-keyframe;
+                            has-keyframe-at-playhead: root.animate-has-keyframe-at-playhead;
+                            current-interp: root.animate-current-interp;
+                            tracks: root.animate-tracks;
+                            drawer-tab: root.animate-drawer-tab;
+                            active-curve-channel: root.animate-active-curve-channel;
+                            curve-path: root.animate-curve-path;
+                            curve-points: root.animate-curve-points;
+                            layers: root.animate-layers;
+                            onion-skin-enabled: root.animate-onion-skin-enabled;
+                            motion-trails-enabled: root.animate-motion-trails-enabled;
                             action(a, b, v) => { root.animate-action(a, b, v); }
                         }
                     }

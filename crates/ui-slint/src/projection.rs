@@ -328,24 +328,35 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
     // Hastes de transformação: tamanho fixo em tela. O modo combinado mantém
     // três famílias de handle simultâneas e selecionáveis.
-    if state.workspace != Workspace::Model
-        || !matches!(
+    let is_animate_bone =
+        state.workspace.is_animate() && state.session.animate.selected_bone.is_some();
+    let is_model_transform = state.workspace == Workspace::Model
+        && matches!(
             state.session.tools.active_tool.as_str(),
             "move" | "rotate" | "scale" | "transform"
-        )
-    {
+        );
+
+    if !is_model_transform && !is_animate_bone {
         return model;
     }
-    let Some(asset) = state.project.active() else {
-        return model;
+
+    let pivot = if is_animate_bone {
+        let Some(p) = state.animate_selected_bone_pivot() else {
+            return model;
+        };
+        p
+    } else {
+        let Some(asset) = state.project.active() else {
+            return model;
+        };
+        if asset.mesh.verts.is_empty() {
+            return model;
+        };
+        state.session.tools.modal.as_ref().map_or_else(
+            || state.calculate_pivot(state.session.pivot_point),
+            |modal| modal.pivot,
+        )
     };
-    if asset.mesh.verts.is_empty() {
-        return model;
-    };
-    let pivot = state.session.tools.modal.as_ref().map_or_else(
-        || state.calculate_pivot(state.session.pivot_point),
-        |modal| modal.pivot,
-    );
     let Some(origin) = project(pivot) else {
         return model;
     };

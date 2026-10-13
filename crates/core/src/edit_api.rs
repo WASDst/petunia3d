@@ -274,7 +274,12 @@ impl Command for InsertAssetCmd {
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if state.document.assets.iter().any(|asset| asset.id == self.asset.id) {
+        if state
+            .document
+            .assets
+            .iter()
+            .any(|asset| asset.id == self.asset.id)
+        {
             Err("an object with this id already exists")
         } else {
             Ok(())

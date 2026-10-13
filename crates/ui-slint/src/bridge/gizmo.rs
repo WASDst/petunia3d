@@ -17,7 +17,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         if !gizmo.visible {
             return None;
         }
-        let active = self.state.session.tools.active_tool.as_str();
+        let active = if self.state.workspace.is_animate() {
+            match self.state.session.tools.active_tool.as_str() {
+                "move" => "move",
+                "scale" => "scale",
+                _ => "rotate",
+            }
+        } else {
+            self.state.session.tools.active_tool.as_str()
+        };
         let dist_from_origin = (x - gizmo.origin_x).hypot(y - gizmo.origin_y);
         // Desambiguação do gizmo universal: zona morta do centro protege contra cliques acidentais
         if active == "transform" && dist_from_origin < 12.0 {
@@ -146,6 +154,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         let handle = target.handle;
         let kind = target.kind;
+        if self.state.workspace.is_animate() {
+            let Some(_bone_id) = self.state.session.animate.selected_bone else {
+                return false;
+            };
+            self.start_viewport_drag(kind, x, y);
+            self.gizmo_drag = Some(handle);
+            self.state.set_status(format!(
+                "{} · {}",
+                match kind {
+                    TransformKind::Position => "Move Bone",
+                    TransformKind::Rotation => "Rotate Bone",
+                    TransformKind::Scale => "Scale Bone",
+                },
+                match handle {
+                    GizmoHandle::X => "X axis",
+                    GizmoHandle::Y => "Y axis",
+                    GizmoHandle::Z => "Z axis",
+                    GizmoHandle::Center => "Free rotation",
+                    _ => "Plane",
+                }
+            ));
+            return true;
+        }
         if !self.begin_viewport_transform(kind, x, y) {
             return false;
         }

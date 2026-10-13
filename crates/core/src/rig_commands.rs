@@ -1213,3 +1213,425 @@ impl Command for ResetBonePoseCmd {
     }
 }
 
+/// Grava um keyframe para um osso na trilha de animação do esqueleto com histórico de Undo.
+#[derive(Debug, Clone)]
+pub struct InsertBoneKeyframeCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub time: f32,
+    pub transform: Transform3D,
+    pub interpolation: Interpolation,
+}
+
+impl Command for InsertBoneKeyframeCmd {
+    fn label(&self) -> &'static str {
+        "insert bone keyframe"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        if !self.time.is_finite() || self.time < 0.0 {
+            return Err("Invalid keyframe time");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let bone_name = {
+            let skel = state
+                .document
+                .project
+                .get_skeleton(self.skeleton_id)
+                .ok_or_else(|| exec_err("Skeleton not found"))?;
+            let bone = skel
+                .get_bone(self.bone_id)
+                .ok_or_else(|| exec_err("Bone not found"))?;
+            bone.name.clone()
+        };
+
+        let clip = state
+            .document
+            .project
+            .get_or_create_animation_clip(self.skeleton_id, "Action", (self.time + 1.0).max(2.0));
+        if self.time > clip.duration {
+            clip.duration = (self.time + 0.5).max(clip.duration);
+        }
+
+        let track = clip.get_or_create_track(self.bone_id, &bone_name);
+        track.add_translation(self.time, self.transform.translation);
+        track.add_rotation(self.time, self.transform.rotation);
+        track.add_scale(self.time, self.transform.scale);
+        track.set_keyframe_interpolation(self.time, self.interpolation, 1e-4);
+
+        state.set_status(format!(
+            "Keyframe inserted for {} at {:.2}s",
+            bone_name, self.time
+        ));
+        Ok(())
+    }
+}
+
+/// Remove keyframe de um osso no tempo informado com histórico de Undo.
+#[derive(Debug, Clone)]
+pub struct DeleteBoneKeyframeCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub time: f32,
+    pub tolerance: f32,
+}
+
+impl Command for DeleteBoneKeyframeCmd {
+    fn label(&self) -> &'static str {
+        "delete bone keyframe"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let tag = format!("skeleton:{}", self.skeleton_id);
+        let mut removed = false;
+        for asset in &mut state.document.project.animations {
+            if asset.tags.iter().any(|t| t == &tag) {
+                if asset
+                    .clip
+                    .remove_keyframe_on_bone(self.bone_id, self.time, self.tolerance.max(1e-3))
+                {
+                    removed = true;
+                }
+            }
+        }
+        if !removed {
+            return Err(CommandError::NoChange(
+                "No keyframe found at that time".into(),
+            ));
+        }
+        state.set_status(format!("Keyframe deleted at {:.2}s", self.time));
+        Ok(())
+    }
+}
+
+/// Altera a interpolação do keyframe no tempo informado.
+#[derive(Debug, Clone)]
+pub struct SetBoneKeyframeInterpolationCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+    pub time: f32,
+    pub interpolation: Interpolation,
+}
+
+impl Command for SetBoneKeyframeInterpolationCmd {
+    fn label(&self) -> &'static str {
+        "set bone keyframe interpolation"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let tag = format!("skeleton:{}", self.skeleton_id);
+        let mut changed = false;
+        for asset in &mut state.document.project.animations {
+            if asset.tags.iter().any(|t| t == &tag) {
+                if let Some(track) = asset.clip.get_track_mut(self.bone_id) {
+                    if track.has_keyframe_at(self.time, 1e-3) {
+                        track.set_keyframe_interpolation(self.time, self.interpolation, 1e-3);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            return Err(CommandError::NoChange(
+                "No keyframe found at that time".into(),
+            ));
+        }
+        state.set_status("Keyframe interpolation updated");
+        Ok(())
+    }
+}
+
+/// Limpa toda a trilha de um osso na animação.
+#[derive(Debug, Clone)]
+pub struct ClearBoneTrackCmd {
+    pub skeleton_id: Uuid,
+    pub bone_id: u32,
+}
+
+impl Command for ClearBoneTrackCmd {
+    fn label(&self) -> &'static str {
+        "clear bone track"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let skel = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let tag = format!("skeleton:{}", self.skeleton_id);
+        let mut cleared = false;
+        for asset in &mut state.document.project.animations {
+            if asset.tags.iter().any(|t| t == &tag) {
+                if let Some(track) = asset.clip.get_track_mut(self.bone_id) {
+                    if !track.translations.is_empty()
+                        || !track.rotations.is_empty()
+                        || !track.scales.is_empty()
+                    {
+                        track.clear();
+                        cleared = true;
+                    }
+                }
+            }
+        }
+        if !cleared {
+            return Err(CommandError::NoChange("Bone track was already empty".into()));
+        }
+        state.set_status("Bone track cleared");
+        Ok(())
+    }
+}
+
+/// Adiciona uma camada de animação à pilha (Fatia 4).
+#[derive(Debug, Clone)]
+pub struct AddMotionLayerCmd {
+    pub layer: petunia_project::MotionLayer,
+}
+
+impl Command for AddMotionLayerCmd {
+    fn label(&self) -> &'static str {
+        "add motion layer"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, _state: &EditorView<'_>) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.document.project.add_motion_layer(self.layer.clone());
+        state.set_status("Motion layer added");
+        Ok(())
+    }
+}
+
+/// Remove uma camada de animação da pilha (Fatia 4).
+#[derive(Debug, Clone)]
+pub struct RemoveMotionLayerCmd {
+    pub layer_id: Uuid,
+}
+
+impl Command for RemoveMotionLayerCmd {
+    fn label(&self) -> &'static str {
+        "remove motion layer"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if !state
+            .document
+            .project
+            .motion_layers
+            .iter()
+            .any(|l| l.id == self.layer_id)
+        {
+            return Err("Motion layer not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if !state.document.project.remove_motion_layer(self.layer_id) {
+            return Err(CommandError::NoChange("Motion layer not found".into()));
+        }
+        state.set_status("Motion layer removed");
+        Ok(())
+    }
+}
+
+/// Define o peso de blending de uma camada de animação (Fatia 4).
+#[derive(Debug, Clone)]
+pub struct SetMotionLayerWeightCmd {
+    pub layer_id: Uuid,
+    pub weight: f32,
+}
+
+impl Command for SetMotionLayerWeightCmd {
+    fn label(&self) -> &'static str {
+        "set motion layer weight"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if !self.weight.is_finite() {
+            return Err("Weight must be finite");
+        }
+        if !state
+            .document
+            .project
+            .motion_layers
+            .iter()
+            .any(|l| l.id == self.layer_id)
+        {
+            return Err("Motion layer not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let layer = state
+            .document
+            .project
+            .get_motion_layer_mut(self.layer_id)
+            .ok_or_else(|| exec_err("Motion layer not found"))?;
+        let clamped = self.weight.clamp(0.0, 1.0);
+        if (layer.blend_weight - clamped).abs() < 1e-4 {
+            return Err(CommandError::NoChange("Weight already set".into()));
+        }
+        layer.blend_weight = clamped;
+        state.set_status("Layer weight updated");
+        Ok(())
+    }
+}
+
+/// Define o modo de blending (Override/Additive) de uma camada de animação (Fatia 4).
+#[derive(Debug, Clone)]
+pub struct SetMotionLayerBlendModeCmd {
+    pub layer_id: Uuid,
+    pub blend_mode: petunia_project::BlendMode,
+}
+
+impl Command for SetMotionLayerBlendModeCmd {
+    fn label(&self) -> &'static str {
+        "set motion layer blend mode"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if !state
+            .document
+            .project
+            .motion_layers
+            .iter()
+            .any(|l| l.id == self.layer_id)
+        {
+            return Err("Motion layer not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let layer = state
+            .document
+            .project
+            .get_motion_layer_mut(self.layer_id)
+            .ok_or_else(|| exec_err("Motion layer not found"))?;
+        if layer.blend_mode == self.blend_mode {
+            return Err(CommandError::NoChange("Blend mode already set".into()));
+        }
+        layer.blend_mode = self.blend_mode;
+        state.set_status("Layer blend mode updated");
+        Ok(())
+    }
+}
+
+/// Alterna a ativação (enable/disable) de uma camada de animação (Fatia 4).
+#[derive(Debug, Clone)]
+pub struct ToggleMotionLayerEnabledCmd {
+    pub layer_id: Uuid,
+}
+
+impl Command for ToggleMotionLayerEnabledCmd {
+    fn label(&self) -> &'static str {
+        "toggle motion layer enabled"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if !state
+            .document
+            .project
+            .motion_layers
+            .iter()
+            .any(|l| l.id == self.layer_id)
+        {
+            return Err("Motion layer not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let layer = state
+            .document
+            .project
+            .get_motion_layer_mut(self.layer_id)
+            .ok_or_else(|| exec_err("Motion layer not found"))?;
+        layer.enabled = !layer.enabled;
+        state.set_status("Layer enabled toggled");
+        Ok(())
+    }
+}
+

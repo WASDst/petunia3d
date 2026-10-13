@@ -579,6 +579,33 @@ pub mod text_id {
     pub const ANIMATE_FIT_NEEDS_MODEL: TextId = TextId::new("animate.fit_needs_model");
     pub const ANIMATE_FIT_LOCKED: TextId = TextId::new("animate.fit_locked");
     pub const ANIMATE_LINKED_MODEL: TextId = TextId::new("animate.linked_model");
+    pub const ANIMATE_TITLE_BONE: TextId = TextId::new("animate.title_bone");
+    pub const ANIMATE_RESET_BONE: TextId = TextId::new("animate.reset_bone");
+    pub const ANIMATE_IK_MODE: TextId = TextId::new("animate.ik_mode");
+    pub const ANIMATE_INSERT_KEYFRAME: TextId = TextId::new("animate.insert_keyframe");
+    pub const ANIMATE_DELETE_KEYFRAME: TextId = TextId::new("animate.delete_keyframe");
+    pub const ANIMATE_INTERP_LINEAR: TextId = TextId::new("animate.interp_linear");
+    pub const ANIMATE_INTERP_STEP: TextId = TextId::new("animate.interp_step");
+    pub const ANIMATE_INTERP_CUBIC: TextId = TextId::new("animate.interp_cubic");
+    pub const ANIMATE_CLEAR_TRACK: TextId = TextId::new("animate.clear_track");
+    pub const ANIMATE_TITLE_TIMELINE: TextId = TextId::new("animate.title_timeline");
+    pub const ANIMATE_TITLE_CURVES: TextId = TextId::new("animate.title_curves");
+    pub const ANIMATE_TITLE_DOPE_SHEET: TextId = TextId::new("animate.title_dope_sheet");
+    pub const ANIMATE_CHANNEL_TRANS_X: TextId = TextId::new("animate.channel_trans_x");
+    pub const ANIMATE_CHANNEL_TRANS_Y: TextId = TextId::new("animate.channel_trans_y");
+    pub const ANIMATE_CHANNEL_TRANS_Z: TextId = TextId::new("animate.channel_trans_z");
+    pub const ANIMATE_CHANNEL_ROT_X: TextId = TextId::new("animate.channel_rot_x");
+    pub const ANIMATE_CHANNEL_ROT_Y: TextId = TextId::new("animate.channel_rot_y");
+    pub const ANIMATE_CHANNEL_ROT_Z: TextId = TextId::new("animate.channel_rot_z");
+    pub const ANIMATE_CHANNEL_SCALE: TextId = TextId::new("animate.channel_scale");
+    pub const ANIMATE_TITLE_LAYERS: TextId = TextId::new("animate.title_layers");
+    pub const ANIMATE_ADD_LAYER: TextId = TextId::new("animate.add_layer");
+    pub const ANIMATE_ADD_TWEAK: TextId = TextId::new("animate.add_tweak");
+    pub const ANIMATE_BLEND_OVERRIDE: TextId = TextId::new("animate.blend_override");
+    pub const ANIMATE_BLEND_ADDITIVE: TextId = TextId::new("animate.blend_additive");
+    pub const ANIMATE_LAYER_WEIGHT: TextId = TextId::new("animate.layer_weight");
+    pub const ANIMATE_ONION_SKIN: TextId = TextId::new("animate.onion_skin");
+    pub const ANIMATE_MOTION_TRAILS: TextId = TextId::new("animate.motion_trails");
 
     pub const PAINT_RADIUS: TextId = TextId::new("paint.radius");
     pub const PAINT_COLOR: TextId = TextId::new("paint.color");
@@ -1351,6 +1378,33 @@ pub mod text_id {
         ANIMATE_FIT_NEEDS_MODEL,
         ANIMATE_FIT_LOCKED,
         ANIMATE_LINKED_MODEL,
+        ANIMATE_TITLE_BONE,
+        ANIMATE_RESET_BONE,
+        ANIMATE_IK_MODE,
+        ANIMATE_INSERT_KEYFRAME,
+        ANIMATE_DELETE_KEYFRAME,
+        ANIMATE_INTERP_LINEAR,
+        ANIMATE_INTERP_STEP,
+        ANIMATE_INTERP_CUBIC,
+        ANIMATE_CLEAR_TRACK,
+        ANIMATE_TITLE_TIMELINE,
+        ANIMATE_TITLE_CURVES,
+        ANIMATE_TITLE_DOPE_SHEET,
+        ANIMATE_CHANNEL_TRANS_X,
+        ANIMATE_CHANNEL_TRANS_Y,
+        ANIMATE_CHANNEL_TRANS_Z,
+        ANIMATE_CHANNEL_ROT_X,
+        ANIMATE_CHANNEL_ROT_Y,
+        ANIMATE_CHANNEL_ROT_Z,
+        ANIMATE_CHANNEL_SCALE,
+        ANIMATE_TITLE_LAYERS,
+        ANIMATE_ADD_LAYER,
+        ANIMATE_ADD_TWEAK,
+        ANIMATE_BLEND_OVERRIDE,
+        ANIMATE_BLEND_ADDITIVE,
+        ANIMATE_LAYER_WEIGHT,
+        ANIMATE_ONION_SKIN,
+        ANIMATE_MOTION_TRAILS,
         PAINT_RADIUS,
         PAINT_COLOR,
         SETTINGS_INTERFACE,

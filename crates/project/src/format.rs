@@ -126,6 +126,7 @@ impl LegacyProjectWithSplines {
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
+            motion_layers: Vec::new(),
             references: Vec::new(),
         }
     }
@@ -201,6 +202,7 @@ impl LegacyProjectBeforeSplines {
             prefabs: Vec::new(),
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
+            motion_layers: Vec::new(),
             references: Vec::new(),
         }
     }
