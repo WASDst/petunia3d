@@ -375,6 +375,11 @@
       "revision": "045f88576a792e3c823b6c0f1a5dd63024ef835c + functional continuation; source hashes: evidence/origin-frame-2026-10-15/source-snapshot.json",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H19 estático: 688 pass / 14 suítes com animation-workspace, incluindo 20 cenários de origem/frame e dois de snap no editor. Rebase/Undo/persistência, G/R/S/reset normalizados, compatibilidade assada, instanciação/separação/prefabs em mundo e limites numéricos exercitados. Clippy all-targets -D warnings pass. Rig/geradores/legado completo e aceite nativo permanecem abertos; H19 IN PROGRESS. Cache rígido do renderer: 1 pass; diagnóstico Software3dViewport inspecionado: rebase 0 pixels, Move 78629 pixels. Fmt, seis testes do tracker/matriz e links/agentes pass. Fontes e artefatos em source-snapshot.json; sem alteração de esquema ou dependências."
+    },
+    "primitive-frame-core-20261015": {
+      "revision": "93c4ed782a64ae374bc8646c12635455c71d6f61 + functional continuation; source hashes: evidence/primitive-frame-2026-10-15/source-snapshot.json",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H19 complementar: primitivas locais e regeneração com TRS preservado, compatibilidade por validação de fonte, recusa de edições assadas/livres incompatíveis, rig, locks e valores inválidos. Sessão/Cancel/adapter respeitam alvo ativo. 700 pass / 16 suítes com animation-workspace, incluindo 10 regressões Core e 2 de adapter; fmt e Clippy all-targets -D warnings pass. Software3dViewport: reedição altera 18721 pixels, referência local+TRS difere em 0; três imagens inspecionadas. Rebase paramétrico/skin, legado completo e aceite nativo permanecem pendentes; H19 IN PROGRESS."
     }
   },
   "tasks": [
@@ -3366,7 +3371,7 @@
       "document": "02-application/tools-interaction-implementation.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; continuação sobre 045f88576a792e3c823b6c0f1a5dd63024ef835c. Núcleo estático: rebase da origem, G/R/S/reset no TRS normalizado, compatibilidade de metadados assados, snap congelado e cópia/separação/prefab em mundo; 688 testes pass com animation-workspace. Rig/geradores/normalização completa e gates nativos permanecem pendentes.",
+      "baseline": "Plano aprovado sobre 92c22caa; continuação sobre 045f88576a792e3c823b6c0f1a5dd63024ef835c. Núcleo estático: rebase da origem, G/R/S/reset no TRS normalizado, compatibilidade de metadados assados, snap congelado e cópia/separação/prefab em mundo; 688 testes pass com animation-workspace. Rig/geradores/normalização completa e gates nativos permanecem pendentes. Continuação sobre 93c4ed78: criação/regeneração de primitivas locais, fonte validada, sessão/Cancel e reedição verificados: 700 pass / 16 suítes, fmt/Clippy e imagem CPU pass. Compensação de origem paramétrica/rig, legado completo e gates nativos continuam pendentes.",
       "checkpoints": [
         {
           "title": "Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.",
@@ -3392,6 +3397,11 @@
           "title": "Gates finais do checkpoint, cache rígido, imagem CPU, fmt/Clippy e documentação com limites nativos registrados.",
           "completed": true,
           "evidence": "origin-frame-core-20261015"
+        },
+        {
+          "title": "Criação e regeneração de primitivas em frame local; compatibilidade legada sem perda silenciosa de pose, validação, persistência e Undo exercitados.",
+          "completed": true,
+          "evidence": "primitive-frame-core-20261015"
         }
       ],
       "documents": [

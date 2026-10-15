@@ -1,0 +1,96 @@
+{
+  "base_sha": "93c4ed782a64ae374bc8646c12635455c71d6f61",
+  "branch": "refactor/architecture-foundation",
+  "date": "2026-10-15",
+  "main_sha": "92c22caa23f96f85f18e72a5e962a1d8831694db",
+  "sources": {
+    "crates/core/src/primitive_session.rs": "2d9b970b915768f075422c253e34ffd3282c211efc5af189b35a0a5604813fb4",
+    "crates/core/src/state.rs": "f076e9f43d96bd9d90964aa4beec90e2b00373965f3284ca71e50b79614a3b62",
+    "crates/core/tests/primitive_frame.rs": "493a2a74a21c741af3b0181cbb20fcbae08684be816aea94bc56994e4daa3e2e",
+    "crates/editor/src/bridge/primitives.rs": "330582da5b300b6987c5b6560b31987ca8eac0392e5ff6cea21c81a1c27b68d9",
+    "crates/editor/tests/primitive_frame_bridge.rs": "5a704ef9c6138d2a482c919121e13158e3066fb0d2cce875366345f86d245358",
+    "crates/editor/examples/primitive_frame_feedback.rs": "23ef5bbf05aa4716015fdcf12a6a04c293f955a4ef2e68e144772fe43c2346bb",
+    "ATTRIBUTION.md": "d501c5dc4624891bdb1b0588d4324a68b88bd73613c03478b3d71bf97ba55cd1",
+    "website/progress/tasks.json": "c348c16b1872c61cf797e9f3a046416f2df89e0a974baab19bf9331d3e80c9bd",
+    "website/docs/02-application/tools-interaction-implementation.md": "636eb2d624a6912cd6535c2b9921099690607f384e8681ff865f8b611ccd86fd",
+    "website/docs/03-geometry/transforms-origin-pivot-gizmos.md": "38ffaff2176c0b18c8e1a4b71dae9a75a082ed39ef054fe9f10299f5b52d4c8b"
+  },
+  "gates": {
+    "tests": {
+      "result": "pass",
+      "passed": 700,
+      "suites": 16,
+      "features": "petunia_editor/animation-workspace",
+      "suite_counts": [
+        179,
+        57,
+        7,
+        20,
+        3,
+        10,
+        2,
+        13,
+        4,
+        126,
+        9,
+        2,
+        244,
+        5,
+        16,
+        3
+      ]
+    },
+    "fmt": "pass",
+    "clippy_all_targets": "pass",
+    "cpu_visual": {
+      "backend": "Software3dViewport",
+      "boundary": "UiIntent::AddPrimitive -> model.add_cube; numeric re-edit adapter -> Core",
+      "native_qt": "not run",
+      "reference_changed_pixels": 0,
+      "resized_changed_pixels": 18721,
+      "size": [
+        800,
+        600
+      ],
+      "result": "pass",
+      "inspection": "pass"
+    },
+    "native_qt_gpu_windows_accessibility": "not run",
+    "independent_review": "not run",
+    "tracker_matrix": "pass",
+    "progress_tests": {
+      "result": "pass",
+      "passed": 6
+    },
+    "agent_docs": "pass",
+    "original_spec_hashes": {
+      "result": "pass",
+      "files": 20
+    }
+  },
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28) (Arch Linux rust 1:1.99.0-1)",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27) (Arch Linux rust 1:1.99.0-1)",
+  "cargo_lock_sha256": "19b82d0fdc044bb98db3deb707f61b4d1fdbb74649fc575bbae24cf70a1d8025",
+  "artifacts": {
+    "evidence/primitive-frame-2026-10-15/README.md": "e14b3e73d12ed0fca839537555d427d96e8da5832567e1bd9466c1f4b26ed7ac",
+    "evidence/primitive-frame-2026-10-15/agent-docs.txt": "31eb703e683105fc26ee94ee2b0d9c6620af501e2e2721263f3db693f25cae6d",
+    "evidence/primitive-frame-2026-10-15/clippy.txt": "377dfefda0bfdb8227fa375b59373d529540be7a47ecabc36b57e48d76459d02",
+    "evidence/primitive-frame-2026-10-15/created.png": "173d5e0a3e3b7fd4fd320b8752d8d41d75196e71adde77ea3ea8391d6ca3f4bd",
+    "evidence/primitive-frame-2026-10-15/environment.txt": "ba3dc4ba0c19ab459786395472d7151ac78120f6bea6252547ce2f0f831e2261",
+    "evidence/primitive-frame-2026-10-15/fmt.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence/primitive-frame-2026-10-15/pixels.json": "a9b67d657d8ba2373df3b7b3def405ff2a5d4bf798bfa1d0c4407ba5386217a2",
+    "evidence/primitive-frame-2026-10-15/progress-tests.txt": "ec7046b58a83ef2241f662b9288a7c9c1011eb2a63ac9311fad4c554daafda15",
+    "evidence/primitive-frame-2026-10-15/progress.txt": "bffe6a2d120c337a10dfb83f801280aa97d682cb67ee22a90b94ca2bc1fa218c",
+    "evidence/primitive-frame-2026-10-15/reference.png": "82201c455c131a6f4f94c127b1651e41bceb670944584874b5e7c19a37ada858",
+    "evidence/primitive-frame-2026-10-15/resized.png": "82201c455c131a6f4f94c127b1651e41bceb670944584874b5e7c19a37ada858",
+    "evidence/primitive-frame-2026-10-15/resources-final.txt": "6b97a12d8558158fdf161a2dd7bc45a5d8ee04c8adf90064b97852931bc44308",
+    "evidence/primitive-frame-2026-10-15/tests.txt": "4665e186a27747c9c9252cdea68d4b7125b7913ec536efc03cf2587b6eeb6e63",
+    "evidence/primitive-frame-2026-10-15/visual.txt": "f6147b45a06373804e857e28ccff9e40fffdcd31066c6833440e28f0d40c2834"
+  },
+  "resources": {
+    "build_jobs": 1,
+    "test_threads": 1,
+    "isolated_agent_targets_created": false,
+    "notes": "Shared target; Clippy waited for an external Qt build. No external process interrupted. Native Qt acceptance not inferred."
+  }
+}

@@ -2258,16 +2258,12 @@ impl CommandContext<'_> {
     /// Inicia uma criação com transação única de undo (Wave 8 — §10).
     ///
     /// Uma sessão anterior válida é confirmada silenciosamente (malha mantida).
-    /// Inicia uma criação com transação única de undo (Wave 8 — §10).
-    ///
-    /// Uma sessão anterior válida é confirmada silenciosamente (malha mantida).
     pub fn begin_primitive(
         &mut self,
         kind: crate::command::PrimitiveKind,
         name: Option<String>,
     ) -> bool {
         use crate::primitive_session::{PrimitiveDescriptor, PrimitiveDescriptorExt};
-        self.finalize_primitive_session();
         let descriptor = PrimitiveDescriptor::default_for(kind);
         self.begin_primitive_with(descriptor, name)
     }
@@ -2279,30 +2275,42 @@ impl CommandContext<'_> {
         name: Option<String>,
     ) -> bool {
         use crate::primitive_session::PrimitiveDescriptorExt;
+        // Validate before changing selection, the current creation session or Undo.
+        let mesh = match crate::primitive_session::build_primitive(descriptor) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error);
+                return false;
+            }
+        };
+        let cursor = Vec3::from(self.editor.cursor_3d);
+        if !cursor.is_finite()
+            || mesh.verts.iter().any(|v| !(cursor + v.vec()).is_finite())
+            || self.editor.tools.modal.is_some()
+            || self.editor.tools.uv_transform.is_some()
+        {
+            self.set_status("Cannot create primitive: invalid cursor or active transform");
+            return false;
+        }
         self.set_selection_domain(SelectionDomain::Object);
         self.finalize_primitive_session();
         let original_selection = self.editor.selection.clone();
-        let cursor_offset = self.editor.cursor_3d;
         let asset_name = name.unwrap_or_else(|| descriptor.kind().default_name().to_string());
         let undo_label = format!("add primitive: {asset_name}");
         self.checkpoint(&undo_label);
-        let mut mesh = descriptor.build();
-        for v in &mut mesh.verts {
-            v.pos[0] += cursor_offset[0];
-            v.pos[1] += cursor_offset[1];
-            v.pos[2] += cursor_offset[2];
-        }
         self.document.add(&asset_name, mesh);
         let Some(asset) = self.document.assets.last_mut() else {
             return false;
         };
         asset.parametric = Some(descriptor);
-        asset.origin = Some(cursor_offset);
+        asset.set_object_transform(petunia_project::ObjectTransform {
+            translation: cursor.to_array(),
+            ..Default::default()
+        });
         let asset_id = asset.id;
         self.editor.primitive_session = Some(crate::primitive_session::PrimitiveCreationSession {
             asset_id,
             descriptor,
-            cursor_offset,
             undo_label,
             original_selection,
         });
@@ -2321,20 +2329,23 @@ impl CommandContext<'_> {
             self.editor.primitive_session = None;
             return false;
         }
-        let (asset_id, cursor_offset) = match &self.editor.primitive_session {
-            Some(session) => (session.asset_id, session.cursor_offset),
-            None => return false,
-        };
-        let Some(asset) = self.document.assets.iter_mut().find(|a| a.id == asset_id) else {
-            self.editor.primitive_session = None;
+        if self.editor.tools.modal.is_some() || self.editor.tools.uv_transform.is_some() {
+            self.set_status("Finish the active transform before editing primitive parameters");
+            return false;
+        }
+        let Some(asset_id) = self.editor.primitive_session.as_ref().map(|s| s.asset_id) else {
             return false;
         };
-        let mut mesh = descriptor.build();
-        for v in &mut mesh.verts {
-            v.pos[0] += cursor_offset[0];
-            v.pos[1] += cursor_offset[1];
-            v.pos[2] += cursor_offset[2];
-        }
+        let Some(asset) = self.document.assets.iter_mut().find(|a| a.id == asset_id) else {
+            return false;
+        };
+        let mesh = match crate::primitive_session::regenerate_primitive(asset, descriptor) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error);
+                return false;
+            }
+        };
         asset.mesh = mesh.into();
         asset.parametric = Some(descriptor);
         if let Some(session) = self.editor.primitive_session.as_mut() {
@@ -2373,18 +2384,6 @@ impl CommandContext<'_> {
     ///
     /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
     /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
-    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
-    ///
-    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
-    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
-    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
-    ///
-    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
-    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
-    /// Atualiza os parâmetros da primitiva do asset ativo e regenera a malha.
-    ///
-    /// Se a sessão de criação estiver ativa, atualiza diretamente sem novo checkpoint.
-    /// Caso contrário, se `create_checkpoint` for verdadeiro, registra checkpoint no undo.
     pub fn update_active_primitive(
         &mut self,
         descriptor: crate::primitive_session::PrimitiveDescriptor,
@@ -2394,30 +2393,24 @@ impl CommandContext<'_> {
             return self.update_primitive(descriptor);
         }
 
-        let Some(asset) = self.document.active_mut() else {
-            return false;
-        };
-        if !asset.is_parametric() {
+        if self.editor.tools.modal.is_some() || self.editor.tools.uv_transform.is_some() {
+            self.set_status("Finish the active transform before editing primitive parameters");
             return false;
         }
-
-        let origin = asset.origin.unwrap_or_else(|| {
-            let c = asset.mesh.center();
-            [c.x, c.y, c.z]
-        });
-
+        let Some(asset) = self.document.active() else {
+            return false;
+        };
+        let mesh = match crate::primitive_session::regenerate_primitive(asset, descriptor) {
+            Ok(mesh) => mesh,
+            Err(error) => {
+                self.set_status(error);
+                return false;
+            }
+        };
         if create_checkpoint {
             let label = format!("edit primitive: {}", descriptor.kind_name());
             self.checkpoint(&label);
         }
-
-        let mut mesh = descriptor.build();
-        for v in &mut mesh.verts {
-            v.pos[0] += origin[0];
-            v.pos[1] += origin[1];
-            v.pos[2] += origin[2];
-        }
-
         let Some(asset) = self.document.active_mut() else {
             return false;
         };
@@ -2444,6 +2437,10 @@ impl CommandContext<'_> {
 
     /// Cancela a criação: desfaz até o ponto de inserção e restaura a seleção.
     pub fn cancel_primitive(&mut self) -> bool {
+        if !self.primitive_session_valid() {
+            self.editor.primitive_session = None;
+            return false;
+        }
         let Some(session) = self.editor.primitive_session.take() else {
             return false;
         };
@@ -3910,9 +3907,8 @@ impl<'a> EditorView<'a> {
             None => false,
             Some(session) => {
                 self.document
-                    .assets
-                    .iter()
-                    .any(|a| a.id == session.asset_id)
+                    .active()
+                    .is_some_and(|asset| asset.id == session.asset_id && asset.parametric.is_some())
                     && self.document.undo.undo_label() == Some(session.undo_label.as_str())
             }
         }

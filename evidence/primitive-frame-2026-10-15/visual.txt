@@ -1,0 +1,10 @@
+   Compiling petunia_core v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/core)
+   Compiling petunia_render v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/render)
+   Compiling petunia_module_assets v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-assets)
+   Compiling petunia_module_uv v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-uv)
+   Compiling petunia_module_paint v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-paint)
+   Compiling petunia_module_model v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-model)
+   Compiling petunia_application v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/application)
+   Compiling petunia_editor v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/editor)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 04s
+     Running `target/debug/examples/primitive_frame_feedback evidence/primitive-frame-2026-10-15`

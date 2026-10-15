@@ -1,0 +1,10 @@
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda3       238G  146G   92G  62% /mnt/sda3
+
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi        13Gi       289Mi       178Mi        17Gi        17Gi
+Swap:          4.0Gi       4.0Gi        18Mi
+
+rustc 1.99.0 (b940084d7 2026-09-28) (Arch Linux rust 1:1.99.0-1)
+
+cargo 1.99.0 (5f94df478 2026-08-27) (Arch Linux rust 1:1.99.0-1)
