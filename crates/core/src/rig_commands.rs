@@ -1213,10 +1213,39 @@ impl Command for ResetBonePoseCmd {
     }
 }
 
-/// Grava um keyframe para um osso na trilha de animação do esqueleto com histórico de Undo.
+/// Shared validation for explicit animation authoring targets.
+fn validate_keyframe_target(
+    state: &EditorView<'_>,
+    skeleton_id: Uuid,
+    bone_id: u32,
+    clip_id: Option<Uuid>,
+) -> Result<(), &'static str> {
+    let skeleton = state
+        .document
+        .project
+        .get_skeleton(skeleton_id)
+        .ok_or("Skeleton not found")?;
+    if skeleton.get_bone(bone_id).is_none() {
+        return Err("Bone not found");
+    }
+    if let Some(id) = clip_id {
+        let asset = state
+            .document
+            .project
+            .get_animation(id)
+            .ok_or("Animation clip not found")?;
+        if !asset.tags.contains(&format!("skeleton:{skeleton_id}")) {
+            return Err("Animation clip belongs to a different skeleton");
+        }
+    }
+    Ok(())
+}
+
+/// Author into an explicit clip; None creates the first clip only.
 #[derive(Debug, Clone)]
 pub struct InsertBoneKeyframeCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Option<Uuid>,
     pub bone_id: u32,
     pub time: f32,
     pub transform: Transform3D,
@@ -1227,215 +1256,200 @@ impl Command for InsertBoneKeyframeCmd {
     fn label(&self) -> &'static str {
         "insert bone keyframe"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
-            .document
-            .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, self.clip_id)?;
+        if self.clip_id.is_none()
+            && state
+                .document
+                .project
+                .get_animation_for_skeleton(self.skeleton_id)
+                .is_some()
+        {
+            return Err("Select an animation clip explicitly");
         }
         if !self.time.is_finite() || self.time < 0.0 {
             return Err("Invalid keyframe time");
         }
+        if !finite3(&self.transform.translation)
+            || !finite3(&self.transform.scale)
+            || !self.transform.rotation.iter().all(|v| v.is_finite())
+            || !glam::Quat::from_array(self.transform.rotation)
+                .length_squared()
+                .is_finite()
+            || glam::Quat::from_array(self.transform.rotation).length_squared() <= f32::EPSILON
+        {
+            return Err("Invalid keyframe transform");
+        }
         Ok(())
     }
-
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let bone_name = {
-            let skel = state
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let bone_name = state
+            .document
+            .project
+            .get_skeleton(self.skeleton_id)
+            .and_then(|s| s.get_bone(self.bone_id))
+            .ok_or_else(|| exec_err("Bone not found"))?
+            .name
+            .clone();
+        let clip = if let Some(id) = self.clip_id {
+            &mut state
                 .document
                 .project
-                .get_skeleton(self.skeleton_id)
-                .ok_or_else(|| exec_err("Skeleton not found"))?;
-            let bone = skel
-                .get_bone(self.bone_id)
-                .ok_or_else(|| exec_err("Bone not found"))?;
-            bone.name.clone()
+                .get_animation_mut(id)
+                .ok_or_else(|| exec_err("Animation clip not found"))?
+                .clip
+        } else {
+            state.document.project.get_or_create_animation_clip(
+                self.skeleton_id,
+                "Action",
+                (self.time + 1.0).max(2.0),
+            )
         };
-
-        let clip = state.document.project.get_or_create_animation_clip(
-            self.skeleton_id,
-            "Action",
-            (self.time + 1.0).max(2.0),
-        );
         if self.time > clip.duration {
             clip.duration = (self.time + 0.5).max(clip.duration);
         }
-
         let track = clip.get_or_create_track(self.bone_id, &bone_name);
         track.add_translation(self.time, self.transform.translation);
         track.add_rotation(self.time, self.transform.rotation);
         track.add_scale(self.time, self.transform.scale);
         track.set_keyframe_interpolation(self.time, self.interpolation, 1e-4);
-
         state.set_status(format!(
-            "Keyframe inserted for {} at {:.2}s",
-            bone_name, self.time
+            "Keyframe inserted for {bone_name} at {:.4}s",
+            self.time
         ));
         Ok(())
     }
 }
 
-/// Remove keyframe de um osso no tempo informado com histórico de Undo.
+/// Delete one authored key time, never every key in the search window.
 #[derive(Debug, Clone)]
 pub struct DeleteBoneKeyframeCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Uuid,
     pub bone_id: u32,
     pub time: f32,
     pub tolerance: f32,
+}
+
+fn nearest_key_time(track: &petunia_project::BoneTrack, time: f32, tolerance: f32) -> Option<f32> {
+    track
+        .keyframe_times()
+        .into_iter()
+        .filter(|t| t.is_finite() && (*t - time).abs() <= tolerance)
+        .min_by(|a, b| {
+            (a - time)
+                .abs()
+                .total_cmp(&(b - time).abs())
+                .then_with(|| a.total_cmp(b))
+        })
 }
 
 impl Command for DeleteBoneKeyframeCmd {
     fn label(&self) -> &'static str {
         "delete bone keyframe"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
-            .document
-            .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, Some(self.clip_id))?;
+        if !self.time.is_finite()
+            || self.time < 0.0
+            || !self.tolerance.is_finite()
+            || self.tolerance < 0.0
+        {
+            return Err("Invalid keyframe time or tolerance");
         }
         Ok(())
     }
-
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let tag = format!("skeleton:{}", self.skeleton_id);
-        let mut removed = false;
-        for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag)
-                && asset.clip.remove_keyframe_on_bone(
-                    self.bone_id,
-                    self.time,
-                    self.tolerance.max(1e-3),
-                )
-            {
-                removed = true;
-            }
-        }
-        if !removed {
-            return Err(CommandError::NoChange(
-                "No keyframe found at that time".into(),
-            ));
-        }
-        state.set_status(format!("Keyframe deleted at {:.2}s", self.time));
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let track = state
+            .document
+            .project
+            .get_animation_mut(self.clip_id)
+            .and_then(|a| a.clip.get_track_mut(self.bone_id))
+            .ok_or_else(|| CommandError::NoChange("No keyframe track".into()))?;
+        let time = nearest_key_time(track, self.time, self.tolerance)
+            .ok_or_else(|| CommandError::NoChange("No keyframe found at that time".into()))?;
+        track.remove_keyframe_at(time, 0.0);
+        state.set_status(format!("Keyframe deleted at {time:.4}s"));
         Ok(())
     }
 }
 
-/// Altera a interpolação do keyframe no tempo informado.
+/// Change interpolation only on the explicitly targeted clip and key time.
 #[derive(Debug, Clone)]
 pub struct SetBoneKeyframeInterpolationCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Uuid,
     pub bone_id: u32,
     pub time: f32,
     pub interpolation: Interpolation,
 }
-
 impl Command for SetBoneKeyframeInterpolationCmd {
     fn label(&self) -> &'static str {
         "set bone keyframe interpolation"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
-            .document
-            .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, Some(self.clip_id))?;
+        if !self.time.is_finite() || self.time < 0.0 {
+            return Err("Invalid keyframe time");
         }
         Ok(())
     }
-
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let tag = format!("skeleton:{}", self.skeleton_id);
-        let mut changed = false;
-        for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag)
-                && let Some(track) = asset.clip.get_track_mut(self.bone_id)
-                && track.has_keyframe_at(self.time, 1e-3)
-            {
-                track.set_keyframe_interpolation(self.time, self.interpolation, 1e-3);
-                changed = true;
-            }
-        }
-        if !changed {
-            return Err(CommandError::NoChange(
-                "No keyframe found at that time".into(),
-            ));
-        }
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let track = state
+            .document
+            .project
+            .get_animation_mut(self.clip_id)
+            .and_then(|a| a.clip.get_track_mut(self.bone_id))
+            .ok_or_else(|| CommandError::NoChange("No keyframe track".into()))?;
+        let time = nearest_key_time(track, self.time, 1e-4)
+            .ok_or_else(|| CommandError::NoChange("No keyframe found at that time".into()))?;
+        track.set_keyframe_interpolation(time, self.interpolation, 0.0);
         state.set_status("Keyframe interpolation updated");
         Ok(())
     }
 }
 
-/// Limpa toda a trilha de um osso na animação.
+/// Clear a bone track only in the explicit animation clip.
 #[derive(Debug, Clone)]
 pub struct ClearBoneTrackCmd {
     pub skeleton_id: Uuid,
+    pub clip_id: Uuid,
     pub bone_id: u32,
 }
-
 impl Command for ClearBoneTrackCmd {
     fn label(&self) -> &'static str {
         "clear bone track"
     }
-
     fn changes(&self) -> petunia_project::ProjectChanges {
         petunia_project::ProjectChanges::NONE
     }
-
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        let skel = state
+        validate_keyframe_target(state, self.skeleton_id, self.bone_id, Some(self.clip_id))
+    }
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        self.can_execute(&state.view()).map_err(exec_err)?;
+        let track = state
             .document
             .project
-            .get_skeleton(self.skeleton_id)
-            .ok_or("Skeleton not found")?;
-        if skel.get_bone(self.bone_id).is_none() {
-            return Err("Bone not found");
-        }
-        Ok(())
-    }
-
-    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let tag = format!("skeleton:{}", self.skeleton_id);
-        let mut cleared = false;
-        for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag)
-                && let Some(track) = asset.clip.get_track_mut(self.bone_id)
-                && (!track.translations.is_empty()
-                    || !track.rotations.is_empty()
-                    || !track.scales.is_empty())
-            {
-                track.clear();
-                cleared = true;
-            }
-        }
-        if !cleared {
-            return Err(CommandError::NoChange(
-                "Bone track was already empty".into(),
-            ));
-        }
+            .get_animation_mut(self.clip_id)
+            .and_then(|a| a.clip.get_track_mut(self.bone_id))
+            .filter(|t| {
+                !t.translations.is_empty() || !t.rotations.is_empty() || !t.scales.is_empty()
+            })
+            .ok_or_else(|| CommandError::NoChange("Bone track was already empty".into()))?;
+        track.clear();
         state.set_status("Bone track cleared");
         Ok(())
     }

@@ -76,7 +76,8 @@ impl CommandContext<'_> {
 
 impl<'a> EditorView<'a> {
     pub fn is_interacting(self) -> bool {
-        self.modal.is_some()
+        self.uv_transform.is_some()
+            || self.modal.is_some()
             || self.pending_modal.is_some()
             || self.mesh_preview.is_some()
             || self.paint_stroke.is_some()

@@ -427,6 +427,8 @@ const PARAMETRIC_HANDLE_TARGET: u8 = 4;
 /// Ferramenta que segue a gramática única (constituição 11, ADR 007).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GrammarTool {
+    /// Select by click/area; transform only via explicit handles.
+    Select,
     /// Move, Rotate e Scale: arrasto livre ("haul") ou pelas alças do gizmo.
     Transform(TransformKind),
     /// Extrude, Inset, Round Edge e Push/Pull: o valor segue o cursor.
@@ -512,6 +514,12 @@ impl PolyPenMode {
 /// Gesto da gramática única em andamento.
 #[derive(Debug, Clone, Copy)]
 enum ToolGesture {
+    ProtectedSelection,
+    SelectionBox {
+        anchor: [f32; 2],
+        current: [f32; 2],
+        mode: viewport_intents::RegionSelectionMode,
+    },
     Transform {
         gizmo: bool,
     },
@@ -613,6 +621,12 @@ pub enum UiIntent {
     ToggleInspector,
     /// DRAW: vista planar ↔ câmera livre (só a vista muda).
     TogglePlanarNavigation,
+    SetNavigationAnchor(petunia_core::NavigationAnchor),
+    SetSelectThrough(bool),
+    BeginUvTransform(petunia_core::UvTransformKind),
+    UpdateUvTransform(petunia_mesh::UvTransform),
+    CommitUvTransform,
+    CancelUvTransform,
     ExecuteCommand(CommandId),
     DismissTopOverlay,
     ScrubTransform {
@@ -972,6 +986,7 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     parametric_tool: Option<ToolModalKind>,
     tool_gesture: Option<ToolGesture>,
     tool_press_extend: bool,
+    tool_press_subtract: bool,
     /// Alt no último evento da gramática (quebrar tangente no perfil).
     tool_pointer_alt: bool,
     /// Modificador de "ação alternativa" no último press (Ctrl no preset
@@ -1129,8 +1144,7 @@ pub enum GeometryClipboard {
     Asset(Box<petunia_project::Asset>),
 }
 
-/// Modo do workspace de modelagem (ADR 007): DRAW trabalha no nível de forma,
-/// POLY no nível de componente.
+/// Presentation preset of the same modeling workspace; capabilities are shared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ModelingMode {
     Draw,
@@ -1155,22 +1169,9 @@ impl ModelingMode {
         }
     }
 
-    /// A ferramenta persistente pertence ao trilho deste modo.
-    pub fn offers_tool(self, tool: &str) -> bool {
-        const SHARED: [&str; 6] = [
-            "select",
-            "move",
-            "rotate",
-            "scale",
-            "transform",
-            "push_pull",
-        ];
-        const DRAW: [&str; 2] = ["draw_profile", "shape_builder"];
-        SHARED.contains(&tool)
-            || match self {
-                Self::Draw => DRAW.contains(&tool),
-                Self::Poly => !DRAW.contains(&tool),
-            }
+    /// Both presentation presets share the same modeling capabilities.
+    pub fn offers_tool(self, _tool: &str) -> bool {
+        true
     }
 }
 

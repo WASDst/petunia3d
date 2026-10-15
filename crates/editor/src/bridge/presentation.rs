@@ -152,7 +152,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         vm.paint_pip = self.paint_pip;
         vm.split_preset = self.split.preset_id().to_string();
         vm.prefab_items = self.prefab_item_models();
-        vm.gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        vm.gizmo = self.projected_gizmo();
         if self.viewport.draws_gizmo() {
             vm.gizmo.clear_handle_geometry();
         }
@@ -944,7 +944,6 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// Perfil DRAW, POLY, Loop Cut e ferramentas de modelagem.
     fn project_modeling(&self, vm: &mut ShellViewModel) {
         vm.profile_active = self.state.session.workspace == Workspace::Model
-            && self.modeling_mode == ModelingMode::Draw
             && (self.state.session.tools.active_tool == "draw_profile"
                 || self.active_profile_id.is_some());
         vm.profile_point_count = self.active_profile_point_count() as i32;

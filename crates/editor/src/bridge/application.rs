@@ -120,6 +120,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             parametric_tool: None,
             tool_gesture: None,
             tool_press_extend: false,
+            tool_press_subtract: false,
             tool_pointer_alt: false,
             tool_press_alternate: false,
             poly_pen_points: Vec::new(),
@@ -306,6 +307,33 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             UiIntent::ToggleInspector => {
                 self.inspector_visible = !self.inspector_visible;
+                self.state.mark_dirty();
+            }
+            UiIntent::SetNavigationAnchor(anchor) => {
+                self.state.session.navigation_anchor = anchor;
+                self.state.mark_dirty();
+            }
+            UiIntent::BeginUvTransform(kind) => {
+                if let Err(error) = self.state.begin_uv_transform(kind) {
+                    self.state.set_status(error.to_string());
+                }
+            }
+            UiIntent::UpdateUvTransform(transform) => {
+                if let Err(error) = self.state.update_uv_transform(transform) {
+                    self.state.set_status(error.to_string());
+                }
+            }
+            UiIntent::CommitUvTransform => {
+                if let Err(error) = self.state.commit_uv_transform() {
+                    self.state.set_status(error.to_string());
+                }
+            }
+            UiIntent::CancelUvTransform => {
+                self.state.cancel_uv_transform();
+            }
+            UiIntent::SetSelectThrough(enabled) => {
+                self.state.session.select_through = enabled;
+                self.clear_hover();
                 self.state.mark_dirty();
             }
             UiIntent::TogglePlanarNavigation => {

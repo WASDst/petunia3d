@@ -10,6 +10,10 @@ redo = "Ctrl+Y"
 save_project = "Ctrl+S"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+make_face = "Shift+F"
+# Explicitly disable inherited shortcuts superseded by this profile.
+tool_select = false
 select_object = "Q"
 transform = "W"
 rotate = "E"

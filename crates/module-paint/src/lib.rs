@@ -1020,19 +1020,17 @@ impl PaintModule {
         }
 
         let mut dirty = if s.kind == BrushType::Fill {
-            // O balde preenche uma região conectada: não usa dabs nem buffer.
+            // Compatibility brush entry point obeys the same masks and layer locks.
+            let first_face = points
+                .first()
+                .and_then(|&(x, y)| Self::face_at_texel_of_active_in(state.view(), x, y));
             let mut dirty = DirtyTiles::default();
-            if let Some(o) = state.document.assets.get_mut(active_idx)
-                && let Some(stack) = o.paint_stack.as_mut()
-                && let Some(layer) = stack.active_mut()
-                && !layer.locked
-                && let Some(cv) = layer.canvas_mut()
-            {
+            Self::restricted_edit_in(state, first_face, |cv| {
                 for &(x, y) in points {
                     Self::flood_fill(cv, x, y, color, 16);
                 }
                 dirty.mark_all(cv.w, cv.h);
-            }
+            });
             dirty
         } else {
             Self::stamp_dabs_2d_in(state, points, s)
@@ -1388,29 +1386,34 @@ impl PaintModule {
 
     /// Preenche o canvas respeitando o `FillScope` (uma semente, algoritmos distintos).
     ///
-    /// `face_hint` é a face sob o cursor, quando existe: sem ela os escopos por
-    /// face não têm semente e caem em `Object`.
+    /// `face_hint` or a texel seed must resolve a valid face for Face/Island.
+    /// An empty or invalid target never broadens the requested scope.
     pub fn canvas_fill_scoped_in(
         state: &mut CommandContext<'_>,
         face_hint: Option<usize>,
         seed: Option<(u32, u32)>,
         scope: petunia_core::FillScope,
     ) {
-        Self::ensure_stack_in(state);
         let color = Self::paint_color_rgba_in(state.view());
-        // No canvas 2D não há face sob o cursor: a semente (texel) a revela.
         let face_hint = face_hint.or_else(|| {
             seed.and_then(|(x, y)| Self::face_at_texel_of_active_in(state.view(), x, y))
         });
-        let scope = if face_hint.is_none()
-            && matches!(
-                scope,
-                petunia_core::FillScope::Face | petunia_core::FillScope::UvIsland
-            ) {
-            petunia_core::FillScope::Object
-        } else {
-            scope
-        };
+        if matches!(scope, petunia_core::FillScope::ConnectedPixels) && seed.is_none() {
+            state.set_status("Fill requires a texel seed");
+            return;
+        }
+        if matches!(
+            scope,
+            petunia_core::FillScope::Face | petunia_core::FillScope::UvIsland
+        ) && !face_hint.is_some_and(|face| {
+            state
+                .document
+                .active_mesh()
+                .is_some_and(|mesh| mesh.faces.get(face).is_some())
+        }) {
+            state.set_status("Fill requires a valid face");
+            return;
+        }
 
         // Coleta os polígonos UV elegíveis antes de emprestar o canvas.
         let polygons: Vec<Vec<[f32; 2]>> = match scope {
@@ -1452,19 +1455,29 @@ impl PaintModule {
                 .unwrap_or_default(),
         };
 
+        let polygons: Vec<_> = polygons
+            .into_iter()
+            .filter(|polygon| polygon.len() >= 3 && polygon.iter().flatten().all(|v| v.is_finite()))
+            .collect();
+        if matches!(
+            scope,
+            petunia_core::FillScope::Face
+                | petunia_core::FillScope::SelectedFaces
+                | petunia_core::FillScope::UvIsland
+        ) && polygons.is_empty()
+        {
+            state.set_status("Fill has no eligible UV faces");
+            return;
+        }
+
         Self::restricted_edit_in(state, face_hint, |cv| match scope {
             petunia_core::FillScope::ConnectedPixels => {
                 if let Some((x, y)) = seed {
                     Self::flood_fill(cv, x, y, color, 16);
-                } else {
-                    cv.fill(color);
                 }
             }
             petunia_core::FillScope::Object => cv.fill(color),
             _ => {
-                if polygons.is_empty() {
-                    cv.fill(color);
-                }
                 for polygon in &polygons {
                     Self::fill_uv_polygon(cv, polygon, color);
                 }
@@ -2784,11 +2797,11 @@ mod tests {
         assert!(!PaintModule::paint_mesh_3d_with_settings(
             &mut state, front, front_hit, settings, false
         ));
-        state.in_context(|ctx| PaintModule::reset_stroke_scratch_in(ctx));
+        state.in_context(PaintModule::reset_stroke_scratch_in);
         assert!(PaintModule::paint_mesh_3d_with_settings(
             &mut state, right, right_hit, settings, false
         ));
-        state.in_context(|ctx| PaintModule::reset_stroke_scratch_in(ctx));
+        state.in_context(PaintModule::reset_stroke_scratch_in);
         // Tudo selecionado não é uma restrição: pinta em qualquer face.
         for face in &mut state.project.active_mesh_mut().unwrap().faces {
             face.selected = true;

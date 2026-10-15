@@ -110,3 +110,11 @@ Decisões arquiteturais e operacionais:
 2. **Purga completa das dependências Slint:** O crate `crates/ui-slint/` foi excluído do repositório, assim como todas as suas regras de lint e dependências no `Cargo.toml` raiz e `Cargo.lock`. Isso alivia o tempo de compilação, o consumo de disco e de memória durante o desenvolvimento.
 3. **Frontend Qt 6 primário (`crates/ui-cxxqt`):** `crates/ui-cxxqt` passa a ser o frontend padrão do executável principal (`src/main.rs`), consumindo diretamente o `petunia_editor`. A execução da GUI passa a ocorrer via `petunia_ui_cxxqt::widgets::run()`.
 4. **Isolamento de camadas (L6):** A UI em C++/Qt Widgets e QML permanece estritamente na camada de apresentação (L6), comunicando-se com `petunia_editor` através de DTOs e despachando comandos transacionais para a camada Application.
+
+## Editor contextual, DRAW/POLY e ShapeBuilder avançado — 2026-10-15
+
+O usuário aprovou incorporar SEL-001–007, VSP-001–006/MF-001–008 e RIG-001–012 do pacote de especificação ao produto. O [contrato integrado](../02-application/contextual-editor-contract.md) concilia essas decisões com os capítulos de domínio e a [matriz complementar H01–H33](../02-application/tools-interaction-implementation.md). Aprovação não comprova implementação.
+
+Seleção usa gizmo integrado e **arrasto protegido**, substituindo a proposta inicial de mover ao arrastar geometria; modos globais de componentes deixam de ser requisito do fluxo, mas componentes e filtros permanecem. Pivô do objeto é sua origem local persistente; centro de transformação e Cursor3D são referências independentes, assim como navegação. Editar origem preserva o quadro atual, não promete preservar toda a animação. DRAW é preset planar de POLY, com retorno livre, ferramentas e perfis compartilhados. ShapeBuilder avança em composição reeditável, múltiplos sólidos e construção sobre superfícies, após a fundação de dois operandos.
+
+Execução: núcleo/editor compartilhado primeiro, apresentação Qt/GL e gates visuais depois; sem restaurar Slint ou modificar GUI neste lote. Trabalho na branch funcional autorizada, sem merge em main. Histórico D03 e demais evidências permanece preservado; D04 cobre apenas a consolidação documental.

@@ -11,6 +11,9 @@ save_project = "Ctrl+S"
 cycle_mode = "Tab"
 
 [model]
+# Resolve inherited collisions explicitly; false persists an unbound action.
+move = false
+dissolve = false
 box_select = "B"
 tool_select = "W"
 select_vertex = "1"

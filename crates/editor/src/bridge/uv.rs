@@ -60,7 +60,15 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     pub(crate) fn build_uv_editor(&self) -> UvEditorModel {
         const BOX: f32 = 256.0;
         const MAX_FACES: usize = 2_000;
-        let Some(mesh) = self.state.project.active_mesh() else {
+        let Some(mesh) = self
+            .state
+            .session
+            .tools
+            .uv_transform
+            .as_ref()
+            .map(|session| session.preview_mesh())
+            .or_else(|| self.state.project.active_mesh())
+        else {
             return UvEditorModel::default();
         };
         let face_count = mesh.faces.len();
@@ -182,6 +190,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// convenção do domínio; o editor desenha com origem em cima e converte
     /// antes de chamar.
     pub fn uv_editor_click(&mut self, u: f32, v: f32, extend: bool) -> bool {
+        if self.state.session.tools.uv_transform.is_some() {
+            return false;
+        }
         /// Raio de pick de canto/edge: 6 px no editor de 256 px.
         const PICK_RADIUS: f32 = 6.0 / 256.0;
         if !u.is_finite() || !v.is_finite() {

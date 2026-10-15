@@ -355,6 +355,21 @@
       "revision": "codex/qt-integration working tree",
       "document": "09-ui/qt-integration.md",
       "summary": "Abandono e remocao total do Slint: crate crates/editor (petunia_editor) extraido com controlador neutro e 116 testes unitarios passando. Crate crates/ui-slint e dependencias slint / i-slint-* purgadas do Cargo.toml e Cargo.lock. crates/ui-cxxqt adaptado diretamente para petunia_editor (21 testes de paridade + 10 testes de bridge passando). src/main.rs despachando para petunia_ui_cxxqt::widgets::run(). cargo check --workspace e testes de core/mesh/project/application/render passando."
+    },
+    "contextual-core-20261015": {
+      "revision": "92c22caa23f96f85f18e72a5e962a1d8831694db + functional WIP; source hashes: evidence/contextual-tools-2026-10-15/source-snapshot.json",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H01–H07: correções no núcleo de autoria de chaves/clipes, escopo/restrições de Fill e persistência/parser de atalhos. Suite integrada 776 pass; confirmação final Editor/Mesh/Paint 522 pass (inclui repetições, não somar como testes únicos). Clippy all-targets -D warnings e fmt pass nos sete crates afetados. Novas sessões UV, Select protegido, navegação e DRAW/POLY têm evidência headless parcial; os respectivos processos permanecem IN PROGRESS. Qt/Windows/acessibilidade nativa not run."
+    },
+    "d04-contextual-spec-20261015": {
+      "revision": "92c22caa23f96f85f18e72a5e962a1d8831694db + documentation WIP; source manifest stored in evidence/contextual-tools-2026-10-15/spec-manifest.json",
+      "document": "02-application/contextual-editor-contract.md",
+      "summary": "Contrato SEL/VSP/MF/RIG integrado e conciliado com pivô/cursor, DRAW/POLY e ShapeBuilder avançado; H19–H33 complementares, histórico D03 preservado. 20 hashes de origem conferidos; manifest/tracker/matriz, seis testes do painel e links/agentes pass. DONE documental não fecha features nem GUI."
+    },
+    "contextual-history-20261015": {
+      "revision": "92c22caa23f96f85f18e72a5e962a1d8831694db + final WIP; source-snapshot.json",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H03 reaberto na revisão para Undo da criação do primeiro clipe. Referência de sessão obsoleta agora é podada em Undo/Redo e reconciliação, sem escolher clipe arbitrário. Gate de história: 342 pass, incluindo 7 regressões de keyframes e 20 de Animate; IDs inválidos de autoria continuam rejeitados. Gate final de seleção também cobre clique em alça abaixo do limiar sem selecionar a geometria por trás."
     }
   },
   "tasks": [
@@ -2764,24 +2779,24 @@
       "title": "Keyframes com precisão por frame",
       "description": "Excluir apenas a chave alvo em 24/30/60 fps, preservando vizinhas e Undo/Redo. Definir identidade/precisão temporal sem tolerância fixa que alcance outro frame.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P1. Auditoria de 2026-10-15: N-A; tolerância fixa remove vizinhas a 30 fps. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P1. Auditoria de 2026-10-15: N-A; tolerância fixa remove vizinhas a 30 fps. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status.",
       "checkpoints": [
         {
           "title": "Excluir apenas a chave alvo em 24/30/60 fps, preservando vizinhas e Undo/Redo.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Definir identidade/precisão temporal sem tolerância fixa que alcance outro frame.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         }
       ],
       "documents": [
@@ -2796,24 +2811,24 @@
       "title": "Keying da pose efetivamente avaliada",
       "description": "Preservar a pose avaliada ao inserir chave, com e sem draft. Resolver espaço autoral, procedural/layers e erro contextual sem fallback silencioso para repouso.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P1. Auditoria de 2026-10-15: N-B; inserção sem draft pode gravar repouso. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P1. Auditoria de 2026-10-15: N-B; inserção sem draft pode gravar repouso. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status.",
       "checkpoints": [
         {
           "title": "Preservar a pose avaliada ao inserir chave, com e sem draft.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Resolver espaço autoral, procedural/layers e erro contextual sem fallback silencioso para repouso.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         }
       ],
       "documents": [
@@ -2828,24 +2843,24 @@
       "title": "Autoria restrita ao clipe explícito",
       "description": "Inserir, excluir, interpolar e limpar somente no clip_id validado para skeleton/osso. Cobrir dois clipes do mesmo skeleton, alvo obsoleto, Undo/Redo e round-trip.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P1. Auditoria de 2026-10-15: N-C; seleção de active_clip não delimita todos os comandos. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P1. Auditoria de 2026-10-15: N-C; seleção de active_clip não delimita todos os comandos. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status. Revisão final reabriu o gate para criação do primeiro clipe seguida de Undo/Redo; reconciliação implementada, regressão em validação. Regressão final pass em history-tests.txt; gate reencerrado com nova evidência preservando o checkpoint anterior.",
       "checkpoints": [
         {
           "title": "Inserir, excluir, interpolar e limpar somente no clip_id validado para skeleton/osso.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Cobrir dois clipes do mesmo skeleton, alvo obsoleto, Undo/Redo e round-trip.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-history-20261015"
         }
       ],
       "documents": [
@@ -2860,24 +2875,24 @@
       "title": "Fill com scope e alvo válidos",
       "description": "Seleção vazia e alvo inválido retornam erro/no-change sem pintar objeto inteiro. Cobrir scopes Face/SelectedFaces/Island/Object com semente válida e uma transação.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P1. Auditoria de 2026-10-15: P-A; seleção vazia ou face inválida ampliam Fill. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P1. Auditoria de 2026-10-15: P-A; seleção vazia ou face inválida ampliam Fill. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status.",
       "checkpoints": [
         {
           "title": "Seleção vazia e alvo inválido retornam erro/no-change sem pintar objeto inteiro.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Cobrir scopes Face/SelectedFaces/Island/Object com semente válida e uma transação.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         }
       ],
       "documents": [
@@ -2892,24 +2907,24 @@
       "title": "Restrição única em todas as entradas de Fill",
       "description": "Aplicar máscara e layer lock também na API compatível, sem divergência 2D/3D. Consolidar ou depreciar caminhos legados somente após cobrir callers e compatibilidade.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P1. Auditoria de 2026-10-15: P-B; API compatível Fill ignora máscara. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P1. Auditoria de 2026-10-15: P-B; API compatível Fill ignora máscara. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status.",
       "checkpoints": [
         {
           "title": "Aplicar máscara e layer lock também na API compatível, sem divergência 2D/3D.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Consolidar ou depreciar caminhos legados somente após cobrir callers e compatibilidade.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         }
       ],
       "documents": [
@@ -2924,24 +2939,24 @@
       "title": "Parser e round-trip de atalhos",
       "description": "Aceitar colchetes literais, Shift+colchetes e tecla Numpad+. Garantir parse/export/reload dos bindings e rejeição explícita de entradas inválidas.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: K-A/B; colchetes e Numpad+ falham no parser/retorno. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: K-A/B; colchetes e Numpad+ falham no parser/retorno. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status.",
       "checkpoints": [
         {
           "title": "Aceitar colchetes literais, Shift+colchetes e tecla Numpad+.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Garantir parse/export/reload dos bindings e rejeição explícita de entradas inválidas.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         }
       ],
       "documents": [
@@ -2955,24 +2970,24 @@
       "title": "Persistência de atalhos desativados",
       "description": "Distinguir binding desativado de ação ausente em override. Salvar/recarregar preservando desativação e compatibilidade de perfis antigos.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: K-C; defaults restauram binding removido. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: K-C; defaults restauram binding removido. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Delta delimitado do núcleo verificado nesta entrega; integração/aceite de frontend não é encerrado por este status.",
       "checkpoints": [
         {
           "title": "Distinguir binding desativado de ação ausente em override.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Salvar/recarregar preservando desativação e compatibilidade de perfis antigos.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         }
       ],
       "documents": [
@@ -2986,19 +3001,19 @@
       "title": "Perfis efetivos e conflitos coerentes",
       "description": "Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos. Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: K-D/E; Maya W colide e detectores divergem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: K-D/E; Maya W colide e detectores divergem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Mapa efetivo e detectores corrigidos; W Maya, Z Max, D Cinema e overrides de domínio/Delete/brush exercitados. Demais fallbacks físicos de navegação/pins/nudge e integração nativa exigem revisão H09/H13/H33.",
       "checkpoints": [
         {
           "title": "Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
@@ -3017,9 +3032,9 @@
       "title": "Executor compartilhado de ações semânticas",
       "description": "Mapear ações de seleção, transformação e Paint por contratos compartilhados. Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: K-F; handlers diferem entre Application e adapters. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: K-F; handlers diferem entre Application e adapters. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. A seleção, autoria/transporte Animate e início de UV têm entrada compartilhada; UnknownAction/Rejected são explícitos. Consolidação dos demais adapters e fallbacks permanece aberta.",
       "checkpoints": [
         {
           "title": "Mapear ações de seleção, transformação e Paint por contratos compartilhados.",
@@ -3028,8 +3043,8 @@
         },
         {
           "title": "Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
@@ -3045,17 +3060,17 @@
     {
       "id": "H10",
       "phase": "geometry",
-      "title": "Seleção dinâmica e movimento direto MODEL",
-      "description": "Distinguir clique/arrasto/box; preservar multisseleção e modificadores semânticos. Validar alvo/revisão, limiar, mundo/local, cancelamento exato e Undo único sem mudar domínio.",
+      "title": "Seleção integrada e arrasto protegido MODEL",
+      "description": "SEL-004 substitui a proposta de movimento ao arrastar geometria: transformação por alça ou comando; vazio inicia box; fonte fixa, cancelamento e Undo único.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: ToolSession/ModalOp existem; política de Select ausente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: ToolSession/ModalOp existem; política de Select ausente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Proposta inicial de arrasto direto substituída pela decisão explícita SEL-004 em 2026-10-15; histórico D03 preservado. Select expõe gizmo para alvos mesh válidos e arrasto protegido; box preview/commit/cancel e modificadores de alça exercitados. Gizmo fica indisponível para perfil selecionado, evitando transformar a mesh errada; adapters de perfil/mistos dependem de H22/H23. Gate nativo aberto.",
       "checkpoints": [
         {
-          "title": "Distinguir clique/arrasto/box; preservar multisseleção e modificadores semânticos.",
-          "completed": false,
-          "evidence": null
+          "title": "Distinguir clique/arrasto/box, sem iniciar Move ao arrastar geometria; preservar multisseleção e modificadores semânticos.",
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Validar alvo/revisão, limiar, mundo/local, cancelamento exato e Undo único sem mudar domínio.",
@@ -3110,19 +3125,19 @@
       "title": "Sessão contínua de transformação UV",
       "description": "Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento. Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: V01 parcial; comandos discretos e previews diretos existem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: V01 parcial; comandos discretos e previews diretos existem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Sessão UV de fonte fixa/revisão/seleção implementada; preview fora do documento, um commit/Undo, pins/Sync e cancel/stale exercitados. Adapter tipado e consulta UV conectados; integração de gestos físicos no frontend continua pendente.",
       "checkpoints": [
         {
           "title": "Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
@@ -3143,14 +3158,14 @@
       "title": "Ações e atalhos contextuais UV",
       "description": "Definir ações de seleção/move/rotate/scale UV com handlers na Application. Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Sem binding padrão UV G/R/S; kernels reutilizáveis. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: Sem binding padrão UV G/R/S; kernels reutilizáveis. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Defaults UV G/R/S, intents e handlers headless presentes; constraints/entrada numérica física e foco por superfície permanecem abertos.",
       "checkpoints": [
         {
           "title": "Definir ações de seleção/move/rotate/scale UV com handlers na Application.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.",
@@ -3176,14 +3191,14 @@
       "title": "Atalhos de transporte e chaves ANIMATE",
       "description": "Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado. Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "IN PROGRESS",
       "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Space resolve para ferramenta anterior no keymap global. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "baseline": "P2. Auditoria de 2026-10-15: Space resolve para ferramenta anterior no keymap global. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Transporte/autoria roteados antes de Delete geométrico; taxa da timeline validada e remapeamento exercitado. Foco físico timeline/viewport/texto e aceite nativo não executados.",
       "checkpoints": [
         {
           "title": "Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-core-20261015"
         },
         {
           "title": "Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.",
@@ -3336,6 +3351,433 @@
       "documents": [
         "02-application/tools-interaction-implementation.md",
         "03-geometry/transforms-origin-pivot-gizmos.md"
+      ]
+    },
+    {
+      "id": "H19",
+      "phase": "foundations",
+      "title": "Pivô do objeto e centro de transformação",
+      "description": "Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H20",
+      "phase": "foundations",
+      "title": "Cursor3D e navegação independentes",
+      "description": "Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. NavigationAnchor e cópia única do centro separados de ferramenta/pivô. Orbit/zoom mantêm referência e não saltam ao trocar modo; pan preserva cursor. API/headless pass; exposição nativa pendente. Origem persistente continua em H19.",
+      "checkpoints": [
+        {
+          "title": "Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.",
+          "completed": true,
+          "evidence": "contextual-core-20261015"
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H21",
+      "phase": "geometry",
+      "title": "DRAW como preset de POLY",
+      "description": "Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. Presets compartilham ferramentas, perfis, picking e extensões; alinhamento planar/retorno reutilizados e exercitados sem mutar seleção/documento. Aceite visual da apresentação permanece em H33.",
+      "checkpoints": [
+        {
+          "title": "Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.",
+          "completed": true,
+          "evidence": "contextual-core-20261015"
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H22",
+      "phase": "foundations",
+      "title": "Seleção contextual e alvos heterogêneos",
+      "description": "SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. SelectThrough separado de X-Ray/Wireframe no picking, box/lasso, preselection e snap. Seleção heterogênea, auto picking sem troca global e ActiveElement tipado ainda não implementados.",
+      "checkpoints": [
+        {
+          "title": "SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H23",
+      "phase": "foundations",
+      "title": "Gizmo universal, orientação e snap",
+      "description": "SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H24",
+      "phase": "geometry",
+      "title": "ShapeBuilder planar com operandos explícitos",
+      "description": "Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H25",
+      "phase": "geometry",
+      "title": "ShapeBuilder sólido de dois operandos",
+      "description": "Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "IN PROGRESS",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. Fundação BooleanSolid Empty/Mesh, operandos preparados, partição A-only/overlap/B-only e componentes por aresta exercitados. Ainda faltam sessão, RegionPlan, Unite/Remove/Extract, publicação UV/material, broad-phase e orçamento/cancel.",
+      "checkpoints": [
+        {
+          "title": "Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Exercitar a fundação Empty/preparação/partição e componentes por aresta, sem declarar sessão interativa concluída.",
+          "completed": true,
+          "evidence": "contextual-core-20261015"
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H26",
+      "phase": "geometry",
+      "title": "Composição reeditável e múltiplos sólidos",
+      "description": "Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H27",
+      "phase": "geometry",
+      "title": "Construção sobre superfícies",
+      "description": "Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H28",
+      "phase": "foundations",
+      "title": "Feedback comum de operações",
+      "description": "MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H29",
+      "phase": "geometry",
+      "title": "Dimensões e comparação espacial",
+      "description": "VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H30",
+      "phase": "geometry",
+      "title": "Section, Thickness e Organic Profiles",
+      "description": "VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H31",
+      "phase": "workflows",
+      "title": "Smart Rig manual e assistido",
+      "description": "RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H32",
+      "phase": "workflows",
+      "title": "Smart Rig estrutural e Live opcional",
+      "description": "RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "H33",
+      "phase": "quality",
+      "title": "Integração visual e acessibilidade posterior",
+      "description": "VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "checkpoints": [
+        {
+          "title": "VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "D04",
+      "phase": "governance",
+      "title": "Integrar a especificação contextual ao caderno canônico",
+      "description": "Consolidar SEL/VSP/MF/RIG, pivô/cursor, DRAW/POLY e ShapeBuilder avançado com matriz complementar e evidência.",
+      "document": "02-application/contextual-editor-contract.md",
+      "status": "DONE",
+      "updated": "2026-10-15",
+      "baseline": "Pacote PETUNIA3D_DOCUMENTACAO_COMPLETA_CODE_AGENT, 20 arquivos com hashes conferidos no planejamento; implementação não inferida da aprovação.",
+      "checkpoints": [
+        {
+          "title": "Publicar contratos conciliados e rastrear decisões e testes do pacote importado.",
+          "completed": true,
+          "evidence": "d04-contextual-spec-20261015"
+        },
+        {
+          "title": "Vincular manifesto, decisões, matriz e tracker preservando o histórico.",
+          "completed": true,
+          "evidence": "d04-contextual-spec-20261015"
+        },
+        {
+          "title": "Executar validadores documentais e registrar evidência.",
+          "completed": true,
+          "evidence": "d04-contextual-spec-20261015"
+        }
+      ],
+      "documents": [
+        "02-application/contextual-editor-contract.md",
+        "02-application/tools-interaction-implementation.md",
+        "00-philosophy/decision-register.md"
       ]
     }
   ]

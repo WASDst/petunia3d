@@ -383,6 +383,7 @@ pub mod arrangement;
 mod bevel;
 pub mod boolean;
 pub mod boolean_cleanup;
+mod boolean_partition;
 pub mod cleanup;
 mod connect;
 pub mod curve;

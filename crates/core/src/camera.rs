@@ -11,6 +11,14 @@ pub enum Projection {
     Ortho,
 }
 
+/// Navigation anchor is session state, independent from transform pivots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NavigationAnchor {
+    #[default]
+    ViewTarget,
+    Cursor3D,
+}
+
 /// Vista nomeada (header do viewport).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewPreset {
@@ -217,6 +225,46 @@ impl Camera {
         self.yaw -= dx * 0.008;
         self.pitch = (self.pitch + dy * 0.008)
             .clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
+    }
+
+    /// Rotate the existing eye and target around a world anchor, without a
+    /// preliminary reframe. Changing the anchor alone never moves the camera.
+    pub fn orbit_about(&mut self, anchor: Vec3, dx: f32, dy: f32) -> bool {
+        if !anchor.is_finite() || !dx.is_finite() || !dy.is_finite() {
+            return false;
+        }
+        let before = glam::Mat3::from_cols(self.right(), self.up(), -self.forward());
+        let offset = self.target - anchor;
+        let mut next = self.clone();
+        next.orbit(dx, dy);
+        let after = glam::Mat3::from_cols(next.right(), next.up(), -next.forward());
+        let target = anchor + after * before.transpose() * offset;
+        if !target.is_finite() {
+            return false;
+        }
+        next.target = target;
+        *self = next;
+        true
+    }
+
+    /// Keep the world anchor at its projected position while changing zoom.
+    pub fn zoom_about(&mut self, anchor: Vec3, delta: f32) -> bool {
+        if !anchor.is_finite() || !delta.is_finite() {
+            return false;
+        }
+        let before = self.visible_height();
+        if !before.is_finite() || before <= 0.0 {
+            return false;
+        }
+        let mut next = self.clone();
+        next.zoom(delta);
+        let ratio = next.visible_height() / before;
+        next.target = anchor + (self.target - anchor) * ratio;
+        if !next.target.is_finite() || !next.distance.is_finite() {
+            return false;
+        }
+        *self = next;
+        true
     }
 
     pub fn pan(&mut self, dx: f32, dy: f32) {

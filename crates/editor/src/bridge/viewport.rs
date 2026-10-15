@@ -21,7 +21,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.session.camera.pan(dx, dy);
             }
             ViewportGesture::Zoom { delta } => {
-                self.state.session.camera.zoom(delta);
+                if self.state.session.navigation_anchor == petunia_core::NavigationAnchor::Cursor3D
+                {
+                    let anchor = glam::Vec3::from(self.state.session.cursor_3d);
+                    self.state.session.camera.zoom_about(anchor, delta);
+                } else {
+                    self.state.session.camera.zoom(delta);
+                }
             }
         }
         self.state.mark_dirty();
@@ -62,20 +68,19 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.state.mark_dirty();
     }
 
-    /// Orbita a câmera usando Cursor 3D ou seleção como pivô quando aplicável.
+    /// Explicit navigation mode; transform pivots and active tools are unrelated.
     pub fn orbit_viewport(&mut self, dx: f32, dy: f32) -> bool {
         if !dx.is_finite() || !dy.is_finite() {
             return false;
         }
-        if self.state.session.tools.active_tool == "cursor"
-            || self.state.session.tools.active_tool == "cursor_3d"
-            || self.state.session.pivot_point == petunia_core::PivotPoint::Cursor3D
-        {
-            self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
-        } else if let Some(center) = self.selection_pivot() {
-            self.state.session.camera.target = center;
+        if self.state.session.navigation_anchor == petunia_core::NavigationAnchor::Cursor3D {
+            let anchor = glam::Vec3::from(self.state.session.cursor_3d);
+            if !self.state.session.camera.orbit_about(anchor, dx, dy) {
+                return false;
+            }
+        } else {
+            self.state.session.camera.orbit(dx, dy);
         }
-        self.state.session.camera.orbit(dx, dy);
         self.state.mark_dirty();
         true
     }

@@ -44,3 +44,9 @@ pub enum SelectionDomain {
 A migração deverá identificar consumidores, substituir conversões, preservar testes e remover o enum apenas quando não houver consumidores.
 
 IDs persistentes deverão usar newtypes quando isso aumentar segurança e legibilidade.
+
+## Navegação e seleção explícitas — checkpoint contextual 2026-10-15
+
+O [contrato contextual](../02-application/contextual-editor-contract.md) separa navegação, centro de transformação e origem persistente. `NavigationAnchor::ViewTarget` é o default; `Cursor3D` é escolha explícita da sessão. Orbitar no modo Cursor3D transforma olho e alvo em torno da âncora sem reenquadrar antes do gesto; zoom preserva a posição projetada da referência. Pan/frame não movem cursor; trocar modo não altera câmera imediatamente. Ferramenta ativa e `PivotPoint` não decidem navegação.
+
+`select_through` é política de picking da sessão, independente de `show_xray` e Wireframe. Clique, hover, regiões e candidatos de snap usam essa política; a renderização mantém suas opções visuais próprias. `ViewportSession` projeta e restaura ambas as escolhas. A exposição Qt e seus gates continuam em H33; APIs headless não comprovam acesso físico no frontend.

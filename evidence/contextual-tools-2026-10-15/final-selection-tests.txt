@@ -1,0 +1,14 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (target/debug/deps/petunia_editor-ac78e7a94ef6a2fc)
+
+running 8 tests
+test bridge::tool_gestures::contextual_selection_tests::clicking_a_select_handle_below_drag_threshold_keeps_selection ... ok
+test bridge::tool_gestures::contextual_selection_tests::empty_drag_commits_box_and_locked_assets_offer_no_handles ... ok
+test bridge::tool_gestures::contextual_selection_tests::empty_drag_previews_box_without_mutating_selection_and_cancel_discards_it ... ok
+test bridge::tool_gestures::contextual_selection_tests::explicit_handles_keep_precision_and_snap_modifiers ... ok
+test bridge::tool_gestures::contextual_selection_tests::persistent_profile_can_be_drawn_picked_and_edited_without_leaving_poly ... ok
+test bridge::tool_gestures::contextual_selection_tests::profiles_are_visible_and_shape_builder_available_in_poly ... ok
+test bridge::tool_gestures::contextual_selection_tests::select_gizmo_drag_uses_the_existing_transaction_and_cancel_restores_source ... ok
+test bridge::tool_gestures::contextual_selection_tests::select_has_a_universal_gizmo_and_geometry_drag_is_protected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 116 filtered out; finished in 0.21s

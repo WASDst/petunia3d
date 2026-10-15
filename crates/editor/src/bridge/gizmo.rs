@@ -3,6 +3,26 @@
 use crate::*;
 
 impl<V: PetuniaViewport> SlintUiBridge<V> {
+    /// Only expose handles backed by a transformable target. Profile adapters
+    /// remain explicit until heterogeneous target resolution is implemented.
+    pub(crate) fn projected_gizmo(&self) -> GizmoModel {
+        let mut gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        let unsupported_profile = self.state.workspace == Workspace::Model
+            && self.state.active_tool == "select"
+            && self.active_profile_resources().is_some();
+        let unavailable_asset = self.state.workspace == Workspace::Model
+            && self
+                .state
+                .project
+                .active()
+                .is_none_or(|asset| asset.locked || !asset.visible);
+        if unsupported_profile || unavailable_asset {
+            gizmo.visible = false;
+            gizmo.clear_handle_geometry();
+        }
+        gizmo
+    }
+
     /// Handle do gizmo sob o cursor (preselection, sem clique).
     /// Handle do gizmo sob um ponto de tela, dentro de um raio de tolerância.
     ///
@@ -13,7 +33,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub(crate) fn gizmo_target_at(&self, x: f32, y: f32) -> Option<GizmoTarget> {
-        let gizmo = compute_gizmo(&self.state, self.viewport_size[0], self.viewport_size[1]);
+        let gizmo = self.projected_gizmo();
         if !gizmo.visible {
             return None;
         }
@@ -23,6 +43,8 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 "scale" => "scale",
                 _ => "rotate",
             }
+        } else if self.state.session.tools.active_tool == "select" {
+            "transform"
         } else {
             self.state.session.tools.active_tool.as_str()
         };
@@ -309,8 +331,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     /// domina, o eixo sob o cursor clareia e os demais esmaecem no arrasto.
     pub(crate) fn gizmo_overlay_shapes(&self) -> Vec<petunia_render::OverlayShape> {
         use petunia_render::OverlayShape;
-        let [width, height] = self.viewport_size;
-        let gizmo = compute_gizmo(&self.state, width, height);
+        let gizmo = self.projected_gizmo();
         if !gizmo.visible || self.state.workspace != Workspace::Model {
             return Vec::new();
         }

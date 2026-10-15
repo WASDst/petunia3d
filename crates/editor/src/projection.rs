@@ -333,7 +333,7 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
     let is_model_transform = state.workspace == Workspace::Model
         && matches!(
             state.session.tools.active_tool.as_str(),
-            "move" | "rotate" | "scale" | "transform"
+            "select" | "move" | "rotate" | "scale" | "transform"
         );
 
     if !is_model_transform && !is_animate_bone {
@@ -430,7 +430,10 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             "M {:.2} {:.2} L {:.2} {:.2} ",
             origin[0], origin[1], end[0], end[1]
         );
-        if state.session.tools.active_tool == "transform" {
+        if matches!(
+            state.session.tools.active_tool.as_str(),
+            "select" | "transform"
+        ) {
             let scale_center = [
                 origin[0] + direction[0] * 43.0,
                 origin[1] + direction[1] * 43.0,

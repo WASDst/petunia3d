@@ -234,6 +234,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             }
             return true;
         }
+        if self.state.cancel_uv_transform() {
+            return true;
+        }
         if self.close_context_menu() {
             return true;
         }
@@ -402,6 +405,12 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
     }
 
     pub(crate) fn confirm_active_operation(&mut self) -> bool {
+        if self.state.session.tools.uv_transform.is_some() {
+            if let Err(error) = self.state.commit_uv_transform() {
+                self.state.set_status(error.to_string());
+            }
+            return true;
+        }
         if self.decal_gesture.is_some() {
             let effect = self.tool_session.key(petunia_core::ToolKey::Confirm);
             if effect == petunia_core::ToolEffect::Nothing {

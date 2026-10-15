@@ -431,3 +431,9 @@ O drawer auxiliar recebe o diagnóstico já projetado pela Application, com aç�
 
 1. **Aba Global UV:** UV possui cápsula de navegação dedicada no cabeçalho global da aplicação (`DRAW` · `POLY` · `PINTAR` · `UV`), acessível por teclado (Setas, Home, End) e atalhos rápidos.
 2. **Isolamento de Pintura:** Removida a subseção redundante "Preparar superfície" de dentro do Paint Inspector, eliminando qualquer conflito operacional entre o mapeamento UV e a pintura de textura.
+
+## Transformação contínua no núcleo — 2026-10-15
+
+`begin_uv_transform` captura alvo, revisão, seleção e UVs; `update_uv_transform` aplica valores absolutos à fonte fixa e mantém a prévia fora do documento. O editor UV lê `preview_mesh`; confirmar despacha um comando e um Undo, cancelar descarta apenas a prévia. Mudança de alvo, seleção, topologia ou revisão recusa commit; pins e Sync não são alterados. Undo/Redo durante o gesto cancelam primeiro a prévia. Os helpers compatíveis de `UvModule` atualizam uma sessão ativa ou despacham ação discreta, sem mutação direta.
+
+G/R/S resolvem `uv.move/rotate/scale` no contexto UV. Enter/Esc atendem a sessão; updates numéricos tipados usam `UiIntent::UpdateUvTransform`. Integração física de gesto/constraints numéricos no frontend permanece gate distinto: [H12/H13 e H33](../02-application/tools-interaction-implementation.md).

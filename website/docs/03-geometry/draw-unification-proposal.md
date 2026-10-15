@@ -101,3 +101,7 @@ Sem ECS, editor CAD geral com constraints, segundo scene graph, segundo Geometry
 3. Curvas persistem como SplineResource; formas persistem como PlanarShape.
 4. Selection, commands, snapping, sessions, IDs, render e Undo são compartilhados.
 5. Migração incremental com gates por vertical slice; remover duplicação somente após equivalência comprovada.
+
+## Execução contextual — 2026-10-15
+
+Decisão complementar do usuário: DRAW é preset planar com retorno livre, sem ferramentas exclusivas. O editor compartilhado remove as restrições `offers_tool`, a ocultação dos perfis em POLY e os bloqueios por preset em ShapeBuilder, extensões e importação SVG. A câmera planar/retorno já existente é reutilizada, sem novo documento ou engine. Detalhes e status: [contrato contextual](../02-application/contextual-editor-contract.md), H21 na [matriz](../02-application/tools-interaction-implementation.md). Composição paramétrica, múltiplos sólidos e superfícies ampliam o ShapeBuilder em etapas H24–H27; remover a restrição DRAW não equivale a concluir essas features.

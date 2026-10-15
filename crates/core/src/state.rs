@@ -644,6 +644,7 @@ pub struct ToolState {
     pub profile: ProfileState,
     /// Seleção UV (cantos, modo e Sync explícito) — website/docs/07-uv.
     pub uv_selection: crate::UvSelectionState,
+    pub uv_transform: Option<crate::UvTransformSession>,
     pub selected_annotation: Option<uuid::Uuid>,
     pub selected_measurement: Option<uuid::Uuid>,
     pub active_measurement: Option<MeasurementItem>,
@@ -732,6 +733,7 @@ impl ToolState {
                 ..Default::default()
             },
             uv_selection: crate::UvSelectionState::default(),
+            uv_transform: None,
             selected_annotation: None,
             selected_measurement: None,
             active_measurement: None,
@@ -891,6 +893,7 @@ pub struct ViewportSession {
     pub shading: Shading,
     pub textured: bool,
     pub cursor_3d: [f32; 3],
+    pub navigation_anchor: crate::camera::NavigationAnchor,
     pub locked_axes: [bool; 3],
     pub isolate_active: bool,
     pub isolate_prev_visibilities: Option<Vec<bool>>,
@@ -900,9 +903,13 @@ pub struct ViewportSession {
     pub proportional_settings: crate::proportional::ProportionalSettings,
     pub transform_orientation: TransformOrientation,
     pub pivot_point: PivotPoint,
+    /// Snapshot of an explicitly copied world-space transform center.
+    pub transform_center: Option<[f32; 3]>,
     pub edit_pivot: bool,
     pub show_overlays: bool,
     pub show_xray: bool,
+    /// Picking policy, independent of X-Ray and wireframe shading.
+    pub select_through: bool,
     pub xray_opacity: f32,
     pub show_triangulation: bool,
     pub show_nav_hud: bool,
@@ -929,6 +936,7 @@ impl ViewportSession {
             shading: Shading::Solid,
             textured: false,
             cursor_3d: [0.0, 0.0, 0.0],
+            navigation_anchor: crate::camera::NavigationAnchor::default(),
             locked_axes: [false; 3],
             isolate_active: false,
             isolate_prev_visibilities: None,
@@ -938,9 +946,11 @@ impl ViewportSession {
             proportional_settings: crate::proportional::ProportionalSettings::default(),
             transform_orientation: TransformOrientation::Global,
             pivot_point: PivotPoint::MedianPoint,
+            transform_center: None,
             edit_pivot: false,
             show_overlays: true,
             show_xray: false,
+            select_through: false,
             xray_opacity: 0.5,
             show_triangulation: false,
             show_nav_hud: true,
@@ -979,6 +989,7 @@ pub struct EditorSession {
     pub camera: Camera,
     pub camera_frame: Option<(Camera, Camera, f32)>,
     pub cursor_3d: [f32; 3],
+    pub navigation_anchor: crate::camera::NavigationAnchor,
     pub locked_axes: [bool; 3],
     pub isolate_active: bool,
     pub isolate_prev_visibilities: Option<Vec<bool>>,
@@ -988,9 +999,13 @@ pub struct EditorSession {
     pub proportional_settings: crate::proportional::ProportionalSettings,
     pub transform_orientation: TransformOrientation,
     pub pivot_point: PivotPoint,
+    /// Snapshot of an explicitly copied world-space transform center.
+    pub transform_center: Option<[f32; 3]>,
     pub edit_pivot: bool,
     pub show_overlays: bool,
     pub show_xray: bool,
+    /// Picking policy, independent of X-Ray and wireframe shading.
+    pub select_through: bool,
     /// Opacidade da geometria em X-Ray (0.1..=0.9). Ajustável pelo popover.
     pub xray_opacity: f32,
     pub show_triangulation: bool,
@@ -1050,6 +1065,7 @@ impl EditorSession {
             camera: Camera::default(),
             camera_frame: None,
             cursor_3d: [0.0, 0.0, 0.0],
+            navigation_anchor: crate::camera::NavigationAnchor::default(),
             locked_axes: [false; 3],
             isolate_active: false,
             isolate_prev_visibilities: None,
@@ -1060,9 +1076,11 @@ impl EditorSession {
             proportional_settings: crate::proportional::ProportionalSettings::default(),
             transform_orientation: TransformOrientation::Global,
             pivot_point: PivotPoint::MedianPoint,
+            transform_center: None,
             edit_pivot: false,
             show_overlays: true,
             show_xray: false,
+            select_through: false,
             xray_opacity: 0.42,
             show_triangulation: false,
             show_nav_hud: true,
@@ -1079,6 +1097,16 @@ impl EditorSession {
             animate: crate::animate_session::AnimateSession::default(),
             decal_time: None,
         }
+    }
+
+    /// Explicit one-time copy. Moving the cursor afterwards does not alter this center.
+    pub fn copy_cursor_to_transform_center(&mut self) -> bool {
+        if !self.cursor_3d.iter().all(|v| v.is_finite()) {
+            return false;
+        }
+        self.transform_center = Some(self.cursor_3d);
+        self.pivot_point = PivotPoint::Cursor3D;
+        true
     }
 
     /// Visão derivada do estado de edição (P3D-015).
@@ -1183,6 +1211,7 @@ impl EditorSession {
             shading: self.shading,
             textured: self.textured,
             cursor_3d: self.cursor_3d,
+            navigation_anchor: self.navigation_anchor,
             locked_axes: self.locked_axes,
             isolate_active: self.isolate_active,
             isolate_prev_visibilities: self.isolate_prev_visibilities.clone(),
@@ -1192,9 +1221,11 @@ impl EditorSession {
             proportional_settings: self.proportional_settings.clone(),
             transform_orientation: self.transform_orientation,
             pivot_point: self.pivot_point,
+            transform_center: self.transform_center,
             edit_pivot: self.edit_pivot,
             show_overlays: self.show_overlays,
             show_xray: self.show_xray,
+            select_through: self.select_through,
             xray_opacity: self.xray_opacity,
             show_triangulation: self.show_triangulation,
             show_nav_hud: self.show_nav_hud,
@@ -1214,6 +1245,7 @@ impl EditorSession {
         self.shading = vs.shading;
         self.textured = vs.textured;
         self.cursor_3d = vs.cursor_3d;
+        self.navigation_anchor = vs.navigation_anchor;
         self.locked_axes = vs.locked_axes;
         self.isolate_active = vs.isolate_active;
         self.isolate_prev_visibilities = vs.isolate_prev_visibilities;
@@ -1223,9 +1255,11 @@ impl EditorSession {
         self.proportional_settings = vs.proportional_settings;
         self.transform_orientation = vs.transform_orientation;
         self.pivot_point = vs.pivot_point;
+        self.transform_center = vs.transform_center;
         self.edit_pivot = vs.edit_pivot;
         self.show_overlays = vs.show_overlays;
         self.show_xray = vs.show_xray;
+        self.select_through = vs.select_through;
         self.xray_opacity = vs.xray_opacity;
         self.show_triangulation = vs.show_triangulation;
         self.show_nav_hud = vs.show_nav_hud;
@@ -2523,6 +2557,7 @@ impl CommandContext<'_> {
     /// atual e restaura os do destino. Projeto, seleção e undo são
     /// compartilhados — só a composição do shell muda.
     pub fn switch_workspace(&mut self, next: Workspace) {
+        self.editor.tools.uv_transform = None;
         let prev = self.editor.workspace;
         if prev == next {
             return;
@@ -2597,6 +2632,10 @@ impl CommandContext<'_> {
     }
 
     pub fn undo(&mut self) -> bool {
+        if self.editor.tools.uv_transform.take().is_some() {
+            self.mark_dirty();
+            return true;
+        }
         if self.editor.tools.mesh_preview.is_some() {
             self.finish_mesh_preview(true);
             return true;
@@ -2617,6 +2656,9 @@ impl CommandContext<'_> {
             self.document.palette = prev.palette.clone();
             self.document.project = prev;
             self.document.sync_reference_mirror();
+            self.editor
+                .animate
+                .clear_stale_clip_selection(&self.document.project);
             self.sync_selection();
             self.editor.tools.uv_selection.clear();
             self.emit_project_changed(ProjectChanges::ALL);
@@ -2628,6 +2670,10 @@ impl CommandContext<'_> {
     }
 
     pub fn redo(&mut self) -> bool {
+        if self.editor.tools.uv_transform.take().is_some() {
+            self.mark_dirty();
+            return true;
+        }
         if self.editor.tools.mesh_preview.is_some() {
             self.finish_mesh_preview(true);
             return true;
@@ -2648,6 +2694,9 @@ impl CommandContext<'_> {
             self.document.palette = next.palette.clone();
             self.document.project = next;
             self.document.sync_reference_mirror();
+            self.editor
+                .animate
+                .clear_stale_clip_selection(&self.document.project);
             self.sync_selection();
             self.editor.tools.uv_selection.clear();
             self.emit_project_changed(ProjectChanges::ALL);
@@ -4138,7 +4187,9 @@ impl<'a> EditorView<'a> {
             }
         }
         match pivot {
-            PivotPoint::Cursor3D => glam::Vec3::from(self.cursor_3d),
+            PivotPoint::Cursor3D => self
+                .transform_center
+                .map_or(glam::Vec3::ZERO, glam::Vec3::from),
             PivotPoint::BoundingBoxCenter => {
                 if self.selection_domain() == SelectionDomain::Object
                     && let Some(active) = self.document.active()

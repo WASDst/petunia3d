@@ -7,10 +7,16 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let Some(pivot) = pivot_from_id(id) else {
             return false;
         };
-        if self.state.session.pivot_point == pivot {
-            return false;
+        if pivot == PivotPoint::Cursor3D {
+            if !self.state.session.copy_cursor_to_transform_center() {
+                return false;
+            }
+        } else {
+            if self.state.session.pivot_point == pivot {
+                return false;
+            }
+            self.state.session.pivot_point = pivot;
         }
-        self.state.session.pivot_point = pivot;
         self.state.mark_dirty();
         self.state.set_status(crate::tr::fill(
             &self.state.t_id(petunia_config::text_id::STATUS_PIVOT),
@@ -21,6 +27,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Posiciona o 3D Cursor na viewport dado um ponto normalizado (ou clique na tela).
     pub fn place_cursor_3d(&mut self, norm_x: f32, norm_y: f32) -> bool {
+        if !norm_x.is_finite() || !norm_y.is_finite() {
+            return false;
+        }
         let nx = norm_x.clamp(0.0, 1.0) * 2.0 - 1.0;
         let ny = 1.0 - norm_y.clamp(0.0, 1.0) * 2.0;
 
@@ -106,6 +115,9 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
 
     /// Centraliza o alvo da câmera na posição do 3D Cursor.
     pub fn frame_cursor(&mut self) -> bool {
+        if !self.state.session.cursor_3d.iter().all(|v| v.is_finite()) {
+            return false;
+        }
         self.state.session.camera.target = glam::Vec3::from(self.state.session.cursor_3d);
         self.state.set_status(
             self.state
@@ -191,26 +203,5 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         // Fração do movimento do ponteiro na direção do eixo, em unidades de
         // mundo (a direção projetada corresponde a 1 unidade do eixo).
         (total_x * direction[0] + total_y * direction[1]) / length_squared
-    }
-
-    /// Centro da seleção do ativo, quando há algo selecionado.
-    pub(crate) fn selection_pivot(&self) -> Option<glam::Vec3> {
-        let mesh = self.state.project.active_mesh()?;
-        if self.state.selection_domain() == SelectionDomain::Object {
-            return Some(self.state.calculate_pivot(self.state.session.pivot_point));
-        }
-        if !mesh.has_selection() {
-            return None;
-        }
-        let center = mesh.selection_center();
-        if center.iter().all(|value| value.is_finite()) {
-            // Centro local da seleção levado ao mundo, como o pivô do core.
-            Some(
-                crate::projection::active_world_matrix(&self.state)
-                    .transform_point3(glam::Vec3::from_array(center)),
-            )
-        } else {
-            None
-        }
     }
 }

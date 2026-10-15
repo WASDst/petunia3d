@@ -20,6 +20,90 @@ pub enum BooleanOp {
     Intersection,
 }
 
+/// A successful solid operation can legitimately contain no volume.
+#[derive(Clone, Debug)]
+pub enum BooleanSolid {
+    Empty,
+    Mesh(Box<Mesh>),
+}
+
+/// Two validated, triangulated operands prepared once for a partition session.
+/// Provider handles remain private and never enter document serialization.
+pub struct PreparedBooleanOperands {
+    a: Manifold,
+    b: Manifold,
+}
+
+/// Disjoint-membership cells before splitting edge-connected components.
+#[derive(Clone, Debug)]
+pub struct BooleanPartition {
+    pub first_only: BooleanSolid,
+    pub overlap: BooleanSolid,
+    pub second_only: BooleanSolid,
+}
+
+impl PreparedBooleanOperands {
+    pub fn new(a: &Mesh, b: &Mesh) -> Result<Self, BooleanError> {
+        let a = to_provider(a).ok_or(BooleanError::InvalidInput("mesh A"))?;
+        let b = to_provider(b).ok_or(BooleanError::InvalidInput("mesh B"))?;
+        if a.status() != manifold_rust::types::Error::NoError {
+            return Err(BooleanError::InvalidInput(
+                "mesh A is not a closed manifold",
+            ));
+        }
+        if b.status() != manifold_rust::types::Error::NoError {
+            return Err(BooleanError::InvalidInput(
+                "mesh B is not a closed manifold",
+            ));
+        }
+        Ok(Self { a, b })
+    }
+
+    pub fn evaluate(&self, op: BooleanOp) -> Result<BooleanSolid, BooleanError> {
+        let result = match op {
+            BooleanOp::Union => self.a.union(&self.b),
+            BooleanOp::Difference => self.a.difference(&self.b),
+            BooleanOp::Intersection => self.a.intersection(&self.b),
+        };
+        solid_from_provider(&result)
+    }
+
+    pub fn partition(&self) -> Result<BooleanPartition, BooleanError> {
+        Ok(BooleanPartition {
+            first_only: self.evaluate(BooleanOp::Difference)?,
+            overlap: self.evaluate(BooleanOp::Intersection)?,
+            second_only: solid_from_provider(&self.b.difference(&self.a))?,
+        })
+    }
+}
+
+impl BooleanSolid {
+    /// Regions share edges, not just a single touching vertex.
+    pub fn connected_regions(&self) -> Result<Vec<Mesh>, BooleanError> {
+        match self {
+            Self::Empty => Ok(Vec::new()),
+            Self::Mesh(mesh) => crate::boolean_partition::edge_connected_components(mesh),
+        }
+    }
+}
+
+/// Success with zero volume is separate from malformed input/kernel failures.
+pub fn boolean_solids(a: &Mesh, b: &Mesh, op: BooleanOp) -> Result<BooleanSolid, BooleanError> {
+    PreparedBooleanOperands::new(a, b)?.evaluate(op)
+}
+
+fn solid_from_provider(result: &Manifold) -> Result<BooleanSolid, BooleanError> {
+    if result.status() != manifold_rust::types::Error::NoError {
+        return Err(BooleanError::Kernel);
+    }
+    if result.is_empty() {
+        return Ok(BooleanSolid::Empty);
+    }
+    from_provider(result)
+        .map(|mesh| BooleanSolid::Mesh(Box::new(mesh)))
+        .ok_or(BooleanError::InvalidOutput("mesh"))
+}
+
 /// Boolean provider failure.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum BooleanError {
@@ -39,17 +123,12 @@ pub enum BooleanError {
 /// Inputs must be triangulated with finite coordinates. Output is validated
 /// the same way before returning.
 pub fn boolean_meshes(a: &Mesh, b: &Mesh, op: BooleanOp) -> Result<Mesh, BooleanError> {
-    let ma = to_provider(a).ok_or(BooleanError::InvalidInput("mesh A"))?;
-    let mb = to_provider(b).ok_or(BooleanError::InvalidInput("mesh B"))?;
-    let result = match op {
-        BooleanOp::Union => ma.union(&mb),
-        BooleanOp::Difference => ma.difference(&mb),
-        BooleanOp::Intersection => ma.intersection(&mb),
-    };
-    if result.status() != manifold_rust::types::Error::NoError {
-        return Err(BooleanError::Kernel);
+    // Compatibility API requires a concrete mesh. New region workflows use
+    // boolean_solids so a valid empty result is not mistaken for a failure.
+    match boolean_solids(a, b, op)? {
+        BooleanSolid::Mesh(mesh) => Ok(*mesh),
+        BooleanSolid::Empty => Err(BooleanError::InvalidOutput("mesh")),
     }
-    from_provider(&result).ok_or(BooleanError::InvalidOutput("mesh"))
 }
 
 /// Booleano com cleanup seguro (cap. 04): triangula as cópias para o kernel e
@@ -89,15 +168,17 @@ fn to_provider(mesh: &Mesh) -> Option<Manifold> {
     if mesh.verts.is_empty() || mesh.faces.is_empty() {
         return None;
     }
-    let mut vert_properties = Vec::with_capacity(mesh.verts.len() * 3);
+    let vertex_capacity = mesh.verts.len().checked_mul(3)?;
+    let face_capacity = mesh.faces.len().checked_mul(3)?;
+    let count = u32::try_from(mesh.verts.len()).ok()?;
+    let mut vert_properties = Vec::with_capacity(vertex_capacity);
     for v in &mesh.verts {
         if !v.pos.iter().all(|x| x.is_finite()) {
             return None;
         }
         vert_properties.extend_from_slice(&v.pos);
     }
-    let mut tri_verts = Vec::with_capacity(mesh.faces.len() * 3);
-    let count = mesh.verts.len() as u32;
+    let mut tri_verts = Vec::with_capacity(face_capacity);
     for f in &mesh.faces {
         if f.verts.len() != 3 {
             return None;
@@ -139,7 +220,7 @@ fn from_provider(manifold: &Manifold) -> Option<Mesh> {
             selected: false,
         });
     }
-    let count = mesh.verts.len() as u32;
+    let count = u32::try_from(mesh.verts.len()).ok()?;
     let (tri_chunks, _) = mesh_gl.tri_verts.as_chunks::<3>();
     for tri in tri_chunks {
         let [a, b, c] = *tri;

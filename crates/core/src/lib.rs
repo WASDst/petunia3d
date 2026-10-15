@@ -46,6 +46,8 @@ pub mod state;
 pub mod tool_session;
 pub mod transform_projection;
 pub mod uv_selection;
+pub mod uv_transform_session;
+pub use uv_transform_session::{UvTransformKind, UvTransformSession};
 pub mod viewport;
 pub mod viewport_query;
 
@@ -135,7 +137,7 @@ pub use brush::{
     PaintRestriction, PointStabilizer, StrokeBuffer, StrokeSampler, brush_size_px_from_slider,
     brush_type_from_kind, hash01, kind_from_brush_type,
 };
-pub use camera::{Camera, Projection, ViewPreset};
+pub use camera::{Camera, NavigationAnchor, Projection, ViewPreset};
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use edit_api::{
     AddMeshAssetCmd, ApplyMeshEditCmd, AssignMaterialSlotCmd, ComponentSet, InsertAssetCmd,

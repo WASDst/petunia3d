@@ -67,8 +67,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             SelectionDomain::Face => petunia_core::SelectMode::Face,
             SelectionDomain::Object => return Target::None,
         };
-        let through = self.state.session.show_xray
-            || self.state.session.shading == petunia_core::Shading::Wireframe;
+        let through = self.state.session.select_through;
         let viewport = glam::Vec2::new(width, height);
         let cursor = glam::Vec2::from_array(ndc);
         // O picking compara posições com a câmera (mundo): malha editável no
@@ -122,7 +121,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         _direction: glam::Vec3,
         position: glam::Vec3,
     ) -> bool {
-        if self.state.session.show_xray {
+        if self.state.session.select_through {
             return false;
         }
         let scene = self.scene_query();
@@ -282,8 +281,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         self.last_viewport_click = Some(([normalized_x, normalized_y], now));
         let loop_select = loop_select || is_double_click;
-        let draw =
-            self.state.workspace == Workspace::Model && self.modeling_mode == ModelingMode::Draw;
+        let draw = self.state.workspace == Workspace::Model;
         if draw && self.profile_transform_gesture.is_none() {
             let pixel = [
                 normalized_x * self.viewport_size[0],

@@ -65,6 +65,10 @@
         {
           "path": "02-application/tools-interaction-implementation.md",
           "title": "Ferramentas: proposta e matriz de implementação"
+        },
+        {
+          "path": "02-application/contextual-editor-contract.md",
+          "title": "Editor contextual — seleção, percepção e Smart Rig"
         }
       ]
     },

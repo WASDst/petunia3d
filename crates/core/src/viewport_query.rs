@@ -274,7 +274,7 @@ impl crate::AppState {
             let p = clip.truncate() / clip.w;
             Some([p.x, p.y])
         };
-        let through = self.session.show_xray || self.session.shading == crate::Shading::Wireframe;
+        let through = self.session.select_through;
         let inside = |point: Vec3| {
             project(point).is_some_and(|p| {
                 contains(p) && (through || scene.point_visible(&self.session.camera, point))
@@ -528,14 +528,22 @@ mod lasso_tests {
     fn front_ortho_cube_box_lasso_select_only_visible_components_without_through_selection() {
         use crate::SelectionDomain::{Edge, Face, Vertex};
         for lasso in [false, true] {
-            for (xray, wireframe) in [(false, false), (true, false), (false, true)] {
-                let through = xray || wireframe;
+            for (xray, wireframe, through) in [
+                (false, false, false),
+                (true, false, false),
+                (false, true, false),
+                (false, false, true),
+                (true, false, true),
+                (false, true, true),
+            ] {
                 for domain in [Face, Vertex, Edge] {
                     let mut state = cube_state(domain, xray, wireframe);
+                    state.session.select_through = through;
                     select_region(&mut state, lasso, [-0.6, -0.6], [0.6, 0.6]);
                     let mesh = state.project.active_mesh().unwrap();
-                    let context =
-                        format!("{domain:?}, lasso={lasso}, xray={xray}, wireframe={wireframe}");
+                    let context = format!(
+                        "{domain:?}, lasso={lasso}, xray={xray}, wireframe={wireframe}, select_through={through}"
+                    );
                     match domain {
                         Face => {
                             for face in &mesh.faces {

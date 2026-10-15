@@ -41,6 +41,8 @@ use uuid::Uuid;
 
 /// Escala padrão dos rigs criados pelo seletor de criaturas.
 pub const DEFAULT_RIG_SCALE: f32 = 1.0;
+/// Timeline display/stepping rate; key times remain authored in seconds.
+pub const DEFAULT_TIMELINE_FPS: f32 = 24.0;
 
 /// Valor provisório da transformação de um osso durante manipulação no viewport.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -70,6 +72,7 @@ pub struct AnimateSession {
     pub selected_keyframe: Option<(u32, f32)>,
     /// Playhead em segundos, dentro de `[0, ciclo)`.
     pub time: f32,
+    frame_rate: f32,
     pub playing: bool,
     /// Mostra os parâmetros da camada "Advanced".
     pub show_advanced: bool,
@@ -106,6 +109,7 @@ impl Default for AnimateSession {
             active_clip: None,
             selected_keyframe: None,
             time: 0.0,
+            frame_rate: DEFAULT_TIMELINE_FPS,
             playing: false,
             show_advanced: false,
             show_skeleton: true,
@@ -126,6 +130,42 @@ impl Default for AnimateSession {
 }
 
 impl AnimateSession {
+    /// Validated clip shared by preview, timeline and authoring consumers.
+    pub fn resolved_clip<'p>(
+        &self,
+        project: &'p Project,
+    ) -> Result<Option<&'p petunia_project::AnimationAsset>, CommandError> {
+        resolve_authoring_clip(project, self)
+    }
+
+    /// Document restoration may remove the selected clip. Prune only the
+    /// stale session reference, without choosing another clip or changing data.
+    pub(crate) fn clear_stale_clip_selection(&mut self, project: &Project) {
+        let valid = self.active_clip.is_none_or(|id| {
+            self.skeleton.is_some_and(|skeleton| {
+                project
+                    .get_animation(id)
+                    .is_some_and(|asset| asset.tags.contains(&format!("skeleton:{skeleton}")))
+            })
+        });
+        if !valid {
+            self.active_clip = None;
+            self.selected_keyframe = None;
+        }
+    }
+
+    pub fn timeline_frame_rate(&self) -> f32 {
+        self.frame_rate
+    }
+
+    pub fn set_timeline_frame_rate(&mut self, fps: f32) -> bool {
+        if !fps.is_finite() || fps <= 0.0 || !(1.0 / fps).is_finite() {
+            return false;
+        }
+        self.frame_rate = fps;
+        true
+    }
+
     /// Parâmetro em edição (arrasto de slider), se houver: `(chave, valor)`.
     pub fn draft(&self) -> Option<(&str, f32)> {
         self.draft.as_ref().map(|d| (d.key.as_str(), d.value))
@@ -451,11 +491,8 @@ impl AnimatePreview {
         {
             return Some(e.cycle_seconds());
         }
-        if let Some(skel_id) = session.skeleton
-            && let Some(asset) = session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skel_id))
+        if session.skeleton.is_some()
+            && let Some(asset) = resolve_authoring_clip(project, session).ok().flatten()
         {
             return Some(asset.clip.duration.max(0.1));
         }
@@ -490,11 +527,7 @@ impl AnimatePreview {
             }
         } else {
             let skeleton = project.get_skeleton(session.skeleton?)?;
-            let local = if let Some(asset) = session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skeleton.id))
-            {
+            let local = if let Some(asset) = resolve_authoring_clip(project, session).ok()? {
                 asset.clip.sample_pose(skeleton, session.time)
             } else {
                 skeleton.bones.iter().map(|b| b.local_transform).collect()
@@ -505,10 +538,7 @@ impl AnimatePreview {
         // Sobrepõe trilhas com keyframes do clipe se estiver tocando junto com um motion procedural
         if session.motion.is_some()
             && let Some(skeleton) = project.get_skeleton(skeleton_id)
-            && let Some(asset) = session
-                .active_clip
-                .and_then(|id| project.get_animation(id))
-                .or_else(|| project.get_animation_for_skeleton(skeleton_id))
+            && let Some(asset) = resolve_authoring_clip(project, session).ok()?
         {
             for (bi, bone) in skeleton.bones.iter().enumerate() {
                 if let Some(track) = asset.clip.get_track(bone.id)
@@ -682,12 +712,7 @@ fn wrap_time(t: f32, cycle: f32) -> f32 {
 fn has_playable_keyframes(project: &Project, session: &AnimateSession) -> bool {
     session
         .skeleton
-        .and_then(|id| {
-            session
-                .active_clip
-                .and_then(|clip| project.get_animation(clip))
-                .or_else(|| project.get_animation_for_skeleton(id))
-        })
+        .and_then(|_| resolve_authoring_clip(project, session).ok().flatten())
         .is_some_and(|asset| {
             asset.clip.tracks.iter().any(|track| {
                 !track.translations.is_empty()
@@ -695,6 +720,39 @@ fn has_playable_keyframes(project: &Project, session: &AnimateSession) -> bool {
                     || !track.scales.is_empty()
             })
         })
+}
+
+/// Resolve a clip once. A stale explicit ID never falls back to another clip.
+fn resolve_authoring_clip<'p>(
+    project: &'p Project,
+    session: &AnimateSession,
+) -> Result<Option<&'p petunia_project::AnimationAsset>, CommandError> {
+    let Some(skeleton_id) = session.skeleton else {
+        return Ok(None);
+    };
+    let tag = format!("skeleton:{skeleton_id}");
+    if let Some(id) = session.active_clip {
+        return project
+            .get_animation(id)
+            .filter(|asset| asset.tags.contains(&tag))
+            .map(Some)
+            .ok_or_else(|| {
+                CommandError::Execution(
+                    "Selected clip is missing or belongs to another skeleton".into(),
+                )
+            });
+    }
+    let mut clips = project
+        .animations
+        .iter()
+        .filter(|asset| asset.tags.contains(&tag));
+    let clip = clips.next();
+    if clips.next().is_some() {
+        return Err(CommandError::Execution(
+            "Select an animation clip explicitly".into(),
+        ));
+    }
+    Ok(clip)
 }
 
 fn no_rig() -> CommandError {
@@ -725,6 +783,7 @@ impl CommandContext<'_> {
                 .find(|m| Some(m.skeleton_id) == a.skeleton)
                 .map(|m| m.id);
         }
+        a.clear_stale_clip_selection(project);
         let has_clip = has_playable_keyframes(project, a);
         if a.motion.is_none() && !has_clip {
             a.playing = false;
@@ -760,40 +819,57 @@ impl CommandContext<'_> {
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
         let time = a.time;
 
-        let transform = if let Some(draft) = a.bone_draft() {
-            if draft.bone_id == bone_id {
-                draft.transform
-            } else {
-                let skel = self
-                    .document
-                    .project
-                    .get_skeleton(skeleton_id)
-                    .ok_or_else(no_rig)?;
-                let bone = skel
-                    .get_bone(bone_id)
-                    .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
-                bone.local_transform
-            }
-        } else {
-            let skel = self
-                .document
-                .project
-                .get_skeleton(skeleton_id)
-                .ok_or_else(no_rig)?;
-            let bone = skel
-                .get_bone(bone_id)
-                .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
-            bone.local_transform
-        };
-
-        self.editor.animate.clear_bone_draft();
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?.map(|asset| asset.id);
+        // Writing an evaluated composite back into its base clip would apply the
+        // layers twice. Keep the draft and ask for explicit layer authoring/bake.
+        if self
+            .document
+            .project
+            .motion_layers
+            .iter()
+            .any(|layer| layer.enabled && layer.blend_weight > 1e-4)
+        {
+            return Err(CommandError::Execution(
+                "Keying blended layers requires an explicit authoring layer or bake".into(),
+            ));
+        }
+        let mut preview = AnimatePreview::default();
+        let (evaluated_skeleton, pose) = preview
+            .local_pose(&self.document.project, a)
+            .ok_or_else(|| CommandError::Execution("Cannot evaluate pose for keyframing".into()))?;
+        if preview.error().is_some() || evaluated_skeleton != skeleton_id {
+            return Err(CommandError::Execution(
+                "Cannot key an invalid procedural pose".into(),
+            ));
+        }
+        let index = self
+            .document
+            .project
+            .get_skeleton(skeleton_id)
+            .and_then(|s| s.bone_index(bone_id))
+            .ok_or_else(|| CommandError::Execution("Bone not found".into()))?;
+        let transform = *pose
+            .get(index)
+            .ok_or_else(|| CommandError::Execution("Bone missing from evaluated pose".into()))?;
         self.dispatch(&InsertBoneKeyframeCmd {
             skeleton_id,
+            clip_id,
             bone_id,
             time,
             transform,
             interpolation: Interpolation::Linear,
-        })
+        })?;
+        if clip_id.is_none() {
+            self.editor.animate.active_clip = self
+                .document
+                .project
+                .get_animation_for_skeleton(skeleton_id)
+                .map(|a| a.id);
+        } else {
+            self.editor.animate.active_clip = clip_id;
+        }
+        self.editor.animate.clear_bone_draft();
+        Ok(())
     }
 
     /// Remove o keyframe do osso selecionado na posição atual (ou informada) da timeline (1 passo de Undo).
@@ -805,11 +881,15 @@ impl CommandContext<'_> {
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
         let t = time.unwrap_or(a.time);
 
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?
+            .map(|asset| asset.id)
+            .ok_or_else(|| CommandError::NoChange("No animation clip selected".into()))?;
         self.dispatch(&DeleteBoneKeyframeCmd {
             skeleton_id,
+            clip_id,
             bone_id,
             time: t,
-            tolerance: 0.05,
+            tolerance: 1e-4,
         })
     }
 
@@ -825,8 +905,12 @@ impl CommandContext<'_> {
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
         let time = a.time;
 
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?
+            .map(|asset| asset.id)
+            .ok_or_else(|| CommandError::NoChange("No animation clip selected".into()))?;
         self.dispatch(&SetBoneKeyframeInterpolationCmd {
             skeleton_id,
+            clip_id,
             bone_id,
             time,
             interpolation: interp,
@@ -841,8 +925,12 @@ impl CommandContext<'_> {
             .selected_bone
             .ok_or_else(|| CommandError::Execution("No bone selected for keyframing".into()))?;
 
+        let clip_id = resolve_authoring_clip(&self.document.project, a)?
+            .map(|asset| asset.id)
+            .ok_or_else(|| CommandError::NoChange("No animation clip selected".into()))?;
         self.dispatch(&ClearBoneTrackCmd {
             skeleton_id,
+            clip_id,
             bone_id,
         })
     }

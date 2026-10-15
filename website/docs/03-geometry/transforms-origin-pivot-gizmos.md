@@ -309,9 +309,7 @@ Workplane já cobre boa parte do caso custom.
 
 # Pivot Policy
 
-Pivot é estado do EditorSession.
-
-Não é propriedade do objeto.
+Nesta seção, **Pivot Policy** é o nome legado do **centro de transformação**, estado do EditorSession. O **pivô do objeto** pertence ao objeto e corresponde a Object Origin, definido abaixo. Não confundir os dois conceitos.
 
 V1:
 
@@ -342,7 +340,7 @@ Se não houver active element válido, o comando deve ficar indisponível ou ind
 
 ## 3D Cursor
 
-Usa cursor transitório do editor.
+Copia explicitamente a posição mundial do cursor para um centro da sessão. A cópia é fixa; mover o cursor depois não muda o centro de transformação. Não vincular operações continuamente ao cursor.
 
 ## Individual
 
@@ -994,3 +992,9 @@ Origin, Workplane, hierarchy e gizmo alimentam essas quatro respostas; não prec
 18. transform-gizmo-egui é removido no destino final.
 19. Gizmo recebe TransformFrame pronto.
 20. TransformSession captura somente estado necessário para preview/Undo.
+
+## Terminologia conciliada — pivô do objeto e centro de transformação (2026-10-15)
+
+No vocabulário do produto aprovado pelo usuário, **pivô do objeto** significa `Object Origin`, persistente e pertencente ao frame local. O `Transform Pivot`/`Pivot Policy` descrito acima deve ser lido como **centro de transformação**, estado da sessão. Não são dois pivôs persistentes. A edição da origem preserva a pose no quadro atual; não promete preservar toda a trajetória de animação. Sua migração completa é H19, ainda pendente onde `Asset.origin` e os metadados legados competem com `Asset.transform`.
+
+O Cursor3D continua referência espacial de criação/navegação independente. Selecionar o item legado `PivotPoint::Cursor3D` pelo editor agora executa uma **cópia única** para `EditorSession.transform_center`; mover o cursor depois não desloca esse centro. Consumidores novos usam `copy_cursor_to_transform_center`, não atribuição direta ao enum para criar vínculo. Sem snapshot, a referência legada não lê o cursor ao vivo. Navegação usa `NavigationAnchor`, sem consultar essa política. [Contrato integrado](../02-application/contextual-editor-contract.md#pivo-do-objeto-centro-cursor3d-e-camera).

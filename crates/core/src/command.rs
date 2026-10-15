@@ -276,7 +276,10 @@ impl CommandDispatcher {
         cmd.can_execute(&ctx.view())
             .map_err(|reason| CommandError::Execution(reason.into()))?;
         if cmd.is_destructive()
-            && (ctx.modal.is_some() || ctx.mesh_preview.is_some() || ctx.paint_stroke.is_some())
+            && (ctx.modal.is_some()
+                || ctx.mesh_preview.is_some()
+                || ctx.paint_stroke.is_some()
+                || ctx.uv_transform.is_some())
         {
             return Err(CommandError::Execution(
                 "Confirm or cancel the active operation first".into(),
