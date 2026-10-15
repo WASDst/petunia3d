@@ -1606,7 +1606,11 @@ fn test_instantiate_asset_command_and_undo() {
     assert_eq!(state.project.active, initial_count);
 
     let instantiated = &state.project.assets[state.project.active];
-    let center = instantiated.mesh.selection_center();
+    let center = instantiated.origin_world().to_array();
+    assert_eq!(
+        serde_json::to_value(&*instantiated.mesh).unwrap(),
+        serde_json::to_value(&*state.project.assets[0].mesh).unwrap()
+    );
     assert!((center[0] - 5.0).abs() < 1e-4);
     assert!((center[1] - 0.0).abs() < 1e-4);
     assert!((center[2] - (-2.0)).abs() < 1e-4);
@@ -1622,7 +1626,13 @@ fn test_instantiate_asset_command_and_undo() {
     // 4. Teste via método auxiliar instantiate_asset_by_id
     assert!(state.instantiate_asset_by_id(asset_id, Some([10.0, 2.0, 3.0])));
     assert_eq!(state.project.assets.len(), initial_count + 2);
-    let center2 = state.project.assets.last().unwrap().mesh.selection_center();
+    let center2 = state
+        .project
+        .assets
+        .last()
+        .unwrap()
+        .origin_world()
+        .to_array();
     assert!((center2[0] - 10.0).abs() < 1e-4);
 
     // 5. Instanciação com ID inexistente falha graciosamente

@@ -81,6 +81,7 @@ pub mod model_library;
 pub mod motion;
 mod motion_gen;
 pub mod object_transform;
+pub mod origin;
 pub mod package;
 pub mod paint_layers;
 pub mod palette;
@@ -459,6 +460,8 @@ pub struct Asset {
     pub tags: Vec<String>,
     #[serde(default)]
     pub modifiers: Vec<ModifierInstance>,
+    /// Offset local legado, lido apenas por compatibilidade. Um rebase
+    /// explícito normaliza para None: a origem canônica é o zero local do TRS.
     #[serde(default)]
     pub origin: Option<[f32; 3]>,
     /// Especificação paramétrica viva da primitiva (None = malha estática B-Rep).
@@ -481,9 +484,8 @@ pub struct Asset {
     /// objeto, não do viewport.
     #[serde(default)]
     pub surface_shading: petunia_mesh::shading::SurfaceShading,
-    /// Transform autoritativo local → mundo (P01/G10). Fase 1 da migração:
-    /// identidade em todo objeto; consumidores em mundo já leem
-    /// [`Asset::world_matrix`] / [`Asset::world_mesh`].
+    /// Transform autoritativo local → mundo (P01/G10/H19). Object Mode escreve
+    /// este TRS; consumidores em mundo leem world_matrix/world_mesh.
     #[serde(default)]
     pub transform: object_transform::ObjectTransform,
     #[serde(skip)]

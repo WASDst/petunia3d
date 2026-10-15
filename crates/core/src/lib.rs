@@ -25,6 +25,7 @@ pub mod modal_feedback;
 pub mod modifier_commands;
 pub mod module;
 pub mod object_metadata_commands;
+pub mod origin_commands;
 pub use object_metadata_commands::SetAssetSelectionColorCmd;
 pub mod picking;
 pub mod poly_pen;

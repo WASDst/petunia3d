@@ -3082,173 +3082,6 @@ impl CommandContext<'_> {
         }
     }
 
-    /// Define a origem do objeto ativo para o centro da sua geometria.
-    pub fn set_origin_geometry(&mut self) -> Result<(), &'static str> {
-        let center = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            active.mesh.selection_center()
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(center);
-        }
-        self.document.undo.checkpoint_sized(
-            "Set Origin to Geometry",
-            &prev,
-            prev.estimated_bytes(),
-        );
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to geometry center.");
-        Ok(())
-    }
-
-    /// Define a origem do objeto ativo para a base mais baixa (Y mínimo) da geometria.
-    pub fn set_origin_bottom(&mut self) -> Result<(), &'static str> {
-        let bottom_origin = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            let mut min = glam::Vec3::splat(f32::MAX);
-            let mut max = glam::Vec3::splat(f32::MIN);
-            for v in &active.mesh.verts {
-                let p = v.vec();
-                min = min.min(p);
-                max = max.max(p);
-            }
-            if !min.is_finite() || !max.is_finite() {
-                self.set_status("Mesh vertices are non-finite");
-                return Err("Mesh vertices are non-finite");
-            }
-            [(min.x + max.x) * 0.5, min.y, (min.z + max.z) * 0.5]
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(bottom_origin);
-        }
-        self.document
-            .undo
-            .checkpoint_sized("Set Origin to Bottom", &prev, prev.estimated_bytes());
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to bottom.");
-        Ok(())
-    }
-
-    /// Define a origem do objeto ativo para a posição atual do 3D Cursor.
-    pub fn set_origin_cursor(&mut self) -> Result<(), &'static str> {
-        let cursor = self.editor.cursor_3d;
-        {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-        }
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(cursor);
-        }
-        self.document.undo.checkpoint_sized(
-            "Set Origin to 3D Cursor",
-            &prev,
-            prev.estimated_bytes(),
-        );
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to 3D Cursor.");
-        Ok(())
-    }
-
-    /// Define a origem do objeto ativo para a média da seleção atual.
-    pub fn set_origin_selection(&mut self) -> Result<(), &'static str> {
-        let center = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            active.mesh.selection_center()
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            active.origin = Some(center);
-        }
-        self.document.undo.checkpoint_sized(
-            "Set Origin to Selection",
-            &prev,
-            prev.estimated_bytes(),
-        );
-        self.mark_document_dirty();
-        self.emit_transform_changed();
-        self.set_status("Origin set to selection.");
-        Ok(())
-    }
-
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    /// Translada a geometria para que seu centro coincida com o ponto de origem (0, 0, 0)
-    /// ou a origem definida do objeto.
-    pub fn set_geometry_to_origin(&mut self) -> Result<(), &'static str> {
-        let (delta, target_origin) = {
-            let active = self.document.active().ok_or("No active asset")?;
-            if active.locked {
-                self.set_status("Asset is locked");
-                return Err("Asset is locked");
-            }
-            if active.mesh.verts.is_empty() {
-                self.set_status("Asset mesh is empty");
-                return Err("Asset mesh is empty");
-            }
-            let center = active.mesh.selection_center();
-            let target_origin = active.origin.unwrap_or([0.0, 0.0, 0.0]);
-            let delta = [
-                target_origin[0] - center[0],
-                target_origin[1] - center[1],
-                target_origin[2] - center[2],
-            ];
-            (delta, target_origin)
-        };
-        let prev = self.document.project.clone();
-        if let Some(active) = self.document.active_mut() {
-            for v in &mut active.mesh.verts {
-                v.pos[0] += delta[0];
-                v.pos[1] += delta[1];
-                v.pos[2] += delta[2];
-            }
-            active.origin = Some(target_origin);
-        }
-        self.document
-            .undo
-            .checkpoint_sized("Geometry to Origin", &prev, prev.estimated_bytes());
-        self.mark_document_dirty();
-        self.emit_project_changed(ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS);
-        self.set_status("Geometry centered at origin.");
-        Ok(())
-    }
-
     /// Alterna o modo de edição de pivô (Ajustar Pivô).
     pub fn toggle_edit_pivot(&mut self) -> bool {
         self.editor.edit_pivot = !self.editor.edit_pivot;
@@ -3908,25 +3741,10 @@ impl CommandContext<'_> {
     /// Canonical Application API entry: UI / CLI / FFI / MCP / Lua all land here.
     /// Cria uma nova instância de um asset da biblioteca na posição do 3D Cursor.
     pub fn instantiate_asset_at_cursor(&mut self, asset_index: usize) -> bool {
-        if let Some(asset) = self.document.assets.get(asset_index) {
-            let mut new_asset = asset.duplicate();
-            let cursor = self.editor.cursor_3d;
-            for v in &mut new_asset.mesh.verts {
-                v.pos[0] += cursor[0];
-                v.pos[1] += cursor[1];
-                v.pos[2] += cursor[2];
-            }
-            let name = new_asset.name.clone();
-            self.checkpoint("instantiate asset");
-            self.document.assets.push(new_asset);
-            self.document.active = self.document.assets.len() - 1;
-            self.sync_selection();
-            self.emit_mesh_changed();
-            self.set_status(format!("Asset '{}' instanciado na cena", name));
-            self.mark_dirty();
-            return true;
-        }
-        false
+        let Some(id) = self.document.assets.get(asset_index).map(|a| a.id) else {
+            return false;
+        };
+        self.instantiate_asset_by_id(id, None)
     }
 
     /// Cria uma nova instância de um asset da biblioteca na posição especificada ou no 3D Cursor.
@@ -3935,28 +3753,14 @@ impl CommandContext<'_> {
         asset_id: uuid::Uuid,
         position: Option<[f32; 3]>,
     ) -> bool {
-        if let Some(pos) = self.document.assets.iter().position(|a| a.id == asset_id) {
-            self.set_selection_domain(SelectionDomain::Object);
-            let mut new_asset = self.document.assets[pos].duplicate();
-            let target_pos = position.unwrap_or(self.editor.cursor_3d);
-            let center = new_asset.mesh.selection_center();
-            for v in &mut new_asset.mesh.verts {
-                v.pos[0] += target_pos[0] - center[0];
-                v.pos[1] += target_pos[1] - center[1];
-                v.pos[2] += target_pos[2] - center[2];
+        let command = crate::command::InstantiateAssetCmd { asset_id, position };
+        match crate::CommandDispatcher::run(self, &command) {
+            Ok(()) => true,
+            Err(error) => {
+                self.set_status(error.to_string());
+                false
             }
-            new_asset.origin = Some(target_pos);
-            let name = new_asset.name.clone();
-            self.checkpoint("instantiate asset");
-            self.document.assets.push(new_asset);
-            self.document.active = self.document.assets.len() - 1;
-            self.sync_selection();
-            self.emit_mesh_changed();
-            self.set_status(format!("Asset '{}' instanciado na cena", name));
-            self.mark_dirty();
-            return true;
         }
-        false
     }
 
     /// Alterna o modo de isolamento da seleção atual (Local View / Isolate).
@@ -4150,14 +3954,14 @@ impl<'a> EditorView<'a> {
 
     /// Calcula a posição no espaço de mundo do pivô selecionado (P3D-027).
     pub fn calculate_pivot(self, pivot: PivotPoint) -> glam::Vec3 {
+        if self.editor.edit_pivot {
+            return self
+                .document
+                .active()
+                .map_or(glam::Vec3::ZERO, petunia_project::Asset::origin_world);
+        }
         if self.selection_domain() == SelectionDomain::Object && pivot != PivotPoint::Cursor3D {
-            if let Some(active) = self.document.active()
-                && let Some(origin) = active.origin
-                && self.editor.selection.assets.len() <= 1
-            {
-                return glam::Vec3::from(origin);
-            }
-            let points: Vec<_> = self
+            let assets: Vec<_> = self
                 .document
                 .assets
                 .iter()
@@ -4169,34 +3973,44 @@ impl<'a> EditorView<'a> {
                                 .active()
                                 .is_some_and(|active| active.id == a.id))
                 })
-                .flat_map(|a| a.world_positions())
                 .collect();
-            if !points.is_empty() {
-                if pivot == PivotPoint::BoundingBoxCenter {
-                    let min = points
-                        .iter()
-                        .copied()
-                        .fold(glam::Vec3::splat(f32::INFINITY), glam::Vec3::min);
-                    let max = points
-                        .iter()
-                        .copied()
-                        .fold(glam::Vec3::splat(f32::NEG_INFINITY), glam::Vec3::max);
-                    return (min + max) * 0.5;
-                }
-                return points.iter().sum::<glam::Vec3>() / points.len() as f32;
+            if pivot == PivotPoint::IndividualOrigins {
+                return self
+                    .document
+                    .active()
+                    .map_or(glam::Vec3::ZERO, petunia_project::Asset::origin_world);
             }
+            if pivot == PivotPoint::MedianPoint && !assets.is_empty() {
+                return (assets
+                    .iter()
+                    .map(|a| a.origin_world().as_dvec3())
+                    .sum::<glam::DVec3>()
+                    / assets.len() as f64)
+                    .as_vec3();
+            }
+            let points = assets
+                .iter()
+                .flat_map(|a| a.world_positions())
+                .filter(|p| p.is_finite());
+            let (min, max) = points.fold(
+                (
+                    glam::Vec3::splat(f32::INFINITY),
+                    glam::Vec3::splat(f32::NEG_INFINITY),
+                ),
+                |(min, max), p| (min.min(p), max.max(p)),
+            );
+            return if min.is_finite() && max.is_finite() {
+                min * 0.5 + max * 0.5
+            } else {
+                glam::Vec3::ZERO
+            };
         }
         match pivot {
             PivotPoint::Cursor3D => self
                 .transform_center
                 .map_or(glam::Vec3::ZERO, glam::Vec3::from),
             PivotPoint::BoundingBoxCenter => {
-                if self.selection_domain() == SelectionDomain::Object
-                    && let Some(active) = self.document.active()
-                    && let Some(origin) = active.origin
-                {
-                    glam::Vec3::from(origin)
-                } else if let Some(active) = self.document.active() {
+                if let Some(active) = self.document.active() {
                     let mut min = glam::Vec3::splat(f32::MAX);
                     let mut max = glam::Vec3::splat(f32::MIN);
                     let mut count = 0;
@@ -4218,12 +4032,7 @@ impl<'a> EditorView<'a> {
                 }
             }
             PivotPoint::MedianPoint | PivotPoint::IndividualOrigins => {
-                if self.selection_domain() == SelectionDomain::Object
-                    && let Some(active) = self.document.active()
-                    && let Some(origin) = active.origin
-                {
-                    glam::Vec3::from(origin)
-                } else if let Some(active) = self.document.active() {
+                if let Some(active) = self.document.active() {
                     active.to_world_point(glam::Vec3::from(active.mesh.selection_center()))
                 } else {
                     glam::Vec3::from(self.cursor_3d)

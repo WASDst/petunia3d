@@ -64,38 +64,22 @@ fn clean_name(raw: &str) -> String {
     raw.trim().chars().take(PREFAB_NAME_MAX_LEN).collect()
 }
 
-fn shift(asset: &mut Asset, delta: [f32; 3]) {
-    for v in &mut asset.mesh.verts {
-        v.pos[0] += delta[0];
-        v.pos[1] += delta[1];
-        v.pos[2] += delta[2];
-    }
-    if let Some(origin) = &mut asset.origin {
-        origin[0] += delta[0];
-        origin[1] += delta[1];
-        origin[2] += delta[2];
-    }
+fn shift(asset: &mut Asset, delta: [f32; 3]) -> bool {
+    asset.translate_world(glam::Vec3::from(delta)).is_ok()
 }
 
 fn bounds_center(parts: &[Asset]) -> [f32; 3] {
-    let mut min = [f32::INFINITY; 3];
-    let mut max = [f32::NEG_INFINITY; 3];
-    for part in parts {
-        for v in &part.mesh.verts {
-            for axis in 0..3 {
-                min[axis] = min[axis].min(v.pos[axis]);
-                max[axis] = max[axis].max(v.pos[axis]);
-            }
-        }
-    }
-    if min[0] > max[0] {
+    let (min, max) = parts.iter().flat_map(Asset::world_positions).fold(
+        (
+            glam::Vec3::splat(f32::INFINITY),
+            glam::Vec3::splat(f32::NEG_INFINITY),
+        ),
+        |(min, max), p| (min.min(p), max.max(p)),
+    );
+    if !min.is_finite() || !max.is_finite() {
         return [0.0; 3];
     }
-    [
-        (min[0] + max[0]) * 0.5,
-        (min[1] + max[1]) * 0.5,
-        (min[2] + max[2]) * 0.5,
-    ]
+    (min * 0.5 + max * 0.5).to_array()
 }
 
 impl Project {
@@ -126,7 +110,9 @@ impl Project {
             part.id = Uuid::new_v4();
             part.visible = true;
             part.locked = false;
-            shift(part, [-center[0], -center[1], -center[2]]);
+            if !shift(part, (-glam::Vec3::from(center)).to_array()) {
+                return Vec::new();
+            }
         }
         parts
     }
@@ -181,16 +167,18 @@ impl Project {
         };
         let revision = prefab.revision;
         let mut created = Vec::with_capacity(prefab.parts.len());
-        let copies: Vec<Asset> = prefab
+        let copies: Option<Vec<Asset>> = prefab
             .parts
             .iter()
             .map(|part| {
                 let mut copy = part.clone();
                 copy.id = Uuid::new_v4();
-                shift(&mut copy, position);
-                copy
+                shift(&mut copy, position).then_some(copy)
             })
             .collect();
+        let Some(copies) = copies else {
+            return Vec::new();
+        };
         for copy in copies {
             created.push(copy.id);
             self.prefab_links.push(PrefabLink {

@@ -65,6 +65,12 @@ pub trait Command: Send + Sync {
         true
     }
 
+    /// Geometry edits freeze live primitives by default. Commands that change
+    /// another responsibility must explicitly retain their authored sources.
+    fn freezes_active_primitive(&self) -> bool {
+        true
+    }
+
     /// Domínios persistentes alterados quando a execução termina com sucesso.
     fn changes(&self) -> ProjectChanges {
         if self.is_destructive() {
@@ -92,6 +98,10 @@ impl<T: ?Sized + Command> Command for Box<T> {
 
     fn is_destructive(&self) -> bool {
         (**self).is_destructive()
+    }
+
+    fn freezes_active_primitive(&self) -> bool {
+        (**self).freezes_active_primitive()
     }
 
     fn changes(&self) -> ProjectChanges {
@@ -296,7 +306,7 @@ impl CommandDispatcher {
             ctx.editor.primitive_session.clone(),
             ctx.editor.last_primitive,
         );
-        if cmd.is_destructive() {
+        if cmd.is_destructive() && cmd.freezes_active_primitive() {
             ctx.freeze_active_primitive_for_command();
         }
         let exec_result =
@@ -403,6 +413,17 @@ impl CommandDispatcher {
     /// Cria e preenche o dispatcher com todos os comandos canônicos do Petunia3D.
     pub fn canonical() -> Self {
         let mut d = Self::new();
+
+        use crate::origin_commands::{OriginPreset, OriginPresetCmd};
+        for (id, preset) in [
+            ("model.origin_geometry", OriginPreset::Geometry),
+            ("model.origin_bottom", OriginPreset::Bottom),
+            ("model.origin_cursor", OriginPreset::Cursor),
+            ("model.origin_selection", OriginPreset::Selection),
+            ("model.geometry_to_origin", OriginPreset::GeometryToOrigin),
+        ] {
+            d.register(id, OriginPresetCmd(preset));
+        }
 
         // 1. Arquivo (File)
         d.register_with_meta(
@@ -1876,6 +1897,14 @@ impl Command for InstantiateAssetCmd {
         "instantiate asset"
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::GEOMETRY | ProjectChanges::TRANSFORMS
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.document.assets.iter().any(|a| a.id == self.asset_id) {
             Ok(())
@@ -1885,26 +1914,18 @@ impl Command for InstantiateAssetCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(asset) = state
-            .document
-            .assets
-            .iter()
-            .find(|a| a.id == self.asset_id)
-            .cloned()
-        else {
+        let Some(asset) = state.document.assets.iter().find(|a| a.id == self.asset_id) else {
             return Err(CommandError::Execution("Asset not found".to_string()));
         };
 
-        let mut instance = asset.duplicate();
-        let target_pos = self.position.unwrap_or(state.editor.cursor_3d);
-        for v in &mut instance.mesh.verts {
-            v.pos[0] += target_pos[0];
-            v.pos[1] += target_pos[1];
-            v.pos[2] += target_pos[2];
-        }
+        let target = glam::Vec3::from(self.position.unwrap_or(state.editor.cursor_3d));
+        let instance = asset
+            .duplicate_at_world(target)
+            .map_err(|error| CommandError::Execution(error.to_string()))?;
         let name = instance.name.clone();
         state.document.assets.push(instance);
         state.document.active = state.document.assets.len() - 1;
+        state.set_selection_domain(SelectionDomain::Object);
         state.set_status(format!("Instantiated '{}'", name));
         Ok(())
     }
@@ -2276,6 +2297,8 @@ impl Command for SeparateSelectionCmd {
         };
         let orig_name = active_asset.name.clone();
         let mut orig_mesh = active_asset.mesh.to_owned_value();
+        let object_transform = active_asset.transform;
+        let legacy_origin = active_asset.origin;
         let mat_id = active_asset.material_id;
         let base_color = active_asset.base_color;
         let collection = active_asset.collection.clone();
@@ -2354,6 +2377,8 @@ impl Command for SeparateSelectionCmd {
         // 3. Adiciona a malha separada como novo objeto/asset na cena
         let new_name = format!("{}_sep", orig_name);
         let mut new_asset = petunia_project::Asset::new(&new_name, sep_mesh);
+        new_asset.set_object_transform(object_transform);
+        new_asset.origin = legacy_origin;
         new_asset.material_id = mat_id;
         new_asset.base_color = base_color;
         new_asset.collection = collection;
@@ -2380,6 +2405,10 @@ impl Command for ClearLocationCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2395,33 +2424,7 @@ impl Command for ClearLocationCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(active) = state.document.active_mut() else {
-            return Err(CommandError::NoActiveAsset);
-        };
-        let delta = [
-            -active.position[0],
-            -active.position[1],
-            -active.position[2],
-        ];
-        active.position = [0.0, 0.0, 0.0];
-        if delta[0].abs() > 1e-6 || delta[1].abs() > 1e-6 || delta[2].abs() > 1e-6 {
-            for v in &mut active.mesh.verts {
-                v.pos[0] += delta[0];
-                v.pos[1] += delta[1];
-                v.pos[2] += delta[2];
-            }
-            if let Some(orig) = active.origin.as_mut() {
-                orig[0] += delta[0];
-                orig[1] += delta[1];
-                orig[2] += delta[2];
-            }
-            active
-                .mesh
-                .validate_invariants()
-                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
-        }
-        state.set_status("Cleared location to [0, 0, 0]");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::Location)
     }
 }
 
@@ -2438,6 +2441,10 @@ impl Command for ClearRotationCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2453,35 +2460,7 @@ impl Command for ClearRotationCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(active) = state.document.active_mut() else {
-            return Err(CommandError::NoActiveAsset);
-        };
-        let rot = active.rotation;
-        active.rotation = [0.0, 0.0, 0.0];
-        if rot[0].abs() > 1e-5 || rot[1].abs() > 1e-5 || rot[2].abs() > 1e-5 {
-            let inv_rot = glam::Quat::from_euler(
-                glam::EulerRot::XYZ,
-                rot[0].to_radians(),
-                rot[1].to_radians(),
-                rot[2].to_radians(),
-            )
-            .inverse();
-            let pivot = glam::Vec3::from(
-                active
-                    .origin
-                    .unwrap_or_else(|| active.mesh.center().to_array()),
-            );
-            for v in &mut active.mesh.verts {
-                let p = glam::Vec3::from(v.pos);
-                v.pos = (pivot + inv_rot * (p - pivot)).to_array();
-            }
-            active
-                .mesh
-                .validate_invariants()
-                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
-        }
-        state.set_status("Cleared rotation to [0, 0, 0]");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::Rotation)
     }
 }
 
@@ -2498,6 +2477,10 @@ impl Command for ClearScaleCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2513,47 +2496,7 @@ impl Command for ClearScaleCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        let Some(active) = state.document.active_mut() else {
-            return Err(CommandError::NoActiveAsset);
-        };
-        let scale = active.scale;
-        active.scale = [1.0, 1.0, 1.0];
-        let sx = if scale[0].abs() > 1e-5 {
-            1.0 / scale[0]
-        } else {
-            1.0
-        };
-        let sy = if scale[1].abs() > 1e-5 {
-            1.0 / scale[1]
-        } else {
-            1.0
-        };
-        let sz = if scale[2].abs() > 1e-5 {
-            1.0 / scale[2]
-        } else {
-            1.0
-        };
-        if (scale[0] - 1.0).abs() > 1e-5
-            || (scale[1] - 1.0).abs() > 1e-5
-            || (scale[2] - 1.0).abs() > 1e-5
-        {
-            let inv_scale = glam::Vec3::new(sx, sy, sz);
-            let pivot = glam::Vec3::from(
-                active
-                    .origin
-                    .unwrap_or_else(|| active.mesh.center().to_array()),
-            );
-            for v in &mut active.mesh.verts {
-                let p = glam::Vec3::from(v.pos);
-                v.pos = (pivot + inv_scale * (p - pivot)).to_array();
-            }
-            active
-                .mesh
-                .validate_invariants()
-                .map_err(|e| CommandError::Execution(format!("Malha ativa inválida: {e}")))?;
-        }
-        state.set_status("Cleared scale to [1, 1, 1]");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::Scale)
     }
 }
 
@@ -2570,6 +2513,10 @@ impl Command for ClearAllTransformsCmd {
         true
     }
 
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
     fn changes(&self) -> ProjectChanges {
         ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
     }
@@ -2585,12 +2532,125 @@ impl Command for ClearAllTransformsCmd {
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
-        ClearScaleCmd.execute(state)?;
-        ClearRotationCmd.execute(state)?;
-        ClearLocationCmd.execute(state)?;
-        state.set_status("Cleared all transforms to default");
-        Ok(())
+        clear_object_frame(state, ClearFramePart::All)
     }
+}
+
+#[derive(Clone, Copy)]
+enum ClearFramePart {
+    Location,
+    Rotation,
+    Scale,
+    All,
+}
+
+fn clear_object_frame(
+    state: &mut CommandContext<'_>,
+    part: ClearFramePart,
+) -> Result<(), CommandError> {
+    let asset = state
+        .document
+        .active_mut()
+        .ok_or(CommandError::NoActiveAsset)?;
+    if asset.locked {
+        return Err(CommandError::Execution("Asset is locked".into()));
+    }
+    if asset.has_legacy_baked_transform() {
+        return clear_legacy_object_frame(asset, part);
+    }
+    let mut transform = asset.transform;
+    match part {
+        ClearFramePart::Location => transform.translation = [0.0; 3],
+        ClearFramePart::Rotation => transform.rotation = [0.0, 0.0, 0.0, 1.0],
+        ClearFramePart::Scale => transform.scale = [1.0; 3],
+        ClearFramePart::All => transform = petunia_project::ObjectTransform::IDENTITY,
+    }
+    if !transform.is_finite() || !transform.to_mat4().inverse().is_finite() {
+        return Err(CommandError::Execution("Invalid object frame".into()));
+    }
+    if transform == asset.transform {
+        return Err(CommandError::NoChange("Object frame already reset".into()));
+    }
+    asset.set_object_transform(transform);
+    state.set_status("Object frame reset");
+    Ok(())
+}
+
+fn clear_legacy_object_frame(
+    asset: &mut petunia_project::Asset,
+    part: ClearFramePart,
+) -> Result<(), CommandError> {
+    use glam::{EulerRot, Mat4, Quat, Vec3};
+    let position = Vec3::from(asset.position);
+    let rotation = Vec3::from(asset.rotation);
+    let scale = Vec3::from(asset.scale);
+    let pivot = asset.origin.map_or_else(|| asset.mesh.center(), Vec3::from);
+    if !position.is_finite() || !rotation.is_finite() || !scale.is_finite() || !pivot.is_finite() {
+        return Err(CommandError::Execution("Invalid legacy transform".into()));
+    }
+    let world = asset.world_matrix();
+    let pivot = world.transform_point3(pivot);
+    let around = |matrix| Mat4::from_translation(pivot) * matrix * Mat4::from_translation(-pivot);
+    let mut matrix = Mat4::IDENTITY;
+    let reset_scale = matches!(part, ClearFramePart::Scale | ClearFramePart::All);
+    let reset_rotation = matches!(part, ClearFramePart::Rotation | ClearFramePart::All);
+    let reset_location = matches!(part, ClearFramePart::Location | ClearFramePart::All);
+    if reset_scale {
+        matrix = around(Mat4::from_scale(scale.recip())) * matrix;
+    }
+    if reset_rotation {
+        let q = Quat::from_euler(
+            EulerRot::XYZ,
+            rotation.x.to_radians(),
+            rotation.y.to_radians(),
+            rotation.z.to_radians(),
+        );
+        matrix = around(Mat4::from_quat(q.inverse())) * matrix;
+    }
+    if reset_location {
+        matrix = Mat4::from_translation(-position) * matrix;
+    }
+    let matrix = world.inverse() * matrix * world;
+    if !matrix.is_finite() {
+        return Err(CommandError::Execution("Invalid legacy transform".into()));
+    }
+    if matrix == Mat4::IDENTITY {
+        return Err(CommandError::NoChange(
+            "Legacy transform already reset".into(),
+        ));
+    }
+    if asset.parametric.is_some() || asset.skeleton_id.is_some() || asset.skin_data.is_some() {
+        return Err(CommandError::Execution(
+            "Resetting baked procedural/rigged transforms requires explicit source compensation"
+                .into(),
+        ));
+    }
+    let mut mesh = (*asset.mesh).clone();
+    for vertex in &mut mesh.verts {
+        let next = matrix.transform_point3(vertex.vec());
+        if !next.is_finite() {
+            return Err(CommandError::Execution("Legacy transform overflow".into()));
+        }
+        vertex.pos = next.to_array();
+    }
+    let origin = asset
+        .origin
+        .map(|p| matrix.transform_point3(Vec3::from(p)).to_array());
+    if origin.is_some_and(|p| !Vec3::from(p).is_finite()) {
+        return Err(CommandError::Execution("Legacy origin overflow".into()));
+    }
+    asset.mesh = mesh.into();
+    asset.origin = origin;
+    if reset_location {
+        asset.position = [0.0; 3];
+    }
+    if reset_rotation {
+        asset.rotation = [0.0; 3];
+    }
+    if reset_scale {
+        asset.scale = [1.0; 3];
+    }
+    Ok(())
 }
 
 /// Comando para subdividir a geometria selecionada na malha ativa.

@@ -1,0 +1,107 @@
+{
+  "base_sha": "045f88576a792e3c823b6c0f1a5dd63024ef835c",
+  "branch": "refactor/architecture-foundation",
+  "main_sha": "92c22caa23f96f85f18e72a5e962a1d8831694db",
+  "date": "2026-10-15",
+  "rustc": "rustc 1.99.0 (b940084d7 2026-09-28) (Arch Linux rust 1:1.99.0-1)",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27) (Arch Linux rust 1:1.99.0-1)",
+  "cargo_build_jobs": 1,
+  "test_threads": 1,
+  "cargo_lock_sha256": "19b82d0fdc044bb98db3deb707f61b4d1fdbb74649fc575bbae24cf70a1d8025",
+  "sources": {
+    "ATTRIBUTION.md": "dbcf02c20e3cd670c0feed1c920a6ca1217adee720a98721aeec6fde4af9f66d",
+    "crates/core/src/command.rs": "9318acd361c755e6cecaee7e8a8eb98c1e8976eecaaa88cdef86b4652938439e",
+    "crates/core/src/lib.rs": "c41e17048003f9a12c8c8a2930f93c98ff5e5fa8343cc548365528b5f1966f38",
+    "crates/core/src/modal.rs": "0052493dddd8a55834f6b767404b51286ab12cbf9a393689e0c3bdc412124818",
+    "crates/core/src/origin_commands.rs": "d8a5e6f144939f5d29c65aba8bb8fb6eae46351f41ba2930e02412934005db89",
+    "crates/core/src/state.rs": "105a605b8a17082910df6b0d5afbad3429f4f9da5c846121e5ee139e891950bb",
+    "crates/core/tests/command_tests.rs": "703728667d59ab27995af6cd1e492eef926d98f04b956e20439b1e05ed5eaf91",
+    "crates/core/tests/origin_frame.rs": "01f1587233386eb167a58fc0bd24cd88dab140f15d6d6c8fa7c472a170cec90c",
+    "crates/editor/examples/origin_frame_feedback.rs": "a32f85df58578842b442a478473229f81db6015e4b5e5fd9a6f2b149ff0c2797",
+    "crates/editor/src/bridge/snapping.rs": "141d557cbaa6777eee8c56b3bc920cebd31a695868ba0e77457a6c774d794be2",
+    "crates/project/src/lib.rs": "46e45503d39a0430c35aa961d3cd76b22dbedd6d4393852c5362d8e043d2b87f",
+    "crates/project/src/object_transform.rs": "15711a9fbca49cf02f4291f05b42fbf7061ef7d97a80e77b62ce6181fd67a317",
+    "crates/project/src/origin.rs": "261b984d1a0a3c50e13a55156d0607fe7ef0720ed82547724f30aeb4e4a69b8a",
+    "crates/project/src/prefab.rs": "6db49e1c1b06b4886eec8fdd43dc8a0fa712e4564fa43758550cc6fbe7dfe1ef",
+    "website/docs/02-application/tools-interaction-implementation.md": "74e7e5683f67f8587cbecbe60e71a1ff024c512ac65e76f36bedb21c7ead0dd0",
+    "website/docs/03-geometry/transforms-origin-pivot-gizmos.md": "f3324ff6da9ec406e758469514cc3281628c831f9175e32e261b5aa430f06361",
+    "website/progress/tasks.json": "33588c025ddab669163be63ea3973898451c2de916f7cf56698560e694a8a21f"
+  },
+  "artifacts": {
+    "evidence/origin-frame-2026-10-15/README.md": "ba64e32ece598edc3da6ade14e14d5a1c9f8594f71e8bda9fe2bfa91b37e01c0",
+    "evidence/origin-frame-2026-10-15/agent-docs.txt": "31eb703e683105fc26ee94ee2b0d9c6620af501e2e2721263f3db693f25cae6d",
+    "evidence/origin-frame-2026-10-15/before.png": "94326e9a4bd89e8574b05a5a186712a55822d9bae49365b1413d57859be2ad22",
+    "evidence/origin-frame-2026-10-15/clippy.txt": "ef68ac98c38fed2bf01f7375e97f002735f85d8bb185558241b187d8b3a7756d",
+    "evidence/origin-frame-2026-10-15/environment.txt": "53fd2d89b49137eabd9d933f0675c13a9e81afab88bede8bdeefb98d8fa1673e",
+    "evidence/origin-frame-2026-10-15/fmt.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence/origin-frame-2026-10-15/moved.png": "7eef1c327395296ba13a0a8ae44fce07065380359edc2038436885c13b363756",
+    "evidence/origin-frame-2026-10-15/pixels.json": "9a84b329bb892cc2e07a95100b597f315893995a7387e8480a008d1d256c9534",
+    "evidence/origin-frame-2026-10-15/progress-tests.txt": "ba9a52326b232c3a7f12d2a12a88395eaf77e1c2bbe3c9e45ac309d406a953cb",
+    "evidence/origin-frame-2026-10-15/progress.txt": "bffe6a2d120c337a10dfb83f801280aa97d682cb67ee22a90b94ca2bc1fa218c",
+    "evidence/origin-frame-2026-10-15/rebased.png": "94326e9a4bd89e8574b05a5a186712a55822d9bae49365b1413d57859be2ad22",
+    "evidence/origin-frame-2026-10-15/resources-final.txt": "9af12cc7e518fd0ed19364cced08979fab1b93f479ea4321be62316ea9472485",
+    "evidence/origin-frame-2026-10-15/rigid-cache-tests.txt": "20f589e4ffdd4bbb897119ca36d69d4187a16f234dd2d4a1f292022fd506a69f",
+    "evidence/origin-frame-2026-10-15/tests.txt": "0ab73de01a3614a5fe936469c4c72216bf02a06c3695341a3b6e45de4dcb8f1b",
+    "evidence/origin-frame-2026-10-15/visual.txt": "b6325f298907e7f00322f7cd4d7ed9abae23392e1d878da0f280a8fe62b343f6"
+  },
+  "gates": {
+    "tests": {
+      "result": "pass",
+      "passed": 688,
+      "suites": 14,
+      "suite_counts": [
+        179,
+        57,
+        7,
+        20,
+        3,
+        2,
+        13,
+        4,
+        126,
+        9,
+        244,
+        5,
+        16,
+        3
+      ],
+      "features": "petunia_editor/animation-workspace"
+    },
+    "clippy_all_targets": "pass",
+    "renderer_rigid_cache": {
+      "result": "pass",
+      "passed": 1
+    },
+    "fmt": "pass",
+    "progress_and_matrix": "pass",
+    "progress_tests": {
+      "result": "pass",
+      "passed": 6
+    },
+    "agent_docs": "pass",
+    "spec_hashes": {
+      "result": "pass",
+      "files": 20
+    },
+    "cpu_pixels": {
+      "backend": "Software3dViewport",
+      "boundary": "UiIntent::SetOriginCursor -> CommandDispatcher",
+      "moved_changed_pixels": 78629,
+      "native_qt": "not run",
+      "rebased_changed_pixels": 0,
+      "size": [
+        800,
+        600
+      ]
+    },
+    "visual_inspection": "pass",
+    "independent_review": "not run",
+    "native_qt_gpu_windows_accessibility": "not run"
+  },
+  "limits": [
+    "H19 remains IN PROGRESS",
+    "static origin translation only; rig/generators/full legacy normalization pending",
+    "CPU evidence is not native Qt acceptance",
+    "No ephemeral target/agent-* directories created or retained"
+  ]
+}

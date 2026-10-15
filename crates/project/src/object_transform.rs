@@ -104,6 +104,9 @@ impl ObjectTransform {
         if !matrix.is_finite() {
             return Err(TransformError::NonFinite);
         }
+        if !matrix.row(3).abs_diff_eq(glam::Vec4::W, 1.0e-6) {
+            return Err(TransformError::Shear);
+        }
         let det = matrix.determinant();
         if det.abs() < 1.0e-12 {
             return Err(TransformError::Singular);
@@ -112,7 +115,7 @@ impl ObjectTransform {
         let candidate = Self::from_trs(translation, rotation, scale);
         let rebuilt = candidate.to_mat4();
         let tolerance = 1.0e-4
-            * matrix
+            * glam::Mat3::from_mat4(matrix)
                 .abs()
                 .to_cols_array()
                 .iter()
@@ -176,5 +179,22 @@ mod tests {
         let double =
             ObjectTransform::from_trs(Vec3::ZERO, Quat::IDENTITY, Vec3::new(-1.0, -1.0, 1.0));
         assert!(!double.flips_winding());
+    }
+
+    #[test]
+    fn large_translation_does_not_hide_shear_or_projective_terms() {
+        let mut shear = Mat4::IDENTITY;
+        shear.y_axis.x = 0.5;
+        let far = Mat4::from_translation(Vec3::splat(1.0e20));
+        assert_eq!(
+            ObjectTransform::from_mat4(far * shear),
+            Err(TransformError::Shear)
+        );
+        let mut projective = far;
+        projective.x_axis.w = 0.1;
+        assert_eq!(
+            ObjectTransform::from_mat4(projective),
+            Err(TransformError::Shear)
+        );
     }
 }

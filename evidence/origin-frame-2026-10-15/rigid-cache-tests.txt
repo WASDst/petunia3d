@@ -1,0 +1,22 @@
+   Compiling petunia_project v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/project)
+   Compiling petunia_core v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/core)
+   Compiling petunia_render v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/render)
+   Compiling petunia_module_assets v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-assets)
+   Compiling petunia_module_uv v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-uv)
+   Compiling petunia_module_paint v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-paint)
+   Compiling petunia_module_model v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/module-model)
+   Compiling petunia_application v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/application)
+   Compiling petunia_editor v0.1.0 (/mnt/sda3/petunia3d-qt-integration/crates/editor)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 43s
+     Running unittests src/lib.rs (target/debug/deps/petunia_editor-ac78e7a94ef6a2fc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 126 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/petunia_render-fcaad8332b3e2c3f)
+
+running 1 test
+test extract::tests::rigid_preview_moves_by_matrix_without_retriangulating ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 0.00s
