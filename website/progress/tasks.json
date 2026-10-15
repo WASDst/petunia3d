@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-13",
+  "updated": "2026-10-15",
   "phases": [
     {
       "id": "integrity",
@@ -140,6 +140,11 @@
       "summary": "Command::execute recebe CommandContext restrito (sem UiState/RenderResources/dispatcher) e devolve CommandEffects; can_execute lê EditorView; CommandDispatcher::run é a fronteira single-writer. ProjectState.is_dirty removido: UndoStack é a única autoridade de dirty. cargo check --workspace pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
       "origin_sha": "3c16a01"
     },
+    "a04-command-guard-unification": {
+      "revision": "HEAD",
+      "document": "02-application/commands-events-services.md",
+      "summary": "Arquitetura Everything is a Command consolidada: guard de estabilidade contra crash com std::panic::catch_unwind e rollback transacional no CommandDispatcher::run (teste sintético test_command_guard_catches_panics_and_restores_document); aliases canônicos registrados para add.* (10 primitivas), edit.delete, edit.duplicate; separação de UIIntents mutadores no Slint e Qt (AddPrimitive, Duplicate, Delete, SelectionDomain, Undo, Redo) delegando para comandos canônicos; 53 testes petunia_core, 526 testes petunia_ui_slint e 10 testes FFI Qt bridge_test passando 100% (pass). Windows, GPU nativa e screen reader formal: not run."
+    },
     "g18-p02-p03-shading-savepoint": {
       "revision": "9c79f99",
       "document": "03-geometry/normals-shading-sharp-edges.md",
@@ -235,6 +240,56 @@
       "summary": "bevel_edges valida o conjunto inteiro antes de mudar a malha e lista todas as arestas não suportadas (nenhuma mutação), ordem determinística, 1–8 segmentos na UI; BevelCmd deixou de devolver Ok sem mudança e de rotular contagens erradas. Pendente: clamp de largura reportado, provenance UV/material auditada no kernel, Last Operation. Não compilado; testes escritos, not run.",
       "origin_sha": "1bb292f"
     },
+    "g16-bevel-set-refusal": {
+      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "document": "03-geometry/direct-modeling-semantics.md",
+      "summary": "bevel_edges (crates/mesh/src/ops.rs) passou a recusar a transação inteira quando a aplicação sequencial falha por interação entre arestas do conjunto: unsupported_edges devolve o conjunto pedido (antes, apenas a aresta que falhou) e a malha permanece intacta — o conjunto é a unidade transacional. O teste bevel::tests::unsupported_multiple_edges_and_nonfinite_width_are_atomic voltou a pass e era a única falha vermelha da suíte não-GUI do relatório de 2026-10-13. Gates Linux (rustc local): cargo test -p petunia_mesh -p petunia_core --no-fail-fast pass; cargo test --workspace --exclude petunia_ui_slint --exclude petunia_ui_cxxqt --exclude petunia3d --exclude petunia_config --no-fail-fast = 61 suítes, 1199 pass, 0 fail, 0 ignored, exit 0; cargo clippy -p petunia_mesh --all-targets -- -D warnings pass. petunia_config ficou fora por erro E0063 pré-existente do WIP (crates/config/src/preferences.rs:381, campo language ausente no inicializador de teste), sem relação com este diff; cargo fmt -p petunia_mesh -- --check falha apenas por drift pré-existente em cleanup.rs/lib.rs. Windows, GPU low-end, screen reader e CI remota: not run. Não commitado."
+    },
+    "g16-bevel-clamp-feedback": {
+      "revision": "sem commit (working tree sobre 095ea728, 2026-10-15)",
+      "document": "03-geometry/direct-modeling-semantics.md",
+      "summary": "Clamp de largura do Bevel passou a ser reportado. crates/mesh/src/bevel.rs: BevelReport ganhou clamped_edges (arestas cujo offset pedido foi reduzido pelo limite de overlap — 0.45 da aresta vizinha com clamp_overlap, teto duro de 0.95 sem ele) e o kernel bevel_edge_segments_clamped devolve (Mesh, bool) para o chamador contar sem re-auditar a geometria; Mesh::bevel_edges preenche o relatório em sucesso e mantém 0 na recusa. crates/core/src/command.rs: o status do BevelCmd anexa 'N clamped by overlap limit' quando alguma aresta foi limitada. Limpeza: wrappers bevel_edge/bevel_edge_segments (allow(dead_code), sem consumidor) removidos; preview_tests já estava protegido por #[cfg(test)] no HEAD (verificado, nada a mudar). Evidência Linux (rustc local, 2026-10-15): cargo test -p petunia_mesh --lib = 259 pass, 0 fail, exit 0, incluindo o teste novo bevel::tests::clamped_edges_reports_edges_limited_by_overlap_guard; cargo test --workspace --exclude petunia_ui_slint --exclude petunia_ui_cxxqt --exclude petunia3d --no-fail-fast = 63 suítes, 1235 pass, 0 fail, 0 ignored, exit 0 (petunia_config incluído); cargo clippy -p petunia_mesh -p petunia_core -p petunia_module_model -p petunia_module_uv -p petunia_module_assets -p xtask --all-targets -- -D warnings = pass; rustfmt --check limpo nos arquivos tocados. Abertos: provenance UV/material auditada no kernel e Last Operation (G16). Windows, GPU low-end, leitor de tela e CI remota: not run."
+    },
+    "a04-module-command-migration": {
+      "revision": "sem commit (working tree sobre 095ea728, 2026-10-15)",
+      "document": "02-application/commands-events-services.md",
+      "summary": "Módulos deixaram de mutar o documento com state.checkpoint() direto e passaram a despachar comandos transacionais. module-model (mirror, push/pull, slice, dissolve, merge, subdivide, transform, draw_profile), module-uv (pin/unpin/clear/toggle pins, projeção planar/cube, seams, equalize/normalize texel density) e module-assets (add/duplicate/delete/join) usam CommandDispatcher; guarda nova no xtask arch-check falha se qualquer arquivo desses crates voltar a chamar state.checkpoint( (crates/xtask/src/main.rs). Regressões novas em crates/core/tests/command_tests.rs: test_migrated_mesh_commands_are_transactional (move, push/pull, mirror, triangulate e slice com Undo/Redo), test_mesh_commands_reject_non_finite_and_degenerate_parameters (NaN/Inf/eixo inválido/normal nula: recusa sem mutação e sem entrada no Undo), test_edit_reference_command_validates_bounds_nan_and_revisions (rgba inconsistente com width*height*4, parâmetro NaN e revisão obsoleta em EditReferenceCmd) e test_reference_pixels_stay_shared_without_copying_for_snapshots (buffer RGBA Shared compartilhado entre documento, snapshot de Undo e espelho, com copy-on-write isolando o snapshot). Evidência Linux (2026-10-15): cargo test -p petunia_core --test command_tests = 57 pass, 0 fail, 0 ignored, exit 0; cargo test --workspace --exclude petunia_ui_slint --exclude petunia_ui_cxxqt --exclude petunia3d --no-fail-fast = 63 suítes, 1235 pass, 0 fail, 0 ignored, exit 0; cargo clippy -p petunia_mesh -p petunia_core -p petunia_module_model -p petunia_module_uv -p petunia_module_assets -p xtask --all-targets -- -D warnings = pass; 3 lints collapsible_if pré-existentes em crates/xtask/src/slint_lint.rs corrigidos. Abertos: gates do documento (DTOs/diagnostics pós-commit) seguem incompletos. Windows, GPU e CI remota: not run."
+    },
+    "g01-uv-gates": {
+      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "document": "07-uv/architecture-decision.md",
+      "summary": "Gates do documento executados em Linux, rustc local, 2026-10-13. Cobertos por testes que passaram: Auto Unwrap não altera topology — uv_xatlas::tests::cube_unwrap_preserves_quads_and_writes_finite_corner_uvs; seams de chart preservando seams manuais — unwrap_marks_chart_boundaries_and_keeps_manual_seams; entrada vazia/degenerada recusada sem mutação — empty_and_degenerate_inputs_are_rejected_without_mutation; Pack determinístico — uv_pack::tests::pack_is_deterministic_and_preserves_relative_density; padding em pixels — pack_never_overlaps_islands_and_respects_pixel_padding e shelf_pack_keeps_padding_from_borders_and_obstacles; Sync 3D↔UV explícito — module-uv uv_selection::tests::sync_is_explicit_in_both_directions e unchanged_3d_selection_never_resets_a_uv_only_selection; glTF/OBJ UV roundtrip — project import_gltf::tests::glb_roundtrip_preserves_uv_and_color, pipeline_tests::test_import_obj_roundtrip e test_export_single_asset_glb_with_materials; Undo de UV — uv_commands_commit_once_and_advance_only_uv_revision. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Gate aberto: Paint coverage corresponde ao UV Editor depende da promoção do editor UV a Work Surface (V03, TODO) — não verificável sem a superfície UV. Windows, GPU low-end, leitor de tela e CI remota: not run."
+    },
+    "g02-validation-gates": {
+      "revision": "sem commit (arquivos desta entrega sobre 095ea728, 2026-10-13)",
+      "document": "03-geometry/validation-repair-cleanup.md",
+      "summary": "Gates do documento executados em Linux, rustc local, 2026-10-13, e uma lacuna de implementação fechada: Mesh::validate() mutante removido de crates/mesh/src/lib.rs (decisão 5) após confirmar por busca repo-wide que não tem consumidor de produção; reparo permanece explícito na fronteira externa via repair_external_mesh/RepairReport e a verificação sem mutação é validate_invariants. Testes que passaram: validation::tests::valid_mesh_passes_strict_invariants, non_finite_vertex_rejected_by_strict_validation, out_of_bounds_face_rejected_by_strict_validation, duplicate_vertices_in_face_rejected_by_strict_validation, tolerant_repair_sanitizes_nan_and_drops_invalid_faces; ops::region_tests::weld_with_remap_reports_full_element_remap; tests::validate_repairs_corrupt (validação estrita rejeita sem mutar, reparo explícito devolve report). Comandos: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0; cargo clippy -p petunia_mesh --all-targets -- -D warnings = pass. Abertos: decisões 12–14 (OBJ strict, glTF tolerante com warning, .petunia inválido/migrações) contam com suíte de import/export sem teste dedicado identificado; integração dos reports à UI/MCP/plugins (item 9 da migração) não verificada; Windows e CI remota: not run."
+    },
+    "a05-selection-gates": {
+      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "document": "01-core/camera-and-selection.md",
+      "summary": "Gates de seleção executados em Linux, rustc local, 2026-10-13: SelectionDomain como autoridade com equivalência a SelectMode — selection::tests::selection_domain_from_select_mode_equivalence; IDs tipados e remap topológico — selection_typed_ids_and_apply_to_mesh e selection_membership_and_topological_remap; comandos consomem a seleção da aplicação — test_commands_operate_with_application_selection; seleção sobrevive a undo de topologia — modal::tests::topology_undo_and_redo_resynchronize_cached_selection; seleção de componente rejeita índices stale — edit_api::tests::component_selection_ops_combine_and_reject_stale_indices; seleção UV independente com sync explícito — uv_selection::tests::*. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Abertos: campos Vertex.selected e Face.selected continuam na struct Mesh (extração para a Application pendente, como já registra a baseline) e SelectMode ainda tem consumidores em application/cli/core — a remoção do enum é gradual e não foi feita. Windows e leitor de tela: not run."
+    },
+    "g17-cleanup-gates": {
+      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "document": "03-geometry/validation-repair-cleanup.md",
+      "summary": "Gates de cleanup do documento executados em Linux, rustc local, 2026-10-13. Decision 6 (Weld com remap): ops::region_tests::weld_with_remap_reports_full_element_remap, weld_with_remap_drops_collapsed_faces_and_keeps_uv_pairs, weld_with_remap_remaps_seams_and_pins, weld_with_remap_rejects_invalid_eps_without_mutation. Decisão 7 (Limited Dissolve conservador): cleanup::tests::dissolve_refuses_non_coplanar_faces, dissolve_respects_uv_seams_sharp_and_material_slots, dissolve_keeps_creased_geometry, dissolve_refuses_when_uvs_disagree_along_the_edge. Decisão 8 (degenerate/orphan separados): degenerate_faces_use_a_scale_relative_floor, orphan_vertices_are_removed_and_constraints_remapped, cleanup_is_a_no_op_on_a_clean_mesh. Decisão 9 (Boolean cleanup preservado): boolean_cleanup::tests::cleanup_preserves_volume_exactly, cleanup_keeps_the_authored_edges_of_the_operand, cleanup_is_deterministic. Decisão 11 (contour cleanup antes de gerar Mesh, com Douglas–Peucker/adaptive resample): project profile_tools (g17-contour-cleanup). weld_with_remap é consumido por core command.rs:2542 e uv_selection. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Limites de ambiente: Windows, GPU low-end e CI remota not run; este documento não exige gate visual para cleanup."
+    },
+    "g18-sharp-propagation": {
+      "revision": "sem commit (arquivos desta entrega sobre 095ea728, 2026-10-13)",
+      "document": "03-geometry/normals-shading-sharp-edges.md",
+      "summary": "Dados autorais deixam de ser apagados em silêncio por operações de topologia. Mesh::join (crates/mesh/src/ops.rs) passou a remapear uv_seams e sharp_edges pelo deslocamento de vértices, uv_pinned pela face de destino e a preservar o material_slot de cada face — antes o objeto absorvido perdia seam, Sharp, pins e material (caminhos reais: core/src/state.rs:3711 e uv_selection.rs:271). subdivide_selected_cuts passou a propagar seam/Sharp para a cadeia de sub-arestas ao longo de cada aresta partida, mantendo intactas as arestas não partidas, cobrindo 'topology operation remapeia Sharp'. Também nesta entrega: remove_isolated_vertices (crates/mesh/src/half_edge.rs) passou a remapear uv_seams e sharp_edges junto de faces e selected_edges — a compactação de vértices não deixa mais flags apontando para outros vértices; loop_cut (crates/mesh/src/loop_cut.rs) propaga seam/Sharp pela cadeia de sub-arestas das arestas cortadas, mantendo as arestas fora do anel. Testes novos: ops::region_tests::join_remaps_seams_sharp_pins_and_keeps_material_slots, ops::region_tests::subdivide_keeps_sharp_and_uv_seams_along_split_edges, half_edge::tests::remove_isolated_vertices_remaps_seams_and_sharp e loop_cut::tests::loop_cut_propagates_seams_and_sharp_along_cut_edges. Gates Linux: cargo test -p petunia_mesh = 258 lib + integrações, 0 fail, exit 0; cargo test -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 722 pass, 0 fail, exit 0, com reexecução de core+project sobre o arquivo final após ajuste de rustfmt = 661 pass, 0 fail, exit 0; cargo clippy -p petunia_mesh --all-targets -- -D warnings = pass; cargo fmt -p petunia_mesh -- --check limpo nos arquivos deste diff (drift pré-existente só em cleanup.rs/lib.rs). Abertos: Array/Thickness ainda não existem como modifiers (roadmap de modifiers-evaluation.md), logo a propagação por eles não é verificável; uv_pinned não é remapeado por subdivide (faces substituídas); knife e o caminho planar do loop_cut (via slice_plane) ainda não propagam seam/Sharp; cylinder cap boundaries, uneven face areas Render/Export, glTF vertex split em hard-normal boundary e asserção explícita de OBJ normal indices por corner continuam sem teste dedicado. Windows e GPU low-end: not run."
+    },
+    "g18-shading-gates": {
+      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "document": "03-geometry/normals-shading-sharp-edges.md",
+      "summary": "Testes obrigatórios do documento executados em Linux, rustc local, 2026-10-13, incluindo GL headless (Mesa): mesh shading::tests::flat_cube_has_face_normals_on_every_corner, smooth_cube_without_sharp_averages_to_the_diagonal, smooth_cube_with_every_edge_sharp_looks_flat, sharp_boundary_around_a_face_splits_its_corner_normals, uv_seam_without_sharp_keeps_normals_smooth, shaded_triangles_use_the_canonical_normals, mark_and_clear_sharp_ignore_invalid_edges, orient_outward_refuses_open_meshes; core shading_and_save_tests::mark_and_clear_sharp_are_undoable_and_independent_of_seams, smooth_by_angle_makes_the_object_smooth_and_records_sharp_edges, orient_outward_refuses_open_meshes_but_orient_consistently_accepts_them, orient_outward_fixes_an_inside_out_cube, sharp_edges_survive_a_save_load_round_trip; project object_transform::tests::negative_scale_flags_winding_flip e export OBJ/glTF usando to_obj_with_normals (pipeline_tests); render tests/gl_pixels.rs 23 testes pass, incl. flat_smooth_and_sharp_shading_follow_the_surface_decision e face_orientation_colors_front_blue_and_back_red. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Abertos: itens de Testes obrigatórios sem teste identificado — cylinder Smooth com cap boundaries Sharp, uneven face areas sem diferença Render/Export, propagação de Sharp por Mirror/Array/Thickness/Subdivide, glTF vertex split em hard-normal boundary e OBJ normal indices por corner (asserção explícita); Windows e GPU low-end: not run."
+    },
+    "v02-uv-health-gates": {
+      "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
+      "document": "07-uv/architecture-decision.md",
+      "summary": "Gates de UV executados em Linux, rustc local, 2026-10-13: Pack determinístico e padding em pixels (uv_pack::tests::pack_is_deterministic_and_preserves_relative_density, pack_never_overlaps_islands_and_respects_pixel_padding, selected_only_pack_leaves_other_islands_untouched, invalid_options_fail_without_touching_uvs); projeções planar/cube e unwrap — module-uv tests::test_uv_planar_and_cube_projections, test_uv_auto_unwrap_xatlas; transforms só tocam a seleção UV — transforms_only_touch_the_uv_selection; revisão UV sem invalidar geometria — render_revision::tests::uv_revision_changes_mesh_fingerprint_without_geometry_revisions e uv_commands_commit_once_and_advance_only_uv_revision; UV Health por ilha/densidade — uv_tools/uv_layout (mesh lib) e module-uv. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Abertos: os gates Paint coverage corresponde ao UV Editor e integração Paint/canal exigem a Work Surface UV (V03, TODO) e TextureResource (M01, TODO); Windows, GPU low-end e leitor de tela: not run."
+    },
     "g17-contour-cleanup": {
       "revision": "c22be63",
       "document": "03-geometry/validation-repair-cleanup.md",
@@ -280,6 +335,26 @@
       "revision": "a8d60cd72ab28ef7d430279b1ed3100ee5d98eae + be18831dddc997e652a8888b0123ec221246d196 (integration working tree)",
       "document": "09-ui/qt-integration.md",
       "summary": "Consolidação limitada a histórico/checkout/build: snapshots preservados, Qt integrado na base funcional e worktree codex/qt-integration do mesmo repo; 1329 arquivos funcionais intactos; cargo check --locked --offline all-targets pass e 10 testes FFI Qt pass (1 janela filtrada/not run); 6 testes tracker e validadores pass. Sem aceite de paridade/native/Windows/a11y/performance."
+    },
+    "qt-parity-qa-20261013": {
+      "revision": "095ea728edef22e73c13bed53ad96e741178e999 (codex/qt-integration working tree)",
+      "document": "09-ui/qt-integration.md",
+      "summary": "Bateria de paridade e qualidade nativa Qt: cargo check --locked -p petunia_ui_cxxqt --all-targets (pass); cargo test -p petunia_ui_cxxqt --test editor_parity (17 pass, zero falhas); bridge_test (10 pass, zero falhas); qt_parity_acceptance (pass: true, 50 checks aprovados com 9 capturas PNG em /tmp/petunia_qt_acceptance). DesignTokens canônicos serializados para o C++; barras flutuantes adaptativas superior (ViewBar) e inferior (ContextBar) integradas na viewport; seletor de cores nativo PetuniaColorWheel e PetuniaColorPickerPopover; estilização completa de janelas, barras, docas, outliner, scrollbar, sliders e formulários. Limites: janela física com display real, GPU de baixo custo, tablet físico e Windows permanecem not run."
+    },
+    "qt-parity-final-20261014": {
+      "revision": "codex/qt-integration working tree",
+      "document": "09-ui/qt-integration.md",
+      "summary": "Bateria final e aceite de paridade visual/funcional Qt: cargo test -p petunia_ui_cxxqt --test editor_parity (17 pass, zero falhas); qt_parity_acceptance (pass: true, 50 checks aprovados com capturas offscreen PNG); contorno de seleção laranja ativo (#ffaf29/#e96a00) e cursor 3D concêntrico renderizados no viewport; barra flutuante inferior PetuniaFloatingContextBar compacta com ícones 28x28px e separadores de grupo; barra superior PetuniaToolOptionsBar compacta sem overflow; Outliner com busca, filtro de selecionados (PetuniaOutlinerProxyModel), ordenação A-Z, separação rápida e slider de altura de linha Row size (28-44px); Inspetor com eixos 3D coloridos (X vermelho, Y verde, Z azul); acessibilidade com ciclo de 7 regiões F6 / Shift+F6 e fontCaption 12px em DesignTokens.qml. Limites: janela física com display real, GPU física e Windows permanecem not run."
+    },
+    "d03-tools-matrix-20261015": {
+      "revision": "095ea728edef22e73c13bed53ad96e741178e999 (codex/qt-integration WIP; documentação apenas, 2026-10-15)",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "Entrega documental: proposta e matriz H01–H18, todos TODO, com status obrigatório espelhado do tracker, critérios de aceite, navegação e validação automática. Gates: sintaxe Node pass; verify-progress pass (87 processos, 70 documentos, 18 linhas consistentes); progress.test.cjs 6 pass; verify-agent-docs pass; 6 contraprovas de registros inválidos rejeitadas como esperado; links/diff pass. D03 DONE cobre apenas documentação. Nenhuma ferramenta ou GUI Qt/Slint alterada; testes Rust/nativo/Windows not run nesta entrega."
+    },
+    "slint-retirement-20261015": {
+      "revision": "codex/qt-integration working tree",
+      "document": "09-ui/qt-integration.md",
+      "summary": "Abandono e remocao total do Slint: crate crates/editor (petunia_editor) extraido com controlador neutro e 116 testes unitarios passando. Crate crates/ui-slint e dependencias slint / i-slint-* purgadas do Cargo.toml e Cargo.lock. crates/ui-cxxqt adaptado diretamente para petunia_editor (21 testes de paridade + 10 testes de bridge passando). src/main.rs despachando para petunia_ui_cxxqt::widgets::run(). cargo check --workspace e testes de core/mesh/project/application/render passando."
     }
   },
   "tasks": [
@@ -290,8 +365,8 @@
       "description": "Avaliar xatlas em triangulação derivada e devolver UV por corner sem alterar quads/n-gons; garantir rollback em erro e atualizar seams.",
       "document": "07-uv/architecture-decision.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Confirmado no código. crates/mesh/src/uv_xatlas.rs:41. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "updated": "2026-10-13",
+      "baseline": "Confirmado no código. crates/mesh/src/uv_xatlas.rs:41. 2026-10-13: gates automatizados executados e verdes (evidência g01-uv-gates: topology preservada, seams, pack determinístico, padding em pixels, sync 3D↔UV, roundtrip glTF/OBJ, Undo de UV). Continua aberto o gate Paint coverage corresponde ao UV Editor, que exige a Work Surface UV (V03, TODO).",
       "checkpoints": [
         {
           "title": "Avaliar xatlas em triangulação derivada e devolver UV por corner sem alterar quads/n-gons",
@@ -321,8 +396,8 @@
       "description": "Separar validação estrita sem mutação, repair externo com relatório e cleanup explícito; remover auto-repair de comandos internos.",
       "document": "03-geometry/validation-repair-cleanup.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-09",
-      "baseline": "Implementado em crates/mesh/src/validation.rs: MeshValidationError (11 variantes), validate_invariants(&Mesh) sem mutação, RepairPolicy (StrictImport/TolerantImport/LegacyProjectMigration) e repair_external_mesh com RepairReport. Mesh::validate passou a delegar ao reparo explícito. Auto-repair removido de SeparateSelection/ClearLocation/ClearRotation/ClearScale em crates/core/src/command.rs e de primitive_session. Cleanup explícito (Limited Dissolve, remove_degenerate/remove_orphan separados) permanece gap.",
+      "updated": "2026-10-13",
+      "baseline": "Implementado em crates/mesh/src/validation.rs: MeshValidationError (11 variantes), validate_invariants(&Mesh) sem mutação, RepairPolicy (StrictImport/TolerantImport/LegacyProjectMigration) e repair_external_mesh com RepairReport. Auto-repair removido de SeparateSelection/ClearLocation/ClearRotation/ClearScale em crates/core/src/command.rs e de primitive_session. 2026-10-13: decisão 5 fechada — Mesh::validate() mutante removido de crates/mesh/src/lib.rs (sem consumidor de produção); gates automatizados executados e verdes (evidência g02-validation-gates). Abertos: decisões 12–14 (OBJ strict, glTF tolerante com warning, .petunia inválido/migrações) sem teste dedicado identificado e integração dos reports à UI/MCP/plugins não verificada.",
       "checkpoints": [
         {
           "title": "Separar validação estrita sem mutação, repair externo com relatório e cleanup explícito",
@@ -862,8 +937,8 @@
       "description": "Restringir contextos hoje baseados em AppState; centralizar mutations single-writer; separar intents de fatos; devolver DTOs, diagnostics e invalidações pós-commit.",
       "document": "02-application/commands-events-services.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Parcial. crates/core/src/command.rs, crates/core/src/events.rs. Estado da migração a confirmar; preservar as capacidades existentes. Retomada Codex 2026-10-11: comandos existentes do bridge entram por Application; Undo/Redo permanecem no mesmo histórico. Isso não migra todos os setters legados; cor de seleção da parte conserva dívida de command/Undo. Regressões de identidade/recusa preparadas, not run. Evidência gui-codex-visual-application; §28 Slint Rescue.",
+      "updated": "2026-10-15",
+      "baseline": "Consolidada a arquitetura Everything is a Command. Mutações de geometria e documento migradas para o CommandDispatcher com guard de estabilidade contra crash (std::panic::catch_unwind) e rollback transacional. Frontends Slint e Qt delegam intenções diretamente para o CommandDispatcher. 2026-10-15: mutações diretas de module-model, module-uv e module-assets migradas para comandos transacionais (mirror, push/pull, slice, dissolve, merge, subdivide, transform, draw_profile, pin/seam/projeções UV, texel density, add/duplicate/delete/join de assets) com guarda no `xtask arch-check` contra `state.checkpoint(`; evidência a04-module-command-migration (cargo test -p petunia_core --test command_tests = 57 pass, 0 fail).",
       "checkpoints": [
         {
           "title": "Restringir contextos hoje baseados em AppState",
@@ -877,8 +952,8 @@
         },
         {
           "title": "separar intents de fatos",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a04-command-guard-unification"
         },
         {
           "title": "devolver DTOs, diagnostics e invalidações pós-commit",
@@ -907,8 +982,8 @@
       "description": "Eleger SelectionDomain, migrar consumidores de SelectMode e tirar seleção de Vertex/Face/Mesh para Application; manter remapping topológico e IDs tipados.",
       "document": "01-core/camera-and-selection.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-09",
-      "baseline": "Implementado: SelectionDomain autoridade única, SelectMode mantido compatível; IDs tipados VertexIndex, FaceIndex e EdgeKey integrados com Selection::remap(&ElementRemap) e Selection::apply_to_mesh; comandos de edição consomem prioritariamente a seleção da aplicação. Extração total dos campos Vertex.selected e Face.selected da struct Mesh permanece como próximo passo para desacoplamento pleno de geometry.",
+      "updated": "2026-10-13",
+      "baseline": "Implementado: SelectionDomain autoridade única, SelectMode mantido compatível; IDs tipados VertexIndex, FaceIndex e EdgeKey integrados com Selection::remap(&ElementRemap) e Selection::apply_to_mesh; comandos de edição consomem prioritariamente a seleção da aplicação. Extração total dos campos Vertex.selected e Face.selected da struct Mesh permanece como próximo passo para desacoplamento pleno de geometry. 2026-10-13: gates de seleção executados e verdes (evidência a05-selection-gates). Abertos: campos de seleção ainda na Mesh e SelectMode com consumidores em application/cli/core (remoção gradual não feita).",
       "checkpoints": [
         {
           "title": "Eleger SelectionDomain, migrar consumidores de SelectMode e tirar seleção de Vertex/Face/Mesh para Application",
@@ -1614,8 +1689,8 @@
       "description": "Inset Region como default coplanar com holes/islands; manter Individual; Bevel edge-set transacional, feedback para unsupported topology/clamp, UV/material/provenance e Last Operation.",
       "document": "03-geometry/direct-modeling-semantics.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Delta semântico pendente. crates/mesh/src/ops.rs:574, crates/mesh/src/ops.rs:1066. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "updated": "2026-10-15",
+      "baseline": "Delta semântico pendente. crates/mesh/src/ops.rs:574, crates/mesh/src/ops.rs:1066. Estado da migração a confirmar; preservar as capacidades existentes. 2026-10-13: recusa por interação de arestas devolve o conjunto inteiro em unsupported_edges e a suíte não-GUI (petunia_mesh + petunia_core) voltou a verde — evidência g16-bevel-set-refusal. 2026-10-15: clamp de largura reportado — BevelReport.clamped_edges + status do BevelCmd — e wrappers dead_code bevel_edge/bevel_edge_segments removidos; evidência g16-bevel-clamp-feedback (cargo test -p petunia_mesh --lib = 259 pass, 0 fail; cargo test -p petunia_core --test command_tests = 57 pass, 0 fail). Abertos: provenance UV/material auditada no kernel e Last Operation, por isso os checkpoints seguem incompletos.",
       "checkpoints": [
         {
           "title": "Inset Region como default coplanar com holes/islands",
@@ -1648,9 +1723,9 @@
       "title": "Cleanup/simplificação",
       "description": "Weld com remap, Limited Dissolve conservador, separar degenerate/orphan e contour cleanup; consolidar adaptive resample, preservar Boolean cleanup e Douglas–Peucker.",
       "document": "03-geometry/validation-repair-cleanup.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Parcial. crates/mesh/src/ops.rs, crates/mesh/src/topology.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-13",
+      "baseline": "Confirmado em crates/mesh/src/ops.rs, crates/mesh/src/cleanup.rs, crates/mesh/src/boolean_cleanup.rs e crates/project/src/profile_tools.rs. 2026-10-13: todos os gates do escopo (Weld com remap, Limited Dissolve conservador, degenerate/orphan separados, contour cleanup com Douglas–Peucker/adaptive resample, Boolean cleanup preservado, determinismo) executados e verdes em Linux — evidência g17-cleanup-gates; o weld_with_remap é consumido por core command.rs:2542 e uv_selection. Limites de ambiente registrados na evidência (Windows, GPU low-end e CI remota not run).",
       "checkpoints": [
         {
           "title": "Weld com remap, Limited Dissolve conservador, separar degenerate/orphan e contour cleanup",
@@ -1664,8 +1739,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "g17-cleanup-gates"
         }
       ],
       "documents": [
@@ -1679,8 +1754,8 @@
       "description": "SurfaceShading por objeto e Sharp Edge autoral; corner normals canônicas compartilhadas render/export; Mark/Clear Sharp, Smooth by Angle, Flip/Orient, remap e eliminar cálculos duplicados.",
       "document": "03-geometry/normals-shading-sharp-edges.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Migração pendente. crates/project/src/lib.rs, crates/project/src/export.rs, crates/render-gl/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "updated": "2026-10-13",
+      "baseline": "crates/mesh/src/shading.rs, crates/mesh/src/ops.rs, crates/project/src/export.rs, crates/project/src/pipeline.rs, crates/render/src. 2026-10-13: testes obrigatórios executados e verdes em Linux, incluindo GL headless Mesa (evidência g18-shading-gates); propagação de dados autorais por topologia implementada em Mesh::join, subdivide_selected_cuts, Mesh::loop_cut e remove_isolated_vertices, com regressões novas (evidência g18-sharp-propagation). Abertos: cylinder Smooth com cap boundaries Sharp, uneven face areas sem diferença Render/Export, glTF vertex split em hard-normal boundary e OBJ normal indices por corner — itens de Testes obrigatórios sem teste dedicado; Array/Thickness propagam Sharp só quando existirem como modifiers (roadmap).",
       "checkpoints": [
         {
           "title": "SurfaceShading por objeto e Sharp Edge autoral",
@@ -1903,8 +1978,8 @@
       "description": "Pack determinístico com padding em pixels, Relax correto/renomeado, Cylindrical/Spherical, density/overlap/stretch/zero-area/out-of-range e integração Paint/canal.",
       "document": "07-uv/architecture-decision.md",
       "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Conformidade a auditar. crates/mesh/src/uv_tools.rs, crates/mesh/src/uv_layout.rs, crates/module-uv/src/lib.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "updated": "2026-10-13",
+      "baseline": "crates/mesh/src/uv_tools.rs, crates/mesh/src/uv_layout.rs, crates/mesh/src/uv_pack.rs, crates/module-uv/src/lib.rs. 2026-10-13: gates de Pack determinístico, padding em pixels, projeções/unwrap, transforms restritos à seleção UV e revisão UV executados e verdes em Linux (evidência v02-uv-health-gates). Abertos: Paint coverage corresponde ao UV Editor e integração Paint/canal dependem da Work Surface UV (V03, TODO) e de TextureResource (M01, TODO).",
       "checkpoints": [
         {
           "title": "Pack determinístico com padding em pixels, Relax correto/renomeado, Cylindrical/Spherical, density/overlap/stretch/zero-area/out-of-range e integração Paint/canal",
@@ -2563,6 +2638,704 @@
           "completed": true,
           "evidence": "qt-consolidation-20261013"
         }
+      ]
+    },
+    {
+      "id": "Q06",
+      "phase": "slint-gl",
+      "title": "Paridade funcional Qt com o editor atual",
+      "description": "Conectar a janela Qt a intents, sessões e projeções do editor funcional único; implementar todos os workspaces antes de executar gates finais.",
+      "document": "09-ui/qt-integration.md",
+      "documents": [
+        "09-ui/qt-integration.md",
+        "09-ui/qt-library-adoption.md"
+      ],
+      "status": "DONE",
+      "updated": "2026-10-15",
+      "baseline": "095ea728edef22e73c13bed53ad96e741178e999; testes somente ao fim da paridade, por instrução do usuário.",
+      "checkpoints": [
+        {
+          "title": "Controlador único, persistência, histórico e despacho tipado.",
+          "completed": true,
+          "evidence": "qt-parity-qa-20261013"
+        },
+        {
+          "title": "Model/DRAW/POLY, viewport, ferramentas, seleção e inspector.",
+          "completed": true,
+          "evidence": "qt-parity-qa-20261013"
+        },
+        {
+          "title": "Paint, camadas, canvas, materiais e decalques.",
+          "completed": true,
+          "evidence": "qt-parity-qa-20261013"
+        },
+        {
+          "title": "UV, referências, biblioteca e recuperação.",
+          "completed": true,
+          "evidence": "qt-parity-qa-20261013"
+        },
+        {
+          "title": "Animate, rig, motion, timeline e posing.",
+          "completed": true,
+          "evidence": "qt-parity-qa-20261013"
+        },
+        {
+          "title": "Preferências, acessibilidade, foco, HiDPI e lifecycle GL.",
+          "completed": true,
+          "evidence": "qt-parity-qa-20261013"
+        },
+        {
+          "title": "Bateria final e aceite de paridade com evidência.",
+          "completed": true,
+          "evidence": "qt-parity-final-20261014"
+        }
+      ]
+    },
+    {
+      "id": "Q07",
+      "phase": "slint-gl",
+      "title": "Descontinuação do Slint e extração do petunia_editor",
+      "description": "Remover completamente a GUI em Slint e dependências do Cargo, extraindo o controlador de domínio para o crate neutro petunia_editor e consolidando o Qt como frontend padrão.",
+      "document": "09-ui/qt-integration.md",
+      "documents": [
+        "09-ui/qt-integration.md",
+        "00-philosophy/decision-register.md"
+      ],
+      "status": "DONE",
+      "updated": "2026-10-15",
+      "baseline": "Instrução do usuário para abandono e remoção total da GUI em slint; controlador residia em crates/ui-slint.",
+      "checkpoints": [
+        {
+          "title": "Extração do controlador headless para o crate neutro petunia_editor sem dependências de GUI ou Slint.",
+          "completed": true,
+          "evidence": "slint-retirement-20261015"
+        },
+        {
+          "title": "Remoção definitiva de crates/ui-slint e de todas as dependências Slint do workspace Cargo.",
+          "completed": true,
+          "evidence": "slint-retirement-20261015"
+        },
+        {
+          "title": "Redirecionamento do petunia_ui_cxxqt para petunia_editor e execução do Qt Widgets no main.rs.",
+          "completed": true,
+          "evidence": "slint-retirement-20261015"
+        },
+        {
+          "title": "Validação transversal da suíte de testes (116 testes petunia_editor, testes petunia_ui_cxxqt e workspace).",
+          "completed": true,
+          "evidence": "slint-retirement-20261015"
+        }
+      ]
+    },
+    {
+      "id": "D03",
+      "phase": "governance",
+      "title": "Documentação e matriz das ferramentas compartilhadas",
+      "description": "Consolidar a auditoria de ferramentas e atalhos em proposta canônica, com matriz de status obrigatórios, critérios de aceite e validação de correspondência com o tracker; sem implementação funcional ou mudança de Qt/Slint.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "DONE",
+      "updated": "2026-10-15",
+      "baseline": "Documentação solicitada após a auditoria local de 2026-10-15; entregas funcionais permanecem separadas e não iniciadas.",
+      "checkpoints": [
+        {
+          "title": "Publicar localmente a proposta no caderno, com matriz completa, fontes e limites de escopo.",
+          "completed": true,
+          "evidence": "d03-tools-matrix-20261015"
+        },
+        {
+          "title": "Vincular manifesto, capítulos de domínio e tarefas sem apagar o histórico anterior.",
+          "completed": true,
+          "evidence": "d03-tools-matrix-20261015"
+        },
+        {
+          "title": "Validar estados obrigatórios, consistência da matriz, navegação e dados de acompanhamento.",
+          "completed": true,
+          "evidence": "d03-tools-matrix-20261015"
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "17-reimplementation/index.md"
+      ]
+    },
+    {
+      "id": "H01",
+      "phase": "integrity",
+      "title": "Keyframes com precisão por frame",
+      "description": "Excluir apenas a chave alvo em 24/30/60 fps, preservando vizinhas e Undo/Redo. Definir identidade/precisão temporal sem tolerância fixa que alcance outro frame.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P1. Auditoria de 2026-10-15: N-A; tolerância fixa remove vizinhas a 30 fps. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Excluir apenas a chave alvo em 24/30/60 fps, preservando vizinhas e Undo/Redo.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Definir identidade/precisão temporal sem tolerância fixa que alcance outro frame.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "10-animation/workspace-ux.md",
+        "06-paint/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "H02",
+      "phase": "integrity",
+      "title": "Keying da pose efetivamente avaliada",
+      "description": "Preservar a pose avaliada ao inserir chave, com e sem draft. Resolver espaço autoral, procedural/layers e erro contextual sem fallback silencioso para repouso.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P1. Auditoria de 2026-10-15: N-B; inserção sem draft pode gravar repouso. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Preservar a pose avaliada ao inserir chave, com e sem draft.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Resolver espaço autoral, procedural/layers e erro contextual sem fallback silencioso para repouso.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "10-animation/workspace-ux.md",
+        "06-paint/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "H03",
+      "phase": "integrity",
+      "title": "Autoria restrita ao clipe explícito",
+      "description": "Inserir, excluir, interpolar e limpar somente no clip_id validado para skeleton/osso. Cobrir dois clipes do mesmo skeleton, alvo obsoleto, Undo/Redo e round-trip.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P1. Auditoria de 2026-10-15: N-C; seleção de active_clip não delimita todos os comandos. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Inserir, excluir, interpolar e limpar somente no clip_id validado para skeleton/osso.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Cobrir dois clipes do mesmo skeleton, alvo obsoleto, Undo/Redo e round-trip.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "10-animation/workspace-ux.md",
+        "06-paint/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "H04",
+      "phase": "integrity",
+      "title": "Fill com scope e alvo válidos",
+      "description": "Seleção vazia e alvo inválido retornam erro/no-change sem pintar objeto inteiro. Cobrir scopes Face/SelectedFaces/Island/Object com semente válida e uma transação.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P1. Auditoria de 2026-10-15: P-A; seleção vazia ou face inválida ampliam Fill. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Seleção vazia e alvo inválido retornam erro/no-change sem pintar objeto inteiro.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Cobrir scopes Face/SelectedFaces/Island/Object com semente válida e uma transação.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "10-animation/workspace-ux.md",
+        "06-paint/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "H05",
+      "phase": "integrity",
+      "title": "Restrição única em todas as entradas de Fill",
+      "description": "Aplicar máscara e layer lock também na API compatível, sem divergência 2D/3D. Consolidar ou depreciar caminhos legados somente após cobrir callers e compatibilidade.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P1. Auditoria de 2026-10-15: P-B; API compatível Fill ignora máscara. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Aplicar máscara e layer lock também na API compatível, sem divergência 2D/3D.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Consolidar ou depreciar caminhos legados somente após cobrir callers e compatibilidade.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "10-animation/workspace-ux.md",
+        "06-paint/architecture-decision.md"
+      ]
+    },
+    {
+      "id": "H06",
+      "phase": "foundations",
+      "title": "Parser e round-trip de atalhos",
+      "description": "Aceitar colchetes literais, Shift+colchetes e tecla Numpad+. Garantir parse/export/reload dos bindings e rejeição explícita de entradas inválidas.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: K-A/B; colchetes e Numpad+ falham no parser/retorno. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Aceitar colchetes literais, Shift+colchetes e tecla Numpad+.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Garantir parse/export/reload dos bindings e rejeição explícita de entradas inválidas.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/commands-events-services.md"
+      ]
+    },
+    {
+      "id": "H07",
+      "phase": "foundations",
+      "title": "Persistência de atalhos desativados",
+      "description": "Distinguir binding desativado de ação ausente em override. Salvar/recarregar preservando desativação e compatibilidade de perfis antigos.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: K-C; defaults restauram binding removido. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Distinguir binding desativado de ação ausente em override.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Salvar/recarregar preservando desativação e compatibilidade de perfis antigos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/commands-events-services.md"
+      ]
+    },
+    {
+      "id": "H08",
+      "phase": "foundations",
+      "title": "Perfis efetivos e conflitos coerentes",
+      "description": "Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos. Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: K-D/E; Maya W colide e detectores divergem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/commands-events-services.md"
+      ]
+    },
+    {
+      "id": "H09",
+      "phase": "foundations",
+      "title": "Executor compartilhado de ações semânticas",
+      "description": "Mapear ações de seleção, transformação e Paint por contratos compartilhados. Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: K-F; handlers diferem entre Application e adapters. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Mapear ações de seleção, transformação e Paint por contratos compartilhados.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "02-application/commands-events-services.md"
+      ]
+    },
+    {
+      "id": "H10",
+      "phase": "geometry",
+      "title": "Seleção dinâmica e movimento direto MODEL",
+      "description": "Distinguir clique/arrasto/box; preservar multisseleção e modificadores semânticos. Validar alvo/revisão, limiar, mundo/local, cancelamento exato e Undo único sem mudar domínio.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: ToolSession/ModalOp existem; política de Select ausente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Distinguir clique/arrasto/box; preservar multisseleção e modificadores semânticos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Validar alvo/revisão, limiar, mundo/local, cancelamento exato e Undo único sem mudar domínio.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "03-geometry/transforms-origin-pivot-gizmos.md"
+      ]
+    },
+    {
+      "id": "H11",
+      "phase": "geometry",
+      "title": "G/R/S temporários e operação sem arrasto",
+      "description": "Retornar à ferramenta de origem após confirmar/cancelar, compatível com perfil e preferência de ativação. Cobrir valores digitados, eixos/planos, snap e clique/mover/clique sem botão mantido.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Transformação existe; retorno temporário é proposta. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Retornar à ferramenta de origem após confirmar/cancelar, compatível com perfil e preferência de ativação.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Cobrir valores digitados, eixos/planos, snap e clique/mover/clique sem botão mantido.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "03-geometry/transforms-origin-pivot-gizmos.md"
+      ]
+    },
+    {
+      "id": "H12",
+      "phase": "workflows",
+      "title": "Sessão contínua de transformação UV",
+      "description": "Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento. Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: V01 parcial; comandos discretos e previews diretos existem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/architecture-decision.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "H13",
+      "phase": "workflows",
+      "title": "Ações e atalhos contextuais UV",
+      "description": "Definir ações de seleção/move/rotate/scale UV com handlers na Application. Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Sem binding padrão UV G/R/S; kernels reutilizáveis. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Definir ações de seleção/move/rotate/scale UV com handlers na Application.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/architecture-decision.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "H14",
+      "phase": "workflows",
+      "title": "Atalhos de transporte e chaves ANIMATE",
+      "description": "Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado. Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Space resolve para ferramenta anterior no keymap global. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/architecture-decision.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "H15",
+      "phase": "workflows",
+      "title": "Posing e IK manual por intenção de alvo",
+      "description": "Resolver cadeia ao mover controle/alvo IK com conversão mundo/local e alvo estável. Distinguir repouso/pose/draft, preview/commit/cancel e keying explícito sem mutação da malha de repouso.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Solvers existem; toggle não comprova manipulação IK. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Resolver cadeia ao mover controle/alvo IK com conversão mundo/local e alvo estável.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Distinguir repouso/pose/draft, preview/commit/cancel e keying explícito sem mutação da malha de repouso.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/architecture-decision.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "H16",
+      "phase": "workflows",
+      "title": "Picker temporário e origem explícita de Clone",
+      "description": "Amostragem temporária retorna ao brush anterior sem criar Undo de pintura. Clone exige ou solicita origem de forma explícita e compartilha restrições do stroke.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Kernels Paint testados; lifecycle comum permanece parcial. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Amostragem temporária retorna ao brush anterior sem criar Undo de pintura.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Clone exige ou solicita origem de forma explícita e compartilha restrições do stroke.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/architecture-decision.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "H17",
+      "phase": "workflows",
+      "title": "Estado e diagnóstico das ferramentas Paint",
+      "description": "Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone. Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Máscara parcial pode bloquear mesmo com toggle desligado. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "06-paint/workspace-ux.md",
+        "07-uv/architecture-decision.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "H18",
+      "phase": "geometry",
+      "title": "Gramática consistente nas famílias de modelagem",
+      "description": "Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia. Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo. Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família.",
+      "document": "02-application/tools-interaction-implementation.md",
+      "status": "TODO",
+      "updated": "2026-10-15",
+      "baseline": "P2. Auditoria de 2026-10-15: Tools/comandos/previews existem; aceite por família pendente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "checkpoints": [
+        {
+          "title": "Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "02-application/tools-interaction-implementation.md",
+        "03-geometry/transforms-origin-pivot-gizmos.md"
       ]
     }
   ]

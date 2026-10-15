@@ -198,10 +198,7 @@ impl Material {
             TextureChannel::Emission => &mut self.emission_texture,
             TextureChannel::Height => &mut self.height_texture,
         };
-        if slot.is_none() {
-            *slot = Some(Canvas::new(w, h, fill));
-        }
-        slot.as_mut().expect("canvas acabou de ser criado")
+        slot.get_or_insert_with(|| Canvas::new(w, h, fill))
     }
 
     /// Amostra a cor efetiva do canal albedo para uma coordenada UV dada.

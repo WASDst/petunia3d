@@ -47,8 +47,8 @@ fn main() {
         i += 1;
     }
 
-    // Interface única: shell Slint com viewport OpenGL 3.3 (website/docs/09-ui).
-    if let Err(e) = petunia_ui_slint::run() {
+    // Interface única: shell Qt Widgets com viewport OpenGL 3.3.
+    if let Err(e) = petunia_ui_cxxqt::widgets::run() {
         eprintln!("petunia3d: {e}");
         std::process::exit(1);
     }

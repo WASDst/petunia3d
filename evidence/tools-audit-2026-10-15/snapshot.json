@@ -1,0 +1,49 @@
+{
+  "scope": "Audit only; production code and GUI unchanged by this task",
+  "branch": "codex/qt-integration",
+  "head": "095ea728edef22e73c13bed53ad96e741178e999",
+  "toolchain": {
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27) (Arch Linux rust 1:1.99.0-1)",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28) (Arch Linux rust 1:1.99.0-1)"
+  },
+  "sha256": {
+    "Cargo.lock": "eee00693e9ce2433f0e517936d862dd79d43a0d9e4e2c15aac860ecb94a8755b",
+    "crates/config/src/keybinds.rs": "ec92e127d6c38e4a25366c91571b63e8b8abd9b140017a249092285c99617829",
+    "crates/application/src/actions.rs": "ca9ca2f2c9f835c28769b83257342be7e246ce88cebd279780980a553456f066",
+    "crates/core/src/animate_session.rs": "2de4f0f4a82adf9804f5a68afae44819f4b46427f4106024604618be1e2af52f",
+    "crates/core/src/rig_commands.rs": "83ccabb858dbdcf5755ce66655ac41f2e63efc50e6edac5ad2dbffde1eadd877",
+    "crates/core/src/tool_session.rs": "b1fe67a9050cd27ad1c348553de67a2a8930e832ba0589fd7ee7ebbb6140ed22",
+    "crates/core/src/modal.rs": "710ceebd3e46f7df852ccff252e126d3377c94b145fd0009787419e2eae043b8",
+    "crates/core/src/uv_selection.rs": "17e292e429bd35674fd482b9e4766085cbbbffef2fad0f4e6f8224f7cf6fd7f8",
+    "crates/core/src/state.rs": "b63cd7c05b2942fdce74b2a63cdad342ed8c557c8fe6b52e543ab337f5db1da3",
+    "crates/module-paint/src/lib.rs": "f6a32d21efd5265909f15f3a09182119aabd37175a0be48336cc62176bcbeeef",
+    "crates/module-paint/src/engine.rs": "5ffa31dd41debac25715fcc3955245106ac460b41a3409b02e50d5eefc81cd10",
+    "crates/module-uv/src/lib.rs": "2b71500fe4a85f0869b05f9291092197e5c7339880e6796765f2f05afa3835c0",
+    "crates/module-model/src/lib.rs": "757f0dbd3338e26ce4a442ef101dcb679a8bf81053e339428ac4a1222db4b64f",
+    "crates/ui-slint/src/bridge/commands.rs": "b1d820736617f03b99907980f100cfa7d51dced53caaf6a2fd89be9f0c510710",
+    "crates/ui-slint/src/bridge/tools.rs": "4beaabdd19015507060f134ba22eb00d1714a800079c89ec545a4fe245d522e6",
+    "crates/ui-slint/src/bridge/transform.rs": "44e6892ac817982c1df4c317b7ff1cf5ac48e0524bd1eb4c1cef4f4d6dc2d2a4",
+    "crates/ui-cxxqt/src/editor.rs": "6e78eb6a4368f0fa73aad68ddbebc94198e0758ad96001a84ed6ffeb347ba28e",
+    "website/progress/tasks.json": "577c7ea50f2b997b216654c213702cfa2f5d0720e6e02185f2675bffcdec3cca"
+  },
+  "verification": {
+    "existing_suites": {
+      "passed": 417,
+      "failed": 0
+    },
+    "synthetic_harness": {
+      "passed": 1,
+      "failed": 16,
+      "exit_code": 101,
+      "notes": "Includes related cases and two proposed shortcut coverage expectations, not 16 independent bugs."
+    },
+    "native_gui": "not run",
+    "resource_end": {
+      "disk_free_gb": 40,
+      "disk_used_percent": 84,
+      "memory_available_gib": 18,
+      "swap_used_gib": 3.3,
+      "cargo_build_jobs": 1
+    }
+  }
+}

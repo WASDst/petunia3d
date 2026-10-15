@@ -1,7 +1,10 @@
 //! module-assets — Asset Library (§13): múltiplos assets com UUID,
 //! rename/duplicate/delete/search. Reage a `ActiveAssetChanged`.
 
-use petunia_core::{AppEvent, AppState, Module};
+use petunia_core::{
+    AddMeshAssetCmd, AppEvent, AppState, DeleteAssetCmd, DuplicateAssetCmd, JoinAssetIntoActiveCmd,
+    Module,
+};
 use petunia_mesh::Mesh;
 
 #[derive(Default)]
@@ -17,69 +20,40 @@ impl AssetsModule {
     }
 
     pub fn add_primitive(state: &mut AppState, name: &str, mut mesh: Mesh) {
-        state.checkpoint("add asset");
         let cursor = state.session.cursor_3d;
         for v in &mut mesh.verts {
             v.pos[0] += cursor[0];
             v.pos[1] += cursor[1];
             v.pos[2] += cursor[2];
         }
-        state.project.add(name, mesh);
-        let id = state.project.assets[state.project.active].id;
-        state
-            .events
-            .emit(AppEvent::ActiveAssetChanged { asset_id: id });
-        state.sync_selection();
-        state.emit_mesh_changed();
+        if let Err(err) = state.dispatch(&AddMeshAssetCmd {
+            label: "add asset",
+            name: name.to_string(),
+            mesh,
+        }) {
+            state.set_status(format!("add asset: {err}"));
+        }
     }
 
     pub fn duplicate_active(state: &mut AppState) {
-        let idx = state.project.active;
-        if let Some(a) = state.project.assets.get(idx).cloned() {
-            state.checkpoint("duplicate asset");
-            let dup = a.duplicate();
-            let id = dup.id;
-            state.project.assets.push(dup);
-            state.project.active = state.project.assets.len() - 1;
-            state
-                .events
-                .emit(AppEvent::ActiveAssetChanged { asset_id: id });
-            state.sync_selection();
-            state.emit_mesh_changed();
+        if let Err(err) = state.dispatch(&DuplicateAssetCmd::default()) {
+            state.set_status(format!("duplicate asset: {err}"));
         }
     }
 
     pub fn delete_active(state: &mut AppState) {
-        state.checkpoint("delete asset");
-        let active = state.project.active;
-        state.project.remove(active);
-        let id = state
-            .project
-            .assets
-            .get(state.project.active)
-            .map(|a| a.id)
-            .unwrap_or_default();
-        state
-            .events
-            .emit(AppEvent::ActiveAssetChanged { asset_id: id });
-        state.sync_selection();
-        state.emit_mesh_changed();
+        if let Err(err) = state.dispatch(&DeleteAssetCmd::default()) {
+            state.set_status(format!("delete asset: {err}"));
+        }
     }
 
     /// Mescla a malha de outro asset com o asset ativo e remove o asset de origem.
     pub fn join_asset(state: &mut AppState, source_idx: usize) {
-        if source_idx == state.project.active || source_idx >= state.project.assets.len() {
-            return;
+        if let Err(err) = state.dispatch(&JoinAssetIntoActiveCmd {
+            source_index: source_idx,
+        }) {
+            state.set_status(format!("join asset: {err}"));
         }
-        state.checkpoint("join asset");
-        let source_mesh = state.project.assets[source_idx].mesh.clone();
-        if let Some(active_asset) = state.project.active_mut() {
-            active_asset.mesh.join(&source_mesh);
-        }
-        state.project.remove(source_idx);
-        state.sync_selection();
-        state.emit_mesh_changed();
-        state.set_status("asset joined into active");
     }
 
     /// Assets visíveis após o filtro (índices reais).

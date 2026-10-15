@@ -28,11 +28,8 @@ impl Tool for DissolveTool {
 
 impl DissolveTool {
     pub fn apply(state: &mut AppState) {
-        state.checkpoint("dissolve");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.dissolve_selected();
+        if let Err(err) = state.dispatch(&petunia_core::DissolveCmd) {
+            state.set_status(format!("dissolve: {err}"));
         }
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 }

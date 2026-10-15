@@ -30,12 +30,12 @@ impl Tool for MirrorTool {
 
 impl MirrorTool {
     pub fn apply(state: &mut AppState) {
-        let (ax, weld) = (state.mirror_axis, state.mirror_weld);
-        state.checkpoint("mirror");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.mirror(ax, weld);
+        let cmd = petunia_core::MirrorMeshCmd {
+            axis: state.mirror_axis,
+            weld: state.mirror_weld,
+        };
+        if let Err(err) = state.dispatch(&cmd) {
+            state.set_status(format!("mirror: {err}"));
         }
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 }

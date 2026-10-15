@@ -14,7 +14,7 @@ members = [
     "crates/module-paint",
     "crates/module-uv",
     "crates/module-assets",
-    "crates/ui-slint",
+    "crates/editor",
     "crates/xtask",
     "crates/cli",
     "crates/ffi",
@@ -63,7 +63,7 @@ petunia_module_model = { path = "crates/module-model" }
 petunia_module_paint = { path = "crates/module-paint" }
 petunia_module_uv = { path = "crates/module-uv" }
 petunia_module_assets = { path = "crates/module-assets" }
-petunia_ui_slint = { path = "crates/ui-slint" }
+petunia_editor = { path = "crates/editor" }
 petunia_ui_cxxqt = { path = "crates/ui-cxxqt" }
 petunia_cli = { path = "crates/cli" }
 petunia_ffi = { path = "crates/ffi" }
@@ -92,11 +92,12 @@ path = "src/main.rs"
 [features]
 default = []
 # Workspace Animate (P3D-066/170, ADR 006). Fora da V1 congelada (capítulo 36:
-# MODEL/PAINT/UV). Habilite explicitamente: liga a pill ANIMATE no shell Slint.
-animation-workspace = ["petunia_ui_slint/animation-workspace"]
+# MODEL/PAINT/UV). Habilite explicitamente.
+animation-workspace = ["petunia_editor/animation-workspace", "petunia_ui_cxxqt/animation-workspace"]
 
 [dependencies]
-petunia_ui_slint = { workspace = true }
+petunia_ui_cxxqt = { workspace = true }
+petunia_editor = { workspace = true }
 petunia_application = { workspace = true }
 petunia_mcp = { workspace = true }
 
@@ -104,5 +105,5 @@ petunia_mcp = { workspace = true }
 opt-level = 3
 lto = true
 codegen-units = 1
-panic = "abort"
+panic = "unwind"
 strip = true

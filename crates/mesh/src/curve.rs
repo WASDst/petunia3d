@@ -162,12 +162,12 @@ impl BezierPath {
         }
 
         // Se fechado, garante que o último ponto não duplique o primeiro se for idêntico
-        if self.closed && result.len() > 1 {
-            let first = result[0];
-            let last = *result.last().unwrap();
-            if (first[0] - last[0]).hypot(first[1] - last[1]) < 1e-5 {
-                result.pop();
-            }
+        if self.closed
+            && result.len() > 1
+            && let (Some(&first), Some(&last)) = (result.first(), result.last())
+            && (first[0] - last[0]).hypot(first[1] - last[1]) < 1e-5
+        {
+            result.pop();
         }
 
         result

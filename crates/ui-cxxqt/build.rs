@@ -1,14 +1,19 @@
 use cxx_qt_build::CxxQtBuilder;
 
 fn main() {
+    println!("cargo:rerun-if-changed=cpp/petunia_editor_api.h");
+    println!("cargo:rerun-if-changed=cpp/petunia_icons.h");
     CxxQtBuilder::new()
         .qt_module("Widgets")
+        .qt_module("Svg")
         .qt_module("OpenGL")
         .qt_module("OpenGLWidgets")
         .qt_module("Quick")
         .file("src/bridge/shell.rs")
         .cpp_file("cpp/petunia_gl_widget.h")
         .cpp_file("cpp/petunia_gl_widget.cpp")
+        .cpp_file("cpp/petunia_editor_panel.h")
+        .cpp_file("cpp/petunia_editor_panel.cpp")
         .cpp_file("cpp/petunia_main_window.h")
         .cpp_file("cpp/petunia_main_window.cpp")
         .cpp_file("cpp/petunia_command_palette.h")
@@ -31,6 +36,14 @@ fn main() {
         .cpp_file("cpp/petunia_timeline_widget.cpp")
         .cpp_file("cpp/petunia_asset_library_widget.h")
         .cpp_file("cpp/petunia_asset_library_widget.cpp")
+        .cpp_file("cpp/petunia_pie_menu.h")
+        .cpp_file("cpp/petunia_pie_menu.cpp")
+        .cpp_file("cpp/petunia_placeholder_message.h")
+        .cpp_file("cpp/petunia_placeholder_message.cpp")
+        .cpp_file("cpp/petunia_dock_manager.h")
+        .cpp_file("cpp/petunia_dock_manager.cpp")
+        .cpp_file("cpp/petunia_angle_dial.h")
+        .cpp_file("cpp/petunia_angle_dial.cpp")
         .qrc("qml/qml.qrc")
         .build();
 }

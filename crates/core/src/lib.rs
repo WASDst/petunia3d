@@ -24,6 +24,8 @@ pub mod modal;
 pub mod modal_feedback;
 pub mod modifier_commands;
 pub mod module;
+pub mod object_metadata_commands;
+pub use object_metadata_commands::SetAssetSelectionColorCmd;
 pub mod picking;
 pub mod poly_pen;
 pub mod primitive_session;
@@ -31,6 +33,8 @@ pub mod project_service;
 pub mod proportional;
 pub mod queries;
 pub mod recent_projects;
+pub mod reference_commands;
+pub use reference_commands::{EditReferenceCmd, ReferenceOp};
 pub mod region_push;
 pub mod render_revision;
 pub mod rig_commands;
@@ -88,22 +92,25 @@ pub use command::{
     ConnectLoopsCmd, ConvertSplineToPolylineCmd, CreatePathGeneratorCmd, CreateProfileCmd,
     CreateSplineCmd, CycleSelectionDomainCmd, DeleteAssetCmd, DeleteOrDissolveSelectionCmd,
     DeletePathGeneratorCmd, DeleteProfileCmd, DeleteSelectionCmd, DeleteSplineCmd,
-    DeleteSplinePointCmd, DetachSplinePointCmd, DuplicateAssetCmd, DuplicateSelectionCmd,
-    ExportGlbCmd, ExportObjCmd, ExtrudeIndividualCmd, ExtrudeSelectedCmd, FlipDiagonalCmd,
-    FlipNormalsCmd, FrameSelectionCmd, ImportGltfCmd, ImportObjCmd, InsetFacesCmd,
-    InstantiateAssetCmd, InvertSelectionCmd, JoinObjectsCmd, KnifeToolCmd, LoopCutCmd,
-    MarkSharpCmd, MergeCenterCmd, MoveSplinePointCmd, NewProjectCmd, OpenProjectCmd,
-    OrientConsistentlyCmd, OrientOutwardCmd, PrimitiveKind, PushPullToolCmd, RedoCmd,
-    ReorderAssetCmd, ReprojectSplinePointAttachmentCmd, ResetCameraCmd, ReverseSplineCmd,
-    RevolveCmd, RotateSplinePointAttachmentCmd, SaveActiveAsAssetCmd, SaveProjectAsCmd,
-    SaveProjectCmd, ScaleSelectionCmd, SelectAllCmd, SelectLinkedCmd, SeparateSelectionCmd,
-    SetAssetCollectionCmd, SetDecalTransformCmd, SetSelectionDomainCmd, SetShadeSmoothCmd,
-    SetSplineClosedCmd, SetSplineHandlesCmd, SlideSplinePointAttachmentCmd, SmoothByAngleCmd,
-    SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd,
-    ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd,
-    ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, UndoCmd,
-    UnwrapAutoCmd, UpdateProfileCmd, UpdateSplineCmd, UpdateSweepGeneratorCmd, UvPackIslandsCmd,
-    UvProjectFromViewCmd, UvSetTexelDensityCmd, UvSplitCmd, UvTransformCmd, WeldCmd,
+    DeleteSplinePointCmd, DetachSplinePointCmd, DissolveCmd, DuplicateAssetCmd,
+    DuplicateSelectionCmd, ExportGlbCmd, ExportObjCmd, ExtrudeIndividualCmd, ExtrudeSelectedCmd,
+    FlipDiagonalCmd, FlipNormalsCmd, FrameSelectionCmd, ImportGltfCmd, ImportObjCmd, InsetFacesCmd,
+    InstantiateAssetCmd, InvertSelectionCmd, JoinAssetIntoActiveCmd, JoinObjectsCmd, KnifeToolCmd,
+    LoopCutCmd, MakeFaceCmd, MarkSharpCmd, MergeCenterCmd, MirrorMeshCmd, MoveSplinePointCmd,
+    NewProjectCmd, OpenProjectCmd, OrientConsistentlyCmd, OrientOutwardCmd, PrimitiveKind,
+    PushPullApplyCmd, PushPullToolCmd, RedoCmd, ReorderAssetCmd, ReprojectSplinePointAttachmentCmd,
+    ResetCameraCmd, ReverseSplineCmd, RevolveCmd, RotateSplinePointAttachmentCmd,
+    SaveActiveAsAssetCmd, SaveProjectAsCmd, SaveProjectCmd, ScaleSelectionCmd, SelectAllCmd,
+    SelectLinkedCmd, SeparateSelectionCmd, SetAssetCollectionCmd, SetDecalTransformCmd,
+    SetSelectionDomainCmd, SetShadeSmoothCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
+    SlicePlaneCmd, SlideSplinePointAttachmentCmd, SmoothByAngleCmd, SubdivideSelectionCmd,
+    SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd, ToggleCommandPaletteCmd,
+    ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd, ToggleSettingsCmd,
+    ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, TranslateSelectionCmd,
+    TriangulateMeshCmd, UndoCmd, UnwrapAutoCmd, UpdateProfileCmd, UpdateSplineCmd,
+    UpdateSweepGeneratorCmd, UvEqualizeTexelDensityCmd, UvNormalizeTexelDensityCmd,
+    UvPackIslandsCmd, UvProjectCubeCmd, UvProjectFromViewCmd, UvProjectPlanarCmd,
+    UvSetTexelDensityCmd, UvSplitCmd, UvTransformCmd, WeldCmd,
 };
 pub use context::{
     CommandEffects, EditorView, HostRequest, KeyText, TextSource, TextureOp, UiRequest,
@@ -113,14 +120,13 @@ pub use project_service::{
 };
 pub use rig_commands::{
     AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd,
-    ApplyMotionNowCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearBoneTrackCmd,
-    ClearRigRoleCmd, DeleteBoneKeyCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitBlocked,
+    ApplyMotionNowCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearBoneTrackCmd, ClearRigRoleCmd,
+    DeleteBoneKeyCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitBlocked,
     FitRigToActiveAssetCmd, InferRigRolesCmd, InsertBoneKeyframeCmd, RemoveAnimationCmd,
-    RemoveIkChainCmd, RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd,
-    ResetBonePoseCmd, RigPresetKind, SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd,
-    SetBoneTransformCmd, SetMotionLayerBlendModeCmd, SetMotionLayerWeightCmd, SetMotionParamCmd,
-    SetMotionStyleCmd, ToggleMotionLayerEnabledCmd, UpdateIkChainCmd, UpdateMotionCmd,
-    fit_availability,
+    RemoveIkChainCmd, RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd, ResetBonePoseCmd,
+    RigPresetKind, SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd,
+    SetMotionLayerBlendModeCmd, SetMotionLayerWeightCmd, SetMotionParamCmd, SetMotionStyleCmd,
+    ToggleMotionLayerEnabledCmd, UpdateIkChainCmd, UpdateMotionCmd, fit_availability,
 };
 
 pub use brush::{

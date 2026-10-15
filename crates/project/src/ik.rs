@@ -306,11 +306,11 @@ pub fn solve_chain(
             tolerance,
         } => {
             let mut cur: Vec<Vec3> = (0..idx.len()).map(head).collect();
-            cur.push(posed_tail(
-                skeleton,
-                &world,
-                *idx.last().expect("cadeia validada"),
-            ));
+            let last_idx = *idx.last().ok_or(IkError::ChainTooShort {
+                needed: 1,
+                found: 0,
+            })?;
+            cur.push(posed_tail(skeleton, &world, last_idx));
             let (new, reached) = solve_fabrik(&cur, target, iterations, tolerance);
             (cur, new, Some(reached))
         }
@@ -350,7 +350,7 @@ pub fn solve_chain(
         parent_rot = (parent_rot * blended).normalize();
     }
 
-    let end_new = *new.last().expect("juntas");
+    let end_new = *new.last().unwrap_or(&target);
     let error = (end_new - target).length();
     // `reached`/`error` descrevem a solução do solver; o `weight` < 1 mistura a
     // pose atual e não entra nessa medida.
@@ -366,7 +366,10 @@ pub fn chain_end_position(
 ) -> Result<Vec3, IkError> {
     chain.validate(skeleton)?;
     let world = skeleton.world_pose_matrices(pose)?;
-    let last = *chain.bones.last().expect("cadeia validada");
+    let last = *chain.bones.last().ok_or(IkError::ChainTooShort {
+        needed: 1,
+        found: 0,
+    })?;
     let li = skeleton
         .bone_index(last)
         .ok_or(IkError::BoneNotFound(last))?;

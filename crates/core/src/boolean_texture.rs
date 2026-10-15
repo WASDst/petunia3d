@@ -8,15 +8,20 @@ use petunia_project::{Asset, Canvas, Material, Project};
 struct UvSampler(Vec<([Vec3; 3], [[f32; 2]; 3])>);
 impl UvSampler {
     fn new(mesh: &Mesh, face: usize) -> Self {
+        let Some(f) = mesh.faces.get(face) else {
+            return Self(Vec::new());
+        };
         Self(
             mesh.face_triangle_corners(face)
                 .into_iter()
-                .map(|corners| {
-                    let f = &mesh.faces[face];
-                    (
-                        corners.map(|c| mesh.verts[f.verts[c] as usize].vec()),
+                .filter_map(|corners| {
+                    let p0 = mesh.verts.get(*f.verts.get(corners[0])? as usize)?.vec();
+                    let p1 = mesh.verts.get(*f.verts.get(corners[1])? as usize)?.vec();
+                    let p2 = mesh.verts.get(*f.verts.get(corners[2])? as usize)?.vec();
+                    Some((
+                        [p0, p1, p2],
                         corners.map(|c| f.uv.get(c).copied().unwrap_or([0.0; 2])),
-                    )
+                    ))
                 })
                 .collect(),
         )

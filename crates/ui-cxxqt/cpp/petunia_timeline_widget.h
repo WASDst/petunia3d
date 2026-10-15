@@ -17,13 +17,20 @@ public:
     ~PetuniaDopesheetCanvas() override = default;
 
     int currentFrame() const { return m_currentFrame; }
+    int startFrame() const { return m_startFrame; }
+    int endFrame() const { return m_endFrame; }
+    int totalFrames() const { return m_totalFrames; }
     void setCurrentFrame(int frame);
+    void setStartFrame(int start);
+    void setEndFrame(int end);
+    void setPlaybackRange(int start, int end);
     void setTotalFrames(int total);
     void setActiveAsset(int asset);
 
 signals:
     void frameChanged(int frame);
     void keyframeToggled(int frame);
+    void playbackRangeChanged(int start, int end);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -36,6 +43,8 @@ private:
     int xAtFrame(int frame) const;
 
     int m_currentFrame{1};
+    int m_startFrame{1};
+    int m_endFrame{250};
     int m_totalFrames{250};
     int m_activeAsset{0};
     int m_labelWidth{130};
@@ -50,11 +59,16 @@ public:
     ~PetuniaTimelineWidget() override;
 
     int currentFrame() const;
+    int startFrame() const;
+    int endFrame() const;
     bool isPlaying() const { return m_isPlaying; }
     bool isAutoKeyEnabled() const;
 
 public slots:
     void setFrame(int frame);
+    void setStartFrame(int start);
+    void setEndFrame(int end);
+    void setPlaybackRange(int start, int end);
     void togglePlayback();
     void play();
     void pause();
@@ -68,6 +82,7 @@ public slots:
 
 signals:
     void frameChanged(int frame);
+    void playbackRangeChanged(int start, int end);
     void playbackToggled(bool isPlaying);
     void keyframeInserted(int asset, int frame);
     void keyframeDeleted(int asset, int frame);
@@ -90,7 +105,9 @@ private:
     QPushButton *m_addKeyBtn{nullptr};
     QPushButton *m_delKeyBtn{nullptr};
 
+    QSpinBox *m_startSpin{nullptr};
     QSpinBox *m_frameSpin{nullptr};
+    QSpinBox *m_endSpin{nullptr};
     QLabel *m_totalFramesLabel{nullptr};
     QComboBox *m_fpsCombo{nullptr};
 

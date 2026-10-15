@@ -71,6 +71,9 @@ impl BoneTrack {
     }
 
     pub fn add_translation(&mut self, time: f32, val: [f32; 3]) {
+        if !time.is_finite() || val.iter().any(|v| !v.is_finite()) {
+            return;
+        }
         if let Some(kf) = self
             .translations
             .iter_mut()
@@ -79,12 +82,14 @@ impl BoneTrack {
             kf.value = val;
         } else {
             self.translations.push(Keyframe::new(time, val));
-            self.translations
-                .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+            self.translations.sort_by(|a, b| a.time.total_cmp(&b.time));
         }
     }
 
     pub fn add_rotation(&mut self, time: f32, quat: [f32; 4]) {
+        if !time.is_finite() || quat.iter().any(|v| !v.is_finite()) {
+            return;
+        }
         if let Some(kf) = self
             .rotations
             .iter_mut()
@@ -93,12 +98,14 @@ impl BoneTrack {
             kf.value = quat;
         } else {
             self.rotations.push(Keyframe::new(time, quat));
-            self.rotations
-                .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+            self.rotations.sort_by(|a, b| a.time.total_cmp(&b.time));
         }
     }
 
     pub fn add_scale(&mut self, time: f32, val: [f32; 3]) {
+        if !time.is_finite() || val.iter().any(|v| !v.is_finite()) {
+            return;
+        }
         if let Some(kf) = self
             .scales
             .iter_mut()
@@ -107,20 +114,20 @@ impl BoneTrack {
             kf.value = val;
         } else {
             self.scales.push(Keyframe::new(time, val));
-            self.scales
-                .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+            self.scales.sort_by(|a, b| a.time.total_cmp(&b.time));
         }
     }
 
     pub fn sample_translation(&self, time: f32) -> [f32; 3] {
-        if self.translations.is_empty() {
+        let Some(first) = self.translations.first() else {
             return [0.0, 0.0, 0.0];
+        };
+        if self.translations.len() == 1 || time <= first.time {
+            return first.value;
         }
-        if self.translations.len() == 1 || time <= self.translations[0].time {
-            return self.translations[0].value;
-        }
-        let last = self.translations.last().unwrap();
-        if time >= last.time {
+        if let Some(last) = self.translations.last()
+            && time >= last.time
+        {
             return last.value;
         }
 
@@ -146,18 +153,19 @@ impl BoneTrack {
                 return [res.x, res.y, res.z];
             }
         }
-        self.translations[0].value
+        first.value
     }
 
     pub fn sample_rotation(&self, time: f32) -> [f32; 4] {
-        if self.rotations.is_empty() {
+        let Some(first) = self.rotations.first() else {
             return [0.0, 0.0, 0.0, 1.0];
+        };
+        if self.rotations.len() == 1 || time <= first.time {
+            return first.value;
         }
-        if self.rotations.len() == 1 || time <= self.rotations[0].time {
-            return self.rotations[0].value;
-        }
-        let last = self.rotations.last().unwrap();
-        if time >= last.time {
+        if let Some(last) = self.rotations.last()
+            && time >= last.time
+        {
             return last.value;
         }
 
@@ -183,18 +191,19 @@ impl BoneTrack {
                 return [res.x, res.y, res.z, res.w];
             }
         }
-        self.rotations[0].value
+        first.value
     }
 
     pub fn sample_scale(&self, time: f32) -> [f32; 3] {
-        if self.scales.is_empty() {
+        let Some(first) = self.scales.first() else {
             return [1.0, 1.0, 1.0];
+        };
+        if self.scales.len() == 1 || time <= first.time {
+            return first.value;
         }
-        if self.scales.len() == 1 || time <= self.scales[0].time {
-            return self.scales[0].value;
-        }
-        let last = self.scales.last().unwrap();
-        if time >= last.time {
+        if let Some(last) = self.scales.last()
+            && time >= last.time
+        {
             return last.value;
         }
 
@@ -220,7 +229,7 @@ impl BoneTrack {
                 return [res.x, res.y, res.z];
             }
         }
-        self.scales[0].value
+        first.value
     }
 
     /// Amostra a transformação com **identidade** nos canais sem keyframes.
@@ -291,7 +300,9 @@ impl BoneTrack {
 
     /// Verifica se existe algum keyframe por volta de `time`.
     pub fn has_keyframe_at(&self, time: f32, tol: f32) -> bool {
-        self.translations.iter().any(|k| (k.time - time).abs() <= tol)
+        self.translations
+            .iter()
+            .any(|k| (k.time - time).abs() <= tol)
             || self.rotations.iter().any(|k| (k.time - time).abs() <= tol)
             || self.scales.iter().any(|k| (k.time - time).abs() <= tol)
     }
@@ -317,24 +328,27 @@ impl BoneTrack {
 
     /// Move um keyframe existente de `old_time` para `new_time`.
     pub fn move_keyframe(&mut self, old_time: f32, new_time: f32, tol: f32) {
+        if !old_time.is_finite() || !new_time.is_finite() || !tol.is_finite() {
+            return;
+        }
         for k in &mut self.translations {
             if (k.time - old_time).abs() <= tol {
                 k.time = new_time;
             }
         }
-        self.translations.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.translations.sort_by(|a, b| a.time.total_cmp(&b.time));
         for k in &mut self.rotations {
             if (k.time - old_time).abs() <= tol {
                 k.time = new_time;
             }
         }
-        self.rotations.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.rotations.sort_by(|a, b| a.time.total_cmp(&b.time));
         for k in &mut self.scales {
             if (k.time - old_time).abs() <= tol {
                 k.time = new_time;
             }
         }
-        self.scales.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        self.scales.sort_by(|a, b| a.time.total_cmp(&b.time));
     }
 
     /// Limpa todos os keyframes da trilha.
@@ -521,7 +535,6 @@ pub fn blend_transforms(
     }
 }
 
-
 /// Clipe de animação contendo trilhas para múltiplos ossos.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AnimationClip {
@@ -564,12 +577,14 @@ impl AnimationClip {
     }
 
     pub fn get_or_create_track(&mut self, bone_id: u32, bone_name: &str) -> &mut BoneTrack {
-        if let Some(pos) = self.tracks.iter().position(|t| t.bone_id == bone_id) {
-            &mut self.tracks[pos]
-        } else {
-            self.tracks.push(BoneTrack::new(bone_id, bone_name));
-            self.tracks.last_mut().unwrap()
-        }
+        let idx = match self.tracks.iter().position(|t| t.bone_id == bone_id) {
+            Some(pos) => pos,
+            None => {
+                self.tracks.push(BoneTrack::new(bone_id, bone_name));
+                self.tracks.len() - 1
+            }
+        };
+        &mut self.tracks[idx]
     }
 
     pub fn total_frames(&self) -> i32 {
@@ -629,7 +644,10 @@ impl AnimationClip {
         let mut times: Vec<f32> = Vec::new();
         for track in &self.tracks {
             for t in track.keyframe_times() {
-                if !times.iter().any(|&existing: &f32| (existing - t).abs() < 1e-4) {
+                if !times
+                    .iter()
+                    .any(|&existing: &f32| (existing - t).abs() < 1e-4)
+                {
                     times.push(t);
                 }
             }
@@ -646,167 +664,163 @@ impl AnimationClip {
 pub struct RigPreset;
 
 impl RigPreset {
+    fn push_bone(
+        skel: &mut Skeleton,
+        name: impl Into<String>,
+        parent: Option<u32>,
+        head: [f32; 3],
+        tail: [f32; 3],
+    ) -> u32 {
+        skel.add_bone(name, parent, head, tail).unwrap_or(0)
+    }
+
     /// Gera um esqueleto canônico Humanoid bípede proporcional.
     pub fn humanoid(scale: f32) -> Skeleton {
         let mut skel = Skeleton::new("Humanoid_Rig");
         let s = scale.max(0.1);
 
         // Espinha e Cabeça
-        let hips = skel
-            .add_bone("Hips", None, [0.0, 1.0 * s, 0.0], [0.0, 1.2 * s, 0.0])
-            .unwrap();
-        let spine = skel
-            .add_bone(
-                "Spine",
-                Some(hips),
-                [0.0, 1.2 * s, 0.0],
-                [0.0, 1.4 * s, 0.0],
-            )
-            .unwrap();
-        let chest = skel
-            .add_bone(
-                "Chest",
-                Some(spine),
-                [0.0, 1.4 * s, 0.0],
-                [0.0, 1.6 * s, 0.0],
-            )
-            .unwrap();
-        let neck = skel
-            .add_bone(
-                "Neck",
-                Some(chest),
-                [0.0, 1.6 * s, 0.0],
-                [0.0, 1.7 * s, 0.0],
-            )
-            .unwrap();
-        let _head = skel
-            .add_bone(
-                "Head",
-                Some(neck),
-                [0.0, 1.7 * s, 0.0],
-                [0.0, 1.95 * s, 0.0],
-            )
-            .unwrap();
+        let hips = Self::push_bone(
+            &mut skel,
+            "Hips",
+            None,
+            [0.0, 1.0 * s, 0.0],
+            [0.0, 1.2 * s, 0.0],
+        );
+        let spine = Self::push_bone(
+            &mut skel,
+            "Spine",
+            Some(hips),
+            [0.0, 1.2 * s, 0.0],
+            [0.0, 1.4 * s, 0.0],
+        );
+        let chest = Self::push_bone(
+            &mut skel,
+            "Chest",
+            Some(spine),
+            [0.0, 1.4 * s, 0.0],
+            [0.0, 1.6 * s, 0.0],
+        );
+        let neck = Self::push_bone(
+            &mut skel,
+            "Neck",
+            Some(chest),
+            [0.0, 1.6 * s, 0.0],
+            [0.0, 1.7 * s, 0.0],
+        );
+        let _head = Self::push_bone(
+            &mut skel,
+            "Head",
+            Some(neck),
+            [0.0, 1.7 * s, 0.0],
+            [0.0, 1.95 * s, 0.0],
+        );
 
         // Braço Esquerdo
-        let sh_l = skel
-            .add_bone(
-                "Shoulder.L",
-                Some(chest),
-                [0.1 * s, 1.55 * s, 0.0],
-                [0.25 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
-        let arm_l = skel
-            .add_bone(
-                "UpperArm.L",
-                Some(sh_l),
-                [0.25 * s, 1.55 * s, 0.0],
-                [0.55 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
-        let farm_l = skel
-            .add_bone(
-                "LowerArm.L",
-                Some(arm_l),
-                [0.55 * s, 1.55 * s, 0.0],
-                [0.85 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
-        let _hand_l = skel
-            .add_bone(
-                "Hand.L",
-                Some(farm_l),
-                [0.85 * s, 1.55 * s, 0.0],
-                [1.0 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
+        let sh_l = Self::push_bone(
+            &mut skel,
+            "Shoulder.L",
+            Some(chest),
+            [0.1 * s, 1.55 * s, 0.0],
+            [0.25 * s, 1.55 * s, 0.0],
+        );
+        let arm_l = Self::push_bone(
+            &mut skel,
+            "UpperArm.L",
+            Some(sh_l),
+            [0.25 * s, 1.55 * s, 0.0],
+            [0.55 * s, 1.55 * s, 0.0],
+        );
+        let farm_l = Self::push_bone(
+            &mut skel,
+            "LowerArm.L",
+            Some(arm_l),
+            [0.55 * s, 1.55 * s, 0.0],
+            [0.85 * s, 1.55 * s, 0.0],
+        );
+        let _hand_l = Self::push_bone(
+            &mut skel,
+            "Hand.L",
+            Some(farm_l),
+            [0.85 * s, 1.55 * s, 0.0],
+            [1.0 * s, 1.55 * s, 0.0],
+        );
 
         // Braço Direito
-        let sh_r = skel
-            .add_bone(
-                "Shoulder.R",
-                Some(chest),
-                [-0.1 * s, 1.55 * s, 0.0],
-                [-0.25 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
-        let arm_r = skel
-            .add_bone(
-                "UpperArm.R",
-                Some(sh_r),
-                [-0.25 * s, 1.55 * s, 0.0],
-                [-0.55 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
-        let farm_r = skel
-            .add_bone(
-                "LowerArm.R",
-                Some(arm_r),
-                [-0.55 * s, 1.55 * s, 0.0],
-                [-0.85 * s, 1.55 * s, 0.0],
-            )
-            .unwrap();
-        let _hand_r = skel
-            .add_bone(
-                "Hand.R",
-                Some(farm_r),
-                [-0.85 * s, 1.55 * s, 0.0],
-                [-s, 1.55 * s, 0.0],
-            )
-            .unwrap();
+        let sh_r = Self::push_bone(
+            &mut skel,
+            "Shoulder.R",
+            Some(chest),
+            [-0.1 * s, 1.55 * s, 0.0],
+            [-0.25 * s, 1.55 * s, 0.0],
+        );
+        let arm_r = Self::push_bone(
+            &mut skel,
+            "UpperArm.R",
+            Some(sh_r),
+            [-0.25 * s, 1.55 * s, 0.0],
+            [-0.55 * s, 1.55 * s, 0.0],
+        );
+        let farm_r = Self::push_bone(
+            &mut skel,
+            "LowerArm.R",
+            Some(arm_r),
+            [-0.55 * s, 1.55 * s, 0.0],
+            [-0.85 * s, 1.55 * s, 0.0],
+        );
+        let _hand_r = Self::push_bone(
+            &mut skel,
+            "Hand.R",
+            Some(farm_r),
+            [-0.85 * s, 1.55 * s, 0.0],
+            [-s, 1.55 * s, 0.0],
+        );
 
         // Perna Esquerda
-        let uleg_l = skel
-            .add_bone(
-                "UpperLeg.L",
-                Some(hips),
-                [0.15 * s, 1.0 * s, 0.0],
-                [0.15 * s, 0.5 * s, 0.0],
-            )
-            .unwrap();
-        let lleg_l = skel
-            .add_bone(
-                "LowerLeg.L",
-                Some(uleg_l),
-                [0.15 * s, 0.5 * s, 0.0],
-                [0.15 * s, 0.1 * s, 0.0],
-            )
-            .unwrap();
-        let _foot_l = skel
-            .add_bone(
-                "Foot.L",
-                Some(lleg_l),
-                [0.15 * s, 0.1 * s, 0.0],
-                [0.15 * s, 0.0, 0.2 * s],
-            )
-            .unwrap();
+        let uleg_l = Self::push_bone(
+            &mut skel,
+            "UpperLeg.L",
+            Some(hips),
+            [0.15 * s, 1.0 * s, 0.0],
+            [0.15 * s, 0.5 * s, 0.0],
+        );
+        let lleg_l = Self::push_bone(
+            &mut skel,
+            "LowerLeg.L",
+            Some(uleg_l),
+            [0.15 * s, 0.5 * s, 0.0],
+            [0.15 * s, 0.1 * s, 0.0],
+        );
+        let _foot_l = Self::push_bone(
+            &mut skel,
+            "Foot.L",
+            Some(lleg_l),
+            [0.15 * s, 0.1 * s, 0.0],
+            [0.15 * s, 0.0, 0.2 * s],
+        );
 
         // Perna Direita
-        let uleg_r = skel
-            .add_bone(
-                "UpperLeg.R",
-                Some(hips),
-                [-0.15 * s, 1.0 * s, 0.0],
-                [-0.15 * s, 0.5 * s, 0.0],
-            )
-            .unwrap();
-        let lleg_r = skel
-            .add_bone(
-                "LowerLeg.R",
-                Some(uleg_r),
-                [-0.15 * s, 0.5 * s, 0.0],
-                [-0.15 * s, 0.1 * s, 0.0],
-            )
-            .unwrap();
-        let _foot_r = skel
-            .add_bone(
-                "Foot.R",
-                Some(lleg_r),
-                [-0.15 * s, 0.1 * s, 0.0],
-                [-0.15 * s, 0.0, 0.2 * s],
-            )
-            .unwrap();
+        let uleg_r = Self::push_bone(
+            &mut skel,
+            "UpperLeg.R",
+            Some(hips),
+            [-0.15 * s, 1.0 * s, 0.0],
+            [-0.15 * s, 0.5 * s, 0.0],
+        );
+        let lleg_r = Self::push_bone(
+            &mut skel,
+            "LowerLeg.R",
+            Some(uleg_r),
+            [-0.15 * s, 0.5 * s, 0.0],
+            [-0.15 * s, 0.1 * s, 0.0],
+        );
+        let _foot_r = Self::push_bone(
+            &mut skel,
+            "Foot.R",
+            Some(lleg_r),
+            [-0.15 * s, 0.1 * s, 0.0],
+            [-0.15 * s, 0.0, 0.2 * s],
+        );
 
         skel
     }
@@ -816,111 +830,103 @@ impl RigPreset {
         let mut skel = Skeleton::new("Quadruped_Rig");
         let s = scale.max(0.1);
 
-        let root = skel
-            .add_bone("Root", None, [0.0, 0.8 * s, 0.0], [0.0, 0.8 * s, 0.5 * s])
-            .unwrap();
-        let spine = skel
-            .add_bone(
-                "Spine",
-                Some(root),
-                [0.0, 0.8 * s, 0.5 * s],
-                [0.0, 0.85 * s, 1.0 * s],
-            )
-            .unwrap();
-        let neck = skel
-            .add_bone(
-                "Neck",
-                Some(spine),
-                [0.0, 0.85 * s, 1.0 * s],
-                [0.0, 1.1 * s, 1.3 * s],
-            )
-            .unwrap();
-        let _head = skel
-            .add_bone(
-                "Head",
-                Some(neck),
-                [0.0, 1.1 * s, 1.3 * s],
-                [0.0, 1.2 * s, 1.6 * s],
-            )
-            .unwrap();
+        let root = Self::push_bone(
+            &mut skel,
+            "Root",
+            None,
+            [0.0, 0.8 * s, 0.0],
+            [0.0, 0.8 * s, 0.5 * s],
+        );
+        let spine = Self::push_bone(
+            &mut skel,
+            "Spine",
+            Some(root),
+            [0.0, 0.8 * s, 0.5 * s],
+            [0.0, 0.85 * s, 1.0 * s],
+        );
+        let neck = Self::push_bone(
+            &mut skel,
+            "Neck",
+            Some(spine),
+            [0.0, 0.85 * s, 1.0 * s],
+            [0.0, 1.1 * s, 1.3 * s],
+        );
+        let _head = Self::push_bone(
+            &mut skel,
+            "Head",
+            Some(neck),
+            [0.0, 1.1 * s, 1.3 * s],
+            [0.0, 1.2 * s, 1.6 * s],
+        );
 
-        let _tail = skel
-            .add_bone(
-                "Tail",
-                Some(root),
-                [0.0, 0.8 * s, 0.0],
-                [0.0, 0.6 * s, -0.6 * s],
-            )
-            .unwrap();
+        let _tail = Self::push_bone(
+            &mut skel,
+            "Tail",
+            Some(root),
+            [0.0, 0.8 * s, 0.0],
+            [0.0, 0.6 * s, -0.6 * s],
+        );
 
         // 4 Patas
-        let leg_fl = skel
-            .add_bone(
-                "LegFront.L",
-                Some(spine),
-                [0.25 * s, 0.8 * s, 0.9 * s],
-                [0.25 * s, 0.4 * s, 0.9 * s],
-            )
-            .unwrap();
-        let _paw_fl = skel
-            .add_bone(
-                "PawFront.L",
-                Some(leg_fl),
-                [0.25 * s, 0.4 * s, 0.9 * s],
-                [0.25 * s, 0.0, 0.9 * s],
-            )
-            .unwrap();
+        let leg_fl = Self::push_bone(
+            &mut skel,
+            "LegFront.L",
+            Some(spine),
+            [0.25 * s, 0.8 * s, 0.9 * s],
+            [0.25 * s, 0.4 * s, 0.9 * s],
+        );
+        let _paw_fl = Self::push_bone(
+            &mut skel,
+            "PawFront.L",
+            Some(leg_fl),
+            [0.25 * s, 0.4 * s, 0.9 * s],
+            [0.25 * s, 0.0, 0.9 * s],
+        );
 
-        let leg_fr = skel
-            .add_bone(
-                "LegFront.R",
-                Some(spine),
-                [-0.25 * s, 0.8 * s, 0.9 * s],
-                [-0.25 * s, 0.4 * s, 0.9 * s],
-            )
-            .unwrap();
-        let _paw_fr = skel
-            .add_bone(
-                "PawFront.R",
-                Some(leg_fr),
-                [-0.25 * s, 0.4 * s, 0.9 * s],
-                [-0.25 * s, 0.0, 0.9 * s],
-            )
-            .unwrap();
+        let leg_fr = Self::push_bone(
+            &mut skel,
+            "LegFront.R",
+            Some(spine),
+            [-0.25 * s, 0.8 * s, 0.9 * s],
+            [-0.25 * s, 0.4 * s, 0.9 * s],
+        );
+        let _paw_fr = Self::push_bone(
+            &mut skel,
+            "PawFront.R",
+            Some(leg_fr),
+            [-0.25 * s, 0.4 * s, 0.9 * s],
+            [-0.25 * s, 0.0, 0.9 * s],
+        );
 
-        let leg_bl = skel
-            .add_bone(
-                "LegBack.L",
-                Some(root),
-                [0.25 * s, 0.8 * s, 0.1 * s],
-                [0.25 * s, 0.4 * s, 0.1 * s],
-            )
-            .unwrap();
-        let _paw_bl = skel
-            .add_bone(
-                "PawBack.L",
-                Some(leg_bl),
-                [0.25 * s, 0.4 * s, 0.1 * s],
-                [0.25 * s, 0.0, 0.1 * s],
-            )
-            .unwrap();
+        let leg_bl = Self::push_bone(
+            &mut skel,
+            "LegBack.L",
+            Some(root),
+            [0.25 * s, 0.8 * s, 0.1 * s],
+            [0.25 * s, 0.4 * s, 0.1 * s],
+        );
+        let _paw_bl = Self::push_bone(
+            &mut skel,
+            "PawBack.L",
+            Some(leg_bl),
+            [0.25 * s, 0.4 * s, 0.1 * s],
+            [0.25 * s, 0.0, 0.1 * s],
+        );
 
-        let leg_br = skel
-            .add_bone(
-                "LegBack.R",
-                Some(root),
-                [-0.25 * s, 0.8 * s, 0.1 * s],
-                [-0.25 * s, 0.4 * s, 0.1 * s],
-            )
-            .unwrap();
-        let _paw_br = skel
-            .add_bone(
-                "PawBack.R",
-                Some(leg_br),
-                [-0.25 * s, 0.4 * s, 0.1 * s],
-                [-0.25 * s, 0.0, 0.1 * s],
-            )
-            .unwrap();
+        let leg_br = Self::push_bone(
+            &mut skel,
+            "LegBack.R",
+            Some(root),
+            [-0.25 * s, 0.8 * s, 0.1 * s],
+            [-0.25 * s, 0.4 * s, 0.1 * s],
+        );
+        let _paw_br = Self::push_bone(
+            &mut skel,
+            "PawBack.R",
+            Some(leg_br),
+            [-0.25 * s, 0.4 * s, 0.1 * s],
+            [-0.25 * s, 0.0, 0.1 * s],
+        );
 
         skel
     }
@@ -936,40 +942,36 @@ impl RigPreset {
         let seg = 2.0 * s / total as f32;
         let y = 0.1 * s;
         let mut skel = Skeleton::new("Serpent_Rig");
-        let root = skel
-            .add_bone("Root", None, [0.0, y, 0.0], [0.0, y, seg])
-            .unwrap();
+        let root = Self::push_bone(&mut skel, "Root", None, [0.0, y, 0.0], [0.0, y, seg]);
         let mut prev = root;
         let mut z = 0.0;
         for i in 0..front {
             z += seg;
-            prev = skel
-                .add_bone(
-                    format!("Spine_{i}"),
-                    Some(prev),
-                    [0.0, y, z],
-                    [0.0, y, z + seg],
-                )
-                .unwrap();
+            prev = Self::push_bone(
+                &mut skel,
+                format!("Spine_{i}"),
+                Some(prev),
+                [0.0, y, z],
+                [0.0, y, z + seg],
+            );
         }
-        skel.add_bone(
+        Self::push_bone(
+            &mut skel,
             "Head",
             Some(prev),
             [0.0, y, z + seg],
             [0.0, y, z + 1.6 * seg],
-        )
-        .unwrap();
+        );
         let mut prev = root;
         let mut z = 0.0;
         for i in 0..back {
-            prev = skel
-                .add_bone(
-                    format!("Tail_{i}"),
-                    Some(prev),
-                    [0.0, y, z],
-                    [0.0, y, z - seg],
-                )
-                .unwrap();
+            prev = Self::push_bone(
+                &mut skel,
+                format!("Tail_{i}"),
+                Some(prev),
+                [0.0, y, z],
+                [0.0, y, z - seg],
+            );
             z -= seg;
         }
         skel
@@ -983,7 +985,8 @@ impl RigPreset {
         if let Some(anchor) = skel.find_bone("Spine_1").or_else(|| skel.find_bone("Root")) {
             let head = skel.get_bone(anchor).map(|b| b.head).unwrap_or([0.0; 3]);
             for (name, sx) in [("Fin.L", 1.0f32), ("Fin.R", -1.0)] {
-                skel.add_bone(
+                Self::push_bone(
+                    &mut skel,
                     name,
                     Some(anchor),
                     head,
@@ -992,8 +995,7 @@ impl RigPreset {
                         head[1] - 0.05 * s,
                         head[2] - 0.1 * s,
                     ],
-                )
-                .unwrap();
+                );
             }
         }
         skel
@@ -1004,89 +1006,86 @@ impl RigPreset {
     pub fn bird(scale: f32) -> Skeleton {
         let s = scale.max(0.1);
         let mut skel = Skeleton::new("Bird_Rig");
-        let hips = skel
-            .add_bone("Hips", None, [0.0, 0.5 * s, 0.0], [0.0, 0.5 * s, 0.2 * s])
-            .unwrap();
-        let spine = skel
-            .add_bone(
-                "Spine",
-                Some(hips),
-                [0.0, 0.5 * s, 0.2 * s],
-                [0.0, 0.55 * s, 0.4 * s],
-            )
-            .unwrap();
-        let chest = skel
-            .add_bone(
-                "Chest",
-                Some(spine),
-                [0.0, 0.55 * s, 0.4 * s],
-                [0.0, 0.62 * s, 0.55 * s],
-            )
-            .unwrap();
-        let neck = skel
-            .add_bone(
-                "Neck",
-                Some(chest),
-                [0.0, 0.62 * s, 0.55 * s],
-                [0.0, 0.8 * s, 0.6 * s],
-            )
-            .unwrap();
-        skel.add_bone(
+        let hips = Self::push_bone(
+            &mut skel,
+            "Hips",
+            None,
+            [0.0, 0.5 * s, 0.0],
+            [0.0, 0.5 * s, 0.2 * s],
+        );
+        let spine = Self::push_bone(
+            &mut skel,
+            "Spine",
+            Some(hips),
+            [0.0, 0.5 * s, 0.2 * s],
+            [0.0, 0.55 * s, 0.4 * s],
+        );
+        let chest = Self::push_bone(
+            &mut skel,
+            "Chest",
+            Some(spine),
+            [0.0, 0.55 * s, 0.4 * s],
+            [0.0, 0.62 * s, 0.55 * s],
+        );
+        let neck = Self::push_bone(
+            &mut skel,
+            "Neck",
+            Some(chest),
+            [0.0, 0.62 * s, 0.55 * s],
+            [0.0, 0.8 * s, 0.6 * s],
+        );
+        Self::push_bone(
+            &mut skel,
             "Head",
             Some(neck),
             [0.0, 0.8 * s, 0.6 * s],
             [0.0, 0.85 * s, 0.75 * s],
-        )
-        .unwrap();
+        );
         for (side, sx) in [("L", 1.0f32), ("R", -1.0)] {
             let mut prev = chest;
             for n in 0..3 {
                 let x0 = sx * (0.05 + 0.3 * n as f32) * s;
-                prev = skel
-                    .add_bone(
-                        format!("Wing_{n}.{side}"),
-                        Some(prev),
-                        [x0, 0.62 * s, 0.45 * s],
-                        [x0 + sx * 0.3 * s, 0.62 * s, 0.45 * s],
-                    )
-                    .unwrap();
+                prev = Self::push_bone(
+                    &mut skel,
+                    format!("Wing_{n}.{side}"),
+                    Some(prev),
+                    [x0, 0.62 * s, 0.45 * s],
+                    [x0 + sx * 0.3 * s, 0.62 * s, 0.45 * s],
+                );
             }
             let x = sx * 0.08 * s;
-            let up = skel
-                .add_bone(
-                    format!("UpperLeg.{side}"),
-                    Some(hips),
-                    [x, 0.5 * s, 0.1 * s],
-                    [x, 0.3 * s, 0.1 * s],
-                )
-                .unwrap();
-            let low = skel
-                .add_bone(
-                    format!("LowerLeg.{side}"),
-                    Some(up),
-                    [x, 0.3 * s, 0.1 * s],
-                    [x, 0.08 * s, 0.1 * s],
-                )
-                .unwrap();
-            skel.add_bone(
+            let up = Self::push_bone(
+                &mut skel,
+                format!("UpperLeg.{side}"),
+                Some(hips),
+                [x, 0.5 * s, 0.1 * s],
+                [x, 0.3 * s, 0.1 * s],
+            );
+            let low = Self::push_bone(
+                &mut skel,
+                format!("LowerLeg.{side}"),
+                Some(up),
+                [x, 0.3 * s, 0.1 * s],
+                [x, 0.08 * s, 0.1 * s],
+            );
+            Self::push_bone(
+                &mut skel,
                 format!("Foot.{side}"),
                 Some(low),
                 [x, 0.08 * s, 0.1 * s],
                 [x, 0.0, 0.18 * s],
-            )
-            .unwrap();
+            );
         }
         let mut prev = hips;
         for n in 0..2 {
             let z = -0.2 * n as f32 * s;
-            prev = skel
-                .add_bone(
-                    format!("Tail_{n}"),
-                    Some(prev),
-                    [0.0, 0.5 * s, z],
-                    [0.0, 0.5 * s, z - 0.2 * s],
-                )
-                .unwrap();
+            prev = Self::push_bone(
+                &mut skel,
+                format!("Tail_{n}"),
+                Some(prev),
+                [0.0, 0.5 * s, z],
+                [0.0, 0.5 * s, z - 0.2 * s],
+            );
         }
         skel
     }
@@ -1097,9 +1096,13 @@ impl RigPreset {
         let s = scale.max(0.1);
         let count = legs_count.clamp(4, 16);
 
-        let thorax = skel
-            .add_bone("Thorax", None, [0.0, 0.4 * s, 0.0], [0.0, 0.4 * s, 0.8 * s])
-            .unwrap();
+        let thorax = Self::push_bone(
+            &mut skel,
+            "Thorax",
+            None,
+            [0.0, 0.4 * s, 0.0],
+            [0.0, 0.4 * s, 0.8 * s],
+        );
 
         let half = count / 2;
         let step = (0.8 * s) / (half as f32);
@@ -1108,40 +1111,36 @@ impl RigPreset {
             let z = (i as f32) * step + 0.1 * s;
 
             // Perna Esquerda
-            let coxa_l = skel
-                .add_bone(
-                    format!("Leg_{i}_Coxa.L"),
-                    Some(thorax),
-                    [0.2 * s, 0.4 * s, z],
-                    [0.6 * s, 0.5 * s, z],
-                )
-                .unwrap();
-            let _tibia_l = skel
-                .add_bone(
-                    format!("Leg_{i}_Tibia.L"),
-                    Some(coxa_l),
-                    [0.6 * s, 0.5 * s, z],
-                    [1.0 * s, 0.0, z],
-                )
-                .unwrap();
+            let coxa_l = Self::push_bone(
+                &mut skel,
+                format!("Leg_{i}_Coxa.L"),
+                Some(thorax),
+                [0.2 * s, 0.4 * s, z],
+                [0.6 * s, 0.5 * s, z],
+            );
+            let _tibia_l = Self::push_bone(
+                &mut skel,
+                format!("Leg_{i}_Tibia.L"),
+                Some(coxa_l),
+                [0.6 * s, 0.5 * s, z],
+                [1.0 * s, 0.0, z],
+            );
 
             // Perna Direita
-            let coxa_r = skel
-                .add_bone(
-                    format!("Leg_{i}_Coxa.R"),
-                    Some(thorax),
-                    [-0.2 * s, 0.4 * s, z],
-                    [-0.6 * s, 0.5 * s, z],
-                )
-                .unwrap();
-            let _tibia_r = skel
-                .add_bone(
-                    format!("Leg_{i}_Tibia.R"),
-                    Some(coxa_r),
-                    [-0.6 * s, 0.5 * s, z],
-                    [-s, 0.0, z],
-                )
-                .unwrap();
+            let coxa_r = Self::push_bone(
+                &mut skel,
+                format!("Leg_{i}_Coxa.R"),
+                Some(thorax),
+                [-0.2 * s, 0.4 * s, z],
+                [-0.6 * s, 0.5 * s, z],
+            );
+            let _tibia_r = Self::push_bone(
+                &mut skel,
+                format!("Leg_{i}_Tibia.R"),
+                Some(coxa_r),
+                [-0.6 * s, 0.5 * s, z],
+                [-s, 0.0, z],
+            );
         }
 
         skel
@@ -1223,7 +1222,7 @@ pub fn compute_auto_skin_weights(mesh: &petunia_mesh::Mesh, skeleton: &Skeleton)
             .collect();
 
         // Ordenar por menor distância
-        bone_distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        bone_distances.sort_by(|a, b| a.1.total_cmp(&b.1));
 
         // Selecionar os 4 ossos mais próximos
         let mut bones = [0u32; 4];

@@ -781,4 +781,3 @@ fn manual_keyframing_timeline_inserts_evaluates_and_deletes_with_undo() {
     assert!(state.undo());
     assert_eq!(depth(&state).0, initial_depth + 2);
 }
-

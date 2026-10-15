@@ -457,9 +457,8 @@ impl Command for UvPinCmd {
         }
         let pin = match self.op {
             PinOp::Pin => true,
-            PinOp::Unpin => false,
+            PinOp::Unpin | PinOp::ClearAll => false,
             PinOp::Toggle => !corners.iter().any(|c| mesh.is_uv_pinned(c.face, c.corner)),
-            PinOp::ClearAll => unreachable!("handled above"),
         };
         for c in &corners {
             if pin {

@@ -327,8 +327,16 @@ impl SurfaceRecipe {
                 }));
             }
             // Re-valida sockets e tipos (edges são públicos: não confiar só no `connect`).
-            let src = self.nodes.iter().find(|n| n.id == edge.from).unwrap();
-            let dst = self.nodes.iter().find(|n| n.id == edge.to).unwrap();
+            let src = self
+                .nodes
+                .iter()
+                .find(|n| n.id == edge.from)
+                .ok_or(RecipeError::UnknownNode(edge.from))?;
+            let dst = self
+                .nodes
+                .iter()
+                .find(|n| n.id == edge.to)
+                .ok_or(RecipeError::UnknownNode(edge.to))?;
             let out_ty = *src
                 .spec
                 .outputs()
@@ -355,17 +363,18 @@ impl SurfaceRecipe {
         let mut queue: Vec<Uuid> = self
             .nodes
             .iter()
-            .filter(|n| indegree[&n.id] == 0)
+            .filter(|n| indegree.get(&n.id).copied().unwrap_or(0) == 0)
             .map(|n| n.id)
             .collect();
         let mut visited = 0;
         while let Some(id) = queue.pop() {
             visited += 1;
             for edge in self.edges.iter().filter(|e| e.from == id) {
-                let d = indegree.get_mut(&edge.to).unwrap();
-                *d -= 1;
-                if *d == 0 {
-                    queue.push(edge.to);
+                if let Some(d) = indegree.get_mut(&edge.to) {
+                    *d = d.saturating_sub(1);
+                    if *d == 0 {
+                        queue.push(edge.to);
+                    }
                 }
             }
         }
@@ -392,8 +401,9 @@ impl SurfaceRecipe {
         Ok(())
     }
 
-    /// DFS para achar um caminho de ciclo (p/ mensagem de erro útil).
+    /// DFS iterativa/limitada para achar um caminho de ciclo (p/ mensagem de erro útil).
     fn find_cycle_path(&self) -> Vec<Uuid> {
+        const MAX_CYCLE_DEPTH: usize = 512;
         #[derive(Clone, Copy, PartialEq)]
         enum Mark {
             Unvisited,
@@ -411,6 +421,9 @@ impl SurfaceRecipe {
             stack: &mut Vec<Uuid>,
             cycle: &mut Option<Vec<Uuid>>,
         ) {
+            if stack.len() >= MAX_CYCLE_DEPTH {
+                return;
+            }
             marks.insert(id, Mark::InStack);
             stack.push(id);
             for edge in recipe.edges.iter().filter(|e| e.from == id) {
@@ -422,7 +435,7 @@ impl SurfaceRecipe {
                         }
                     }
                     Mark::InStack => {
-                        let start = stack.iter().position(|&n| n == edge.to).unwrap();
+                        let start = stack.iter().position(|&n| n == edge.to).unwrap_or(0);
                         *cycle = Some(stack[start..].to_vec());
                         return;
                     }
@@ -455,17 +468,18 @@ impl SurfaceRecipe {
         let mut ready: Vec<Uuid> = self
             .nodes
             .iter()
-            .filter(|n| indegree[&n.id] == 0)
+            .filter(|n| indegree.get(&n.id).copied().unwrap_or(0) == 0)
             .map(|n| n.id)
             .collect();
         let mut order = Vec::with_capacity(self.nodes.len());
         while let Some(id) = ready.pop() {
             order.push(id);
             for edge in self.edges.iter().filter(|e| e.from == id) {
-                let d = indegree.get_mut(&edge.to).unwrap();
-                *d -= 1;
-                if *d == 0 {
-                    ready.push(edge.to);
+                if let Some(d) = indegree.get_mut(&edge.to) {
+                    *d = d.saturating_sub(1);
+                    if *d == 0 {
+                        ready.push(edge.to);
+                    }
                 }
             }
         }
@@ -486,7 +500,11 @@ impl SurfaceRecipe {
         let mut memo: HashMap<Uuid, SocketValue> = HashMap::new();
 
         for id in order {
-            let node = self.nodes.iter().find(|n| n.id == id).unwrap();
+            let node = self
+                .nodes
+                .iter()
+                .find(|n| n.id == id)
+                .ok_or(RecipeError::UnknownNode(id))?;
             let value = evaluate_node(node, self, source, &memo)?;
             memo.insert(id, value);
         }

@@ -890,6 +890,32 @@ impl Mesh {
         for face in replacement_faces {
             self.push_face(face);
         }
+        // Aresta partida propaga seam/Sharp para a cadeia de sub-arestas ao longo
+        // dela; aresta intocada permanece. Nunca apagar seam/Sharp em silêncio
+        // (website/docs/03-geometry/normals-shading-sharp-edges.md).
+        let split_edges = |set: &HashSet<(u32, u32)>| -> HashSet<(u32, u32)> {
+            let mut out = HashSet::new();
+            for &(a, b) in set {
+                let (low, high) = edge_key(a, b);
+                if !edge_vertices.contains_key(&(low, high, 1)) {
+                    out.insert(edge_key(a, b));
+                    continue;
+                }
+                let mut chain = vec![low];
+                for step in 1..segments {
+                    if let Some(&vertex) = edge_vertices.get(&(low, high, step)) {
+                        chain.push(vertex);
+                    }
+                }
+                chain.push(high);
+                for pair in chain.windows(2) {
+                    out.insert(edge_key(pair[0], pair[1]));
+                }
+            }
+            out
+        };
+        self.uv_seams = split_edges(&self.uv_seams);
+        self.sharp_edges = split_edges(&self.sharp_edges);
         self.selected_edges.clear();
         self.sync_vert_selection_from_faces();
     }
@@ -965,7 +991,11 @@ impl Mesh {
     /// Bevel transacional de um conjunto de arestas (website/docs/03-geometry/
     /// direct-modeling-semantics.md, "Bevel"): o conjunto inteiro é validado
     /// antes; se alguma aresta não for suportada **nada muda** e todas as não
-    /// suportadas voltam no relatório. Ordem determinística (por `edge_key`).
+    /// suportadas voltam no relatório. Se a aplicação sequencial falhar por
+    /// **interação entre arestas do conjunto**, a transação é recusada como um
+    /// todo e `unsupported_edges` devolve o conjunto inteiro pedido (o conjunto
+    /// é a unidade da operação; nunca se publica metade da seleção).
+    /// Ordem determinística (por `edge_key`).
     /// `segments = 1` é chanfro; mais segmentos, perfil circular.
     pub fn bevel_edges(
         &mut self,
@@ -1033,7 +1063,8 @@ impl Mesh {
             })
         };
         let mut working = self.clone();
-        for (edge, pa, pb) in targets {
+        let mut clamped = 0usize;
+        for (_, pa, pb) in targets {
             let next = match (find(&working, pa), find(&working, pb)) {
                 (Some(va), Some(vb)) => crate::bevel::bevel_edge_segments_clamped(
                     &working,
@@ -1046,15 +1077,25 @@ impl Mesh {
                 _ => None,
             };
             match next {
-                Some(mesh) => working = mesh,
+                Some((mesh, was_clamped)) => {
+                    working = mesh;
+                    if was_clamped {
+                        clamped += 1;
+                    }
+                }
                 None => {
-                    report.unsupported_edges.push(edge);
+                    // Interação entre arestas do conjunto: recusa a transação
+                    // inteira. Nada foi aplicado (`self` intacto), então o
+                    // relatório devolve o conjunto pedido, não só a aresta que
+                    // falhou.
+                    report.unsupported_edges = edges.clone();
                     return report;
                 }
             }
         }
         *self = working;
         report.beveled_edges = edges.len();
+        report.clamped_edges = clamped;
         report
     }
 
@@ -1630,9 +1671,10 @@ impl Mesh {
         // Espelha os vértices fonte.
         let mut mirror_of: Vec<Option<u32>> = vec![None; n];
         for i in 0..n {
-            if is_source[i] {
-                let orig_new = new_id[i].expect("fonte sempre mantida") as usize;
-                let mut mv = new_verts[orig_new].clone();
+            if is_source[i]
+                && let Some(orig_new) = new_id[i]
+                && let Some(mut mv) = new_verts.get(orig_new as usize).cloned()
+            {
                 mv.pos[ax] = -mv.pos[ax];
                 mirror_of[i] = Some(new_verts.len() as u32);
                 new_verts.push(mv);
@@ -1649,7 +1691,7 @@ impl Mesh {
                 let mut nf = Face::with_uv(
                     f.verts
                         .iter()
-                        .map(|vi| new_id[*vi as usize].expect("vert mantido"))
+                        .filter_map(|vi| new_id.get(*vi as usize).and_then(|&id| id))
                         .collect(),
                     f.uv.clone(),
                 );
@@ -1661,12 +1703,12 @@ impl Mesh {
                     let mut mverts: Vec<u32> = f
                         .verts
                         .iter()
-                        .map(|vi| {
+                        .filter_map(|vi| {
                             let idx = *vi as usize;
                             if is_source[idx] {
-                                mirror_of[idx].expect("espelho da fonte")
+                                mirror_of[idx]
                             } else {
-                                new_id[idx].expect("centro mantido")
+                                new_id[idx]
                             }
                         })
                         .collect();
@@ -2450,19 +2492,37 @@ impl Mesh {
     // ---------------- operações de combinação ----------------
 
     /// Combina outra malha nesta, mantendo ilhas disjuntas em um único objeto.
+    ///
+    /// Os dados autorais de `other` são remapeados em vez de descartados:
+    /// `sharp_edges` e `uv_seams` pelo deslocamento de vértices, `uv_pinned` pela
+    /// face de destino e o `material_slot` de cada face é preservado. Nenhuma
+    /// operação de topologia apaga Sharp/seam/material em silêncio
+    /// (website/docs/03-geometry/normals-shading-sharp-edges.md).
     pub fn join(&mut self, other: &Mesh) {
         let base_idx = self.verts.len() as u32;
+        let base_face = self.faces.len();
         self.verts.extend(other.verts.iter().cloned());
 
         for f in &other.faces {
             let remapped_verts: Vec<u32> = f.verts.iter().map(|&i| i + base_idx).collect();
             let mut nf = Face::with_uv(remapped_verts, f.uv.clone());
             nf.selected = f.selected;
+            nf.material_slot = f.material_slot;
             self.push_face(nf);
         }
 
         for &(a, b) in &other.selected_edges {
             self.selected_edges.insert((a + base_idx, b + base_idx));
+        }
+        for &(a, b) in &other.uv_seams {
+            self.uv_seams.insert(edge_key(a + base_idx, b + base_idx));
+        }
+        for &(a, b) in &other.sharp_edges {
+            self.sharp_edges
+                .insert(edge_key(a + base_idx, b + base_idx));
+        }
+        for &(face, corner) in &other.uv_pinned {
+            self.uv_pinned.insert((face + base_face, corner));
         }
     }
 
@@ -3206,5 +3266,56 @@ mod region_tests {
         assert!(mesh.make_face_from_selection().is_ok());
         assert_eq!(mesh.selected_edges.len(), 1);
         assert!(mesh.selected_edges.contains(&edge_key(0, 1)));
+    }
+
+    #[test]
+    fn join_remaps_seams_sharp_pins_and_keeps_material_slots() {
+        let mut a = Mesh::cube(2.0);
+        let mut b = Mesh::cube(2.0);
+        let base_verts = a.verts.len() as u32;
+        let base_faces = a.faces.len();
+        let sharp = edge_key(0, 1);
+        let seam = edge_key(2, 3);
+        b.sharp_edges.insert(sharp);
+        b.uv_seams.insert(seam);
+        b.uv_pinned.insert((0, 1));
+        b.faces[0].material_slot = Some(3);
+
+        a.join(&b);
+
+        // Sharp/seam remapeados pelo deslocamento de vértices, não descartados.
+        assert_eq!(a.sharp_edges.len(), 1);
+        assert!(
+            a.sharp_edges
+                .contains(&edge_key(sharp.0 + base_verts, sharp.1 + base_verts))
+        );
+        assert_eq!(a.uv_seams.len(), 1);
+        assert!(
+            a.uv_seams
+                .contains(&edge_key(seam.0 + base_verts, seam.1 + base_verts))
+        );
+        // Pin remapeado pela face de destino; material slot preservado.
+        assert_eq!(a.uv_pinned.len(), 1);
+        assert!(a.uv_pinned.contains(&(base_faces, 1)));
+        assert_eq!(a.faces[base_faces].material_slot, Some(3));
+    }
+
+    #[test]
+    fn subdivide_keeps_sharp_and_uv_seams_along_split_edges() {
+        let mut mesh = Mesh::plane(2.0);
+        let original = edge_key(0, 1);
+        mesh.sharp_edges.insert(original);
+        mesh.uv_seams.insert(original);
+        mesh.select_all();
+
+        mesh.subdivide_selected_cuts(1);
+
+        // A aresta partida vira a cadeia de sub-arestas; o crease/seam não some.
+        assert!(!mesh.sharp_edges.contains(&original));
+        assert_eq!(mesh.sharp_edges.len(), 2);
+        assert_eq!(mesh.sharp_edges, mesh.uv_seams);
+        // Toda sub-aresta marcada pertence de fato à malha resultante.
+        let existing: HashSet<(u32, u32)> = mesh.edges_unique().into_iter().collect();
+        assert!(mesh.sharp_edges.iter().all(|edge| existing.contains(edge)));
     }
 }

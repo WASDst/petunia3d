@@ -30,15 +30,21 @@ pub fn smoke_test() -> anyhow::Result<()> {
         .context("mesh ativa")?
         .select_all();
     s.checkpoint("extrude");
-    s.project.active_mesh_mut().unwrap().extrude_selected(0.4);
+    s.project
+        .active_mesh_mut()
+        .context("mesh ativa")?
+        .extrude_selected(0.4);
     s.checkpoint("inset");
-    let mesh = s.project.active_mesh_mut().unwrap();
+    let mesh = s.project.active_mesh_mut().context("mesh ativa")?;
     let selected: Vec<usize> = (0..mesh.faces.len())
         .filter(|&f| mesh.faces[f].selected)
         .collect();
     mesh.inset_faces(&selected, 0.1, petunia_mesh::InsetMode::Region);
     s.checkpoint("subdivide");
-    s.project.active_mesh_mut().unwrap().subdivide_selected();
+    s.project
+        .active_mesh_mut()
+        .context("mesh ativa")?
+        .subdivide_selected();
     // Bevel has a stricter supported topology than arbitrary subdivided spheres.
     let mut bevel_fixture = petunia_mesh::Mesh::cube(2.0);
     bevel_fixture.selected_edges.insert((0, 1));
@@ -50,11 +56,17 @@ pub fn smoke_test() -> anyhow::Result<()> {
         "bevel closed manifold"
     );
     s.checkpoint("mirror");
-    s.project.active_mesh_mut().unwrap().mirror(0, 0.001);
+    s.project
+        .active_mesh_mut()
+        .context("mesh ativa")?
+        .mirror(0, 0.001);
     s.checkpoint("pushpull");
-    s.project.active_mesh_mut().unwrap().push_pull(0.2);
+    s.project
+        .active_mesh_mut()
+        .context("mesh ativa")?
+        .push_pull(0.2);
     // novas operações de geometria da Gauntlet
-    let m = s.project.active_mesh_mut().unwrap();
+    let m = s.project.active_mesh_mut().context("mesh ativa")?;
     m.slice_plane(glam::Vec3::ZERO, glam::Vec3::Y, true);
     m.flip_normals();
     m.recalculate_normals();
@@ -116,12 +128,15 @@ pub fn smoke_test() -> anyhow::Result<()> {
     eprintln!("SMOKE profile ok");
 
     // uv + paint
-    s.project.active_mesh_mut().unwrap().project_planar();
+    s.project
+        .active_mesh_mut()
+        .context("mesh ativa")?
+        .project_planar();
     UvModule::move_selected(s, 0.1, 0.0);
     ensure!(
         s.project
             .active_mesh_mut()
-            .unwrap()
+            .context("mesh ativa")?
             .faces
             .iter()
             .all(|f| f.uv.len() == f.verts.len()),

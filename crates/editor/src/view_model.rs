@@ -1,0 +1,2141 @@
+// Presentation ViewModels and Data Transfer Objects (DTOs) for the Slint shell.
+// ViewModels de apresentação e Objetos de Transferência de Dados (DTOs) para o shell Slint.
+
+use super::*;
+
+/// Representação DTO de um item da árvore de cena do Outliner.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneItemModel {
+    pub id: String,
+    pub name: String,
+    pub visible: bool,
+    pub locked: bool,
+    pub selected: bool,
+    /// Objeto ativo (referência das operações). No máximo um por vez e
+    /// visualmente distinto do apenas-selecionado, como no Blender.
+    pub active: bool,
+    pub verts: usize,
+    pub tris: usize,
+    pub has_custom_color: bool,
+    pub custom_color_rgb: [u8; 3],
+}
+
+/// Prefab da biblioteca já resumido para a grade do Asset Library.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrefabItemModel {
+    pub id: String,
+    pub name: String,
+    pub parts: usize,
+    pub tris: usize,
+    pub verts: usize,
+    pub favorite: bool,
+    pub instances: usize,
+    pub tags: String,
+    /// RGBA8 `THUMBNAIL_SIZE²`; `None` = sem geometria para renderizar.
+    pub thumbnail: Option<std::sync::Arc<Vec<u8>>>,
+}
+
+/// Ação rápida do Inspector MODEL derivada do Command Registry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuickActionModel {
+    pub id: String,
+    pub label: String,
+    pub enabled: bool,
+    /// Por que está desabilitada (vazio quando habilitada); vai ao leitor de tela.
+    pub disabled_reason: String,
+    pub active: bool,
+    pub pinned: bool,
+}
+
+/// Opção de material do projeto para o seletor do Inspector.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MaterialOptionModel {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+}
+
+/// Estado de apresentação de uma seção do Inspector (dock/flutuação/pin).
+/// Preenchido pelo bridge a partir dos layouts em tempo de execução; o
+/// snapshot puro de `from_state` usa vetor vazio.
+/// Presentation state of one Inspector section (dock/float/pin).
+/// Filled by the bridge from runtime layouts; the pure `from_state`
+/// snapshot uses an empty vector.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SectionStateModel {
+    pub id: String,
+    pub pin_open: bool,
+    pub open: bool,
+}
+
+/// Linha funcional da pilha Mirror/Symmetry no Inspector MODEL.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModifierRowModel {
+    pub id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub enabled: bool,
+    pub kind: String,
+    pub axis: i32,
+    pub positive_to_negative: bool,
+    pub can_move_up: bool,
+    pub can_move_down: bool,
+}
+
+/// Slot de imagem de referência no Gerenciador de Referências (P3D-013).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReferenceSlotViewModel {
+    pub axis: String,
+    pub axis_tag: String,
+    pub title: String,
+    pub has_image: bool,
+    pub image_name: String,
+    pub dimensions: String,
+    pub visible: bool,
+    pub locked: bool,
+    pub opacity: f32,
+    pub size: f32,
+    pub offset: f32,
+    pub rotation: f32,
+    pub fine_open: bool,
+    pub thumbnail: Option<Vec<u8>>,
+}
+
+/// Mapeamento dinâmico de atalhos para tooltips da UI derivado do keymap ativo.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ShortcutsModel {
+    pub undo: String,
+    pub redo: String,
+    pub save: String,
+    pub open: String,
+    pub search: String,
+    pub settings: String,
+    pub parts: String,
+    pub model_select: String,
+    pub model_lasso: String,
+    pub model_cursor: String,
+    pub model_measure: String,
+    pub model_move: String,
+    pub model_rotate: String,
+    pub model_scale: String,
+    pub model_transform: String,
+    pub model_add_primitive: String,
+    pub model_duplicate: String,
+    pub model_extrude: String,
+    pub model_push_pull: String,
+    pub model_inset: String,
+    pub model_bevel: String,
+    pub model_knife: String,
+    pub model_loop_cut: String,
+    pub model_profile: String,
+    pub model_subdivide: String,
+    pub model_merge: String,
+    pub model_slice: String,
+    pub model_connect: String,
+    pub model_spin: String,
+    pub model_dissolve: String,
+    pub model_delete: String,
+    pub select_point: String,
+    pub select_edge: String,
+    pub select_face: String,
+    pub select_object: String,
+    pub view_proj: String,
+    pub view_frame: String,
+    pub view_reset: String,
+    pub view_wireframe: String,
+    pub view_solid: String,
+    pub view_material: String,
+    pub view_lit: String,
+    pub view_xray: String,
+    pub view_pivot: String,
+    pub view_snap: String,
+    pub view_prop: String,
+    pub paint_select: String,
+    pub paint_isolate: String,
+    pub paint_brush: String,
+    pub paint_airbrush: String,
+    pub paint_eraser: String,
+    pub paint_picker: String,
+    pub paint_fill: String,
+    pub paint_line: String,
+    pub paint_rectangle: String,
+    pub paint_ellipse: String,
+    pub paint_gradient_radial: String,
+    pub paint_gradient: String,
+    pub uv_select: String,
+    pub uv_unwrap: String,
+    pub uv_pack: String,
+    pub uv_project_ref: String,
+    pub uv_stitch: String,
+    pub uv_relax: String,
+}
+
+impl ShortcutsModel {
+    pub fn from_keybinds(keybinds: &petunia_config::keybinds::Keybinds) -> Self {
+        let fmt = |action: &str, fallback: &str| {
+            keybinds
+                .format_shortcut(action)
+                .unwrap_or_else(|| fallback.to_string())
+        };
+        Self {
+            undo: fmt("global.undo", "Ctrl+Z"),
+            redo: fmt("global.redo", "Ctrl+Shift+Z"),
+            save: fmt("global.save_project", "Ctrl+S"),
+            open: fmt("global.open_project", "Ctrl+O"),
+            search: fmt("global.command_palette", "Ctrl+P"),
+            settings: fmt("global.settings", "Ctrl+,"),
+            parts: fmt("global.toggle_parts", "F4"),
+            model_select: fmt("model.tool_select", "W"),
+            model_lasso: fmt("model.tool_lasso", "Shift+Space"),
+            model_cursor: fmt("model.tool_cursor", "Shift+RMB"),
+            model_measure: fmt("model.measure", "M"),
+            model_move: fmt("model.move", "G"),
+            model_rotate: fmt("model.rotate", "R"),
+            model_scale: fmt("model.scale", "S"),
+            model_transform: fmt("model.transform", "T"),
+            model_add_primitive: fmt("model.primitives", "Shift+A"),
+            model_duplicate: fmt("model.duplicate", "Shift+D"),
+            model_extrude: fmt("model.extrude", "E"),
+            model_push_pull: fmt("model.push_pull", "Alt+E"),
+            model_inset: fmt("model.inset", "I"),
+            model_bevel: fmt("model.bevel", "Ctrl+B"),
+            model_knife: fmt("model.knife", "K"),
+            model_loop_cut: fmt("model.loop_cut", "Ctrl+R"),
+            model_profile: fmt("model.draw_profile", "Alt+R"),
+            model_subdivide: fmt("model.subdivide", "Ctrl+1"),
+            model_merge: fmt("model.merge", "M, C"),
+            model_slice: fmt("model.slice", "Shift+K"),
+            model_connect: fmt("model.connect", "F"),
+            model_spin: fmt("model.spin", "Alt+S"),
+            model_dissolve: fmt("model.dissolve", "Ctrl+X"),
+            model_delete: fmt("model.delete", "X"),
+            select_point: fmt("model.select_vertex", "1"),
+            select_edge: fmt("model.select_edge", "2"),
+            select_face: fmt("model.select_face", "3"),
+            select_object: fmt("model.select_object", "0"),
+            view_proj: fmt("view.toggle_projection", "Numpad 5"),
+            view_frame: fmt("view.frame_selection", "Numpad ."),
+            view_reset: fmt("view.reset_camera", "Home"),
+            view_wireframe: fmt("view.toggle_wireframe", "Shift+Z"),
+            view_solid: fmt("view.shading_solid", "Z"),
+            view_material: fmt("view.shading_material", "Alt+Z"),
+            view_lit: fmt("view.shading_rendered", "Ctrl+Alt+Z"),
+            view_xray: fmt("view.toggle_xray", "Alt+Z"),
+            view_pivot: fmt("model.toggle_pivot", "."),
+            view_snap: fmt("model.toggle_snap", "Shift+Tab"),
+            view_prop: fmt("model.toggle_proportional", "O"),
+            paint_select: fmt("paint.select", "V"),
+            paint_isolate: fmt("paint.isolate", "Numpad /"),
+            paint_brush: fmt("paint.paint", "B"),
+            paint_airbrush: fmt("paint.airbrush", "Shift+B"),
+            paint_eraser: fmt("paint.eraser", "E"),
+            paint_picker: fmt("paint.color_picker", "I"),
+            paint_fill: fmt("paint.fill", "G"),
+            paint_line: fmt("paint.line", "D"),
+            paint_rectangle: fmt("paint.rectangle", "R"),
+            paint_ellipse: fmt("paint.ellipse", "C"),
+            paint_gradient_radial: fmt("paint.gradient_radial", "Alt+G"),
+            paint_gradient: fmt("paint.gradient", "G"),
+            uv_select: fmt("uv.select", "W"),
+            uv_unwrap: fmt("uv.unwrap_auto", "U"),
+            uv_pack: fmt("uv.pack_islands", "Ctrl+P"),
+            uv_project_ref: fmt("uv.project_reference", "Alt+U"),
+            uv_stitch: fmt("uv.stitch", "V"),
+            uv_relax: fmt("uv.relax", "Shift+V"),
+        }
+    }
+}
+
+/// Snapshot pequeno para apresentação. Não expõe estruturas internas do core ao
+/// markup Slint e não carrega estado transitório de widgets.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShellViewModel {
+    pub workspace: Workspace,
+    pub selection_domain: SelectionDomain,
+    pub inspector_visible: bool,
+    /// DRAW com navegação planar ativa (botão Planar/Livre da barra).
+    pub planar_navigation: bool,
+    pub shortcuts: ShortcutsModel,
+    pub saved: bool,
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub active_tool: String,
+    pub paint_color: [f32; 3],
+    pub brush_size: f32,
+    pub brush_opacity: f32,
+    pub brush_hardness: f32,
+    pub paint_symmetry_x: bool,
+    pub paint_symmetry_y: bool,
+    pub paint_symmetry_z: bool,
+    pub paint_target_vertex: bool,
+    pub paint_mask_selection: bool,
+    /// Isolamento do objeto ativo ligado (esconde os demais).
+    pub isolate_active: bool,
+    pub status_message: String,
+    /// 0 info, 1 sucesso, 2 aviso, 3 erro (ver [`classify_status`]).
+    pub status_severity: i32,
+    /// Resumo persistente da seleção para a pill da viewport
+    /// ("2 objects selected", "Selected: 3 points · 1 edge", "No selection").
+    pub selection_summary: String,
+    pub position: [f32; 3],
+    pub rotation: [f32; 3],
+    pub scale: [f32; 3],
+    pub cursor_3d: [f32; 3],
+    pub scene_items: Vec<SceneItemModel>,
+    pub parts_items: Vec<SceneItemModel>,
+    pub parts_query: String,
+    pub parts_selected_only: bool,
+    pub parts_sort_by_name: bool,
+    pub parts_row_height: f32,
+    pub inspector_pane_layout: crate::inspector_layout::InspectorPaneLayout,
+    pub prefab_items: Vec<PrefabItemModel>,
+    pub asset_only_favorites: bool,
+    pub split_enabled: bool,
+    pub paint_pip: bool,
+    /// Preset da vista secundária (`front`, `top`, ..., `custom`).
+    pub split_preset: String,
+    pub asset_query: String,
+    pub asset_sort_by_name: bool,
+    pub asset_thumbnail_size: f32,
+    pub active_object_title: String,
+    pub active_object_details: String,
+    pub active_material_name: String,
+    pub scene_stats: String,
+    pub uv_stats: String,
+    pub current_theme: String,
+    pub icon_theme: String,
+    pub is_orthographic: bool,
+    pub is_wireframe: bool,
+    pub shading_mode: String,
+    pub xray_opacity: f32,
+    pub selection_rgb: [u8; 3],
+    pub active_selection_rgb: [u8; 3],
+    pub selection_thickness: f32,
+    pub selection_color_hex: String,
+    pub show_xray: bool,
+    pub show_face_orientation: bool,
+    pub show_uv_checker: bool,
+    pub stencil_image: Option<Vec<u8>>,
+    pub draw_extension_values: [f32; 5],
+    pub export_padding: f32,
+    pub trace_threshold: f32,
+    pub proportional_editing: bool,
+    pub proportional_radius: f32,
+    pub proportional_falloff: String,
+    pub snap_enabled: bool,
+    pub snap_target: String,
+    pub shading_popover_open: bool,
+    /// HUD da operação: título, linhas de valor e dica de controles.
+    pub operation_hud_active: bool,
+    pub operation_hud_title: String,
+    pub operation_hud_lines: Vec<String>,
+    pub operation_hud_hint: String,
+    /// Feedback curto abaixo da ação ("Moving 3 vertices").
+    pub operation_hud_subject: String,
+    /// Barra de status contextual.
+    pub context_hint: String,
+    // Phase 4: Feedback Visual em Tempo Real
+    pub hud_pill_visible: bool,
+    pub hud_pill_x: f32,
+    pub hud_pill_y: f32,
+    pub hud_pill_title: String,
+    pub hud_pill_value: String,
+    pub hud_pill_badge: String,
+    pub hud_pill_hint: String,
+    pub axis_guide_visible: bool,
+    pub axis_guide_commands: String,
+    pub axis_guide_color: [u8; 3],
+    pub axis_guide_label: String,
+    pub axis_guide_label_x: f32,
+    pub axis_guide_label_y: f32,
+    pub world_axis_labels: Vec<crate::projection::WorldAxisLabelModel>,
+    pub dimension_visible: bool,
+    pub dimension_commands: String,
+    pub dimension_text: String,
+    pub dimension_x: f32,
+    pub dimension_y: f32,
+    pub measure_visible: bool,
+    pub measure_commands: String,
+    pub measure_text: String,
+    pub measure_x: f32,
+    pub measure_y: f32,
+    pub measure_distance: f32,
+    pub measure_dx: f32,
+    pub measure_dy: f32,
+    pub measure_dz: f32,
+    pub measure_angle_deg: f32,
+    pub measure_hud_text: String,
+    pub measure_tags: Vec<crate::projection::MeasureTagModel>,
+    pub micro_inspector_open: bool,
+    pub micro_inspector_x: f32,
+    pub micro_inspector_y: f32,
+    pub snap_marker_visible: bool,
+    pub snap_marker_x: f32,
+    pub snap_marker_y: f32,
+    pub snap_marker_label: String,
+    pub snap_marker_round: bool,
+    pub operation_preview_commands: String,
+    pub drag_link_commands: String,
+    pub proportional_circle_commands: String,
+    pub hover_label: String,
+    pub transform_instant_active: bool,
+    pub gizmo_hover_axis: i32,
+    pub gizmo_active_axis: i32,
+    pub gizmo_constraint_axes: [i32; 2],
+    pub gizmo_has_hover: bool,
+    pub gizmo_center_active: bool,
+    pub gizmo_center_hover: bool,
+    pub asset_library_visible: bool,
+    pub gizmo: GizmoModel,
+    pub selection_overlay: SelectionOverlayModel,
+    pub add_menu_open: bool,
+    pub inspector_width: f32,
+    pub asset_library_height: f32,
+    pub rename_active: bool,
+    pub rename_value: String,
+    pub context_menu_open: bool,
+    pub context_menu_x: f32,
+    pub context_menu_y: f32,
+    pub context_menu_title: String,
+    /// "outliner" (padrão, verbetes do asset) ou "viewport" (só seleção).
+    pub context_menu_mode: String,
+    pub context_menu_visible: bool,
+    pub context_menu_locked: bool,
+    /// Indicates if scene isolation is active for this target.
+    /// Indica se o modo de isolamento da cena está ativo para este alvo.
+    pub context_menu_isolated: bool,
+    /// Indicates if the item can be moved up in the hierarchy.
+    /// Indica se o item pode ser movido para cima na hierarquia.
+    pub context_menu_can_move_up: bool,
+    /// Indicates if the item can be moved down in the hierarchy.
+    /// Indica se o item pode ser movido para baixo na hierarquia.
+    pub context_menu_can_move_down: bool,
+    pub boolean_operand_name: String,
+    pub boolean_ready: bool,
+    pub boolean_keep_parts: bool,
+    pub boolean_cleanup: bool,
+    // Reference Image Manager (P3D-013)
+    pub reference_manager_open: bool,
+    pub reference_slots: Vec<ReferenceSlotViewModel>,
+    pub reference_total_count: i32,
+    // Primitive Creation / Last Operation / Parametric Re-editing
+    pub primitive_active: bool,
+    pub active_asset_is_parametric: bool,
+    pub primitive_kind: String,
+    pub primitive_title: String,
+    pub primitive_radius: f32,
+    pub primitive_radius_b: f32,
+    pub primitive_height: f32,
+    pub primitive_depth: f32,
+    pub primitive_width: f32,
+    pub primitive_sides: i32,
+    pub primitive_rings: i32,
+    pub primitive_subdiv: i32,
+    pub primitive_cap_top: bool,
+    pub primitive_cap_bottom: bool,
+    pub primitive_fill_disc: bool,
+    pub label_parametric_primitive: String,
+    pub label_freeze_primitive: String,
+    pub label_freeze_primitive_hint: String,
+    // Slice Tool Feedback & Trim
+    pub slice_preview_visible: bool,
+    pub slice_preview_commands: String,
+    pub slice_trim: bool,
+    pub bevel_clamp_overlap: bool,
+    pub bevel_affect_vertices: bool,
+    pub protractor_visible: bool,
+    pub protractor_wedge_commands: String,
+    pub protractor_ticks_commands: String,
+    pub menu_open: String,
+    pub menu_file_label: String,
+    pub menu_edit_label: String,
+    pub menu_view_label: String,
+    pub menu_window_label: String,
+    pub menu_file_items: Vec<MenuEntryModel>,
+    pub menu_edit_items: Vec<MenuEntryModel>,
+    pub menu_view_items: Vec<MenuEntryModel>,
+    pub menu_window_items: Vec<MenuEntryModel>,
+    pub label_parts: String,
+    pub label_project_asset_library: String,
+    pub label_save_active_as_asset: String,
+    pub label_status_hint: String,
+    pub label_unwrap_mesh: String,
+    pub label_pack_islands: String,
+    pub label_active_brush_color: String,
+    pub label_albedo_base_color: String,
+    pub label_theme: String,
+    pub label_place_in_scene: String,
+    pub label_vertical_tool_drag: String,
+    pub label_invert_vertical_drag: String,
+    pub label_colorblind_axes: String,
+    pub label_reduced_motion: String,
+    pub label_double_tap_interval: String,
+    pub label_multiselection_measure_tag: String,
+    pub label_search_assets: String,
+    pub label_search_parts: String,
+    pub label_inspector: String,
+    pub label_expand_inspector: String,
+    pub label_collapse_inspector: String,
+    pub label_resize_panel_width: String,
+    pub label_section_dock: String,
+    pub label_section_drag: String,
+    pub label_section_pin_open: String,
+    pub label_section_pin_asset: String,
+    pub label_section_unpin_asset: String,
+    pub label_object_name: String,
+    pub label_object_visibility: String,
+    pub label_object_lock: String,
+    pub label_object_no_selection: String,
+    pub label_stats_faces: String,
+    pub label_stats_verts: String,
+    pub label_stats_tris: String,
+    pub label_stats_selection: String,
+    pub label_tool_options: String,
+    pub label_tool_options_expand: String,
+    pub label_tool_options_collapse: String,
+    pub label_quick_actions: String,
+    pub label_quick_action_customize: String,
+    pub label_quick_action_add: String,
+    pub label_quick_action_remove: String,
+    pub label_quick_action_reset: String,
+    pub label_quick_action_done: String,
+    pub label_action_subdivide: String,
+    pub label_action_fuse: String,
+    pub label_action_cut: String,
+    pub label_action_intersect: String,
+    pub label_action_join: String,
+    pub label_action_merge: String,
+    pub label_action_slice: String,
+    pub label_action_loop_cut: String,
+    pub label_material_base_color: String,
+    pub label_material_profile: String,
+    pub label_material_roughness: String,
+    pub label_material_metallic: String,
+    pub label_material_normal_scale: String,
+    pub label_material_advanced: String,
+    pub label_material_assign: String,
+    pub label_material_new: String,
+    pub label_material_duplicate: String,
+    pub label_material_remove: String,
+    pub label_material_no_material: String,
+    pub label_material_no_selection: String,
+    pub label_material_emission_strength: String,
+    pub label_material_alpha_cutoff: String,
+    pub label_material_texture_albedo: String,
+    pub label_material_no_texture: String,
+    pub label_material_create_texture: String,
+    pub label_material_clear_texture: String,
+    pub label_material_profile_pbr: String,
+    pub label_material_profile_unlit: String,
+    pub label_material_profile_toon: String,
+    pub label_material_profile_glass: String,
+    pub label_material_profile_emissive: String,
+    pub label_material_alpha_opaque: String,
+    pub label_material_alpha_mask: String,
+    pub label_material_alpha_blend: String,
+    pub label_modifier_mirror: String,
+    pub label_modifier_symmetry: String,
+    pub label_modifiers_empty: String,
+    pub label_modifier_apply: String,
+    pub label_modifier_axis: String,
+    pub label_modifier_add_mirror: String,
+    pub label_modifier_add_symmetry: String,
+    pub label_modifier_remove: String,
+    pub label_modifier_move_up: String,
+    pub label_modifier_move_down: String,
+    pub label_modifier_direction: String,
+    pub label_modifier_positive_to_negative: String,
+    pub label_modifier_negative_to_positive: String,
+    pub label_tab_parts: String,
+    pub label_tab_transform: String,
+    pub label_tab_material: String,
+    pub label_tab_object: String,
+    pub label_tab_modifiers: String,
+    pub label_numeric_field_hint: String,
+    pub label_model_select: String,
+    pub label_model_position: String,
+    pub label_model_rotate: String,
+    pub label_model_scale: String,
+    pub label_model_transform: String,
+    pub label_model_lasso: String,
+    pub label_model_loop_cut: String,
+    pub hint_model_loop_cut: String,
+    pub label_model_slice: String,
+    pub hint_model_slice: String,
+    pub label_model_push_pull: String,
+    pub hint_model_push_pull: String,
+    pub label_model_profile: String,
+    pub hint_model_profile: String,
+    pub label_model_pivot: String,
+    pub hint_model_pivot: String,
+    pub label_profile_depth: String,
+    pub label_profile_points: String,
+    pub label_profile_close: String,
+    pub label_view_gizmo: String,
+    pub label_view_gizmo_hint: String,
+    pub label_profile_plane: String,
+    pub label_profile_plane_auto: String,
+    pub label_profile_plane_ground: String,
+    pub label_profile_plane_face: String,
+    pub label_profile_plane_view: String,
+    pub label_profile_look_at_plane: String,
+    pub profile_workplane_locked: bool,
+    /// Região de perfil em hover (caminho SVG em px da viewport).
+    pub region_hover_commands: String,
+    /// Segmento do perfil selecionado no domínio Curve (DRAW).
+    pub profile_selection_commands: String,
+    /// Estilo do pincel (ponta, mistura, estabilizador, jitter, presets).
+    pub brush_panel: crate::brush_panel::BrushPanelModel,
+    /// Revisão das listas de atalhos (`-1` = Configurações fechadas, nada a enviar).
+    pub keymap_revision: i64,
+    pub keymap_snapshot: std::sync::Arc<crate::keymap_edit::KeymapSnapshot>,
+    /// Ação aguardando a próxima combinação de teclas.
+    pub keymap_capture_action: String,
+    /// Tinta leve de todas as regiões fechadas (DRAW).
+    pub region_shapes_commands: String,
+    /// Contorno dos perfis que não estão em edição (DRAW).
+    pub profile_outline_commands: String,
+    /// Pontos coletados pelo Poly Pen até o cursor (caminho SVG).
+    pub poly_pen_preview_commands: String,
+    pub label_poly_pen: String,
+    pub label_poly_pen_hint: String,
+    pub poly_pen_mode: String,
+    pub label_poly_pen_mode: String,
+    pub label_poly_pen_mode_auto: String,
+    pub label_poly_pen_mode_points: String,
+    pub label_poly_pen_mode_edges: String,
+    pub label_poly_pen_mode_polygons: String,
+    pub label_poly_pen_mode_hint: String,
+    /// "DRAW" ou "POLY" (pílula ativa quando o workspace é de modelagem).
+    pub modeling_mode: String,
+    pub label_workspace_draw_title: String,
+    pub label_workspace_draw_description: String,
+    pub label_workspace_poly_title: String,
+    pub label_workspace_poly_description: String,
+    pub label_profile_generate: String,
+    pub label_profile_revolve: String,
+    pub label_profile_sweep: String,
+    pub label_profile_cuts: String,
+    pub label_profile_presets: String,
+    pub label_profile_add_rect: String,
+    pub label_profile_add_circle: String,
+    pub label_profile_canvas_hint: String,
+    pub label_profile_wall_thickness: String,
+    pub label_profile_smooth_curves: String,
+    pub label_profile_sharp_corners: String,
+    pub label_profile_smoothness: String,
+    pub hint_model_select: String,
+    pub hint_model_position: String,
+    pub hint_model_rotate: String,
+    pub hint_model_scale: String,
+    pub hint_model_transform: String,
+    pub hint_model_lasso: String,
+    pub label_hide_part: String,
+    pub label_show_part: String,
+    pub label_lock_part: String,
+    pub label_unlock_part: String,
+    pub label_selected_parts_only: String,
+    pub label_sort_parts: String,
+    pub label_parts_row_size: String,
+    pub label_sort_assets: String,
+    pub label_thumbnail_size: String,
+    pub label_selection_color: String,
+    pub label_highlight_thickness: String,
+    pub label_view_wireframe: String,
+    pub label_view_wireframe_hint: String,
+    pub label_view_solid: String,
+    pub label_view_solid_hint: String,
+    pub label_view_material: String,
+    pub label_view_material_hint: String,
+    pub label_view_lit: String,
+    pub label_view_lit_hint: String,
+    pub label_more_model_tools: String,
+    pub label_xray_opacity: String,
+    pub label_wire_overlay: String,
+    pub label_wire_overlay_hint: String,
+    pub recovery_open: bool,
+    pub recovery_title: String,
+    pub recovery_body: String,
+    pub recovery_detail: String,
+    pub recovery_recover: String,
+    pub recovery_keep: String,
+    pub recovery_discard: String,
+    pub label_asset_library: String,
+    pub label_preferences: String,
+    pub shell_info: String,
+    pub label_apply: String,
+    pub label_cancel: String,
+    pub label_delete: String,
+    pub label_duplicate: String,
+    pub themes: Vec<ThemeEntryModel>,
+    pub uv_editor: UvEditorModel,
+    pub paint_layers: Vec<PaintLayerModel>,
+    pub paint_layer_count: String,
+    pub paint_effect_kind: String,
+    pub paint_effect_params: Vec<PaintEffectParam>,
+    pub paint_canvas_size: String,
+    pub paint_canvas_revision: i32,
+    pub paint_pixel_grid: bool,
+    pub paint_canvas_zoom: i32,
+    pub paint_canvas_grid_commands: String,
+    pub paint_fill_scope: String,
+    pub paint_projection: String,
+    pub paint_lock: String,
+    /// Indicates if the active layer is a Decal layer (P3D-133).
+    /// Indica se a camada ativa é uma camada de Decalque (P3D-133).
+    pub active_layer_is_decal: bool,
+    /// Decalque ativo fixado na superfície (largura em mundo, sem posição UV).
+    pub decal_surface: bool,
+    /// Lado (px) da textura de pintura do ativo; 0 sem textura.
+    pub paint_texture_side: i32,
+    pub decal_center_u: f32,
+    pub decal_center_v: f32,
+    pub decal_scale_u: f32,
+    pub decal_scale_v: f32,
+    pub decal_rotation_deg: f32,
+    pub label_decal_transform: String,
+    pub label_decal_position: String,
+    pub label_decal_scale: String,
+    pub label_decal_width: String,
+    pub label_decal_rotation: String,
+    pub label_decal_bake: String,
+    pub label_decal_hint: String,
+    pub decal_preview_commands: String,
+    /// Decal Set do decalque ativo (cap. 39): nomes das variantes, a
+    /// mostrada e a trilha em degraus.
+    pub decal_variant_names: Vec<String>,
+    pub decal_variant_index: i32,
+    pub decal_frame: i32,
+    pub decal_track_length: i32,
+    pub decal_track_fps: f32,
+    pub decal_keys_text: String,
+    pub decal_has_keys: bool,
+    pub decal_frame_keyed: bool,
+    pub decal_playing: bool,
+    pub loop_cut_active: bool,
+    pub loop_cut_slide: f32,
+    pub loop_cut_cuts: i32,
+    pub loop_cut_preview_commands: String,
+    pub loop_cut_armed: bool,
+    pub loop_cut_balanced: bool,
+    pub profile_active: bool,
+    pub pivot_id: String,
+    pub pivot_label: String,
+    pub pivot_menu_open: bool,
+    pub pivot_median_label: String,
+    pub pivot_bounds_label: String,
+    pub pivot_cursor_label: String,
+    pub pivot_individual_label: String,
+    pub edit_pivot: bool,
+    pub label_origin_to_geometry: String,
+    pub label_origin_to_bottom: String,
+    pub label_origin_to_cursor: String,
+    pub label_origin_to_selection: String,
+    pub label_geometry_to_origin: String,
+    pub label_edit_pivot: String,
+    pub hint_edit_pivot: String,
+    pub profile_point_count: i32,
+    pub profile_closed: bool,
+    pub profile_preview_commands: String,
+    pub profile_parametric: bool,
+    pub profile_ellipse: bool,
+    pub profile_width: f32,
+    pub profile_height: f32,
+    pub profile_segments: i32,
+    pub profile_depth: f32,
+    pub profile_wall_thickness: f32,
+    pub profile_smoothness: f32,
+    pub profile_has_curves: bool,
+    pub profile_workplane: String,
+    pub profile_volume_mode: String,
+    pub profile_revolve_angle: f32,
+    pub paint_show_uv_overlay: bool,
+    pub uv_show_texture: bool,
+    pub tool_activation: String,
+    pub keyboard_tool_modal_active: bool,
+    pub is_instant_tool_mode: bool,
+    pub invert_vertical_drag: bool,
+    pub colorblind_axes: bool,
+    pub reduced_motion: bool,
+    pub double_tap_interval_ms: i32,
+    /// Botão principal na viewport segue a gramática única (constituição 11).
+    pub tool_grammar_active: bool,
+    /// Gesto segue o ponteiro sem botão (clicar-mover-clicar).
+    pub tool_gesture_latched: bool,
+    /// Card "Última operação".
+    pub last_operation_active: bool,
+    pub last_operation_title: String,
+    pub last_operation_value: f32,
+    pub last_operation_step: f32,
+    pub last_operation_unit: String,
+    pub label_last_operation: String,
+    pub label_last_operation_hint: String,
+    /// Preferências de gesto (acessibilidade motora).
+    pub drag_threshold_px: f32,
+    pub snap_radius_px: f32,
+    pub label_snap_radius: String,
+    pub click_move_click: bool,
+    /// Trilho de ferramentas com nomes (D6).
+    pub show_tool_labels: bool,
+    pub label_show_tool_labels: String,
+    pub label_show_tool_labels_hint: String,
+    /// Cor de destaque escolhida (`None` = do tema) e a efetiva em `#RRGGBB` (D5).
+    pub accent_rgb: Option<[u8; 3]>,
+    /// Home (cap. 23): visível, preferência de abrir com ela, recentes como
+    /// (nome, caminho) e textos na ordem de `HomeTexts` do shell.
+    pub home_open: bool,
+    pub show_home_on_start: bool,
+    pub recent_projects: Vec<(String, String)>,
+    pub home_texts: [String; 9],
+    pub accent_color_hex: String,
+    pub label_accent_color: String,
+    pub label_accent_color_hint: String,
+    pub workplane_prefer_ground: bool,
+    pub studio_light_follows_camera: bool,
+    pub viewport_matcap: bool,
+    pub viewport_ambient_occlusion: bool,
+    pub label_viewport_matcap: String,
+    pub label_viewport_matcap_hint: String,
+    pub label_viewport_ambient_occlusion: String,
+    pub label_viewport_ambient_occlusion_hint: String,
+    /// O gizmo é desenhado pelo backend GPU (o shell só mostra rótulos).
+    pub gizmo_gpu: bool,
+    pub label_studio_light_follows_camera: String,
+    pub label_studio_light_follows_camera_hint: String,
+    pub label_workplane_prefer_ground: String,
+    pub label_workplane_prefer_ground_hint: String,
+    pub label_drag_threshold: String,
+    pub label_click_move_click: String,
+    pub label_click_move_click_hint: String,
+    pub multiselection_measure_tag: bool,
+    pub active_language: String,
+    pub ui_scale: f32,
+    pub tool_modal_active: bool,
+    pub tool_modal_id: String,
+    pub tool_modal_title: String,
+    pub tool_modal_label: String,
+    pub tool_modal_value: f32,
+    pub tool_modal_step: f32,
+    pub tool_modal_min: f32,
+    pub tool_modal_max: f32,
+    pub tool_options_active: bool,
+    pub tool_options_title: String,
+    pub tool_options_hint: String,
+    pub tool_options_accessible_label: String,
+    pub object_has_selection: bool,
+    pub object_id: String,
+    pub object_name: String,
+    pub object_visible: bool,
+    pub object_locked: bool,
+    pub object_verts: i32,
+    pub object_faces: i32,
+    pub object_tris: i32,
+    pub object_selection: String,
+    pub object_material: String,
+    pub object_modifier_count: i32,
+    pub material_has_selection: bool,
+    pub material_id: String,
+    pub material_name: String,
+    pub material_profile: String,
+    pub material_profile_label: String,
+    pub material_profile_ids: Vec<String>,
+    pub material_profile_labels: Vec<String>,
+    pub material_base_color: [f32; 3],
+    pub material_palette: Vec<[f32; 3]>,
+    pub material_roughness: f32,
+    pub material_metallic: f32,
+    pub material_normal_scale: f32,
+    pub material_emission: [f32; 3],
+    pub material_emission_strength: f32,
+    pub material_alpha_mode: String,
+    pub material_alpha_label: String,
+    pub material_alpha_ids: Vec<String>,
+    pub material_alpha_labels: Vec<String>,
+    pub material_alpha_cutoff: f32,
+    pub material_has_albedo: bool,
+    pub material_albedo_label: String,
+    pub quick_actions: Vec<QuickActionModel>,
+    pub quick_action_candidates: Vec<QuickActionModel>,
+    pub modifier_rows: Vec<ModifierRowModel>,
+    pub section_states: Vec<SectionStateModel>,
+    pub material_slots: Vec<String>,
+    pub active_material_slot: i32,
+    pub settings_visible: bool,
+    pub command_search_visible: bool,
+    /// Projeção do topo de OverlayStack; Slint não mantém uma segunda pilha.
+    pub overlay_top_id: String,
+    pub scene_drawer_visible: bool,
+    pub active_keymap_id: String,
+    /// Semântica dos modificadores de pointer do keymap ativo.
+    /// Bitmask: Ctrl=1, Shift=2, Alt=4.
+    pub pointer_precision_mask: i32,
+    pub pointer_snap_mask: i32,
+    pub pointer_extend_mask: i32,
+    pub pointer_subtract_mask: i32,
+    pub pointer_pan_mask: i32,
+    pub pointer_cursor_place_mask: i32,
+    pub pointer_adjust_mask: i32,
+    pub pointer_loop_mask: i32,
+    pub pointer_orbit_left_mask: i32,
+    /// PAINT: ações de ponteiro (U05), máscaras como as demais `[pointer]`.
+    pub pointer_paint_straight_mask: i32,
+    pub pointer_clone_source_mask: i32,
+    pub pointer_decal_scale_mask: i32,
+    pub pointer_decal_rotate_mask: i32,
+    /// Painel do workspace Animate (cap. 45 F2).
+    pub animate: crate::animate::AnimateViewModel,
+}
+
+fn pointer_modifier_mask(mods: petunia_config::keybinds::Mods2) -> i32 {
+    (if mods.ctrl { 1 } else { 0 })
+        | (if mods.shift { 2 } else { 0 })
+        | (if mods.alt { 4 } else { 0 })
+}
+
+impl ShellViewModel {
+    pub fn from_state(state: &AppState) -> Self {
+        let active_id = state.project.active().map(|a| a.id);
+        let scene_items: Vec<SceneItemModel> = state
+            .project
+            .assets
+            .iter()
+            .map(|asset| SceneItemModel {
+                id: asset.id.to_string(),
+                name: asset.name.clone(),
+                visible: asset.visible,
+                locked: asset.locked,
+                selected: state.session.selection.assets.contains(&asset.id)
+                    || active_id == Some(asset.id),
+                active: active_id == Some(asset.id),
+                verts: asset.mesh.verts.len(),
+                tris: asset.mesh.tri_count(),
+                has_custom_color: asset.selection_overlay_color.is_some(),
+                custom_color_rgb: asset
+                    .selection_overlay_color
+                    .unwrap_or(state.ui.selection_rgb),
+            })
+            .collect();
+
+        let (active_object_title, active_object_details, active_material_name) =
+            if let Some(active_asset) = state.project.active() {
+                let title = active_asset.name.clone();
+                let mut details = format!(
+                    "Vertices: {}  ·  Faces: {}",
+                    active_asset.mesh.verts.len(),
+                    active_asset.mesh.faces.len()
+                );
+                // Segunda linha só com seleção real: o inspector mostra o
+                // que as operações vão atingir, como o Object Info do Blender.
+                let summary = format_selection_summary(state);
+                if summary != "No selection" {
+                    details.push_str(&format!("\n{summary}"));
+                }
+                let mat = active_asset
+                    .material(&state.project.project)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| "Default Material".to_string());
+                (title, details, mat)
+            } else {
+                (
+                    "No Object Selected".to_string(),
+                    "Vertices: 0  ·  Faces: 0".to_string(),
+                    "None".to_string(),
+                )
+            };
+
+        let scene_stats = format!(
+            "{} tris  ·  {} verts",
+            state.scene_tris(),
+            state.scene_verts()
+        );
+
+        let uv_stats = match petunia_module_uv::UvModule::diagnostics(state) {
+            Some(diagnostics) => format!(
+                "Provider: xatlas-rs-v2 (generic fallback)\nIslands: {}\nOverlaps: {}\nZero-area faces: {}\nOut of range: {}\nStretch: mean {:.1}% / max {:.1}%",
+                diagnostics.island_count,
+                diagnostics.overlapping_islands,
+                diagnostics.zero_area_faces,
+                diagnostics.out_of_range_corners,
+                diagnostics.mean_stretch * 100.0,
+                diagnostics.max_stretch * 100.0,
+            ),
+            None => "No active mesh".to_string(),
+        };
+
+        let active_tool = if state.session.tools.active_tool.is_empty() {
+            "select".to_string()
+        } else {
+            state.session.tools.active_tool.clone()
+        };
+
+        let status_message = if state.ui.status.is_empty() {
+            "Ready".to_string()
+        } else {
+            state.ui.status.clone()
+        };
+
+        let status_severity = classify_status(&status_message);
+
+        let creation_active = state.primitive_session_valid();
+        let active_desc = if creation_active {
+            state
+                .session
+                .primitive_session
+                .as_ref()
+                .map(|s| s.descriptor)
+        } else {
+            state.active_primitive_descriptor()
+        };
+        let active_asset_is_parametric = active_desc.is_some();
+
+        let (
+            primitive_active,
+            primitive_kind,
+            primitive_title,
+            primitive_radius,
+            primitive_radius_b,
+            primitive_height,
+            primitive_depth,
+            primitive_width,
+            primitive_sides,
+            primitive_rings,
+            primitive_subdiv,
+            primitive_cap_top,
+            primitive_cap_bottom,
+            primitive_fill_disc,
+        ) = if let Some(descriptor) = active_desc {
+            use petunia_core::PrimitiveDescriptor::*;
+            use petunia_core::PrimitiveDescriptorExt;
+            let title = if creation_active {
+                format!("Add {}", descriptor.kind().default_name())
+            } else {
+                format!("Primitive: {}", descriptor.kind().default_name())
+            };
+            let kind_str = descriptor.kind_name().to_string();
+            match &descriptor {
+                Box {
+                    width,
+                    height,
+                    depth,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    0.0,
+                    0.0,
+                    *height,
+                    *depth,
+                    *width,
+                    0,
+                    0,
+                    0,
+                    false,
+                    false,
+                    false,
+                ),
+                Plane { width, height } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    0.0,
+                    0.0,
+                    *height,
+                    0.0,
+                    *width,
+                    0,
+                    0,
+                    0,
+                    false,
+                    false,
+                    false,
+                ),
+                Wedge {
+                    width,
+                    height,
+                    depth,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    0.0,
+                    0.0,
+                    *height,
+                    *depth,
+                    *width,
+                    0,
+                    0,
+                    0,
+                    false,
+                    false,
+                    false,
+                ),
+                Cylinder {
+                    radius,
+                    height,
+                    sides,
+                    cap_top,
+                    cap_bottom,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *radius,
+                    0.0,
+                    *height,
+                    0.0,
+                    0.0,
+                    *sides as i32,
+                    0,
+                    0,
+                    *cap_top,
+                    *cap_bottom,
+                    false,
+                ),
+                Cone {
+                    bottom_radius,
+                    top_radius,
+                    height,
+                    sides,
+                    cap_bottom,
+                    cap_top,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *bottom_radius,
+                    *top_radius,
+                    *height,
+                    0.0,
+                    0.0,
+                    *sides as i32,
+                    0,
+                    0,
+                    *cap_top,
+                    *cap_bottom,
+                    false,
+                ),
+                Circle {
+                    radius,
+                    vertices,
+                    fill,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *radius,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    *vertices as i32,
+                    0,
+                    0,
+                    false,
+                    false,
+                    *fill == petunia_core::CircleFill::Disc,
+                ),
+                Torus {
+                    major_radius,
+                    minor_radius,
+                    major_segments,
+                    minor_segments,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *major_radius,
+                    *minor_radius,
+                    0.0,
+                    0.0,
+                    0.0,
+                    *major_segments as i32,
+                    *minor_segments as i32,
+                    0,
+                    false,
+                    false,
+                    false,
+                ),
+                LowSphere {
+                    radius,
+                    segments,
+                    rings,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *radius,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    *segments as i32,
+                    *rings as i32,
+                    0,
+                    false,
+                    false,
+                    false,
+                ),
+                Icosphere { radius, subdiv } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *radius,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0,
+                    0,
+                    *subdiv as i32,
+                    false,
+                    false,
+                    false,
+                ),
+                Capsule {
+                    radius,
+                    height,
+                    radial_segments,
+                    cap_segments,
+                } => (
+                    creation_active,
+                    kind_str,
+                    title,
+                    *radius,
+                    0.0,
+                    *height,
+                    0.0,
+                    0.0,
+                    *radial_segments as i32,
+                    *cap_segments as i32,
+                    0,
+                    false,
+                    false,
+                    false,
+                ),
+            }
+        } else {
+            (
+                false,
+                String::new(),
+                String::new(),
+                1.0,
+                1.0,
+                2.0,
+                1.0,
+                1.0,
+                8,
+                6,
+                1,
+                true,
+                true,
+                true,
+            )
+        };
+
+        let canonical_slots = [
+            (petunia_core::RefAxis::Front, "+Z", "Front"),
+            (petunia_core::RefAxis::Back, "-Z", "Back"),
+            (petunia_core::RefAxis::Left, "-X", "Left"),
+            (petunia_core::RefAxis::Right, "+X", "Right"),
+            (petunia_core::RefAxis::Top, "+Y", "Top"),
+            (petunia_core::RefAxis::Bottom, "-Y", "Bottom"),
+        ];
+
+        let reference_slots = canonical_slots
+            .iter()
+            .map(|(axis, tag, name)| {
+                let matching = state.project.refs.iter().find(|r| {
+                    r.axis == *axis
+                        || (*axis == petunia_core::RefAxis::Right
+                            && r.axis == petunia_core::RefAxis::Side)
+                });
+                if let Some(r) = matching {
+                    ReferenceSlotViewModel {
+                        axis: format!("{axis:?}").to_lowercase(),
+                        axis_tag: tag.to_string(),
+                        title: format!("{tag} · {name}"),
+                        has_image: true,
+                        image_name: r.name.clone(),
+                        dimensions: format!("{}×{}px", r.width, r.height),
+                        visible: r.visible,
+                        locked: r.locked,
+                        opacity: r.opacity,
+                        size: r.size,
+                        offset: r.offset,
+                        rotation: r.rotation,
+                        fine_open: false,
+                        thumbnail: None,
+                    }
+                } else {
+                    ReferenceSlotViewModel {
+                        axis: format!("{axis:?}").to_lowercase(),
+                        axis_tag: tag.to_string(),
+                        title: format!("{tag} · {name}"),
+                        has_image: false,
+                        image_name: String::new(),
+                        dimensions: String::new(),
+                        visible: true,
+                        locked: false,
+                        opacity: 0.6,
+                        size: 4.0,
+                        offset: -3.0,
+                        rotation: 0.0,
+                        fine_open: false,
+                        thumbnail: None,
+                    }
+                }
+            })
+            .collect();
+
+        Self {
+            workspace: state.workspace,
+            selection_domain: state.selection_domain(),
+            reference_manager_open: false,
+            reference_slots,
+            reference_total_count: state.project.refs.len() as i32,
+            inspector_visible: true,
+            planar_navigation: false,
+            shortcuts: ShortcutsModel::from_keybinds(&state.ui.keybinds),
+            saved: !state.is_document_dirty(),
+            can_undo: state.project.undo.can_undo(),
+            can_redo: state.project.undo.can_redo(),
+            active_tool,
+            paint_color: state.paint_color,
+            brush_size: state.session.tools.paint_radius,
+            brush_opacity: state.session.tools.paint_strength,
+            brush_hardness: state.session.tools.brush_hardness,
+            paint_symmetry_x: state.session.tools.paint_symmetry_x,
+            paint_symmetry_y: state.session.tools.paint_symmetry_y,
+            paint_symmetry_z: state.session.tools.paint_symmetry_z,
+            paint_target_vertex: false,
+            paint_mask_selection: state.session.tools.paint_isolate_selection,
+            isolate_active: state.session.isolate_active,
+            status_message,
+            status_severity,
+            selection_summary: format_selection_summary(state),
+            position: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
+            cursor_3d: state.session.cursor_3d,
+            scene_items,
+            parts_items: Vec::new(),
+            parts_query: String::new(),
+            parts_selected_only: false,
+            parts_sort_by_name: false,
+            parts_row_height: 28.0,
+            inspector_pane_layout: crate::inspector_layout::InspectorLayoutMemory::default()
+                .get(state.workspace),
+            prefab_items: Vec::new(),
+            asset_only_favorites: false,
+            split_enabled: false,
+            paint_pip: false,
+            split_preset: String::new(),
+            asset_query: String::new(),
+            asset_sort_by_name: false,
+            asset_thumbnail_size: state.ui.asset_thumbnail_size,
+            active_object_title,
+            active_object_details,
+            active_material_name,
+            material_slots: state
+                .project
+                .project
+                .materials
+                .iter()
+                .map(|m| m.name.clone())
+                .collect(),
+            active_material_slot: 0,
+            scene_stats,
+            uv_stats,
+            current_theme: state.ui.active_theme_id.clone(),
+            icon_theme: if state.ui.active_icon_pack_id.contains("filled") {
+                "filled".to_string()
+            } else {
+                "outline".to_string()
+            },
+            is_orthographic: state.session.camera.proj == petunia_core::Projection::Ortho,
+            is_wireframe: state.session.show_wireframe_overlay,
+            shading_mode: state.shading.id().to_string(),
+            xray_opacity: state.session.xray_opacity,
+            selection_rgb: state.ui.selection_rgb,
+            active_selection_rgb: state
+                .project
+                .active()
+                .and_then(|a| a.effective_selection_overlay_color())
+                .unwrap_or(state.ui.selection_rgb),
+            selection_thickness: state.ui.selection_thickness,
+            selection_color_hex: format!(
+                "#{:02X}{:02X}{:02X}",
+                state.ui.selection_rgb[0], state.ui.selection_rgb[1], state.ui.selection_rgb[2]
+            ),
+            show_xray: state.session.show_xray,
+            show_face_orientation: state.session.show_face_orientation,
+            show_uv_checker: state.session.show_uv_checker,
+            stencil_image: None,
+            draw_extension_values: [0.1, 1.0, 0.0, 6.0, 0.01],
+            export_padding: 2.0,
+            trace_threshold: 128.0,
+            proportional_editing: state.session.proportional_editing,
+            proportional_radius: state.session.proportional_settings.radius,
+            proportional_falloff: format!("{:?}", state.session.proportional_settings.falloff)
+                .to_lowercase(),
+            snap_enabled: state.session.snap_enabled,
+            snap_target: format!("{:?}", state.session.snap_settings.target).to_lowercase(),
+            shading_popover_open: false,
+            operation_hud_active: false,
+            operation_hud_title: String::new(),
+            operation_hud_lines: Vec::new(),
+            operation_hud_hint: String::new(),
+            operation_hud_subject: String::new(),
+            context_hint: String::new(),
+            hud_pill_visible: false,
+            hud_pill_x: 0.0,
+            hud_pill_y: 0.0,
+            hud_pill_title: String::new(),
+            hud_pill_value: String::new(),
+            hud_pill_badge: String::new(),
+            hud_pill_hint: String::new(),
+            axis_guide_visible: false,
+            axis_guide_commands: String::new(),
+            axis_guide_color: [229, 77, 66],
+            axis_guide_label: String::new(),
+            axis_guide_label_x: 0.0,
+            axis_guide_label_y: 0.0,
+            world_axis_labels: Vec::new(),
+            dimension_visible: false,
+            dimension_commands: String::new(),
+            dimension_text: String::new(),
+            dimension_x: 0.0,
+            dimension_y: 0.0,
+            measure_visible: false,
+            measure_commands: String::new(),
+            measure_text: String::new(),
+            measure_x: 0.0,
+            measure_y: 0.0,
+            measure_distance: 0.0,
+            measure_dx: 0.0,
+            measure_dy: 0.0,
+            measure_dz: 0.0,
+            measure_angle_deg: 0.0,
+            measure_hud_text: String::new(),
+            measure_tags: Vec::new(),
+            micro_inspector_open: false,
+            micro_inspector_x: 0.0,
+            micro_inspector_y: 0.0,
+            snap_marker_visible: false,
+            snap_marker_x: 0.0,
+            snap_marker_y: 0.0,
+            snap_marker_label: String::new(),
+            snap_marker_round: false,
+            operation_preview_commands: String::new(),
+            drag_link_commands: String::new(),
+            proportional_circle_commands: String::new(),
+            hover_label: String::new(),
+            transform_instant_active: false,
+            gizmo_hover_axis: -1,
+            gizmo_active_axis: -1,
+            gizmo_constraint_axes: [-1, -1],
+            gizmo_has_hover: false,
+            gizmo_center_active: false,
+            gizmo_center_hover: false,
+            asset_library_visible: false,
+            gizmo: GizmoModel::default(),
+            selection_overlay: SelectionOverlayModel::default(),
+            add_menu_open: false,
+            inspector_width: state.ui.right_width,
+            asset_library_height: state.ui.shell_asset_library_height,
+            rename_active: false,
+            rename_value: String::new(),
+            context_menu_open: false,
+            context_menu_x: 0.0,
+            context_menu_y: 0.0,
+            context_menu_title: String::new(),
+            context_menu_mode: String::new(),
+            context_menu_visible: true,
+            context_menu_locked: false,
+            context_menu_isolated: false,
+            context_menu_can_move_up: false,
+            context_menu_can_move_down: false,
+            boolean_operand_name: String::new(),
+            boolean_ready: false,
+            boolean_keep_parts: false,
+            boolean_cleanup: true,
+            primitive_active,
+            active_asset_is_parametric,
+            primitive_kind,
+            primitive_title,
+            primitive_radius,
+            primitive_radius_b,
+            primitive_height,
+            primitive_depth,
+            primitive_width,
+            primitive_sides,
+            primitive_rings,
+            primitive_subdiv,
+            primitive_cap_top,
+            primitive_cap_bottom,
+            primitive_fill_disc,
+            label_parametric_primitive: String::new(),
+            label_freeze_primitive: String::new(),
+            label_freeze_primitive_hint: String::new(),
+            slice_preview_visible: false,
+            slice_preview_commands: String::new(),
+            slice_trim: false,
+            bevel_clamp_overlap: state.tools.bevel_clamp_overlap,
+            bevel_affect_vertices: state.tools.bevel_affect_vertices,
+            protractor_visible: false,
+            protractor_wedge_commands: String::new(),
+            protractor_ticks_commands: String::new(),
+            menu_open: String::new(),
+            menu_file_label: String::new(),
+            menu_edit_label: String::new(),
+            menu_view_label: String::new(),
+            menu_window_label: String::new(),
+            menu_file_items: Vec::new(),
+            menu_edit_items: Vec::new(),
+            menu_view_items: Vec::new(),
+            menu_window_items: Vec::new(),
+            label_parts: String::new(),
+            label_project_asset_library: String::new(),
+            label_save_active_as_asset: String::new(),
+            label_status_hint: String::new(),
+            label_unwrap_mesh: String::new(),
+            label_pack_islands: String::new(),
+            label_active_brush_color: String::new(),
+            label_albedo_base_color: String::new(),
+            label_theme: String::new(),
+            label_place_in_scene: String::new(),
+            label_vertical_tool_drag: String::new(),
+            label_invert_vertical_drag: String::new(),
+            label_colorblind_axes: String::new(),
+            label_reduced_motion: String::new(),
+            label_double_tap_interval: String::new(),
+            label_multiselection_measure_tag: String::new(),
+            label_search_assets: String::new(),
+            label_search_parts: String::new(),
+            label_inspector: String::new(),
+            label_expand_inspector: String::new(),
+            label_collapse_inspector: String::new(),
+            label_resize_panel_width: String::new(),
+            label_section_dock: String::new(),
+            label_section_drag: String::new(),
+            label_section_pin_open: String::new(),
+            label_section_pin_asset: String::new(),
+            label_section_unpin_asset: String::new(),
+            label_object_name: String::new(),
+            label_object_visibility: String::new(),
+            label_object_lock: String::new(),
+            label_object_no_selection: String::new(),
+            label_stats_faces: String::new(),
+            label_stats_verts: String::new(),
+            label_stats_tris: String::new(),
+            label_stats_selection: String::new(),
+            label_tool_options: String::new(),
+            label_tool_options_expand: String::new(),
+            label_tool_options_collapse: String::new(),
+            label_quick_actions: String::new(),
+            label_quick_action_customize: String::new(),
+            label_quick_action_add: String::new(),
+            label_quick_action_remove: String::new(),
+            label_quick_action_reset: String::new(),
+            label_quick_action_done: String::new(),
+            label_action_subdivide: String::new(),
+            label_action_fuse: String::new(),
+            label_action_cut: String::new(),
+            label_action_intersect: String::new(),
+            label_action_join: String::new(),
+            label_action_merge: String::new(),
+            label_action_slice: String::new(),
+            label_action_loop_cut: String::new(),
+            label_material_base_color: String::new(),
+            label_material_profile: String::new(),
+            label_material_roughness: String::new(),
+            label_material_metallic: String::new(),
+            label_material_normal_scale: String::new(),
+            label_material_advanced: String::new(),
+            label_material_assign: String::new(),
+            label_material_new: String::new(),
+            label_material_duplicate: String::new(),
+            label_material_remove: String::new(),
+            label_material_no_material: String::new(),
+            label_material_no_selection: String::new(),
+            label_material_emission_strength: String::new(),
+            label_material_alpha_cutoff: String::new(),
+            label_material_texture_albedo: String::new(),
+            label_material_no_texture: String::new(),
+            label_material_create_texture: String::new(),
+            label_material_clear_texture: String::new(),
+            label_material_profile_pbr: String::new(),
+            label_material_profile_unlit: String::new(),
+            label_material_profile_toon: String::new(),
+            label_material_profile_glass: String::new(),
+            label_material_profile_emissive: String::new(),
+            label_material_alpha_opaque: String::new(),
+            label_material_alpha_mask: String::new(),
+            label_material_alpha_blend: String::new(),
+            label_modifier_mirror: String::new(),
+            label_modifier_symmetry: String::new(),
+            label_modifiers_empty: String::new(),
+            label_modifier_apply: String::new(),
+            label_modifier_axis: String::new(),
+            label_modifier_add_mirror: String::new(),
+            label_modifier_add_symmetry: String::new(),
+            label_modifier_remove: String::new(),
+            label_modifier_move_up: String::new(),
+            label_modifier_move_down: String::new(),
+            label_modifier_direction: String::new(),
+            label_modifier_positive_to_negative: String::new(),
+            label_modifier_negative_to_positive: String::new(),
+            label_tab_parts: String::new(),
+            label_tab_transform: String::new(),
+            label_tab_material: String::new(),
+            label_tab_object: String::new(),
+            label_tab_modifiers: String::new(),
+            label_numeric_field_hint: String::new(),
+            label_model_select: String::new(),
+            label_model_position: String::new(),
+            label_model_rotate: String::new(),
+            label_model_scale: String::new(),
+            label_model_transform: String::new(),
+            label_model_lasso: String::new(),
+            label_model_loop_cut: String::new(),
+            hint_model_loop_cut: String::new(),
+            label_model_slice: String::new(),
+            hint_model_slice: String::new(),
+            label_model_push_pull: String::new(),
+            hint_model_push_pull: String::new(),
+            label_model_profile: String::new(),
+            hint_model_profile: String::new(),
+            label_model_pivot: String::new(),
+            hint_model_pivot: String::new(),
+            label_profile_depth: String::new(),
+            label_profile_points: String::new(),
+            label_profile_close: String::new(),
+            label_view_gizmo: String::new(),
+            label_view_gizmo_hint: String::new(),
+            label_profile_plane: String::new(),
+            label_profile_plane_auto: String::new(),
+            label_profile_plane_ground: String::new(),
+            label_profile_plane_face: String::new(),
+            label_profile_plane_view: String::new(),
+            label_profile_look_at_plane: String::new(),
+            profile_workplane_locked: false,
+            region_hover_commands: String::new(),
+            profile_selection_commands: String::new(),
+            brush_panel: Default::default(),
+            keymap_revision: -1,
+            keymap_snapshot: std::sync::Arc::default(),
+            keymap_capture_action: String::new(),
+            region_shapes_commands: String::new(),
+            profile_outline_commands: String::new(),
+            poly_pen_preview_commands: String::new(),
+            label_poly_pen: String::new(),
+            label_poly_pen_hint: String::new(),
+            poly_pen_mode: String::new(),
+            label_poly_pen_mode: String::new(),
+            label_poly_pen_mode_auto: String::new(),
+            label_poly_pen_mode_points: String::new(),
+            label_poly_pen_mode_edges: String::new(),
+            label_poly_pen_mode_polygons: String::new(),
+            label_poly_pen_mode_hint: String::new(),
+            modeling_mode: "POLY".to_string(),
+            label_workspace_draw_title: String::new(),
+            label_workspace_draw_description: String::new(),
+            label_workspace_poly_title: String::new(),
+            label_workspace_poly_description: String::new(),
+            label_profile_generate: String::new(),
+            label_profile_revolve: String::new(),
+            label_profile_sweep: String::new(),
+            label_profile_cuts: String::new(),
+            label_profile_presets: String::new(),
+            label_profile_add_rect: String::new(),
+            label_profile_add_circle: String::new(),
+            label_profile_canvas_hint: String::new(),
+            label_profile_wall_thickness: String::new(),
+            label_profile_smooth_curves: String::new(),
+            label_profile_sharp_corners: String::new(),
+            label_profile_smoothness: String::new(),
+            hint_model_select: String::new(),
+            hint_model_position: String::new(),
+            hint_model_rotate: String::new(),
+            hint_model_scale: String::new(),
+            hint_model_transform: String::new(),
+            hint_model_lasso: String::new(),
+            label_hide_part: String::new(),
+            label_show_part: String::new(),
+            label_lock_part: String::new(),
+            label_unlock_part: String::new(),
+            label_selected_parts_only: String::new(),
+            label_sort_parts: String::new(),
+            label_parts_row_size: String::new(),
+            label_sort_assets: String::new(),
+            label_thumbnail_size: String::new(),
+            label_selection_color: String::new(),
+            label_highlight_thickness: String::new(),
+            label_view_wireframe: String::new(),
+            label_view_wireframe_hint: String::new(),
+            label_view_solid: String::new(),
+            label_view_solid_hint: String::new(),
+            label_view_material: String::new(),
+            label_view_material_hint: String::new(),
+            label_view_lit: String::new(),
+            label_view_lit_hint: String::new(),
+            label_more_model_tools: String::new(),
+            label_xray_opacity: String::new(),
+            label_wire_overlay: String::new(),
+            label_wire_overlay_hint: String::new(),
+            recovery_open: false,
+            recovery_title: String::new(),
+            recovery_body: String::new(),
+            recovery_detail: String::new(),
+            recovery_recover: String::new(),
+            recovery_keep: String::new(),
+            recovery_discard: String::new(),
+            label_asset_library: String::new(),
+            label_preferences: String::new(),
+            shell_info: String::new(),
+            label_apply: String::new(),
+            label_cancel: String::new(),
+            label_delete: String::new(),
+            label_duplicate: String::new(),
+            themes: Vec::new(),
+            uv_editor: UvEditorModel::default(),
+            paint_layers: Vec::new(),
+            paint_layer_count: String::new(),
+            paint_effect_kind: String::new(),
+            paint_effect_params: Vec::new(),
+            paint_canvas_size: String::new(),
+            paint_canvas_revision: 0,
+            paint_pixel_grid: true,
+            paint_canvas_zoom: 1,
+            paint_canvas_grid_commands: String::new(),
+            paint_fill_scope: "ConnectedPixels".to_string(),
+            paint_projection: "Surface".to_string(),
+            paint_lock: "None".to_string(),
+            active_layer_is_decal: false,
+            decal_surface: false,
+            paint_texture_side: 0,
+            decal_center_u: 0.5,
+            decal_center_v: 0.5,
+            decal_scale_u: 0.25,
+            decal_scale_v: 0.25,
+            decal_rotation_deg: 0.0,
+            label_decal_transform: String::new(),
+            label_decal_position: String::new(),
+            label_decal_scale: String::new(),
+            label_decal_width: String::new(),
+            label_decal_rotation: String::new(),
+            label_decal_bake: String::new(),
+            label_decal_hint: String::new(),
+            decal_preview_commands: String::new(),
+            decal_variant_names: Vec::new(),
+            decal_variant_index: 0,
+            decal_frame: 0,
+            decal_track_length: 24,
+            decal_track_fps: 12.0,
+            decal_keys_text: String::new(),
+            decal_has_keys: false,
+            decal_frame_keyed: false,
+            decal_playing: false,
+            loop_cut_active: false,
+            loop_cut_slide: 0.0,
+            loop_cut_cuts: 1,
+            loop_cut_preview_commands: String::new(),
+            loop_cut_armed: false,
+            loop_cut_balanced: false,
+            profile_active: false,
+            pivot_id: pivot_id(state.session.pivot_point).to_string(),
+            pivot_label: state.t_id(match state.session.pivot_point {
+                PivotPoint::MedianPoint => petunia_config::text_id::PIVOT_MEDIAN,
+                PivotPoint::BoundingBoxCenter => petunia_config::text_id::PIVOT_BOUNDS,
+                PivotPoint::Cursor3D => petunia_config::text_id::PIVOT_CURSOR,
+                PivotPoint::IndividualOrigins => petunia_config::text_id::PIVOT_INDIVIDUAL,
+            }),
+            pivot_menu_open: false,
+            pivot_median_label: state.t_id(petunia_config::text_id::PIVOT_MEDIAN),
+            pivot_bounds_label: state.t_id(petunia_config::text_id::PIVOT_BOUNDS),
+            pivot_cursor_label: state.t_id(petunia_config::text_id::PIVOT_CURSOR),
+            pivot_individual_label: state.t_id(petunia_config::text_id::PIVOT_INDIVIDUAL),
+            edit_pivot: state.session.edit_pivot,
+            label_origin_to_geometry: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_GEOMETRY),
+            label_origin_to_bottom: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_BOTTOM),
+            label_origin_to_cursor: state.t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_CURSOR),
+            label_origin_to_selection: state
+                .t_id(petunia_config::text_id::PIVOT_ORIGIN_TO_SELECTION),
+            label_geometry_to_origin: state.t_id(petunia_config::text_id::PIVOT_GEOMETRY_TO_ORIGIN),
+            label_edit_pivot: state.t_id(petunia_config::text_id::PIVOT_EDIT_PIVOT),
+            hint_edit_pivot: state.t_id(petunia_config::text_id::PIVOT_EDIT_PIVOT_HINT),
+            profile_point_count: state.profile.points.len() as i32,
+            profile_closed: state.profile.closed,
+            profile_preview_commands: String::new(),
+            profile_parametric: false,
+            profile_ellipse: false,
+            profile_width: 0.0,
+            profile_height: 0.0,
+            profile_segments: 16,
+            profile_depth: state.profile.depth,
+            profile_wall_thickness: state.profile.wall_thickness,
+            profile_smoothness: state.profile.curve_smoothness,
+            profile_has_curves: state
+                .profile
+                .nodes
+                .iter()
+                .any(|n| n.handle_in.is_some() || n.handle_out.is_some()),
+            profile_workplane: petunia_module_model::profile_workplane_label(state).to_string(),
+            profile_volume_mode: "none".to_string(),
+            profile_revolve_angle: if state.profile.revolve_angle <= 0.0 {
+                360.0
+            } else {
+                state.profile.revolve_angle
+            },
+            paint_show_uv_overlay: false,
+            uv_show_texture: true,
+            tool_activation: "drag".to_string(),
+            keyboard_tool_modal_active: false,
+            is_instant_tool_mode: false,
+            invert_vertical_drag: state.ui.invert_vertical_drag,
+            colorblind_axes: state.ui.colorblind_axes,
+            reduced_motion: state.ui.reduced_motion,
+            double_tap_interval_ms: 350,
+            tool_grammar_active: false,
+            tool_gesture_latched: false,
+            last_operation_active: false,
+            last_operation_title: String::new(),
+            last_operation_value: 0.0,
+            last_operation_step: 0.1,
+            last_operation_unit: String::new(),
+            label_last_operation: String::new(),
+            label_last_operation_hint: String::new(),
+            drag_threshold_px: 4.0,
+            snap_radius_px: 12.0,
+            label_snap_radius: String::new(),
+            click_move_click: false,
+            show_tool_labels: false,
+            label_show_tool_labels: String::new(),
+            label_show_tool_labels_hint: String::new(),
+            accent_rgb: None,
+            home_open: false,
+            show_home_on_start: true,
+            recent_projects: Vec::new(),
+            home_texts: Default::default(),
+            accent_color_hex: String::new(),
+            label_accent_color: String::new(),
+            label_accent_color_hint: String::new(),
+            workplane_prefer_ground: false,
+            studio_light_follows_camera: true,
+            viewport_matcap: false,
+            viewport_ambient_occlusion: true,
+            label_viewport_matcap: String::new(),
+            label_viewport_matcap_hint: String::new(),
+            label_viewport_ambient_occlusion: String::new(),
+            label_viewport_ambient_occlusion_hint: String::new(),
+            gizmo_gpu: false,
+            label_studio_light_follows_camera: String::new(),
+            label_studio_light_follows_camera_hint: String::new(),
+            label_workplane_prefer_ground: String::new(),
+            label_workplane_prefer_ground_hint: String::new(),
+            label_drag_threshold: String::new(),
+            label_click_move_click: String::new(),
+            label_click_move_click_hint: String::new(),
+            multiselection_measure_tag: state.ui.multiselection_measure_tag,
+            active_language: state.ui.i18n.lang.clone(),
+            ui_scale: 1.0,
+            tool_modal_active: false,
+            tool_modal_id: String::new(),
+            tool_modal_title: String::new(),
+            tool_modal_label: String::new(),
+            tool_modal_value: 0.0,
+            tool_modal_step: 0.1,
+            tool_modal_min: 0.0,
+            tool_modal_max: 0.0,
+            tool_options_active: false,
+            tool_options_title: String::new(),
+            tool_options_hint: String::new(),
+            tool_options_accessible_label: String::new(),
+            object_has_selection: false,
+            object_id: String::new(),
+            object_name: String::new(),
+            object_visible: true,
+            object_locked: false,
+            object_verts: 0,
+            object_faces: 0,
+            object_tris: 0,
+            object_selection: String::new(),
+            object_material: String::new(),
+            object_modifier_count: 0,
+            material_has_selection: false,
+            material_id: String::new(),
+            material_name: String::new(),
+            material_profile: String::new(),
+            material_profile_label: String::new(),
+            material_profile_ids: Vec::new(),
+            material_profile_labels: Vec::new(),
+            material_base_color: [0.75, 0.75, 0.78],
+            material_palette: Vec::new(),
+            material_roughness: 0.5,
+            material_metallic: 0.0,
+            material_normal_scale: 1.0,
+            material_emission: [0.0, 0.0, 0.0],
+            material_emission_strength: 0.0,
+            material_alpha_mode: String::new(),
+            material_alpha_label: String::new(),
+            material_alpha_ids: Vec::new(),
+            material_alpha_labels: Vec::new(),
+            material_alpha_cutoff: 0.5,
+            material_has_albedo: false,
+            material_albedo_label: String::new(),
+            quick_actions: Vec::new(),
+            quick_action_candidates: Vec::new(),
+            modifier_rows: Vec::new(),
+            section_states: Vec::new(),
+            settings_visible: false,
+            command_search_visible: false,
+            overlay_top_id: String::new(),
+            scene_drawer_visible: false,
+            active_keymap_id: state.ui.active_keymap_id.clone(),
+            pointer_precision_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PRECISION),
+            ),
+            pointer_snap_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SNAP),
+            ),
+            pointer_extend_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_EXTEND),
+            ),
+            pointer_subtract_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_SUBTRACT),
+            ),
+            pointer_pan_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PAN),
+            ),
+            pointer_cursor_place_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_CURSOR_PLACE),
+            ),
+            pointer_adjust_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ADJUST),
+            ),
+            pointer_loop_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_LOOP),
+            ),
+            pointer_orbit_left_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_ORBIT_LEFT),
+            ),
+            pointer_paint_straight_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_PAINT_STRAIGHT),
+            ),
+            pointer_clone_source_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_CLONE_SOURCE),
+            ),
+            pointer_decal_scale_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_DECAL_SCALE),
+            ),
+            pointer_decal_rotate_mask: pointer_modifier_mask(
+                state
+                    .ui
+                    .keybinds
+                    .pointer_modifier(petunia_config::keybinds::POINTER_DECAL_ROTATE),
+            ),
+            animate: crate::animate::AnimateViewModel::default(),
+        }
+    }
+
+    pub fn workspace_label(&self) -> &'static str {
+        match self.workspace {
+            Workspace::Model => "MODEL",
+            Workspace::Paint => "PAINT",
+            Workspace::Uv => "UV",
+            #[cfg(feature = "animation-workspace")]
+            Workspace::Animate => "ANIMATE",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UvEditorModel {
+    /// SVG-like Path commands for UV mesh wireframe / Comandos SVG-like para malha de arame UV
+    pub layout_commands: String,
+    /// SVG-like Path commands for highlighted seam edges / Comandos SVG-like para arestas de costura destacadas
+    pub seam_commands: String,
+    /// SVG-like Path commands for selected UV faces / Comandos SVG-like para faces UV selecionadas
+    pub selected_commands: String,
+    /// SVG-like Path commands for pinned UV vertices / Comandos SVG-like para vértices UV fixados
+    pub pinned_commands: String,
+    pub pinned_count: usize,
+    pub island_count: usize,
+    pub face_count: usize,
+    pub selected_face: i32,
+    /// Faces totalmente selecionadas em `uv_selection` (seleção UV; com Sync desligado, independente da 3D).
+    pub uv_selected_count: usize,
+    /// `true` quando a malha tem mais faces do que o editor desenha.
+    pub truncated: bool,
+}
+
+/// Feedback visual da seleção na viewport, projetado para `Path` do Slint.
+///
+/// O shell desenha a silhueta do objeto por cima da imagem do backend como
+/// complemento da camada de seleção 3D: sem isso o usuário clica e nada
+/// muda na tela. Como no Blender, ativo e selecionado são canais distintos:
+/// no máximo um ativo (amarelo) contra N selecionados (laranja).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SelectionOverlayModel {
+    pub visible: bool,
+    /// Arestas do contorno (caixa do objeto, arestas ou faces selecionadas).
+    pub outline_commands: String,
+    /// Silhueta do objeto ATIVO. Canal separado do selecionado para o
+    /// usuário saber qual objeto é referência das operações.
+    pub active_outline_commands: String,
+    /// Marcadores preenchidos dos vértices selecionados.
+    pub point_commands: String,
+    /// Elementos não selecionados do domínio atual, para o usuário ver o que
+    /// pode clicar. Sem isso a viewport mostra um sólido sem alvos visíveis.
+    pub unselected_outline_commands: String,
+    pub unselected_point_commands: String,
+    /// Cor semântica: seleção normal ou ativo em modo componente.
+    pub accent: bool,
+}
+
+/// Parâmetro numérico de um efeito de camada, já com rótulo e faixa.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaintEffectParam {
+    pub key: String,
+    pub label: String,
+    pub value: f32,
+    pub min: f32,
+    pub max: f32,
+}
+
+/// Camada de pintura publicada para o painel de camadas do shell.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaintLayerModel {
+    pub id: String,
+    pub name: String,
+    pub visible: bool,
+    pub locked: bool,
+    pub opacity: f32,
+    pub active: bool,
+    pub is_group: bool,
+    pub kind_label: String,
+    /// `raster`, `group`, `decal` ou `effect` (ícone por tipo, não pelo nome).
+    pub kind: String,
+    /// Índice de `LayerBlendMode` (Normal, Multiply, Add, Screen).
+    pub blend: i32,
+    /// Profundidade no grupo (recuo da linha).
+    pub depth: i32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThemeEntryModel {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+}
+
+/// Item de menu já traduzido para o shell.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MenuEntryModel {
+    pub id: String,
+    pub label: String,
+    pub shortcut: String,
+    /// Divisor visual entre grupos de itens (id `-`).
+    pub separator: bool,
+    pub disabled: bool,
+    pub checked: bool,
+}
+
+/// Severidade visual de uma mensagem de status.
+///
+/// O estado do domínio guarda o status como texto livre; até que cada emissor
+/// carregue a severidade explícita, a UI a infere por marcadores em `pt-BR` e
+/// `en`. Erro tem precedência sobre aviso, que tem precedência sobre sucesso.
+pub fn classify_status(message: &str) -> i32 {
+    const DANGER: [&str; 12] = [
+        "erro",
+        "error",
+        "falh",
+        "fail",
+        "inválid",
+        "invalid",
+        "não foi possível",
+        "cannot",
+        "can't",
+        "negad",
+        "denied",
+        "rejeit",
+    ];
+    const WARNING: [&str; 5] = ["aviso", "warning", "atenção", "cuidado", "truncad"];
+    const SUCCESS: [&str; 12] = [
+        "salv",
+        "saved",
+        "criad",
+        "created",
+        "aplicad",
+        "applied",
+        "exportad",
+        "exported",
+        "importad",
+        "imported",
+        "duplicad",
+        "duplicated",
+    ];
+    let m = message.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| m.contains(w));
+    if has(&DANGER) {
+        3
+    } else if has(&WARNING) {
+        2
+    } else if has(&SUCCESS) {
+        1
+    } else {
+        0
+    }
+}
+
+#[cfg(test)]
+mod status_severity_tests {
+    use super::classify_status;
+
+    #[test]
+    fn classifies_status_messages_by_severity() {
+        assert_eq!(classify_status("Ready"), 0);
+        assert_eq!(classify_status("Projeto salvo"), 1);
+        assert_eq!(classify_status("Object duplicated"), 1);
+        assert_eq!(classify_status("Aviso: malha truncada"), 2);
+        assert_eq!(classify_status("Falha ao salvar o projeto"), 3);
+        assert_eq!(classify_status("Cannot apply: invalid selection"), 3);
+    }
+}

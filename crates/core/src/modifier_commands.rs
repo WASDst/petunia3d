@@ -171,7 +171,7 @@ impl Command for ModifierCmd {
                     | ModifierOp::SetAxis { modifier, .. }
                     | ModifierOp::SetDirection { modifier, .. }
                     | ModifierOp::Apply { modifier } => *modifier,
-                    ModifierOp::Add { .. } => unreachable!("handled above"),
+                    ModifierOp::Add { .. } => return Ok(()),
                 };
                 let (a, m) = locate(document, modifier)
                     .ok_or_else(|| CommandError::StaleReference(modifier.to_string()))?;
@@ -219,7 +219,7 @@ impl Command for ModifierCmd {
                         }
                         asset.mesh = mesh.into();
                     }
-                    ModifierOp::Add { .. } => unreachable!("handled above"),
+                    ModifierOp::Add { .. } => {}
                 }
             }
         }

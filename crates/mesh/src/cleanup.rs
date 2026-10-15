@@ -248,11 +248,8 @@ impl Mesh {
                     .push((fi, k));
             }
         }
-        let mut candidates: Vec<(u32, u32)> = directed
-            .keys()
-            .filter(|&&(u, v)| u < v)
-            .copied()
-            .collect();
+        let mut candidates: Vec<(u32, u32)> =
+            directed.keys().filter(|&&(u, v)| u < v).copied().collect();
         candidates.sort_unstable();
 
         let mut touched: HashSet<usize> = HashSet::new();
@@ -411,7 +408,12 @@ mod tests {
 
     fn quad_split_in_two_triangles() -> Mesh {
         let mut mesh = Mesh::default();
-        for p in [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]] {
+        for p in [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ] {
             mesh.verts.push(Vertex::new(p[0], p[1], p[2]));
         }
         let uv = |i: usize| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]][i];

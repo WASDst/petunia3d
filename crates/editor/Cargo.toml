@@ -1,0 +1,32 @@
+[package]
+name = "petunia_editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+petunia_application = { workspace = true }
+petunia_config = { workspace = true }
+petunia_core = { workspace = true }
+petunia_mesh = { workspace = true }
+petunia_project = { workspace = true }
+petunia_render = { workspace = true }
+petunia_module_paint = { path = "../module-paint" }
+petunia_module_model = { path = "../module-model" }
+petunia_module_uv = { path = "../module-uv" }
+puffin = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+glam = { workspace = true }
+glow = { workspace = true }
+rfd = "=0.17.2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[features]
+default = []
+animation-workspace = ["petunia_core/animation-workspace"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

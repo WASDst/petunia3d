@@ -1,4 +1,5 @@
 #include "petunia_uv_panel.h"
+#include "petunia_icons.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -182,7 +183,7 @@ void PetuniaUvPanel::setupUi() {
     auto *unwrapGroup = new QGroupBox(QStringLiteral("Desdobramento UV"), this);
     auto *unwrapLayout = new QVBoxLayout(unwrapGroup);
 
-    m_unwrapSmartBtn = new QPushButton(QStringLiteral("⚡ Unwrap Inteligente"), unwrapGroup);
+    m_unwrapSmartBtn = new QPushButton(PetuniaIcons::get("knife"), QStringLiteral(" Unwrap Inteligente"), unwrapGroup);
     connect(m_unwrapSmartBtn, &QPushButton::clicked, this, [this]() {
         emit unwrapRequested("smart");
         m_uvCanvas->refresh();
@@ -190,7 +191,7 @@ void PetuniaUvPanel::setupUi() {
     });
     unwrapLayout->addWidget(m_unwrapSmartBtn);
 
-    m_unwrapCubeBtn = new QPushButton(QStringLiteral("📦 Projeção Cúbica"), unwrapGroup);
+    m_unwrapCubeBtn = new QPushButton(PetuniaIcons::get("cube"), QStringLiteral(" Projeção Cúbica"), unwrapGroup);
     connect(m_unwrapCubeBtn, &QPushButton::clicked, this, [this]() {
         emit unwrapRequested("cube");
         m_uvCanvas->refresh();

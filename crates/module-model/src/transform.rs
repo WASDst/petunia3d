@@ -33,14 +33,9 @@ impl Tool for TransformTool {
 impl TransformTool {
     pub fn apply_move(state: &mut AppState) {
         let d = state.transform_delta;
-        state.checkpoint("move");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.translate_selected(d);
+        if let Err(err) = state.dispatch(&petunia_core::TranslateSelectionCmd { delta: d }) {
+            state.set_status(format!("move: {err}"));
         }
-        state.transform_delta = [0.0; 3];
-        state.set_status(format!("move {d:?}"));
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 
     pub fn apply_scale(state: &mut AppState) {

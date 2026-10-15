@@ -1,0 +1,2790 @@
+{
+  "Ferramenta": {
+    "pt-BR": "Ferramenta",
+    "en": "Tool"
+  },
+  "Ferramentas": {
+    "pt-BR": "Ferramentas",
+    "en": "Tools"
+  },
+  "Primitiva": {
+    "pt-BR": "Primitiva",
+    "en": "Primitive"
+  },
+  "Perfil": {
+    "pt-BR": "Perfil",
+    "en": "Profile"
+  },
+  "Transformação": {
+    "pt-BR": "Transformação",
+    "en": "Transform"
+  },
+  "Material": {
+    "pt-BR": "Material",
+    "en": "Material"
+  },
+  "Modificadores": {
+    "pt-BR": "Modificadores",
+    "en": "Modifiers"
+  },
+  "Booleans": {
+    "pt-BR": "Booleans",
+    "en": "Booleans"
+  },
+  "Vista": {
+    "pt-BR": "Vista",
+    "en": "View"
+  },
+  "Operações DRAW": {
+    "pt-BR": "Operações DRAW",
+    "en": "DRAW operations"
+  },
+  "Posição": {
+    "pt-BR": "Posição",
+    "en": "Position"
+  },
+  "Rotação": {
+    "pt-BR": "Rotação",
+    "en": "Rotation"
+  },
+  "Escala": {
+    "pt-BR": "Escala",
+    "en": "Scale"
+  },
+  "Medir": {
+    "pt-BR": "Medir",
+    "en": "Measure"
+  },
+  "Pincel": {
+    "pt-BR": "Pincel",
+    "en": "Brush"
+  },
+  "Selecionar": {
+    "pt-BR": "Selecionar",
+    "en": "Select"
+  },
+  "Laço": {
+    "pt-BR": "Laço",
+    "en": "Lasso"
+  },
+  "Mover": {
+    "pt-BR": "Mover",
+    "en": "Move"
+  },
+  "Rotacionar": {
+    "pt-BR": "Rotacionar",
+    "en": "Rotate"
+  },
+  "Escalar": {
+    "pt-BR": "Escalar",
+    "en": "Scale"
+  },
+  "Valor da operação": {
+    "pt-BR": "Valor da operação",
+    "en": "Operation value"
+  },
+  "Confirmar operação": {
+    "pt-BR": "Confirmar operação",
+    "en": "Confirm operation"
+  },
+  "Cancelar operação": {
+    "pt-BR": "Cancelar operação",
+    "en": "Cancel operation"
+  },
+  "Cortes": {
+    "pt-BR": "Cortes",
+    "en": "Cuts"
+  },
+  "Slide": {
+    "pt-BR": "Slide",
+    "en": "Slide"
+  },
+  "Corte balanceado": {
+    "pt-BR": "Corte balanceado",
+    "en": "Balanced cut"
+  },
+  "Confirmar Loop Cut": {
+    "pt-BR": "Confirmar Loop Cut",
+    "en": "Confirm Loop Cut"
+  },
+  "Cancelar Loop Cut": {
+    "pt-BR": "Cancelar Loop Cut",
+    "en": "Cancel Loop Cut"
+  },
+  "Trim do corte": {
+    "pt-BR": "Trim do corte",
+    "en": "Trim cut"
+  },
+  "Bevel: limitar sobreposição": {
+    "pt-BR": "Bevel: limitar sobreposição",
+    "en": "Bevel: clamp overlap"
+  },
+  "Bevel: vértices": {
+    "pt-BR": "Bevel: vértices",
+    "en": "Bevel: vertices"
+  },
+  "Confirmar corte": {
+    "pt-BR": "Confirmar corte",
+    "en": "Confirm cut"
+  },
+  "Cancelar corte": {
+    "pt-BR": "Cancelar corte",
+    "en": "Cancel cut"
+  },
+  "Confirmar faca": {
+    "pt-BR": "Confirmar faca",
+    "en": "Confirm knife"
+  },
+  "Cancelar faca": {
+    "pt-BR": "Cancelar faca",
+    "en": "Cancel knife"
+  },
+  "Confirmar primitiva": {
+    "pt-BR": "Confirmar primitiva",
+    "en": "Confirm primitive"
+  },
+  "Cancelar primitiva": {
+    "pt-BR": "Cancelar primitiva",
+    "en": "Cancel primitive"
+  },
+  "Converter em malha": {
+    "pt-BR": "Converter em malha",
+    "en": "Convert to mesh"
+  },
+  "Importar SVG": {
+    "pt-BR": "Importar SVG",
+    "en": "Import SVG"
+  },
+  "Retângulo": {
+    "pt-BR": "Retângulo",
+    "en": "Rectangle"
+  },
+  "Círculo": {
+    "pt-BR": "Círculo",
+    "en": "Circle"
+  },
+  "Fechar perfil": {
+    "pt-BR": "Fechar perfil",
+    "en": "Close profile"
+  },
+  "Plano": {
+    "pt-BR": "Plano",
+    "en": "Workplane"
+  },
+  "Olhar para o plano": {
+    "pt-BR": "Olhar para o plano",
+    "en": "Look at workplane"
+  },
+  "Largura": {
+    "pt-BR": "Largura",
+    "en": "Width"
+  },
+  "Altura": {
+    "pt-BR": "Altura",
+    "en": "Height"
+  },
+  "Segmentos": {
+    "pt-BR": "Segmentos",
+    "en": "Segments"
+  },
+  "Profundidade": {
+    "pt-BR": "Profundidade",
+    "en": "Depth"
+  },
+  "Parede": {
+    "pt-BR": "Parede",
+    "en": "Wall"
+  },
+  "Revolução": {
+    "pt-BR": "Revolução",
+    "en": "Revolve"
+  },
+  "Suavidade": {
+    "pt-BR": "Suavidade",
+    "en": "Smoothness"
+  },
+  "Suavizar curvas": {
+    "pt-BR": "Suavizar curvas",
+    "en": "Smooth curves"
+  },
+  "Remover curvas": {
+    "pt-BR": "Remover curvas",
+    "en": "Remove curves"
+  },
+  "Volume por extrusão": {
+    "pt-BR": "Volume por extrusão",
+    "en": "Extrude volume"
+  },
+  "Volume por revolução": {
+    "pt-BR": "Volume por revolução",
+    "en": "Revolve volume"
+  },
+  "Volume por sweep": {
+    "pt-BR": "Volume por sweep",
+    "en": "Sweep volume"
+  },
+  "Confirmar volume": {
+    "pt-BR": "Confirmar volume",
+    "en": "Confirm volume"
+  },
+  "Cancelar volume": {
+    "pt-BR": "Cancelar volume",
+    "en": "Cancel volume"
+  },
+  "Limiar de traçado": {
+    "pt-BR": "Limiar de traçado",
+    "en": "Trace threshold"
+  },
+  "Padding de exportação": {
+    "pt-BR": "Padding de exportação",
+    "en": "Export padding"
+  },
+  "Pivô": {
+    "pt-BR": "Pivô",
+    "en": "Pivot"
+  },
+  "Editar pivô": {
+    "pt-BR": "Editar pivô",
+    "en": "Edit pivot"
+  },
+  "Origem na geometria": {
+    "pt-BR": "Origem na geometria",
+    "en": "Origin to geometry"
+  },
+  "Origem na base": {
+    "pt-BR": "Origem na base",
+    "en": "Origin to bottom"
+  },
+  "Origem no cursor": {
+    "pt-BR": "Origem no cursor",
+    "en": "Origin to cursor"
+  },
+  "Origem na seleção": {
+    "pt-BR": "Origem na seleção",
+    "en": "Origin to selection"
+  },
+  "Geometria na origem": {
+    "pt-BR": "Geometria na origem",
+    "en": "Geometry to origin"
+  },
+  "Resetar cursor": {
+    "pt-BR": "Resetar cursor",
+    "en": "Reset cursor"
+  },
+  "Enquadrar cursor": {
+    "pt-BR": "Enquadrar cursor",
+    "en": "Frame cursor"
+  },
+  "Materiais": {
+    "pt-BR": "Materiais",
+    "en": "Materials"
+  },
+  "Novo material": {
+    "pt-BR": "Novo material",
+    "en": "New material"
+  },
+  "Duplicar material": {
+    "pt-BR": "Duplicar material",
+    "en": "Duplicate material"
+  },
+  "Remover material": {
+    "pt-BR": "Remover material",
+    "en": "Remove material"
+  },
+  "Atribuir às faces/objeto": {
+    "pt-BR": "Atribuir às faces/objeto",
+    "en": "Assign to faces/object"
+  },
+  "Cor base": {
+    "pt-BR": "Cor base",
+    "en": "Base color"
+  },
+  "Shader": {
+    "pt-BR": "Shader",
+    "en": "Shader"
+  },
+  "Transparência": {
+    "pt-BR": "Transparência",
+    "en": "Transparency"
+  },
+  "Criar textura albedo": {
+    "pt-BR": "Criar textura albedo",
+    "en": "Create albedo texture"
+  },
+  "Remover textura albedo": {
+    "pt-BR": "Remover textura albedo",
+    "en": "Clear albedo texture"
+  },
+  "Adicionar Mirror": {
+    "pt-BR": "Adicionar Mirror",
+    "en": "Add Mirror"
+  },
+  "Adicionar Symmetry": {
+    "pt-BR": "Adicionar Symmetry",
+    "en": "Add Symmetry"
+  },
+  "Ações rápidas": {
+    "pt-BR": "Ações rápidas",
+    "en": "Quick actions"
+  },
+  "Executar": {
+    "pt-BR": "Executar",
+    "en": "Execute"
+  },
+  "Adicionar/remover favoritas": {
+    "pt-BR": "Adicionar/remover favoritas",
+    "en": "Add/remove favorites"
+  },
+  "Restaurar ações rápidas": {
+    "pt-BR": "Restaurar ações rápidas",
+    "en": "Reset quick actions"
+  },
+  "Operando": {
+    "pt-BR": "Operando",
+    "en": "Operand"
+  },
+  "Limpeza": {
+    "pt-BR": "Limpeza",
+    "en": "Cleanup"
+  },
+  "Manter partes": {
+    "pt-BR": "Manter partes",
+    "en": "Keep parts"
+  },
+  "Juntar": {
+    "pt-BR": "Juntar",
+    "en": "Join"
+  },
+  "Limpar operando": {
+    "pt-BR": "Limpar operando",
+    "en": "Clear operand"
+  },
+  "Navegação planar": {
+    "pt-BR": "Navegação planar",
+    "en": "Planar navigation"
+  },
+  "Raio X": {
+    "pt-BR": "Raio X",
+    "en": "X-Ray"
+  },
+  "Opacidade raio X": {
+    "pt-BR": "Opacidade raio X",
+    "en": "X-Ray opacity"
+  },
+  "Orientação de faces": {
+    "pt-BR": "Orientação de faces",
+    "en": "Face orientation"
+  },
+  "Checker UV": {
+    "pt-BR": "Checker UV",
+    "en": "UV checker"
+  },
+  "Alvo snap": {
+    "pt-BR": "Alvo snap",
+    "en": "Snap target"
+  },
+  "Edição proporcional": {
+    "pt-BR": "Edição proporcional",
+    "en": "Proportional editing"
+  },
+  "Raio proporcional": {
+    "pt-BR": "Raio proporcional",
+    "en": "Proportional radius"
+  },
+  "Enquadrar seleção": {
+    "pt-BR": "Enquadrar seleção",
+    "en": "Frame selection"
+  },
+  "Resetar câmera": {
+    "pt-BR": "Resetar câmera",
+    "en": "Reset camera"
+  },
+  "Cor do pincel": {
+    "pt-BR": "Cor do pincel",
+    "en": "Brush color"
+  },
+  "Tamanho (px)": {
+    "pt-BR": "Tamanho (px)",
+    "en": "Size (px)"
+  },
+  "Opacidade": {
+    "pt-BR": "Opacidade",
+    "en": "Opacity"
+  },
+  "Dureza": {
+    "pt-BR": "Dureza",
+    "en": "Hardness"
+  },
+  "Ponta": {
+    "pt-BR": "Ponta",
+    "en": "Tip"
+  },
+  "Mistura": {
+    "pt-BR": "Mistura",
+    "en": "Blend"
+  },
+  "Projeção": {
+    "pt-BR": "Projeção",
+    "en": "Projection"
+  },
+  "Restrição": {
+    "pt-BR": "Restrição",
+    "en": "Lock"
+  },
+  "Preenchimento": {
+    "pt-BR": "Preenchimento",
+    "en": "Fill scope"
+  },
+  "Cor de vértice": {
+    "pt-BR": "Cor de vértice",
+    "en": "Vertex color"
+  },
+  "Máscara pela seleção": {
+    "pt-BR": "Máscara pela seleção",
+    "en": "Selection mask"
+  },
+  "Simetria X": {
+    "pt-BR": "Simetria X",
+    "en": "Symmetry X"
+  },
+  "Simetria Y": {
+    "pt-BR": "Simetria Y",
+    "en": "Symmetry Y"
+  },
+  "Simetria Z": {
+    "pt-BR": "Simetria Z",
+    "en": "Symmetry Z"
+  },
+  "Salvar preset": {
+    "pt-BR": "Salvar preset",
+    "en": "Save preset"
+  },
+  "Remover preset selecionado": {
+    "pt-BR": "Remover preset selecionado",
+    "en": "Remove selected preset"
+  },
+  "Camadas": {
+    "pt-BR": "Camadas",
+    "en": "Layers"
+  },
+  "Nova camada": {
+    "pt-BR": "Nova camada",
+    "en": "New layer"
+  },
+  "Novo grupo": {
+    "pt-BR": "Novo grupo",
+    "en": "New group"
+  },
+  "Novo decalque": {
+    "pt-BR": "Novo decalque",
+    "en": "New decal"
+  },
+  "Superfície": {
+    "pt-BR": "Superfície",
+    "en": "Surface"
+  },
+  "Resolução": {
+    "pt-BR": "Resolução",
+    "en": "Resolution"
+  },
+  "Grade de pixels": {
+    "pt-BR": "Grade de pixels",
+    "en": "Pixel grid"
+  },
+  "UV sobre a pintura": {
+    "pt-BR": "UV sobre a pintura",
+    "en": "UV overlay"
+  },
+  "Projetar referência": {
+    "pt-BR": "Projetar referência",
+    "en": "Project reference"
+  },
+  "Bake da referência": {
+    "pt-BR": "Bake da referência",
+    "en": "Bake reference"
+  },
+  "Importar paleta": {
+    "pt-BR": "Importar paleta",
+    "en": "Import palette"
+  },
+  "Exportar paleta": {
+    "pt-BR": "Exportar paleta",
+    "en": "Export palette"
+  },
+  "Decalque": {
+    "pt-BR": "Decalque",
+    "en": "Decal"
+  },
+  "Importar imagem": {
+    "pt-BR": "Importar imagem",
+    "en": "Import image"
+  },
+  "Bake do decalque": {
+    "pt-BR": "Bake do decalque",
+    "en": "Bake decal"
+  },
+  "Adicionar variante": {
+    "pt-BR": "Adicionar variante",
+    "en": "Add variant"
+  },
+  "Variantes": {
+    "pt-BR": "Variantes",
+    "en": "Variants"
+  },
+  "Remover variante": {
+    "pt-BR": "Remover variante",
+    "en": "Remove variant"
+  },
+  "Frames": {
+    "pt-BR": "Frames",
+    "en": "Frames"
+  },
+  "Inserir key": {
+    "pt-BR": "Inserir key",
+    "en": "Insert key"
+  },
+  "Remover key": {
+    "pt-BR": "Remover key",
+    "en": "Remove key"
+  },
+  "Exportar frames": {
+    "pt-BR": "Exportar frames",
+    "en": "Export frames"
+  },
+  "Unwrap automático": {
+    "pt-BR": "Unwrap automático",
+    "en": "Auto unwrap"
+  },
+  "Igualar texel density": {
+    "pt-BR": "Igualar texel density",
+    "en": "Equalize texel density"
+  },
+  "Marcar/remover seam": {
+    "pt-BR": "Marcar/remover seam",
+    "en": "Mark/clear seam"
+  },
+  "Limpar seams": {
+    "pt-BR": "Limpar seams",
+    "en": "Clear seams"
+  },
+  "Fixar/desfixar pins": {
+    "pt-BR": "Fixar/desfixar pins",
+    "en": "Pin/unpin"
+  },
+  "Limpar pins": {
+    "pt-BR": "Limpar pins",
+    "en": "Clear pins"
+  },
+  "Textura": {
+    "pt-BR": "Textura",
+    "en": "Texture"
+  },
+  "Sincronizar seleção 3D": {
+    "pt-BR": "Sincronizar seleção 3D",
+    "en": "Sync 3D selection"
+  },
+  "Transformar UV": {
+    "pt-BR": "Transformar UV",
+    "en": "Transform UV"
+  },
+  "Mover U": {
+    "pt-BR": "Mover U",
+    "en": "Move U"
+  },
+  "Mover V": {
+    "pt-BR": "Mover V",
+    "en": "Move V"
+  },
+  "Criatura": {
+    "pt-BR": "Criatura",
+    "en": "Creature"
+  },
+  "Adicionar criatura": {
+    "pt-BR": "Adicionar criatura",
+    "en": "Add creature"
+  },
+  "Criaturas do projeto": {
+    "pt-BR": "Criaturas do projeto",
+    "en": "Project creatures"
+  },
+  "Ajustar e ligar ao modelo": {
+    "pt-BR": "Ajustar e ligar ao modelo",
+    "en": "Fit and bind to model"
+  },
+  "Mostrar ossos": {
+    "pt-BR": "Mostrar ossos",
+    "en": "Show bones"
+  },
+  "Adicionar Motion": {
+    "pt-BR": "Adicionar Motion",
+    "en": "Add Motion"
+  },
+  "Motions do projeto": {
+    "pt-BR": "Motions do projeto",
+    "en": "Project Motions"
+  },
+  "Estilo": {
+    "pt-BR": "Estilo",
+    "en": "Style"
+  },
+  "Duplicar Motion": {
+    "pt-BR": "Duplicar Motion",
+    "en": "Duplicate Motion"
+  },
+  "Remover Motion": {
+    "pt-BR": "Remover Motion",
+    "en": "Remove Motion"
+  },
+  "Bake e manter Motion": {
+    "pt-BR": "Bake e manter Motion",
+    "en": "Bake and keep Motion"
+  },
+  "Bake e substituir Motion": {
+    "pt-BR": "Bake e substituir Motion",
+    "en": "Bake and replace Motion"
+  },
+  "Parâmetros avançados": {
+    "pt-BR": "Parâmetros avançados",
+    "en": "Advanced parameters"
+  },
+  "Ossos": {
+    "pt-BR": "Ossos",
+    "en": "Bones"
+  },
+  "Resetar pose": {
+    "pt-BR": "Resetar pose",
+    "en": "Reset pose"
+  },
+  "Posição no ciclo": {
+    "pt-BR": "Posição no ciclo",
+    "en": "Cycle position"
+  },
+  "Primeiro frame": {
+    "pt-BR": "Primeiro frame",
+    "en": "First frame"
+  },
+  "Último frame": {
+    "pt-BR": "Último frame",
+    "en": "Last frame"
+  },
+  "Frame anterior": {
+    "pt-BR": "Frame anterior",
+    "en": "Previous frame"
+  },
+  "Próximo frame": {
+    "pt-BR": "Próximo frame",
+    "en": "Next frame"
+  },
+  "Inserir keyframe": {
+    "pt-BR": "Inserir keyframe",
+    "en": "Insert keyframe"
+  },
+  "Remover keyframe": {
+    "pt-BR": "Remover keyframe",
+    "en": "Delete keyframe"
+  },
+  "Interpolação": {
+    "pt-BR": "Interpolação",
+    "en": "Interpolation"
+  },
+  "Limpar trilha": {
+    "pt-BR": "Limpar trilha",
+    "en": "Clear track"
+  },
+  "Editor de curvas": {
+    "pt-BR": "Editor de curvas",
+    "en": "Curve editor"
+  },
+  "Canal": {
+    "pt-BR": "Canal",
+    "en": "Channel"
+  },
+  "Nova camada de animação": {
+    "pt-BR": "Nova camada de animação",
+    "en": "New animation layer"
+  },
+  "Nova camada de ajuste": {
+    "pt-BR": "Nova camada de ajuste",
+    "en": "New tweak layer"
+  },
+  "Geral": {
+    "pt-BR": "Geral",
+    "en": "General"
+  },
+  "Idioma": {
+    "pt-BR": "Idioma",
+    "en": "Language"
+  },
+  "Temas": {
+    "pt-BR": "Temas",
+    "en": "Themes"
+  },
+  "Escala da interface": {
+    "pt-BR": "Escala da interface",
+    "en": "UI scale"
+  },
+  "Ícones": {
+    "pt-BR": "Ícones",
+    "en": "Icons"
+  },
+  "Contorno": {
+    "pt-BR": "Contorno",
+    "en": "Outline"
+  },
+  "Preenchidos": {
+    "pt-BR": "Preenchidos",
+    "en": "Filled"
+  },
+  "Cor de destaque (#RRGGBB)": {
+    "pt-BR": "Cor de destaque (#RRGGBB)",
+    "en": "Accent color (#RRGGBB)"
+  },
+  "Mostrar Home ao abrir": {
+    "pt-BR": "Mostrar Home ao abrir",
+    "en": "Show Home at startup"
+  },
+  "Mostrar nomes de ferramentas": {
+    "pt-BR": "Mostrar nomes de ferramentas",
+    "en": "Show tool labels"
+  },
+  "Acessibilidade": {
+    "pt-BR": "Acessibilidade",
+    "en": "Accessibility"
+  },
+  "Reduzir movimento": {
+    "pt-BR": "Reduzir movimento",
+    "en": "Reduce motion"
+  },
+  "Eixos distinguíveis sem cor": {
+    "pt-BR": "Eixos distinguíveis sem cor",
+    "en": "Distinguish axes without color"
+  },
+  "Clicar, mover, clicar": {
+    "pt-BR": "Clicar, mover, clicar",
+    "en": "Click, move, click"
+  },
+  "Limiar de arrasto (px)": {
+    "pt-BR": "Limiar de arrasto (px)",
+    "en": "Drag threshold (px)"
+  },
+  "Raio de snap (px)": {
+    "pt-BR": "Raio de snap (px)",
+    "en": "Snap radius (px)"
+  },
+  "Duplo toque (ms)": {
+    "pt-BR": "Duplo toque (ms)",
+    "en": "Double tap (ms)"
+  },
+  "Cor da seleção (#RRGGBB)": {
+    "pt-BR": "Cor da seleção (#RRGGBB)",
+    "en": "Selection color (#RRGGBB)"
+  },
+  "Espessura da seleção": {
+    "pt-BR": "Espessura da seleção",
+    "en": "Selection thickness"
+  },
+  "Mostrar média de medidas": {
+    "pt-BR": "Mostrar média de medidas",
+    "en": "Show average measurements"
+  },
+  "Inverter arrasto vertical": {
+    "pt-BR": "Inverter arrasto vertical",
+    "en": "Invert vertical drag"
+  },
+  "Luz acompanha câmera": {
+    "pt-BR": "Luz acompanha câmera",
+    "en": "Light follows camera"
+  },
+  "Preferir chão no plano automático": {
+    "pt-BR": "Preferir chão no plano automático",
+    "en": "Prefer ground for automatic workplane"
+  },
+  "Ativação de ferramentas": {
+    "pt-BR": "Ativação de ferramentas",
+    "en": "Tool activation"
+  },
+  "Atalhos": {
+    "pt-BR": "Atalhos",
+    "en": "Shortcuts"
+  },
+  "Perfis": {
+    "pt-BR": "Perfis",
+    "en": "Profiles"
+  },
+  "Novo perfil": {
+    "pt-BR": "Novo perfil",
+    "en": "New profile"
+  },
+  "Ações · duplo clique para editar": {
+    "pt-BR": "Ações · duplo clique para editar",
+    "en": "Actions · double click to edit"
+  },
+  "Pressione o atalho": {
+    "pt-BR": "Pressione o atalho",
+    "en": "Press shortcut"
+  },
+  "Pressione a combinação desejada. Escape cancela.": {
+    "pt-BR": "Pressione a combinação desejada. Escape cancela.",
+    "en": "Press the desired combination. Escape cancels."
+  },
+  "Limpar atalho": {
+    "pt-BR": "Limpar atalho",
+    "en": "Clear shortcut"
+  },
+  "Restaurar atalho": {
+    "pt-BR": "Restaurar atalho",
+    "en": "Reset shortcut"
+  },
+  "Importar/substituir imagem": {
+    "pt-BR": "Importar/substituir imagem",
+    "en": "Import/replace image"
+  },
+  "Imagem de referência": {
+    "pt-BR": "Imagem de referência",
+    "en": "Reference image"
+  },
+  "Visível": {
+    "pt-BR": "Visível",
+    "en": "Visible"
+  },
+  "Bloqueada": {
+    "pt-BR": "Bloqueada",
+    "en": "Locked"
+  },
+  "Tamanho": {
+    "pt-BR": "Tamanho",
+    "en": "Size"
+  },
+  "Alinhar vista": {
+    "pt-BR": "Alinhar vista",
+    "en": "Align view"
+  },
+  "Remover referência": {
+    "pt-BR": "Remover referência",
+    "en": "Remove reference"
+  },
+  "Biblioteca do projeto": {
+    "pt-BR": "Biblioteca do projeto",
+    "en": "Project asset library"
+  },
+  "Buscar": {
+    "pt-BR": "Buscar",
+    "en": "Search"
+  },
+  "Só favoritos": {
+    "pt-BR": "Só favoritos",
+    "en": "Favorites only"
+  },
+  "Ordenar por nome": {
+    "pt-BR": "Ordenar por nome",
+    "en": "Sort by name"
+  },
+  "Salvar seleção como asset": {
+    "pt-BR": "Salvar seleção como asset",
+    "en": "Save selection as asset"
+  },
+  "Assets · clique para inserir": {
+    "pt-BR": "Assets · clique para inserir",
+    "en": "Assets · click to insert"
+  },
+  "Remover favorito": {
+    "pt-BR": "Remover favorito",
+    "en": "Remove favorite"
+  },
+  "Favoritar": {
+    "pt-BR": "Favoritar",
+    "en": "Favorite"
+  },
+  "Atualizar pela seleção": {
+    "pt-BR": "Atualizar pela seleção",
+    "en": "Update from selection"
+  },
+  "Remover asset": {
+    "pt-BR": "Remover asset",
+    "en": "Remove asset"
+  },
+  "Importar modelo": {
+    "pt-BR": "Importar modelo",
+    "en": "Import model"
+  },
+  "Exportar OBJ": {
+    "pt-BR": "Exportar OBJ",
+    "en": "Export OBJ"
+  },
+  "Exportar GLB": {
+    "pt-BR": "Exportar GLB",
+    "en": "Export GLB"
+  },
+  "Eixo": {
+    "pt-BR": "Eixo",
+    "en": "Axis"
+  },
+  "Positivo → negativo": {
+    "pt-BR": "Positivo → negativo",
+    "en": "Positive → negative"
+  },
+  "Mover acima": {
+    "pt-BR": "Mover acima",
+    "en": "Move up"
+  },
+  "Mover abaixo": {
+    "pt-BR": "Mover abaixo",
+    "en": "Move down"
+  },
+  "Aplicar": {
+    "pt-BR": "Aplicar",
+    "en": "Apply"
+  },
+  "Remover": {
+    "pt-BR": "Remover",
+    "en": "Remove"
+  },
+  "Mesclar abaixo": {
+    "pt-BR": "Mesclar abaixo",
+    "en": "Merge down"
+  },
+  "Peso": {
+    "pt-BR": "Peso",
+    "en": "Weight"
+  },
+  "Remover camada": {
+    "pt-BR": "Remover camada",
+    "en": "Remove layer"
+  },
+  "Selecione um objeto e uma camada de pintura": {
+    "pt-BR": "Selecione um objeto e uma camada de pintura",
+    "en": "Select an object and a paint layer"
+  },
+  "Comando indisponível nesta versão": {
+    "pt-BR": "Comando indisponível nesta versão",
+    "en": "Command unavailable in this version"
+  },
+  "Fechar": {
+    "pt-BR": "Fechar",
+    "en": "Close"
+  },
+  "Preferências": {
+    "pt-BR": "Preferências",
+    "en": "Preferences"
+  },
+  "Referências": {
+    "pt-BR": "Referências",
+    "en": "References"
+  },
+  "Partes": {
+    "pt-BR": "Partes",
+    "en": "Parts"
+  },
+  "Buscar partes": {
+    "pt-BR": "Buscar partes",
+    "en": "Search parts"
+  },
+  "Partes da cena": {
+    "pt-BR": "Partes da cena",
+    "en": "Scene parts"
+  },
+  "Nome": {
+    "pt-BR": "Nome",
+    "en": "Name"
+  },
+  "Bloqueio": {
+    "pt-BR": "Bloqueio",
+    "en": "Lock"
+  },
+  "Pintura": {
+    "pt-BR": "Pintura",
+    "en": "Paint"
+  },
+  "Animação": {
+    "pt-BR": "Animação",
+    "en": "Animation"
+  },
+  "Objeto ativo": {
+    "pt-BR": "Objeto ativo",
+    "en": "Active object"
+  },
+  "Objeto da cena": {
+    "pt-BR": "Objeto da cena",
+    "en": "Scene object"
+  },
+  "Sim": {
+    "pt-BR": "Sim",
+    "en": "Yes"
+  },
+  "Não": {
+    "pt-BR": "Não",
+    "en": "No"
+  },
+  "Bloqueado": {
+    "pt-BR": "Bloqueado",
+    "en": "Locked"
+  },
+  "Livre": {
+    "pt-BR": "Livre",
+    "en": "Unlocked"
+  },
+  "Renomear": {
+    "pt-BR": "Renomear",
+    "en": "Rename"
+  },
+  "Duplicar": {
+    "pt-BR": "Duplicar",
+    "en": "Duplicate"
+  },
+  "Excluir": {
+    "pt-BR": "Excluir",
+    "en": "Delete"
+  },
+  "Isolar": {
+    "pt-BR": "Isolar",
+    "en": "Isolate"
+  },
+  "Salvar como asset": {
+    "pt-BR": "Salvar como asset",
+    "en": "Save as asset"
+  },
+  "Recuperação": {
+    "pt-BR": "Recuperação",
+    "en": "Recovery"
+  },
+  "Nenhum snapshot de recuperação disponível.": {
+    "pt-BR": "Nenhum snapshot de recuperação disponível.",
+    "en": "No recovery snapshot is available."
+  },
+  "Sessão recuperável": {
+    "pt-BR": "Sessão recuperável",
+    "en": "Recoverable session"
+  },
+  "Alterações não salvas": {
+    "pt-BR": "Alterações não salvas",
+    "en": "Unsaved changes"
+  },
+  "Salvar as alterações antes de continuar?": {
+    "pt-BR": "Salvar as alterações antes de continuar?",
+    "en": "Save changes before continuing?"
+  },
+  "Buscar comando": {
+    "pt-BR": "Buscar comando",
+    "en": "Search command"
+  },
+  "Comandos encontrados": {
+    "pt-BR": "Comandos encontrados",
+    "en": "Search results"
+  },
+  "&Arquivo": {
+    "pt-BR": "&Arquivo",
+    "en": "&File"
+  },
+  "&Editar": {
+    "pt-BR": "&Editar",
+    "en": "&Edit"
+  },
+  "&Selecionar": {
+    "pt-BR": "&Selecionar",
+    "en": "&Select"
+  },
+  "&Adicionar": {
+    "pt-BR": "&Adicionar",
+    "en": "&Add"
+  },
+  "&Visualizar": {
+    "pt-BR": "&Visualizar",
+    "en": "&View"
+  },
+  "&Janela": {
+    "pt-BR": "&Janela",
+    "en": "&Window"
+  },
+  "&Ajuda": {
+    "pt-BR": "&Ajuda",
+    "en": "&Help"
+  },
+  "Desfazer": {
+    "pt-BR": "Desfazer",
+    "en": "Undo"
+  },
+  "Refazer": {
+    "pt-BR": "Refazer",
+    "en": "Redo"
+  },
+  "Canvas de pintura do documento": {
+    "pt-BR": "Canvas de pintura do documento",
+    "en": "Document paint canvas"
+  },
+  "Editor UV": {
+    "pt-BR": "Editor UV",
+    "en": "UV editor"
+  },
+  "Dope Sheet e editor de curvas": {
+    "pt-BR": "Dope Sheet e editor de curvas",
+    "en": "Dope Sheet and curve editor"
+  },
+  "roughness": {
+    "pt-BR": "Rugosidade",
+    "en": "Roughness"
+  },
+  "metallic": {
+    "pt-BR": "Metálico",
+    "en": "Metallic"
+  },
+  "normal_scale": {
+    "pt-BR": "Intensidade da normal",
+    "en": "Normal strength"
+  },
+  "emission_strength": {
+    "pt-BR": "Emissão",
+    "en": "Emission strength"
+  },
+  "alpha_cutoff": {
+    "pt-BR": "Limiar alfa",
+    "en": "Alpha cutoff"
+  },
+  "flow": {
+    "pt-BR": "Fluxo",
+    "en": "Flow"
+  },
+  "spacing": {
+    "pt-BR": "Espaçamento",
+    "en": "Spacing"
+  },
+  "smoothing": {
+    "pt-BR": "Estabilização",
+    "en": "Smoothing"
+  },
+  "size_jitter": {
+    "pt-BR": "Variação de tamanho",
+    "en": "Size jitter"
+  },
+  "opacity_jitter": {
+    "pt-BR": "Variação de opacidade",
+    "en": "Opacity jitter"
+  },
+  "scatter": {
+    "pt-BR": "Dispersão",
+    "en": "Scatter"
+  },
+  "spray_density": {
+    "pt-BR": "Densidade do spray",
+    "en": "Spray density"
+  },
+  "angle": {
+    "pt-BR": "Ângulo",
+    "en": "Angle"
+  },
+  "roundness": {
+    "pt-BR": "Arredondamento",
+    "en": "Roundness"
+  },
+  "Tool": {
+    "pt-BR": "Ferramenta",
+    "en": "Tool"
+  },
+  "Tools": {
+    "pt-BR": "Ferramentas",
+    "en": "Tools"
+  },
+  "Primitive": {
+    "pt-BR": "Primitiva",
+    "en": "Primitive"
+  },
+  "Profile": {
+    "pt-BR": "Perfil",
+    "en": "Profile"
+  },
+  "Transform": {
+    "pt-BR": "Transformação",
+    "en": "Transform"
+  },
+  "Modifiers": {
+    "pt-BR": "Modificadores",
+    "en": "Modifiers"
+  },
+  "View": {
+    "pt-BR": "Vista",
+    "en": "View"
+  },
+  "DRAW operations": {
+    "pt-BR": "Operações DRAW",
+    "en": "DRAW operations"
+  },
+  "Position": {
+    "pt-BR": "Posição",
+    "en": "Position"
+  },
+  "Rotation": {
+    "pt-BR": "Rotação",
+    "en": "Rotation"
+  },
+  "Scale": {
+    "pt-BR": "Escala",
+    "en": "Scale"
+  },
+  "Measure": {
+    "pt-BR": "Medir",
+    "en": "Measure"
+  },
+  "Brush": {
+    "pt-BR": "Pincel",
+    "en": "Brush"
+  },
+  "Select": {
+    "pt-BR": "Selecionar",
+    "en": "Select"
+  },
+  "Lasso": {
+    "pt-BR": "Laço",
+    "en": "Lasso"
+  },
+  "Move": {
+    "pt-BR": "Mover",
+    "en": "Move"
+  },
+  "Rotate": {
+    "pt-BR": "Rotacionar",
+    "en": "Rotate"
+  },
+  "Operation value": {
+    "pt-BR": "Valor da operação",
+    "en": "Operation value"
+  },
+  "Confirm operation": {
+    "pt-BR": "Confirmar operação",
+    "en": "Confirm operation"
+  },
+  "Cancel operation": {
+    "pt-BR": "Cancelar operação",
+    "en": "Cancel operation"
+  },
+  "Cuts": {
+    "pt-BR": "Cortes",
+    "en": "Cuts"
+  },
+  "Balanced cut": {
+    "pt-BR": "Corte balanceado",
+    "en": "Balanced cut"
+  },
+  "Confirm Loop Cut": {
+    "pt-BR": "Confirmar Loop Cut",
+    "en": "Confirm Loop Cut"
+  },
+  "Cancel Loop Cut": {
+    "pt-BR": "Cancelar Loop Cut",
+    "en": "Cancel Loop Cut"
+  },
+  "Trim cut": {
+    "pt-BR": "Trim do corte",
+    "en": "Trim cut"
+  },
+  "Bevel: clamp overlap": {
+    "pt-BR": "Bevel: limitar sobreposição",
+    "en": "Bevel: clamp overlap"
+  },
+  "Bevel: vertices": {
+    "pt-BR": "Bevel: vértices",
+    "en": "Bevel: vertices"
+  },
+  "Confirm cut": {
+    "pt-BR": "Confirmar corte",
+    "en": "Confirm cut"
+  },
+  "Cancel cut": {
+    "pt-BR": "Cancelar corte",
+    "en": "Cancel cut"
+  },
+  "Confirm knife": {
+    "pt-BR": "Confirmar faca",
+    "en": "Confirm knife"
+  },
+  "Cancel knife": {
+    "pt-BR": "Cancelar faca",
+    "en": "Cancel knife"
+  },
+  "Confirm primitive": {
+    "pt-BR": "Confirmar primitiva",
+    "en": "Confirm primitive"
+  },
+  "Cancel primitive": {
+    "pt-BR": "Cancelar primitiva",
+    "en": "Cancel primitive"
+  },
+  "Convert to mesh": {
+    "pt-BR": "Converter em malha",
+    "en": "Convert to mesh"
+  },
+  "Import SVG": {
+    "pt-BR": "Importar SVG",
+    "en": "Import SVG"
+  },
+  "Rectangle": {
+    "pt-BR": "Retângulo",
+    "en": "Rectangle"
+  },
+  "Circle": {
+    "pt-BR": "Círculo",
+    "en": "Circle"
+  },
+  "Close profile": {
+    "pt-BR": "Fechar perfil",
+    "en": "Close profile"
+  },
+  "Workplane": {
+    "pt-BR": "Plano",
+    "en": "Workplane"
+  },
+  "Look at workplane": {
+    "pt-BR": "Olhar para o plano",
+    "en": "Look at workplane"
+  },
+  "Width": {
+    "pt-BR": "Largura",
+    "en": "Width"
+  },
+  "Height": {
+    "pt-BR": "Altura",
+    "en": "Height"
+  },
+  "Segments": {
+    "pt-BR": "Segmentos",
+    "en": "Segments"
+  },
+  "Depth": {
+    "pt-BR": "Profundidade",
+    "en": "Depth"
+  },
+  "Wall": {
+    "pt-BR": "Parede",
+    "en": "Wall"
+  },
+  "Revolve": {
+    "pt-BR": "Revolução",
+    "en": "Revolve"
+  },
+  "Smoothness": {
+    "pt-BR": "Suavidade",
+    "en": "Smoothness"
+  },
+  "Smooth curves": {
+    "pt-BR": "Suavizar curvas",
+    "en": "Smooth curves"
+  },
+  "Remove curves": {
+    "pt-BR": "Remover curvas",
+    "en": "Remove curves"
+  },
+  "Extrude volume": {
+    "pt-BR": "Volume por extrusão",
+    "en": "Extrude volume"
+  },
+  "Revolve volume": {
+    "pt-BR": "Volume por revolução",
+    "en": "Revolve volume"
+  },
+  "Sweep volume": {
+    "pt-BR": "Volume por sweep",
+    "en": "Sweep volume"
+  },
+  "Confirm volume": {
+    "pt-BR": "Confirmar volume",
+    "en": "Confirm volume"
+  },
+  "Cancel volume": {
+    "pt-BR": "Cancelar volume",
+    "en": "Cancel volume"
+  },
+  "Trace threshold": {
+    "pt-BR": "Limiar de traçado",
+    "en": "Trace threshold"
+  },
+  "Export padding": {
+    "pt-BR": "Padding de exportação",
+    "en": "Export padding"
+  },
+  "Pivot": {
+    "pt-BR": "Pivô",
+    "en": "Pivot"
+  },
+  "Edit pivot": {
+    "pt-BR": "Editar pivô",
+    "en": "Edit pivot"
+  },
+  "Origin to geometry": {
+    "pt-BR": "Origem na geometria",
+    "en": "Origin to geometry"
+  },
+  "Origin to bottom": {
+    "pt-BR": "Origem na base",
+    "en": "Origin to bottom"
+  },
+  "Origin to cursor": {
+    "pt-BR": "Origem no cursor",
+    "en": "Origin to cursor"
+  },
+  "Origin to selection": {
+    "pt-BR": "Origem na seleção",
+    "en": "Origin to selection"
+  },
+  "Geometry to origin": {
+    "pt-BR": "Geometria na origem",
+    "en": "Geometry to origin"
+  },
+  "Reset cursor": {
+    "pt-BR": "Resetar cursor",
+    "en": "Reset cursor"
+  },
+  "Frame cursor": {
+    "pt-BR": "Enquadrar cursor",
+    "en": "Frame cursor"
+  },
+  "Materials": {
+    "pt-BR": "Materiais",
+    "en": "Materials"
+  },
+  "New material": {
+    "pt-BR": "Novo material",
+    "en": "New material"
+  },
+  "Duplicate material": {
+    "pt-BR": "Duplicar material",
+    "en": "Duplicate material"
+  },
+  "Remove material": {
+    "pt-BR": "Remover material",
+    "en": "Remove material"
+  },
+  "Assign to faces/object": {
+    "pt-BR": "Atribuir às faces/objeto",
+    "en": "Assign to faces/object"
+  },
+  "Base color": {
+    "pt-BR": "Cor base",
+    "en": "Base color"
+  },
+  "Transparency": {
+    "pt-BR": "Transparência",
+    "en": "Transparency"
+  },
+  "Create albedo texture": {
+    "pt-BR": "Criar textura albedo",
+    "en": "Create albedo texture"
+  },
+  "Clear albedo texture": {
+    "pt-BR": "Remover textura albedo",
+    "en": "Clear albedo texture"
+  },
+  "Add Mirror": {
+    "pt-BR": "Adicionar Mirror",
+    "en": "Add Mirror"
+  },
+  "Add Symmetry": {
+    "pt-BR": "Adicionar Symmetry",
+    "en": "Add Symmetry"
+  },
+  "Quick actions": {
+    "pt-BR": "Ações rápidas",
+    "en": "Quick actions"
+  },
+  "Execute": {
+    "pt-BR": "Executar",
+    "en": "Execute"
+  },
+  "Add/remove favorites": {
+    "pt-BR": "Adicionar/remover favoritas",
+    "en": "Add/remove favorites"
+  },
+  "Reset quick actions": {
+    "pt-BR": "Restaurar ações rápidas",
+    "en": "Reset quick actions"
+  },
+  "Operand": {
+    "pt-BR": "Operando",
+    "en": "Operand"
+  },
+  "Cleanup": {
+    "pt-BR": "Limpeza",
+    "en": "Cleanup"
+  },
+  "Keep parts": {
+    "pt-BR": "Manter partes",
+    "en": "Keep parts"
+  },
+  "Join": {
+    "pt-BR": "Juntar",
+    "en": "Join"
+  },
+  "Clear operand": {
+    "pt-BR": "Limpar operando",
+    "en": "Clear operand"
+  },
+  "Planar navigation": {
+    "pt-BR": "Navegação planar",
+    "en": "Planar navigation"
+  },
+  "X-Ray": {
+    "pt-BR": "Raio X",
+    "en": "X-Ray"
+  },
+  "X-Ray opacity": {
+    "pt-BR": "Opacidade raio X",
+    "en": "X-Ray opacity"
+  },
+  "Face orientation": {
+    "pt-BR": "Orientação de faces",
+    "en": "Face orientation"
+  },
+  "UV checker": {
+    "pt-BR": "Checker UV",
+    "en": "UV checker"
+  },
+  "Snap target": {
+    "pt-BR": "Alvo snap",
+    "en": "Snap target"
+  },
+  "Proportional editing": {
+    "pt-BR": "Edição proporcional",
+    "en": "Proportional editing"
+  },
+  "Proportional radius": {
+    "pt-BR": "Raio proporcional",
+    "en": "Proportional radius"
+  },
+  "Frame selection": {
+    "pt-BR": "Enquadrar seleção",
+    "en": "Frame selection"
+  },
+  "Reset camera": {
+    "pt-BR": "Resetar câmera",
+    "en": "Reset camera"
+  },
+  "Brush color": {
+    "pt-BR": "Cor do pincel",
+    "en": "Brush color"
+  },
+  "Size (px)": {
+    "pt-BR": "Tamanho (px)",
+    "en": "Size (px)"
+  },
+  "Opacity": {
+    "pt-BR": "Opacidade",
+    "en": "Opacity"
+  },
+  "Hardness": {
+    "pt-BR": "Dureza",
+    "en": "Hardness"
+  },
+  "Tip": {
+    "pt-BR": "Ponta",
+    "en": "Tip"
+  },
+  "Blend": {
+    "pt-BR": "Mistura",
+    "en": "Blend"
+  },
+  "Projection": {
+    "pt-BR": "Projeção",
+    "en": "Projection"
+  },
+  "Lock": {
+    "pt-BR": "Restrição",
+    "en": "Lock"
+  },
+  "Fill scope": {
+    "pt-BR": "Preenchimento",
+    "en": "Fill scope"
+  },
+  "Vertex color": {
+    "pt-BR": "Cor de vértice",
+    "en": "Vertex color"
+  },
+  "Selection mask": {
+    "pt-BR": "Máscara pela seleção",
+    "en": "Selection mask"
+  },
+  "Symmetry X": {
+    "pt-BR": "Simetria X",
+    "en": "Symmetry X"
+  },
+  "Symmetry Y": {
+    "pt-BR": "Simetria Y",
+    "en": "Symmetry Y"
+  },
+  "Symmetry Z": {
+    "pt-BR": "Simetria Z",
+    "en": "Symmetry Z"
+  },
+  "Save preset": {
+    "pt-BR": "Salvar preset",
+    "en": "Save preset"
+  },
+  "Remove selected preset": {
+    "pt-BR": "Remover preset selecionado",
+    "en": "Remove selected preset"
+  },
+  "Layers": {
+    "pt-BR": "Camadas",
+    "en": "Layers"
+  },
+  "New layer": {
+    "pt-BR": "Nova camada",
+    "en": "New layer"
+  },
+  "New group": {
+    "pt-BR": "Novo grupo",
+    "en": "New group"
+  },
+  "New decal": {
+    "pt-BR": "Novo decalque",
+    "en": "New decal"
+  },
+  "Surface": {
+    "pt-BR": "Superfície",
+    "en": "Surface"
+  },
+  "Resolution": {
+    "pt-BR": "Resolução",
+    "en": "Resolution"
+  },
+  "Pixel grid": {
+    "pt-BR": "Grade de pixels",
+    "en": "Pixel grid"
+  },
+  "UV overlay": {
+    "pt-BR": "UV sobre a pintura",
+    "en": "UV overlay"
+  },
+  "Project reference": {
+    "pt-BR": "Projetar referência",
+    "en": "Project reference"
+  },
+  "Bake reference": {
+    "pt-BR": "Bake da referência",
+    "en": "Bake reference"
+  },
+  "Import palette": {
+    "pt-BR": "Importar paleta",
+    "en": "Import palette"
+  },
+  "Export palette": {
+    "pt-BR": "Exportar paleta",
+    "en": "Export palette"
+  },
+  "Decal": {
+    "pt-BR": "Decalque",
+    "en": "Decal"
+  },
+  "Import image": {
+    "pt-BR": "Importar imagem",
+    "en": "Import image"
+  },
+  "Bake decal": {
+    "pt-BR": "Bake do decalque",
+    "en": "Bake decal"
+  },
+  "Add variant": {
+    "pt-BR": "Adicionar variante",
+    "en": "Add variant"
+  },
+  "Variants": {
+    "pt-BR": "Variantes",
+    "en": "Variants"
+  },
+  "Remove variant": {
+    "pt-BR": "Remover variante",
+    "en": "Remove variant"
+  },
+  "Insert key": {
+    "pt-BR": "Inserir key",
+    "en": "Insert key"
+  },
+  "Remove key": {
+    "pt-BR": "Remover key",
+    "en": "Remove key"
+  },
+  "Export frames": {
+    "pt-BR": "Exportar frames",
+    "en": "Export frames"
+  },
+  "Auto unwrap": {
+    "pt-BR": "Unwrap automático",
+    "en": "Auto unwrap"
+  },
+  "Equalize texel density": {
+    "pt-BR": "Igualar texel density",
+    "en": "Equalize texel density"
+  },
+  "Mark/clear seam": {
+    "pt-BR": "Marcar/remover seam",
+    "en": "Mark/clear seam"
+  },
+  "Clear seams": {
+    "pt-BR": "Limpar seams",
+    "en": "Clear seams"
+  },
+  "Pin/unpin": {
+    "pt-BR": "Fixar/desfixar pins",
+    "en": "Pin/unpin"
+  },
+  "Clear pins": {
+    "pt-BR": "Limpar pins",
+    "en": "Clear pins"
+  },
+  "Texture": {
+    "pt-BR": "Textura",
+    "en": "Texture"
+  },
+  "Sync 3D selection": {
+    "pt-BR": "Sincronizar seleção 3D",
+    "en": "Sync 3D selection"
+  },
+  "Transform UV": {
+    "pt-BR": "Transformar UV",
+    "en": "Transform UV"
+  },
+  "Move U": {
+    "pt-BR": "Mover U",
+    "en": "Move U"
+  },
+  "Move V": {
+    "pt-BR": "Mover V",
+    "en": "Move V"
+  },
+  "Creature": {
+    "pt-BR": "Criatura",
+    "en": "Creature"
+  },
+  "Add creature": {
+    "pt-BR": "Adicionar criatura",
+    "en": "Add creature"
+  },
+  "Project creatures": {
+    "pt-BR": "Criaturas do projeto",
+    "en": "Project creatures"
+  },
+  "Fit and bind to model": {
+    "pt-BR": "Ajustar e ligar ao modelo",
+    "en": "Fit and bind to model"
+  },
+  "Show bones": {
+    "pt-BR": "Mostrar ossos",
+    "en": "Show bones"
+  },
+  "Add Motion": {
+    "pt-BR": "Adicionar Motion",
+    "en": "Add Motion"
+  },
+  "Project Motions": {
+    "pt-BR": "Motions do projeto",
+    "en": "Project Motions"
+  },
+  "Style": {
+    "pt-BR": "Estilo",
+    "en": "Style"
+  },
+  "Duplicate Motion": {
+    "pt-BR": "Duplicar Motion",
+    "en": "Duplicate Motion"
+  },
+  "Remove Motion": {
+    "pt-BR": "Remover Motion",
+    "en": "Remove Motion"
+  },
+  "Bake and keep Motion": {
+    "pt-BR": "Bake e manter Motion",
+    "en": "Bake and keep Motion"
+  },
+  "Bake and replace Motion": {
+    "pt-BR": "Bake e substituir Motion",
+    "en": "Bake and replace Motion"
+  },
+  "Advanced parameters": {
+    "pt-BR": "Parâmetros avançados",
+    "en": "Advanced parameters"
+  },
+  "Bones": {
+    "pt-BR": "Ossos",
+    "en": "Bones"
+  },
+  "Reset pose": {
+    "pt-BR": "Resetar pose",
+    "en": "Reset pose"
+  },
+  "Cycle position": {
+    "pt-BR": "Posição no ciclo",
+    "en": "Cycle position"
+  },
+  "First frame": {
+    "pt-BR": "Primeiro frame",
+    "en": "First frame"
+  },
+  "Last frame": {
+    "pt-BR": "Último frame",
+    "en": "Last frame"
+  },
+  "Previous frame": {
+    "pt-BR": "Frame anterior",
+    "en": "Previous frame"
+  },
+  "Next frame": {
+    "pt-BR": "Próximo frame",
+    "en": "Next frame"
+  },
+  "Insert keyframe": {
+    "pt-BR": "Inserir keyframe",
+    "en": "Insert keyframe"
+  },
+  "Delete keyframe": {
+    "pt-BR": "Remover keyframe",
+    "en": "Delete keyframe"
+  },
+  "Interpolation": {
+    "pt-BR": "Interpolação",
+    "en": "Interpolation"
+  },
+  "Clear track": {
+    "pt-BR": "Limpar trilha",
+    "en": "Clear track"
+  },
+  "Curve editor": {
+    "pt-BR": "Editor de curvas",
+    "en": "Curve editor"
+  },
+  "Channel": {
+    "pt-BR": "Canal",
+    "en": "Channel"
+  },
+  "New animation layer": {
+    "pt-BR": "Nova camada de animação",
+    "en": "New animation layer"
+  },
+  "New tweak layer": {
+    "pt-BR": "Nova camada de ajuste",
+    "en": "New tweak layer"
+  },
+  "General": {
+    "pt-BR": "Geral",
+    "en": "General"
+  },
+  "Language": {
+    "pt-BR": "Idioma",
+    "en": "Language"
+  },
+  "Themes": {
+    "pt-BR": "Temas",
+    "en": "Themes"
+  },
+  "UI scale": {
+    "pt-BR": "Escala da interface",
+    "en": "UI scale"
+  },
+  "Icons": {
+    "pt-BR": "Ícones",
+    "en": "Icons"
+  },
+  "Outline": {
+    "pt-BR": "Contorno",
+    "en": "Outline"
+  },
+  "Filled": {
+    "pt-BR": "Preenchidos",
+    "en": "Filled"
+  },
+  "Accent color (#RRGGBB)": {
+    "pt-BR": "Cor de destaque (#RRGGBB)",
+    "en": "Accent color (#RRGGBB)"
+  },
+  "Show Home at startup": {
+    "pt-BR": "Mostrar Home ao abrir",
+    "en": "Show Home at startup"
+  },
+  "Show tool labels": {
+    "pt-BR": "Mostrar nomes de ferramentas",
+    "en": "Show tool labels"
+  },
+  "Accessibility": {
+    "pt-BR": "Acessibilidade",
+    "en": "Accessibility"
+  },
+  "Reduce motion": {
+    "pt-BR": "Reduzir movimento",
+    "en": "Reduce motion"
+  },
+  "Distinguish axes without color": {
+    "pt-BR": "Eixos distinguíveis sem cor",
+    "en": "Distinguish axes without color"
+  },
+  "Click, move, click": {
+    "pt-BR": "Clicar, mover, clicar",
+    "en": "Click, move, click"
+  },
+  "Drag threshold (px)": {
+    "pt-BR": "Limiar de arrasto (px)",
+    "en": "Drag threshold (px)"
+  },
+  "Snap radius (px)": {
+    "pt-BR": "Raio de snap (px)",
+    "en": "Snap radius (px)"
+  },
+  "Double tap (ms)": {
+    "pt-BR": "Duplo toque (ms)",
+    "en": "Double tap (ms)"
+  },
+  "Selection color (#RRGGBB)": {
+    "pt-BR": "Cor da seleção (#RRGGBB)",
+    "en": "Selection color (#RRGGBB)"
+  },
+  "Selection thickness": {
+    "pt-BR": "Espessura da seleção",
+    "en": "Selection thickness"
+  },
+  "Show average measurements": {
+    "pt-BR": "Mostrar média de medidas",
+    "en": "Show average measurements"
+  },
+  "Invert vertical drag": {
+    "pt-BR": "Inverter arrasto vertical",
+    "en": "Invert vertical drag"
+  },
+  "Light follows camera": {
+    "pt-BR": "Luz acompanha câmera",
+    "en": "Light follows camera"
+  },
+  "Prefer ground for automatic workplane": {
+    "pt-BR": "Preferir chão no plano automático",
+    "en": "Prefer ground for automatic workplane"
+  },
+  "Tool activation": {
+    "pt-BR": "Ativação de ferramentas",
+    "en": "Tool activation"
+  },
+  "Shortcuts": {
+    "pt-BR": "Atalhos",
+    "en": "Shortcuts"
+  },
+  "Profiles": {
+    "pt-BR": "Perfis",
+    "en": "Profiles"
+  },
+  "New profile": {
+    "pt-BR": "Novo perfil",
+    "en": "New profile"
+  },
+  "Actions · double click to edit": {
+    "pt-BR": "Ações · duplo clique para editar",
+    "en": "Actions · double click to edit"
+  },
+  "Press shortcut": {
+    "pt-BR": "Pressione o atalho",
+    "en": "Press shortcut"
+  },
+  "Press the desired combination. Escape cancels.": {
+    "pt-BR": "Pressione a combinação desejada. Escape cancela.",
+    "en": "Press the desired combination. Escape cancels."
+  },
+  "Clear shortcut": {
+    "pt-BR": "Limpar atalho",
+    "en": "Clear shortcut"
+  },
+  "Reset shortcut": {
+    "pt-BR": "Restaurar atalho",
+    "en": "Reset shortcut"
+  },
+  "Import/replace image": {
+    "pt-BR": "Importar/substituir imagem",
+    "en": "Import/replace image"
+  },
+  "Reference image": {
+    "pt-BR": "Imagem de referência",
+    "en": "Reference image"
+  },
+  "Visible": {
+    "pt-BR": "Visível",
+    "en": "Visible"
+  },
+  "Locked": {
+    "pt-BR": "Bloqueada",
+    "en": "Locked"
+  },
+  "Size": {
+    "pt-BR": "Tamanho",
+    "en": "Size"
+  },
+  "Align view": {
+    "pt-BR": "Alinhar vista",
+    "en": "Align view"
+  },
+  "Remove reference": {
+    "pt-BR": "Remover referência",
+    "en": "Remove reference"
+  },
+  "Project asset library": {
+    "pt-BR": "Biblioteca do projeto",
+    "en": "Project asset library"
+  },
+  "Search": {
+    "pt-BR": "Buscar",
+    "en": "Search"
+  },
+  "Favorites only": {
+    "pt-BR": "Só favoritos",
+    "en": "Favorites only"
+  },
+  "Sort by name": {
+    "pt-BR": "Ordenar por nome",
+    "en": "Sort by name"
+  },
+  "Save selection as asset": {
+    "pt-BR": "Salvar seleção como asset",
+    "en": "Save selection as asset"
+  },
+  "Assets · click to insert": {
+    "pt-BR": "Assets · clique para inserir",
+    "en": "Assets · click to insert"
+  },
+  "Remove favorite": {
+    "pt-BR": "Remover favorito",
+    "en": "Remove favorite"
+  },
+  "Favorite": {
+    "pt-BR": "Favoritar",
+    "en": "Favorite"
+  },
+  "Update from selection": {
+    "pt-BR": "Atualizar pela seleção",
+    "en": "Update from selection"
+  },
+  "Remove asset": {
+    "pt-BR": "Remover asset",
+    "en": "Remove asset"
+  },
+  "Import model": {
+    "pt-BR": "Importar modelo",
+    "en": "Import model"
+  },
+  "Export OBJ": {
+    "pt-BR": "Exportar OBJ",
+    "en": "Export OBJ"
+  },
+  "Export GLB": {
+    "pt-BR": "Exportar GLB",
+    "en": "Export GLB"
+  },
+  "Axis": {
+    "pt-BR": "Eixo",
+    "en": "Axis"
+  },
+  "Positive → negative": {
+    "pt-BR": "Positivo → negativo",
+    "en": "Positive → negative"
+  },
+  "Move up": {
+    "pt-BR": "Mover acima",
+    "en": "Move up"
+  },
+  "Move down": {
+    "pt-BR": "Mover abaixo",
+    "en": "Move down"
+  },
+  "Apply": {
+    "pt-BR": "Aplicar",
+    "en": "Apply"
+  },
+  "Remove": {
+    "pt-BR": "Remover",
+    "en": "Remove"
+  },
+  "Merge down": {
+    "pt-BR": "Mesclar abaixo",
+    "en": "Merge down"
+  },
+  "Weight": {
+    "pt-BR": "Peso",
+    "en": "Weight"
+  },
+  "Remove layer": {
+    "pt-BR": "Remover camada",
+    "en": "Remove layer"
+  },
+  "Select an object and a paint layer": {
+    "pt-BR": "Selecione um objeto e uma camada de pintura",
+    "en": "Select an object and a paint layer"
+  },
+  "Command unavailable in this version": {
+    "pt-BR": "Comando indisponível nesta versão",
+    "en": "Command unavailable in this version"
+  },
+  "Close": {
+    "pt-BR": "Fechar",
+    "en": "Close"
+  },
+  "Preferences": {
+    "pt-BR": "Preferências",
+    "en": "Preferences"
+  },
+  "References": {
+    "pt-BR": "Referências",
+    "en": "References"
+  },
+  "Parts": {
+    "pt-BR": "Partes",
+    "en": "Parts"
+  },
+  "Search parts": {
+    "pt-BR": "Buscar partes",
+    "en": "Search parts"
+  },
+  "Scene parts": {
+    "pt-BR": "Partes da cena",
+    "en": "Scene parts"
+  },
+  "Name": {
+    "pt-BR": "Nome",
+    "en": "Name"
+  },
+  "Paint": {
+    "pt-BR": "Pintura",
+    "en": "Paint"
+  },
+  "Animation": {
+    "pt-BR": "Animação",
+    "en": "Animation"
+  },
+  "Active object": {
+    "pt-BR": "Objeto ativo",
+    "en": "Active object"
+  },
+  "Scene object": {
+    "pt-BR": "Objeto da cena",
+    "en": "Scene object"
+  },
+  "Yes": {
+    "pt-BR": "Sim",
+    "en": "Yes"
+  },
+  "No": {
+    "pt-BR": "Não",
+    "en": "No"
+  },
+  "Unlocked": {
+    "pt-BR": "Livre",
+    "en": "Unlocked"
+  },
+  "Rename": {
+    "pt-BR": "Renomear",
+    "en": "Rename"
+  },
+  "Duplicate": {
+    "pt-BR": "Duplicar",
+    "en": "Duplicate"
+  },
+  "Delete": {
+    "pt-BR": "Excluir",
+    "en": "Delete"
+  },
+  "Isolate": {
+    "pt-BR": "Isolar",
+    "en": "Isolate"
+  },
+  "Save as asset": {
+    "pt-BR": "Salvar como asset",
+    "en": "Save as asset"
+  },
+  "Recovery": {
+    "pt-BR": "Recuperação",
+    "en": "Recovery"
+  },
+  "No recovery snapshot is available.": {
+    "pt-BR": "Nenhum snapshot de recuperação disponível.",
+    "en": "No recovery snapshot is available."
+  },
+  "Recoverable session": {
+    "pt-BR": "Sessão recuperável",
+    "en": "Recoverable session"
+  },
+  "Unsaved changes": {
+    "pt-BR": "Alterações não salvas",
+    "en": "Unsaved changes"
+  },
+  "Save changes before continuing?": {
+    "pt-BR": "Salvar as alterações antes de continuar?",
+    "en": "Save changes before continuing?"
+  },
+  "Search command": {
+    "pt-BR": "Buscar comando",
+    "en": "Search command"
+  },
+  "Search results": {
+    "pt-BR": "Comandos encontrados",
+    "en": "Search results"
+  },
+  "&File": {
+    "pt-BR": "&Arquivo",
+    "en": "&File"
+  },
+  "&Edit": {
+    "pt-BR": "&Editar",
+    "en": "&Edit"
+  },
+  "&Select": {
+    "pt-BR": "&Selecionar",
+    "en": "&Select"
+  },
+  "&Add": {
+    "pt-BR": "&Adicionar",
+    "en": "&Add"
+  },
+  "&View": {
+    "pt-BR": "&Visualizar",
+    "en": "&View"
+  },
+  "&Window": {
+    "pt-BR": "&Janela",
+    "en": "&Window"
+  },
+  "&Help": {
+    "pt-BR": "&Ajuda",
+    "en": "&Help"
+  },
+  "Undo": {
+    "pt-BR": "Desfazer",
+    "en": "Undo"
+  },
+  "Redo": {
+    "pt-BR": "Refazer",
+    "en": "Redo"
+  },
+  "Document paint canvas": {
+    "pt-BR": "Canvas de pintura do documento",
+    "en": "Document paint canvas"
+  },
+  "UV editor": {
+    "pt-BR": "Editor UV",
+    "en": "UV editor"
+  },
+  "Dope Sheet and curve editor": {
+    "pt-BR": "Dope Sheet e editor de curvas",
+    "en": "Dope Sheet and curve editor"
+  },
+  "Roughness": {
+    "pt-BR": "Rugosidade",
+    "en": "Roughness"
+  },
+  "Metallic": {
+    "pt-BR": "Metálico",
+    "en": "Metallic"
+  },
+  "Normal strength": {
+    "pt-BR": "Intensidade da normal",
+    "en": "Normal strength"
+  },
+  "Emission strength": {
+    "pt-BR": "Emissão",
+    "en": "Emission strength"
+  },
+  "Alpha cutoff": {
+    "pt-BR": "Limiar alfa",
+    "en": "Alpha cutoff"
+  },
+  "Flow": {
+    "pt-BR": "Fluxo",
+    "en": "Flow"
+  },
+  "Spacing": {
+    "pt-BR": "Espaçamento",
+    "en": "Spacing"
+  },
+  "Smoothing": {
+    "pt-BR": "Estabilização",
+    "en": "Smoothing"
+  },
+  "Size jitter": {
+    "pt-BR": "Variação de tamanho",
+    "en": "Size jitter"
+  },
+  "Opacity jitter": {
+    "pt-BR": "Variação de opacidade",
+    "en": "Opacity jitter"
+  },
+  "Scatter": {
+    "pt-BR": "Dispersão",
+    "en": "Scatter"
+  },
+  "Spray density": {
+    "pt-BR": "Densidade do spray",
+    "en": "Spray density"
+  },
+  "Angle": {
+    "pt-BR": "Ângulo",
+    "en": "Angle"
+  },
+  "Roundness": {
+    "pt-BR": "Arredondamento",
+    "en": "Roundness"
+  },
+  "Editar última operação": {
+    "en": "Edit last operation",
+    "pt-BR": "Editar última operação"
+  },
+  "Excluir perfil": {
+    "en": "Delete profile",
+    "pt-BR": "Excluir perfil"
+  },
+  "Prévia da referência": {
+    "en": "Reference preview",
+    "pt-BR": "Prévia da referência"
+  },
+  "Edit last operation": {
+    "en": "Edit last operation",
+    "pt-BR": "Editar última operação"
+  },
+  "Delete profile": {
+    "en": "Delete profile",
+    "pt-BR": "Excluir perfil"
+  },
+  "Reference preview": {
+    "en": "Reference preview",
+    "pt-BR": "Prévia da referência"
+  },
+  "Viewport 3D": {
+    "en": "3D viewport",
+    "pt-BR": "Viewport 3D"
+  },
+  "Ferramentas do documento; Enter confirma, Escape cancela e F6 muda de região": {
+    "en": "Document tools; Enter confirms, Escape cancels and F6 changes region",
+    "pt-BR": "Ferramentas do documento; Enter confirma, Escape cancela e F6 muda de região"
+  },
+  "⬡ Objeto": {
+    "pt-BR": "⬡ Objeto",
+    "en": "⬡ Object"
+  },
+  "⬡ Object": {
+    "pt-BR": "⬡ Objeto",
+    "en": "⬡ Object"
+  },
+  "• Vértice": {
+    "pt-BR": "• Vértice",
+    "en": "• Vertex"
+  },
+  "• Vertex": {
+    "pt-BR": "• Vértice",
+    "en": "• Vertex"
+  },
+  "╱ Aresta": {
+    "pt-BR": "╱ Aresta",
+    "en": "╱ Edge"
+  },
+  "╱ Edge": {
+    "pt-BR": "╱ Aresta",
+    "en": "╱ Edge"
+  },
+  "▱ Face": {
+    "pt-BR": "▱ Face",
+    "en": "▱ Face"
+  },
+  "Modo Objeto (Atalho 1)": {
+    "pt-BR": "Modo Objeto (Atalho 1)",
+    "en": "Object selection (1)"
+  },
+  "Object selection (1)": {
+    "pt-BR": "Modo Objeto (Atalho 1)",
+    "en": "Object selection (1)"
+  },
+  "Modo Vértice (Atalho 1 em POLY)": {
+    "pt-BR": "Modo Vértice (Atalho 1 em POLY)",
+    "en": "Vertex selection (1 in POLY)"
+  },
+  "Vertex selection (1 in POLY)": {
+    "pt-BR": "Modo Vértice (Atalho 1 em POLY)",
+    "en": "Vertex selection (1 in POLY)"
+  },
+  "Modo Aresta (Atalho 2)": {
+    "pt-BR": "Modo Aresta (Atalho 2)",
+    "en": "Edge selection (2)"
+  },
+  "Edge selection (2)": {
+    "pt-BR": "Modo Aresta (Atalho 2)",
+    "en": "Edge selection (2)"
+  },
+  "Modo Face (Atalho 3)": {
+    "pt-BR": "Modo Face (Atalho 3)",
+    "en": "Face selection (3)"
+  },
+  "Face selection (3)": {
+    "pt-BR": "Modo Face (Atalho 3)",
+    "en": "Face selection (3)"
+  },
+  "Pivô:": {
+    "pt-BR": "Pivô:",
+    "en": "Pivot:"
+  },
+  "Pivot:": {
+    "pt-BR": "Pivô:",
+    "en": "Pivot:"
+  },
+  "Ponto Médio": {
+    "pt-BR": "Ponto Médio",
+    "en": "Median Point"
+  },
+  "Median Point": {
+    "pt-BR": "Ponto Médio",
+    "en": "Median Point"
+  },
+  "Origens Individuais": {
+    "pt-BR": "Origens Individuais",
+    "en": "Individual Origins"
+  },
+  "Individual Origins": {
+    "pt-BR": "Origens Individuais",
+    "en": "Individual Origins"
+  },
+  "Caixa Delimitadora": {
+    "pt-BR": "Caixa Delimitadora",
+    "en": "Bounding Box"
+  },
+  "Bounding Box": {
+    "pt-BR": "Caixa Delimitadora",
+    "en": "Bounding Box"
+  },
+  "Ponto de Pivô para Transformação": {
+    "pt-BR": "Ponto de Pivô para Transformação",
+    "en": "Transform pivot"
+  },
+  "Transform pivot": {
+    "pt-BR": "Ponto de Pivô para Transformação",
+    "en": "Transform pivot"
+  },
+  "Origem ▾": {
+    "pt-BR": "Origem ▾",
+    "en": "Origin ▾"
+  },
+  "Origin ▾": {
+    "pt-BR": "Origem ▾",
+    "en": "Origin ▾"
+  },
+  "Ajustar Origem do Objeto": {
+    "pt-BR": "Ajustar Origem do Objeto",
+    "en": "Set object origin"
+  },
+  "Set object origin": {
+    "pt-BR": "Ajustar Origem do Objeto",
+    "en": "Set object origin"
+  },
+  "○ Aramado": {
+    "pt-BR": "○ Aramado",
+    "en": "○ Wireframe"
+  },
+  "○ Wireframe": {
+    "pt-BR": "○ Aramado",
+    "en": "○ Wireframe"
+  },
+  "◐ Sólido": {
+    "pt-BR": "◐ Sólido",
+    "en": "◐ Solid"
+  },
+  "◐ Solid": {
+    "pt-BR": "◐ Sólido",
+    "en": "◐ Solid"
+  },
+  "● Material": {
+    "pt-BR": "● Material",
+    "en": "● Material"
+  },
+  "◉ Render": {
+    "pt-BR": "◉ Render",
+    "en": "◉ Render"
+  },
+  "Raio-X": {
+    "pt-BR": "Raio-X",
+    "en": "X-Ray"
+  },
+  "Orient. Faces": {
+    "pt-BR": "Orient. Faces",
+    "en": "Face Orientation"
+  },
+  "Face Orientation": {
+    "pt-BR": "Orient. Faces",
+    "en": "Face Orientation"
+  },
+  "Ativar/Desativar Snap (Shift+Tab)": {
+    "pt-BR": "Ativar/Desativar Snap (Shift+Tab)",
+    "en": "Toggle snapping (Shift+Tab)"
+  },
+  "Toggle snapping (Shift+Tab)": {
+    "pt-BR": "Ativar/Desativar Snap (Shift+Tab)",
+    "en": "Toggle snapping (Shift+Tab)"
+  },
+  "Alvo do Snap": {
+    "pt-BR": "Alvo do Snap",
+    "en": "Snap target"
+  },
+  "Edição Proporcional (O)": {
+    "pt-BR": "Edição Proporcional (O)",
+    "en": "Proportional editing (O)"
+  },
+  "Proportional editing (O)": {
+    "pt-BR": "Edição Proporcional (O)",
+    "en": "Proportional editing (O)"
+  },
+  "Raio de Influência": {
+    "pt-BR": "Raio de Influência",
+    "en": "Influence radius"
+  },
+  "Influence radius": {
+    "pt-BR": "Raio de Influência",
+    "en": "Influence radius"
+  },
+  "Ativar Sombreamento MatCap": {
+    "pt-BR": "Ativar Sombreamento MatCap",
+    "en": "Enable MatCap shading"
+  },
+  "Enable MatCap shading": {
+    "pt-BR": "Ativar Sombreamento MatCap",
+    "en": "Enable MatCap shading"
+  },
+  "Oclusão Ambiente (GTAO)": {
+    "pt-BR": "Oclusão Ambiente (GTAO)",
+    "en": "Ambient occlusion (GTAO)"
+  },
+  "Ambient occlusion (GTAO)": {
+    "pt-BR": "Oclusão Ambiente (GTAO)",
+    "en": "Ambient occlusion (GTAO)"
+  },
+  "Frente": {
+    "pt-BR": "Frente",
+    "en": "Front"
+  },
+  "Front": {
+    "pt-BR": "Frente",
+    "en": "Front"
+  },
+  "Trás": {
+    "pt-BR": "Trás",
+    "en": "Back"
+  },
+  "Back": {
+    "pt-BR": "Trás",
+    "en": "Back"
+  },
+  "Esq": {
+    "pt-BR": "Esq",
+    "en": "Left"
+  },
+  "Left": {
+    "pt-BR": "Esq",
+    "en": "Left"
+  },
+  "Dir": {
+    "pt-BR": "Dir",
+    "en": "Right"
+  },
+  "Right": {
+    "pt-BR": "Dir",
+    "en": "Right"
+  },
+  "Topo": {
+    "pt-BR": "Topo",
+    "en": "Top"
+  },
+  "Top": {
+    "pt-BR": "Topo",
+    "en": "Top"
+  },
+  "pixel": {
+    "pt-BR": "Pincel de pixel",
+    "en": "Pixel brush"
+  },
+  "Pixel brush": {
+    "pt-BR": "Pincel de pixel",
+    "en": "Pixel brush"
+  },
+  "airbrush": {
+    "pt-BR": "Aerógrafo",
+    "en": "Airbrush"
+  },
+  "Airbrush": {
+    "pt-BR": "Aerógrafo",
+    "en": "Airbrush"
+  },
+  "blur": {
+    "pt-BR": "Desfocar",
+    "en": "Blur"
+  },
+  "Blur": {
+    "pt-BR": "Desfocar",
+    "en": "Blur"
+  },
+  "dodge": {
+    "pt-BR": "Clarear",
+    "en": "Dodge"
+  },
+  "Dodge": {
+    "pt-BR": "Clarear",
+    "en": "Dodge"
+  },
+  "burn": {
+    "pt-BR": "Escurecer",
+    "en": "Burn"
+  },
+  "Burn": {
+    "pt-BR": "Escurecer",
+    "en": "Burn"
+  },
+  "spray": {
+    "pt-BR": "Spray",
+    "en": "Spray"
+  },
+  "Spray": {
+    "pt-BR": "Spray",
+    "en": "Spray"
+  },
+  "gradient": {
+    "pt-BR": "Gradiente",
+    "en": "Gradient"
+  },
+  "Gradient": {
+    "pt-BR": "Gradiente",
+    "en": "Gradient"
+  },
+  "gradient radial": {
+    "pt-BR": "Gradiente radial",
+    "en": "Radial gradient"
+  },
+  "Radial gradient": {
+    "pt-BR": "Gradiente radial",
+    "en": "Radial gradient"
+  },
+  "path paint": {
+    "pt-BR": "Pintura por caminho",
+    "en": "Path painting"
+  },
+  "Path painting": {
+    "pt-BR": "Pintura por caminho",
+    "en": "Path painting"
+  },
+  "projection": {
+    "pt-BR": "Projeção",
+    "en": "Projection"
+  },
+  "clone": {
+    "pt-BR": "Clonar",
+    "en": "Clone"
+  },
+  "Clone": {
+    "pt-BR": "Clonar",
+    "en": "Clone"
+  },
+  "brush": {
+    "pt-BR": "Pincel",
+    "en": "Brush"
+  },
+  "eraser": {
+    "pt-BR": "Borracha",
+    "en": "Eraser"
+  },
+  "Eraser": {
+    "pt-BR": "Borracha",
+    "en": "Eraser"
+  },
+  "smudge": {
+    "pt-BR": "Borrar",
+    "en": "Smudge"
+  },
+  "Smudge": {
+    "pt-BR": "Borrar",
+    "en": "Smudge"
+  },
+  "picker": {
+    "pt-BR": "Conta-gotas",
+    "en": "Color picker"
+  },
+  "Color picker": {
+    "pt-BR": "Conta-gotas",
+    "en": "Color picker"
+  },
+  "fill": {
+    "pt-BR": "Preencher",
+    "en": "Fill"
+  },
+  "Fill": {
+    "pt-BR": "Preencher",
+    "en": "Fill"
+  },
+  "line": {
+    "pt-BR": "Linha",
+    "en": "Line"
+  },
+  "Line": {
+    "pt-BR": "Linha",
+    "en": "Line"
+  },
+  "rectangle": {
+    "pt-BR": "Retângulo",
+    "en": "Rectangle"
+  },
+  "ellipse": {
+    "pt-BR": "Elipse",
+    "en": "Ellipse"
+  },
+  "Ellipse": {
+    "pt-BR": "Elipse",
+    "en": "Ellipse"
+  },
+  "decal": {
+    "pt-BR": "Decalque",
+    "en": "Decal"
+  },
+  "MODEL · controles do editor": {
+    "pt-BR": "MODEL · controles do editor",
+    "en": "MODEL · editor controls"
+  },
+  "MODEL · editor controls": {
+    "pt-BR": "MODEL · controles do editor",
+    "en": "MODEL · editor controls"
+  },
+  "PAINT · controles do editor": {
+    "pt-BR": "PAINT · controles do editor",
+    "en": "PAINT · editor controls"
+  },
+  "PAINT · editor controls": {
+    "pt-BR": "PAINT · controles do editor",
+    "en": "PAINT · editor controls"
+  },
+  "UV · controles do editor": {
+    "pt-BR": "UV · controles do editor",
+    "en": "UV · editor controls"
+  },
+  "UV · editor controls": {
+    "pt-BR": "UV · controles do editor",
+    "en": "UV · editor controls"
+  },
+  "ANIMATE · controles do editor": {
+    "pt-BR": "ANIMATE · controles do editor",
+    "en": "ANIMATE · editor controls"
+  },
+  "ANIMATE · editor controls": {
+    "pt-BR": "ANIMATE · controles do editor",
+    "en": "ANIMATE · editor controls"
+  },
+  "SETTINGS · controles do editor": {
+    "pt-BR": "SETTINGS · controles do editor",
+    "en": "SETTINGS · editor controls"
+  },
+  "SETTINGS · editor controls": {
+    "pt-BR": "SETTINGS · controles do editor",
+    "en": "SETTINGS · editor controls"
+  },
+  "REFERENCES · controles do editor": {
+    "pt-BR": "REFERENCES · controles do editor",
+    "en": "REFERENCES · editor controls"
+  },
+  "REFERENCES · editor controls": {
+    "pt-BR": "REFERENCES · controles do editor",
+    "en": "REFERENCES · editor controls"
+  },
+  "ASSETS · controles do editor": {
+    "pt-BR": "ASSETS · controles do editor",
+    "en": "ASSETS · editor controls"
+  },
+  "ASSETS · editor controls": {
+    "pt-BR": "ASSETS · controles do editor",
+    "en": "ASSETS · editor controls"
+  }
+}

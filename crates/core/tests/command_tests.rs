@@ -1960,7 +1960,7 @@ fn test_project_from_reference_and_bake_commands() {
         name: "Test Ref".into(),
         width: 2,
         height: 2,
-        rgba: ref_rgba,
+        rgba: ref_rgba.into(),
         axis: petunia_core::RefAxis::Front,
         offset: 0.0,
         size: 2.0,
@@ -2302,4 +2302,349 @@ fn test_commands_operate_with_application_selection() {
         })
         .unwrap();
     assert!(bevel_state.project.active_mesh().unwrap().faces.len() > before_bevel_faces);
+}
+
+#[test]
+fn test_command_guard_catches_panics_and_restores_document() {
+    struct BuggyPanicCmd;
+    impl petunia_core::command::Command for BuggyPanicCmd {
+        fn label(&self) -> &'static str {
+            "test.buggy_panic"
+        }
+        fn execute(
+            &self,
+            state: &mut petunia_core::command::CommandContext<'_>,
+        ) -> Result<(), petunia_core::command::CommandError> {
+            // Modifica algo antes do pânico para verificar que o rollback restaura
+            state.document.project.assets.clear();
+            panic!("Unexpected internal algorithm panic in mesh calculation");
+        }
+    }
+
+    let mut state = AppState::new("en");
+    state.project.add("Sample", petunia_mesh::Mesh::cube(1.0));
+    let initial_assets_len = state.project.assets.len();
+    let undo_depth_before = state.project.undo.depth().0;
+
+    let res = state.dispatch(&BuggyPanicCmd);
+    assert!(
+        res.is_err(),
+        "Comando que entra em pânico deve retornar Err"
+    );
+    let err_msg = format!("{:?}", res.unwrap_err());
+    assert!(
+        err_msg.contains("Internal error caught")
+            && err_msg.contains("Unexpected internal algorithm panic"),
+        "Mensagem de erro deve capturar o pânico interno: {}",
+        err_msg
+    );
+
+    // Invariante Never-Crash: o documento e os assets foram integralmente restaurados
+    assert_eq!(
+        state.project.assets.len(),
+        initial_assets_len,
+        "Snapshot do projeto deve ser revertido e manter o asset intacto"
+    );
+    assert_eq!(
+        state.project.undo.depth().0,
+        undo_depth_before,
+        "Pânico não pode gravar entrada inválida na pilha de Undo"
+    );
+}
+
+#[test]
+fn test_migrated_mesh_commands_are_transactional() {
+    use petunia_core::{
+        AppState, EditMode, MirrorMeshCmd, PushPullApplyCmd, SelectionDomain, SlicePlaneCmd,
+        TranslateSelectionCmd, TriangulateMeshCmd,
+    };
+
+    let mesh_snapshot = |state: &AppState| {
+        format!(
+            "{:?}",
+            state
+                .project
+                .active_mesh()
+                .expect("malha ativa sempre presente")
+        )
+    };
+
+    let mut state = AppState::new("en");
+    state.set_edit_mode(EditMode::Edit);
+
+    // 1. Move: seleção de vértice traduz uma vez e o Undo/Redo devolve o estado.
+    state.set_selection_domain(SelectionDomain::Vertex);
+    state.session.selection.verts = vec![0];
+    let before_move = mesh_snapshot(&state);
+    state
+        .dispatch(&TranslateSelectionCmd {
+            delta: [0.5, 0.0, 0.0],
+        })
+        .expect("move");
+    let after_move = mesh_snapshot(&state);
+    assert_ne!(after_move, before_move);
+    assert_eq!(state.project.undo.depth().0, 1);
+    assert!(state.undo());
+    assert_eq!(mesh_snapshot(&state), before_move);
+    assert!(state.redo());
+    assert_eq!(mesh_snapshot(&state), after_move);
+    assert!(state.undo());
+
+    // 2. Push/Pull imediato move o conjunto selecionado, não a malha inteira.
+    state.set_selection_domain(SelectionDomain::Face);
+    state.session.selection.faces = vec![0];
+    state.session.selection.verts = vec![0, 1, 2, 3];
+    let before_push = mesh_snapshot(&state);
+    let undo_depth_before_push = state.project.undo.depth().0;
+    state
+        .dispatch(&PushPullApplyCmd { dist: 0.4 })
+        .expect("push/pull");
+    let after_push = mesh_snapshot(&state);
+    assert_ne!(after_push, before_push);
+    assert_eq!(state.project.undo.depth().0, undo_depth_before_push + 1);
+    assert!(state.undo());
+    assert_eq!(mesh_snapshot(&state), before_push);
+
+    // 3. Mirror: sem seleção espelha o objeto inteiro e continua transacional.
+    state.set_selection_domain(SelectionDomain::Object);
+    state.session.selection.faces.clear();
+    state.session.selection.verts.clear();
+    let before_mirror = mesh_snapshot(&state);
+    state
+        .dispatch(&MirrorMeshCmd {
+            axis: 0,
+            weld: 0.001,
+        })
+        .expect("mirror");
+    assert_ne!(mesh_snapshot(&state), before_mirror);
+    assert!(state.undo());
+    assert_eq!(mesh_snapshot(&state), before_mirror);
+
+    // 4. Triangulate: quads viram triângulos e o Undo restaura os quads.
+    let before_tri = mesh_snapshot(&state);
+    assert!(
+        state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .iter()
+            .any(|f| f.verts.len() == 4)
+    );
+    state.dispatch(&TriangulateMeshCmd).expect("triangulate");
+    assert!(
+        state
+            .project
+            .active_mesh()
+            .unwrap()
+            .faces
+            .iter()
+            .all(|f| f.verts.len() == 3)
+    );
+    assert!(state.undo());
+    assert_eq!(mesh_snapshot(&state), before_tri);
+
+    // 5. Slice no centro da seleção recorta a malha; Undo restaura.
+    state.set_selection_domain(SelectionDomain::Vertex);
+    state.session.selection.verts = vec![0, 1, 2, 3];
+    let before_slice = mesh_snapshot(&state);
+    state
+        .dispatch(&SlicePlaneCmd {
+            normal: [0.0, 1.0, 0.0],
+            cap: true,
+        })
+        .expect("slice");
+    assert_ne!(mesh_snapshot(&state), before_slice);
+    assert!(state.undo());
+    assert_eq!(mesh_snapshot(&state), before_slice);
+}
+
+#[test]
+fn test_mesh_commands_reject_non_finite_and_degenerate_parameters() {
+    use petunia_core::{
+        AppState, EditMode, MirrorMeshCmd, PushPullApplyCmd, SelectionDomain, SlicePlaneCmd,
+        TranslateSelectionCmd,
+    };
+
+    let mut state = AppState::new("en");
+    state.set_edit_mode(EditMode::Edit);
+    state.set_selection_domain(SelectionDomain::Vertex);
+    state.session.selection.verts = vec![0];
+
+    let before = format!("{:?}", state.project.active_mesh().unwrap());
+    let depth_before = state.project.undo.depth();
+
+    // NaN/Inf em parâmetros de transformação nunca entram na geometria.
+    assert!(
+        state
+            .dispatch(&TranslateSelectionCmd {
+                delta: [f32::NAN, 0.0, 0.0],
+            })
+            .is_err()
+    );
+    assert!(
+        state
+            .dispatch(&PushPullApplyCmd {
+                dist: f32::INFINITY
+            })
+            .is_err()
+    );
+    // Eixo fora de 0..=2 e weld não-finito são degenerados.
+    assert!(
+        state
+            .dispatch(&MirrorMeshCmd {
+                axis: 3,
+                weld: 0.001,
+            })
+            .is_err()
+    );
+    assert!(
+        state
+            .dispatch(&MirrorMeshCmd {
+                axis: 0,
+                weld: f32::NAN,
+            })
+            .is_err()
+    );
+    // Normal nula não define plano de corte.
+    assert!(
+        state
+            .dispatch(&SlicePlaneCmd {
+                normal: [0.0, 0.0, 0.0],
+                cap: true,
+            })
+            .is_err()
+    );
+
+    assert_eq!(
+        format!("{:?}", state.project.active_mesh().unwrap()),
+        before,
+        "parâmetros inválidos não podem mexer na malha"
+    );
+    assert_eq!(
+        state.project.undo.depth(),
+        depth_before,
+        "comando recusado não abre transação de Undo"
+    );
+}
+
+#[test]
+fn test_edit_reference_command_validates_bounds_nan_and_revisions() {
+    use petunia_core::{AppState, EditReferenceCmd, RefAxis, ReferenceImage, ReferenceOp};
+
+    let mut state = AppState::new("en");
+
+    // Bounds: rgba inconsistente com width x height x 4 é recusado sem mutação.
+    let invalid = ReferenceImage::from_rgba("bad".into(), 4, 4, vec![0u8; 15]);
+    assert!(
+        state
+            .dispatch(&EditReferenceCmd {
+                axis: RefAxis::Front,
+                expected_revision: None,
+                op: ReferenceOp::SetSlot(invalid),
+            })
+            .is_err()
+    );
+    assert!(state.project.references().is_empty());
+    assert_eq!(state.project.undo.depth(), (0, 0));
+
+    // Slot válido entra como uma transação de Undo.
+    let image = ReferenceImage::from_rgba("front".into(), 2, 2, vec![255u8; 16]);
+    state
+        .dispatch(&EditReferenceCmd {
+            axis: RefAxis::Front,
+            expected_revision: None,
+            op: ReferenceOp::SetSlot(image),
+        })
+        .expect("set slot");
+    assert_eq!(state.project.references().len(), 1);
+    assert_eq!(state.project.undo.depth().0, 1);
+    let revision = state.project.references()[0].revision;
+    let offset_before = state.project.references()[0].offset;
+
+    // NaN em parâmetro autoral é recusado sem tocar na referência.
+    assert!(
+        state
+            .dispatch(&EditReferenceCmd {
+                axis: RefAxis::Front,
+                expected_revision: Some(revision),
+                op: ReferenceOp::Parameter {
+                    field: "offset".into(),
+                    value: f32::NAN,
+                },
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.references()[0].offset, offset_before);
+
+    // Parâmetro válido com a revisão observada é aceito e registrado.
+    state
+        .dispatch(&EditReferenceCmd {
+            axis: RefAxis::Front,
+            expected_revision: Some(revision),
+            op: ReferenceOp::Parameter {
+                field: "offset".into(),
+                value: 1.5,
+            },
+        })
+        .expect("offset");
+    assert_eq!(state.project.references()[0].offset, 1.5);
+
+    // Revisão obsoleta é recusada (StaleReference), sem remover o slot.
+    assert!(
+        state
+            .dispatch(&EditReferenceCmd {
+                axis: RefAxis::Front,
+                expected_revision: Some(revision),
+                op: ReferenceOp::Remove,
+            })
+            .is_err()
+    );
+    assert_eq!(state.project.references().len(), 1);
+
+    // Undo devolve o parâmetro autorado anterior.
+    assert!(state.undo());
+    assert_eq!(state.project.references().len(), 1);
+    assert_eq!(state.project.references()[0].offset, offset_before);
+}
+
+#[test]
+fn test_reference_pixels_stay_shared_without_copying_for_snapshots() {
+    use petunia_core::{AppState, EditReferenceCmd, RefAxis, ReferenceImage, ReferenceOp};
+    use petunia_project::Shared;
+
+    let mut state = AppState::new("en");
+    let pixels = vec![9u8; 4 * 4 * 4];
+    state
+        .dispatch(&EditReferenceCmd {
+            axis: RefAxis::Front,
+            expected_revision: None,
+            op: ReferenceOp::SetSlot(ReferenceImage::from_rgba(
+                "front".into(),
+                4,
+                4,
+                pixels.clone(),
+            )),
+        })
+        .expect("set slot");
+    state.project.sync_reference_mirror();
+
+    // O snapshot de Undo e o espelho de compatibilidade compartilham o buffer
+    // RGBA — clonar o documento não copia pixels.
+    let snapshot = state.project.project.clone();
+    let authored = state.project.references().first().expect("authored");
+    let frozen = snapshot.references.first().expect("snapshot");
+    let mirror = state.project.refs.first().expect("mirror");
+    assert!(Shared::ptr_eq(&authored.rgba, &frozen.rgba));
+    assert!(Shared::ptr_eq(&authored.rgba, &mirror.rgba));
+
+    // A primeira escrita copia só o bloco tocado (copy-on-write) e o snapshot
+    // congelado permanece intacto.
+    let mut edited = authored.clone();
+    edited.rgba[0] ^= 0xFF;
+    assert!(!Shared::ptr_eq(&authored.rgba, &edited.rgba));
+    assert_eq!(edited.rgba[0], pixels[0] ^ 0xFF);
+    assert_eq!(authored.rgba[0], pixels[0]);
+    assert_eq!(frozen.rgba[0], pixels[0]);
+    assert_eq!(mirror.rgba[0], pixels[0]);
 }

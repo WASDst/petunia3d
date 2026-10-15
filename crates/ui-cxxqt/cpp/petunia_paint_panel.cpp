@@ -1,4 +1,7 @@
 #include "petunia_paint_panel.h"
+#include "petunia_overlay_cards.h"
+#include "petunia_angle_dial.h"
+#include "petunia_icons.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -82,14 +85,23 @@ void PetuniaPaintCanvasWidget::paintAtPoint(const QPointF &pt) {
 
     auto drawBrushSpot = [&](const QPointF &pos) {
         float r = m_brushSize * 0.5f;
+        painter.save();
+        painter.translate(pos);
+        if (std::abs(m_brushAngle) > 0.001f) {
+            painter.rotate(-m_brushAngle);
+        }
+        if (m_brushRoundness < 0.999f) {
+            painter.scale(1.0, m_brushRoundness);
+        }
+
         if (m_activeTool == 1) { // Borracha
             painter.setCompositionMode(QPainter::CompositionMode_Clear);
             painter.setBrush(Qt::transparent);
             painter.setPen(Qt::NoPen);
-            painter.drawEllipse(pos, r, r);
+            painter.drawEllipse(QPointF(0, 0), r, r);
         } else { // Pincel normal
             painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-            QRadialGradient grad(pos, r);
+            QRadialGradient grad(QPointF(0, 0), r);
             QColor inner = m_brushColor;
             inner.setAlphaF(qBound(0.0f, m_brushOpacity, 1.0f));
             QColor mid = inner;
@@ -103,8 +115,9 @@ void PetuniaPaintCanvasWidget::paintAtPoint(const QPointF &pt) {
 
             painter.setPen(Qt::NoPen);
             painter.setBrush(grad);
-            painter.drawEllipse(pos, r, r);
+            painter.drawEllipse(QPointF(0, 0), r, r);
         }
+        painter.restore();
     };
 
     drawBrushSpot(pt);
@@ -241,14 +254,14 @@ void PetuniaPaintPanel::setupUi() {
 
     // 1. Barra Superior de Ferramentas e Simetria
     auto *topRow = new QHBoxLayout();
-    m_brushBtn = new QPushButton(QStringLiteral("🖌 Pincel"), this);
+    m_brushBtn = new QPushButton(PetuniaIcons::get("paint_brush"), QStringLiteral(" Pincel"), this);
     m_brushBtn->setCheckable(true);
     m_brushBtn->setChecked(true);
-    m_eraserBtn = new QPushButton(QStringLiteral("⌫ Borracha"), this);
+    m_eraserBtn = new QPushButton(PetuniaIcons::get("paint_eraser"), QStringLiteral(" Borracha"), this);
     m_eraserBtn->setCheckable(true);
-    m_bucketBtn = new QPushButton(QStringLiteral("🪣 Preencher"), this);
+    m_bucketBtn = new QPushButton(PetuniaIcons::get("paint_fill"), QStringLiteral(" Preencher"), this);
     m_bucketBtn->setCheckable(true);
-    m_eyedropperBtn = new QPushButton(QStringLiteral("💉 Amostra"), this);
+    m_eyedropperBtn = new QPushButton(PetuniaIcons::get("paint_picker"), QStringLiteral(" Amostra"), this);
     m_eyedropperBtn->setCheckable(true);
 
     auto *toolGroup = new QButtonGroup(this);
@@ -404,6 +417,46 @@ void PetuniaPaintPanel::setupUi() {
     smoothRow->addWidget(m_smoothingLabel);
     form->addRow(QStringLiteral("Suavização:"), smoothRow);
 
+    // Ângulo (Dial circular DCC com SpinBox sincronizado)
+    auto *angleRow = new QHBoxLayout();
+    m_angleDial = new PetuniaAngleDial(brushGroup);
+    m_angleDial->setFixedSize(36, 36);
+    m_angleSpin = new QDoubleSpinBox(brushGroup);
+    m_angleSpin->setRange(0.0, 360.0);
+    m_angleSpin->setSingleStep(1.0);
+    m_angleSpin->setDecimals(1);
+    m_angleSpin->setSuffix(QStringLiteral("°"));
+    m_angleSpin->setWrapping(true);
+    m_angleSpin->setValue(0.0);
+    m_angleSpin->setAccessibleName(tr("Ângulo do pincel"));
+
+    connect(m_angleDial, &PetuniaAngleDial::angleChanged, this, [this](float deg) {
+        if (std::abs(m_angleSpin->value() - deg) > 0.1) {
+            QSignalBlocker blocker(m_angleSpin);
+            m_angleSpin->setValue(deg);
+        }
+        if (m_paintCanvas) {
+            m_paintCanvas->setBrushAngle(deg);
+        }
+        emit brushAngleChanged(deg);
+    });
+
+    connect(m_angleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double val) {
+        float fVal = static_cast<float>(val);
+        if (std::abs(m_angleDial->angle() - fVal) > 0.1f) {
+            m_angleDial->setAngle(fVal);
+        }
+        if (m_paintCanvas) {
+            m_paintCanvas->setBrushAngle(fVal);
+        }
+        emit brushAngleChanged(fVal);
+    });
+
+    angleRow->addWidget(m_angleDial);
+    angleRow->addWidget(m_angleSpin);
+    angleRow->addStretch();
+    form->addRow(QStringLiteral("Ângulo:"), angleRow);
+
     // Modo de Mesclagem
     m_blendModeCombo = new QComboBox(brushGroup);
     m_blendModeCombo->addItem(QStringLiteral("Normal"));
@@ -518,9 +571,12 @@ void PetuniaPaintPanel::setupUi() {
 }
 
 void PetuniaPaintPanel::pickColor() {
-    QColor col = QColorDialog::getColor(m_currentColor, this, QStringLiteral("Cor do Pincel"));
-    if (col.isValid()) {
-        applyPaletteColor(col);
+    PetuniaColorPickerPopover picker(this);
+    picker.setTitle(QStringLiteral("Cor do Pincel"));
+    picker.setColor(m_currentColor);
+    connect(&picker, &PetuniaColorPickerPopover::colorChanged, this, &PetuniaPaintPanel::applyPaletteColor);
+    if (picker.exec() == QDialog::Accepted) {
+        applyPaletteColor(picker.color());
     }
 }
 

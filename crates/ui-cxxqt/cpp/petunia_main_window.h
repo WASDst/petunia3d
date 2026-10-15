@@ -1,31 +1,37 @@
 #pragma once
 
-#include <QMainWindow>
+#include "petunia_editor_panel.h"
+#include "petunia_gl_widget.h"
+#include <QCloseEvent>
+#include <QComboBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMainWindow>
+#include <QPointer>
+#include <QPushButton>
+#include <QSlider>
+#include <QSortFilterProxyModel>
+#include <QSplitter>
+#include <QStackedWidget>
+#include <QStandardItemModel>
 #include <QToolBar>
 #include <QTreeView>
-#include <QStandardItemModel>
-#include <QSortFilterProxyModel>
-#include <QLineEdit>
-#include <QSlider>
-#include <QLabel>
-#include <QPushButton>
-#include <QDoubleSpinBox>
-#include <QSplitter>
-#include <QComboBox>
 #include <QVBoxLayout>
-#include "petunia_gl_widget.h"
 
 class PetuniaMainWindow : public QMainWindow {
     Q_OBJECT
 
-public:
+  public:
     explicit PetuniaMainWindow(QWidget *parent = nullptr);
     ~PetuniaMainWindow() override;
 
-    PetuniaGlWidget* viewport() const { return m_viewport; }
+    PetuniaGlWidget *viewport() const { return m_viewport; }
+    class PetuniaDockManager *dockManager() const { return m_dockManager; }
 
-public slots:
+  public slots:
     void syncFromApplication();
     void openCommandPalette();
     void openHomeDialog();
@@ -41,7 +47,8 @@ public slots:
     void updateSelectedCount(int count);
     void updateDirtyState(bool isDirty);
     void setStatusMessage(const QString &message);
-    void populateOutliner(const QStringList &objectNames, const QList<bool> &visibilities);
+    void populateOutliner(const QStringList &objectNames,
+                          const QList<bool> &visibilities);
     void onOutlinerContextMenu(const QPoint &pos);
     void newProject();
     void openProject();
@@ -54,27 +61,46 @@ public slots:
     void showPrimitiveCard(const QString &type);
     void showLoopCutCard();
 
-signals:
+  signals:
     void workspaceChanged(const QString &workspace);
     void actionTriggered(const QString &action);
     void objectSelected(int index);
     void objectVisibilityToggled(int index, bool visible);
 
-private:
+  protected:
+    bool eventFilter(QObject *, QEvent *) override;
+    void closeEvent(QCloseEvent *) override;
+
+  private:
+    void syncEditorState(const QJsonObject &);
+    void applyPreferences(const QJsonObject &);
+    void updateToolRail(const QString &, const QJsonObject &);
+    QString m_toolRailMode;
+    bool confirmDiscard();
+    QList<PetuniaEditorPanel *> m_editorPanels;
+    QJsonObject m_editorState;
+    QElapsedTimer m_frameClock;
+    QString m_themeSignature;
     void setupUi();
     void setupMenuBar();
     void setupWorkspaceBar();
     void setupToolRail();
     void setupDocks();
+    void setupInspector();
     void setupStatusBar();
     void applyDarkTheme();
+    void repositionFloatingBars();
 
     PetuniaGlWidget *m_viewport{nullptr};
+    QStackedWidget *m_primaryStack{nullptr};
+    PetuniaEditorCanvas *m_primaryPaintCanvas{nullptr};
+    PetuniaGlWidget *m_pipViewport{nullptr};
     QSplitter *m_viewportSplitter{nullptr};
     QWidget *m_secondaryViewportContainer{nullptr};
     PetuniaGlWidget *m_secondaryViewport{nullptr};
 
-    // Docas Destacáveis (Multi-Monitor Suportado)
+    // Docas Destacáveis (Multi-Monitor Suportado via PetuniaDockManager)
+    class PetuniaDockManager *m_dockManager{nullptr};
     QDockWidget *m_outlinerDock{nullptr};
     QDockWidget *m_inspectorDock{nullptr};
     QDockWidget *m_timelineDock{nullptr};
@@ -88,17 +114,27 @@ private:
     class PetuniaPrimitiveCard *m_primitiveCard{nullptr};
     class PetuniaLoopCutCard *m_loopCutCard{nullptr};
     class PetuniaToolOptionsBar *m_toolOptionsBar{nullptr};
+    class PetuniaFloatingContextBar *m_contextBar{nullptr};
     class PetuniaMicroInspector *m_microInspector{nullptr};
     class PetuniaOperationHud *m_operationHud{nullptr};
     class PetuniaAddMenu *m_addMenu{nullptr};
+    class PetuniaPieMenu *m_pieMenu{nullptr};
     class PetuniaHomeDialog *m_homeDialog{nullptr};
     class PetuniaRecoveryDialog *m_recoveryDialog{nullptr};
+    QPointer<QDialog> m_referenceDialog{nullptr};
 
     // Componentes da Árvore de Cena (Outliner)
     QTreeView *m_outlinerTree{nullptr};
+    class PetuniaPlaceholderMessage *m_outlinerPlaceholder{nullptr};
     QStandardItemModel *m_outlinerModel{nullptr};
     QSortFilterProxyModel *m_outlinerProxy{nullptr};
     QLineEdit *m_outlinerSearch{nullptr};
+    QPushButton *m_outlinerFilterBtn{nullptr};
+    QPushButton *m_outlinerSortBtn{nullptr};
+    QPushButton *m_outlinerSeparateBtn{nullptr};
+    QSlider *m_outlinerRowSizeSlider{nullptr};
+    int m_outlinerRowHeight{22};
+    QMenuBar *m_headerMenuBar{nullptr};
 
     // Componentes do Inspetor (Transform & Material)
     QDoubleSpinBox *m_posX{nullptr};

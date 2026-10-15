@@ -9,7 +9,6 @@ use std::process::Command;
 mod bible;
 mod generator;
 mod icons_check;
-mod slint_lint;
 use generator::GeneratedCatalog;
 
 fn main() -> Result<()> {
@@ -28,7 +27,9 @@ fn main() -> Result<()> {
         "arch-check" => task_arch_check()?,
         "verify" => task_verify()?,
         "icons-check" => icons_check::run(&root_dir())?,
-        "ui-lint" => slint_lint::run(&root_dir())?,
+        "ui-lint" => {
+            println!("ℹ️ ui-lint: Slint aposentado em favor do Qt Widgets.");
+        }
         "ui-metrics" => task_ui_metrics()?,
         "help" | "--help" | "-h" => print_help(),
         other => {
@@ -315,7 +316,7 @@ fn task_docs_check() -> Result<()> {
 }
 
 /// Único arquivo autorizado a abrir o diálogo nativo de arquivos (Gauntlet G4).
-const FILE_DIALOG_BOUNDARY: &str = "crates/ui-slint/src/files.rs";
+const FILE_DIALOG_BOUNDARY: &str = "crates/editor/src/files.rs";
 
 fn task_arch_check() -> Result<()> {
     println!("🔍 Validando relatórios da Auditoria Arquitetural...");
@@ -405,7 +406,7 @@ fn task_arch_check() -> Result<()> {
         ),
         (
             "crates/render/Cargo.toml",
-            &["slint", "petunia_ui_slint", "petunia_application"][..],
+            &["petunia_editor", "petunia_ui_cxxqt", "petunia_application"][..],
             "petunia_render não pode depender da UI nem da Application (recebe só RenderFrameInput)",
         ),
         (
@@ -633,6 +634,31 @@ fn task_arch_check() -> Result<()> {
         "✅ Módulos purificados: module-model, module-paint, module-uv e module-assets são 100% livres de egui."
     );
 
+    println!(
+        "🛡️ Validando ausência de state.checkpoint() direto em module-model, module-uv e module-assets..."
+    );
+    for file_path in &rs_files {
+        let rel = file_path
+            .strip_prefix(&root)
+            .unwrap_or(file_path)
+            .to_string_lossy();
+        if rel.starts_with("crates/module-model/")
+            || rel.starts_with("crates/module-uv/")
+            || rel.starts_with("crates/module-assets/")
+        {
+            let content = std::fs::read_to_string(file_path)
+                .with_context(|| format!("Falha ao ler {}", file_path.display()))?;
+            if content.contains("state.checkpoint(") {
+                bail!(
+                    "Violação Everything is a Command: {rel} chama state.checkpoint() diretamente em vez de despachar um Command!"
+                );
+            }
+        }
+    }
+    println!(
+        "✅ Comandos de módulo validados: module-model, module-uv e module-assets despacham mutações via CommandDispatcher."
+    );
+
     println!("🛡️ Validando soberania headless do crate CLI (Gauntlet G8 / F-011)...");
     for file_path in &rs_files {
         let rel = file_path
@@ -826,7 +852,7 @@ fn task_arch_check() -> Result<()> {
         "crates/module-uv",
         "crates/module-assets",
         "crates/application",
-        "crates/ui-slint",
+        "crates/editor",
         "crates/cli",
         "crates/ffi",
     ];
@@ -1063,24 +1089,7 @@ fn task_verify() -> Result<()> {
 
 /// Métricas do shell (plano de UI F0): literais de estilo e controles visíveis.
 fn task_ui_metrics() -> Result<()> {
-    slint_lint::run(&root_dir())?;
-    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
-        .current_dir(root_dir())
-        .args([
-            "test",
-            "-q",
-            "-p",
-            "petunia_ui_slint",
-            "--test",
-            "ui_metrics",
-            "--",
-            "--nocapture",
-        ])
-        .status()
-        .context("falha ao rodar o teste ui_metrics")?;
-    if !status.success() {
-        bail!("ui-metrics: a contagem de controles passou da meta (ver tabela acima)");
-    }
+    println!("ℹ️ ui-metrics: Slint aposentado em favor do Qt Widgets.");
     Ok(())
 }
 

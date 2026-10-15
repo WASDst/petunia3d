@@ -4,6 +4,8 @@
 >
 > O estado implementado atual cobre principalmente a experiência procedural-first (Creature + Motion + preview). Timeline de keyframes, Ghosts/Trails, Tweak Layers e Reference Frames são expansão posterior e **não devem ser documentados como concluídos**.
 
+Precisão temporal, clipe explícito, keying da pose avaliada, atalhos e posing/IK são acompanhados na [proposta e matriz das ferramentas compartilhadas](../02-application/tools-interaction-implementation.md). A documentação dessa proposta não fecha o aceite de keyframing ou altera o escopo procedural já registrado.
+
 ## 1. Objetivo
 
 ANIMATE deve permitir criar movimento útil antes de exigir conhecimento de rigging/keyframes.

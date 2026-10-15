@@ -508,6 +508,27 @@ impl LoopRing {
             }
         }
         result.faces = faces;
+        // A aresta cortada vira a cadeia de sub-arestas ao longo dela: seam/Sharp
+        // seguem, nunca são descartados em silêncio. Arestas fora do anel mantêm
+        // o flag original (website/docs/03-geometry/normals-shading-sharp-edges.md).
+        let remap_cut_edges = |set: &HashSet<Edge>| -> HashSet<Edge> {
+            let mut out = HashSet::new();
+            for &edge in set {
+                match splits.get(&key(edge)) {
+                    Some(points) => {
+                        for pair in points.windows(2) {
+                            out.insert(key((pair[0].0, pair[1].0)));
+                        }
+                    }
+                    None => {
+                        out.insert(key(edge));
+                    }
+                }
+            }
+            out
+        };
+        result.uv_seams = remap_cut_edges(&result.uv_seams);
+        result.sharp_edges = remap_cut_edges(&result.sharp_edges);
         Ok(result)
     }
 }
@@ -628,6 +649,34 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loop_cut_propagates_seams_and_sharp_along_cut_edges() {
+        let mut mesh = Mesh::cube(2.0);
+        let face = mesh.faces[0].clone();
+        let (a, b, c) = (face.verts[0], face.verts[1], face.verts[2]);
+        let cut_edge = key((a, b)); // transversal: o anel corta esta aresta
+        let kept_edge = key((b, c)); // longitudinal: fica intacta
+        mesh.uv_seams.insert(cut_edge);
+        mesh.uv_seams.insert(kept_edge);
+        mesh.sharp_edges.insert(cut_edge);
+        mesh.sharp_edges.insert(kept_edge);
+
+        mesh.loop_cut((a, b), 1, 0.0).unwrap();
+
+        assert_eq!(mesh.uv_seams, mesh.sharp_edges);
+        assert!(
+            mesh.uv_seams.contains(&kept_edge),
+            "aresta fora do corte mantém o flag"
+        );
+        assert!(
+            !mesh.uv_seams.contains(&cut_edge),
+            "aresta cortada vira a cadeia de sub-arestas"
+        );
+        assert_eq!(mesh.uv_seams.len(), 3, "2 sub-arestas + 1 intacta");
+        let existing: HashSet<Edge> = mesh.edges_unique().into_iter().collect();
+        assert!(mesh.uv_seams.iter().all(|edge| existing.contains(edge)));
+    }
 
     fn assert_closed(mesh: &Mesh) {
         let mut edges: HashMap<Edge, usize> = HashMap::new();

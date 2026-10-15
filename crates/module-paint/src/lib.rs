@@ -11,16 +11,16 @@
 //! - Sincronização direta com o modelo canônico de Material (P3D-050).
 
 mod engine;
+mod paint_stack_commands;
 mod path_paint;
 pub mod projection;
-mod paint_stack_commands;
 mod surface_commands;
 pub use engine::dab_falloff;
+pub use paint_stack_commands::{DecalEdit, PaintStackCmd, PaintStackOp};
 pub use path_paint::{
     MAX_LINE_PIXELS, MAX_PATH_DABS, MAX_PATH_NODES, SurfaceHit, line_pixels, pixel_perfect,
     project_path_onto_surface, sample_path, snap_to_surface,
 };
-pub use paint_stack_commands::{DecalEdit, PaintStackCmd, PaintStackOp};
 pub use surface_commands::{
     GradientPaintCmd, GradientShape, PaintPathCmd, PathPaintMode, ProjectionPaintCmd, ShapePaintCmd,
 };

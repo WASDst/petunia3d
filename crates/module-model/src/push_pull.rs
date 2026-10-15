@@ -30,12 +30,11 @@ impl Tool for PushPullTool {
 
 impl PushPullTool {
     pub fn apply(state: &mut AppState) {
-        let d = state.push_dist;
-        state.checkpoint("push/pull");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.push_pull(d);
+        let cmd = petunia_core::PushPullApplyCmd {
+            dist: state.push_dist,
+        };
+        if let Err(err) = state.dispatch(&cmd) {
+            state.set_status(format!("push/pull: {err}"));
         }
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 }

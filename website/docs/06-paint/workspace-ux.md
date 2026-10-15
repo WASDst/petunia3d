@@ -1,6 +1,8 @@
 # PAINT Workspace — UX e Comportamento
 
 > **Status: aprovado em 2026-10-08.**
+
+As correções de scope/máscara de Fill, picker temporário e diagnóstico de bloqueios são acompanhadas na [proposta e matriz das ferramentas compartilhadas](../02-application/tools-interaction-implementation.md). Esse plano preserva a precedência da pintura e não autoriza movimento geométrico ao selecionar uma máscara.
 >
 > Este documento especializa o contrato global de [Workspaces, Feedback Visual e Acessibilidade](../09-ui/workspaces-feedback-accessibility.md) para o workspace PAINT. A arquitetura de dados continua definida em [Paint Architecture](./architecture-decision.md) e o sistema de decal em [Decals e Animated Decals](./decals-animated-decals.md).
 

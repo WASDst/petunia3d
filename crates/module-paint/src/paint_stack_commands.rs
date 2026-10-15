@@ -16,19 +16,33 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 pub enum DecalEdit {
     /// Rerasteriza o SVG de origem com o lado maior `size`.
-    Rerasterize { size: u32 },
+    Rerasterize {
+        size: u32,
+    },
     /// Acrescenta uma variante e passa a mostrá-la.
-    AddVariant { variant: Box<DecalVariant> },
-    SetVariant { index: usize },
+    AddVariant {
+        variant: Box<DecalVariant>,
+    },
+    SetVariant {
+        index: usize,
+    },
     /// Remove a variante mostrada (a última não sai).
     RemoveShownVariant,
     /// Grava a variante mostrada no quadro `frame` da trilha.
-    SetKey { frame: u32 },
-    RemoveKey { frame: u32 },
+    SetKey {
+        frame: u32,
+    },
+    RemoveKey {
+        frame: u32,
+    },
     /// Quadros por segundo da trilha, `1..=60`.
-    TrackFps { fps: f32 },
+    TrackFps {
+        fps: f32,
+    },
     /// Duração do ciclo, nunca menor que a última chave.
-    TrackLength { frames: u32 },
+    TrackLength {
+        frames: u32,
+    },
 }
 
 impl DecalEdit {
@@ -74,21 +88,55 @@ impl DecalEdit {
 /// Operação sobre a pilha de camadas do objeto ativo.
 #[derive(Clone, Debug)]
 pub enum PaintStackOp {
-    AddLayer { name: String, width: u32, height: u32 },
-    AddGroup { name: String },
-    AddEffect { name: String, effect: PaintEffect },
+    AddLayer {
+        name: String,
+        width: u32,
+        height: u32,
+    },
+    AddGroup {
+        name: String,
+    },
+    AddEffect {
+        name: String,
+        effect: PaintEffect,
+    },
     /// Parâmetro `key` do efeito da camada ativa, limitado à faixa válida.
-    SetEffectParam { key: String, value: f32 },
-    AddDecal { name: String, decal: Box<DecalLayer> },
-    SetActive { layer: Uuid },
-    ToggleVisible { layer: Uuid },
-    ToggleLock { layer: Uuid },
+    SetEffectParam {
+        key: String,
+        value: f32,
+    },
+    AddDecal {
+        name: String,
+        decal: Box<DecalLayer>,
+    },
+    SetActive {
+        layer: Uuid,
+    },
+    ToggleVisible {
+        layer: Uuid,
+    },
+    ToggleLock {
+        layer: Uuid,
+    },
     /// A última camada é a base do raster e não sai.
-    Remove { layer: Uuid },
-    MergeDown { layer: Uuid },
-    Move { layer: Uuid, delta: i32 },
-    SetOpacity { layer: Uuid, opacity: f32 },
-    SetBlend { layer: Uuid, blend: petunia_project::paint_layers::LayerBlendMode },
+    Remove {
+        layer: Uuid,
+    },
+    MergeDown {
+        layer: Uuid,
+    },
+    Move {
+        layer: Uuid,
+        delta: i32,
+    },
+    SetOpacity {
+        layer: Uuid,
+        opacity: f32,
+    },
+    SetBlend {
+        layer: Uuid,
+        blend: petunia_project::paint_layers::LayerBlendMode,
+    },
     EditActiveDecal(DecalEdit),
 }
 
@@ -199,7 +247,9 @@ impl PaintStackOp {
                 }
                 let opacity = opacity.clamp(0.0, 1.0);
                 match find(stack, *layer) {
-                    Some(index) if (stack.layers[index].opacity - opacity).abs() >= f32::EPSILON => {
+                    Some(index)
+                        if (stack.layers[index].opacity - opacity).abs() >= f32::EPSILON =>
+                    {
                         stack.layers[index].opacity = opacity;
                         true
                     }
@@ -255,7 +305,12 @@ impl Command for PaintStackCmd {
         crate::PaintModule::ensure_stack_in(state);
         // Só a fusão precisa da malha (para sangrar entre ilhas UV).
         let mesh = matches!(self.op, PaintStackOp::MergeDown { .. })
-            .then(|| state.document.active().map(|asset| asset.mesh.to_owned_value()))
+            .then(|| {
+                state
+                    .document
+                    .active()
+                    .map(|asset| asset.mesh.to_owned_value())
+            })
             .flatten();
         let stack = state
             .document
@@ -264,7 +319,9 @@ impl Command for PaintStackCmd {
             .ok_or(CommandError::NoActiveAsset)?;
         if !self.op.apply(stack, mesh.as_ref()) {
             // O dispatcher desfaz também a conversão textura → pilha.
-            return Err(CommandError::Execution("paint layer: nothing to change".into()));
+            return Err(CommandError::Execution(
+                "paint layer: nothing to change".into(),
+            ));
         }
         crate::PaintModule::composite_active_in(state);
         Ok(())

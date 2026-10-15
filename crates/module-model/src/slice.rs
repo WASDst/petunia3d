@@ -29,17 +29,12 @@ impl Tool for SliceTool {
 
 impl SliceTool {
     pub fn apply_slice(state: &mut AppState, normal: Vec3, cap: bool) {
-        state.checkpoint("slice");
-        let center = if let Some(m) = state.project.active_mesh() {
-            Vec3::from(m.selection_center())
-        } else {
-            Vec3::ZERO
+        let cmd = petunia_core::SlicePlaneCmd {
+            normal: normal.to_array(),
+            cap,
         };
-
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.slice_plane(center, normal, cap);
+        if let Err(err) = state.dispatch(&cmd) {
+            state.set_status(format!("slice: {err}"));
         }
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 }

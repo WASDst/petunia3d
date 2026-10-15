@@ -44,7 +44,7 @@ QtObject {
 
     // Tipografia (Inter)
     readonly property string fontFamily: "Inter"
-    readonly property int fontCaption: 11
+    readonly property int fontCaption: 12
     readonly property int fontSmall: 12
     readonly property int fontDefault: 13
     readonly property int fontStrong: 14

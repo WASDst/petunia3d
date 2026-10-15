@@ -96,3 +96,17 @@ Decisão sem evidência de viabilidade não vira conclusão de testes. O caderno
 ## ADR-C10 — base funcional única e integração Qt (2026-10-13)
 
 O usuário autorizou trazer o adapter Qt para o repositório da implementação funcional, evitando duas cópias independentes do motor. `refactor/architecture-foundation` é a linha funcional; `codex/qt-integration` trabalha em worktree do mesmo repositório. As features compartilhadas vivem em Core/Application/Geometry/Project/Renderer; Qt é consumidor desses contratos, não uma segunda implementação do domínio. Slint permanece a entrada padrão durante a integração. Aceitação de produção Qt, paridade, Windows/Linux, a11y e performance continuam independentes deste transporte. Protocolo e evidências: [Integração Qt](../09-ui/qt-integration.md).
+
+## Proposta registrada — ferramentas e seleção dinâmica (2026-10-15)
+
+O usuário solicitou documentar a auditoria de ferramentas/atalhos e a proposta de seleção com movimento direto, incluindo matriz com status de implementação sempre preenchido. A referência transversal é [Ferramentas compartilhadas — proposta e matriz de implementação](../02-application/tools-interaction-implementation.md); H01–H18 acompanham os deltas e D03 acompanha somente a entrega documental. Trata-se de proposta registrada e plano de execução, sem declarar UX ratificada, correções implementadas ou frontend aceito. A restrição atual de não alterar Qt/Slint permanece vigente. Os contratos existentes de Paint, UV, Animation e Commands continuam autoritativos em suas responsabilidades.
+
+## ADR-C11 — Abandono e remoção total do Slint e consolidação em Qt 6 + petunia_editor (2026-10-15)
+
+Por solicitação explícita do usuário ("analisar a implementação para abandono e remoção total da GUI em slint e de suas dependencias para não pesar mais o projeto"), a avaliação de substituição/viabilidade do Slint foi concluída com a decisão de **No-Go** e remoção definitiva de toda a infraestrutura Slint (`slint`, `slint-build`, crates `i-slint-*` e `crates/ui-slint/`) do repositório e do workspace Cargo.
+
+Decisões arquiteturais e operacionais:
+1. **Controlador neutro desacoplado (`crates/editor` / `petunia_editor`):** A máquina de estados, o gerenciamento de sessões de ferramentas, projeções de viewport e intents do editor (anteriormente `SlintUiBridge`) foram extraídos para o crate neutro `crates/editor` (`petunia_editor`). Este crate não depende de Slint, Qt, FFI ou GPU, servindo como o controlador headless único do produto.
+2. **Purga completa das dependências Slint:** O crate `crates/ui-slint/` foi excluído do repositório, assim como todas as suas regras de lint e dependências no `Cargo.toml` raiz e `Cargo.lock`. Isso alivia o tempo de compilação, o consumo de disco e de memória durante o desenvolvimento.
+3. **Frontend Qt 6 primário (`crates/ui-cxxqt`):** `crates/ui-cxxqt` passa a ser o frontend padrão do executável principal (`src/main.rs`), consumindo diretamente o `petunia_editor`. A execução da GUI passa a ocorrer via `petunia_ui_cxxqt::widgets::run()`.
+4. **Isolamento de camadas (L6):** A UI em C++/Qt Widgets e QML permanece estritamente na camada de apresentação (L6), comunicando-se com `petunia_editor` através de DTOs e despachando comandos transacionais para a camada Application.

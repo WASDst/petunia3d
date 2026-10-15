@@ -322,6 +322,32 @@ impl ProjectState {
         }
     }
 
+    /// Normalize legacy session references before a document transaction.
+    /// The compatibility list is a derived mirror after normalization.
+    pub fn normalize_references(&mut self) {
+        if self.project.references.is_empty() && !self.refs.is_empty() {
+            self.project.references = self.refs.clone();
+        }
+        self.sync_reference_mirror();
+    }
+
+    pub fn sync_reference_mirror(&mut self) {
+        // Reference revisions cover pixels and parameters; avoid copying RGBA
+        // buffers for unrelated document commands.
+        if self.refs.len() == self.project.references.len()
+            && self
+                .refs
+                .iter()
+                .zip(&self.project.references)
+                .all(|(mirror, authored)| {
+                    mirror.revision == authored.revision && mirror.axis == authored.axis
+                })
+        {
+            return;
+        }
+        self.refs = self.project.references.clone();
+    }
+
     /// Acesso mutável às imagens de referência autorais no documento (A03 / Checkpoint 3).
     pub fn references_mut(&mut self) -> &mut Vec<ReferenceImage> {
         &mut self.project.references
@@ -436,8 +462,14 @@ impl ProjectState {
         let obj = self.project.assets.get(self.project.active)?;
         let mut best: Option<((u32, u32), f32, f32, Vec3)> = None;
         for (a, b) in obj.mesh.edges_unique() {
-            let pa = obj.mesh.verts[a as usize].vec();
-            let pb = obj.mesh.verts[b as usize].vec();
+            let (Some(va), Some(vb)) = (
+                obj.mesh.verts.get(a as usize),
+                obj.mesh.verts.get(b as usize),
+            ) else {
+                continue;
+            };
+            let pa = va.vec();
+            let pb = vb.vec();
             let mut bd = f32::MAX;
             let mut bp = pa;
             for k in 0..=8 {
@@ -2557,6 +2589,7 @@ impl CommandContext<'_> {
         self.editor.selection.assets = snapshot.history_selection.clone();
         self.document.palette = snapshot.palette.clone();
         self.document.project = snapshot;
+        self.document.sync_reference_mirror();
         self.sync_selection();
         self.editor.tools.uv_selection.clear();
         self.emit_project_changed(ProjectChanges::ALL);
@@ -2583,6 +2616,7 @@ impl CommandContext<'_> {
             self.editor.selection.assets = prev.history_selection.clone();
             self.document.palette = prev.palette.clone();
             self.document.project = prev;
+            self.document.sync_reference_mirror();
             self.sync_selection();
             self.editor.tools.uv_selection.clear();
             self.emit_project_changed(ProjectChanges::ALL);
@@ -2613,6 +2647,7 @@ impl CommandContext<'_> {
             self.editor.selection.assets = next.history_selection.clone();
             self.document.palette = next.palette.clone();
             self.document.project = next;
+            self.document.sync_reference_mirror();
             self.sync_selection();
             self.editor.tools.uv_selection.clear();
             self.emit_project_changed(ProjectChanges::ALL);

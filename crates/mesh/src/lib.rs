@@ -275,16 +275,12 @@ impl Mesh {
         self.faces.push(f);
     }
 
-    /// Repara malha vinda de fora (arquivo) de acordo com a política de importação.
-    ///
-    /// Delega para `repair_external_mesh` e emite um relatório auditável.
-    /// Para verificação sem mutação de invariantes de authoring, use
-    /// `validate_invariants` (website/docs/03-geometry/validation-repair-cleanup.md).
-    pub fn validate(&mut self) -> RepairReport {
-        repair_external_mesh(self, RepairPolicy::TolerantImport)
-    }
-
     /// Verificação estrita de invariantes sem mutação de dados.
+    ///
+    /// O antigo `Mesh::validate()` mutante foi removido (decisão 5 de
+    /// website/docs/03-geometry/validation-repair-cleanup.md): reparo só existe
+    /// na fronteira externa, explícito e com relatório — use
+    /// `repair_external_mesh(&mut mesh, policy)`.
     pub fn validate_invariants(&self) -> Result<(), MeshValidationError> {
         validate_invariants(self)
     }
@@ -392,11 +388,11 @@ mod connect;
 pub mod curve;
 pub mod half_edge;
 pub mod imprint;
+pub mod inset;
 pub mod knife;
 pub mod loop_cut;
 mod loops;
 pub mod obj;
-pub mod inset;
 pub mod ops;
 pub mod path_frames;
 pub mod poly_pen;
@@ -416,18 +412,18 @@ pub mod uv_stitch;
 pub mod uv_tools;
 pub mod uv_xatlas;
 
+pub use bevel::{BevelReport, MAX_BEVEL_SEGMENTS};
 pub use curve::{BezierNode, BezierNodeKind, BezierPath, create_hollow_profile, offset_polygon};
 pub use half_edge::{
     EdgeId, FaceId, HalfEdge, HalfEdgeId, HalfEdgeMesh, TopologyDefect, TopologyReport, VertexId,
 };
+pub use inset::{InsetMode, InsetReport};
 pub use path_frames::{PathFrame, PathFrameError, compute_parallel_transport_frames};
 pub use primitives::{CircleFill, PrimitiveAudit, PrimitiveDescriptor, primitive_audit};
 pub use sweep::{SweepFrame, SweepOptions, compute_rmf_frames, generate_sweep};
 pub use topology::{DirtyDomains, ElementRemap, TopologyResult};
-pub use uv_layout::CoverageMask;
-pub use bevel::{BevelReport, MAX_BEVEL_SEGMENTS};
-pub use inset::{InsetMode, InsetReport};
 pub use uv_hit::{UvEdge, UvTransform};
+pub use uv_layout::CoverageMask;
 pub use uv_pack::{UvPackError, UvPackOptions, UvPackReport};
 pub use uv_stitch::UvStitchReport;
 pub use uv_tools::{UvDiagnostics, UvIsland};

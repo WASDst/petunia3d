@@ -445,21 +445,19 @@ impl AnimatePreview {
 
     /// Duração do ciclo do Motion selecionado ou da animação por keyframes, em segundos.
     pub fn cycle_seconds(&mut self, project: &Project, session: &AnimateSession) -> Option<f32> {
-        if session.motion.is_some() {
-            if self.refresh(project, session).is_some() {
-                if let Some(Ok(e)) = self.evaluator.as_ref() {
-                    return Some(e.cycle_seconds());
-                }
-            }
+        if session.motion.is_some()
+            && self.refresh(project, session).is_some()
+            && let Some(Ok(e)) = self.evaluator.as_ref()
+        {
+            return Some(e.cycle_seconds());
         }
-        if let Some(skel_id) = session.skeleton {
-            if let Some(asset) = session
+        if let Some(skel_id) = session.skeleton
+            && let Some(asset) = session
                 .active_clip
                 .and_then(|id| project.get_animation(id))
                 .or_else(|| project.get_animation_for_skeleton(skel_id))
-            {
-                return Some(asset.clip.duration.max(0.1));
-            }
+        {
+            return Some(asset.clip.duration.max(0.1));
         }
         Some(2.0)
     }
@@ -505,26 +503,21 @@ impl AnimatePreview {
         };
 
         // Sobrepõe trilhas com keyframes do clipe se estiver tocando junto com um motion procedural
-        if session.motion.is_some() {
-            if let Some(skeleton) = project.get_skeleton(skeleton_id) {
-                if let Some(asset) = session
-                    .active_clip
-                    .and_then(|id| project.get_animation(id))
-                    .or_else(|| project.get_animation_for_skeleton(skeleton_id))
+        if session.motion.is_some()
+            && let Some(skeleton) = project.get_skeleton(skeleton_id)
+            && let Some(asset) = session
+                .active_clip
+                .and_then(|id| project.get_animation(id))
+                .or_else(|| project.get_animation_for_skeleton(skeleton_id))
+        {
+            for (bi, bone) in skeleton.bones.iter().enumerate() {
+                if let Some(track) = asset.clip.get_track(bone.id)
+                    && (!track.translations.is_empty()
+                        || !track.rotations.is_empty()
+                        || !track.scales.is_empty())
+                    && bi < local.len()
                 {
-                    for (bi, bone) in skeleton.bones.iter().enumerate() {
-                        if let Some(track) = asset.clip.get_track(bone.id) {
-                            if !track.translations.is_empty()
-                                || !track.rotations.is_empty()
-                                || !track.scales.is_empty()
-                            {
-                                if bi < local.len() {
-                                    local[bi] =
-                                        track.sample_transform_over(session.time, &local[bi]);
-                                }
-                            }
-                        }
-                    }
+                    local[bi] = track.sample_transform_over(session.time, &local[bi]);
                 }
             }
         }
@@ -635,10 +628,10 @@ impl AnimatePreview {
         trail_session.motion_trails_enabled = false;
         for i in 0..count {
             trail_session.time = i as f32 * dt;
-            if let Some(pose) = self.pose(project, &trail_session) {
-                if let Some(bone) = pose.bones.iter().find(|b| b.id == bone_id) {
-                    trail.push(bone.head);
-                }
+            if let Some(pose) = self.pose(project, &trail_session)
+                && let Some(bone) = pose.bones.iter().find(|b| b.id == bone_id)
+            {
+                trail.push(bone.head);
             }
         }
         trail
@@ -686,6 +679,24 @@ fn wrap_time(t: f32, cycle: f32) -> f32 {
 // Ações (a UI só chama estas; toda mutação passa pelo dispatcher)
 // ---------------------------------------------------------------------------
 
+fn has_playable_keyframes(project: &Project, session: &AnimateSession) -> bool {
+    session
+        .skeleton
+        .and_then(|id| {
+            session
+                .active_clip
+                .and_then(|clip| project.get_animation(clip))
+                .or_else(|| project.get_animation_for_skeleton(id))
+        })
+        .is_some_and(|asset| {
+            asset.clip.tracks.iter().any(|track| {
+                !track.translations.is_empty()
+                    || !track.rotations.is_empty()
+                    || !track.scales.is_empty()
+            })
+        })
+}
+
 fn no_rig() -> CommandError {
     CommandError::Execution("No rig selected".into())
 }
@@ -714,12 +725,14 @@ impl CommandContext<'_> {
                 .find(|m| Some(m.skeleton_id) == a.skeleton)
                 .map(|m| m.id);
         }
-        let has_clip = a.skeleton.is_some_and(|skel_id| {
-            project.get_animation_for_skeleton(skel_id).is_some()
-        });
+        let has_clip = has_playable_keyframes(project, a);
         if a.motion.is_none() && !has_clip {
             a.playing = false;
-            a.time = 0.0;
+            // An empty rig can author its first keyframe at any playhead time.
+            // Reset time only when the selected rig itself no longer exists.
+            if a.skeleton.is_none() {
+                a.time = 0.0;
+            }
         }
         if a.draft.as_ref().is_some_and(|d| Some(d.motion) != a.motion) {
             a.draft = None;
@@ -1142,10 +1155,11 @@ impl CommandContext<'_> {
         }
     }
 
-    /// Alterna reprodução. Sem Motion, não toca.
+    /// Alterna reprodução de Motion ou clipe autoral com keyframes.
     pub fn animate_toggle_play(&mut self) {
+        let has_clip = has_playable_keyframes(&self.document.project, &self.editor.animate);
         let a = &mut self.editor.animate;
-        a.playing = a.motion.is_some() && !a.playing;
+        a.playing = (a.motion.is_some() || has_clip) && !a.playing;
     }
 
     /// Posiciona o playhead (segundos) e pausa: arrastar a barra é "scrub".

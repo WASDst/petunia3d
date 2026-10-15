@@ -1087,11 +1087,13 @@ fn painted_face_shows_in_render() {
     let mut canvas = petunia_project::Canvas::new(128, 128, [191, 191, 198, 255]);
     let hit = glam::Vec3::new(0.0, 0.0, 1.0);
     let mut painted_pixels = 0;
-    project.assets[index].mesh.rasterize_face_near(1, hit, 0.5, 128, 128, 0.0, |x, y, _, _, _| {
-        let idx = ((y * 128 + x) * 4) as usize;
-        canvas.pixels[idx..idx + 4].copy_from_slice(&[255, 0, 0, 255]);
-        painted_pixels += 1;
-    });
+    project.assets[index]
+        .mesh
+        .rasterize_face_near(1, hit, 0.5, 128, 128, 0.0, |x, y, _, _, _| {
+            let idx = ((y * 128 + x) * 4) as usize;
+            canvas.pixels[idx..idx + 4].copy_from_slice(&[255, 0, 0, 255]);
+            painted_pixels += 1;
+        });
     assert!(painted_pixels > 0, "rasterize_face_near deve pintar pixels");
     project.assets[index].texture = Some(canvas);
     project.bump_textures();
@@ -1101,4 +1103,3 @@ fn painted_face_shows_in_render() {
         "a face pintada de vermelho precisa renderizar vermelho! antes {plain:?}, depois {painted:?}"
     );
 }
-

@@ -25,6 +25,10 @@ public:
     void setBrushSize(int sz) { m_brushSize = sz; update(); }
     void setBrushOpacity(float op) { m_brushOpacity = op; }
     void setBrushHardness(float hd) { m_brushHardness = hd; }
+    void setBrushAngle(float angleDeg) { m_brushAngle = angleDeg; }
+    void setBrushRoundness(float roundness) { m_brushRoundness = qBound(0.1f, roundness, 1.0f); }
+    float brushAngle() const { return m_brushAngle; }
+    float brushRoundness() const { return m_brushRoundness; }
     void setTool(int tool) { m_activeTool = tool; update(); } // 0=Brush, 1=Eraser, 2=Bucket, 3=Eyedropper
     void setSymmetryX(bool sym) { m_symmetryX = sym; }
     void setSymmetryY(bool sym) { m_symmetryY = sym; }
@@ -60,6 +64,8 @@ private:
     int m_brushSize{32};
     float m_brushOpacity{1.0f};
     float m_brushHardness{0.8f};
+    float m_brushAngle{0.0f};
+    float m_brushRoundness{1.0f};
     int m_activeTool{0}; // 0=Brush, 1=Eraser, 2=Bucket, 3=Eyedropper
     bool m_symmetryX{false};
     bool m_symmetryY{false};
@@ -78,6 +84,7 @@ signals:
     void brushSizeChanged(int size);
     void brushHardnessChanged(float hardness);
     void brushOpacityChanged(float opacity);
+    void brushAngleChanged(float angle);
     void blendModeChanged(const QString &mode);
     void activeColorChanged(const QColor &color);
     void addLayerRequested();
@@ -119,6 +126,8 @@ private:
     QLabel *m_jitterSizeLabel{nullptr};
     QSlider *m_smoothingSlider{nullptr};
     QLabel *m_smoothingLabel{nullptr};
+    class PetuniaAngleDial *m_angleDial{nullptr};
+    QDoubleSpinBox *m_angleSpin{nullptr};
     QComboBox *m_blendModeCombo{nullptr};
 
     // Cor & Swatches

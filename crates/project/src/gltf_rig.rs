@@ -679,7 +679,11 @@ pub fn import_rig(
         }
         // Rotação local de repouso = rot_mundial(pai)⁻¹ · rot_mundial.
         for j in 0..joints.len() {
-            let id = bone_of[j].expect("resolvido");
+            let Some(id) = bone_of[j] else {
+                return Err(GltfImportError::Validation(format!(
+                    "skin {k}: joint {j} não resolvido"
+                )));
+            };
             let parent_rot = parent_joint[j].map_or(Quat::IDENTITY, |p| world_rot[p]);
             let q = (parent_rot.inverse() * world_rot[j]).normalize();
             if let Some(b) = skeleton.get_bone_mut(id) {
@@ -706,7 +710,7 @@ pub fn import_rig(
         };
         rig.roles.push(roles);
 
-        let ids: Vec<u32> = bone_of.iter().map(|b| b.expect("resolvido")).collect();
+        let ids: Vec<u32> = bone_of.iter().filter_map(|&b| b).collect();
         for (j, n) in joints.iter().enumerate() {
             node_bone.insert(n.index(), (rig.skeletons.len(), ids[j]));
         }

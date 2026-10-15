@@ -477,7 +477,7 @@ impl ProjectService {
             existing.name = name.clone();
             existing.width = width;
             existing.height = height;
-            existing.rgba = rgba;
+            existing.rgba = rgba.into();
             existing.bump_revision();
         } else {
             let mut img = ReferenceImage::from_rgba(name.clone(), width, height, rgba);

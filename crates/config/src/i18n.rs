@@ -1759,7 +1759,8 @@ fn locales_dir() -> PathBuf {
 }
 
 fn discover_available_locales() -> Vec<String> {
-    let mut out = vec!["en".to_string()];
+    // Both catalogs are embedded in installed binaries, independently of cwd.
+    let mut out = vec!["en".to_string(), "pt-BR".to_string()];
     if let Ok(entries) = fs::read_dir(locales_dir()) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -1825,6 +1826,13 @@ mod tests {
 
     const EN_TOML: &str = include_str!("../../../assets/locales/en.toml");
     const PT_TOML: &str = include_str!("../../../assets/locales/pt-BR.toml");
+
+    #[test]
+    fn embedded_catalogs_remain_available_without_external_locale_files() {
+        let available = I18n::available();
+        assert!(available.iter().any(|id| id == "en"));
+        assert!(available.iter().any(|id| id == "pt-BR"));
+    }
 
     fn keys_of(toml_text: &str) -> Vec<String> {
         let mut keys: Vec<String> = I18n::parse(toml_text).keys().cloned().collect();

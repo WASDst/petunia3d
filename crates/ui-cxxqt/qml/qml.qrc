@@ -1,4 +1,106 @@
 <RCC>
+    <qresource prefix="/toolbar/outline">
+        <file alias="select_box.svg">../../../assets/icons/petunia-outline/svg/selection-transform/select_box.svg</file>
+        <file alias="move.svg">../../../assets/icons/petunia-outline/svg/selection-transform/move.svg</file>
+        <file alias="rotate.svg">../../../assets/icons/petunia-outline/svg/selection-transform/rotate.svg</file>
+        <file alias="scale.svg">../../../assets/icons/petunia-outline/svg/selection-transform/scale.svg</file>
+        <file alias="transform.svg">../../../assets/icons/petunia-outline/svg/selection-transform/transform.svg</file>
+        <file alias="cursor_3d.svg">../../../assets/icons/petunia-outline/svg/selection-transform/cursor_3d.svg</file>
+        <file alias="measure.svg">../../../assets/icons/petunia-outline/svg/interface/measure.svg</file>
+        <file alias="draw_profile.svg">../../../assets/icons/petunia-outline/svg/shape-first/draw_profile.svg</file>
+        <file alias="shape_layer.svg">../../../assets/icons/petunia-outline/svg/shape-first/shape_layer.svg</file>
+        <file alias="select_lasso.svg">../../../assets/icons/petunia-outline/svg/selection-transform/select_lasso.svg</file>
+        <file alias="tool_poly_pen.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/tool_poly_pen.svg</file>
+        <file alias="extrude.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/extrude.svg</file>
+        <file alias="pushpull.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/pushpull.svg</file>
+        <file alias="inset.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/inset.svg</file>
+        <file alias="bevel.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/bevel.svg</file>
+        <file alias="knife.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/knife.svg</file>
+        <file alias="loop_cut.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/loop_cut.svg</file>
+        <file alias="slice.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/slice.svg</file>
+        <file alias="paint_brush.svg">../../../assets/icons/petunia-outline/svg/painting/paint_brush.svg</file>
+        <file alias="paint_eraser.svg">../../../assets/icons/petunia-outline/svg/painting/paint_eraser.svg</file>
+        <file alias="paint_smudge.svg">../../../assets/icons/petunia-outline/svg/painting/paint_smudge.svg</file>
+        <file alias="paint_clone.svg">../../../assets/icons/petunia-outline/svg/painting/paint_clone.svg</file>
+        <file alias="paint_picker.svg">../../../assets/icons/petunia-outline/svg/painting/paint_picker.svg</file>
+        <file alias="paint_fill.svg">../../../assets/icons/petunia-outline/svg/painting/paint_fill.svg</file>
+        <file alias="paint_line.svg">../../../assets/icons/petunia-outline/svg/painting/paint_line.svg</file>
+        <file alias="paint_rect.svg">../../../assets/icons/petunia-outline/svg/painting/paint_rect.svg</file>
+        <file alias="shape_circle.svg">../../../assets/icons/petunia-outline/svg/interface/shape_circle.svg</file>
+        <file alias="paint_decal.svg">../../../assets/icons/petunia-outline/svg/painting/paint_decal.svg</file>
+    </qresource>
+    <qresource prefix="/toolbar/filled">
+        <file alias="select_box.svg">../../../assets/icons/petunia-filled/svg/selection-transform/select_box.svg</file>
+        <file alias="move.svg">../../../assets/icons/petunia-filled/svg/selection-transform/move.svg</file>
+        <file alias="rotate.svg">../../../assets/icons/petunia-filled/svg/selection-transform/rotate.svg</file>
+        <file alias="scale.svg">../../../assets/icons/petunia-filled/svg/selection-transform/scale.svg</file>
+        <file alias="transform.svg">../../../assets/icons/petunia-filled/svg/selection-transform/transform.svg</file>
+        <file alias="cursor_3d.svg">../../../assets/icons/petunia-filled/svg/selection-transform/cursor_3d.svg</file>
+        <file alias="measure.svg">../../../assets/icons/petunia-filled/svg/interface/measure.svg</file>
+        <file alias="draw_profile.svg">../../../assets/icons/petunia-filled/svg/shape-first/draw_profile.svg</file>
+        <file alias="shape_layer.svg">../../../assets/icons/petunia-filled/svg/shape-first/shape_layer.svg</file>
+        <file alias="select_lasso.svg">../../../assets/icons/petunia-filled/svg/selection-transform/select_lasso.svg</file>
+        <file alias="tool_poly_pen.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/tool_poly_pen.svg</file>
+        <file alias="extrude.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/extrude.svg</file>
+        <file alias="pushpull.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/pushpull.svg</file>
+        <file alias="inset.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/inset.svg</file>
+        <file alias="bevel.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/bevel.svg</file>
+        <file alias="knife.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/knife.svg</file>
+        <file alias="loop_cut.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/loop_cut.svg</file>
+        <file alias="slice.svg">../../../assets/icons/petunia-filled/svg/mesh-modeling/slice.svg</file>
+        <file alias="paint_brush.svg">../../../assets/icons/petunia-filled/svg/painting/paint_brush.svg</file>
+        <file alias="paint_eraser.svg">../../../assets/icons/petunia-filled/svg/painting/paint_eraser.svg</file>
+        <file alias="paint_smudge.svg">../../../assets/icons/petunia-filled/svg/painting/paint_smudge.svg</file>
+        <file alias="paint_clone.svg">../../../assets/icons/petunia-filled/svg/painting/paint_clone.svg</file>
+        <file alias="paint_picker.svg">../../../assets/icons/petunia-filled/svg/painting/paint_picker.svg</file>
+        <file alias="paint_fill.svg">../../../assets/icons/petunia-filled/svg/painting/paint_fill.svg</file>
+        <file alias="paint_line.svg">../../../assets/icons/petunia-filled/svg/painting/paint_line.svg</file>
+        <file alias="paint_rect.svg">../../../assets/icons/petunia-filled/svg/painting/paint_rect.svg</file>
+        <file alias="shape_circle.svg">../../../assets/icons/petunia-filled/svg/interface/shape_circle.svg</file>
+        <file alias="paint_decal.svg">../../../assets/icons/petunia-filled/svg/painting/paint_decal.svg</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="logo.svg">../assets/logo.svg</file>
+        <file alias="undo.svg">../../../assets/icons/petunia-outline/svg/interface/undo.svg</file>
+        <file alias="redo.svg">../../../assets/icons/petunia-outline/svg/interface/redo.svg</file>
+        <file alias="search.svg">../../../assets/icons/petunia-outline/svg/interface/search.svg</file>
+        <file alias="settings.svg">../../../assets/icons/petunia-outline/svg/interface/settings.svg</file>
+        <file alias="move.svg">../../../assets/icons/petunia-outline/svg/selection-transform/move.svg</file>
+        <file alias="select_box.svg">../../../assets/icons/petunia-outline/svg/selection-transform/select_box.svg</file>
+        <file alias="extrude.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/extrude.svg</file>
+        <file alias="inset.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/inset.svg</file>
+        <file alias="bevel.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/bevel.svg</file>
+        <file alias="knife.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/knife.svg</file>
+        <file alias="loop_cut.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/loop_cut.svg</file>
+        <file alias="subdivide.svg">../../../assets/icons/petunia-outline/svg/mesh-modeling/connect.svg</file>
+        <file alias="duplicate.svg">../../../assets/icons/petunia-outline/svg/interface/duplicate.svg</file>
+        <file alias="delete.svg">../../../assets/icons/petunia-outline/svg/interface/delete.svg</file>
+        <file alias="frame_selection.svg">../../../assets/icons/petunia-outline/svg/viewport-scene/frame_selection.svg</file>
+        <file alias="mode_object.svg">../../../assets/icons/petunia-outline/svg/selection-transform/mode_object.svg</file>
+        <file alias="select_vertex.svg">../../../assets/icons/petunia-outline/svg/selection-transform/select_vertex.svg</file>
+        <file alias="select_edge.svg">../../../assets/icons/petunia-outline/svg/selection-transform/select_edge.svg</file>
+        <file alias="select_face.svg">../../../assets/icons/petunia-outline/svg/selection-transform/select_face.svg</file>
+        <file alias="snap_magnet.svg">../../../assets/icons/petunia-outline/svg/selection-transform/snap_magnet.svg</file>
+        <file alias="circle_dot.svg">../../../assets/icons/petunia-outline/svg/interface/circle_dot.svg</file>
+        <file alias="camera.svg">../../../assets/icons/petunia-outline/svg/viewport-scene/camera.svg</file>
+        <file alias="cube.svg">../../../assets/icons/petunia-outline/svg/primitives/cube.svg</file>
+        <file alias="shade_smooth.svg">../../../assets/icons/petunia-outline/svg/viewport-scene/shade_smooth.svg</file>
+        <file alias="shade_flat.svg">../../../assets/icons/petunia-outline/svg/viewport-scene/shade_flat.svg</file>
+        <file alias="eye.svg">../../../assets/icons/petunia-outline/svg/interface/eye.svg</file>
+        <file alias="eye_hidden.svg">../../../assets/icons/petunia-outline/svg/interface/eye_hidden.svg</file>
+        <file alias="lock.svg">../../../assets/icons/petunia-outline/svg/interface/lock.svg</file>
+        <file alias="chevron_down.svg">../../../assets/icons/petunia-outline/svg/interface/chevron_down.svg</file>
+        <file alias="chevron_right.svg">../../../assets/icons/petunia-outline/svg/interface/chevron_right.svg</file>
+        <file alias="paint_brush.svg">../../../assets/icons/petunia-outline/svg/painting/paint_brush.svg</file>
+        <file alias="paint_eraser.svg">../../../assets/icons/petunia-outline/svg/painting/paint_eraser.svg</file>
+        <file alias="paint_fill.svg">../../../assets/icons/petunia-outline/svg/painting/paint_fill.svg</file>
+        <file alias="paint_picker.svg">../../../assets/icons/petunia-outline/svg/painting/paint_picker.svg</file>
+        <file alias="play.svg">../../../assets/icons/petunia-outline/svg/interface/play.svg</file>
+        <file alias="jump_start.svg">../../../assets/icons/petunia-outline/svg/interface/jump_start.svg</file>
+        <file alias="jump_end.svg">../../../assets/icons/petunia-outline/svg/interface/jump_end.svg</file>
+        <file alias="keyframe.svg">../../../assets/icons/petunia-outline/svg/future-roadmap/keyframe.svg</file>
+        <file alias="cursor_3d.svg">../../../assets/icons/petunia-outline/svg/selection-transform/cursor_3d.svg</file>
+    </qresource>
     <qresource prefix="/">
         <file>main.qml</file>
         <file>tokens/DesignTokens.qml</file>
@@ -6,6 +108,11 @@
         <file>components/PetuniaIconButton.qml</file>
         <file>components/NumericInput.qml</file>
         <file>components/PetuniaSlider.qml</file>
+        <file>components/TimelineRangeSlider.qml</file>
+        <file>components/PetuniaDial.qml</file>
+        <file>components/PlaceholderMessage.qml</file>
+        <file>components/OutlinerTreeView.qml</file>
+        <file>components/NodeGraphCanvas.qml</file>
         <file>components/ColorSwatch.qml</file>
         <file>shell/Header.qml</file>
         <file>shell/ToolRail.qml</file>

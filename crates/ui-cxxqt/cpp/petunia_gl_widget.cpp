@@ -1,58 +1,100 @@
 #include "petunia_gl_widget.h"
-#include <QOpenGLContext>
+#include "petunia_editor_panel.h"
+#include "petunia_overlay_cards.h"
 #include <QDebug>
-#include <vector>
+#include <QGuiApplication>
+#include <QJsonDocument>
+#include <QKeySequence>
+#include <QMenu>
+#include <QOpenGLContext>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QTimer>
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 // Declarado no lado Rust (crates/ui-cxxqt/src/render/opengl_viewport.rs)
 extern "C" {
-    typedef void* (*QtGlGetProcAddressFn)(const char*);
-    bool petunia_qt_gl_initialize(QtGlGetProcAddressFn get_proc);
-    void petunia_qt_gl_resize(int width, int height);
-    void petunia_qt_gl_paint(uint32_t fbo_id, int width, int height);
-    void petunia_qt_camera_orbit(float dx, float dy);
-    void petunia_qt_camera_pan(float dx, float dy);
-    void petunia_qt_camera_zoom(float delta);
-    void petunia_qt_camera_reset();
-    void petunia_qt_camera_set_preset(int preset);
-    void petunia_qt_camera_toggle_projection();
-    bool petunia_qt_camera_get_view_name(char *buf, int max_len);
-    bool petunia_qt_camera_get_orientation(
-        float *rx, float *ry, float *rz,
-        float *ux, float *uy, float *uz,
-        float *fx, float *fy, float *fz
-    );
-    void petunia_qt_app_frame_selection();
-    int petunia_qt_app_get_shading();
-    void petunia_qt_app_set_shading(int shading);
-    void petunia_qt_tablet_paint_stroke(float x, float y, float pressure, float tilt_x, float tilt_y, bool is_eraser);
-    bool petunia_qt_viewport_select(float screen_x, float screen_y, float viewport_w, float viewport_h, bool extend);
-    bool petunia_qt_viewport_hover(float screen_x, float screen_y, float viewport_w, float viewport_h);
-    bool petunia_qt_gizmo_get_projected(float viewport_w, float viewport_h, float *out_origin, float *out_x, float *out_y, float *out_z);
-    int petunia_qt_gizmo_hit_test(float mouse_x, float mouse_y, float viewport_w, float viewport_h);
-    bool petunia_qt_gizmo_drag_axis(int axis, float dx, float dy, float viewport_w, float viewport_h);
+size_t petunia_qt_software_frame_rgba(uint64_t, uint32_t, uint32_t, uint8_t *,
+                                      size_t, uint32_t *, uint32_t *);
+typedef void *(*QtGlGetProcAddressFn)(const char *);
+bool petunia_qt_gl_surface_initialize(uint64_t, QtGlGetProcAddressFn);
+void petunia_qt_gl_surface_release(uint64_t);
+void petunia_qt_gl_surface_paint(uint64_t, uint32_t, int, int, float);
+bool petunia_qt_gl_initialize(QtGlGetProcAddressFn get_proc);
+void petunia_qt_gl_resize(int width, int height);
+void petunia_qt_gl_paint(uint32_t fbo_id, int width, int height);
+void petunia_qt_camera_orbit(float dx, float dy);
+void petunia_qt_camera_pan(float dx, float dy);
+void petunia_qt_camera_zoom(float delta);
+void petunia_qt_camera_reset();
+void petunia_qt_camera_set_preset(int preset);
+void petunia_qt_camera_toggle_projection();
+bool petunia_qt_camera_get_view_name(char *buf, int max_len);
+bool petunia_qt_camera_get_orientation(float *rx, float *ry, float *rz,
+                                       float *ux, float *uy, float *uz,
+                                       float *fx, float *fy, float *fz);
+void petunia_qt_app_frame_selection();
+int petunia_qt_app_get_shading();
+void petunia_qt_app_set_shading(int shading);
+void petunia_qt_tablet_paint_stroke(float x, float y, float pressure,
+                                    float tilt_x, float tilt_y, bool is_eraser);
+bool petunia_qt_viewport_select(float screen_x, float screen_y,
+                                float viewport_w, float viewport_h,
+                                bool extend);
+bool petunia_qt_viewport_hover(float screen_x, float screen_y, float viewport_w,
+                               float viewport_h);
+bool petunia_qt_gizmo_get_projected(float viewport_w, float viewport_h,
+                                    float *out_origin, float *out_x,
+                                    float *out_y, float *out_z);
+int petunia_qt_gizmo_hit_test(float mouse_x, float mouse_y, float viewport_w,
+                              float viewport_h);
+bool petunia_qt_gizmo_drag_axis(int axis, float dx, float dy, float viewport_w,
+                                float viewport_h);
 }
 
-static void* qt_gl_get_proc_address(const char* name) {
-    auto* ctx = QOpenGLContext::currentContext();
-    if (!ctx) return nullptr;
-    return reinterpret_cast<void*>(ctx->getProcAddress(QByteArray(name)));
+static void *qt_gl_get_proc_address(const char *name) {
+    auto *ctx = QOpenGLContext::currentContext();
+    if (!ctx)
+        return nullptr;
+    return reinterpret_cast<void *>(ctx->getProcAddress(QByteArray(name)));
 }
 
-PetuniaGlWidget::PetuniaGlWidget(QWidget *parent)
-    : QOpenGLWidget(parent)
-{
-    QSurfaceFormat fmt;
-    fmt.setVersion(3, 3);
-    fmt.setProfile(QSurfaceFormat::CoreProfile);
-    setFormat(fmt);
+class PetuniaNativeGlCanvas : public QOpenGLWidget {
+  public:
+    PetuniaGlWidget *owner;
+    explicit PetuniaNativeGlCanvas(PetuniaGlWidget *parent)
+        : QOpenGLWidget(parent), owner(parent) {
+        QSurfaceFormat fmt;
+        fmt.setVersion(3, 3);
+        fmt.setProfile(QSurfaceFormat::CoreProfile);
+        setFormat(fmt);
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setFocusPolicy(Qt::NoFocus);
+    }
 
+  protected:
+    void initializeGL() override { owner->initializeGL(); }
+    void resizeGL(int w, int h) override { owner->resizeGL(w, h); }
+    void paintGL() override {
+        owner->paintGL(defaultFramebufferObject(), this);
+    }
+};
+PetuniaGlWidget::PetuniaGlWidget(QWidget *parent) : QWidget(parent) {
+    const auto platform = QGuiApplication::platformName();
+    m_software = platform == "offscreen" || platform == "minimal" ||
+                 qEnvironmentVariableIsSet("PETUNIA_VIEWPORT_SOFTWARE");
+    if (!m_software)
+        m_gl = new PetuniaNativeGlCanvas(this);
+    setAccessibleName(tr("Viewport 3D"));
+    setAccessibleDescription(tr("Ferramentas do documento; Enter confirma, "
+                                "Escape cancela e F6 muda de região"));
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
 }
 
-PetuniaGlWidget::~PetuniaGlWidget() = default;
+PetuniaGlWidget::~PetuniaGlWidget() { cleanupGl(); }
 
 void PetuniaGlWidget::setShadingMode(const QString &mode) {
     if (mode == QStringLiteral("wireframe")) {
@@ -68,49 +110,112 @@ void PetuniaGlWidget::setShadingMode(const QString &mode) {
 }
 
 void PetuniaGlWidget::initializeGL() {
-    auto* ctx = QOpenGLContext::currentContext();
+    auto *ctx = QOpenGLContext::currentContext();
     if (!ctx) {
-        qWarning() << "[PetuniaGlWidget] Sem contexto OpenGL ativo no QPA atual.";
+        qWarning()
+            << "[PetuniaGlWidget] Sem contexto OpenGL ativo no QPA atual.";
         return;
     }
-    initializeOpenGLFunctions();
-    m_rendererInitialized = petunia_qt_gl_initialize(&qt_gl_get_proc_address);
+    m_rendererInitialized =
+        petunia_qt_gl_surface_initialize(m_surfaceId, &qt_gl_get_proc_address);
+    connect(ctx, &QOpenGLContext::aboutToBeDestroyed, this,
+            &PetuniaGlWidget::cleanupGl, Qt::DirectConnection);
     if (!m_rendererInitialized) {
-        qWarning() << "[PetuniaGlWidget] Falha ao inicializar renderer OpenGL Rust.";
+        qWarning()
+            << "[PetuniaGlWidget] Falha ao inicializar renderer OpenGL Rust.";
+        m_software = true;
+        QTimer::singleShot(0, this, [this] {
+            if (m_gl)
+                m_gl->hide();
+            update();
+        });
     }
 }
 
 void PetuniaGlWidget::resizeGL(int w, int h) {
+    PetuniaViewScope scope(m_surfaceId);
     if (m_rendererInitialized) {
         petunia_qt_gl_resize(w, h);
     }
 }
 
-void PetuniaGlWidget::paintGL() {
-    auto* ctx = QOpenGLContext::currentContext();
+void PetuniaGlWidget::paintGL(uint32_t fbo, QPaintDevice *device) {
+    auto *ctx = QOpenGLContext::currentContext();
     if (!ctx || !m_rendererInitialized) {
         return;
     }
 
     // 1. Renderiza a cena 3D Rust via framebuffer blit
-    GLuint fbo = defaultFramebufferObject();
-    petunia_qt_gl_paint(fbo, width(), height());
+    PetuniaViewScope scope(m_surfaceId);
+    petunia_qt_gl_surface_paint(m_surfaceId, fbo, width(), height(),
+                                devicePixelRatioF());
+    m_overlayState = petuniaRequest("snapshot");
 
     // 2. Sobrepõe overlays interativos 2D fiéis via QPainter nativo
+    QPainter painter(device);
+    drawOverlays(painter);
+}
+void PetuniaGlWidget::update() {
+    if (m_gl && !m_software)
+        m_gl->update();
+    else
+        QWidget::update();
+}
+void PetuniaGlWidget::showEvent(QShowEvent *event) {
+    QWidget::showEvent(event);
+    if (m_gl && !m_software)
+        QTimer::singleShot(500, this, [this] {
+            if (isVisible() && !m_rendererInitialized) {
+                m_software = true;
+                m_gl->hide();
+                update();
+            }
+        });
+}
+void PetuniaGlWidget::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    if (m_gl)
+        m_gl->setGeometry(rect());
+}
+void PetuniaGlWidget::paintEvent(QPaintEvent *) {
+    if (!m_software)
+        return;
+    uint32_t w = 0, h = 0;
+    const auto len = petunia_qt_software_frame_rgba(
+        m_surfaceId, width(), height(), nullptr, 0, &w, &h);
     QPainter painter(this);
+    painter.fillRect(rect(), palette().color(QPalette::Base));
+    if (len && len <= 1280 * 720 * 4 && len == size_t(w) * h * 4) {
+        QByteArray pixels;
+        pixels.resize(len);
+        if (petunia_qt_software_frame_rgba(
+                m_surfaceId, width(), height(),
+                reinterpret_cast<uint8_t *>(pixels.data()), len, &w, &h) == len)
+            painter.drawImage(rect(), QImage(reinterpret_cast<const uchar *>(
+                                                 pixels.constData()),
+                                             w, h, QImage::Format_RGBA8888));
+    }
+    PetuniaViewScope scope(m_surfaceId);
+    m_overlayState = petuniaRequest("snapshot");
+    drawOverlays(painter);
+}
+void PetuniaGlWidget::drawOverlays(QPainter &painter) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::TextAntialiasing);
-
+    drawSelectionOutline(painter);
+    draw3dCursor(painter);
+    drawDecalGizmo(painter);
     drawViewportHud(painter);
     drawShadingPill(painter);
     drawNavigationGizmo(painter);
     drawTransformGizmo(painter);
     drawSnapIndicator(painter);
-
-    painter.end();
+    drawBrushCursor(painter);
 }
 
 void PetuniaGlWidget::drawViewportHud(QPainter &painter) {
+    if (parentWidget() && parentWidget()->findChild<PetuniaToolOptionsBar *>())
+        return;
     char buf[64] = {0};
     QString viewName = QStringLiteral("User Persp");
     if (petunia_qt_camera_get_view_name(buf, sizeof(buf))) {
@@ -140,7 +245,7 @@ void PetuniaGlWidget::drawViewportHud(QPainter &painter) {
     font.setBold(false);
     painter.setFont(font);
     painter.setPen(QColor(140, 140, 140));
-    painter.drawText(14, 52, QStringLiteral("OpenGL 3.3 Core • MSAA"));
+    painter.drawText(14, 52, m_overlayState["context_hint"].toString());
 }
 
 void PetuniaGlWidget::drawShadingPill(QPainter &painter) {
@@ -187,7 +292,8 @@ bool PetuniaGlWidget::handleShadingClick(const QPoint &pos) {
         return false;
     }
     int segWidth = m_shadingPillRect.width() / 4;
-    if (segWidth <= 0) return false;
+    if (segWidth <= 0)
+        return false;
     int seg = (pos.x() - m_shadingPillRect.x()) / segWidth;
     seg = qBound(0, seg, 3);
     petunia_qt_app_set_shading(seg);
@@ -217,18 +323,25 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
     float ux = 0.0f, uy = 1.0f, uz = 0.0f;
     float fx = 0.0f, fy = 0.0f, fz = 1.0f;
 
-    if (!petunia_qt_camera_get_orientation(&rx, &ry, &rz, &ux, &uy, &uz, &fx, &fy, &fz)) {
+    if (!petunia_qt_camera_get_orientation(&rx, &ry, &rz, &ux, &uy, &uz, &fx,
+                                           &fy, &fz)) {
         return;
     }
 
     const float armLength = 26.0f;
     std::vector<AxisRenderInfo> axes = {
-        { 1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(255, 110, 110), QStringLiteral("X"), 3, true },   // +X (Right)
-        {-1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(140, 45, 45),   QStringLiteral(""),  4, false },  // -X (Left)
-        { 0.0f, 1.0f, 0.0f, 0, 0, 0, QColor(105, 219, 124), QStringLiteral("Y"), 2, true },   // +Y (Back)
-        { 0.0f,-1.0f, 0.0f, 0, 0, 0, QColor(45, 120, 55),   QStringLiteral(""),  1, false },  // -Y (Front)
-        { 0.0f, 0.0f, 1.0f, 0, 0, 0, QColor(77, 171, 247),  QStringLiteral("Z"), 5, true },   // +Z (Top)
-        { 0.0f, 0.0f,-1.0f, 0, 0, 0, QColor(35, 80, 140),   QStringLiteral(""),  6, false }   // -Z (Bottom)
+        {1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(255, 110, 110), QStringLiteral("X"),
+         3, true}, // +X (Right)
+        {-1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(140, 45, 45), QStringLiteral(""), 4,
+         false}, // -X (Left)
+        {0.0f, 1.0f, 0.0f, 0, 0, 0, QColor(105, 219, 124), QStringLiteral("Y"),
+         2, true}, // +Y (Back)
+        {0.0f, -1.0f, 0.0f, 0, 0, 0, QColor(45, 120, 55), QStringLiteral(""), 1,
+         false}, // -Y (Front)
+        {0.0f, 0.0f, 1.0f, 0, 0, 0, QColor(77, 171, 247), QStringLiteral("Z"),
+         5, true}, // +Z (Top)
+        {0.0f, 0.0f, -1.0f, 0, 0, 0, QColor(35, 80, 140), QStringLiteral(""), 6,
+         false} // -Z (Bottom)
     };
 
     // Calcula projeção na tela de cada eixo
@@ -243,9 +356,10 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
     }
 
     // Ordena pelo depth (do mais distante para o mais próximo da tela)
-    std::sort(axes.begin(), axes.end(), [](const AxisRenderInfo &a, const AxisRenderInfo &b) {
-        return a.depth < b.depth;
-    });
+    std::sort(axes.begin(), axes.end(),
+              [](const AxisRenderInfo &a, const AxisRenderInfo &b) {
+                  return a.depth < b.depth;
+              });
 
     QFont font = painter.font();
     font.setPointSize(8);
@@ -268,7 +382,8 @@ void PetuniaGlWidget::drawNavigationGizmo(QPainter &painter) {
             painter.drawEllipse(pEnd, 7.5, 7.5);
 
             painter.setPen(QColor(18, 18, 18));
-            painter.drawText(QRectF(pEnd.x() - 7.5, pEnd.y() - 7.5, 15, 15), Qt::AlignCenter, ax.label);
+            painter.drawText(QRectF(pEnd.x() - 7.5, pEnd.y() - 7.5, 15, 15),
+                             Qt::AlignCenter, ax.label);
         } else {
             // Eixo negativo: ponto pequeno
             painter.setPen(Qt::NoPen);
@@ -290,18 +405,19 @@ bool PetuniaGlWidget::handleGizmoClick(const QPoint &pos) {
     float rx = 1.0f, ry = 0.0f, rz = 0.0f;
     float ux = 0.0f, uy = 1.0f, uz = 0.0f;
     float fx = 0.0f, fy = 0.0f, fz = 1.0f;
-    if (!petunia_qt_camera_get_orientation(&rx, &ry, &rz, &ux, &uy, &uz, &fx, &fy, &fz)) {
+    if (!petunia_qt_camera_get_orientation(&rx, &ry, &rz, &ux, &uy, &uz, &fx,
+                                           &fy, &fz)) {
         return false;
     }
 
     const float armLength = 26.0f;
     std::vector<AxisRenderInfo> axes = {
-        { 1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(), QString(), 3, true },   // Right
-        {-1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(), QString(), 4, false },  // Left
-        { 0.0f, 1.0f, 0.0f, 0, 0, 0, QColor(), QString(), 2, true },   // Back
-        { 0.0f,-1.0f, 0.0f, 0, 0, 0, QColor(), QString(), 1, false },  // Front
-        { 0.0f, 0.0f, 1.0f, 0, 0, 0, QColor(), QString(), 5, true },   // Top
-        { 0.0f, 0.0f,-1.0f, 0, 0, 0, QColor(), QString(), 6, false }   // Bottom
+        {1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(), QString(), 3, true},   // Right
+        {-1.0f, 0.0f, 0.0f, 0, 0, 0, QColor(), QString(), 4, false}, // Left
+        {0.0f, 1.0f, 0.0f, 0, 0, 0, QColor(), QString(), 2, true},   // Back
+        {0.0f, -1.0f, 0.0f, 0, 0, 0, QColor(), QString(), 1, false}, // Front
+        {0.0f, 0.0f, 1.0f, 0, 0, 0, QColor(), QString(), 5, true},   // Top
+        {0.0f, 0.0f, -1.0f, 0, 0, 0, QColor(), QString(), 6, false}  // Bottom
     };
 
     // Testa colisão com esferas dos eixos
@@ -319,293 +435,717 @@ bool PetuniaGlWidget::handleGizmoClick(const QPoint &pos) {
         }
     }
 
-    // Se clicou dentro do círculo mas fora das esferas, inicia órbita pelo Gizmo
+    // Se clicou dentro do círculo mas fora das esferas, inicia órbita pelo
+    // Gizmo
     m_isGizmoInteracting = true;
     return true;
 }
 
+static int modifierMask(Qt::KeyboardModifiers mods) {
+    return (mods & Qt::ControlModifier ? 1 : 0) |
+           (mods & Qt::ShiftModifier ? 2 : 0) |
+           (mods & Qt::AltModifier ? 4 : 0);
+}
+static bool pointerBinding(const QJsonObject &state, const char *key,
+                           Qt::KeyboardModifiers mods) {
+    const int required = state[key].toInt();
+    return required > 0 && (modifierMask(mods) & required) == required;
+}
+
+/// Ferramentas de pintura que mostram o anel do pincel (mesma lista do Slint).
+static bool isPaintBrushTool(const QJsonObject &state) {
+    static const QStringList tools{
+        QStringLiteral("brush"),    QStringLiteral("eraser"),
+        QStringLiteral("airbrush"), QStringLiteral("pixel"),
+        QStringLiteral("smudge"),   QStringLiteral("blur"),
+        QStringLiteral("dodge"),    QStringLiteral("burn"),
+        QStringLiteral("spray"),    QStringLiteral("clone")};
+    return state[QStringLiteral("workspace")].toString().toUpper() ==
+               QStringLiteral("PAINT") &&
+           tools.contains(state[QStringLiteral("active_tool")].toString());
+}
+
+static QPointF pointFromArray(const QJsonValue &value) {
+    const auto array = value.toArray();
+    if (array.size() < 2)
+        return {};
+    return QPointF(array[0].toDouble(), array[1].toDouble());
+}
+
+/// Realimenta o anel do pincel e o realce das alças do decalque. Durante
+/// navegação (órbita/pan) o cursor volta a ser o do sistema.
+void PetuniaGlWidget::updatePointerFeedback(const QPointF &position,
+                                            bool navigating) {
+    const bool brush = m_pointerInside && !navigating &&
+                       isPaintBrushTool(m_overlayState);
+    m_brushCursorVisible = brush;
+    if (brush)
+        setCursor(Qt::BlankCursor);
+    else
+        unsetCursor();
+    if (!brush) {
+        m_brushSquash = 1.0f;
+        m_brushTilt = 0.0f;
+        return;
+    }
+    const auto response = petuniaRequest(
+        "brush_footprint", {{"x", position.x()}, {"y", position.y()}});
+    m_brushSquash =
+        qBound(0.05, response[QStringLiteral("brush_squash")].toDouble(1.0), 1.0);
+    m_brushTilt = response[QStringLiteral("brush_tilt")].toDouble(0.0);
+}
+
+void PetuniaGlWidget::enterEvent(QEnterEvent *event) {
+    m_pointerInside = true;
+    QWidget::enterEvent(event);
+    update();
+}
+
+void PetuniaGlWidget::leaveEvent(QEvent *event) {
+    m_pointerInside = false;
+    m_brushCursorVisible = false;
+    m_brushSquash = 1.0f;
+    m_brushTilt = 0.0f;
+    unsetCursor();
+    QWidget::leaveEvent(event);
+    update();
+}
 void PetuniaGlWidget::mousePressEvent(QMouseEvent *event) {
+    setFocus();
+    PetuniaViewScope scope(m_surfaceId);
     m_lastMousePos = event->pos();
-
-    if (event->button() == Qt::LeftButton) {
-        if (handleShadingClick(event->pos())) {
-            event->accept();
-            return;
-        }
-        if (handleGizmoClick(event->pos())) {
-            event->accept();
-            return;
-        }
-
-        // Teste de clique nos eixos do Gizmo 3D Transform
-        int gizmoHandle = petunia_qt_gizmo_hit_test(
-            static_cast<float>(event->pos().x()),
-            static_cast<float>(event->pos().y()),
-            static_cast<float>(width()),
-            static_cast<float>(height())
-        );
-        if (gizmoHandle > 0 && !(event->modifiers() & Qt::AltModifier)) {
-            m_activeGizmoHandle = gizmoHandle;
-            m_isTransformGizmoDragging = true;
-            event->accept();
-            return;
-        }
-
-        if (event->modifiers() & Qt::AltModifier) {
-            m_isInteracting = true;
-            event->accept();
-            return;
-        }
-
-        // Seleção de viewport (Objeto, Vértice, Aresta ou Face)
-        bool extend = (event->modifiers() & Qt::ShiftModifier);
-        petunia_qt_viewport_select(
-            static_cast<float>(event->pos().x()),
-            static_cast<float>(event->pos().y()),
-            static_cast<float>(width()),
-            static_cast<float>(height()),
-            extend
-        );
-        update();
+    m_pressPoint = event->position();
+    m_overlayState = petuniaRequest("snapshot");
+    if (event->button() == Qt::RightButton) {
+        petuniaRequest(
+            "open_viewport_context_menu",
+            {{"x", event->position().x()}, {"y", event->position().y()}});
+        petunia_qt_view_activate(1);
+        QMenu menu(this);
+        QHash<QAction *, QString> actions;
+        const QStringList ids{"select_all",
+                              "clear_selection",
+                              "invert_selection",
+                              "frame",
+                              "duplicate",
+                              "delete",
+                              "extrude",
+                              "inset",
+                              "bevel",
+                              "loop_cut",
+                              "slice",
+                              "edge_loop",
+                              "edge_ring",
+                              "face_loop",
+                              "mark_seam",
+                              "workplane_from_selection",
+                              "origin_to_geometry",
+                              "origin_to_cursor",
+                              "shade_smooth",
+                              "shade_flat"};
+        for (const auto &id : ids)
+            actions.insert(
+                menu.addAction(QString(id).replace(QString("_"), QString(" "))),
+                id);
+        auto *picked = menu.exec(event->globalPosition().toPoint());
+        petunia_qt_view_activate(m_surfaceId);
+        if (picked)
+            petuniaRequest("context_menu_action",
+                           {{"target", actions[picked]}});
+        else
+            petuniaRequest("close_context_menu");
         emit selectionChanged();
+        update();
         event->accept();
         return;
     }
-
-    if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton ||
+        (event->button() == Qt::LeftButton &&
+         pointerBinding(m_overlayState, "pointer_orbit_left_mask",
+                        event->modifiers()))) {
         m_isInteracting = true;
         event->accept();
         return;
     }
-
-    event->accept();
+    if (event->button() == Qt::LeftButton) {
+        if (handleShadingClick(event->pos()) ||
+            handleGizmoClick(event->pos())) {
+            event->accept();
+            return;
+        }
+        const auto begin =
+            petuniaRequest("gizmo_begin", {{"x", event->position().x()},
+                                           {"y", event->position().y()}});
+        if (begin["changed"].toBool()) {
+            m_isTransformGizmoDragging = true;
+            m_overlayState = begin;
+            event->accept();
+            update();
+            return;
+        }
+        m_overlayState = petuniaRequest("snapshot");
+        const auto tool = m_overlayState["active_tool"].toString();
+        if (tool == "cursor" || tool == "cursor_3d") {
+            const float norm_x = static_cast<float>(event->position().x()) / qMax(1.0f, static_cast<float>(width()));
+            const float norm_y = static_cast<float>(event->position().y()) / qMax(1.0f, static_cast<float>(height()));
+            m_overlayState = petuniaRequest("place_cursor_3d", {{"x", norm_x}, {"y", norm_y}});
+            m_toolPressed = true;
+            emit selectionChanged();
+            update();
+            event->accept();
+            return;
+        }
+        m_regionSelecting =
+            tool == "select" || tool == "lasso_select" ||
+            (m_overlayState["workspace"] == "Animate" &&
+             m_overlayState["animate"].toObject()["selected_bone"].isNull());
+        m_lasso = tool == "lasso_select";
+        m_regionPoints.clear();
+        m_regionPoints << event->position();
+        m_toolPressed = true;
+        if (!m_regionSelecting)
+            pointer(0, event->position(), event->modifiers());
+        event->accept();
+        update();
+        return;
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
-    QPoint delta = event->pos() - m_lastMousePos;
+    PetuniaViewScope scope(m_surfaceId);
+    const auto delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();
-
+    const auto activeTool = m_overlayState["active_tool"].toString();
+    updatePointerFeedback(
+        event->position(),
+        m_isInteracting || m_isGizmoInteracting || m_isTransformGizmoDragging);
+    if (m_toolPressed && (activeTool == "cursor" || activeTool == "cursor_3d")) {
+        const float norm_x = static_cast<float>(event->position().x()) / qMax(1.0f, static_cast<float>(width()));
+        const float norm_y = static_cast<float>(event->position().y()) / qMax(1.0f, static_cast<float>(height()));
+        m_overlayState = petuniaRequest("place_cursor_3d", {{"x", norm_x}, {"y", norm_y}});
+        update();
+        event->accept();
+        return;
+    }
     if (m_isTransformGizmoDragging) {
-        if (petunia_qt_gizmo_drag_axis(
-            m_activeGizmoHandle,
-            static_cast<float>(delta.x()),
-            static_cast<float>(delta.y()),
-            static_cast<float>(width()),
-            static_cast<float>(height())
-        )) {
-            emit selectionChanged();
-            update();
-        }
+        m_overlayState = petuniaRequest(
+            "update_viewport_transform_modified",
+            {{"x", event->position().x()},
+             {"y", event->position().y()},
+             {"fine", pointerBinding(m_overlayState, "pointer_precision_mask",
+                                     event->modifiers())},
+             {"snap", pointerBinding(m_overlayState, "pointer_snap_mask",
+                                     event->modifiers())}});
+        update();
         event->accept();
         return;
     }
-
     if (m_isGizmoInteracting) {
-        petunia_qt_camera_orbit(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
-        emit cameraOrbitRequested(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
+        petunia_qt_camera_orbit(delta.x(), delta.y());
         update();
         event->accept();
         return;
     }
-
-    if (!m_isInteracting) {
-        if (m_shadingPillRect.contains(event->pos()) || (event->pos() - m_gizmoCenter).manhattanLength() < m_gizmoRadius + 10) {
-            return;
-        }
-        if (petunia_qt_viewport_hover(
-            static_cast<float>(event->pos().x()),
-            static_cast<float>(event->pos().y()),
-            static_cast<float>(width()),
-            static_cast<float>(height())
-        )) {
-            update();
-        }
+    if (m_isInteracting) {
+        if (pointerBinding(m_overlayState, "pointer_pan_mask",
+                           event->modifiers()))
+            petunia_qt_camera_pan(delta.x(), delta.y());
+        else if (event->modifiers() & Qt::ControlModifier)
+            petunia_qt_camera_zoom(-delta.y() * 0.05f);
+        else
+            petunia_qt_camera_orbit(delta.x(), delta.y());
+        update();
         event->accept();
         return;
     }
-
-    // Alt + Botão Esquerdo ou Botão do Meio (estilo Blender / Maya)
-    bool isMiddle = (event->buttons() & Qt::MiddleButton);
-    bool isAltLeft = (event->buttons() & Qt::LeftButton) && (event->modifiers() & Qt::AltModifier);
-
-    if (isMiddle || isAltLeft) {
-        if (event->modifiers() & Qt::ShiftModifier) {
-            petunia_qt_camera_pan(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
-            emit cameraPanRequested(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
-        } else if (event->modifiers() & Qt::ControlModifier) {
-            float zoomDelta = static_cast<float>(-delta.y()) * 0.05f;
-            petunia_qt_camera_zoom(zoomDelta);
-            emit cameraZoomRequested(zoomDelta);
-        } else {
-            petunia_qt_camera_orbit(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
-            emit cameraOrbitRequested(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
-        }
+    if (m_regionSelecting) {
+        if (m_regionPoints.size() < 4096)
+            m_regionPoints << event->position();
         update();
+        event->accept();
+        return;
     }
+    if (m_toolPressed || m_overlayState["tool_gesture_latched"].toBool())
+        pointer(1, event->position(), event->modifiers());
+    else {
+        petuniaRequest("hover_gizmo", {{"x", event->position().x()},
+                                       {"y", event->position().y()}});
+        m_overlayState = petuniaRequest(
+            "hover", {{"x", event->position().x() / qMax(1, width())},
+                      {"y", event->position().y() / qMax(1, height())}});
+        pointer(1, event->position(), event->modifiers());
+    }
+    update();
     event->accept();
 }
 
 void PetuniaGlWidget::mouseReleaseEvent(QMouseEvent *event) {
-    m_isInteracting = false;
-    m_isGizmoInteracting = false;
-    m_isTransformGizmoDragging = false;
-    m_activeGizmoHandle = 0;
+    if (m_isTransformGizmoDragging) {
+        PetuniaViewScope scope(m_surfaceId);
+        m_overlayState = petuniaRequest("end_gizmo_drag");
+        m_isTransformGizmoDragging = false;
+        emit selectionChanged();
+        update();
+        event->accept();
+        return;
+    }
+    {
+        PetuniaViewScope scope(m_surfaceId);
+        if (m_toolPressed) {
+            if (m_regionSelecting) {
+                const auto distance =
+                    QLineF(m_pressPoint, event->position()).length();
+                const auto threshold =
+                    m_overlayState["drag_threshold_px"].toDouble(4);
+                if (distance < threshold ||
+                    m_overlayState["workspace"] == "Animate") {
+                    m_overlayState = petuniaRequest(
+                        "viewport_select",
+                        {{"x", m_pressPoint.x() / qMax(1, width())},
+                         {"y", m_pressPoint.y() / qMax(1, height())},
+                         {"extend",
+                          pointerBinding(m_overlayState, "pointer_extend_mask",
+                                         event->modifiers())},
+                         {"loop",
+                          pointerBinding(m_overlayState, "pointer_loop_mask",
+                                         event->modifiers())}});
+                } else {
+                    QJsonObject args{
+                        {"x0", m_pressPoint.x() / qMax(1, width())},
+                        {"y0", m_pressPoint.y() / qMax(1, height())},
+                        {"x1", event->position().x() / qMax(1, width())},
+                        {"y1", event->position().y() / qMax(1, height())},
+                        {"extend",
+                         pointerBinding(m_overlayState, "pointer_extend_mask",
+                                        event->modifiers())},
+                        {"subtract",
+                         pointerBinding(m_overlayState, "pointer_subtract_mask",
+                                        event->modifiers())},
+                        {"lasso", m_lasso}};
+                    QString path;
+                    for (int i = 0; i < m_regionPoints.size(); ++i)
+                        path +=
+                            QStringLiteral("%1,%2;")
+                                .arg(m_regionPoints[i].x() / qMax(1, width()))
+                                .arg(m_regionPoints[i].y() / qMax(1, height()));
+                    args.insert("path", path);
+                    m_overlayState = petuniaRequest("region_select", args);
+                }
+            } else
+                pointer(2, event->position(), event->modifiers());
+        }
+        m_toolPressed = false;
+        m_regionSelecting = false;
+        m_regionPoints.clear();
+        m_isInteracting = false;
+        m_isGizmoInteracting = false;
+    }
+    emit selectionChanged();
+    update();
     event->accept();
 }
 
 void PetuniaGlWidget::wheelEvent(QWheelEvent *event) {
-    float delta = static_cast<float>(event->angleDelta().y()) / 120.0f;
-    petunia_qt_camera_zoom(delta);
-    emit cameraZoomRequested(delta);
+    PetuniaViewScope scope(m_surfaceId);
+    const float rawDelta = static_cast<float>(event->angleDelta().y());
+    if (m_overlayState["loop_cut_active"].toBool())
+        m_overlayState =
+            petuniaRequest("scroll_loop_cut_count", {{"delta_y", rawDelta / 120.f}});
+    else if (m_overlayState["loop_cut_armed"].toBool())
+        m_overlayState = petuniaRequest("adjust_loop_cut_hover_count",
+                                        {{"delta", int(rawDelta / 120.f)}});
+    else
+        petunia_qt_camera_zoom(rawDelta * m_zoomSensitivity);
     update();
     event->accept();
 }
 
 void PetuniaGlWidget::tabletEvent(QTabletEvent *event) {
-    float pressure = static_cast<float>(event->pressure());
-    float x = static_cast<float>(event->position().x());
-    float y = static_cast<float>(event->position().y());
-    float tiltX = static_cast<float>(event->xTilt());
-    float tiltY = static_cast<float>(event->yTilt());
-    bool isEraser = (event->pointerType() == QPointingDevice::PointerType::Eraser);
-
-    petunia_qt_tablet_paint_stroke(x, y, pressure, tiltX, tiltY, isEraser);
-    emit tabletStrokeUpdated(x, y, pressure, tiltX, tiltY, isEraser);
-
-    if (event->type() == QEvent::TabletPress || event->type() == QEvent::TabletMove) {
-        update();
-    }
+    PetuniaViewScope scope(m_surfaceId);
+    const int phase = event->type() == QEvent::TabletPress     ? 0
+                      : event->type() == QEvent::TabletRelease ? 2
+                                                               : 1;
+    petuniaRequest("tablet_input",
+                   {{"pressure", event->pressure()},
+                    {"tilt_x", event->xTilt()},
+                    {"tilt_y", event->yTilt()},
+                    {"eraser", event->pointerType() ==
+                                   QPointingDevice::PointerType::Eraser}});
+    pointer(phase, event->position(), event->modifiers());
+    if (phase == 2)
+        petuniaRequest("tablet_reset");
+    emit selectionChanged();
+    update();
     event->accept();
 }
 
 void PetuniaGlWidget::keyPressEvent(QKeyEvent *event) {
-    bool handled = true;
-
-    switch (event->key()) {
-    case Qt::Key_Z:
-        if (event->modifiers() & Qt::ShiftModifier) {
-            int cur = petunia_qt_app_get_shading();
-            petunia_qt_app_set_shading(cur == 0 ? 1 : 0);
-        } else {
-            int cur = petunia_qt_app_get_shading();
-            petunia_qt_app_set_shading(cur == 1 ? 2 : 1);
-        }
-        break;
-    case Qt::Key_1:
-        if (event->modifiers() & Qt::KeypadModifier) {
-            petunia_qt_camera_set_preset(event->modifiers() & Qt::ControlModifier ? 2 : 1); // Front / Back
-        } else {
-            handled = false;
-        }
-        break;
-    case Qt::Key_3:
-        if (event->modifiers() & Qt::KeypadModifier) {
-            petunia_qt_camera_set_preset(event->modifiers() & Qt::ControlModifier ? 4 : 3); // Right / Left
-        } else {
-            handled = false;
-        }
-        break;
-    case Qt::Key_7:
-        if (event->modifiers() & Qt::KeypadModifier) {
-            petunia_qt_camera_set_preset(event->modifiers() & Qt::ControlModifier ? 6 : 5); // Top / Bottom
-        } else {
-            handled = false;
-        }
-        break;
-    case Qt::Key_5:
-        if (event->modifiers() & Qt::KeypadModifier) {
-            petunia_qt_camera_toggle_projection();
-        } else {
-            handled = false;
-        }
-        break;
-    case Qt::Key_0:
-        if (event->modifiers() & Qt::KeypadModifier) {
-            petunia_qt_camera_reset();
-        } else {
-            handled = false;
-        }
-        break;
-    case Qt::Key_Period:
-        petunia_qt_app_frame_selection();
-        break;
-    case Qt::Key_F:
-        petunia_qt_app_frame_selection();
-        break;
-    default:
-        handled = false;
-        break;
+    if (event->key() == Qt::Key_Escape) {
+        m_toolPressed = false;
+        m_regionSelecting = false;
+        m_isInteracting = false;
+        m_isGizmoInteracting = false;
+        m_isTransformGizmoDragging = false;
+        petuniaRequest("tablet_reset");
     }
-
-    if (handled) {
+    PetuniaViewScope scope(m_surfaceId);
+    const auto text = petuniaKeyText(event);
+    const auto state = petuniaRequest(
+        "shortcut", {{"text", text},
+                     {"ctrl", bool(event->modifiers() & Qt::ControlModifier)},
+                     {"shift", bool(event->modifiers() & Qt::ShiftModifier)},
+                     {"alt", bool(event->modifiers() & Qt::AltModifier)}});
+    m_overlayState = state;
+    if (state["changed"].toBool()) {
+        emit selectionChanged();
         update();
         event->accept();
-    } else {
-        QOpenGLWidget::keyPressEvent(event);
-    }
+    } else
+        QWidget::keyPressEvent(event);
 }
 
 void PetuniaGlWidget::drawTransformGizmo(QPainter &painter) {
-    float orig[2] = {0}, px[2] = {0}, py[2] = {0}, pz[2] = {0};
-    if (!petunia_qt_gizmo_get_projected(static_cast<float>(width()), static_cast<float>(height()), orig, px, py, pz)) {
+    const auto gizmo = m_overlayState["gizmo"].toObject();
+    if (!gizmo["visible"].toBool())
         return;
-    }
-
-    QPointF pOrig(orig[0], orig[1]);
-    QPointF pX(px[0], px[1]);
-    QPointF pY(py[0], py[1]);
-    QPointF pZ(pz[0], pz[1]);
-
     painter.save();
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    // Eixo X (Vermelho Petunia)
-    QPen penX(QColor(235, 75, 75), 3.0, Qt::SolidLine, Qt::RoundCap);
-    painter.setPen(penX);
-    painter.drawLine(pOrig, pX);
-    painter.setBrush(QColor(235, 75, 75));
-    painter.drawEllipse(pX, 4.5, 4.5);
-
-    // Eixo Y (Verde Petunia)
-    QPen penY(QColor(75, 215, 75), 3.0, Qt::SolidLine, Qt::RoundCap);
-    painter.setPen(penY);
-    painter.drawLine(pOrig, pY);
-    painter.setBrush(QColor(75, 215, 75));
-    painter.drawEllipse(pY, 4.5, 4.5);
-
-    // Eixo Z (Azul Petunia)
-    QPen penZ(QColor(75, 135, 245), 3.0, Qt::SolidLine, Qt::RoundCap);
-    painter.setPen(penZ);
-    painter.drawLine(pOrig, pZ);
-    painter.setBrush(QColor(75, 135, 245));
-    painter.drawEllipse(pZ, 4.5, 4.5);
-
-    // Centro (Branco translúcido)
-    painter.setPen(QPen(QColor(240, 240, 240, 220), 1.5));
-    painter.setBrush(QColor(255, 255, 255, 60));
-    painter.drawEllipse(pOrig, 6.0, 6.0);
-
-    // Rótulos X, Y, Z
-    QFont font = painter.font();
-    font.setPointSize(9);
-    font.setBold(true);
-    painter.setFont(font);
-
-    painter.setPen(QColor(255, 100, 100));
-    painter.drawText(pX + QPointF(6, 4), QStringLiteral("X"));
-    painter.setPen(QColor(100, 255, 100));
-    painter.drawText(pY + QPointF(6, 4), QStringLiteral("Y"));
-    painter.setPen(QColor(100, 160, 255));
-    painter.drawText(pZ + QPointF(6, 4), QStringLiteral("Z"));
-
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QColor colors[] = {QColor("#ff5555"), QColor("#55e055"),
+                             QColor("#4b87f5")};
+    const QStringList axes{"x", "y", "z"};
+    for (int i = 0; i < axes.size(); ++i) {
+        painter.setPen(QPen(colors[i], 2.2));
+        painter.setBrush(colors[i]);
+        for (const auto &suffix :
+             QStringList{"_commands", "_arrow_commands", "_scale_commands",
+                         "_rotate_commands"})
+            painter.drawPath(petuniaPath(gizmo[axes[i] + suffix].toString()));
+        const auto label = gizmo[axes[i] + "_label"].toArray();
+        if (label.size() == 2) {
+            painter.setPen(colors[i]);
+            QFont font = painter.font();
+            font.setPointSize(9);
+            font.setBold(true);
+            painter.setFont(font);
+            painter.drawText(QPointF(label[0].toDouble(), label[1].toDouble()),
+                             axes[i].toUpper());
+        }
+    }
+    // Planar handles (XY, XZ, YZ) com preenchimento translúcido moderno
+    const struct { const char *key; QColor col; } planes[] = {
+        {"plane_xy_commands", QColor(75, 135, 245, 65)},
+        {"plane_xz_commands", QColor(85, 224, 85, 65)},
+        {"plane_yz_commands", QColor(255, 85, 85, 65)},
+    };
+    for (const auto &p : planes) {
+        QPainterPath path = petuniaPath(gizmo[p.key].toString());
+        if (!path.isEmpty()) {
+            painter.setPen(QPen(p.col.lighter(130), 1.5));
+            painter.setBrush(p.col);
+            painter.drawPath(path);
+        }
+    }
+    const QString roll = gizmo["view_roll_commands"].toString();
+    if (!roll.isEmpty()) {
+        painter.setPen(QPen(QColor(255, 255, 255, 160), 1.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(petuniaPath(roll));
+    }
     painter.restore();
 }
 
 void PetuniaGlWidget::drawSnapIndicator(QPainter &painter) {
-    if (!m_snapEnabled) return;
     painter.save();
-    painter.setPen(QPen(QColor(0, 220, 255, 200), 2.0, Qt::DashLine));
     painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(m_lastMousePos, 12, 12);
+    painter.setPen(QPen(palette().color(QPalette::Highlight), 1.5));
+    for (const auto &key :
+         QStringList{"protractor_commands", "protractor_ticks_commands",
+                     "operation_preview_commands", "loop_cut_preview_commands",
+                     "profile_preview_commands", "profile_outline_commands",
+                     "profile_selection_commands", "poly_pen_preview_commands",
+                     "slice_preview_commands", "region_shapes_commands",
+                     "region_hover_commands", "axis_guide_commands",
+                     "dimension_commands", "measure_commands",
+                     "proportional_circle_commands", "drag_link_commands"})
+        painter.drawPath(petuniaPath(m_overlayState[key].toString()));
+    auto animate = m_overlayState["animate"].toObject();
+    for (const auto &key : QStringList{
+             "bone_commands", "joint_commands", "selected_bone_commands",
+             "ghost_commands", "motion_trail_commands"})
+        painter.drawPath(petuniaPath(animate[key].toString()));
+    if (m_overlayState["snap_marker_visible"].toBool()) {
+        QPointF point(m_overlayState["snap_marker_x"].toDouble(),
+                      m_overlayState["snap_marker_y"].toDouble());
+        painter.drawEllipse(point, 5, 5);
+        painter.drawText(point + QPointF(8, -8),
+                         m_overlayState["snap_marker_label"].toString());
+    }
+    if (m_overlayState["measure_visible"].toBool())
+        painter.drawText(QPointF(m_overlayState["measure_x"].toDouble(),
+                                 m_overlayState["measure_y"].toDouble()),
+                         m_overlayState["measure_text"].toString());
+    for (const auto &key : QStringList{"measure_tags", "world_axis_labels"})
+        for (const auto &value : m_overlayState[key].toArray()) {
+            const auto label = value.toObject();
+            const auto rgb = label["color"].toArray();
+            painter.setPen(
+                rgb.size() == 3
+                    ? QColor(rgb[0].toInt(), rgb[1].toInt(), rgb[2].toInt())
+                    : palette().color(QPalette::Text));
+            painter.drawText(
+                QPointF(label["x"].toDouble(), label["y"].toDouble()),
+                label["text"].toString());
+        }
+    if (m_regionSelecting) {
+        painter.setPen(
+            QPen(palette().color(QPalette::Highlight), 1, Qt::DashLine));
+        if (m_lasso)
+            painter.drawPolyline(m_regionPoints);
+        else
+            painter.drawRect(QRectF(m_pressPoint, m_lastMousePos).normalized());
+    }
     painter.restore();
+}
+
+void PetuniaGlWidget::drawSelectionOutline(QPainter &painter) {
+    const auto sel = m_overlayState["selection_overlay"].toObject();
+    if (!sel["visible"].toBool())
+        return;
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setBrush(Qt::NoBrush);
+
+    // 1. Arestas/elementos não selecionados (cinza sutil)
+    const QString unselectedOutline = sel["unselected_outline_commands"].toString();
+    if (!unselectedOutline.isEmpty()) {
+        painter.setPen(QPen(QColor(181, 181, 181, 100), 1.25));
+        painter.drawPath(petuniaPath(unselectedOutline));
+    }
+
+    // 2. Contorno do objeto / elementos selecionados (Laranja Blender #e96a00)
+    const QString outline = sel["outline_commands"].toString();
+    if (!outline.isEmpty()) {
+        const double thickness = m_overlayState["selection_thickness"].toDouble(2.0);
+        painter.setPen(QPen(QColor(233, 106, 0), qMax(2.0, thickness)));
+        painter.drawPath(petuniaPath(outline));
+    }
+
+    // 3. Contorno do objeto ativo (Amarelo Blender #ffaf29)
+    const QString activeOutline = sel["active_outline_commands"].toString();
+    if (!activeOutline.isEmpty()) {
+        painter.setPen(QPen(QColor(255, 175, 41), 2.5));
+        painter.drawPath(petuniaPath(activeOutline));
+    }
+
+    // 4. Vértices não selecionados
+    const QString unselectedPoints = sel["unselected_point_commands"].toString();
+    if (!unselectedPoints.isEmpty()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(158, 158, 158));
+        painter.drawPath(petuniaPath(unselectedPoints));
+    }
+
+    // 5. Vértices selecionados (Amarelo)
+    const QString points = sel["point_commands"].toString();
+    if (!points.isEmpty()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 175, 41));
+        painter.drawPath(petuniaPath(points));
+    }
+
+    painter.restore();
+}
+
+void PetuniaGlWidget::draw3dCursor(QPainter &painter) {
+    const auto gizmo = m_overlayState["gizmo"].toObject();
+    const bool visible = m_overlayState["cursor_visible"].toBool() ||
+                         gizmo["cursor_visible"].toBool();
+    if (!visible)
+        return;
+
+    auto cursorArr = m_overlayState["cursor_screen"].toArray();
+    if (cursorArr.size() < 2)
+        cursorArr = gizmo["cursor_screen"].toArray();
+    if (cursorArr.size() < 2)
+        return;
+
+    const double cx = cursorArr[0].toDouble();
+    const double cy = cursorArr[1].toDouble();
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // Anel externo branco tracejado (#ffffff)
+    QPen dashPen(QColor(255, 255, 255, 230), 1.6, Qt::DashLine);
+    dashPen.setDashPattern({3.0, 3.0});
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(dashPen);
+    painter.drawEllipse(QPointF(cx, cy), 13, 13);
+
+    // Anel interno vermelho (#e54d42)
+    painter.setPen(QPen(QColor(229, 77, 66, 240), 1.6));
+    painter.drawEllipse(QPointF(cx, cy), 10, 10);
+
+    // Linhas de mira (crosshairs com eixos coloridos RGB)
+    painter.setPen(QPen(QColor(255, 110, 110, 240), 1.5)); // X red
+    painter.drawLine(QPointF(cx - 18, cy), QPointF(cx - 2, cy));
+    painter.drawLine(QPointF(cx + 2, cy), QPointF(cx + 18, cy));
+
+    painter.setPen(QPen(QColor(105, 219, 124, 240), 1.5)); // Y green
+    painter.drawLine(QPointF(cx, cy - 18), QPointF(cx, cy - 2));
+    painter.drawLine(QPointF(cx, cy + 2), QPointF(cx, cy + 18));
+
+    // Ponto central
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 255, 255));
+    painter.drawEllipse(QPointF(cx, cy), 2.0, 2.0);
+
+    painter.restore();
+}
+
+void PetuniaGlWidget::drawBrushCursor(QPainter &painter) {
+    if (!m_brushCursorVisible || !underMouse())
+        return;
+    const auto state = m_overlayState;
+    const QString tool = state[QStringLiteral("active_tool")].toString();
+    // Mesmo diâmetro (px de tela) que o carimbo e o canvas 2D usam.
+    const double diameter = qMax(2.0, state[QStringLiteral("brush_size")].toDouble(1.0) * 16.0);
+    const double radius = diameter * 0.5;
+    const bool erase = tool == QStringLiteral("eraser");
+    // Pixel: borda sempre dura, sem anel de núcleo.
+    const bool hardEdge = tool == QStringLiteral("pixel");
+    const double hardness =
+        qBound(0.0, state[QStringLiteral("brush_hardness")].toDouble(0.0), 1.0);
+    const double strength = qBound(
+        0.0,
+        state[QStringLiteral("brush_opacity")].toDouble(1.0) *
+            state[QStringLiteral("brush_flow")].toDouble(1.0),
+        1.0);
+    QColor tint(181, 140, 255);
+    const auto color = state[QStringLiteral("paint_color")].toArray();
+    if (color.size() >= 3)
+        tint = QColor::fromRgbF(color[0].toDouble(), color[1].toDouble(),
+                                color[2].toDouble());
+    const QColor ring =
+        erase ? QColor(239, 107, 115, 255) : QColor(255, 255, 255, 221);
+    QColor fill = erase ? QColor(239, 107, 115, 255) : tint;
+    fill.setAlphaF(0.04 + 0.32 * strength);
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QTransform transform;
+    transform.translate(m_lastMousePos.x(), m_lastMousePos.y());
+    transform.rotate(m_brushTilt);
+    transform.scale(1.0, m_brushSquash);
+    painter.setTransform(transform, true);
+    painter.setBrush(fill);
+    painter.setPen(QPen(ring, 1.5));
+    painter.drawEllipse(QPointF(0, 0), radius, radius);
+    // Contorno escuro interno: o anel lê bem sobre superfícies claras e escuras.
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(0, 0, 0, 170), 1.0));
+    painter.drawEllipse(QPointF(0, 0), qMax(1.0, radius - 1.5),
+                        qMax(1.0, radius - 1.5));
+    if (!hardEdge && hardness > 0.02 && hardness < 0.98 && diameter > 10.0) {
+        painter.setPen(QPen(QColor(255, 255, 255, 178), 1.0));
+        painter.drawEllipse(QPointF(0, 0), radius * hardness, radius * hardness);
+    }
+    painter.restore();
+    // O ponto central marca o cursor e não se deforma.
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(0, 0, 0, 170), 1.0));
+    painter.setBrush(QColor(255, 255, 255));
+    painter.drawEllipse(QPointF(m_lastMousePos), 1.5, 1.5);
+    painter.restore();
+}
+
+void PetuniaGlWidget::drawDecalGizmo(QPainter &painter) {
+    const auto state = m_overlayState;
+    if (state[QStringLiteral("workspace")].toString().toUpper() !=
+        QStringLiteral("PAINT"))
+        return;
+    if (!state[QStringLiteral("active_layer_is_decal")].toBool())
+        return;
+    // O modo escolhido no painel legenda as alças; a geometria é a mesma.
+    const auto mode = state[QStringLiteral("decal_gizmo_mode")].toString();
+    QColor accent(233, 106, 0);
+    if (mode == QStringLiteral("rotate"))
+        accent = QColor(79, 195, 247);
+    else if (mode == QStringLiteral("scale"))
+        accent = QColor(129, 199, 132);
+
+    const auto commands =
+        state[QStringLiteral("decal_preview_commands")].toString();
+    if (!commands.isEmpty()) {
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QColor fill = accent;
+        fill.setAlphaF(0.10);
+        painter.setPen(QPen(accent, 1.5));
+        painter.setBrush(fill);
+        painter.drawPath(petuniaPath(commands));
+        painter.restore();
+    }
+
+    // Alças só com uma ferramenta de decalque: a ferramenta Select seleciona
+    // objetos e não arrasta o decalque (mesma regra do bridge).
+    if (state[QStringLiteral("active_tool")].toString() ==
+        QStringLiteral("select"))
+        return;
+    const auto handles = state[QStringLiteral("decal_handles")].toObject();
+    if (handles.isEmpty())
+        return;
+    const auto hovered =
+        state[QStringLiteral("decal_hover_handle")].toString();
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    // Mover: alvo circular no centro.
+    const auto center = pointFromArray(handles[QStringLiteral("center")]);
+    painter.setPen(QPen(QColor(18, 18, 18, 220), 1.2));
+    painter.setBrush(hovered == QStringLiteral("move") ? accent
+                                                       : QColor(24, 24, 24, 210));
+    painter.drawEllipse(center, 5.5, 5.5);
+    // Escalar: quadrados nos cantos (alvo de 24 px, WCAG 2.2).
+    for (const auto &corner : handles[QStringLiteral("corners")].toArray()) {
+        const auto point = pointFromArray(corner);
+        painter.setBrush(hovered == QStringLiteral("scale")
+                             ? accent
+                             : QColor(255, 255, 255, 230));
+        painter.drawRect(QRectF(point.x() - 5.0, point.y() - 5.0, 10.0, 10.0));
+    }
+    // Girar: haste até o botão acima da borda superior.
+    const auto top = pointFromArray(handles[QStringLiteral("top")]);
+    const auto rotate = pointFromArray(handles[QStringLiteral("rotate")]);
+    painter.setPen(QPen(accent, 1.5));
+    painter.drawLine(top, rotate);
+    painter.setPen(QPen(QColor(18, 18, 18, 220), 1.2));
+    painter.setBrush(hovered == QStringLiteral("rotate")
+                         ? accent
+                         : QColor(129, 199, 132));
+    painter.drawEllipse(rotate, 6.0, 6.0);
+    painter.restore();
+}
+
+void PetuniaGlWidget::cleanupGl() {
+    if (!m_rendererInitialized || !m_gl || !m_gl->context())
+        return;
+    m_gl->makeCurrent();
+    petunia_qt_gl_surface_release(m_surfaceId);
+    m_gl->doneCurrent();
+    m_rendererInitialized = false;
+}
+QJsonObject PetuniaGlWidget::pointer(int phase, const QPointF &point,
+                                     Qt::KeyboardModifiers mods) {
+    auto state =
+        petuniaRequest("pointer", {{"phase", phase},
+                                   {"x", point.x()},
+                                   {"y", point.y()},
+                                   {"shift", bool(mods & Qt::ShiftModifier)},
+                                   {"ctrl", bool(mods & Qt::ControlModifier)},
+                                   {"alt", bool(mods & Qt::AltModifier)}});
+    m_overlayState = state;
+    return state;
 }

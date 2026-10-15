@@ -1260,10 +1260,11 @@ impl Command for InsertBoneKeyframeCmd {
             bone.name.clone()
         };
 
-        let clip = state
-            .document
-            .project
-            .get_or_create_animation_clip(self.skeleton_id, "Action", (self.time + 1.0).max(2.0));
+        let clip = state.document.project.get_or_create_animation_clip(
+            self.skeleton_id,
+            "Action",
+            (self.time + 1.0).max(2.0),
+        );
         if self.time > clip.duration {
             clip.duration = (self.time + 0.5).max(clip.duration);
         }
@@ -1316,13 +1317,14 @@ impl Command for DeleteBoneKeyframeCmd {
         let tag = format!("skeleton:{}", self.skeleton_id);
         let mut removed = false;
         for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag) {
-                if asset
-                    .clip
-                    .remove_keyframe_on_bone(self.bone_id, self.time, self.tolerance.max(1e-3))
-                {
-                    removed = true;
-                }
+            if asset.tags.iter().any(|t| t == &tag)
+                && asset.clip.remove_keyframe_on_bone(
+                    self.bone_id,
+                    self.time,
+                    self.tolerance.max(1e-3),
+                )
+            {
+                removed = true;
             }
         }
         if !removed {
@@ -1369,13 +1371,12 @@ impl Command for SetBoneKeyframeInterpolationCmd {
         let tag = format!("skeleton:{}", self.skeleton_id);
         let mut changed = false;
         for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag) {
-                if let Some(track) = asset.clip.get_track_mut(self.bone_id) {
-                    if track.has_keyframe_at(self.time, 1e-3) {
-                        track.set_keyframe_interpolation(self.time, self.interpolation, 1e-3);
-                        changed = true;
-                    }
-                }
+            if asset.tags.iter().any(|t| t == &tag)
+                && let Some(track) = asset.clip.get_track_mut(self.bone_id)
+                && track.has_keyframe_at(self.time, 1e-3)
+            {
+                track.set_keyframe_interpolation(self.time, self.interpolation, 1e-3);
+                changed = true;
             }
         }
         if !changed {
@@ -1420,20 +1421,20 @@ impl Command for ClearBoneTrackCmd {
         let tag = format!("skeleton:{}", self.skeleton_id);
         let mut cleared = false;
         for asset in &mut state.document.project.animations {
-            if asset.tags.iter().any(|t| t == &tag) {
-                if let Some(track) = asset.clip.get_track_mut(self.bone_id) {
-                    if !track.translations.is_empty()
-                        || !track.rotations.is_empty()
-                        || !track.scales.is_empty()
-                    {
-                        track.clear();
-                        cleared = true;
-                    }
-                }
+            if asset.tags.iter().any(|t| t == &tag)
+                && let Some(track) = asset.clip.get_track_mut(self.bone_id)
+                && (!track.translations.is_empty()
+                    || !track.rotations.is_empty()
+                    || !track.scales.is_empty())
+            {
+                track.clear();
+                cleared = true;
             }
         }
         if !cleared {
-            return Err(CommandError::NoChange("Bone track was already empty".into()));
+            return Err(CommandError::NoChange(
+                "Bone track was already empty".into(),
+            ));
         }
         state.set_status("Bone track cleared");
         Ok(())
@@ -1634,4 +1635,3 @@ impl Command for ToggleMotionLayerEnabledCmd {
         Ok(())
     }
 }
-

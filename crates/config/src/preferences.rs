@@ -146,6 +146,8 @@ pub struct UserPreferences {
     pub selection_rgb: [u8; 3],
     /// Espessura visual em pixels lógicos (1..=6).
     pub selection_thickness: f32,
+    /// Idioma escolhido explicitamente; None preserva o idioma do host/CLI.
+    pub language: Option<String>,
     /// Escala da interface (1.0 = 100%, até 2.0 = 200%).
     pub ui_scale: f32,
     /// Ações rápidas preferidas do Inspector MODEL.
@@ -228,6 +230,7 @@ impl Default for UserPreferences {
             selection_rgb: [233, 106, 0],
             selection_thickness: 2.0,
             ui_scale: 1.0,
+            language: None,
             model_quick_actions: Vec::new(),
             double_tap_interval_ms: 350,
             drag_threshold_px: default_drag_threshold_px(),
@@ -387,6 +390,7 @@ mod tests {
             accent_rgb: Some([91, 140, 255]),
             recent_projects: vec!["/tmp/a.petunia".to_string()],
             show_home_on_start: false,
+            language: None,
             multiselection_measure_tag: true,
             active_keymap_id: "blender".to_string(),
             theme_id: "petunia-light".to_string(),
@@ -432,6 +436,19 @@ mod tests {
             toml::from_str::<UserPreferences>("").unwrap(),
             UserPreferences::default()
         );
+    }
+
+    #[test]
+    fn optional_language_defaults_and_round_trips() {
+        let old: UserPreferences = toml::from_str("").unwrap();
+        assert_eq!(old.language, None);
+        let preferences = UserPreferences {
+            language: Some("en".into()),
+            ..UserPreferences::default()
+        };
+        let loaded: UserPreferences =
+            toml::from_str(&toml::to_string(&preferences).unwrap()).unwrap();
+        assert_eq!(loaded.language.as_deref(), Some("en"));
     }
 
     #[test]

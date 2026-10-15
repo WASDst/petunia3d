@@ -15,6 +15,7 @@ impl PetuniaWidgetsApp {
             fn petunia_qt_app_create() -> *mut std::ffi::c_void;
         }
         let raw = unsafe { petunia_qt_app_create() };
+        assert!(!raw.is_null(), "QApplication must stay on its owner thread");
         Self { raw }
     }
 
@@ -53,6 +54,10 @@ impl PetuniaStudioWindow {
             fn petunia_main_window_create() -> *mut std::ffi::c_void;
         }
         let raw = unsafe { petunia_main_window_create() };
+        assert!(
+            !raw.is_null(),
+            "Create the window on the QApplication thread"
+        );
         Self { raw }
     }
 
@@ -78,5 +83,18 @@ impl Drop for PetuniaStudioWindow {
         if !self.raw.is_null() {
             unsafe { petunia_main_window_destroy(self.raw) };
         }
+    }
+}
+
+/// Inicia e executa a interface gráfica Qt Widgets do Petunia3D.
+pub fn run() -> Result<(), String> {
+    let app = PetuniaWidgetsApp::new();
+    let window = PetuniaStudioWindow::new();
+    window.show();
+    let code = app.exec();
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(format!("Aplicação Qt finalizada com código {code}"))
     }
 }

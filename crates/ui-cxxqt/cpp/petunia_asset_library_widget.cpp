@@ -1,4 +1,5 @@
 #include "petunia_asset_library_widget.h"
+#include "petunia_placeholder_message.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMouseEvent>
@@ -229,6 +230,18 @@ void PetuniaAssetLibraryWidget::setupUi() {
         m_cardWidgets.append(card);
     }
 
+    // Mensagem de estado vazio (Kirigami.PlaceholderMessage)
+    m_placeholder = new PetuniaPlaceholderMessage(m_gridContainer);
+    m_placeholder->setTitle(tr("Nenhum recurso encontrado"));
+    m_placeholder->setExplanation(tr("Nenhum modelo ou primitiva corresponde ao filtro ou busca atual."));
+    m_placeholder->setActionText(tr("Limpar busca"));
+    connect(m_placeholder, &PetuniaPlaceholderMessage::actionTriggered, this, [this]() {
+        m_searchEdit->clear();
+        m_categoryCombo->setCurrentIndex(0);
+    });
+    m_gridLayout->addWidget(m_placeholder, 0, 0, 1, 4, Qt::AlignCenter);
+    m_placeholder->hide();
+
     m_scrollArea->setWidget(m_gridContainer);
     mainLayout->addWidget(m_scrollArea, 1);
 
@@ -259,6 +272,10 @@ void PetuniaAssetLibraryWidget::filterAssets() {
         m_gridLayout->removeWidget(card);
         card->hide();
     }
+    if (m_placeholder) {
+        m_gridLayout->removeWidget(m_placeholder);
+        m_placeholder->hide();
+    }
 
     int visibleCol = 0;
     int visibleRow = 0;
@@ -278,5 +295,10 @@ void PetuniaAssetLibraryWidget::filterAssets() {
                 visibleRow++;
             }
         }
+    }
+
+    if (visibleCol == 0 && visibleRow == 0 && m_placeholder) {
+        m_gridLayout->addWidget(m_placeholder, 0, 0, 1, 4, Qt::AlignCenter);
+        m_placeholder->show();
     }
 }

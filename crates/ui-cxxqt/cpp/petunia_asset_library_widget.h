@@ -61,7 +61,7 @@ private:
     QScrollArea *m_scrollArea{nullptr};
     QWidget *m_gridContainer{nullptr};
     QGridLayout *m_gridLayout{nullptr};
-
     QVector<AssetLibraryItem> m_allItems;
     QVector<PetuniaAssetCard*> m_cardWidgets;
+    class PetuniaPlaceholderMessage *m_placeholder{nullptr};
 };

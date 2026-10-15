@@ -418,12 +418,16 @@ pub fn build_extrude_mesh(p: &ProfileState) -> Result<Mesh, String> {
 pub fn generate_extrude(state: &mut AppState) {
     match build_extrude_mesh(&state.profile) {
         Ok(m) => {
-            state.checkpoint("draw profile");
-            state.project.add("Profile", m);
+            if let Err(err) = state.dispatch(&petunia_core::AddMeshAssetCmd {
+                label: "draw profile",
+                name: "Profile".to_string(),
+                mesh: m,
+            }) {
+                state.set_status(format!("profile: {err}"));
+                return;
+            }
             state.profile.clear();
             state.session.tools.active_tool = "select".to_string();
-            state.sync_selection();
-            state.emit_mesh_changed();
             state.set_status(state.t("profile.generated"));
         }
         Err(e) => state.set_status(format!("profile: {e}")),
@@ -460,12 +464,16 @@ pub fn build_revolve_mesh(p: &ProfileState) -> Result<Mesh, String> {
 pub fn generate_revolve(state: &mut AppState) {
     match build_revolve_mesh(&state.profile) {
         Ok(m) => {
-            state.checkpoint("revolve profile");
-            state.project.add("Revolved", m);
+            if let Err(err) = state.dispatch(&petunia_core::AddMeshAssetCmd {
+                label: "revolve profile",
+                name: "Revolved".to_string(),
+                mesh: m,
+            }) {
+                state.set_status(format!("revolve: {err}"));
+                return;
+            }
             state.profile.clear();
             state.session.tools.active_tool = "select".to_string();
-            state.sync_selection();
-            state.emit_mesh_changed();
             state.set_status(state.t("profile.generated"));
         }
         Err(e) => state.set_status(format!("revolve: {e}")),
@@ -583,12 +591,16 @@ pub fn generate_sweep(state: &mut AppState) {
     let guide = state.project.active_mesh().cloned();
     match build_sweep_mesh(&state.profile, guide.as_ref()) {
         Ok(m) => {
-            state.checkpoint("sweep profile");
-            state.project.add("Sweep", m);
+            if let Err(err) = state.dispatch(&petunia_core::AddMeshAssetCmd {
+                label: "sweep profile",
+                name: "Sweep".to_string(),
+                mesh: m,
+            }) {
+                state.set_status(format!("sweep: {err}"));
+                return;
+            }
             state.profile.clear();
             state.session.tools.active_tool = "select".to_string();
-            state.sync_selection();
-            state.emit_mesh_changed();
             state.set_status(state.t("profile.generated"));
         }
         Err(e) => state.set_status(format!("sweep: {e}")),

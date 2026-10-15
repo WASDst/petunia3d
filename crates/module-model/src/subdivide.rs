@@ -35,11 +35,8 @@ impl SubdivideTool {
     }
 
     pub fn apply_triangulate(state: &mut AppState) {
-        state.checkpoint("triangulate");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.triangulate();
+        if let Err(err) = state.dispatch(&petunia_core::TriangulateMeshCmd) {
+            state.set_status(format!("triangulate: {err}"));
         }
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 }

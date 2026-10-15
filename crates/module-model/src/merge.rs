@@ -28,12 +28,9 @@ impl Tool for MergeTool {
 
 impl MergeTool {
     pub fn apply(state: &mut AppState) {
-        state.checkpoint("merge");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.merge_center();
+        if let Err(err) = state.dispatch(&petunia_core::MergeCenterCmd) {
+            state.set_status(format!("merge: {err}"));
         }
-        state.sync_selection();
-        state.emit_mesh_changed();
     }
 
     pub fn apply_by_distance(state: &mut AppState) {

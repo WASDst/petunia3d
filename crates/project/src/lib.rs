@@ -290,10 +290,12 @@ impl Canvas {
                     continue;
                 }
                 distance[neighbor] = distance[i] + 1;
-                let color: [u8; 4] = out.pixels[i * 4..i * 4 + 4]
-                    .try_into()
-                    .expect("validated RGBA");
-                out.pixels[neighbor * 4..neighbor * 4 + 4].copy_from_slice(&color);
+                let Some(&[r, g, b, a]) = out.pixels.get(i * 4..i * 4 + 4) else {
+                    continue;
+                };
+                if let Some(dst) = out.pixels.get_mut(neighbor * 4..neighbor * 4 + 4) {
+                    dst.copy_from_slice(&[r, g, b, a]);
+                }
                 queue.push_back(neighbor);
             }
         }
@@ -770,7 +772,10 @@ impl Asset {
             let mesh = self.evaluated_mesh();
             self.eval_cache = Some((key.0, key.1, mesh));
         }
-        &self.eval_cache.as_ref().unwrap().2
+        match &self.eval_cache {
+            Some((_, _, mesh)) => mesh,
+            None => &self.mesh,
+        }
     }
 
     /// Duplicata com novo UUID.
@@ -1064,7 +1069,7 @@ pub struct ReferenceImage {
     pub name: String,
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    pub rgba: Shared<Vec<u8>>,
     pub axis: RefAxis,
     pub offset: f32,
     pub size: f32,
@@ -1092,13 +1097,18 @@ impl ReferenceImage {
         self.revision = Self::next_revision();
     }
 
-    pub fn from_rgba(name: String, width: u32, height: u32, rgba: Vec<u8>) -> Self {
+    pub fn from_rgba(
+        name: String,
+        width: u32,
+        height: u32,
+        rgba: impl Into<Shared<Vec<u8>>>,
+    ) -> Self {
         Self {
             revision: Self::next_revision(),
             name,
             width,
             height,
-            rgba,
+            rgba: rgba.into(),
             axis: RefAxis::Front,
             offset: -3.0,
             size: 4.0,
@@ -1539,6 +1549,21 @@ impl Project {
             meshes = meshes.saturating_add(bytes);
             visit(Shared::addr(&asset.mesh), bytes);
         }
+        for prefab in &self.prefabs {
+            for part in &prefab.parts {
+                let bytes = mesh_heap_bytes(&part.mesh);
+                meshes = meshes.saturating_add(bytes);
+                visit(Shared::addr(&part.mesh), bytes);
+                if let Some(tex) = part.texture.as_ref() {
+                    canvas(tex, visit);
+                }
+            }
+        }
+        for reference in &self.references {
+            let bytes = reference.rgba.capacity();
+            shared = shared.saturating_add(bytes);
+            visit(Shared::addr(&reference.rgba), bytes);
+        }
         let total = self.estimated_bytes();
         visit(
             0,
@@ -1768,6 +1793,40 @@ impl Project {
                         .saturating_mul(std::mem::size_of::<Keyframe<[f32; 3]>>()),
                 );
             }
+        }
+        n = n.saturating_add(
+            self.references
+                .capacity()
+                .saturating_mul(std::mem::size_of::<ReferenceImage>()),
+        );
+        for reference in &self.references {
+            n = n.saturating_add(reference.name.capacity());
+            n = n.saturating_add(reference.rgba.capacity());
+        }
+        n = n.saturating_add(
+            self.prefabs
+                .capacity()
+                .saturating_mul(std::mem::size_of::<prefab::Prefab>()),
+        );
+        for prefab in &self.prefabs {
+            n = n.saturating_add(prefab.name.capacity());
+            n = n.saturating_add(
+                prefab
+                    .parts
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Asset>()),
+            );
+            for part in &prefab.parts {
+                n = n.saturating_add(part.name.capacity());
+                n = n.saturating_add(mesh_heap_bytes(&part.mesh));
+                if let Some(tex) = part.texture.as_ref() {
+                    n = n.saturating_add(canvas_heap_bytes(tex));
+                }
+            }
+        }
+        for (namespace, payload) in &self.plugin_data {
+            n = n.saturating_add(namespace.capacity());
+            n = n.saturating_add(std::mem::size_of_val(payload));
         }
         n.max(1)
     }
@@ -2018,17 +2077,20 @@ impl Project {
         duration: f32,
     ) -> &mut AnimationClip {
         let tag = format!("skeleton:{}", skeleton_id);
-        if let Some(pos) = self
+        let idx = match self
             .animations
             .iter()
             .position(|a| a.tags.iter().any(|t| t == &tag))
         {
-            return &mut self.animations[pos].clip;
-        }
-        let mut asset = AnimationAsset::new(name, AnimationClip::new(name, duration));
-        asset.tags.push(tag);
-        self.animations.push(asset);
-        &mut self.animations.last_mut().unwrap().clip
+            Some(pos) => pos,
+            None => {
+                let mut asset = AnimationAsset::new(name, AnimationClip::new(name, duration));
+                asset.tags.push(tag);
+                self.animations.push(asset);
+                self.animations.len() - 1
+            }
+        };
+        &mut self.animations[idx].clip
     }
 
     /// Busca o primeiro clipe associado a um esqueleto, se existir.

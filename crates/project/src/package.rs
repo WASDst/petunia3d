@@ -191,7 +191,7 @@ pub fn save_package_bytes(
             .files
             .iter_mut()
             .find(|f| f.path == MANIFEST_NAME)
-            .expect("manifest lists itself");
+            .ok_or_else(|| PackageError::Invalid("manifest missing self-entry".into()))?;
         if entry.bytes == manifest_json.len() as u64 {
             break;
         }

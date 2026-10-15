@@ -14,30 +14,21 @@ pub struct BevelReport {
     pub segments: u32,
     /// Arestas chanfradas (0 quando o conjunto foi recusado).
     pub beveled_edges: usize,
+    /// Arestas cujo offset pedido foi reduzido pelo limite de overlap
+    /// disponível (0.45 da aresta vizinha com `clamp_overlap`, teto duro de
+    /// 0.95 sem ele). Zero quando a largura pedida foi aplicada por inteiro.
+    pub clamped_edges: usize,
     /// Arestas (`edge_key` da malha original) sem solução: com qualquer uma
-    /// aqui, a malha não mudou.
+    /// aqui, a malha não mudou. Numa recusa por interação entre arestas do
+    /// conjunto, contém **todas** as arestas pedidas — o conjunto é a unidade
+    /// transacional, não a aresta individual.
     pub unsupported_edges: Vec<(u32, u32)>,
 }
 
-/// Não publica geometria parcial: rejeita topologias sem solução implementada.
-#[allow(dead_code)]
-pub(crate) fn bevel_edge(mesh: &Mesh, a: u32, b: u32, amount: f32) -> Option<Mesh> {
-    bevel_edge_segments_clamped(mesh, a, b, amount, 1, true)
-}
-
-/// Chanfro transacional com suporte a multi-segmentos para filetagem arredondada.
-#[allow(dead_code)]
-pub(crate) fn bevel_edge_segments(
-    mesh: &Mesh,
-    a: u32,
-    b: u32,
-    amount: f32,
-    segments: u32,
-) -> Option<Mesh> {
-    bevel_edge_segments_clamped(mesh, a, b, amount, segments, true)
-}
-
 /// Chanfro transacional com suporte a multi-segmentos e clamp overlap opcional.
+/// Devolve `(malha, clamped)`: `clamped = true` quando o offset pedido excedeu
+/// o limite de overlap e foi reduzido em pelo menos um extremo, para o
+/// chamador reportar a largura efetiva sem re-auditar a geometria.
 pub(crate) fn bevel_edge_segments_clamped(
     mesh: &Mesh,
     a: u32,
@@ -45,7 +36,7 @@ pub(crate) fn bevel_edge_segments_clamped(
     amount: f32,
     segments: u32,
     clamp_overlap: bool,
-) -> Option<Mesh> {
+) -> Option<(Mesh, bool)> {
     if mesh.verts.iter().any(|v| !v.vec().is_finite())
         || mesh.faces.iter().any(|face| {
             face.verts.len() < 3
@@ -98,6 +89,7 @@ pub(crate) fn bevel_edge_segments_clamped(
     }
 
     let mut result = mesh.clone();
+    let mut clamped = false;
     // Cada offset fica em uma aresta já existente; preserva os planos incidentes.
     let mut offsets: HashMap<(u32, u32), (u32, f32)> = HashMap::new();
     for &fi in &adjacent {
@@ -120,7 +112,11 @@ pub(crate) fn bevel_edge_segments_clamped(
                 return None;
             }
             let max_t = if clamp_overlap { 0.45 } else { 0.95 };
-            let t = (amount / length).min(max_t);
+            let requested_t = amount / length;
+            let t = requested_t.min(max_t);
+            if requested_t > max_t {
+                clamped = true;
+            }
             vertex.pos = vertex.vec().lerp(target.vec(), t).to_array();
             for (color, target_color) in vertex.color.iter_mut().zip(target.color) {
                 *color += (target_color - *color) * t;
@@ -303,7 +299,7 @@ pub(crate) fn bevel_edge_segments_clamped(
             return None;
         }
     }
-    Some(result)
+    Some((result, clamped))
 }
 
 /// Chanfro transacional de vértice com preservação estrita de 2-manifold e fechamento.
@@ -601,9 +597,8 @@ mod tests {
         let pos_5 = cube.verts[5].pos;
         let pos_6 = cube.verts[6].pos;
 
-        let m1 = bevel_edge_segments_clamped(&cube, 0, 3, 0.2, 1, true);
-        assert!(m1.is_some(), "bevel edge (0, 3) failed");
-        let m1 = m1.unwrap();
+        let (m1, _) = bevel_edge_segments_clamped(&cube, 0, 3, 0.2, 1, true)
+            .expect("bevel edge (0, 3) failed");
         assert!(m1.validate_topology().is_manifold);
 
         // Find edge with positions matching pos_5 and pos_6
@@ -628,9 +623,8 @@ mod tests {
             })
             .unwrap() as u32;
 
-        let m2 = bevel_edge_segments_clamped(&m1, v5, v6, 0.2, 1, true);
-        assert!(m2.is_some(), "bevel edge (v5, v6) failed");
-        let m2 = m2.unwrap();
+        let (m2, _) = bevel_edge_segments_clamped(&m1, v5, v6, 0.2, 1, true)
+            .expect("bevel edge (v5, v6) failed");
         let report = m2.validate_topology();
         assert!(report.is_manifold && report.is_closed);
         assert_eq!((m2.verts.len(), m2.faces.len()), (12, 8));
@@ -667,9 +661,9 @@ mod tests {
                         < 1e-4
                 })
                 .unwrap() as u32;
-            let next = bevel_edge_segments_clamped(&mesh, va, vb, 0.2, 1, true);
-            assert!(next.is_some());
-            mesh = next.unwrap();
+            let (next, _) = bevel_edge_segments_clamped(&mesh, va, vb, 0.2, 1, true)
+                .expect("sequential bevel step failed");
+            mesh = next;
         }
         let report = mesh.validate_topology();
         assert!(report.is_manifold && report.is_closed);
@@ -710,5 +704,23 @@ mod tests {
         let mut mesh = Mesh::cube(2.0);
         let report = mesh.bevel_edges(&[(0, 3)], 0.2, 8, true);
         assert_eq!((report.beveled_edges, report.segments), (1, 8));
+    }
+
+    #[test]
+    fn clamped_edges_reports_edges_limited_by_overlap_guard() {
+        // Offset de 1.0 numa aresta de 2.0 é 0.5 da aresta vizinha: com o clamp
+        // ativo (teto 0.45) a largura é reduzida; sem clamp (teto 0.95) não.
+        let mut clamped_mesh = Mesh::cube(2.0);
+        let clamped = clamped_mesh.bevel_edges(&[(0, 3)], 1.0, 1, true);
+        assert_eq!((clamped.beveled_edges, clamped.clamped_edges), (1, 1));
+
+        let mut free_mesh = Mesh::cube(2.0);
+        let free = free_mesh.bevel_edges(&[(0, 3)], 1.0, 1, false);
+        assert_eq!((free.beveled_edges, free.clamped_edges), (1, 0));
+
+        // Largura abaixo do limite: o relatório não inventa clamp.
+        let mut small_mesh = Mesh::cube(2.0);
+        let small = small_mesh.bevel_edges(&[(0, 3)], 0.4, 1, true);
+        assert_eq!((small.beveled_edges, small.clamped_edges), (1, 0));
     }
 }

@@ -7,6 +7,10 @@ rust-version.workspace = true
 build = "build.rs"
 
 [dependencies]
+petunia_editor = { workspace = true, features = ["animation-workspace"] }
+serde_json = { workspace = true }
+postcard = { version = "1", features = ["alloc"] }
+uuid = { workspace = true }
 petunia_application = { workspace = true }
 petunia_config = { workspace = true }
 petunia_core = { workspace = true }
@@ -27,3 +31,4 @@ cxx-qt-build = "0.10.0"
 
 [features]
 default = []
+animation-workspace = ["petunia_editor/animation-workspace"]

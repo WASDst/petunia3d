@@ -1,4 +1,5 @@
 #include "petunia_timeline_widget.h"
+#include "petunia_icons.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPainter>
@@ -34,9 +35,46 @@ void PetuniaDopesheetCanvas::setCurrentFrame(int frame) {
     }
 }
 
+void PetuniaDopesheetCanvas::setStartFrame(int start) {
+    int s = qBound(1, start, m_totalFrames);
+    if (m_startFrame != s) {
+        m_startFrame = s;
+        if (m_endFrame < m_startFrame) {
+            m_endFrame = m_startFrame;
+        }
+        update();
+        emit playbackRangeChanged(m_startFrame, m_endFrame);
+    }
+}
+
+void PetuniaDopesheetCanvas::setEndFrame(int end) {
+    int e = qBound(1, end, m_totalFrames);
+    if (m_endFrame != e) {
+        m_endFrame = e;
+        if (m_startFrame > m_endFrame) {
+            m_startFrame = m_endFrame;
+        }
+        update();
+        emit playbackRangeChanged(m_startFrame, m_endFrame);
+    }
+}
+
+void PetuniaDopesheetCanvas::setPlaybackRange(int start, int end) {
+    int s = qBound(1, start, m_totalFrames);
+    int e = qBound(s, end, m_totalFrames);
+    if (m_startFrame != s || m_endFrame != e) {
+        m_startFrame = s;
+        m_endFrame = e;
+        update();
+        emit playbackRangeChanged(m_startFrame, m_endFrame);
+    }
+}
+
 void PetuniaDopesheetCanvas::setTotalFrames(int total) {
     if (m_totalFrames != total) {
         m_totalFrames = qMax(1, total);
+        m_startFrame = qBound(1, m_startFrame, m_totalFrames);
+        m_endFrame = qBound(m_startFrame, m_endFrame, m_totalFrames);
         update();
     }
 }
@@ -161,6 +199,27 @@ void PetuniaDopesheetCanvas::paintEvent(QPaintEvent *) {
     painter.setPen(QColor(60, 60, 60));
     painter.drawLine(m_labelWidth, 0, m_labelWidth, height());
 
+    // 3.5 Sombreamento de áreas fora do range ativo (In / Out) e marcadores de régua
+    int startX = xAtFrame(m_startFrame);
+    int endX = xAtFrame(m_endFrame);
+    if (m_startFrame > 1 && startX > m_labelWidth) {
+        painter.fillRect(QRect(m_labelWidth, 0, startX - m_labelWidth, height()), QColor(0, 0, 0, 95));
+    }
+    if (m_endFrame < m_totalFrames && endX < width()) {
+        painter.fillRect(QRect(endX, 0, width() - endX, height()), QColor(0, 0, 0, 95));
+    }
+
+    // Marcadores visuais de In '[' e Out ']' na régua de tempo
+    painter.setPen(QPen(QColor(255, 175, 41), 2.0));
+    painter.drawLine(startX, 0, startX, rulerHeight);
+    painter.drawLine(startX, 0, startX + 4, 0);
+    painter.drawLine(startX, rulerHeight - 1, startX + 4, rulerHeight - 1);
+
+    painter.drawLine(endX, 0, endX, rulerHeight);
+    painter.drawLine(endX - 4, 0, endX, 0);
+    painter.drawLine(endX - 4, rulerHeight - 1, endX, rulerHeight - 1);
+    painter.drawLine(startX, rulerHeight - 1, endX, rulerHeight - 1);
+
     // 4. Linha de Reprodução / Scrubber (Vermelha / Laranja)
     int scrubX = xAtFrame(m_currentFrame);
     painter.setPen(QPen(QColor(233, 106, 0), 2.0));
@@ -241,7 +300,7 @@ void PetuniaTimelineWidget::setupUi() {
     transportRow->setContentsMargins(0, 0, 0, 0);
     transportRow->setSpacing(4);
 
-    m_firstBtn = new QPushButton(QStringLiteral("|◀"), this);
+    m_firstBtn = new QPushButton(PetuniaIcons::get("jump_start"), QString(), this);
     m_firstBtn->setToolTip(QStringLiteral("Ir para Primeiro Frame (Shift+Esquerda)"));
     connect(m_firstBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::jumpToFirst);
     transportRow->addWidget(m_firstBtn);
@@ -251,7 +310,7 @@ void PetuniaTimelineWidget::setupUi() {
     connect(m_prevKeyBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::prevKeyframe);
     transportRow->addWidget(m_prevKeyBtn);
 
-    m_playBtn = new QPushButton(QStringLiteral("▶"), this);
+    m_playBtn = new QPushButton(PetuniaIcons::get("play"), QString(), this);
     m_playBtn->setFixedWidth(36);
     m_playBtn->setToolTip(QStringLiteral("Reproduzir / Pausar (Espaço)"));
     connect(m_playBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::togglePlayback);
@@ -262,7 +321,7 @@ void PetuniaTimelineWidget::setupUi() {
     connect(m_nextKeyBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::nextKeyframe);
     transportRow->addWidget(m_nextKeyBtn);
 
-    m_endBtn = new QPushButton(QStringLiteral("▶|"), this);
+    m_endBtn = new QPushButton(PetuniaIcons::get("jump_end"), QString(), this);
     m_endBtn->setToolTip(QStringLiteral("Ir para Último Frame (Shift+Direita)"));
     connect(m_endBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::jumpToEnd);
     transportRow->addWidget(m_endBtn);
@@ -270,30 +329,74 @@ void PetuniaTimelineWidget::setupUi() {
     transportRow->addSpacing(8);
 
     // Auto-Key
-    m_autoKeyBtn = new QPushButton(QStringLiteral("⏺ Auto-Key"), this);
+    m_autoKeyBtn = new QPushButton(PetuniaIcons::get("keyframe"), QStringLiteral(" Auto-Key"), this);
     m_autoKeyBtn->setCheckable(true);
     m_autoKeyBtn->setToolTip(QStringLiteral("Gravação Automática de Keyframes ao Transformar"));
     transportRow->addWidget(m_autoKeyBtn);
 
     // Inserir / Deletar Keyframes Manuais
-    m_addKeyBtn = new QPushButton(QStringLiteral("+ Key"), this);
+    m_addKeyBtn = new QPushButton(PetuniaIcons::get("keyframe"), QStringLiteral(" +Key"), this);
     m_addKeyBtn->setToolTip(QStringLiteral("Inserir Keyframe no Frame Atual (I)"));
     connect(m_addKeyBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::insertKeyframeAtCurrent);
     transportRow->addWidget(m_addKeyBtn);
 
-    m_delKeyBtn = new QPushButton(QStringLiteral("- Key"), this);
+    m_delKeyBtn = new QPushButton(PetuniaIcons::get("delete"), QStringLiteral(" -Key"), this);
     m_delKeyBtn->setToolTip(QStringLiteral("Deletar Keyframe no Frame Atual (Alt+I)"));
     connect(m_delKeyBtn, &QPushButton::clicked, this, &PetuniaTimelineWidget::deleteKeyframeAtCurrent);
     transportRow->addWidget(m_delKeyBtn);
 
     transportRow->addSpacing(8);
 
-    // Indicador Numérico de Frame
+    // Indicadores Numéricos de Range e Frame Atual (In, Playhead, Out)
+    auto *inLabel = new QLabel(QStringLiteral("In:"), this);
+    inLabel->setStyleSheet(QStringLiteral("color: #888888; font-size: 11px;"));
+    transportRow->addWidget(inLabel);
+
+    m_startSpin = new QSpinBox(this);
+    m_startSpin->setToolTip(QStringLiteral("Frame Inicial da Reprodução (In Point)"));
+    m_startSpin->setRange(1, 250);
+    m_startSpin->setValue(1);
+    m_startSpin->setFixedWidth(56);
+    connect(m_startSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int s) {
+        if (m_endSpin && s > m_endSpin->value()) {
+            m_endSpin->blockSignals(true);
+            m_endSpin->setValue(s);
+            m_endSpin->blockSignals(false);
+        }
+        if (m_canvas) m_canvas->setStartFrame(s);
+    });
+    transportRow->addWidget(m_startSpin);
+
+    auto *curLabel = new QLabel(QStringLiteral("Frame:"), this);
+    curLabel->setStyleSheet(QStringLiteral("color: #b58cff; font-weight: bold; font-size: 11px;"));
+    transportRow->addWidget(curLabel);
+
     m_frameSpin = new QSpinBox(this);
+    m_frameSpin->setToolTip(QStringLiteral("Frame Atual (Playhead)"));
     m_frameSpin->setRange(1, 250);
     m_frameSpin->setValue(1);
+    m_frameSpin->setFixedWidth(62);
     connect(m_frameSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &PetuniaTimelineWidget::setFrame);
     transportRow->addWidget(m_frameSpin);
+
+    auto *outLabel = new QLabel(QStringLiteral("Out:"), this);
+    outLabel->setStyleSheet(QStringLiteral("color: #888888; font-size: 11px;"));
+    transportRow->addWidget(outLabel);
+
+    m_endSpin = new QSpinBox(this);
+    m_endSpin->setToolTip(QStringLiteral("Frame Final da Reprodução (Out Point)"));
+    m_endSpin->setRange(1, 250);
+    m_endSpin->setValue(250);
+    m_endSpin->setFixedWidth(56);
+    connect(m_endSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int e) {
+        if (m_startSpin && e < m_startSpin->value()) {
+            m_startSpin->blockSignals(true);
+            m_startSpin->setValue(e);
+            m_startSpin->blockSignals(false);
+        }
+        if (m_canvas) m_canvas->setEndFrame(e);
+    });
+    transportRow->addWidget(m_endSpin);
 
     m_totalFramesLabel = new QLabel(QStringLiteral("/ 250"), this);
     m_totalFramesLabel->setStyleSheet(QStringLiteral("color: #888888; font-weight: bold;"));
@@ -325,6 +428,19 @@ void PetuniaTimelineWidget::setupUi() {
         petunia_qt_app_set_timeline_frame(f);
         emit frameChanged(f);
     });
+    connect(m_canvas, &PetuniaDopesheetCanvas::playbackRangeChanged, this, [this](int s, int e) {
+        if (m_startSpin && m_startSpin->value() != s) {
+            m_startSpin->blockSignals(true);
+            m_startSpin->setValue(s);
+            m_startSpin->blockSignals(false);
+        }
+        if (m_endSpin && m_endSpin->value() != e) {
+            m_endSpin->blockSignals(true);
+            m_endSpin->setValue(e);
+            m_endSpin->blockSignals(false);
+        }
+        emit playbackRangeChanged(s, e);
+    });
     connect(m_canvas, &PetuniaDopesheetCanvas::keyframeToggled, this, [this](int f) {
         int asset = petunia_qt_app_get_active_asset();
         if (petunia_qt_app_has_keyframe(asset, f)) {
@@ -343,6 +459,14 @@ int PetuniaTimelineWidget::currentFrame() const {
     return m_frameSpin ? m_frameSpin->value() : 1;
 }
 
+int PetuniaTimelineWidget::startFrame() const {
+    return m_canvas ? m_canvas->startFrame() : 1;
+}
+
+int PetuniaTimelineWidget::endFrame() const {
+    return m_canvas ? m_canvas->endFrame() : 250;
+}
+
 bool PetuniaTimelineWidget::isAutoKeyEnabled() const {
     return m_autoKeyBtn && m_autoKeyBtn->isChecked();
 }
@@ -356,6 +480,39 @@ void PetuniaTimelineWidget::setFrame(int frame) {
     }
     petunia_qt_app_set_timeline_frame(frame);
     emit frameChanged(frame);
+}
+
+void PetuniaTimelineWidget::setStartFrame(int start) {
+    if (m_canvas) m_canvas->setStartFrame(start);
+    if (m_startSpin && m_startSpin->value() != start) {
+        m_startSpin->blockSignals(true);
+        m_startSpin->setValue(start);
+        m_startSpin->blockSignals(false);
+    }
+}
+
+void PetuniaTimelineWidget::setEndFrame(int end) {
+    if (m_canvas) m_canvas->setEndFrame(end);
+    if (m_endSpin && m_endSpin->value() != end) {
+        m_endSpin->blockSignals(true);
+        m_endSpin->setValue(end);
+        m_endSpin->blockSignals(false);
+    }
+}
+
+void PetuniaTimelineWidget::setPlaybackRange(int start, int end) {
+    if (m_canvas) m_canvas->setPlaybackRange(start, end);
+    if (m_startSpin) {
+        m_startSpin->blockSignals(true);
+        m_startSpin->setValue(start);
+        m_startSpin->blockSignals(false);
+    }
+    if (m_endSpin) {
+        m_endSpin->blockSignals(true);
+        m_endSpin->setValue(end);
+        m_endSpin->blockSignals(false);
+    }
+    emit playbackRangeChanged(start, end);
 }
 
 void PetuniaTimelineWidget::togglePlayback() {
@@ -381,35 +538,37 @@ void PetuniaTimelineWidget::pause() {
 }
 
 void PetuniaTimelineWidget::jumpToFirst() {
-    setFrame(1);
+    setFrame(startFrame());
 }
 
 void PetuniaTimelineWidget::jumpToEnd() {
-    setFrame(250);
+    setFrame(endFrame());
 }
 
 void PetuniaTimelineWidget::prevKeyframe() {
     int cur = currentFrame();
     int asset = petunia_qt_app_get_active_asset();
-    for (int f = cur - 1; f >= 1; --f) {
+    int start = startFrame();
+    for (int f = cur - 1; f >= start; --f) {
         if (petunia_qt_app_has_keyframe(asset, f)) {
             setFrame(f);
             return;
         }
     }
-    setFrame(1);
+    setFrame(start);
 }
 
 void PetuniaTimelineWidget::nextKeyframe() {
     int cur = currentFrame();
     int asset = petunia_qt_app_get_active_asset();
-    for (int f = cur + 1; f <= 250; ++f) {
+    int end = endFrame();
+    for (int f = cur + 1; f <= end; ++f) {
         if (petunia_qt_app_has_keyframe(asset, f)) {
             setFrame(f);
             return;
         }
     }
-    setFrame(250);
+    setFrame(end);
 }
 
 void PetuniaTimelineWidget::insertKeyframeAtCurrent() {
@@ -431,9 +590,11 @@ void PetuniaTimelineWidget::deleteKeyframeAtCurrent() {
 }
 
 void PetuniaTimelineWidget::onTimerTick() {
+    int start = startFrame();
+    int end = endFrame();
     int next = currentFrame() + 1;
-    if (next > 250) {
-        next = 1; // Loop contínuo
+    if (next > end) {
+        next = start; // Loop contínuo dentro da janela ativa
     }
     setFrame(next);
 }
@@ -452,6 +613,16 @@ void PetuniaTimelineWidget::syncFromApp() {
             m_frameSpin->setRange(1, total);
             m_frameSpin->setValue(cur);
             m_frameSpin->blockSignals(false);
+        }
+        if (m_startSpin) {
+            m_startSpin->blockSignals(true);
+            m_startSpin->setRange(1, total);
+            m_startSpin->blockSignals(false);
+        }
+        if (m_endSpin) {
+            m_endSpin->blockSignals(true);
+            m_endSpin->setRange(1, total);
+            m_endSpin->blockSignals(false);
         }
         if (m_totalFramesLabel) {
             m_totalFramesLabel->setText(QStringLiteral("/ %1").arg(total));

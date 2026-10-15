@@ -285,6 +285,9 @@ pub fn generate_cheatsheet_md() -> Result<String> {
 /// única: cada propriedade aponta para o SVG do pack, cuja pasta é o grupo).
 fn generate_icon_tokens_md(root_dir: &Path) -> Result<String> {
     let icon_catalog_path = root_dir.join("crates/ui-slint/ui/petunia_icons.slint");
+    if !icon_catalog_path.exists() {
+        return Ok(String::new());
+    }
     let content = std::fs::read_to_string(&icon_catalog_path)
         .with_context(|| format!("Falha ao ler {}", icon_catalog_path.display()))?;
 

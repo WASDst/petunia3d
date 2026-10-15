@@ -259,7 +259,9 @@ fn individual_pivots(mesh: &Mesh, object: bool) -> Vec<Vec3> {
     let mut neighbors = vec![Vec::new(); mesh.verts.len()];
     for (a, b) in mesh.edges_unique() {
         let (a, b) = (a as usize, b as usize);
-        if mesh.verts[a].selected && mesh.verts[b].selected {
+        if mesh.verts.get(a).is_some_and(|v| v.selected)
+            && mesh.verts.get(b).is_some_and(|v| v.selected)
+        {
             neighbors[a].push(b);
             neighbors[b].push(a);
         }

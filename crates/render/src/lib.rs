@@ -61,7 +61,10 @@ impl GpuCaps {
     /// Detecta rasterizador por software puro (llvmpipe, softpipe, swrast, lavapipe).
     pub fn is_software(&self) -> bool {
         let r = self.renderer.to_ascii_lowercase();
-        r.contains("llvmpipe") || r.contains("softpipe") || r.contains("swrast") || r.contains("lavapipe")
+        r.contains("llvmpipe")
+            || r.contains("softpipe")
+            || r.contains("swrast")
+            || r.contains("lavapipe")
     }
 
     /// Resumo de uma linha para log de startup e relatórios.

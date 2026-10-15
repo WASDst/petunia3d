@@ -7,7 +7,9 @@
 //! (o chamador abre o Undo do gesto uma vez).
 
 use petunia_core::{
-    AppEvent, AppState, Module, UnwrapAutoCmd, UvPackIslandsCmd, UvProjectFromViewCmd,
+    AppEvent, AppState, Module, PinOp, SeamOp, UnwrapAutoCmd, UvEqualizeTexelDensityCmd,
+    UvNormalizeTexelDensityCmd, UvPackIslandsCmd, UvPinCmd, UvProjectCubeCmd, UvProjectFromViewCmd,
+    UvProjectPlanarCmd, UvSeamCmd,
 };
 use petunia_mesh::UvTransform;
 
@@ -24,12 +26,9 @@ impl UvModule {
 
     /// Re-projeta planar o asset ativo (checkpoint + evento).
     pub fn reproject(state: &mut AppState) {
-        state.checkpoint("uv planar");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.project_planar();
+        if let Err(err) = state.dispatch(&UvProjectPlanarCmd) {
+            state.set_status(format!("uv planar: {err}"));
         }
-        state.uv_selection.clear();
-        state.emit_uv_changed();
     }
 
     /// Preview direto de um gesto contínuo sobre os cantos selecionados, sem
@@ -73,53 +72,60 @@ impl UvModule {
 
     /// Fixa (pin) todos os cantos das faces selecionadas no UV.
     pub fn pin_selected(state: &mut AppState) {
-        let faces = Self::selected_faces(state);
-        state.checkpoint("pin uv");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.pin_selected_faces_uv(&faces);
+        if let Err(err) = state.dispatch(&UvPinCmd {
+            op: PinOp::Pin,
+            corners: None,
+        }) {
+            state.set_status(format!("pin uv: {err}"));
         }
-        state.emit_uv_changed();
     }
 
     /// Desfixa (unpin) todos os cantos das faces selecionadas no UV.
     pub fn unpin_selected(state: &mut AppState) {
-        let faces = Self::selected_faces(state);
-        state.checkpoint("unpin uv");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.unpin_selected_faces_uv(&faces);
+        if let Err(err) = state.dispatch(&UvPinCmd {
+            op: PinOp::Unpin,
+            corners: None,
+        }) {
+            state.set_status(format!("unpin uv: {err}"));
         }
-        state.emit_uv_changed();
     }
 
     /// Alterna estado de fixação (pin/unpin) das faces selecionadas.
     pub fn toggle_pin_selected(state: &mut AppState) -> bool {
         let faces = Self::selected_faces(state);
-        state.checkpoint("toggle pin uv");
-        let res = state
-            .project
-            .active_mesh_mut()
-            .is_some_and(|m| m.toggle_pin_selected_faces_uv(&faces));
-        state.emit_uv_changed();
-        res
+        if state
+            .dispatch(&UvPinCmd {
+                op: PinOp::Toggle,
+                corners: None,
+            })
+            .is_err()
+        {
+            return false;
+        }
+        state.project.active_mesh().is_some_and(|m| {
+            faces.iter().any(|&fi| {
+                m.faces
+                    .get(fi)
+                    .is_some_and(|f| (0..f.uv.len()).any(|ci| m.is_uv_pinned(fi, ci)))
+            })
+        })
     }
 
     /// Limpa todas as fixações de UV da malha ativa.
     pub fn clear_all_pins(state: &mut AppState) {
-        state.checkpoint("clear all uv pins");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.clear_all_pins();
+        if let Err(err) = state.dispatch(&UvPinCmd {
+            op: PinOp::ClearAll,
+            corners: None,
+        }) {
+            state.set_status(format!("clear all uv pins: {err}"));
         }
-        state.emit_uv_changed();
     }
 
     /// Executa projeção cúbica (Box Mapping) sobre o asset ativo (P3D-064).
     pub fn project_cube(state: &mut AppState) {
-        state.checkpoint("uv cube projection");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.project_cube();
+        if let Err(err) = state.dispatch(&UvProjectCubeCmd) {
+            state.set_status(format!("uv cube: {err}"));
         }
-        state.uv_selection.clear();
-        state.emit_uv_changed();
     }
 
     /// Executa unwrap automático genérico usando o provider xatlas (P1-06 / P3D-064).
@@ -149,15 +155,14 @@ impl UvModule {
 
     /// Equaliza a densidade de texels entre as ilhas UV (ou ilhas selecionadas).
     pub fn equalize_texel_density(state: &mut AppState) -> Result<usize, String> {
-        let faces = Self::selected_faces(state);
-        state.checkpoint("equalize texel density");
-        let modified = state
+        state
+            .dispatch(&UvEqualizeTexelDensityCmd)
+            .map_err(|e| e.to_string())?;
+        Ok(state
             .project
-            .active_mesh_mut()
-            .map_or(0, |m| m.equalize_texel_density(&faces));
-        state.emit_uv_changed();
-        state.set_status(format!("Equalized texel density on {modified} island(s)"));
-        Ok(modified)
+            .active_mesh()
+            .map(|m| m.uv_islands().len())
+            .unwrap_or(0))
     }
 
     pub fn project_from_view(state: &mut AppState) -> Result<(), String> {
@@ -167,25 +172,21 @@ impl UvModule {
     }
 
     pub fn mark_selected_seams(state: &mut AppState) {
-        state.checkpoint("mark seam");
-        if let Some(m) = state.project.active_mesh_mut() {
-            let edges: Vec<(u32, u32)> = m.selected_edges.iter().copied().collect();
-            for (a, b) in edges {
-                m.mark_seam(a, b);
-            }
+        if let Err(err) = state.dispatch(&UvSeamCmd {
+            op: SeamOp::Mark,
+            edges: None,
+        }) {
+            state.set_status(format!("mark seam: {err}"));
         }
-        state.emit_uv_changed();
     }
 
     pub fn clear_selected_seams(state: &mut AppState) {
-        state.checkpoint("clear seam");
-        if let Some(m) = state.project.active_mesh_mut() {
-            let edges: Vec<(u32, u32)> = m.selected_edges.iter().copied().collect();
-            for (a, b) in edges {
-                m.clear_seam(a, b);
-            }
+        if let Err(err) = state.dispatch(&UvSeamCmd {
+            op: SeamOp::Clear,
+            edges: None,
+        }) {
+            state.set_status(format!("clear seam: {err}"));
         }
-        state.emit_uv_changed();
     }
 
     pub fn diagnostics(state: &AppState) -> Option<petunia_mesh::uv_tools::UvDiagnostics> {
@@ -201,11 +202,9 @@ impl UvModule {
     }
 
     pub fn normalize_texel_density(state: &mut AppState, texture_w: u32, target: f32) {
-        state.checkpoint("normalize texel density");
-        if let Some(m) = state.project.active_mesh_mut() {
-            m.normalize_texel_density(texture_w, target);
+        if let Err(err) = state.dispatch(&UvNormalizeTexelDensityCmd { texture_w, target }) {
+            state.set_status(format!("normalize texel density: {err}"));
         }
-        state.emit_uv_changed();
     }
 
     /// Face cuja ilha contém (u, v) na malha ativa.

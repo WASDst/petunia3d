@@ -61,6 +61,10 @@
         {
           "path": "02-application/commands-events-services.md",
           "title": "Commands, eventos e serviços"
+        },
+        {
+          "path": "02-application/tools-interaction-implementation.md",
+          "title": "Ferramentas: proposta e matriz de implementação"
         }
       ]
     },
@@ -231,6 +235,10 @@
         {
           "path": "09-ui/qt-integration.md",
           "title": "Qt — integração sobre a base funcional única"
+        },
+        {
+          "path": "09-ui/qt-library-adoption.md",
+          "title": "Qt — adoção de bibliotecas e componentes nativos"
         }
       ]
     },

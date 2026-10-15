@@ -2,6 +2,8 @@
 
 > **Status: aprovado**
 
+Proposta transversal e trabalhos delimitados: [Ferramentas compartilhadas — proposta e matriz de implementação](./tools-interaction-implementation.md). A matriz mantém status obrigatório por feature e não substitui os contratos de Commands desta página.
+
 ## Commands
 
 O sistema atual de `Command` e `CommandDispatcher` é uma base valiosa e será preservado.

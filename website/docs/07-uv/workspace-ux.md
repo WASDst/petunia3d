@@ -1,6 +1,8 @@
 # UV Workspace — UX e Comportamento
 
 > **Status: aprovado em 2026-10-08.**
+
+A sessão contínua de transformação e os atalhos contextuais UV são detalhados na [proposta e matriz das ferramentas compartilhadas](../02-application/tools-interaction-implementation.md), com status de implementação obrigatório e gates próprios, preservando corners, Sync e pins.
 >
 > Este documento especializa o contrato global de [Workspaces, Feedback Visual e Acessibilidade](../09-ui/workspaces-feedback-accessibility.md) para UV. A arquitetura geométrica/algorítmica continua definida em [UV Workspace e Editor](./architecture-decision.md).
 

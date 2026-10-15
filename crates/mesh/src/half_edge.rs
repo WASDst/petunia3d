@@ -731,6 +731,23 @@ impl Mesh {
             }
         }
 
+        // Seams e Sharp seguem o mesmo remap: sem isso os flags passariam a
+        // apontar para outros vértices da malha depois da compactação
+        // (website/docs/03-geometry/normals-shading-sharp-edges.md).
+        let remap_edges = |set: &HashSet<(u32, u32)>| -> HashSet<(u32, u32)> {
+            let mut out = HashSet::new();
+            for &(a, b) in set {
+                let na = remap[a as usize];
+                let nb = remap[b as usize];
+                if na != u32::MAX && nb != u32::MAX && na != nb {
+                    out.insert(edge_key(na, nb));
+                }
+            }
+            out
+        };
+        self.uv_seams = remap_edges(&self.uv_seams);
+        self.sharp_edges = remap_edges(&self.sharp_edges);
+
         self.verts = new_verts;
         removed
     }
@@ -843,5 +860,25 @@ mod tests {
             has_nm_vertex,
             "Expected NonManifoldVertex at pinch vertex 0"
         );
+    }
+
+    #[test]
+    fn remove_isolated_vertices_remaps_seams_and_sharp() {
+        // Órfão no início: todo índice real desloca um, forçando o remap.
+        let mut mesh = Mesh::plane(2.0);
+        mesh.verts.insert(0, Vertex::new(9.0, 9.0, 0.0));
+        for face in &mut mesh.faces {
+            for vertex in &mut face.verts {
+                *vertex += 1;
+            }
+        }
+        mesh.uv_seams.insert(edge_key(1, 2));
+        mesh.sharp_edges.insert(edge_key(3, 4));
+
+        assert_eq!(mesh.remove_isolated_vertices(), 1);
+
+        assert_eq!(mesh.verts.len(), 4);
+        assert_eq!(mesh.uv_seams, HashSet::from([edge_key(0, 1)]));
+        assert_eq!(mesh.sharp_edges, HashSet::from([edge_key(2, 3)]));
     }
 }

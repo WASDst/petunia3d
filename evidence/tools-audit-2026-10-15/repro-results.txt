@@ -1,0 +1,150 @@
+   Compiling petunia_tools_audit v0.0.0 (/tmp/petunia-tools-audit-2026-10-15)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.74s
+     Running unittests src/lib.rs (target/debug/deps/petunia_tools_audit-fff99b5c90dd5aa1)
+
+running 17 tests
+test animation_space_resolves_to_playback ... FAILED
+test application_handles_select_tool_action ... FAILED
+test brush_undo_and_cancel_control ... ok
+test default_brush_shortcuts_exist ... FAILED
+test delete_key_only_changes_active_clip ... FAILED
+test delete_key_preserves_neighboring_frames_at_30fps ... FAILED
+test insert_key_only_changes_active_clip ... FAILED
+test insert_key_preserves_evaluated_pose ... FAILED
+test invalid_face_fill_changes_nothing ... FAILED
+test literal_brackets_parse ... FAILED
+test low_level_fill_brush_honors_empty_selection_mask ... FAILED
+test maya_w_activates_move_instead_of_inherited_select ... FAILED
+test numpad_plus_roundtrips ... FAILED
+test removed_binding_survives_save_reload ... FAILED
+test selected_faces_fill_with_empty_selection_changes_nothing ... FAILED
+test view_overlap_is_reported_consistently ... FAILED
+test workspace_bindings_cover_uv_and_animation ... FAILED
+
+failures:
+
+---- animation_space_resolves_to_playback stdout ----
+
+thread 'animation_space_resolves_to_playback' (1584405) panicked at src/lib.rs:162:5:
+assertion `left == right` failed
+  left: Some("global.previous_tool")
+ right: Some("animate.toggle_play")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- application_handles_select_tool_action stdout ----
+
+thread 'application_handles_select_tool_action' (1584406) panicked at src/lib.rs:46:5:
+assertion `left == right` failed
+  left: "transform"
+ right: "select"
+
+---- default_brush_shortcuts_exist stdout ----
+
+thread 'default_brush_shortcuts_exist' (1584408) panicked at src/lib.rs:16:9:
+absent: paint.size_decrease
+
+---- delete_key_only_changes_active_clip stdout ----
+
+thread 'delete_key_only_changes_active_clip' (1584409) panicked at src/lib.rs:141:5:
+inactive clip changed
+
+---- delete_key_preserves_neighboring_frames_at_30fps stdout ----
+
+thread 'delete_key_preserves_neighboring_frames_at_30fps' (1584410) panicked at src/lib.rs:109:5:
+assertion `left == right` failed: deleting one key must preserve adjacent frames
+  left: 0
+ right: 2
+
+---- insert_key_only_changes_active_clip stdout ----
+
+thread 'insert_key_only_changes_active_clip' (1584411) panicked at src/lib.rs:173:5:
+inactive clip changed
+
+---- insert_key_preserves_evaluated_pose stdout ----
+
+thread 'insert_key_preserves_evaluated_pose' (1584412) panicked at src/lib.rs:128:5:
+assertion `left == right` failed: inserting a key changed the visible pose
+  left: Transform3D { translation: [5.0, 0.100000024, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+ right: Transform3D { translation: [0.0, 0.20000005, 0.0], rotation: [0.0, 0.0, 0.0, 1.0], scale: [1.0, 1.0, 1.0] }
+
+---- invalid_face_fill_changes_nothing stdout ----
+
+thread 'invalid_face_fill_changes_nothing' (1584413) panicked at src/lib.rs:83:5:
+assertion `left == right` failed: invalid face broadened fill
+  left: 256
+ right: 0
+
+---- literal_brackets_parse stdout ----
+
+thread 'literal_brackets_parse' (1584414) panicked at src/lib.rs:9:9:
+unparsed: [
+
+---- low_level_fill_brush_honors_empty_selection_mask stdout ----
+
+thread 'low_level_fill_brush_honors_empty_selection_mask' (1584415) panicked at src/lib.rs:93:5:
+assertion `left == right` failed: Fill bypassed mask
+  left: 256
+ right: 0
+
+---- maya_w_activates_move_instead_of_inherited_select stdout ----
+
+thread 'maya_w_activates_move_instead_of_inherited_select' (1584418) panicked at src/lib.rs:157:5:
+assertion `left == right` failed
+  left: Some("model.tool_select")
+ right: Some("model.transform")
+
+---- numpad_plus_roundtrips stdout ----
+
+thread 'numpad_plus_roundtrips' (1584419) panicked at src/lib.rs:22:5:
+assertion `left == right` failed
+  left: None
+ right: Some(Binding { key: NumpadPlus, mods: Mods2 { ctrl: false, shift: false, alt: false } })
+
+---- removed_binding_survives_save_reload stdout ----
+
+thread 'removed_binding_survives_save_reload' (1584420) panicked at src/lib.rs:30:5:
+assertion failed: Keybinds::load_profile_in(&id, dir).binding_for("model.extrude").is_none()
+
+---- selected_faces_fill_with_empty_selection_changes_nothing stdout ----
+
+thread 'selected_faces_fill_with_empty_selection_changes_nothing' (1584421) panicked at src/lib.rs:74:5:
+assertion `left == right` failed: empty selection broadened fill
+  left: 256
+ right: 0
+
+---- view_overlap_is_reported_consistently stdout ----
+
+thread 'view_overlap_is_reported_consistently' (1584422) panicked at src/lib.rs:39:5:
+assertion `left == right` failed
+  left: 0
+ right: 1
+
+---- workspace_bindings_cover_uv_and_animation stdout ----
+
+thread 'workspace_bindings_cover_uv_and_animation' (1584423) panicked at src/lib.rs:51:5:
+assertion `left == right` failed
+  left: None
+ right: Some("uv.move")
+
+
+failures:
+    animation_space_resolves_to_playback
+    application_handles_select_tool_action
+    default_brush_shortcuts_exist
+    delete_key_only_changes_active_clip
+    delete_key_preserves_neighboring_frames_at_30fps
+    insert_key_only_changes_active_clip
+    insert_key_preserves_evaluated_pose
+    invalid_face_fill_changes_nothing
+    literal_brackets_parse
+    low_level_fill_brush_honors_empty_selection_mask
+    maya_w_activates_move_instead_of_inherited_select
+    numpad_plus_roundtrips
+    removed_binding_survives_save_reload
+    selected_faces_fill_with_empty_selection_changes_nothing
+    view_overlap_is_reported_consistently
+    workspace_bindings_cover_uv_and_animation
+
+test result: FAILED. 1 passed; 16 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+error: test failed, to rerun pass `--lib`

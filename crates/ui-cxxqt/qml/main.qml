@@ -127,15 +127,32 @@ ApplicationWindow {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: 8
                     spacing: 8
 
+                    // Seção Outliner (Partes da Cena)
                     Text {
-                        text: "INSPECTOR"
+                        text: qsTr("OUTLINER")
                         color: DesignTokens.textSecondary
                         font.family: DesignTokens.fontFamily
                         font.pixelSize: DesignTokens.fontSmall
                         font.bold: true
+                    }
+
+                    OutlinerTreeView {
+                        id: outliner
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 180
+                        onAddPrimitiveRequested: {
+                            primitiveCard.primitiveType = "Cubo";
+                            primitiveCard.visible = true;
+                        }
+                        onVisibilityToggled: (id, visible) => {
+                            if (typeof shellBridge !== "undefined") {
+                                shellBridge.dispatch_action("model.toggle_visibility");
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -144,8 +161,17 @@ ApplicationWindow {
                         color: DesignTokens.border
                     }
 
+                    // Seção Inspetor de Propriedades
                     Text {
-                        text: "Transform"
+                        text: qsTr("INSPECTOR")
+                        color: DesignTokens.textSecondary
+                        font.family: DesignTokens.fontFamily
+                        font.pixelSize: DesignTokens.fontSmall
+                        font.bold: true
+                    }
+
+                    Text {
+                        text: qsTr("Transform")
                         color: DesignTokens.textPrimary
                         font.bold: true
                         font.pixelSize: DesignTokens.fontSmall
@@ -164,7 +190,7 @@ ApplicationWindow {
                         Text { text: "0.00 m"; color: DesignTokens.textPrimary }
                     }
 
-                    Item { Layout.fillHeight: true }
+                    Item { Layout.preferredHeight: 10 }
                 }
             }
         }

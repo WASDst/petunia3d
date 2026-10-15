@@ -282,6 +282,7 @@ impl CommandDispatcher {
                 "Confirm or cancel the active operation first".into(),
             ));
         }
+        ctx.document.normalize_references();
         let changes = cmd.changes();
         ctx.document.project.history_selection = ctx.editor.selection.assets.clone();
         let original_selection = ctx.editor.selection.clone();
@@ -295,9 +296,33 @@ impl CommandDispatcher {
         if cmd.is_destructive() {
             ctx.freeze_active_primitive_for_command();
         }
-        if let Err(error) = cmd.execute(ctx) {
+        let exec_result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cmd.execute(ctx)));
+        let execution_outcome = match exec_result {
+            Ok(res) => res,
+            Err(panic_payload) => {
+                let msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown internal panic".to_string()
+                };
+                tracing::error!(
+                    command = cmd.label(),
+                    panic = %msg,
+                    "Command panicked during execution; document restored to pre-command state"
+                );
+                Err(CommandError::Execution(format!(
+                    "Internal error caught: {msg}"
+                )))
+            }
+        };
+
+        if let Err(error) = execution_outcome {
             if let Some(original) = original {
                 ctx.document.project = original;
+                ctx.document.sync_reference_mirror();
                 ctx.editor.selection = original_selection;
                 (ctx.editor.primitive_session, ctx.editor.last_primitive) =
                     original_primitive_session;
@@ -312,6 +337,7 @@ impl CommandDispatcher {
             let bytes = original.estimated_bytes();
             ctx.document.undo.push_sized(cmd.label(), original, bytes);
         }
+        ctx.document.sync_reference_mirror();
         ctx.sync_selection();
         ctx.emit_project_changed(changes);
         ctx.mark_dirty();
@@ -477,6 +503,7 @@ impl CommandDispatcher {
             UndoCmd,
         );
         d.alias("global.undo", "edit.undo");
+        d.alias("app.undo", "edit.undo");
         d.register_with_meta(
             CommandMetadata::new(
                 "edit.redo",
@@ -487,6 +514,7 @@ impl CommandDispatcher {
             RedoCmd,
         );
         d.alias("global.redo", "edit.redo");
+        d.alias("app.redo", "edit.redo");
         d.register_with_meta(
             CommandMetadata::new(
                 "edit.delete",
@@ -497,6 +525,8 @@ impl CommandDispatcher {
             DeleteSelectionCmd,
         );
         d.alias("model.delete", "edit.delete");
+        d.alias("edit.delete_selected", "edit.delete");
+        d.alias("model.delete_selected", "edit.delete");
         d.register_with_meta(
             CommandMetadata::new(
                 "edit.duplicate",
@@ -507,6 +537,8 @@ impl CommandDispatcher {
             DuplicateSelectionCmd,
         );
         d.alias("model.duplicate", "edit.duplicate");
+        d.alias("edit.duplicate_selected", "edit.duplicate");
+        d.alias("model.duplicate_selected", "edit.duplicate");
 
         // 3. Seleção (Select)
         d.register_with_meta(
@@ -605,6 +637,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::cube(true),
         );
+        d.alias("add.cube", "model.add_cube");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_sphere",
@@ -615,6 +648,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Sphere),
         );
+        d.alias("add.sphere", "model.add_sphere");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_cylinder",
@@ -625,6 +659,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Cylinder),
         );
+        d.alias("add.cylinder", "model.add_cylinder");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_plane",
@@ -635,6 +670,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Plane),
         );
+        d.alias("add.plane", "model.add_plane");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_cone",
@@ -645,6 +681,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Cone),
         );
+        d.alias("add.cone", "model.add_cone");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_capsule",
@@ -655,6 +692,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Capsule),
         );
+        d.alias("add.capsule", "model.add_capsule");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_wedge",
@@ -665,6 +703,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Wedge),
         );
+        d.alias("add.wedge", "model.add_wedge");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_circle",
@@ -675,6 +714,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Circle),
         );
+        d.alias("add.circle", "model.add_circle");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_torus",
@@ -685,6 +725,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Torus),
         );
+        d.alias("add.torus", "model.add_torus");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.add_icosphere",
@@ -695,6 +736,7 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             AddPrimitiveCmd::new(PrimitiveKind::Icosphere),
         );
+        d.alias("add.icosphere", "model.add_icosphere");
         d.register_with_meta(
             CommandMetadata::new(
                 "model.revolve",
@@ -1172,6 +1214,106 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.mirror",
+                "Mirror Mesh",
+                "Mirror the active mesh across an axis and optionally weld the plane",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            MirrorMeshCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.push_pull_apply",
+                "Apply Push/Pull",
+                "Displace selected faces along their normal by a given distance",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            PushPullApplyCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.slice_plane",
+                "Slice Plane",
+                "Slice the active mesh along a plane through the selection center",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            SlicePlaneCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.triangulate",
+                "Triangulate",
+                "Triangulate faces of the active mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            TriangulateMeshCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.translate_selection",
+                "Translate Selection",
+                "Translate selected vertices by a delta vector",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            TranslateSelectionCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.project_planar",
+                "Planar UV Projection",
+                "Project UVs planarly on the active mesh",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvProjectPlanarCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.project_cube",
+                "Cube UV Projection",
+                "Project UVs using box mapping on the active mesh",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvProjectCubeCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.equalize_texel_density",
+                "Equalize Texel Density",
+                "Equalize texel density across UV islands",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvEqualizeTexelDensityCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.normalize_texel_density",
+                "Normalize Texel Density",
+                "Normalize texel density to a target value for a given texture width",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvNormalizeTexelDensityCmd::default(),
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "asset.join_into_active",
+                "Join Asset Into Active",
+                "Merge another asset's mesh into the active asset and remove the source asset",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            JoinAssetIntoActiveCmd { source_index: 0 },
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.clear_location",
                 "Clear Location",
                 "Reset object location to [0, 0, 0]",
@@ -1295,6 +1437,9 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Modeling),
             ToggleSnapCmd,
         );
+        d.alias("tool.toggle_snap", "tools.toggle_snap");
+        d.alias("view.toggle_snap", "tools.toggle_snap");
+        d.alias("tool.toggle_proportional", "tools.toggle_proportional");
         d.register_with_meta(
             CommandMetadata::new(
                 "view.frame_selection",
@@ -1455,6 +1600,12 @@ impl CommandDispatcher {
             .with_docs(DocsTopic::Navigation),
             SetViewPresetCmd(ViewPreset::PseudoIsometric2To1),
         );
+        d.alias("view.camera_front", "view.front");
+        d.alias("view.camera_back", "view.back");
+        d.alias("view.camera_left", "view.left");
+        d.alias("view.camera_right", "view.right");
+        d.alias("view.camera_top", "view.top");
+        d.alias("view.camera_bottom", "view.bottom");
 
         // 6. Janela e Interface (Window)
         d.register_with_meta(
@@ -1785,6 +1936,9 @@ impl Command for DeleteAssetCmd {
         }
 
         state.document.remove(idx);
+        state.document.bump_topology();
+        state.document.bump_selection();
+        state.mark_dirty();
         state.set_status("Asset deleted");
         Ok(())
     }
@@ -1827,6 +1981,9 @@ impl Command for DeleteSelectionCmd {
                 .retain(|asset| !selected.contains(&asset.id) || asset.locked);
             state.document.active = usize::MAX;
             state.editor.selection.assets.clear();
+            state.document.bump_topology();
+            state.document.bump_selection();
+            state.mark_dirty();
             state.set_status("Deleted selected objects");
             return Ok(());
         }
@@ -3929,10 +4086,17 @@ impl Command for BevelCmd {
             )));
         }
         state.sync_selection();
-        state.set_status(format!(
+        let mut status = format!(
             "Bevel {} edge(s) · {} segment(s)",
             report.beveled_edges, report.segments
-        ));
+        );
+        if report.clamped_edges > 0 {
+            status.push_str(&format!(
+                " · {} clamped by overlap limit",
+                report.clamped_edges
+            ));
+        }
+        state.set_status(status);
         Ok(())
     }
 }
@@ -6352,6 +6516,354 @@ impl Command for BakeDecalCmd {
         state.mark_canvas_dirty();
         state.mark_dirty();
         state.set_status("Decalque convertido para camada raster".to_string());
+        Ok(())
+    }
+}
+
+/// Espelha a malha ativa ao longo de um eixo com soldagem opcional no plano.
+#[derive(Debug, Clone)]
+pub struct MirrorMeshCmd {
+    pub axis: usize,
+    pub weld: f32,
+}
+
+impl Default for MirrorMeshCmd {
+    fn default() -> Self {
+        Self {
+            axis: 0,
+            weld: 0.001,
+        }
+    }
+}
+
+impl Command for MirrorMeshCmd {
+    fn label(&self) -> &'static str {
+        "mirror"
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
+            Err("No active mesh")
+        } else if self.axis > 2 || !self.weld.is_finite() {
+            Err("Invalid mirror parameters")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.mirror(self.axis, self.weld);
+        state.sync_selection();
+        Ok(())
+    }
+}
+
+/// Aplica deslocamento Push/Pull imediato nas faces selecionadas.
+#[derive(Debug, Clone, Default)]
+pub struct PushPullApplyCmd {
+    pub dist: f32,
+}
+
+impl Command for PushPullApplyCmd {
+    fn label(&self) -> &'static str {
+        "push/pull"
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
+            Err("No active mesh")
+        } else if !self.dist.is_finite() {
+            Err("Push/pull distance must be finite")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let dist = if self.dist != 0.0 {
+            self.dist
+        } else {
+            state.tools.push_dist
+        };
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        if !state.editor.selection.faces.is_empty() {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
+        mesh.push_pull(dist);
+        state.sync_selection();
+        Ok(())
+    }
+}
+
+/// Fatia a malha ativa ao longo de um plano passando pelo centro da seleção.
+#[derive(Debug, Clone)]
+pub struct SlicePlaneCmd {
+    pub normal: [f32; 3],
+    pub cap: bool,
+}
+
+impl Default for SlicePlaneCmd {
+    fn default() -> Self {
+        Self {
+            normal: [0.0, 1.0, 0.0],
+            cap: true,
+        }
+    }
+}
+
+impl Command for SlicePlaneCmd {
+    fn label(&self) -> &'static str {
+        "slice"
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let n = glam::Vec3::from_array(self.normal);
+        if state.document.active_mesh().is_none() {
+            Err("No active mesh")
+        } else if !n.is_finite() || n.length_squared() <= 1.0e-12 {
+            Err("Slice plane normal is invalid")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let center = glam::Vec3::from(mesh.selection_center());
+        let normal = glam::Vec3::from_array(self.normal);
+        mesh.slice_plane(center, normal, self.cap);
+        state.sync_selection();
+        Ok(())
+    }
+}
+
+/// Triangula as faces da malha ativa.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TriangulateMeshCmd;
+
+impl Command for TriangulateMeshCmd {
+    fn label(&self) -> &'static str {
+        "triangulate"
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
+            Err("No active mesh")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.triangulate();
+        state.sync_selection();
+        Ok(())
+    }
+}
+
+/// Translada os elementos selecionados da malha ativa por `delta`.
+#[derive(Debug, Clone, Default)]
+pub struct TranslateSelectionCmd {
+    pub delta: [f32; 3],
+}
+
+impl Command for TranslateSelectionCmd {
+    fn label(&self) -> &'static str {
+        "move"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if state.document.active_mesh().is_none() {
+            Err("No active mesh")
+        } else if !glam::Vec3::from_array(self.delta).is_finite() {
+            Err("Move delta must be finite")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let delta = self.delta;
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        if !state.editor.selection.is_empty() {
+            state.editor.selection.apply_to_mesh(mesh);
+        }
+        mesh.translate_selected(delta);
+        state.tools.transform_delta = [0.0; 3];
+        state.sync_selection();
+        state.set_status(format!("move {delta:?}"));
+        Ok(())
+    }
+}
+
+/// Projeção UV planar sobre a malha ativa.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvProjectPlanarCmd;
+
+impl Command for UvProjectPlanarCmd {
+    fn label(&self) -> &'static str {
+        "uv planar"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.project_planar();
+        state.editor.tools.uv_selection.clear();
+        Ok(())
+    }
+}
+
+/// Projeção UV cúbica (Box Mapping) sobre a malha ativa.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvProjectCubeCmd;
+
+impl Command for UvProjectCubeCmd {
+    fn label(&self) -> &'static str {
+        "uv cube projection"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.project_cube();
+        state.editor.tools.uv_selection.clear();
+        Ok(())
+    }
+}
+
+/// Equaliza a densidade de texels entre as ilhas UV.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvEqualizeTexelDensityCmd;
+
+impl Command for UvEqualizeTexelDensityCmd {
+    fn label(&self) -> &'static str {
+        "equalize texel density"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let faces = match state.document.active_mesh() {
+            Some(mesh) => state.editor.tools.uv_selection.faces(mesh),
+            None => return Err(CommandError::NoActiveAsset),
+        };
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        let modified = mesh.equalize_texel_density(&faces);
+        state.set_status(format!("Equalized texel density on {modified} island(s)"));
+        Ok(())
+    }
+}
+
+/// Normaliza a densidade de texels para um alvo específico dada a largura da textura.
+#[derive(Debug, Clone)]
+pub struct UvNormalizeTexelDensityCmd {
+    pub texture_w: u32,
+    pub target: f32,
+}
+
+impl Default for UvNormalizeTexelDensityCmd {
+    fn default() -> Self {
+        Self {
+            texture_w: 1024,
+            target: 128.0,
+        }
+    }
+}
+
+impl Command for UvNormalizeTexelDensityCmd {
+    fn label(&self) -> &'static str {
+        "normalize texel density"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn can_execute(&self, _state: &EditorView<'_>) -> Result<(), &'static str> {
+        if self.texture_w == 0 || !self.target.is_finite() || self.target <= 0.0 {
+            Err("Invalid texel density parameters")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.normalize_texel_density(self.texture_w, self.target);
+        Ok(())
+    }
+}
+
+/// Mescla a malha de `source_index` no asset ativo e remove o asset de origem.
+#[derive(Debug, Clone)]
+pub struct JoinAssetIntoActiveCmd {
+    pub source_index: usize,
+}
+
+impl Command for JoinAssetIntoActiveCmd {
+    fn label(&self) -> &'static str {
+        "join asset"
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if self.source_index == state.document.active
+            || self.source_index >= state.document.assets.len()
+        {
+            Err("Invalid source asset index for join")
+        } else if state.document.active_mesh().is_none() {
+            Err("No active asset")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        if self.source_index == state.document.active
+            || self.source_index >= state.document.assets.len()
+        {
+            return Err(CommandError::InvalidAssetIndex(self.source_index));
+        }
+        let source_mesh = state.document.assets[self.source_index].mesh.clone();
+        let Some(active_asset) = state.document.active_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        active_asset.mesh.join(&source_mesh);
+        state.document.remove(self.source_index);
+        state.sync_selection();
+        state.set_status("asset joined into active");
         Ok(())
     }
 }
