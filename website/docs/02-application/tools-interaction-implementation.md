@@ -121,8 +121,8 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H17 | P2         | Estado e diagnóstico das ferramentas Paint      | TODO                    | Máscara parcial pode bloquear mesmo com toggle desligado.     | Expor motivos tipados para falta de alvo/UV, máscara, layer lock e origem Clone. Preservar restrições atuais e transações de brush/formas/projeção/decal sem mover geometria por seleção de máscara.                                                                                                                      |
 | H18 | P2         | Gramática consistente nas famílias de modelagem | TODO                    | Tools/comandos/previews existem; aceite por família pendente. | Cobrir Extrude/Inset/Bevel/Push-Pull com precondições, preview, precisão e limites de topologia. Cobrir Primitives/DRAW/Poly Pen/Shape Builder e Knife/Slice/Loop Cut com fases claras, cancelamento e Undo. Manter Merge/Connect/Dissolve/Subdivide como ações contextuais quando discretas, com regressões por família. |
 | H19 | P2         | Pivô do objeto e centro de transformação        | IN PROGRESS             | 700 testes pass; primitivas locais; rig/legado pendentes.     | Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.                                                                                                                                                                                                                |
-| H20 | P2         | Cursor3D e navegação independentes              | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.                                                                                                                                                                                                                       |
-| H21 | P2         | DRAW como preset de POLY                        | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.                                                                                                                                                                                                              |
+| H20 | P2         | Cursor3D e navegação independentes              | DONE                    | NavigationAnchor, órbita/zoom ancorados e Undo isolado ok.    | Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.                                                                                                                                                                                                                       |
+| H21 | P2         | DRAW como preset de POLY                        | DONE                    | Presets DRAW/POLY, projeção planar e restauração livre ok.    | Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.                                                                                                                                                                                                              |
 | H22 | P2         | Seleção contextual e alvos heterogêneos         | DONE                    | SEL-002/006; filtros, resolução e Undo verificados.           | SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.                                                                                                                                                                                                                     |
 | H23 | P2         | Gizmo universal, orientação e snap              | DONE                    | SEL-001/003/005/007; frame congelado e orientações ok.       | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
 | H24 | P2         | ShapeBuilder planar com operandos explícitos    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
@@ -279,5 +279,42 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 
 **Risks / Next checkpoint:**
 - Projeção de gizmo verificada matematicamente e headless; apresentação nativa na viewport Qt permanece sob Task H33.
-- Próximos checkpoints: H20 (Cursor3D e desacoplamento de navegação), H21 (DRAW como preset de POLY) e H24 (ShapeBuilder planar).
+
+
+## Continuação H20 — Cursor3D e navegação independentes (2026-10-15)
+
+**Intent / Sources:** Desacoplar rigorosamente o posicionamento do 3D Cursor das operações de navegação de câmera (órbita, pan, zoom, enquadramento), garantindo ancoragem explícita (`NavigationAnchor`), cópia isolada de centro de transformação e proteção total contra mutação do documento ou poluição do histórico de Undo.
+
+**Gap / Changed:**
+- `crates/core/src/camera.rs`, `state.rs`: `NavigationAnchor` (`Default`, `Cursor3D`) define explicitamente o ponto de pivô da câmera sem acoplamento a ferramentas ativas ou pivôs de transformação (`PivotPoint`).
+- `crates/editor/src/bridge/viewport.rs`: gestos de navegação (`apply_viewport_gesture`, `orbit_viewport`, `pan`, `zoom`) orbitam e aproximam em torno do cursor 3D quando ancorado, e nunca alteram a posição do `cursor_3d`.
+- `crates/editor/src/bridge/pivot.rs`: `place_cursor_3d` valida coordenadas, rejeita `NaN`/`Inf` com segurança e faz raycast/snapping magnético; `copy_cursor_to_transform_center` congela o centro de transformação separadamente do cursor.
+- `crates/editor/tests/contextual_interactions.rs`: teste dedicado `navigation_decoupling_pan_frame_and_history_invariants_h20` provando que pan, zoom e órbita preservam `cursor_3d`, troca de âncora não move a câmera nem suja o documento, e operações de visualização não criam entradas de Undo.
+
+**Verification:**
+- `crates/editor/tests/contextual_interactions.rs`: 11 passed; 0 failed.
+- `crates/core --lib`: 186 passed; 0 failed.
+- `crates/editor --features animation-workspace --lib`: 126 passed; 0 failed.
+- Clippy e fmt pass.
+
+
+## Continuação H21 — DRAW como preset de POLY (2026-10-15)
+
+**Intent / Sources:** Implementar `ModelingMode::Draw` e `ModelingMode::Poly` como presets de apresentação sobre o mesmo workspace unificado `Model`, compartilhando ferramentas, perfis, picking e extensões sem conversões destrutivas ou perda de seleção ao alternar modos.
+
+**Gap / Changed:**
+- `crates/editor/src/lib.rs`: `ModelingMode` com presets `Draw` e `Poly`. Ambos compartilham o mesmo catálogo (`offers_tool` retorna `true`). `Draw` utiliza `EdgeMode::Features` e `Poly` utiliza `EdgeMode::Topology`.
+- `crates/editor/src/bridge/application.rs`: `UiIntent::SetModelingMode` alterna entre `Draw` e `Poly` sem alterar a seleção ativa ou sujar o documento de projeto. Ao entrar em DRAW com workplane ativo, a câmera alinha-se ortograficamente.
+- `crates/editor/src/bridge/viewport.rs`: em modo DRAW planar, o gesto de órbita livre é redirecionado suavemente para pan planar, garantindo que o gesto do usuário nunca fique inoperante. Ao retornar para POLY, a projeção perspectiva livre e orientação original são restauradas sem qualquer mutação de documento ou criação de passos de Undo.
+- `crates/editor/tests/contextual_interactions.rs`: teste dedicado `draw_poly_preset_switching_and_roundtrip_invariants_h21` provando que o chaveamento preserva seleção, malhas ativas, topologia e integridade do histórico de Undo.
+
+**Verification:**
+- `crates/editor/tests/contextual_interactions.rs`: 11 passed; 0 failed.
+- `crates/editor --lib`: 126 passed; 0 failed.
+- Clippy e fmt pass.
+
+**Risks / Next checkpoint:**
+- Integração de UI nativa Qt para os botões DRAW/POLY e Cursor3D verificada em paridade de bridge; gates de apresentação visual e eventos de viewport permanecem sob H33.
+- Próximos checkpoints: H24 (ShapeBuilder planar com operandos explícitos) e H25 (ShapeBuilder sólido).
+
 

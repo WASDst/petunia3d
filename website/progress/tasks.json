@@ -390,6 +390,16 @@
       "revision": "aff72ba2 + functional continuation; crates/core/src/state.rs, crates/core/src/modal.rs, crates/editor/src/projection.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H23 (SEL-001, SEL-003, SEL-005, SEL-007): Universal Gizmo, orientação de frames e snap. TransformFrame ortonormal (x_axis, y_axis, z_axis) desacoplado do pivô. Orientações Global, Local, View, Custom, Normal e Auto (resolvendo face, aresta, vértice e objeto). Frame de orientação capturado e congelado em modal.frame ao iniciar gesto modal (Move/Rotate/Scale), evitando descontinuidades de eixos. Restrições de eixo e plano projetadas no frame e escala sem cisalhamento. Projeção de gizmo (hastes, arcos de rotação, manipuladores de plano) renderizados usando o frame ativo ou congelado. 5 testes de integração dedicados em universal_gizmo.rs, 186 testes em petunia_core --lib, 126 testes em petunia_editor --lib, 10 em contextual_selection.rs, 9 em contextual_interactions.rs e 60 em command_tests.rs passando. Clippy e fmt pass. Limites de apresentação Qt registrados para H33."
+    },
+    "navigation-decoupling-core-20261015": {
+      "revision": "b34d93e5 + functional continuation; crates/core/src/camera.rs, crates/editor/src/bridge/viewport.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H20: Desacoplamento entre Cursor3D e navegação de câmera. NavigationAnchor::Default e NavigationAnchor::Cursor3D isolados de ferramentas ativas e pivôs de transformação. Pan, zoom e órbita não movem cursor_3d. Rotação e zoom em torno do cursor ancorado. Cópia única explícita para transform_center com isolamento de pivô até novo comando. Rejeição de floats não-finitos (NaN/Inf) na colocação do cursor. Operações de navegação puras sem dirty state nem poluição de Undo. 11 testes passando em contextual_interactions.rs. Gates Qt registrados para H33."
+    },
+    "draw-poly-preset-core-20261015": {
+      "revision": "b34d93e5 + functional continuation; crates/editor/src/lib.rs, crates/editor/src/bridge/application.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H21: DRAW como preset de apresentação de POLY. Compartilhamento integral do workspace Model, ferramentas e perfis 2D. DRAW define projeção Ortho e redireciona órbita livre para pan planar. Retorno para POLY restaura câmera original sem dirty state, sem mutação de malha ou seleção e com zero entradas de Undo. Perfis persistentes visíveis e utilizáveis pelo ShapeBuilder sem sair do modo. 11 testes passando em contextual_interactions.rs. Aceite visual Qt registrado para H33."
     }
   },
   "tasks": [
@@ -3425,19 +3435,19 @@
       "title": "Cursor3D e navegação independentes",
       "description": "Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. NavigationAnchor e cópia única do centro separados de ferramenta/pivô. Orbit/zoom mantêm referência e não saltam ao trocar modo; pan preserva cursor. API/headless pass; exposição nativa pendente. Origem persistente continua em H19.",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável exercitada no delta. NavigationAnchor (Default, Cursor3D) desacoplado de ferramentas e pivô de transformação. Pan, zoom e orbit preservam cursor_3d; órbita e zoom em torno do 3D cursor quando NavigationAnchor::Cursor3D; cópia única explícita via copy_cursor_to_transform_center() e fallback seguro em calculate_pivot(PivotPoint::Cursor3D); rejeição de floats NaN/Inf; nenhuma operação de navegação altera histórico Undo ou suja documento. Testado com 11 testes em contextual_interactions.rs e suítes core/editor.",
       "checkpoints": [
         {
           "title": "Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "navigation-decoupling-core-20261015"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "navigation-decoupling-core-20261015"
         }
       ],
       "documents": [
@@ -3451,19 +3461,19 @@
       "title": "DRAW como preset de POLY",
       "description": "Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. Presets compartilham ferramentas, perfis, picking e extensões; alinhamento planar/retorno reutilizados e exercitados sem mutar seleção/documento. Aceite visual da apresentação permanece em H33.",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável exercitada no delta. ModelingMode::Draw e ModelingMode::Poly compartilham o workspace Model, catálogo de ferramentas (offers_tool retorna true), perfis e malha ativa. DRAW ativa câmera ortográfica planar e redireciona arrasto de órbita livre para pan; retorno para POLY restaura a câmera livre, projeção perspectiva e ponto de vista sem alterar o documento, malhas, seleção ou gerar entradas no histórico de Undo. Testado com 11 testes em contextual_interactions.rs e suítes core/editor.",
       "checkpoints": [
         {
           "title": "Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "draw-poly-preset-core-20261015"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "draw-poly-preset-core-20261015"
         }
       ],
       "documents": [

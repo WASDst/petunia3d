@@ -224,3 +224,93 @@ fn contextual_picking_prioritizes_subcomponents_over_objects_when_all_filters_en
     let hit_fallback = b.pick_viewport_target(0.5, 0.5);
     assert!(matches!(hit_fallback, petunia_core::HoverTarget::Object(_)));
 }
+
+#[test]
+fn navigation_decoupling_pan_frame_and_history_invariants_h20() {
+    let mut b = bridge();
+    b.state.session.cursor_3d = [10.0, 20.0, 30.0];
+    let cursor = b.state.session.cursor_3d;
+
+    // Pan viewport: cursor_3d MUST NOT move
+    b.apply_viewport_gesture(ViewportGesture::Pan {
+        dx: 45.0,
+        dy: -30.0,
+    });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Zoom viewport: cursor_3d MUST NOT move
+    b.apply_viewport_gesture(ViewportGesture::Zoom { delta: 120.0 });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Orbit viewport: cursor_3d MUST NOT move
+    b.apply_viewport_gesture(ViewportGesture::Orbit { dx: 15.0, dy: 10.0 });
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Navigation and camera actions MUST NOT create Undo entries or mark document dirty
+    assert!(!b.state.project.undo.can_undo());
+    assert!(!b.state.project.is_dirty());
+
+    // Switching NavigationAnchor MUST NOT create Undo entries or dirty document
+    b.apply(UiIntent::SetNavigationAnchor(NavigationAnchor::Cursor3D));
+    assert_eq!(
+        b.state.session.navigation_anchor,
+        NavigationAnchor::Cursor3D
+    );
+    assert!(!b.state.project.undo.can_undo());
+    assert!(!b.state.project.is_dirty());
+
+    // Placing cursor with invalid floats MUST be rejected safely
+    assert!(!b.place_cursor_3d(f32::NAN, 0.5));
+    assert!(!b.place_cursor_3d(0.5, f32::INFINITY));
+    assert_eq!(b.state.session.cursor_3d, cursor);
+
+    // Freezing transform center keeps pivot isolated until explicit recopy
+    assert!(b.state.session.copy_cursor_to_transform_center());
+    b.state.session.cursor_3d = [100.0, 200.0, 300.0];
+    assert_eq!(
+        b.state.calculate_pivot(PivotPoint::Cursor3D),
+        Vec3::new(10.0, 20.0, 30.0)
+    );
+    assert!(b.state.session.copy_cursor_to_transform_center());
+    assert_eq!(
+        b.state.calculate_pivot(PivotPoint::Cursor3D),
+        Vec3::new(100.0, 200.0, 300.0)
+    );
+}
+
+#[test]
+fn draw_poly_preset_switching_and_roundtrip_invariants_h21() {
+    let mut b = bridge();
+    let initial_assets = serde_json::to_value(&b.state.project.project.assets).unwrap();
+    let initial_selection = b.state.session.selection.clone();
+    let initial_camera = b.state.session.camera.clone();
+
+    // 1. Switch to DRAW mode: sets Ortho and Draw mode without mutating geometry or selection
+    b.apply(UiIntent::SetModelingMode(ModelingMode::Draw));
+    assert_eq!(b.modeling_mode, ModelingMode::Draw);
+    assert_eq!(b.state.session.camera.proj, petunia_core::Projection::Ortho);
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        initial_assets
+    );
+    assert_eq!(b.state.session.selection, initial_selection);
+    assert!(!b.state.project.undo.can_undo());
+
+    // 2. In DRAW mode, free orbit drag is redirected to planar pan (gesture is never dead)
+    let camera_before_orbit = b.state.session.camera.clone();
+    b.apply_viewport_gesture(ViewportGesture::Orbit { dx: 20.0, dy: 10.0 });
+    // Camera remains Ortho; orientation did not pitch/yaw freely
+    assert_eq!(b.state.session.camera.proj, petunia_core::Projection::Ortho);
+    assert_ne!(b.state.session.camera.eye(), camera_before_orbit.eye());
+
+    // 3. Return to POLY mode: restores camera without creating Undo entry
+    b.apply(UiIntent::SetModelingMode(ModelingMode::Poly));
+    assert_eq!(b.modeling_mode, ModelingMode::Poly);
+    assert_eq!(b.state.session.camera.proj, initial_camera.proj);
+    assert_eq!(
+        serde_json::to_value(&b.state.project.project.assets).unwrap(),
+        initial_assets
+    );
+    assert_eq!(b.state.session.selection, initial_selection);
+    assert!(!b.state.project.undo.can_undo());
+}
