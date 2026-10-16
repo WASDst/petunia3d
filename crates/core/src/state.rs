@@ -4098,6 +4098,375 @@ impl CommandContext<'_> {
         Ok(())
     }
 
+    /// Alinha o plano de trabalho de desenho à face de uma malha (H27).
+    pub fn align_workplane_to_face(
+        &mut self,
+        target: Option<Uuid>,
+        face_index: usize,
+    ) -> Result<(), CommandError> {
+        let asset = match target {
+            Some(id) => self.document.assets.iter().find(|a| a.id == id),
+            None => self.document.active(),
+        }
+        .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?;
+
+        let mesh = &asset.mesh;
+        let face = mesh.faces.get(face_index).ok_or_else(|| {
+            CommandError::Execution(format!("Face index {face_index} out of bounds"))
+        })?;
+        if face.verts.len() < 3 {
+            return Err(CommandError::Execution(
+                "Face has fewer than 3 vertices".to_string(),
+            ));
+        }
+        let local_normal = mesh.face_normal(face_index);
+        if !local_normal.is_finite() || local_normal.length_squared() < 1e-6 {
+            return Err(CommandError::Execution(
+                "Face normal is degenerate".to_string(),
+            ));
+        }
+        let local_center = mesh.face_centroid(face_index);
+        let local_v0 = mesh.verts[face.verts[0] as usize].vec();
+        let local_v1 = mesh.verts[face.verts[1] as usize].vec();
+
+        let world_center = asset.to_world_point(local_center);
+        let world_normal = asset
+            .world_matrix()
+            .inverse()
+            .transpose()
+            .transform_vector3(local_normal)
+            .normalize_or_zero();
+        let world_edge = asset.to_world_point(local_v1) - asset.to_world_point(local_v0);
+        let world_edge_dir = world_edge.normalize_or_zero();
+
+        let c_d = [
+            world_center.x as f64,
+            world_center.y as f64,
+            world_center.z as f64,
+        ];
+        let n_d = [
+            world_normal.x as f64,
+            world_normal.y as f64,
+            world_normal.z as f64,
+        ];
+        let e_d = if world_edge_dir != Vec3::ZERO {
+            [
+                world_edge_dir.x as f64,
+                world_edge_dir.y as f64,
+                world_edge_dir.z as f64,
+            ]
+        } else {
+            [1.0, 0.0, 0.0]
+        };
+
+        let wp =
+            petunia_project::ProfileWorkplane::from_face_and_edge(c_d, n_d, e_d).map_err(|e| {
+                CommandError::Execution(format!("Failed to construct workplane from face: {e}"))
+            })?;
+
+        self.profile.origin = wp.origin.map(|x| x as f32);
+        self.profile.right = wp.right.map(|x| x as f32);
+        self.profile.up = wp.up.map(|x| x as f32);
+        self.profile.normal = wp.normal.map(|x| x as f32);
+        self.profile.workplane_kind = WorkplaneKind::Face;
+        self.profile.workplane_locked = true;
+        self.profile.points.clear();
+        self.profile.nodes.clear();
+        self.profile.closed = false;
+
+        self.set_status(format!("Workplane aligned to face {face_index}"));
+        Ok(())
+    }
+
+    /// Alinha o plano de trabalho de desenho às faces selecionadas da malha ativa (H27).
+    pub fn align_workplane_to_selection(&mut self) -> Result<(), CommandError> {
+        let Some(active) = self.document.active() else {
+            return Err(CommandError::Execution("No active asset".to_string()));
+        };
+        let mesh = &active.mesh;
+        let selected_faces: Vec<usize> = mesh
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.selected)
+            .map(|(i, _)| i)
+            .collect();
+
+        if selected_faces.is_empty() {
+            return Err(CommandError::Execution(
+                "No face selected for workplane alignment".to_string(),
+            ));
+        }
+
+        if let [a, b] = selected_faces[..] {
+            let (na, nb) = (
+                mesh.face_normal(a).normalize_or_zero(),
+                mesh.face_normal(b).normalize_or_zero(),
+            );
+            let (ca, cb) = (mesh.face_centroid(a), mesh.face_centroid(b));
+            let gap = (cb - ca).dot(na);
+            if na != Vec3::ZERO && na.dot(nb).abs() > 0.999 && gap.abs() > 1.0e-5 {
+                let face_a = &mesh.faces[a];
+                let center = ca + na * (gap * 0.5);
+                let world_center = active.to_world_point(center);
+                let world_normal = active.to_world_point(ca + na) - active.to_world_point(ca);
+                let world_edge = if face_a.verts.len() >= 2 {
+                    active.to_world_point(mesh.verts[face_a.verts[1] as usize].vec())
+                        - active.to_world_point(mesh.verts[face_a.verts[0] as usize].vec())
+                } else {
+                    Vec3::X
+                };
+
+                let to_f64 = |v: Vec3| [v.x as f64, v.y as f64, v.z as f64];
+                let wp = petunia_project::ProfileWorkplane::from_face_and_edge(
+                    to_f64(world_center),
+                    to_f64(world_normal.normalize_or_zero()),
+                    to_f64(world_edge.normalize_or_zero()),
+                )
+                .map_err(|e| {
+                    CommandError::Execution(format!("Failed to align to opposing faces: {e}"))
+                })?;
+
+                self.profile.origin = wp.origin.map(|x| x as f32);
+                self.profile.right = wp.right.map(|x| x as f32);
+                self.profile.up = wp.up.map(|x| x as f32);
+                self.profile.normal = wp.normal.map(|x| x as f32);
+                self.profile.workplane_kind = WorkplaneKind::Face;
+                self.profile.workplane_locked = true;
+                self.profile.points.clear();
+                self.profile.nodes.clear();
+                self.profile.closed = false;
+                self.set_status("Workplane aligned to gap between selected faces");
+                return Ok(());
+            }
+        }
+
+        let fi = selected_faces[0];
+        let asset_id = active.id;
+        self.align_workplane_to_face(Some(asset_id), fi)
+    }
+
+    /// Grava um perfil (com contorno e furos) sobre a superfície coplanar da malha (H27).
+    pub fn imprint_profile_on_surface(
+        &mut self,
+        profile_id: Uuid,
+        target: Option<Uuid>,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let profile = self
+            .document
+            .project
+            .get_profile(profile_id)
+            .ok_or_else(|| CommandError::Execution("Profile not found".to_string()))?
+            .clone();
+
+        let spline = self
+            .document
+            .project
+            .get_spline(profile.spline_id)
+            .ok_or_else(|| CommandError::Execution("Spline not found".to_string()))?
+            .clone();
+
+        let table = spline
+            .arc_length_table(1.0e-3)
+            .map_err(|e| CommandError::Execution(format!("Spline arc length failed: {e}")))?;
+        let polyline = table.polyline();
+        if polyline.len() < 3 {
+            return Err(CommandError::Execution(
+                "Profile polyline has fewer than 3 vertices".to_string(),
+            ));
+        }
+
+        let asset = &self.document.assets[target_index];
+        if asset.locked {
+            return Err(CommandError::Execution(
+                "Target asset is locked".to_string(),
+            ));
+        }
+
+        let wp = profile.workplane;
+        let origin = glam::DVec3::from_array(wp.origin).as_vec3();
+        let right = glam::DVec3::from_array(wp.right).as_vec3();
+        let up = glam::DVec3::from_array(wp.up).as_vec3();
+        let normal = glam::DVec3::from_array(wp.normal).as_vec3();
+
+        let outer_local: Vec<Vec3> = polyline
+            .iter()
+            .map(|p| {
+                let world_p = origin + right * p[0] as f32 + up * p[1] as f32;
+                asset.to_local_point(world_p)
+            })
+            .collect();
+
+        let holes_local: Vec<Vec<Vec3>> = profile
+            .holes
+            .iter()
+            .map(|hole| {
+                hole.iter()
+                    .map(|p| {
+                        let world_p = origin + right * p[0] as f32 + up * p[1] as f32;
+                        asset.to_local_point(world_p)
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let local_plane_point = asset.to_local_point(origin);
+        let local_plane_normal = asset
+            .world_matrix()
+            .transpose()
+            .transform_vector3(normal)
+            .normalize_or_zero();
+
+        let (new_mesh, inside_faces) = petunia_mesh::imprint::imprint_region_general(
+            &asset.mesh,
+            &outer_local,
+            &holes_local,
+            local_plane_point,
+            local_plane_normal,
+        )
+        .map_err(|e| CommandError::Execution(format!("Imprint failed: {e}")))?;
+
+        self.checkpoint("imprint_profile_on_surface");
+
+        if let Some(target_asset) = self.document.assets.get_mut(target_index) {
+            target_asset.mesh = new_mesh.into();
+            target_asset.parametric = None;
+        }
+
+        self.editor.selection.faces.clear();
+        for &fi in &inside_faces {
+            self.editor.selection.select_face(fi);
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        self.set_status(format!(
+            "Imprinted profile with {} inner faces",
+            inside_faces.len()
+        ));
+        Ok(())
+    }
+
+    /// Executa Push/Pull contextual sobre as faces selecionadas (H27).
+    pub fn contextual_push_pull(
+        &mut self,
+        target: Option<Uuid>,
+        distance: f32,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let asset = &self.document.assets[target_index];
+        if asset.locked {
+            return Err(CommandError::Execution(
+                "Target asset is locked".to_string(),
+            ));
+        }
+
+        let mesh = &asset.mesh;
+        let selected_faces: Vec<usize> = mesh
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.selected)
+            .map(|(i, _)| i)
+            .collect();
+
+        if selected_faces.is_empty() {
+            return Err(CommandError::Execution(
+                "No faces selected for push/pull".to_string(),
+            ));
+        }
+
+        // Teste contextual: a região selecionada é embutida (coplanares vizinhas não selecionadas)?
+        let mut is_embedded = false;
+        'check: for &fi in &selected_faces {
+            let n_fi = mesh.face_normal(fi).normalize_or_zero();
+            let face = &mesh.faces[fi];
+            let m = face.verts.len();
+            for k in 0..m {
+                let v0 = face.verts[k];
+                let v1 = face.verts[(k + 1) % m];
+                for (other_i, other_face) in mesh.faces.iter().enumerate() {
+                    if other_face.selected {
+                        continue;
+                    }
+                    let other_has_edge = (0..other_face.verts.len()).any(|ok| {
+                        let ov0 = other_face.verts[ok];
+                        let ov1 = other_face.verts[(ok + 1) % other_face.verts.len()];
+                        (ov0 == v0 && ov1 == v1) || (ov0 == v1 && ov1 == v0)
+                    });
+                    if other_has_edge {
+                        let other_normal = mesh.face_normal(other_i).normalize_or_zero();
+                        if other_normal.dot(n_fi) > 0.999 {
+                            is_embedded = true;
+                            break 'check;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.checkpoint("contextual_push_pull");
+
+        let target_asset = self.document.assets.get_mut(target_index).unwrap();
+        let mut new_mesh = target_asset.mesh.to_owned_value();
+
+        if is_embedded {
+            new_mesh.extrude_selected(distance);
+        } else {
+            new_mesh.push_pull(distance);
+        }
+
+        target_asset.mesh = new_mesh.into();
+        target_asset.parametric = None;
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        self.set_status(format!(
+            "Contextual push/pull ({}) applied with distance {distance:.3}",
+            if is_embedded {
+                "extrude"
+            } else {
+                "boundary-stretch"
+            }
+        ));
+        Ok(())
+    }
+
     /// **Join**: funde o operando no ativo como um único objeto, sem kernel
     /// booleano — a topologia dos dois é preservada lado a lado.
     /// **Join**: funde o operando no ativo como um único objeto, sem kernel

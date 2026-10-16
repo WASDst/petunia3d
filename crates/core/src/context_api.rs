@@ -838,6 +838,38 @@ impl AppState {
     }
 
     #[inline]
+    pub fn align_workplane_to_face(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        face_index: usize,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.align_workplane_to_face(target, face_index))
+    }
+
+    #[inline]
+    pub fn align_workplane_to_selection(&mut self) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.align_workplane_to_selection())
+    }
+
+    #[inline]
+    pub fn imprint_profile_on_surface(
+        &mut self,
+        profile_id: uuid::Uuid,
+        target: Option<uuid::Uuid>,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.imprint_profile_on_surface(profile_id, target))
+    }
+
+    #[inline]
+    pub fn contextual_push_pull(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        distance: f32,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.contextual_push_pull(target, distance))
+    }
+
+    #[inline]
     pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
         self.in_context(|ctx| ctx.join_active_with_operand())
     }

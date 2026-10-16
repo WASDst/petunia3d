@@ -567,4 +567,42 @@ mod tests {
         assert!(mesh.verts.iter().any(|v| (v.pos[2] - 1.6).abs() < 1e-4));
         assert!((adjusted.value - 0.6).abs() < 1e-6);
     }
+
+    const OUTER_SQUARE: [[f64; 2]; 4] = [[-0.8, -0.8], [0.8, -0.8], [0.8, 0.8], [-0.8, 0.8]];
+    const INNER_SQUARE: [[f64; 2]; 4] = [[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]];
+
+    #[test]
+    fn region_with_hole_on_a_face_is_imprinted_and_extruded_as_one_undo() {
+        let mut state = state_with_profiles(&[
+            (&OUTER_SQUARE, front_face_plane()),
+            (&INNER_SQUARE, front_face_plane()),
+        ]);
+        let faces_before = state.project.active_mesh().unwrap().faces.len();
+        let depth_before = state.project.undo.depth();
+        let (origin, direction) = ray_at(&state, 0.5, 0.5);
+        let hit = state.profile_region_at_ray(origin, direction).unwrap();
+        assert!(!hit.region.holes.is_empty(), "Região deve ter furo interno");
+        assert!(state.region_host_face(&hit).is_some());
+
+        state.begin_region_push_pull(&hit).unwrap();
+        state.update_modal(Vec3::ZERO, 0.4).unwrap();
+        assert!(state.commit_modal());
+        let mesh = state.project.active_mesh().unwrap();
+        assert!(
+            mesh.faces.len() > faces_before,
+            "Malha dividida e extrudada"
+        );
+        assert_eq!(
+            state.project.undo.depth().0,
+            depth_before.0 + 1,
+            "Operação atômica em um único Undo"
+        );
+
+        assert!(state.undo());
+        assert_eq!(
+            state.project.active_mesh().unwrap().faces.len(),
+            faces_before,
+            "Undo restaura exatamente o cubo original"
+        );
+    }
 }

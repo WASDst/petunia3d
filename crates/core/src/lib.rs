@@ -180,6 +180,7 @@ pub use solid_commands::{
     BakeSolidCompositionCmd, CreateSolidCompositionCmd, ReorderSolidCompositionStepCmd,
     SolidOperation, SolidShapeBuilderReport, SolidShapeEditCmd, ToggleSolidCompositionStepCmd,
 };
+pub mod surface_commands;
 pub use state::{
     ASSET_NAME_MAX_LEN, ActiveTool, ActiveToolSessionKind, AnnotationItem, AnnotationStroke,
     AppState, AssetRenameError, DirtyReason, DockOrientation, DockSide, Document, DocumentHistory,
@@ -191,6 +192,9 @@ pub use state::{
     Shading, TOOLBAR_DEFAULT_WIDTH, TextureDirtyRect, TextureUpdate, ToolActivation,
     ToolSessionManager, ToolState, TransformFrame, TransformOrientation, UiDensity, UiState,
     ViewportSession, WorkplaneKind, WorkspaceUiMemory, workspace_index,
+};
+pub use surface_commands::{
+    AlignWorkplaneToFaceCmd, AlignWorkplaneToSelectionCmd, ContextualPushPullCmd, ImprintProfileCmd,
 };
 pub use uv_selection::{UvSelectionMode, UvSelectionState};
 pub use viewport::{

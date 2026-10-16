@@ -655,3 +655,133 @@ fn solid_composition_multi_solid_and_reedit_invariants_h26() {
     );
     assert_eq!(b.state.project.undo.depth().0, initial_undo);
 }
+
+#[test]
+fn surface_construction_face_plane_imprint_with_holes_and_push_pull_h27() {
+    let mut b = bridge();
+    let initial_undo = b.state.project.undo.depth().0;
+    let initial_faces = b.state.project.assets[0].mesh.faces.len();
+
+    // 1. Select front face (face 4) and set workplane to face via UI intent
+    b.state.project.assets[0].mesh.faces[4].selected = true;
+    b.apply(petunia_editor::UiIntent::ProfileSetWorkplaneFace);
+    assert!(b.state.profile.workplane_locked);
+    assert_eq!(
+        b.state.profile.workplane_kind,
+        petunia_core::state::WorkplaneKind::Face
+    );
+
+    // 2. Add an annular profile with an outer square and an inner hole
+    let spline = petunia_project::SplineResource::from_polyline(
+        "OuterSpline",
+        &[
+            [-0.8, -0.8, 0.0],
+            [0.8, -0.8, 0.0],
+            [0.8, 0.8, 0.0],
+            [-0.8, 0.8, 0.0],
+        ],
+        true,
+    );
+    let spline_id = spline.id;
+    b.state.project.add_spline(spline).unwrap();
+
+    let mut profile = petunia_project::ProfileResource::new(
+        "RingProfile",
+        spline_id,
+        petunia_project::ProfileWorkplane {
+            origin: [0.0, 0.0, 1.0],
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        },
+    );
+    profile
+        .holes
+        .push(vec![[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]]);
+    let profile_id = profile.id;
+    b.state.project.add_profile(profile).unwrap();
+
+    // 3. Imprint profile with holes onto the face
+    let imprint_cmd = petunia_core::ImprintProfileCmd::new(profile_id);
+    b.state
+        .dispatch(&imprint_cmd)
+        .expect("Imprint profile with hole should succeed");
+
+    let faces_after_imprint = b.state.project.assets[0].mesh.faces.len();
+    assert!(
+        faces_after_imprint > initial_faces,
+        "Host face must be split and imprinted"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+
+    // 4. Contextual Push/Pull on embedded imprinted region
+    let push_cmd = petunia_core::ContextualPushPullCmd::new(0.6);
+    b.state
+        .dispatch(&push_cmd)
+        .expect("Contextual push/pull should succeed");
+
+    let mesh_pushed = &b.state.project.assets[0].mesh;
+    assert!(
+        mesh_pushed
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.6).abs() < 1e-4),
+        "Vertices must be extruded to Z = 1.6"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 2);
+
+    // 5. Curved/non-planar surface boundary check
+    let mut warped_mesh = petunia_mesh::Mesh::default();
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 1.0, 0.4)); // Non-planar
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 1.0, 0.0));
+    warped_mesh
+        .faces
+        .push(petunia_mesh::Face::new(vec![0, 1, 2, 3]));
+    let warped_asset = petunia_project::Asset::new("Warped", warped_mesh);
+    let warped_id = warped_asset.id;
+    b.state.project.assets.push(warped_asset);
+
+    let curved_cmd = petunia_core::AlignWorkplaneToFaceCmd::for_asset(warped_id, 0);
+    assert_eq!(
+        b.state.dispatch(&curved_cmd),
+        Err(petunia_core::command::CommandError::Execution(
+            "Face is curved or non-planar; curved surface construction is deferred to a subsequent extension".to_string()
+        ))
+    );
+
+    // 6. Transactional Undo/Redo sequence
+    assert!(b.state.undo(), "Undo push/pull");
+    assert_eq!(
+        b.state.project.assets[0].mesh.faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(b.state.undo(), "Undo imprint");
+    assert_eq!(b.state.project.assets[0].mesh.faces.len(), initial_faces);
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+
+    assert!(b.state.redo(), "Redo imprint");
+    assert_eq!(
+        b.state.project.assets[0].mesh.faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(b.state.redo(), "Redo push/pull");
+    assert!(
+        b.state.project.assets[0]
+            .mesh
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.6).abs() < 1e-4)
+    );
+}

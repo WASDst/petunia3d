@@ -127,8 +127,8 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H23 | P2         | Gizmo universal, orientação e snap              | DONE                    | SEL-001/003/005/007; frame congelado e orientações ok.       | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
 | H24 | P2         | ShapeBuilder planar com operandos explícitos    | DONE                    | Operandos explícitos, furos e Undo testados no delta.         | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
 | H25 | P2         | ShapeBuilder sólido de dois operandos           | DONE                    | Partição, RegionPlan, proveniência e Undo no delta.           | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
-| H26 | P2         | Composição reeditável e múltiplos sólidos       | DONE                    | Receita persistente, fontes, orçamento e bake explícito ok.  | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
-| H27 | P2         | Construção sobre superfícies                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
+| H26 | P2         | Composição reeditável e múltiplos sólidos       | DONE                    | Receita persistente, fontes, orçamento e bake explícito ok.   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
+| H27 | P2         | Construção sobre superfícies                    | DONE                    | Plano de face, imprint e Push/Pull verificados.               | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
 | H28 | P2         | Feedback comum de operações                     | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
 | H29 | P2         | Dimensões e comparação espacial                 | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
 | H30 | P2         | Section, Thickness e Organic Profiles           | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
@@ -428,8 +428,35 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 - Clippy e fmt: zero warnings e zero erros em todos os pacotes.
 
 **Risks / Next checkpoint:**
-- Próximo checkpoint: H27 (Construção sobre superfícies: plano de face, imprint, furos e Push/Pull contextual).
+- Checkpoint concluído: H27. Próximo checkpoint: H28 (Feedback comum de operações: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar).
 
+---
 
+### Entrega H27 — Construção sobre superfícies (Plano de face, Imprint com furos, Push/Pull contextual) (2026-10-16)
 
+**Intent:**
+- Implementar os comandos e fluxos transacionais da Task H27:
+  1. Alinhamento de plano de trabalho (`ProfileWorkplane`) à face planar de uma malha autoral (`AlignWorkplaneToFaceCmd` e `AlignWorkplaneToSelectionCmd`), rejeitando graciosamente faces curvas ou não-planares em conformidade com o contrato H27 ("superfícies curvas como extensão posterior").
+  2. Imprint de perfis contendo furos (`ImprintProfileCmd`) sobre superfícies coplanares da malha alvo via triangulação `earcut`, subdividindo a face hospedeira e selecionando as regiões internas resultantes.
+  3. Push/Pull contextual (`ContextualPushPullCmd`), discriminando se a seleção é um contorno livre de sólido (translada face esticando paredes vizinhas sem criar loop) ou região interna embutida (cria extrusão com paredes laterais).
+  4. Suporte irrestrito a Undo/Redo e conformidade rigorosa com a regra "Everything is a Command".
 
+**Sources:**
+- `crates/mesh/src/imprint.rs`
+- `crates/core/src/surface_commands.rs`
+- `crates/core/src/state.rs`
+- `crates/core/src/command.rs`
+- `crates/core/src/context_api.rs`
+- `crates/editor/src/ui_bridge.rs`
+- `crates/core/tests/command_tests.rs`
+- `crates/editor/tests/contextual_interactions.rs`
+
+**Verification:**
+- `crates/mesh/src/imprint.rs`: teste unitário `imprint_region_with_hole_splits_face_with_earcut` (pass).
+- `crates/core/tests/command_tests.rs`: `test_surface_construction_commands_and_undo_redo` (pass).
+- `crates/editor/tests/contextual_interactions.rs`: 15 passed, 0 failed (incluindo `surface_construction_face_plane_imprint_with_holes_and_push_pull_h27`).
+- `crates/ui-cxxqt --test editor_parity`: 21 passed, 0 failed (gate Qt offscreen).
+- `cargo clippy`: zero warnings em `petunia_core` e `petunia_editor`.
+
+**Risks / Next checkpoint:**
+- Próximo checkpoint: H28 (Feedback comum de operações: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar).

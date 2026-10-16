@@ -3093,3 +3093,161 @@ fn test_solid_composition_commands_and_undo_redo() {
     assert!(state.redo(), "Redo create composition");
     assert!(state.project.assets[0].is_composition());
 }
+
+#[test]
+fn test_surface_construction_commands_and_undo_redo() {
+    let mut state = AppState::default();
+    let initial_undo = state.project.undo.depth().0;
+    let initial_faces = state.project.active_mesh().unwrap().faces.len();
+
+    // 1. AlignWorkplaneToFaceCmd validation
+    let out_of_bounds = petunia_core::AlignWorkplaneToFaceCmd::new(999);
+    assert_eq!(
+        state.dispatch(&out_of_bounds),
+        Err(CommandError::Execution(
+            "Face index out of bounds".to_string()
+        ))
+    );
+
+    let align_face_cmd = petunia_core::AlignWorkplaneToFaceCmd::new(4);
+    state
+        .dispatch(&align_face_cmd)
+        .expect("Align workplane to face 4 should succeed");
+    assert_eq!(
+        state.profile.workplane_kind,
+        petunia_core::state::WorkplaneKind::Face
+    );
+
+    // 2. AlignWorkplaneToSelectionCmd validation
+    state.selection.faces.clear();
+    let align_sel_cmd = petunia_core::AlignWorkplaneToSelectionCmd;
+    assert_eq!(
+        state.dispatch(&align_sel_cmd),
+        Err(CommandError::Execution(
+            "No face selected for workplane alignment".to_string()
+        ))
+    );
+
+    state.project.active_mesh_mut().unwrap().faces[4].selected = true;
+    state.sync_selection();
+    state
+        .dispatch(&align_sel_cmd)
+        .expect("Align workplane to selection should succeed");
+
+    // 3. ImprintProfileCmd with a contour carrying a hole onto the front face
+    let spline = SplineResource::from_polyline(
+        "OuterSquare",
+        &[
+            [-0.8, -0.8, 0.0],
+            [0.8, -0.8, 0.0],
+            [0.8, 0.8, 0.0],
+            [-0.8, 0.8, 0.0],
+        ],
+        true,
+    );
+    let spline_id = spline.id;
+    state.project.add_spline(spline).unwrap();
+
+    let mut profile = ProfileResource::new(
+        "AnnularProfile",
+        spline_id,
+        ProfileWorkplane {
+            origin: [0.0, 0.0, 1.0],
+            right: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        },
+    );
+    profile
+        .holes
+        .push(vec![[-0.3, -0.3], [0.3, -0.3], [0.3, 0.3], [-0.3, 0.3]]);
+    let profile_id = profile.id;
+    state.project.add_profile(profile).unwrap();
+
+    let imprint_cmd = petunia_core::ImprintProfileCmd::new(profile_id);
+    state
+        .dispatch(&imprint_cmd)
+        .expect("Imprint profile on surface should succeed");
+
+    let faces_after_imprint = state.project.active_mesh().unwrap().faces.len();
+    assert!(
+        faces_after_imprint > initial_faces,
+        "Imprint must subdivide host face with annular region"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // 4. ContextualPushPullCmd on the embedded imprinted faces
+    let push_pull_cmd = petunia_core::ContextualPushPullCmd::new(0.5);
+    state
+        .dispatch(&push_pull_cmd)
+        .expect("Contextual push/pull on embedded imprinted face should succeed");
+
+    let mesh_after_push = state.project.active_mesh().unwrap();
+    assert!(
+        mesh_after_push
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.5).abs() < 1e-4)
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 2);
+
+    // 5. Curved/non-planar face rejection test ("superfícies curvas como extensão posterior")
+    let mut warped_mesh = petunia_mesh::Mesh::default();
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 0.0, 0.0));
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(1.0, 1.0, 0.5)); // Z elevado, não-planar!
+    warped_mesh
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 1.0, 0.0));
+    warped_mesh
+        .faces
+        .push(petunia_mesh::Face::new(vec![0, 1, 2, 3]));
+    let warped_asset = petunia_project::Asset::new("Warped", warped_mesh);
+    let warped_id = warped_asset.id;
+    state.project.assets.push(warped_asset);
+
+    let curved_cmd = petunia_core::AlignWorkplaneToFaceCmd::for_asset(warped_id, 0);
+    assert_eq!(
+        state.dispatch(&curved_cmd),
+        Err(CommandError::Execution(
+            "Face is curved or non-planar; curved surface construction is deferred to a subsequent extension".to_string()
+        ))
+    );
+
+    // 6. Undo/Redo sequence
+    assert!(state.undo(), "Undo contextual push/pull");
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(state.undo(), "Undo imprint profile");
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        initial_faces
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo);
+
+    assert!(state.redo(), "Redo imprint profile");
+    assert_eq!(
+        state.project.active_mesh().unwrap().faces.len(),
+        faces_after_imprint
+    );
+
+    assert!(state.redo(), "Redo contextual push/pull");
+    assert!(
+        state
+            .project
+            .active_mesh()
+            .unwrap()
+            .verts
+            .iter()
+            .any(|v| (v.pos[2] - 1.5).abs() < 1e-4)
+    );
+}

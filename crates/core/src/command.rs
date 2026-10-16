@@ -970,6 +970,58 @@ impl CommandDispatcher {
 
         d.register_with_meta(
             CommandMetadata::new(
+                "model.align_workplane_to_face",
+                "Align Workplane to Face",
+                "Align drawing workplane to the specified planar face",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::AlignWorkplaneToFaceCmd::new(0),
+        );
+        d.alias("workplane.align_face", "model.align_workplane_to_face");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.align_workplane_to_selection",
+                "Align Workplane to Selection",
+                "Align drawing workplane to selected faces or opposing face gap",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::AlignWorkplaneToSelectionCmd,
+        );
+        d.alias(
+            "workplane.align_selection",
+            "model.align_workplane_to_selection",
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.imprint_profile",
+                "Imprint Profile on Surface",
+                "Imprint profile contour and holes onto coplanar surface faces",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::ImprintProfileCmd::new(uuid::Uuid::nil()),
+        );
+        d.alias("surface.imprint", "model.imprint_profile");
+        d.alias("model.surface_imprint", "model.imprint_profile");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.contextual_push_pull",
+                "Contextual Push/Pull",
+                "Push or pull surface region: boundary cap stretches or embedded region extrudes",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::surface_commands::ContextualPushPullCmd::new(1.0),
+        );
+        d.alias("push_pull.contextual", "model.contextual_push_pull");
+
+        d.register_with_meta(
+            CommandMetadata::new(
                 "draw.unite",
                 "Unite",
                 "Merge the closed shapes of the sketch plane into one",

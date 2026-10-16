@@ -415,6 +415,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/mesh/src/solid_builder.rs, crates/project/src/solid_composition.rs, crates/core/src/solid_commands.rs, crates/core/src/state.rs, crates/editor/tests/contextual_interactions.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H26: Composição reeditável e múltiplos sólidos. SolidCompositionRecipe persistente (schema v1) com fontes estáveis (SolidSource), passos de composição habilitáveis/reordenáveis (SolidCompositionStep), auto-triangulação intermediária e controle estrito de orçamento (ShapeBuilderBudget). Invalidação automática (CompositionStatus::NeedsEvaluation / Invalidated) em mutações topológicas ou perda de operandos. Política estrita 'Sem bake silencioso': materialização de malha poligonal estática sob comando explícito BakeSolidCompositionCmd. Comandos CreateSolidCompositionCmd, ToggleSolidCompositionStepCmd, ReorderSolidCompositionStepCmd e BakeSolidCompositionCmd com integridade transacional de Undo/Redo. 12 testes em solid_builder_tests, 7 em solid_composition_tests, 62 em command_tests, 14 em contextual_interactions e 21 em editor_parity pass; clippy e fmt pass sem warnings."
+    },
+    "surface-construction-core-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/mesh/src/imprint.rs, crates/core/src/surface_commands.rs, crates/core/src/state.rs, crates/core/src/command.rs, crates/core/tests/command_tests.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H27: Construção sobre superfícies. Alinhamento de plano de trabalho à face (AlignWorkplaneToFaceCmd e AlignWorkplaneToSelectionCmd) com rejeição informativa de faces curvas/não-planares; Imprint de perfis com furos (ImprintProfileCmd) com preservação de loops internos e triangulação earcut; Push/Pull contextual (ContextualPushPullCmd) discriminando entre contornos livres e regiões internas embedadas; integridade transacional de Undo/Redo e conformidade 'Everything is a Command'. Testes em imprint.rs, command_tests.rs, contextual_interactions.rs e editor_parity (Qt offscreen) passando 100% com zero warnings de clippy."
     }
   },
   "tasks": [
@@ -3637,19 +3642,19 @@
       "title": "Construção sobre superfícies",
       "description": "Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Consolidada construção sobre superfícies (H27) com AlignWorkplaneToFaceCmd, AlignWorkplaneToSelectionCmd, ImprintProfileCmd e ContextualPushPullCmd com suporte a furos e earcut, distinção contextual entre boundary caps e regiões internas embedadas, rejeição graciosa informativa para faces curvas/não-planares, cobertura completa de Undo/Redo e gates em camadas.",
       "checkpoints": [
         {
           "title": "Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "surface-construction-core-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "surface-construction-core-20261016"
         }
       ],
       "documents": [
