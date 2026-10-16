@@ -104,16 +104,16 @@ pub use command::{
     PushPullApplyCmd, PushPullToolCmd, RedoCmd, ReorderAssetCmd, ReprojectSplinePointAttachmentCmd,
     ResetCameraCmd, ReverseSplineCmd, RevolveCmd, RotateSplinePointAttachmentCmd,
     SaveActiveAsAssetCmd, SaveProjectAsCmd, SaveProjectCmd, ScaleSelectionCmd, SelectAllCmd,
-    SelectLinkedCmd, SeparateSelectionCmd, SetAssetCollectionCmd, SetDecalTransformCmd,
-    SetSelectionDomainCmd, SetShadeSmoothCmd, SetSplineClosedCmd, SetSplineHandlesCmd,
-    SlicePlaneCmd, SlideSplinePointAttachmentCmd, SmoothByAngleCmd, SubdivideSelectionCmd,
-    SymmetrizeCmd, ToggleCollectionLockCmd, ToggleCollectionVisibilityCmd, ToggleCommandPaletteCmd,
-    ToggleHelpCmd, ToggleLockAssetCmd, ToggleProjectionCmd, ToggleSettingsCmd,
-    ToggleVisibilityAssetCmd, ToggleWireframeCmd, ToggleXRayCmd, TranslateSelectionCmd,
-    TriangulateMeshCmd, UndoCmd, UnwrapAutoCmd, UpdateProfileCmd, UpdateSplineCmd,
-    UpdateSweepGeneratorCmd, UvEqualizeTexelDensityCmd, UvNormalizeTexelDensityCmd,
-    UvPackIslandsCmd, UvProjectCubeCmd, UvProjectFromViewCmd, UvProjectPlanarCmd,
-    UvSetTexelDensityCmd, UvSplitCmd, UvTransformCmd, WeldCmd,
+    SelectLinkedCmd, SeparateSelectionCmd, SetAssetCollectionCmd, SetAssetTransformCmd,
+    SetDecalTransformCmd, SetObjectTransformCmd, SetSelectionDomainCmd, SetShadeSmoothCmd,
+    SetSplineClosedCmd, SetSplineHandlesCmd, SlicePlaneCmd, SlideSplinePointAttachmentCmd,
+    SmoothByAngleCmd, SubdivideSelectionCmd, SymmetrizeCmd, ToggleCollectionLockCmd,
+    ToggleCollectionVisibilityCmd, ToggleCommandPaletteCmd, ToggleHelpCmd, ToggleLockAssetCmd,
+    ToggleProjectionCmd, ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd,
+    ToggleXRayCmd, TranslateSelectionCmd, TriangulateMeshCmd, UndoCmd, UnwrapAutoCmd,
+    UpdateProfileCmd, UpdateSplineCmd, UpdateSweepGeneratorCmd, UvEqualizeTexelDensityCmd,
+    UvNormalizeTexelDensityCmd, UvPackIslandsCmd, UvProjectCubeCmd, UvProjectFromViewCmd,
+    UvProjectPlanarCmd, UvSetTexelDensityCmd, UvSplitCmd, UvTransformCmd, WeldCmd,
 };
 pub use context::{
     CommandEffects, EditorView, HostRequest, KeyText, TextSource, TextureOp, UiRequest,
@@ -151,6 +151,7 @@ pub use inference::{
 };
 pub use material_commands::{
     CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, MaterialEdit, RemoveMaterialCmd,
+    SetMaterialPropertiesCmd,
 };
 pub use modal_feedback::ToolFeedback;
 pub use modifier_commands::{ModifierCmd, ModifierOp};
@@ -183,8 +184,8 @@ pub use state::{
     RenderResources, RenderStats, SHELL_ASSET_LIBRARY_DEFAULT_HEIGHT,
     SHELL_ASSET_LIBRARY_MAX_HEIGHT, SHELL_ASSET_LIBRARY_MIN_HEIGHT, SceneFilter, SceneObjectState,
     Shading, TOOLBAR_DEFAULT_WIDTH, TextureDirtyRect, TextureUpdate, ToolActivation,
-    ToolSessionManager, ToolState, TransformOrientation, UiDensity, UiState, ViewportSession,
-    WorkplaneKind, WorkspaceUiMemory, workspace_index,
+    ToolSessionManager, ToolState, TransformFrame, TransformOrientation, UiDensity, UiState,
+    ViewportSession, WorkplaneKind, WorkspaceUiMemory, workspace_index,
 };
 pub use uv_selection::{UvSelectionMode, UvSelectionState};
 pub use viewport::{

@@ -1378,6 +1378,18 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.set_transform",
+                "Set Object Transform",
+                "Set absolute position, rotation (Euler XYZ) and scale of an object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            SetAssetTransformCmd::default(),
+        );
+        d.alias("object.set_transform", "model.set_transform");
+        d.alias("asset.set_transform", "model.set_transform");
+        d.register_with_meta(
+            CommandMetadata::new(
                 "model.instantiate_asset",
                 "Instantiate Asset",
                 "Instantiate a library asset into the active 3D scene",
@@ -1389,6 +1401,112 @@ impl CommandDispatcher {
                 position: None,
             },
         );
+
+        // Materiais (Material & Shading)
+        use crate::edit_api::AssignMaterialSlotCmd;
+        use crate::material_commands::{
+            CreateMaterialCmd, DuplicateMaterialCmd, EditMaterialCmd, RemoveMaterialCmd,
+            SetMaterialPropertiesCmd,
+        };
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.create",
+                "Create Material",
+                "Create a new standard PBR material in the project",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            CreateMaterialCmd::default(),
+        );
+        d.alias("model.create_material", "material.create");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.duplicate",
+                "Duplicate Material",
+                "Duplicate the active or selected material",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            DuplicateMaterialCmd::default(),
+        );
+        d.alias("model.duplicate_material", "material.duplicate");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.remove",
+                "Remove Material",
+                "Remove the specified material from the project",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            RemoveMaterialCmd::default(),
+        );
+        d.alias("model.remove_material", "material.remove");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.edit",
+                "Edit Material",
+                "Edit a scalar or color property of a material",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            EditMaterialCmd::default(),
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.set_properties",
+                "Set Material Properties",
+                "Set multiple PBR properties of a material in a single atomic transaction",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            SetMaterialPropertiesCmd::default(),
+        );
+        d.alias("model.set_material_properties", "material.set_properties");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "material.assign_slot",
+                "Assign Material Slot",
+                "Assign a material slot to the active object or selected faces",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Materials),
+            AssignMaterialSlotCmd::default(),
+        );
+        d.alias("model.assign_material", "material.assign_slot");
+        d.alias("model.assign_material_slot", "material.assign_slot");
+
+        // Metadados do Objeto (Object Presentation)
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.set_selection_color",
+                "Set Object Selection Color",
+                "Set authored custom selection highlight color for an object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Interface),
+            crate::SetAssetSelectionColorCmd::default(),
+        );
+        d.alias("object.set_selection_color", "model.set_selection_color");
+
+        // Modificadores (Modifiers)
+        use crate::modifier_commands::ModifierCmd;
+        d.register_with_meta(
+            CommandMetadata::new(
+                "modifier.apply",
+                "Apply Modifier",
+                "Bake modifier deformation permanently into base mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            ModifierCmd::default(),
+        );
+        d.alias("model.apply_modifier", "modifier.apply");
 
         // 5. Visualização (View)
         d.register_with_meta(
@@ -3345,6 +3463,111 @@ impl Command for ToggleVisibilityAssetCmd {
         } else {
             format!("Hid {}", name)
         });
+        Ok(())
+    }
+}
+
+/// Comando para definir as transformações absolutas (posição, rotação Euler XYZ em graus, escala) de um asset.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SetAssetTransformCmd {
+    pub asset_index: Option<usize>,
+    pub translation: Option<[f32; 3]>,
+    pub rotation_euler_deg: Option<[f32; 3]>,
+    pub scale: Option<[f32; 3]>,
+}
+
+pub type SetObjectTransformCmd = SetAssetTransformCmd;
+
+impl Command for SetAssetTransformCmd {
+    fn label(&self) -> &'static str {
+        "set object transform"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+
+    fn freezes_active_primitive(&self) -> bool {
+        false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::POSITIONS | ProjectChanges::TRANSFORMS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get(idx) else {
+            return Err("No active object");
+        };
+        if asset.locked {
+            return Err("Active object is locked");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let idx = self.asset_index.unwrap_or(state.document.active);
+        let Some(asset) = state.document.assets.get_mut(idx) else {
+            return Err(CommandError::InvalidAssetIndex(idx));
+        };
+        if asset.locked {
+            return Err(CommandError::Execution("Asset is locked".into()));
+        }
+
+        if let Some(pos) = self.translation
+            && !pos.iter().all(|v| v.is_finite())
+        {
+            return Err(CommandError::Execution(
+                "Translation contains non-finite values".into(),
+            ));
+        }
+        if let Some(rot) = self.rotation_euler_deg
+            && !rot.iter().all(|v| v.is_finite())
+        {
+            return Err(CommandError::Execution(
+                "Rotation contains non-finite values".into(),
+            ));
+        }
+        if let Some(scale) = self.scale {
+            if !scale.iter().all(|v| v.is_finite()) {
+                return Err(CommandError::Execution(
+                    "Scale contains non-finite values".into(),
+                ));
+            }
+            if scale.iter().any(|v| v.abs() < 1e-6) {
+                return Err(CommandError::Execution("Scale cannot be zero".into()));
+            }
+        }
+
+        let target_pos = self.translation.unwrap_or(asset.position);
+        let target_rot = self.rotation_euler_deg.unwrap_or(asset.rotation);
+        let target_scale = self.scale.unwrap_or(asset.scale);
+
+        if target_pos == asset.position
+            && target_rot == asset.rotation
+            && target_scale == asset.scale
+        {
+            return Err(CommandError::NoChange("Transform unchanged".into()));
+        }
+
+        let quat = glam::Quat::from_euler(
+            glam::EulerRot::XYZ,
+            target_rot[0].to_radians(),
+            target_rot[1].to_radians(),
+            target_rot[2].to_radians(),
+        );
+        let transform = petunia_project::ObjectTransform::from_trs(
+            glam::Vec3::from_array(target_pos),
+            quat,
+            glam::Vec3::from_array(target_scale),
+        );
+        if !transform.is_finite() || !transform.to_mat4().inverse().is_finite() {
+            return Err(CommandError::Execution("Invalid object transform".into()));
+        }
+
+        asset.set_object_transform_with_euler(transform, target_rot);
+        state.set_status("Object transform updated");
         Ok(())
     }
 }

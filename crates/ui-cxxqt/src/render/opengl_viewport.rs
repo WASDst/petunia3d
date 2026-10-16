@@ -1952,11 +1952,21 @@ pub extern "C" fn petunia_qt_app_set_material_pbr(
             {
                 return false;
             }
+            let shader_profile = match profile {
+                0 => Some(petunia_project::material::ShaderProfile::Pbr),
+                1 => Some(petunia_project::material::ShaderProfile::Unlit),
+                2 => Some(petunia_project::material::ShaderProfile::Toon),
+                3 => Some(petunia_project::material::ShaderProfile::Glass),
+                4 => Some(petunia_project::material::ShaderProfile::Emissive),
+                _ => None,
+            };
             let b = &mut host.app.controller;
-            let mut changed = b.set_active_material_scalar("roughness", roughness);
-            changed |= b.set_active_material_scalar("metallic", metallic);
-            changed |= b.set_active_material_scalar("emission-strength", emission_strength);
-            changed | b.set_active_material_profile(profile)
+            b.set_active_material_properties(
+                Some(roughness),
+                Some(metallic),
+                Some(emission_strength),
+                shader_profile,
+            )
         })
         .unwrap_or(false)
 }
@@ -2657,24 +2667,27 @@ fn set_absolute_transform(
     if !value.iter().all(|v| v.is_finite()) || !select_index(editor, index) {
         return false;
     }
-    let Some(asset) = editor.state.project.active() else {
-        return false;
+    let intent = match kind {
+        petunia_editor::TransformKind::Position => petunia_editor::UiIntent::SetAssetTransform {
+            asset_index: Some(index as usize),
+            translation: Some(value),
+            rotation_euler_deg: None,
+            scale: None,
+        },
+        petunia_editor::TransformKind::Rotation => petunia_editor::UiIntent::SetAssetTransform {
+            asset_index: Some(index as usize),
+            translation: None,
+            rotation_euler_deg: Some(value),
+            scale: None,
+        },
+        petunia_editor::TransformKind::Scale => petunia_editor::UiIntent::SetAssetTransform {
+            asset_index: Some(index as usize),
+            translation: None,
+            rotation_euler_deg: None,
+            scale: Some(value),
+        },
     };
-    let previous = match kind {
-        petunia_editor::TransformKind::Position => asset.position,
-        petunia_editor::TransformKind::Rotation => asset.rotation,
-        petunia_editor::TransformKind::Scale => asset.scale,
-    };
-    for axis in 0..3 {
-        if (value[axis] - previous[axis]).abs() > 1e-6
-            && editor
-                .controller
-                .commit_transform_text(kind, axis, &value[axis].to_string())
-                .is_err()
-        {
-            return false;
-        }
-    }
+    editor.controller.apply(intent);
     true
 }
 /// The active paint layer is the only editable canvas, copied after size checks.

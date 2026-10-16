@@ -635,6 +635,12 @@ pub enum UiIntent {
         delta: f32,
         fine: bool,
     },
+    SetAssetTransform {
+        asset_index: Option<usize>,
+        translation: Option<[f32; 3]>,
+        rotation_euler_deg: Option<[f32; 3]>,
+        scale: Option<[f32; 3]>,
+    },
     ViewportGesture(ViewportGesture),
     SaveProjectTo(PathBuf),
     OpenProjectFrom(PathBuf),

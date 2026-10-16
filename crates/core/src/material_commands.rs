@@ -19,9 +19,17 @@ fn material_index(document: &petunia_project::Project, id: Uuid) -> Option<usize
 }
 
 /// Novo material com `name`, ao fim da lista.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CreateMaterialCmd {
     pub name: String,
+}
+
+impl Default for CreateMaterialCmd {
+    fn default() -> Self {
+        Self {
+            name: "Material".to_string(),
+        }
+    }
 }
 
 impl Command for CreateMaterialCmd {
@@ -43,7 +51,7 @@ impl Command for CreateMaterialCmd {
 }
 
 /// Cópia do material `material` (id novo, nome "<nome> Copy"), ao fim da lista.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct DuplicateMaterialCmd {
     pub material: Uuid,
 }
@@ -75,7 +83,7 @@ impl Command for DuplicateMaterialCmd {
 }
 
 /// Remove o material `material`; o projeto sempre mantém ao menos um.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct RemoveMaterialCmd {
     pub material: Uuid,
 }
@@ -150,10 +158,19 @@ impl MaterialEdit {
 }
 
 /// Aplica `edit` ao material `material`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EditMaterialCmd {
     pub material: Uuid,
     pub edit: MaterialEdit,
+}
+
+impl Default for EditMaterialCmd {
+    fn default() -> Self {
+        Self {
+            material: Uuid::nil(),
+            edit: MaterialEdit::Roughness(0.5),
+        }
+    }
 }
 
 impl Command for EditMaterialCmd {
@@ -216,6 +233,152 @@ impl Command for EditMaterialCmd {
             }
             MaterialEdit::ClearAlbedo => material.albedo_texture = None,
         }
+        material.validate();
+        Ok(())
+    }
+}
+
+/// Altera múltiplas propriedades de um material em uma única transação atômica.
+/// Cada campo com `None` preserva o valor atual.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SetMaterialPropertiesCmd {
+    pub material: Uuid,
+    pub base_color: Option<[f32; 3]>,
+    pub roughness: Option<f32>,
+    pub metallic: Option<f32>,
+    pub normal_scale: Option<f32>,
+    pub emission_color: Option<[f32; 3]>,
+    pub emission_strength: Option<f32>,
+    pub alpha_cutoff: Option<f32>,
+    pub profile: Option<ShaderProfile>,
+    pub alpha_mode: Option<AlphaMode>,
+}
+
+impl Command for SetMaterialPropertiesCmd {
+    fn label(&self) -> &'static str {
+        "set material properties"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::MATERIALS
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        if self
+            .base_color
+            .is_some_and(|rgb| !rgb.iter().all(|v| v.is_finite()))
+        {
+            return Err("material base color must be finite");
+        }
+        if self.roughness.is_some_and(|v| !v.is_finite()) {
+            return Err("material roughness must be finite");
+        }
+        if self.metallic.is_some_and(|v| !v.is_finite()) {
+            return Err("material metallic must be finite");
+        }
+        if self.normal_scale.is_some_and(|v| !v.is_finite()) {
+            return Err("material normal scale must be finite");
+        }
+        if self
+            .emission_color
+            .is_some_and(|rgb| !rgb.iter().all(|v| v.is_finite()))
+        {
+            return Err("material emission color must be finite");
+        }
+        if self.emission_strength.is_some_and(|v| !v.is_finite()) {
+            return Err("material emission strength must be finite");
+        }
+        if self.alpha_cutoff.is_some_and(|v| !v.is_finite()) {
+            return Err("material alpha cutoff must be finite");
+        }
+        material_index(state.document, self.material)
+            .map(|_| ())
+            .ok_or("material not found")
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let index = material_index(state.document, self.material)
+            .ok_or_else(|| CommandError::StaleReference(self.material.to_string()))?;
+        let material = &mut state.document.materials[index];
+        let mut changed = false;
+
+        if let Some([red, green, blue]) = self.base_color {
+            let new_color = [
+                red.clamp(0.0, 1.0),
+                green.clamp(0.0, 1.0),
+                blue.clamp(0.0, 1.0),
+                1.0,
+            ];
+            if material.base_color != new_color {
+                material.base_color = new_color;
+                changed = true;
+            }
+        }
+        if let Some(value) = self.roughness {
+            let clamped = value.clamp(0.0, 1.0);
+            if (material.roughness - clamped).abs() > f32::EPSILON {
+                material.roughness = clamped;
+                changed = true;
+            }
+        }
+        if let Some(value) = self.metallic {
+            let clamped = value.clamp(0.0, 1.0);
+            if (material.metallic - clamped).abs() > f32::EPSILON {
+                material.metallic = clamped;
+                changed = true;
+            }
+        }
+        if let Some(value) = self.normal_scale {
+            let clamped = value.clamp(0.0, 10.0);
+            if (material.normal_scale - clamped).abs() > f32::EPSILON {
+                material.normal_scale = clamped;
+                changed = true;
+            }
+        }
+        if let Some([red, green, blue]) = self.emission_color {
+            let new_emission = [
+                red.clamp(0.0, 1.0),
+                green.clamp(0.0, 1.0),
+                blue.clamp(0.0, 1.0),
+            ];
+            if material.emission_color != new_emission {
+                material.emission_color = new_emission;
+                changed = true;
+            }
+        }
+        if let Some(value) = self.emission_strength {
+            let clamped = value.clamp(0.0, 10.0);
+            if (material.emission_strength - clamped).abs() > f32::EPSILON {
+                material.emission_strength = clamped;
+                changed = true;
+            }
+        }
+        if let Some(value) = self.alpha_cutoff {
+            let clamped = value.clamp(0.0, 1.0);
+            if (material.alpha_cutoff - clamped).abs() > f32::EPSILON {
+                material.alpha_cutoff = clamped;
+                changed = true;
+            }
+        }
+        if let Some(profile) = self.profile
+            && material.profile != profile
+        {
+            material.profile = profile;
+            changed = true;
+        }
+        if let Some(alpha_mode) = self.alpha_mode
+            && material.alpha_mode != alpha_mode
+        {
+            material.alpha_mode = alpha_mode;
+            changed = true;
+        }
+
+        if !changed {
+            return Err(CommandError::NoChange(
+                "no material properties modified".into(),
+            ));
+        }
+
         material.validate();
         Ok(())
     }

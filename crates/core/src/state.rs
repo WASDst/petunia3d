@@ -799,23 +799,38 @@ pub enum ActiveToolSessionKind {
     Cut,
 }
 
-/// Orientação de coordenadas para transformações (P3D-026).
+/// Orientação de coordenadas para transformações (P3D-026, SEL-003).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TransformOrientation {
     #[default]
     Global,
     Local,
+    Normal,
+    View,
+    Auto,
+    Custom,
 }
 
 impl TransformOrientation {
-    pub fn all() -> [Self; 2] {
-        [Self::Global, Self::Local]
+    pub fn all() -> [Self; 6] {
+        [
+            Self::Global,
+            Self::Local,
+            Self::Normal,
+            Self::View,
+            Self::Auto,
+            Self::Custom,
+        ]
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Global => "Global",
             Self::Local => "Local",
+            Self::Normal => "Normal",
+            Self::View => "View",
+            Self::Auto => "Auto",
+            Self::Custom => "Custom",
         }
     }
 
@@ -823,7 +838,99 @@ impl TransformOrientation {
         match self {
             Self::Global => "orientation.global",
             Self::Local => "orientation.local",
+            Self::Normal => "orientation.normal",
+            Self::View => "orientation.view",
+            Self::Auto => "orientation.auto",
+            Self::Custom => "orientation.custom",
         }
+    }
+}
+
+/// Frame tridimensional de orientação para transformação (SEL-003).
+/// Define os três eixos ortonormais (X, Y, Z) em coordenadas de mundo.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct TransformFrame {
+    pub x_axis: glam::Vec3,
+    pub y_axis: glam::Vec3,
+    pub z_axis: glam::Vec3,
+}
+
+impl Default for TransformFrame {
+    fn default() -> Self {
+        Self::global()
+    }
+}
+
+impl TransformFrame {
+    pub fn global() -> Self {
+        Self {
+            x_axis: glam::Vec3::X,
+            y_axis: glam::Vec3::Y,
+            z_axis: glam::Vec3::Z,
+        }
+    }
+
+    pub fn from_rotation(rotation: glam::Quat) -> Self {
+        Self {
+            x_axis: (rotation * glam::Vec3::X).normalize(),
+            y_axis: (rotation * glam::Vec3::Y).normalize(),
+            z_axis: (rotation * glam::Vec3::Z).normalize(),
+        }
+    }
+
+    pub fn from_z_axis(normal: glam::Vec3) -> Self {
+        let n = if normal.is_finite() && normal.length_squared() > 1e-8 {
+            normal.normalize()
+        } else {
+            glam::Vec3::Z
+        };
+        let tangent = n.any_orthonormal_vector();
+        let bitangent = n.cross(tangent).normalize();
+        Self {
+            x_axis: tangent,
+            y_axis: bitangent,
+            z_axis: n,
+        }
+    }
+
+    pub fn from_edge(p0: glam::Vec3, p1: glam::Vec3, up_hint: glam::Vec3) -> Self {
+        let delta = p1 - p0;
+        let tangent = if delta.is_finite() && delta.length_squared() > 1e-8 {
+            delta.normalize()
+        } else {
+            glam::Vec3::X
+        };
+        let normal = if up_hint.cross(tangent).length_squared() > 1e-6 {
+            up_hint.cross(tangent).cross(tangent).normalize()
+        } else {
+            tangent.any_orthonormal_vector()
+        };
+        let bitangent = tangent.cross(normal).normalize();
+        Self {
+            x_axis: tangent,
+            y_axis: bitangent,
+            z_axis: normal,
+        }
+    }
+
+    pub fn from_view(camera: &crate::Camera) -> Self {
+        Self {
+            x_axis: camera.right(),
+            y_axis: camera.up(),
+            z_axis: -camera.forward(),
+        }
+    }
+
+    pub fn axis(&self, index: usize) -> glam::Vec3 {
+        match index {
+            0 => self.x_axis,
+            1 => self.y_axis,
+            _ => self.z_axis,
+        }
+    }
+
+    pub fn plane_normal(&self, index: usize) -> glam::Vec3 {
+        self.axis(index)
     }
 }
 
@@ -905,6 +1012,7 @@ pub struct ViewportSession {
     pub proportional_editing: bool,
     pub proportional_settings: crate::proportional::ProportionalSettings,
     pub transform_orientation: TransformOrientation,
+    pub custom_transform_frame: Option<TransformFrame>,
     pub pivot_point: PivotPoint,
     /// Snapshot of an explicitly copied world-space transform center.
     pub transform_center: Option<[f32; 3]>,
@@ -948,6 +1056,7 @@ impl ViewportSession {
             proportional_editing: false,
             proportional_settings: crate::proportional::ProportionalSettings::default(),
             transform_orientation: TransformOrientation::Global,
+            custom_transform_frame: None,
             pivot_point: PivotPoint::MedianPoint,
             transform_center: None,
             edit_pivot: false,
@@ -1001,6 +1110,7 @@ pub struct EditorSession {
     pub proportional_editing: bool,
     pub proportional_settings: crate::proportional::ProportionalSettings,
     pub transform_orientation: TransformOrientation,
+    pub custom_transform_frame: Option<TransformFrame>,
     pub pivot_point: PivotPoint,
     /// Snapshot of an explicitly copied world-space transform center.
     pub transform_center: Option<[f32; 3]>,
@@ -1078,6 +1188,7 @@ impl EditorSession {
             proportional_editing: false,
             proportional_settings: crate::proportional::ProportionalSettings::default(),
             transform_orientation: TransformOrientation::Global,
+            custom_transform_frame: None,
             pivot_point: PivotPoint::MedianPoint,
             transform_center: None,
             edit_pivot: false,
@@ -1292,6 +1403,7 @@ impl EditorSession {
             proportional_editing: self.proportional_editing,
             proportional_settings: self.proportional_settings.clone(),
             transform_orientation: self.transform_orientation,
+            custom_transform_frame: self.custom_transform_frame,
             pivot_point: self.pivot_point,
             transform_center: self.transform_center,
             edit_pivot: self.edit_pivot,
@@ -1326,6 +1438,7 @@ impl EditorSession {
         self.proportional_editing = vs.proportional_editing;
         self.proportional_settings = vs.proportional_settings;
         self.transform_orientation = vs.transform_orientation;
+        self.custom_transform_frame = vs.custom_transform_frame;
         self.pivot_point = vs.pivot_point;
         self.transform_center = vs.transform_center;
         self.edit_pivot = vs.edit_pivot;
@@ -4073,7 +4186,7 @@ impl<'a> EditorView<'a> {
         match pivot {
             PivotPoint::Cursor3D => self
                 .transform_center
-                .map_or(glam::Vec3::ZERO, glam::Vec3::from),
+                .map_or_else(|| glam::Vec3::from(self.cursor_3d), glam::Vec3::from),
             PivotPoint::BoundingBoxCenter => {
                 if let Some(active) = self.document.active() {
                     let mut min = glam::Vec3::splat(f32::MAX);
@@ -4104,6 +4217,206 @@ impl<'a> EditorView<'a> {
                 }
             }
         }
+    }
+
+    /// Calcula o referencial tridimensional de orientação para transformações (SEL-003).
+    pub fn calculate_transform_frame(self, orientation: TransformOrientation) -> TransformFrame {
+        match orientation {
+            TransformOrientation::Global => TransformFrame::global(),
+            TransformOrientation::View => TransformFrame::from_view(&self.editor.camera),
+            TransformOrientation::Custom => self
+                .editor
+                .custom_transform_frame
+                .unwrap_or_else(TransformFrame::global),
+            TransformOrientation::Local => {
+                if let Some(active) = self.document.active() {
+                    TransformFrame::from_rotation(active.transform.rotation())
+                } else if let Some(first_id) = self.editor.selection.assets.first() {
+                    if let Some(asset) = self.document.assets.iter().find(|a| a.id == *first_id) {
+                        TransformFrame::from_rotation(asset.transform.rotation())
+                    } else {
+                        TransformFrame::global()
+                    }
+                } else {
+                    TransformFrame::global()
+                }
+            }
+            TransformOrientation::Normal => self
+                .calculate_normal_transform_frame()
+                .unwrap_or_else(TransformFrame::global),
+            TransformOrientation::Auto => {
+                // SEL-003:
+                // Default automático:
+                // Se houver active_element:
+                if let Some(active_elem) = self.editor.selection.active_element.as_ref() {
+                    match active_elem.item {
+                        SelectionRef::Face { object, face } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                                && let Some(normal) = Self::compute_asset_face_normal(asset, face)
+                            {
+                                return TransformFrame::from_z_axis(normal);
+                            }
+                        }
+                        SelectionRef::Edge { object, edge } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                                && let Some((p0, p1)) =
+                                    Self::compute_asset_edge_positions(asset, edge.0, edge.1)
+                            {
+                                return TransformFrame::from_edge(p0, p1, glam::Vec3::Y);
+                            }
+                        }
+                        SelectionRef::Vertex { object, vertex } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                                && let Some(normal) =
+                                    Self::compute_asset_vertex_normal(asset, vertex)
+                            {
+                                return TransformFrame::from_z_axis(normal);
+                            }
+                        }
+                        SelectionRef::Object(id) => {
+                            if let Some(asset) = self.document.assets.iter().find(|a| a.id == id) {
+                                return TransformFrame::from_rotation(asset.transform.rotation());
+                            }
+                        }
+                        SelectionRef::Shape { object, .. } => {
+                            if let Some(asset) =
+                                self.document.assets.iter().find(|a| a.id == object)
+                            {
+                                return TransformFrame::from_rotation(asset.transform.rotation());
+                            }
+                        }
+                    }
+                }
+
+                // Se houver seleção de componente na malha ativa:
+                if let Some(frame) = self.calculate_normal_transform_frame() {
+                    return frame;
+                }
+
+                // Domínio de Objeto:
+                let selected_assets: Vec<_> = self
+                    .document
+                    .assets
+                    .iter()
+                    .filter(|a| {
+                        !a.locked
+                            && (self.editor.selection.assets.contains(&a.id)
+                                || self
+                                    .document
+                                    .active()
+                                    .is_some_and(|active| active.id == a.id))
+                    })
+                    .collect();
+
+                if selected_assets.len() == 1 {
+                    TransformFrame::from_rotation(selected_assets[0].transform.rotation())
+                } else {
+                    TransformFrame::global()
+                }
+            }
+        }
+    }
+
+    fn calculate_normal_transform_frame(self) -> Option<TransformFrame> {
+        let active = self.document.active()?;
+        // 1. Faces selecionadas: média das normais em espaço de mundo
+        if !self.editor.selection.faces.is_empty() {
+            let mut normal_acc = glam::Vec3::ZERO;
+            let normal_mat = active.world_matrix().inverse().transpose();
+            for &face_idx in &self.editor.selection.faces {
+                if face_idx < active.mesh.faces.len() {
+                    let local_norm = active.mesh.face_normal(face_idx);
+                    let world_norm = normal_mat.transform_vector3(local_norm);
+                    if world_norm.is_finite() {
+                        normal_acc += world_norm;
+                    }
+                }
+            }
+            if normal_acc.is_finite() && normal_acc.length_squared() > 1e-6 {
+                return Some(TransformFrame::from_z_axis(normal_acc.normalize()));
+            }
+        }
+
+        // 2. Arestas selecionadas: tangente da primeira aresta selecionada
+        if let Some(&(a, b)) = self.editor.selection.edges.first()
+            && let Some((p0, p1)) = Self::compute_asset_edge_positions(active, a, b)
+        {
+            return Some(TransformFrame::from_edge(p0, p1, glam::Vec3::Y));
+        }
+
+        // 3. Vértices selecionados: média das normais dos vértices em mundo
+        if !self.editor.selection.verts.is_empty() {
+            let mut normal_acc = glam::Vec3::ZERO;
+            for &v_idx in &self.editor.selection.verts {
+                if let Some(norm) = Self::compute_asset_vertex_normal(active, v_idx) {
+                    normal_acc += norm;
+                }
+            }
+            if normal_acc.is_finite() && normal_acc.length_squared() > 1e-6 {
+                return Some(TransformFrame::from_z_axis(normal_acc.normalize()));
+            }
+        }
+
+        None
+    }
+
+    fn compute_asset_face_normal(
+        asset: &petunia_project::Asset,
+        face_idx: usize,
+    ) -> Option<glam::Vec3> {
+        if face_idx < asset.mesh.faces.len() {
+            let local_norm = asset.mesh.face_normal(face_idx);
+            let normal_mat = asset.world_matrix().inverse().transpose();
+            let world_norm = normal_mat.transform_vector3(local_norm);
+            if world_norm.is_finite() && world_norm.length_squared() > 1e-6 {
+                return Some(world_norm.normalize());
+            }
+        }
+        None
+    }
+
+    fn compute_asset_edge_positions(
+        asset: &petunia_project::Asset,
+        a: u32,
+        b: u32,
+    ) -> Option<(glam::Vec3, glam::Vec3)> {
+        let v_a = asset.mesh.verts.get(a as usize)?;
+        let v_b = asset.mesh.verts.get(b as usize)?;
+        let p0 = asset.to_world_point(v_a.vec());
+        let p1 = asset.to_world_point(v_b.vec());
+        if p0.is_finite() && p1.is_finite() {
+            Some((p0, p1))
+        } else {
+            None
+        }
+    }
+
+    fn compute_asset_vertex_normal(
+        asset: &petunia_project::Asset,
+        vertex_idx: u32,
+    ) -> Option<glam::Vec3> {
+        if (vertex_idx as usize) < asset.mesh.verts.len() {
+            let mut acc = glam::Vec3::ZERO;
+            for (fi, f) in asset.mesh.faces.iter().enumerate() {
+                if f.verts.contains(&vertex_idx) {
+                    let local_norm = asset.mesh.face_normal(fi);
+                    if local_norm.is_finite() {
+                        acc += local_norm;
+                    }
+                }
+            }
+            if acc.length_squared() > 1e-6 {
+                let normal_mat = asset.world_matrix().inverse().transpose();
+                let world_norm = normal_mat.transform_vector3(acc);
+                if world_norm.is_finite() && world_norm.length_squared() > 1e-6 {
+                    return Some(world_norm.normalize());
+                }
+            }
+        }
+        None
     }
 
     /// Ponto de articulação (head) do osso selecionado na pose avaliada atual.

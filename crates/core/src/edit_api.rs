@@ -480,7 +480,7 @@ impl Command for UvPinCmd {
 /// Atribui o material `material_index` (índice em `Project::materials`) ao
 /// objeto ativo e, quando houver faces alvo, grava o slot nelas.
 /// `faces = None`: faces selecionadas.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct AssignMaterialSlotCmd {
     pub material_index: usize,
     pub faces: Option<Vec<usize>>,

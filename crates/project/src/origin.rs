@@ -181,4 +181,16 @@ impl Asset {
         self.rotation = [x.to_degrees(), y.to_degrees(), z.to_degrees()];
         self.scale = transform.scale;
     }
+
+    /// Set authoritative TRS and explicitly authored Euler representation in degrees.
+    pub fn set_object_transform_with_euler(
+        &mut self,
+        transform: ObjectTransform,
+        euler_deg: [f32; 3],
+    ) {
+        self.transform = transform;
+        self.position = transform.translation;
+        self.rotation = euler_deg;
+        self.scale = transform.scale;
+    }
 }

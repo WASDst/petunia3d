@@ -163,6 +163,29 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.edit_active_material(petunia_core::MaterialEdit::Profile(profile))
     }
 
+    /// Altera atomicamente múltiplas propriedades PBR do material ativo por
+    /// `SetMaterialPropertiesCmd`, gerando uma única entrada de Undo.
+    pub fn set_active_material_properties(
+        &mut self,
+        roughness: Option<f32>,
+        metallic: Option<f32>,
+        emission_strength: Option<f32>,
+        profile: Option<ShaderProfile>,
+    ) -> bool {
+        let Some(material) = self.active_material_id() else {
+            return false;
+        };
+        let cmd = petunia_core::SetMaterialPropertiesCmd {
+            material,
+            roughness,
+            metallic,
+            emission_strength,
+            profile,
+            ..Default::default()
+        };
+        self.dispatch_material(&cmd)
+    }
+
     pub fn set_active_material_alpha_mode(&mut self, mode: i32) -> bool {
         let mode = match mode {
             0 => AlphaMode::Opaque,

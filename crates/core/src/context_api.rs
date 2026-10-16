@@ -658,6 +658,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn calculate_transform_frame(&self, orientation: TransformOrientation) -> TransformFrame {
+        self.view().calculate_transform_frame(orientation)
+    }
+
+    #[inline]
     pub fn animate_selected_bone_pivot(&self) -> Option<glam::Vec3> {
         self.view().animate_selected_bone_pivot()
     }
@@ -995,6 +1000,11 @@ impl CommandContext<'_> {
     #[inline]
     pub fn calculate_pivot(&self, pivot: PivotPoint) -> glam::Vec3 {
         self.view().calculate_pivot(pivot)
+    }
+
+    #[inline]
+    pub fn calculate_transform_frame(&self, orientation: TransformOrientation) -> TransformFrame {
+        self.view().calculate_transform_frame(orientation)
     }
 
     #[inline]

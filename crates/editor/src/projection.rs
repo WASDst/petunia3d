@@ -340,11 +340,11 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         return model;
     }
 
-    let pivot = if is_animate_bone {
+    let (pivot, frame) = if is_animate_bone {
         let Some(p) = state.animate_selected_bone_pivot() else {
             return model;
         };
-        p
+        (p, petunia_core::TransformFrame::global())
     } else {
         let Some(asset) = state.project.active() else {
             return model;
@@ -352,10 +352,15 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
         if asset.mesh.verts.is_empty() {
             return model;
         };
-        state.session.tools.modal.as_ref().map_or_else(
+        let p = state.session.tools.modal.as_ref().map_or_else(
             || state.calculate_pivot(state.session.pivot_point),
             |modal| modal.pivot,
-        )
+        );
+        let f = state.session.tools.modal.as_ref().map_or_else(
+            || state.calculate_transform_frame(state.session.transform_orientation),
+            |modal| modal.frame,
+        );
+        (p, f)
     };
     let Some(origin) = project(pivot) else {
         return model;
@@ -364,23 +369,26 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
     model.origin_x = origin[0];
     model.origin_y = origin[1];
 
-    for (axis, rod, arrow, scale, rotate) in [
+    for (axis_idx, axis, rod, arrow, scale, rotate) in [
         (
-            glam::Vec3::X,
+            0,
+            frame.x_axis,
             &mut model.x_commands,
             &mut model.x_arrow_commands,
             &mut model.x_scale_commands,
             &mut model.x_rotate_commands,
         ),
         (
-            glam::Vec3::Y,
+            1,
+            frame.y_axis,
             &mut model.y_commands,
             &mut model.y_arrow_commands,
             &mut model.y_scale_commands,
             &mut model.y_rotate_commands,
         ),
         (
-            glam::Vec3::Z,
+            2,
+            frame.z_axis,
             &mut model.z_commands,
             &mut model.z_arrow_commands,
             &mut model.z_scale_commands,
@@ -396,24 +404,23 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
             origin[0] + direction[0] * (ROD_LENGTH + 14.0),
             origin[1] + direction[1] * (ROD_LENGTH + 14.0),
         ];
-        if axis == glam::Vec3::X {
+        if axis_idx == 0 {
             model.x_end = end;
             model.x_label = label_pos;
-        } else if axis == glam::Vec3::Y {
+        } else if axis_idx == 1 {
             model.y_end = end;
             model.y_label = label_pos;
-        } else if axis == glam::Vec3::Z {
+        } else {
             model.z_end = end;
             model.z_label = label_pos;
         }
 
         if state.session.tools.active_tool == "rotate" {
-            let tangent = if axis == glam::Vec3::X {
-                glam::Vec3::Y
-            } else {
-                glam::Vec3::X
+            let (tangent, bitangent) = match axis_idx {
+                0 => (frame.y_axis, frame.z_axis),
+                1 => (frame.z_axis, frame.x_axis),
+                _ => (frame.x_axis, frame.y_axis),
             };
-            let bitangent = axis.cross(tangent);
             for segment in 0..=64 {
                 let angle = segment as f32 * std::f32::consts::TAU / 64.0;
                 let direction = screen_direction(tangent * angle.cos() + bitangent * angle.sin());
@@ -450,12 +457,11 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
                 scale_center[0] - r,
                 scale_center[1] + r,
             );
-            let tangent = if axis == glam::Vec3::X {
-                glam::Vec3::Y
-            } else {
-                glam::Vec3::X
+            let (tangent, bitangent) = match axis_idx {
+                0 => (frame.y_axis, frame.z_axis),
+                1 => (frame.z_axis, frame.x_axis),
+                _ => (frame.x_axis, frame.y_axis),
             };
-            let bitangent = axis.cross(tangent);
             for segment in 0..=64 {
                 let angle = segment as f32 * std::f32::consts::TAU / 64.0;
                 let ring_direction =
@@ -505,9 +511,9 @@ pub(crate) fn compute_gizmo(state: &AppState, width: f32, height: f32) -> GizmoM
 
     // Quadrantes dos planos (Plane Handles) para Move e Scale
     if matches!(state.session.tools.active_tool.as_str(), "move" | "scale") {
-        let dir_x = screen_direction(glam::Vec3::X);
-        let dir_y = screen_direction(glam::Vec3::Y);
-        let dir_z = screen_direction(glam::Vec3::Z);
+        let dir_x = screen_direction(frame.x_axis);
+        let dir_y = screen_direction(frame.y_axis);
+        let dir_z = screen_direction(frame.z_axis);
 
         // Plane 0: YZ (normal X)
         let p1 = [

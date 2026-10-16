@@ -193,11 +193,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let start = glam::Vec2::from_array(drag.start);
         let current = glam::Vec2::from_array(drag.virtual_pointer);
         let delta = current - start;
-        let axis = |index| match index {
-            0 => glam::Vec3::X,
-            1 => glam::Vec3::Y,
-            _ => glam::Vec3::Z,
-        };
+        let axis = |index| modal.frame.axis(index);
         use petunia_core::{ModalConstraint, transform_projection as projection};
         let result = match drag.kind {
             TransformKind::Position => {

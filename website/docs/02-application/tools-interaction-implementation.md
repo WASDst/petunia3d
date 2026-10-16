@@ -124,7 +124,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H20 | P2         | Cursor3D e navegação independentes              | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Modo explícito de navegação; pan e enquadramento não movem cursor; cópia única para centro ou pivô.                                                                                                                                                                                                                       |
 | H21 | P2         | DRAW como preset de POLY                        | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.                                                                                                                                                                                                              |
 | H22 | P2         | Seleção contextual e alvos heterogêneos         | DONE                    | SEL-002/006; filtros, resolução e Undo verificados.           | SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.                                                                                                                                                                                                                     |
-| H23 | P2         | Gizmo universal, orientação e snap              | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
+| H23 | P2         | Gizmo universal, orientação e snap              | DONE                    | SEL-001/003/005/007; frame congelado e orientações ok.       | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
 | H24 | P2         | ShapeBuilder planar com operandos explícitos    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
 | H25 | P2         | ShapeBuilder sólido de dois operandos           | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
 | H26 | P2         | Composição reeditável e múltiplos sólidos       | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
@@ -223,3 +223,61 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 **Verification:** 700 testes pass em 16 suítes com `petunia_editor/animation-workspace`, incluindo dez regressões Core e duas de adapter; fmt e Clippy all-targets `-D warnings` pass. Três imagens Software3dViewport inspecionadas: reedição altera 18.721 pixels e coincide com referência local + TRS (0 pixels de diferença). Relatório, comandos e hashes: `evidence/primitive-frame-2026-10-15/README.md`. O checkpoint complementar mantém H19 **IN PROGRESS**, sem descartar as evidências estáticas anteriores.
 
 **Risks / Next checkpoint:** compensação autoral para rebase paramétrico/skin, orientação da origem e migração do legado ainda pendentes; alvos de perfil/mistos H22/H23 e aceite nativo H33 continuam separados. Imagens CPU não estabelecem aceite Qt/GPU físico, Windows, DPI ou leitor de tela.
+
+
+## Continuação H22 — Seleção contextual e alvos heterogêneos (SEL-002, SEL-006) (2026-10-15)
+
+**Intent / Sources:** Implementar seleção contextual e alvos heterogêneos (`SelectionRef`, `SelectionFilters`, `ActiveElement`, `SelectionResolver`) no Core e Editor, com resolução sem duplicidade de vértices compartilhados, dominância de objetos sobre subcomponentes, filtragem de raízes em árvores hierárquicas com proteção contra ciclos, exclusão de alvos bloqueados (`locked_targets`) e picking contextual com prioridade tipada.
+
+**Gap / Changed:**
+- `crates/core/src/selection.rs`: tipos canônicos `SelectionRef` (`Object`, `Vertex`, `Edge`, `Face`, `Shape`), `SelectionFilters`, `ActiveElement` com tempo/ordem de seleção, e `SelectionResolver` executando deduplicação e dominância em O(n).
+- `crates/editor/src/bridge/picking.rs`: picking contextual resolvendo subcomponentes por prioridade tipada (Vertex -> Edge -> Face -> Object) quando filtros estão ativos.
+- `crates/core/src/state.rs`: `sync_selection` bidirecional reconciliando itens contextuais, malha ativa e limpando referências obsoletas em Undo/Redo.
+
+**Verification:**
+- `crates/core/tests/contextual_selection.rs`: 10 passed; 0 failed.
+- `crates/editor/tests/contextual_interactions.rs`: 9 passed; 0 failed.
+- `crates/core/src/selection.rs`: 8 unitários passed; 0 failed.
+- Clippy e fmt pass.
+
+
+## Continuação H23 — Gizmo universal, orientação e snap (SEL-001, SEL-003, SEL-005, SEL-007) (2026-10-15)
+
+**Intent / Sources:** Implementar gizmo de transformação universal com separação estrita entre centro de transformação (pivô) e frame de orientação, orientações Global, Local, View, Custom, Normal e Auto, congelamento do frame de orientação durante gestos modais (`ModalOp`), restrições axiais/planares projetadas no frame sem distorção e snap contextual.
+
+**Gap / Changed:**
+- `crates/core/src/state.rs`:
+  - `TransformFrame`: struct ortonormal (`x_axis`, `y_axis`, `z_axis`) com construtores `global()`, `from_rotation()`, `from_z_axis()`, `from_edge()`, `from_view()`, e métodos `axis(index)` e `plane_normal(index)`.
+  - `TransformOrientation`: enum estendido com `Normal`, `View`, `Auto`, `Custom`.
+  - `EditorView::calculate_transform_frame`: resolução das orientações canônicas. `Auto` resolve a partir do `ActiveElement` (Face normal, Edge tangente, Vertex normal, Object rotação) ou seleção ativa da malha, com fallback limpo.
+  - Sincronização de `custom_transform_frame` entre `EditorSession` e `ViewportSession`.
+  - Fallback seguro de `PivotPoint::Cursor3D` para `cursor_3d` quando `transform_center` não estiver inicializado.
+- `crates/core/src/modal.rs`:
+  - `ModalOp` armazena `frame: TransformFrame` congelado em `begin_modal`, evitando descontinuidades de eixos durante rotação de câmera ou troca de orientação no meio do gesto.
+  - Projeções de constraints axiais (`ModalConstraint::Axis(i)`) e planares (`ModalConstraint::Plane(i)`) calculadas com `modal.frame.axis(i)` e produto escalar.
+  - Escala restrita ao longo de eixos e planos arbitrários sem cisalhamento.
+- `crates/editor/src/projection.rs`:
+  - `compute_gizmo` projeta hastes, anéis de rotação e planos alinhados ao `frame` ativo ou congelado.
+- `crates/editor/src/bridge/transform.rs`:
+  - Arrasto de gizmo e constraints usam `modal.frame.axis(index)`.
+- `crates/core/src/command.rs`, `material_commands.rs`, `editor/bridge`:
+  - `SetAssetTransformCmd` (`model.set_transform` / `asset.set_transform`) e `SetMaterialPropertiesCmd` (`material.set_properties`) transacionais com checagem de floats finitos, Undo/Redo e integração `UiIntent`.
+- `crates/core/tests/universal_gizmo.rs`:
+  - 5 testes de integração dedicados cobrindo construtores de frame, independência pivô/orientação, frame customizado, resolução Auto e congelamento durante gestos modais.
+
+**Verification:**
+- `crates/core/tests/universal_gizmo.rs`: 5 passed; 0 failed.
+- `crates/core --lib`: 186 passed; 0 failed.
+- `crates/editor --features animation-workspace --lib`: 126 passed; 0 failed.
+- `crates/core --test contextual_selection`: 10 passed; 0 failed.
+- `crates/editor --test contextual_interactions`: 9 passed; 0 failed.
+- `crates/core --test command_tests`: 60 passed; 0 failed.
+- `crates/project --lib`: 244 passed; 0 failed.
+- `cargo fmt -p petunia_core -p petunia_editor -- --check`: passed.
+- `cargo clippy -p petunia_core -p petunia_editor --all-targets -- -D warnings`: passed.
+- Scripts de validação de progresso e documentação: passed.
+
+**Risks / Next checkpoint:**
+- Projeção de gizmo verificada matematicamente e headless; apresentação nativa na viewport Qt permanece sob Task H33.
+- Próximos checkpoints: H20 (Cursor3D e desacoplamento de navegação), H21 (DRAW como preset de POLY) e H24 (ShapeBuilder planar).
+

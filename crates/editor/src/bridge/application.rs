@@ -377,6 +377,25 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             } => {
                 self.scrub_transform(kind, axis, delta, fine);
             }
+            UiIntent::SetAssetTransform {
+                asset_index,
+                translation,
+                rotation_euler_deg,
+                scale,
+            } => {
+                let cmd = petunia_core::SetAssetTransformCmd {
+                    asset_index,
+                    translation,
+                    rotation_euler_deg,
+                    scale,
+                };
+                if let Err(error) = self.state.dispatch(&cmd) {
+                    self.state.set_status(error.to_string());
+                } else {
+                    self.reset_transform_fields();
+                    self.state.mark_dirty();
+                }
+            }
             UiIntent::ViewportSelection(intent) => self.apply_viewport_selection(intent),
             UiIntent::ViewportGesture(gesture) => {
                 self.apply_viewport_gesture(gesture);

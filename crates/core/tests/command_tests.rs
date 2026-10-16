@@ -2658,3 +2658,190 @@ fn test_reference_pixels_stay_shared_without_copying_for_snapshots() {
     assert_eq!(frozen.rgba[0], pixels[0]);
     assert_eq!(mirror.rgba[0], pixels[0]);
 }
+
+#[test]
+fn test_canonical_material_commands_registration() {
+    let dispatcher = CommandDispatcher::canonical();
+    for id in [
+        "material.create",
+        "material.duplicate",
+        "material.remove",
+        "material.edit",
+        "material.set_properties",
+        "material.assign_slot",
+        "model.create_material",
+        "model.duplicate_material",
+        "model.remove_material",
+        "model.set_material_properties",
+        "model.assign_material",
+        "model.assign_material_slot",
+    ] {
+        assert!(
+            dispatcher.contains(id),
+            "Command {id} must be registered in canonical dispatcher"
+        );
+        let meta = dispatcher.get_metadata(id).expect("metadata present");
+        assert_eq!(
+            meta.docs_topic,
+            Some(petunia_core::docs::DocsTopic::Materials)
+        );
+    }
+}
+
+#[test]
+fn test_canonical_object_metadata_and_modifier_commands_registration() {
+    let dispatcher = CommandDispatcher::canonical();
+    for (id, expected_topic) in [
+        (
+            "model.set_selection_color",
+            petunia_core::docs::DocsTopic::Interface,
+        ),
+        (
+            "object.set_selection_color",
+            petunia_core::docs::DocsTopic::Interface,
+        ),
+        ("modifier.apply", petunia_core::docs::DocsTopic::Modeling),
+        (
+            "model.apply_modifier",
+            petunia_core::docs::DocsTopic::Modeling,
+        ),
+    ] {
+        assert!(
+            dispatcher.contains(id),
+            "Command {id} must be registered in canonical dispatcher"
+        );
+        let meta = dispatcher.get_metadata(id).expect("metadata present");
+        assert_eq!(meta.docs_topic, Some(expected_topic));
+    }
+}
+
+#[test]
+fn test_material_crud_and_atomic_properties_with_undo_redo() {
+    use petunia_core::command::Command;
+    use petunia_core::{
+        AssignMaterialSlotCmd, CreateMaterialCmd, DuplicateMaterialCmd, RemoveMaterialCmd,
+        SetMaterialPropertiesCmd,
+    };
+    use petunia_project::ShaderProfile;
+
+    let mut state = AppState::new("en");
+    assert_eq!(state.project.project.materials.len(), 1);
+    let original_mat_id = state.project.project.materials[0].id;
+
+    // 1. CreateMaterialCmd
+    let create_cmd = CreateMaterialCmd {
+        name: "Gold".to_string(),
+    };
+    state.dispatch(&create_cmd).expect("create material");
+    assert_eq!(state.project.project.materials.len(), 2);
+    let gold_mat_id = state.project.project.materials[1].id;
+    assert_eq!(state.project.project.materials[1].name, "Gold");
+
+    // 2. SetMaterialPropertiesCmd atômico
+    let props_cmd = SetMaterialPropertiesCmd {
+        material: gold_mat_id,
+        roughness: Some(0.2),
+        metallic: Some(0.95),
+        emission_strength: Some(1.5),
+        profile: Some(ShaderProfile::Pbr),
+        ..Default::default()
+    };
+    state.dispatch(&props_cmd).expect("set material properties");
+    {
+        let gold = &state.project.project.materials[1];
+        assert_eq!(gold.roughness, 0.2);
+        assert_eq!(gold.metallic, 0.95);
+        assert_eq!(gold.emission_strength, 1.5);
+        assert_eq!(gold.profile, ShaderProfile::Pbr);
+    }
+
+    // 3. Teste NoChange quando nenhum valor muda
+    let res_no_change = state.dispatch(&props_cmd);
+    assert!(
+        matches!(res_no_change, Err(CommandError::NoChange(_))),
+        "Must return NoChange when values are identical"
+    );
+
+    // 4. Teste can_execute rejeita NaN / Inf
+    let bad_cmd = SetMaterialPropertiesCmd {
+        material: gold_mat_id,
+        roughness: Some(f32::NAN),
+        ..Default::default()
+    };
+    assert!(
+        bad_cmd.can_execute(&state.view()).is_err(),
+        "Must reject NaN values"
+    );
+
+    // 5. DuplicateMaterialCmd
+    let dup_cmd = DuplicateMaterialCmd {
+        material: gold_mat_id,
+    };
+    state.dispatch(&dup_cmd).expect("duplicate material");
+    assert_eq!(state.project.project.materials.len(), 3);
+    assert_eq!(state.project.project.materials[2].name, "Gold Copy");
+    assert_eq!(state.project.project.materials[2].metallic, 0.95);
+
+    // 6. Undo do Duplicate
+    assert!(state.undo(), "undo duplicate must succeed");
+    assert_eq!(state.project.project.materials.len(), 2);
+
+    // 7. Undo do SetMaterialProperties
+    assert!(state.undo(), "undo set properties must succeed");
+    {
+        let gold = &state.project.project.materials[1];
+        assert_ne!(gold.metallic, 0.95);
+    }
+
+    // 8. Redo do SetMaterialProperties
+    assert!(state.redo(), "redo set properties must succeed");
+    {
+        let gold = &state.project.project.materials[1];
+        assert_eq!(gold.metallic, 0.95);
+        assert_eq!(gold.roughness, 0.2);
+    }
+
+    // 9. AssignMaterialSlotCmd
+    let assign_cmd = AssignMaterialSlotCmd {
+        material_index: 1,
+        faces: None,
+    };
+    state.dispatch(&assign_cmd).expect("assign material slot");
+    assert_eq!(
+        state
+            .project
+            .assets
+            .get(state.project.active)
+            .and_then(|a| a.material_id),
+        Some(gold_mat_id)
+    );
+
+    // 10. Undo do AssignMaterialSlotCmd
+    assert!(state.undo(), "undo assign material slot must succeed");
+    assert_eq!(
+        state
+            .project
+            .assets
+            .get(state.project.active)
+            .and_then(|a| a.material_id),
+        Some(original_mat_id)
+    );
+
+    // 11. RemoveMaterialCmd
+    state
+        .dispatch(&RemoveMaterialCmd {
+            material: gold_mat_id,
+        })
+        .expect("remove material");
+    assert_eq!(state.project.project.materials.len(), 1);
+
+    // Não pode remover o último material
+    assert!(
+        state
+            .dispatch(&RemoveMaterialCmd {
+                material: original_mat_id,
+            })
+            .is_err(),
+        "Cannot remove last material"
+    );
+}

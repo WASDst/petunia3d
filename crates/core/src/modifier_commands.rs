@@ -62,9 +62,19 @@ pub enum ModifierOp {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModifierCmd {
     pub op: ModifierOp,
+}
+
+impl Default for ModifierCmd {
+    fn default() -> Self {
+        Self {
+            op: ModifierOp::Remove {
+                modifier: Uuid::nil(),
+            },
+        }
+    }
 }
 
 impl ModifierCmd {

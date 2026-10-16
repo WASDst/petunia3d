@@ -89,6 +89,7 @@ pub struct ModalOp {
     id: u64,
     pub kind: ModalKind,
     pub constraint: ModalConstraint,
+    pub frame: crate::TransformFrame,
     pub pivot: Vec3,
     pub normal: Vec3,
     /// Distance (Extrude/Push/Inset/Bevel, meters), degrees, or scale factor.
@@ -262,14 +263,6 @@ fn same_geometry(a: &Mesh, b: &Mesh) -> bool {
             .all(|(a, b)| a.verts == b.verts && a.uv == b.uv)
 }
 
-fn axis(index: usize) -> Vec3 {
-    match index {
-        0 => Vec3::X,
-        1 => Vec3::Y,
-        _ => Vec3::Z,
-    }
-}
-
 /// Connected selected elements share an individual pivot. Loose selected points
 /// retain their own position; an object uses its complete geometric center.
 fn individual_pivots(mesh: &Mesh, object: bool) -> Vec<Vec3> {
@@ -325,18 +318,21 @@ fn frame_components(
         ModalKind::Move => match modal.constraint {
             ModalConstraint::Free => translation,
             ModalConstraint::Axis(i) => {
-                axis(i)
-                    * if snap.is_some() {
-                        translation.dot(axis(i))
-                    } else {
-                        value
-                    }
+                let a = modal.frame.axis(i);
+                a * if snap.is_some() {
+                    translation.dot(a)
+                } else {
+                    value
+                }
             }
-            ModalConstraint::Plane(i) => translation - axis(i) * translation.dot(axis(i)),
+            ModalConstraint::Plane(i) => {
+                let a = modal.frame.axis(i);
+                translation - a * translation.dot(a)
+            }
         },
         ModalKind::Rotate => {
             let normal = match modal.constraint {
-                ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => axis(i),
+                ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => modal.frame.axis(i),
                 ModalConstraint::Free => modal.normal,
             };
             let (x, y, z) =
@@ -345,8 +341,8 @@ fn frame_components(
         }
         ModalKind::Scale => match modal.constraint {
             ModalConstraint::Free => Vec3::splat(value),
-            ModalConstraint::Axis(i) => Vec3::ONE + axis(i) * (value - 1.0),
-            ModalConstraint::Plane(i) => Vec3::splat(value) + axis(i) * (1.0 - value),
+            ModalConstraint::Axis(i) => Vec3::ONE + modal.frame.axis(i) * (value - 1.0),
+            ModalConstraint::Plane(i) => Vec3::splat(value) + modal.frame.axis(i) * (1.0 - value),
         },
         _ => Vec3::ZERO,
     })
@@ -417,9 +413,10 @@ impl AppState {
     /// Direção de Extrude/Push conforme a restrição ativa.
     fn modal_direction(modal: &ModalOp) -> Vec3 {
         match modal.constraint {
-            ModalConstraint::Axis(i) => axis(i),
+            ModalConstraint::Axis(i) => modal.frame.axis(i),
             ModalConstraint::Plane(i) => {
-                (modal.normal - axis(i) * modal.normal[i]).normalize_or_zero()
+                let a = modal.frame.axis(i);
+                (modal.normal - a * modal.normal.dot(a)).normalize_or_zero()
             }
             ModalConstraint::Free => modal.normal,
         }
@@ -585,6 +582,7 @@ impl CommandContext<'_> {
         if !pivot.is_finite() {
             return Err(ModalError::InvalidInput);
         }
+        let frame = self.calculate_transform_frame(self.editor.transform_orientation);
         let individual_origins =
             transform && self.editor.pivot_point == crate::PivotPoint::IndividualOrigins;
         // Centroides locais → mundo (mapas afins preservam centroides).
@@ -598,6 +596,7 @@ impl CommandContext<'_> {
             id: NEXT_MODAL_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             preview: PreviewCache::default(),
             kind,
+            frame,
             pivots,
             individual_origins,
             object_mode: self.edit_mode() == EditMode::Object,
@@ -763,13 +762,17 @@ impl CommandContext<'_> {
                             let delta = match modal.constraint {
                                 ModalConstraint::Free => translation,
                                 ModalConstraint::Axis(i) => {
+                                    let a = modal.frame.axis(i);
                                     if snap.is_some() {
-                                        axis(i) * translation[i]
+                                        a * translation.dot(a)
                                     } else {
-                                        axis(i) * value
+                                        a * value
                                     }
                                 }
-                                ModalConstraint::Plane(i) => translation - axis(i) * translation[i],
+                                ModalConstraint::Plane(i) => {
+                                    let a = modal.frame.axis(i);
+                                    translation - a * translation.dot(a)
+                                }
                             };
                             (delta, Box::new(move |_, p| p + delta))
                         }
@@ -779,7 +782,9 @@ impl CommandContext<'_> {
                         }
                         ModalKind::Rotate => {
                             let normal = match modal.constraint {
-                                ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => axis(i),
+                                ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => {
+                                    modal.frame.axis(i)
+                                }
                                 ModalConstraint::Free => modal.normal,
                             };
                             let rotation = Quat::from_axis_angle(normal, value.to_radians());
@@ -793,18 +798,37 @@ impl CommandContext<'_> {
                             )
                         }
                         _ => {
-                            let factors = match modal.constraint {
+                            let frame = modal.frame;
+                            let constraint = modal.constraint;
+                            let factors = match constraint {
                                 ModalConstraint::Free => Vec3::splat(value),
-                                ModalConstraint::Axis(i) => Vec3::ONE + axis(i) * (value - 1.0),
+                                ModalConstraint::Axis(i) => {
+                                    Vec3::ONE + frame.axis(i) * (value - 1.0)
+                                }
                                 ModalConstraint::Plane(i) => {
-                                    Vec3::splat(value) + axis(i) * (1.0 - value)
+                                    Vec3::splat(value) + frame.axis(i) * (1.0 - value)
                                 }
                             };
                             (
                                 factors,
                                 Box::new(move |i, p| {
                                     let pivot = pivot_of(i);
-                                    pivot + (p - pivot) * factors
+                                    let v = p - pivot;
+                                    match constraint {
+                                        ModalConstraint::Free => pivot + v * value,
+                                        ModalConstraint::Axis(ax) => {
+                                            let a = frame.axis(ax);
+                                            let v_parallel = a * v.dot(a);
+                                            let v_perp = v - v_parallel;
+                                            pivot + v_perp + v_parallel * value
+                                        }
+                                        ModalConstraint::Plane(pl) => {
+                                            let a = frame.axis(pl);
+                                            let v_parallel = a * v.dot(a);
+                                            let v_perp = v - v_parallel;
+                                            pivot + v_parallel + v_perp * value
+                                        }
+                                    }
                                 }),
                             )
                         }
@@ -1040,9 +1064,10 @@ impl CommandContext<'_> {
         }
         let mut components = Vec3::ZERO;
         let direction = match modal.constraint {
-            ModalConstraint::Axis(i) => axis(i),
+            ModalConstraint::Axis(i) => modal.frame.axis(i),
             ModalConstraint::Plane(i) => {
-                (modal.normal - axis(i) * modal.normal[i]).normalize_or_zero()
+                let a = modal.frame.axis(i);
+                (modal.normal - a * modal.normal.dot(a)).normalize_or_zero()
             }
             ModalConstraint::Free => modal.normal,
         };
@@ -1058,13 +1083,17 @@ impl CommandContext<'_> {
                     // A translação só vence o valor quando houve um encaixe
                     // de fato (snap ligado sem alvo usa o valor projetado).
                     ModalConstraint::Axis(i) => {
+                        let a = modal.frame.axis(i);
                         if snap.is_some() {
-                            axis(i) * translation[i]
+                            a * translation.dot(a)
                         } else {
-                            axis(i) * value
+                            a * value
                         }
                     }
-                    ModalConstraint::Plane(i) => translation - axis(i) * translation[i],
+                    ModalConstraint::Plane(i) => {
+                        let a = modal.frame.axis(i);
+                        translation - a * translation.dot(a)
+                    }
                 };
                 components = delta;
                 if use_proportional {
@@ -1089,7 +1118,7 @@ impl CommandContext<'_> {
             }
             ModalKind::Rotate => {
                 let normal = match modal.constraint {
-                    ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => axis(i),
+                    ModalConstraint::Axis(i) | ModalConstraint::Plane(i) => modal.frame.axis(i),
                     ModalConstraint::Free => modal.normal,
                 };
                 let rotation = Quat::from_axis_angle(normal, value.to_radians());
@@ -1117,10 +1146,12 @@ impl CommandContext<'_> {
                 }
             }
             ModalKind::Scale => {
-                let factors = match modal.constraint {
+                let frame = modal.frame;
+                let constraint = modal.constraint;
+                let factors = match constraint {
                     ModalConstraint::Free => Vec3::splat(value),
-                    ModalConstraint::Axis(i) => Vec3::ONE + axis(i) * (value - 1.0),
-                    ModalConstraint::Plane(i) => Vec3::splat(value) + axis(i) * (1.0 - value),
+                    ModalConstraint::Axis(i) => Vec3::ONE + frame.axis(i) * (value - 1.0),
+                    ModalConstraint::Plane(i) => Vec3::splat(value) + frame.axis(i) * (1.0 - value),
                 };
                 components = factors;
                 for (index, vertex) in mesh.verts.iter_mut().enumerate() {
@@ -1128,8 +1159,24 @@ impl CommandContext<'_> {
                         .pivots
                         .as_ref()
                         .map_or(modal.pivot, |pivots| pivots[index]);
+                    let v = vertex.vec() - pivot;
+                    let target = match constraint {
+                        ModalConstraint::Free => pivot + v * value,
+                        ModalConstraint::Axis(ax) => {
+                            let a = frame.axis(ax);
+                            let v_parallel = a * v.dot(a);
+                            let v_perp = v - v_parallel;
+                            pivot + v_perp + v_parallel * value
+                        }
+                        ModalConstraint::Plane(pl) => {
+                            let a = frame.axis(pl);
+                            let v_parallel = a * v.dot(a);
+                            let v_perp = v - v_parallel;
+                            pivot + v_parallel + v_perp * value
+                        }
+                    };
                     if vertex.selected {
-                        vertex.pos = (pivot + (vertex.vec() - pivot) * factors).to_array();
+                        vertex.pos = target.to_array();
                     } else if use_proportional {
                         let dist = (vertex.vec() - modal.pivot).length();
                         let weight = crate::proportional::calculate_falloff_weight(
@@ -1138,8 +1185,7 @@ impl CommandContext<'_> {
                             self.editor.proportional_settings.falloff,
                         );
                         if weight > 0.0 {
-                            let scaled = pivot + (vertex.vec() - pivot) * factors;
-                            vertex.pos = vertex.vec().lerp(scaled, weight).to_array();
+                            vertex.pos = vertex.vec().lerp(target, weight).to_array();
                         }
                     }
                 }
