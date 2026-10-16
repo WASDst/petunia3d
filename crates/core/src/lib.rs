@@ -41,6 +41,13 @@ pub mod region_push;
 pub mod render_revision;
 pub mod rig_commands;
 pub mod schema_contracts;
+pub mod section_analysis;
+pub use section_analysis::{
+    ClearSectionPlaneCmd, FlipSectionPlaneCmd, LoopKind, OffsetSectionPlaneCmd, OrganicCenterline,
+    ProfileStation, SectionAnchor, SectionContour, SectionInspector, SectionPlane, SectionResult,
+    SetSectionPlaneCmd, StationBranch, SyntheticCap, ThicknessProbeQuery, ThicknessProbeResult,
+    WallType,
+};
 pub mod selection;
 pub mod shape_builder;
 pub mod snap;

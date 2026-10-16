@@ -131,7 +131,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H27 | P2         | Construção sobre superfícies                    | DONE                    | Plano de face, imprint e Push/Pull verificados.               | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
 | H28 | P2         | Feedback comum de operações                     | DONE                    | Preview fonte fixa, ghost, limites MF-001–008 e guards ok.    | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
 | H29 | P2         | Dimensões e comparação espacial                 | DONE                    | Frames, representação e consultas espaciais VSP-003/004.       | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
-| H30 | P2         | Section, Thickness e Organic Profiles           | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
+| H30 | P2         | Section, Thickness e Organic Profiles           | DONE                    | VSP-005: Section, Thickness e Organic Profiles concluídos.     | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
 | H31 | P2         | Smart Rig manual e assistido                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
 | H32 | P2         | Smart Rig estrutural e Live opcional            | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.                                                                                                                                                                                                   |
 | H33 | P2         | Integração visual e acessibilidade posterior    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.                                                                                                                                                                                                                    |
@@ -547,4 +547,46 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 **Risks / Next checkpoint:**
 - Degenerescência de autovalores em geometrias isotrópicas: mitigada pelo fallback automático do frame `Structural` para o frame `ObjectLocal`.
 - Checkpoint concluído: H29. Próximo checkpoint: H30 (Section, Thickness e Organic Profiles: VSP-005 — seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais).
+
+---
+
+### Entrega H30 — Section, Thickness e Organic Profiles (VSP-005) (2026-10-16)
+
+**Intent:**
+- Implementar o subsistema analítico de corte geométrico, sonda de espessura de parede e perfis orgânicos (VSP-005):
+  1. `Section Inspector`: corte analítico não-destrutivo estritamente desacoplado de GPU clipping (shader discard) e Geometry Split (mutação topológica). Suporta classificação exata de loops abertos (`LoopKind::Open`), fechados (`LoopKind::Closed`), cálculo de área planar (Shoelace/Gauss) e detecção de furos coplanares aninhados (`is_hole = true`) via teste ponto-em-polígono (Ray casting).
+  2. `Synthetic Caps`: geração opcional de malha de preenchimento (`SyntheticCap`) para visualização na viewport com invariante estrito `is_selectable = false` (nunca tratadas como faces autorais da malha por picking ou ferramentas de edição).
+  3. `Section Plane Control`: plano de corte analítico (`SectionPlane`) com ancoragem canônica no Mundo ou Objeto (`SectionAnchor`), edição numérica de passagem, offset paramétrico e inversão de normal (`flip`). Comandos dedicados registrados no despachante: `model.set_section_plane`, `model.clear_section_plane`, `model.flip_section_plane` e `model.offset_section_plane`.
+  4. `Thickness Probe`: sonda analítica direcional de espessura de parede (`ThicknessProbeQuery`, `ThicknessProbeResult`) via traçado de raios Möller-Trumbore em triângulos locais, com classificação explícita de grandeza de parede (`WallType::ParallelWall`, `ObliqueWall`, `NoOpposingWall`) e qualidade de medição (`MeasurementQuality::Exact`, `Approximate`, `Unavailable`).
+  5. `Organic Profiles`: estações ao longo de linhas de centro (`OrganicCenterline`, `ProfileStation`) usando Parallel Transport Frame (Bishop Frame / Rotation Minimizing Frame - RMF) via rotação de Rodrigues para garantir matematicamente **zero flips e sem inversão de normais** ao longo de curvas 3D arbitrárias e através de pontos de inflexão ($\kappa = 0$). Suporte a bifurcações (`StationBranch`) como segmentos independentes que herdam suavemente a base de orientação da estação tronco mãe sem inferência anatômica mágica.
+
+**Sources:**
+- `crates/core/src/section_analysis.rs`
+- `crates/core/src/lib.rs`
+- `crates/core/src/command.rs`
+- `crates/core/src/context_api.rs`
+- `crates/core/src/state.rs`
+- `crates/core/tests/section_analysis_tests.rs`
+
+**Gap:**
+- O Petunia3D carecia de uma ferramenta analítica de seção transversal geométrica independente do pipeline de renderização, cálculo de espessura de parede de malha com detecção de paralelismo e estações de perfis orgânicos com garantia matemática de estabilidade de eixos sem inversão de normais de Frenet-Serret.
+
+**Changed:**
+- Criado o módulo `section_analysis.rs` em `crates/core/src/` com todos os tipos (`SectionAnchor`, `SectionPlane`, `LoopKind`, `SectionContour`, `SyntheticCap`, `SectionResult`, `WallType`, `ThicknessProbeQuery`, `ThicknessProbeResult`, `ProfileStation`, `StationBranch`, `OrganicCenterline`), comandos e inspetor `SectionInspector`.
+- Registrado `pub mod section_analysis;` e exportados os tipos e comandos em `crates/core/src/lib.rs`.
+- Adicionado campo `active_section: Option<SectionPlane>` em `EditorSession` e métodos de consulta (`query_section`, `probe_thickness`) em `EditorView` (`crates/core/src/state.rs`).
+- Adicionados métodos de consulta e controle em `AppState` e `CommandContext` (`crates/core/src/context_api.rs`).
+- Registrados comandos `model.set_section_plane`, `model.clear_section_plane`, `model.flip_section_plane`, `model.offset_section_plane` (e aliases `view.*`) em `crates/core/src/command.rs`.
+- Desenvolvida suíte unitária completa `crates/core/tests/section_analysis_tests.rs` com 9 testes cobrindo todos os requisitos VSP-005.
+
+**Verification:**
+- `crates/core/tests/section_analysis_tests.rs`: 9 passed, 0 failed (0.03s).
+- `crates/core/tests/spatial_query_tests.rs`: 10 passed, 0 failed (0.02s).
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Degenerescência de malhas abertas ou raios divergentes: tratada com retorno gracioso de `WallType::NoOpposingWall` e qualidade `MeasurementQuality::Unavailable` sem pânicos.
+- Checkpoint concluído: H30. Próximo checkpoint: H31 (Smart Rig manual e assistido: RIG-001/002/004/008/009/010/011 — edição manual, preview revisável, bind transacional e pose explícita).
+
 

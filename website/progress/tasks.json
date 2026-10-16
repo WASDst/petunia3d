@@ -430,6 +430,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/spatial_query.rs, crates/core/src/lib.rs, crates/core/src/command.rs, crates/core/src/context_api.rs, crates/core/src/state.rs, crates/core/src/modal.rs, crates/core/tests/spatial_query_tests.rs, crates/core/tests/command_tests.rs, crates/editor/tests/contextual_interactions.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H29: Dimensões e comparação espacial (VSP-003/004). VolumeFrame com frames World, ObjectLocal, Custom (Gram-Schmidt), Structural (PCA/eixos principais de inércia via Jacobi 3x3 com fallback para ObjectLocal em geometrias isotrópicas) e View (câmera). Representações Evaluated (padrão) e Source diferenciadas. Qualidade de medição (Exact, Approximate, Unavailable, Stale). Formatação dimensional sem inventar unidades (cm/m) em cenas genéricas. Separação estrita entre consulta, escala dimensional (ScaleToDimensionCmd com guarda comprovada contra divisão por zero e Undo atômico) e edição de parâmetros. Seis consultas espaciais distintas (distância euclidiana, delta em eixo, profundidade de câmera, clearance com par de pontos mais próximos, contato sob tolerância e interseção volumétrica SAT 15 eixos). Companion View ortográfica desacoplada com câmera independente, sem roubo de foco nem alteração da câmera principal. Ortogonalidade estrita X-Ray vs Select Through (X-Ray visual nunca altera Select Through). 7 testes em spatial_query_tests.rs, 1 em command_tests.rs, 1 em contextual_interactions.rs passando 100% com zero warnings no clippy."
+    },
+    "section-thickness-profiles-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/section_analysis.rs, crates/core/src/lib.rs, crates/core/src/command.rs, crates/core/src/context_api.rs, crates/core/src/state.rs, crates/core/tests/section_analysis_tests.rs, crates/core/tests/spatial_query_tests.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H30: Section, Thickness e Organic Profiles (VSP-005). Section Inspector analítico não-destrutivo desacoplado de GPU clipping e Geometry Split, suportando contornos abertos (LoopKind::Open), fechados (LoopKind::Closed) com perímetro e área 2D (Shoelace), detecção de furos coplanares aninhados (is_hole) e geração de caps sintéticas não-selecionáveis para visualização (is_selectable = false). Controles de Section Plane ancorado ao Mundo ou Objeto, com offset paramétrico e inversão de normal (flip), expostos via comandos model.set_section_plane, clear, flip e offset. Thickness Probe direcional via traçado de raios Möller-Trumbore em triângulos locais com classificação de paralelismo de parede (WallType::ParallelWall, ObliqueWall, NoOpposingWall) e qualidade explícita (MeasurementQuality::Exact, Approximate, Unavailable). Organic Profiles ao longo de linhas de centro com estações orientadas via Parallel Transport Frame (Bishop Frame / RMF com rotação de Rodrigues) garantindo matematicamente zero flips e sem inversão de normais, com suporte a bifurcações como segmentos independentes. 9 testes em section_analysis_tests.rs, 10 testes em spatial_query_tests.rs passando 100% com zero warnings no clippy e formatação limpa."
     }
   },
   "tasks": [
@@ -3730,19 +3735,19 @@
       "title": "Section, Thickness e Organic Profiles",
       "description": "VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Implementação do Section Inspector (VSP-005) com corte geométrico não-destrutivo analítico, loops abertos/fechados/furos, caps sintéticas não-selecionáveis, Thickness Probe direcional com classificação de paredes, e Organic Profiles com Parallel Transport Frame (Bishop Frame / RMF) com zero flips e suporte a bifurcações.",
       "checkpoints": [
         {
           "title": "VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "section-thickness-profiles-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "section-thickness-profiles-20261016"
         }
       ],
       "documents": [

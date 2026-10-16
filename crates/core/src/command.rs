@@ -1040,6 +1040,56 @@ impl CommandDispatcher {
 
         d.register_with_meta(
             CommandMetadata::new(
+                "model.set_section_plane",
+                "Set Section Plane",
+                "Set or update active non-destructive section inspection plane",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::SetSectionPlaneCmd::new(
+                crate::section_analysis::SectionPlane::default(),
+            ),
+        );
+        d.alias("view.set_section_plane", "model.set_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.clear_section_plane",
+                "Clear Section Plane",
+                "Clear active section inspection plane",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::ClearSectionPlaneCmd,
+        );
+        d.alias("view.clear_section_plane", "model.clear_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.flip_section_plane",
+                "Flip Section Plane",
+                "Invert active section inspection plane normal",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::FlipSectionPlaneCmd,
+        );
+        d.alias("view.flip_section_plane", "model.flip_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.offset_section_plane",
+                "Offset Section Plane",
+                "Adjust active section plane offset numerically",
+                CommandCategory::View,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::section_analysis::OffsetSectionPlaneCmd::new(0.0),
+        );
+        d.alias("view.offset_section_plane", "model.offset_section_plane");
+
+        d.register_with_meta(
+            CommandMetadata::new(
                 "draw.unite",
                 "Unite",
                 "Merge the closed shapes of the sketch plane into one",

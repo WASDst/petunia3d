@@ -1144,6 +1144,8 @@ pub struct EditorSession {
     pub decal_time: Option<f32>,
     /// Estado da Companion View secundária ortográfica desacoplada (VSP-004 / H29).
     pub companion_view: crate::spatial_query::CompanionViewState,
+    /// Estado da seção transversal ativa (VSP-005 / H30).
+    pub active_section: Option<crate::section_analysis::SectionPlane>,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -1215,6 +1217,7 @@ impl EditorSession {
             animate: crate::animate_session::AnimateSession::default(),
             decal_time: None,
             companion_view: crate::spatial_query::CompanionViewState::default(),
+            active_section: None,
         }
     }
 
@@ -5255,6 +5258,56 @@ impl<'a> EditorView<'a> {
         query: crate::spatial_query::SpatialQueryKind,
     ) -> Result<crate::spatial_query::SpatialQueryResult, crate::command::CommandError> {
         crate::spatial_query::SpatialQueryInspector::execute_query(&self.document.project, query)
+    }
+
+    /// Executa corte analítico não-destrutivo por plano (Section Inspector — VSP-005 / H30).
+    pub fn query_section(
+        self,
+        asset_id: uuid::Uuid,
+        plane: &crate::section_analysis::SectionPlane,
+    ) -> Result<crate::section_analysis::SectionResult, crate::command::CommandError> {
+        let asset = self
+            .document
+            .project
+            .assets
+            .iter()
+            .find(|a| a.id == asset_id)
+            .ok_or_else(|| {
+                crate::command::CommandError::Execution(format!("Asset {} not found", asset_id))
+            })?;
+        let mesh_cow = asset.evaluated_mesh_ref();
+        Ok(
+            crate::section_analysis::SectionInspector::intersect_mesh_plane(
+                asset_id,
+                mesh_cow.as_ref(),
+                Some(&asset.transform),
+                plane,
+            ),
+        )
+    }
+
+    /// Executa uma sonda direcional de espessura de parede (Thickness Probe — VSP-005 / H30).
+    pub fn probe_thickness(
+        self,
+        asset_id: uuid::Uuid,
+        query: &crate::section_analysis::ThicknessProbeQuery,
+    ) -> Result<crate::section_analysis::ThicknessProbeResult, crate::command::CommandError> {
+        let asset = self
+            .document
+            .project
+            .assets
+            .iter()
+            .find(|a| a.id == asset_id)
+            .ok_or_else(|| {
+                crate::command::CommandError::Execution(format!("Asset {} not found", asset_id))
+            })?;
+        let mesh_cow = asset.evaluated_mesh_ref();
+        Ok(crate::section_analysis::SectionInspector::probe_thickness(
+            asset_id,
+            mesh_cow.as_ref(),
+            Some(&asset.transform),
+            query,
+        ))
     }
 
     /// Descriptor canônico do pincel (iniciativa Paint — P3D-056/057).

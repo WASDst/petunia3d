@@ -1024,6 +1024,24 @@ impl AppState {
         self.view().query_spatial(query)
     }
 
+    #[inline]
+    pub fn query_section(
+        &self,
+        asset_id: uuid::Uuid,
+        plane: &crate::section_analysis::SectionPlane,
+    ) -> Result<crate::section_analysis::SectionResult, CommandError> {
+        self.view().query_section(asset_id, plane)
+    }
+
+    #[inline]
+    pub fn probe_thickness(
+        &self,
+        asset_id: uuid::Uuid,
+        query: &crate::section_analysis::ThicknessProbeQuery,
+    ) -> Result<crate::section_analysis::ThicknessProbeResult, CommandError> {
+        self.view().probe_thickness(asset_id, query)
+    }
+
     pub fn scale_to_dimension(
         &mut self,
         asset_id: uuid::Uuid,
@@ -1077,6 +1095,21 @@ impl AppState {
     pub fn set_select_through(&mut self, enabled: bool) {
         self.session.select_through = enabled;
         // Invariante VSP-004: select_through nunca altera show_xray!
+    }
+
+    #[inline]
+    pub fn active_section_plane(&self) -> Option<&crate::section_analysis::SectionPlane> {
+        self.session.active_section.as_ref()
+    }
+
+    #[inline]
+    pub fn set_active_section_plane(&mut self, plane: crate::section_analysis::SectionPlane) {
+        self.session.active_section = Some(plane);
+    }
+
+    #[inline]
+    pub fn clear_active_section_plane(&mut self) {
+        self.session.active_section = None;
     }
 }
 
@@ -1213,6 +1246,24 @@ impl CommandContext<'_> {
         query: crate::spatial_query::SpatialQueryKind,
     ) -> Result<crate::spatial_query::SpatialQueryResult, CommandError> {
         self.view().query_spatial(query)
+    }
+
+    #[inline]
+    pub fn query_section(
+        &self,
+        asset_id: uuid::Uuid,
+        plane: &crate::section_analysis::SectionPlane,
+    ) -> Result<crate::section_analysis::SectionResult, CommandError> {
+        self.view().query_section(asset_id, plane)
+    }
+
+    #[inline]
+    pub fn probe_thickness(
+        &self,
+        asset_id: uuid::Uuid,
+        query: &crate::section_analysis::ThicknessProbeQuery,
+    ) -> Result<crate::section_analysis::ThicknessProbeResult, CommandError> {
+        self.view().probe_thickness(asset_id, query)
     }
 
     pub fn scale_to_dimension(
@@ -1355,5 +1406,20 @@ impl CommandContext<'_> {
     pub fn set_select_through(&mut self, enabled: bool) {
         self.editor.select_through = enabled;
         // Invariante VSP-004: select_through nunca altera show_xray!
+    }
+
+    #[inline]
+    pub fn active_section_plane(&self) -> Option<&crate::section_analysis::SectionPlane> {
+        self.editor.active_section.as_ref()
+    }
+
+    #[inline]
+    pub fn set_active_section_plane(&mut self, plane: crate::section_analysis::SectionPlane) {
+        self.editor.active_section = Some(plane);
+    }
+
+    #[inline]
+    pub fn clear_active_section_plane(&mut self) {
+        self.editor.active_section = None;
     }
 }
