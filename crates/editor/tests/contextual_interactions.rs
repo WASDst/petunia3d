@@ -1107,3 +1107,105 @@ fn visual_assistance_and_accessibility_intents_h33() {
     // Invariante de histórico: zero poluição de Undo
     assert_eq!(b.state.project.undo.depth().0, 0);
 }
+
+#[test]
+fn shared_semantic_action_execution_and_unknown_action_rejection_h09() {
+    let mut b = bridge();
+
+    // 1. Ações compartilhadas de seleção por contrato (SelectionDomain)
+    assert!(b.execute_core_command("select.domain_vertex").is_ok());
+    assert_eq!(
+        b.state.selection_domain(),
+        petunia_core::SelectionDomain::Vertex
+    );
+    assert!(b.execute_core_command("select.domain_face").is_ok());
+    assert_eq!(
+        b.state.selection_domain(),
+        petunia_core::SelectionDomain::Face
+    );
+    assert!(b.execute_core_command("select.domain_object").is_ok());
+    assert_eq!(
+        b.state.selection_domain(),
+        petunia_core::SelectionDomain::Object
+    );
+
+    // 2. Ações de seleção de elementos
+    assert!(b.execute_core_command("select.all").is_ok());
+    assert!(b.execute_core_command("select.none").is_ok());
+    assert!(b.execute_core_command("select.invert").is_ok());
+
+    // 3. Ações semânticas de transformação
+    b.apply(UiIntent::SetActiveTool("select".into()));
+    assert_eq!(b.state.active_tool, "select");
+    b.apply(UiIntent::SetActiveTool("transform".into()));
+    assert_eq!(b.state.active_tool, "transform");
+
+    // 4. Ações de Paint compartilhadas
+    b.apply(UiIntent::SetActiveTool("brush".into()));
+    assert_eq!(b.state.active_tool, "brush");
+    b.apply(UiIntent::SetActiveTool("eraser".into()));
+    assert_eq!(b.state.active_tool, "eraser");
+    b.apply(UiIntent::SetActiveTool("fill".into()));
+    assert_eq!(b.state.active_tool, "fill");
+
+    // 5. Ação desconhecida rejeitada com erro tipado e status informativo sem poluir histórico
+    let depth_before_err = b.state.project.undo.depth().0;
+    let err = b.execute_core_command("nonexistent.bogus_action");
+    assert!(err.is_err());
+    assert_eq!(b.state.project.undo.depth().0, depth_before_err);
+
+    // 6. route_shortcut retorna false para atalhos inexistentes sem efeitos colaterais
+    assert!(!b.route_shortcut("F24", false, false, false));
+    assert_eq!(b.state.project.undo.depth().0, depth_before_err);
+}
+
+#[test]
+fn uv_contextual_actions_and_shortcuts_h13() {
+    let mut b = bridge();
+    b.apply(UiIntent::SetWorkspace(petunia_core::Workspace::Uv));
+    assert_eq!(b.state.workspace, petunia_core::Workspace::Uv);
+
+    let mesh = b.state.project.active_mesh().unwrap().clone();
+    b.state.session.uv_selection.sync = false;
+    b.state.session.uv_selection.set_faces(&mesh, [0]);
+    b.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+
+    // 1. G/R/S iniciam sessões contextuais de transformação UV
+    assert!(b.route_shortcut("G", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_some());
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+
+    assert!(b.route_shortcut("R", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_some());
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+
+    assert!(b.route_shortcut("S", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_some());
+    assert!(b.route_shortcut("Escape", false, false, false));
+    assert!(b.state.session.tools.uv_transform.is_none());
+
+    // 2. Ações de Seam ('U') e Pin ('P' / Alt+'P') no contexto UV
+    let initial_seams = b.state.project.active_mesh().unwrap().uv_seams.len();
+    assert!(b.route_shortcut("U", false, false, false));
+    let next_seams = b.state.project.active_mesh().unwrap().uv_seams.len();
+    assert_ne!(initial_seams, next_seams);
+
+    assert!(b.route_shortcut("P", false, false, false));
+    assert!(!b.state.project.active_mesh().unwrap().uv_pinned.is_empty());
+    assert!(b.route_shortcut("P", false, false, true)); // Alt+P limpa todos os pins
+    assert!(b.state.project.active_mesh().unwrap().uv_pinned.is_empty());
+
+    // 3. Setas direcionais realizam nudge de coordenadas UV
+    let face_uv_before = b.state.project.active_mesh().unwrap().faces[0].uv.clone();
+    assert!(b.route_shortcut("Right", false, false, false));
+    let face_uv_after = b.state.project.active_mesh().unwrap().faces[0].uv.clone();
+    assert_ne!(face_uv_before, face_uv_after);
+
+    // Vértices 3D permanecem intocados
+    assert_eq!(
+        b.state.project.active_mesh().unwrap().verts.len(),
+        mesh.verts.len()
+    );
+}

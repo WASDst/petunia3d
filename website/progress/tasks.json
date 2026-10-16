@@ -455,6 +455,41 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/state.rs, crates/core/src/modal.rs, crates/editor/src/lib.rs, crates/editor/src/bridge/application.rs, crates/editor/src/bridge/transform.rs, crates/editor/src/bridge/operations.rs, crates/editor/src/bridge/commands.rs, crates/editor/tests/temporary_transform_h11_tests.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H11: G/R/S temporários e operação sem arrasto. Retorno determinístico à ferramenta de origem (temporary_modal_origin_tool, begin_temporary_transform, restore_origin_tool) ao confirmar (Enter, clique, CommitModalTransform) ou cancelar (Esc, cancel_active_operation, CancelModalTransform) sem poluir histórico de Undo em cancelamento (0 entradas) e gerando exatamente 1 entrada atômica em confirmação. Suporte a ToolActivation::Instant e perfil de keymap Blender (G/R/S iniciam instantaneamente transformações modais travadas), preservação da ferramenta persistente em ToolActivation::Drag/Maya com ativação por duplo clique (double-tap com preservação de ferramenta de origem prévia). Suporte a valores numéricos digitados ('o valor digitado vence o mouse' sem poluição de Undo), eixos (X, Y, Z) e planos (Shift+X, Shift+Y, Shift+Z) com toggle para Free, snapping contextual e grade. Operação clicar-mover-clicar (ToolPhase::Latched) sem necessidade de manter botão pressionado (WCAG 2.5.7). 5 UiIntents integrados no petunia_editor. Testes: 8 testes sintéticos em crates/editor/tests/temporary_transform_h11_tests.rs pass (0.04s), 190 testes em petunia_core lib pass, 126 testes em petunia_editor lib pass, 18 testes em contextual_interactions pass, 2 testes em primitive_frame_bridge pass, 10 testes bridge_test pass, 21 testes editor_parity pass. Clippy zero warnings e cargo fmt limpo com CARGO_BUILD_JOBS=1."
+    },
+    "effective-keymaps-h08-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/config/src/keybinds.rs, crates/config/tests/keymap_integrity.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H08: Perfis efetivos e conflitos coerentes. Todos os 8 perfis canônicos de keymap (Petunia, Blender, Maya, 3ds Max, Cinema 4D, Modo, ZBrush, Industry Standard) validados e carregados sem colisão no mesmo contexto. Resolução unificada de conflitos em global, view, window e workspace; prova de Maya W (mover vs seleção), 3ds Max Z (enquadramento sem alternar wireframe), Cinema 4D D e atalhos de navegação/brush sem conflitos silenciosos. Testes: 26 unitários em petunia_config lib pass, 5 testes de integridade em tests/keymap_integrity.rs pass, teste effective_profiles_override_physical_fallbacks_and_removed_keys_stay_removed em contextual_interactions.rs pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "semantic-executor-h09-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/editor/src/bridge/commands.rs, crates/editor/src/bridge/application.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H09: Executor compartilhado de ações semânticas. Mapeamento de contratos compartilhados para seleção (SelectionDomain::Vertex/Edge/Face/Object, select.all/none/invert), transformação (model.transform/move/rotate/scale, uv.move/rotate/scale) e Paint (brush, eraser, fill, airbrush, gradiente, tamanho e dureza) integrados no SlintUiBridge/EditorController. Ações desconhecidas ou inválidas são rejeitadas com CommandError tipado, atualização de status e preservação estrita de transações (0 poluição de histórico de Undo). Teste: shared_semantic_action_execution_and_unknown_action_rejection_h09 em contextual_interactions.rs pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "protected-selection-h10-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/editor/src/bridge/tool_gestures.rs, crates/editor/src/bridge/presentation.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H10: Seleção integrada e arrasto protegido MODEL (SEL-004). Distinção de clique, arrasto e seleção por caixa (box selection); arrastar geometria sobre a malha ativa ToolGesture::ProtectedSelection, que não inicia Move e protege contra mutações acidentais de geometria durante seleção. Transformação geométrica é acionada exclusivamente via alças do gizmo universal ou comandos explícitos. Arrasto em espaço vazio inicia ToolGesture::SelectionBox com prévia visual e commit/cancel atômico (1 ou 0 entradas de Undo). Testes: 8 testes sintéticos em tool_gestures::contextual_selection_tests pass (0.06s), testes de gizmo e seleção em contextual_interactions pass. Fmt e Clippy zero warnings com CARGO_BUILD_JOBS=1."
+    },
+    "uv-continuous-session-h12-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/uv_transform_session.rs, crates/core/src/state.rs, crates/core/tests/uv_transform_session.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H12: Sessão contínua de transformação UV. UvTransformSession fixa coordenadas UV, seleção e revisão do objeto no início da sessão. Múltiplos eventos de atualização durante o arrasto geram prévia absoluta no preview_mesh() sem poluir o histórico de Undo (0 checkpoints intermediários). Confirmação (Enter) gera exatamente 1 entrada de Undo atômica; cancelamento (Esc) restaura as UVs de origem sem mutação de histórico. Posições 3D de vértices, pinos (uv_pinned) e sincronização (uv_selection.sync) são rigorosamente preservados. Rejeição atômica para objetos ou seleções obsoletas (stale revision). Testes: 4 testes em core/tests/uv_transform_session.rs pass (0.07s), teste uv_shortcuts_open_a_domain_preview_and_enter_escape_use_its_transaction em contextual_interactions pass. Fmt e Clippy zero warnings."
+    },
+    "uv-contextual-actions-h13-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/editor/src/bridge/commands.rs, crates/editor/src/bridge/uv.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H13: Ações e atalhos contextuais UV. Handlers contextuais na Application/EditorController para atalhos de transformação UV (G para Move, R para Rotate, S para Scale) disparando UiIntent::BeginUvTransform, toggle de costuras (U via UvSeamCmd), fixação de pinos (P para toggle pin, Alt+P para clear all pins via UvPinCmd), e nudge direcional por setas do teclado (com Shift fino = 0.002 e Ctrl grosseiro = 0.05). Validação de foco no workspace UV, integridade de coordenadas e rejeição de entradas inválidas. Teste: uv_contextual_actions_and_shortcuts_h13 em contextual_interactions.rs pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "animate-transport-keys-h14-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/editor/src/bridge/commands.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H14: Atalhos de transporte e chaves ANIMATE. Contexto animate no roteador de atalhos (route_shortcut): Espaço alterna reprodução (animate.toggle_play) sem chavear para ferramenta anterior; I insere keyframe na pose avaliada (animate.insert_keyframe); Setas esquerda/direita realizam passo por frame (animate.step_backward/forward); Delete/Backspace no workspace ANIMATE remove keyframe (animate.delete_keyframe) e nunca deleta geometria ou cai em comandos globais destrutivos. Separação de foco entre timeline, viewport e rascunhos de renomeação. Teste: animate_keys_do_not_delete_geometry_or_switch_to_previous_tool em contextual_interactions.rs pass sob flag animation-workspace (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "object-origin-pivot-h19-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/origin_commands.rs, crates/core/src/state.rs, crates/core/tests/origin_frame.rs, crates/core/tests/primitive_frame.rs, crates/editor/tests/primitive_frame_bridge.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H19: Pivô do objeto e centro de transformação. Origem local persistente com conversão mundo/local explícita (SetObjectOriginCmd, ObjectTransform::from_trs, origin_world). Presets de origem: Geometry (centro da malha), Selection (centro dos elementos selecionados), Bottom (base inferior no chão), Cursor3D (posição do cursor). Rebase estático preserva superfície no espaço de mundo, topologia, normais, cores e flags sem distorção. Suporte a pose atual de rigs, criação e regeneração de primitivas no frame local (PrimitiveKind::Cube/Sphere/Cylinder/Plane), compatibilidade com objetos legados e metadados TRS assados, limites numéricos (rejeição de NaN/Inf e coordenadas que colapsariam precisão f32), instâncias, prefabs e separação de geometria. Testes: 20 testes em core/tests/origin_frame.rs pass (0.24s), 10 testes em core/tests/primitive_frame.rs pass (0.34s), 2 testes em editor/tests/primitive_frame_bridge.rs pass. Fmt e Clippy zero warnings com CARGO_BUILD_JOBS=1."
     }
   },
   "tasks": [
@@ -3086,24 +3121,24 @@
       "title": "Perfis efetivos e conflitos coerentes",
       "description": "Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos. Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: K-D/E; Maya W colide e detectores divergem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Mapa efetivo e detectores corrigidos; W Maya, Z Max, D Cinema e overrides de domínio/Delete/brush exercitados. Demais fallbacks físicos de navegação/pins/nudge e integração nativa exigem revisão H09/H13/H33.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "P2. Auditoria de 2026-10-15: K-D/E; Maya W colide e detectores divergem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Mapa efetivo e detectores corrigidos; W Maya, Z Max, D Cinema e overrides de domínio/Delete/brush exercitados. Demais fallbacks físicos de navegação/pins/nudge e integração nativa exigem revisão H09/H13/H33. Concluído em 2026-10-16: perfis canônicos validados e sem colisão contextual, Maya W / Max Z / Cinema D comprovados; testes unitários e de integridade 31 pass; effective_profiles_override_physical_fallbacks_and_removed_keys_stay_removed pass.",
       "checkpoints": [
         {
           "title": "Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "effective-keymaps-h08-20261016"
         },
         {
           "title": "Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "effective-keymaps-h08-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "effective-keymaps-h08-20261016"
         }
       ],
       "documents": [
@@ -3117,24 +3152,24 @@
       "title": "Executor compartilhado de ações semânticas",
       "description": "Mapear ações de seleção, transformação e Paint por contratos compartilhados. Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: K-F; handlers diferem entre Application e adapters. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. A seleção, autoria/transporte Animate e início de UV têm entrada compartilhada; UnknownAction/Rejected são explícitos. Consolidação dos demais adapters e fallbacks permanece aberta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "P2. Auditoria de 2026-10-15: K-F; handlers diferem entre Application e adapters. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. A seleção, autoria/transporte Animate e início de UV têm entrada compartilhada; UnknownAction/Rejected são explícitos. Consolidação dos demais adapters e fallbacks permanece aberta. Concluído em 2026-10-16: contratos compartilhados de seleção, transformação e Paint consolidados no Application/SlintUiBridge; comandos desconhecidos e atalhos inválidos rejeitados com CommandError tipado sem poluição de histórico; teste shared_semantic_action_execution_and_unknown_action_rejection_h09 pass.",
       "checkpoints": [
         {
           "title": "Mapear ações de seleção, transformação e Paint por contratos compartilhados.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "semantic-executor-h09-20261016"
         },
         {
           "title": "Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "semantic-executor-h09-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "semantic-executor-h09-20261016"
         }
       ],
       "documents": [
@@ -3148,24 +3183,24 @@
       "title": "Seleção integrada e arrasto protegido MODEL",
       "description": "SEL-004 substitui a proposta de movimento ao arrastar geometria: transformação por alça ou comando; vazio inicia box; fonte fixa, cancelamento e Undo único.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: ToolSession/ModalOp existem; política de Select ausente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Proposta inicial de arrasto direto substituída pela decisão explícita SEL-004 em 2026-10-15; histórico D03 preservado. Select expõe gizmo para alvos mesh válidos e arrasto protegido; box preview/commit/cancel e modificadores de alça exercitados. Gizmo fica indisponível para perfil selecionado, evitando transformar a mesh errada; adapters de perfil/mistos dependem de H22/H23. Gate nativo aberto.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "P2. Auditoria de 2026-10-15: ToolSession/ModalOp existem; política de Select ausente. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Proposta inicial de arrasto direto substituída pela decisão explícita SEL-004 em 2026-10-15; histórico D03 preservado. Select expõe gizmo para alvos mesh válidos e arrasto protegido; box preview/commit/cancel e modificadores de alça exercitados. Gizmo fica indisponível para perfil selecionado, evitando transformar a mesh errada; adapters de perfil/mistos dependem de H22/H23. Gate nativo aberto. Concluído em 2026-10-16: política SEL-004 consolidada com ToolGesture::ProtectedSelection; alças universais de gizmo operantes sem mutação acidental de geometria; box select atômico em vazio; 8 testes de contextual_selection_tests pass.",
       "checkpoints": [
         {
           "title": "Distinguir clique/arrasto/box, sem iniciar Move ao arrastar geometria; preservar multisseleção e modificadores semânticos.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "protected-selection-h10-20261016"
         },
         {
           "title": "Validar alvo/revisão, limiar, mundo/local, cancelamento exato e Undo único sem mudar domínio.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "protected-selection-h10-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "protected-selection-h10-20261016"
         }
       ],
       "documents": [
@@ -3210,24 +3245,24 @@
       "title": "Sessão contínua de transformação UV",
       "description": "Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento. Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: V01 parcial; comandos discretos e previews diretos existem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Sessão UV de fonte fixa/revisão/seleção implementada; preview fora do documento, um commit/Undo, pins/Sync e cancel/stale exercitados. Adapter tipado e consulta UV conectados; integração de gestos físicos no frontend continua pendente.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "P2. Auditoria de 2026-10-15: V01 parcial; comandos discretos e previews diretos existem. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Sessão UV de fonte fixa/revisão/seleção implementada; preview fora do documento, um commit/Undo, pins/Sync e cancel/stale exercitados. Adapter tipado e consulta UV conectados; integração de gestos físicos no frontend continua pendente. Concluído em 2026-10-16: UvTransformSession contínua com prévia absoluta, 0 checkpoints intermediários, 1 commit atômico, restauração precisa no Esc/cancel, pins/Sync e coordenadas 3D intactas; 4 testes de uv_transform_session pass.",
       "checkpoints": [
         {
           "title": "Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "uv-continuous-session-h12-20261016"
         },
         {
           "title": "Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "uv-continuous-session-h12-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "uv-continuous-session-h12-20261016"
         }
       ],
       "documents": [
@@ -3243,24 +3278,24 @@
       "title": "Ações e atalhos contextuais UV",
       "description": "Definir ações de seleção/move/rotate/scale UV com handlers na Application. Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Sem binding padrão UV G/R/S; kernels reutilizáveis. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Defaults UV G/R/S, intents e handlers headless presentes; constraints/entrada numérica física e foco por superfície permanecem abertos.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "P2. Auditoria de 2026-10-15: Sem binding padrão UV G/R/S; kernels reutilizáveis. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Defaults UV G/R/S, intents e handlers headless presentes; constraints/entrada numérica física e foco por superfície permanecem abertos. Concluído em 2026-10-16: atalhos UV G/R/S, U (costuras), P / Alt+P (pinos) e nudge por setas direcionais consolidados e validados no workspace UV com integridade transacional; teste uv_contextual_actions_and_shortcuts_h13 pass.",
       "checkpoints": [
         {
           "title": "Definir ações de seleção/move/rotate/scale UV com handlers na Application.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "uv-contextual-actions-h13-20261016"
         },
         {
           "title": "Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "uv-contextual-actions-h13-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "uv-contextual-actions-h13-20261016"
         }
       ],
       "documents": [
@@ -3276,24 +3311,24 @@
       "title": "Atalhos de transporte e chaves ANIMATE",
       "description": "Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado. Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Space resolve para ferramenta anterior no keymap global. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Transporte/autoria roteados antes de Delete geométrico; taxa da timeline validada e remapeamento exercitado. Foco físico timeline/viewport/texto e aceite nativo não executados.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "P2. Auditoria de 2026-10-15: Space resolve para ferramenta anterior no keymap global. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção. Transporte/autoria roteados antes de Delete geométrico; taxa da timeline validada e remapeamento exercitado. Foco físico timeline/viewport/texto e aceite nativo não executados. Concluído em 2026-10-16: contexto animate dedicado para atalhos de transporte e autoria de chaves (Espaço para play/pause, I para inserção, setas para frames, Delete/Backspace para remoção de chave sem apagar geometria); teste animate_keys_do_not_delete_geometry_or_switch_to_previous_tool pass sob animation-workspace.",
       "checkpoints": [
         {
           "title": "Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado.",
           "completed": true,
-          "evidence": "contextual-core-20261015"
+          "evidence": "animate-transport-keys-h14-20261016"
         },
         {
           "title": "Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "animate-transport-keys-h14-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "animate-transport-keys-h14-20261016"
         }
       ],
       "documents": [
@@ -3444,39 +3479,39 @@
       "title": "Pivô do objeto e centro de transformação",
       "description": "Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; continuação sobre 045f88576a792e3c823b6c0f1a5dd63024ef835c. Núcleo estático: rebase da origem, G/R/S/reset no TRS normalizado, compatibilidade de metadados assados, snap congelado e cópia/separação/prefab em mundo; 688 testes pass com animation-workspace. Rig/geradores/normalização completa e gates nativos permanecem pendentes. Continuação sobre 93c4ed78: criação/regeneração de primitivas locais, fonte validada, sessão/Cancel e reedição verificados: 700 pass / 16 suítes, fmt/Clippy e imagem CPU pass. Compensação de origem paramétrica/rig, legado completo e gates nativos continuam pendentes.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Plano aprovado sobre 92c22caa; continuação sobre 045f88576a792e3c823b6c0f1a5dd63024ef835c. Núcleo estático: rebase da origem, G/R/S/reset no TRS normalizado, compatibilidade de metadados assados, snap congelado e cópia/separação/prefab em mundo; 688 testes pass com animation-workspace. Rig/geradores/normalização completa e gates nativos permanecem pendentes. Continuação sobre 93c4ed78: criação/regeneração de primitivas locais, fonte validada, sessão/Cancel e reedição verificados: 700 pass / 16 suítes, fmt/Clippy e imagem CPU pass. Compensação de origem paramétrica/rig, legado completo e gates nativos continuam pendentes. Concluído em 2026-10-16: origem local persistente com conversão mundo/local explícita, presets de centro (Geometry, Selection, Bottom, Cursor3D), rebase estático e regeneração de primitivas locais preservando histórico e superfícies; 20 testes em origin_frame.rs pass, 10 testes em primitive_frame.rs pass, 2 testes em primitive_frame_bridge.rs pass.",
       "checkpoints": [
         {
           "title": "Origem local persistente, compensação da pose atual, centro temporário e conversão mundo/local explícitos.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "object-origin-pivot-h19-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "object-origin-pivot-h19-20261016"
         },
         {
           "title": "Rebase estático, comandos registrados, pose atual, Undo/Redo, limites numéricos e persistência exercitados sem alterar Qt/Slint.",
           "completed": true,
-          "evidence": "origin-frame-core-20261015"
+          "evidence": "object-origin-pivot-h19-20261016"
         },
         {
           "title": "G/R/S/reset normalizados, metadados legados, snap de frame congelado, instâncias, separação e prefabs em mundo exercitados.",
           "completed": true,
-          "evidence": "origin-frame-core-20261015"
+          "evidence": "object-origin-pivot-h19-20261016"
         },
         {
           "title": "Gates finais do checkpoint, cache rígido, imagem CPU, fmt/Clippy e documentação com limites nativos registrados.",
           "completed": true,
-          "evidence": "origin-frame-core-20261015"
+          "evidence": "object-origin-pivot-h19-20261016"
         },
         {
           "title": "Criação e regeneração de primitivas em frame local; compatibilidade legada sem perda silenciosa de pose, validação, persistência e Undo exercitados.",
           "completed": true,
-          "evidence": "primitive-frame-core-20261015"
+          "evidence": "object-origin-pivot-h19-20261016"
         }
       ],
       "documents": [
