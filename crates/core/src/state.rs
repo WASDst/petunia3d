@@ -3745,6 +3745,138 @@ impl CommandContext<'_> {
         Ok(verts)
     }
 
+    /// Executa uma operação do ShapeBuilder sólido de dois operandos (H25) sob transação atômica.
+    pub fn apply_solid_shape_builder(
+        &mut self,
+        explicit_operand: Option<uuid::Uuid>,
+        op: crate::solid_commands::SolidOperation,
+    ) -> Result<crate::solid_commands::SolidShapeBuilderReport, crate::command::CommandError> {
+        use crate::command::CommandError;
+        use crate::solid_commands::{SolidOperation, SolidShapeBuilderReport};
+        use petunia_mesh::solid_builder::{
+            CommittedObject, RegionGroupOrigin, RegionPlan, SolidRegionProvenance,
+        };
+
+        let operand_id = explicit_operand
+            .or(self.editor.tools.boolean_operand)
+            .ok_or(CommandError::Execution("No operand selected".to_string()))?;
+        let active_index = self.document.active;
+        let operand_index = self
+            .document
+            .assets
+            .iter()
+            .position(|asset| asset.id == operand_id)
+            .ok_or(CommandError::Execution(
+                "Operand no longer exists".to_string(),
+            ))?;
+        if operand_index == active_index {
+            return Err(CommandError::Execution(
+                "Operand cannot be the active object".to_string(),
+            ));
+        }
+
+        let a = self.document.assets[active_index].mesh.to_owned_value();
+        let b = self.document.assets[operand_index]
+            .mesh_in_frame_of(&self.document.assets[active_index]);
+
+        let mut plan = RegionPlan::build(&a, &b)
+            .map_err(|e| CommandError::Execution(format!("Boolean partition failed: {e}")))?;
+
+        match op {
+            SolidOperation::UniteAll => {
+                let all_ids: Vec<usize> = plan.regions.iter().map(|r| r.id).collect();
+                plan.unite(&all_ids);
+            }
+            SolidOperation::RemoveOverlap => {
+                let overlap_ids: Vec<usize> = plan
+                    .regions
+                    .iter()
+                    .filter(|r| r.provenance == SolidRegionProvenance::Overlap)
+                    .map(|r| r.id)
+                    .collect();
+                plan.remove(&overlap_ids);
+            }
+            SolidOperation::ExtractOverlap => {
+                let overlap_ids: Vec<usize> = plan
+                    .regions
+                    .iter()
+                    .filter(|r| r.provenance == SolidRegionProvenance::Overlap)
+                    .map(|r| r.id)
+                    .collect();
+                plan.extract(&overlap_ids);
+            }
+        }
+
+        let results = plan
+            .commit(&a, &b)
+            .map_err(|e| CommandError::Execution(format!("Commit failed: {e}")))?;
+
+        self.checkpoint(match op {
+            SolidOperation::UniteAll => "solid_unite_all",
+            SolidOperation::RemoveOverlap => "solid_remove_overlap",
+            SolidOperation::ExtractOverlap => "solid_extract_overlap",
+        });
+
+        let mut report = SolidShapeBuilderReport {
+            regions_count: plan.regions.len(),
+            ..Default::default()
+        };
+
+        let active_transform = self.document.assets[active_index].transform;
+
+        for (group_idx, res) in results.into_iter().enumerate() {
+            match res {
+                CommittedObject::PreserveFirst => {
+                    report.preserved_first = true;
+                }
+                CommittedObject::PreserveSecond => {
+                    report.preserved_second = true;
+                }
+                CommittedObject::Empty => {
+                    let target_index = if group_idx == 0 && !report.preserved_first {
+                        Some(active_index)
+                    } else if group_idx == 1 && !report.preserved_second {
+                        Some(operand_index)
+                    } else {
+                        None
+                    };
+                    if let Some(asset) =
+                        target_index.and_then(|idx| self.document.assets.get_mut(idx))
+                    {
+                        asset.mesh = petunia_mesh::Mesh::default().into();
+                        asset.parametric = None;
+                    }
+                }
+                CommittedObject::Mesh { mesh, origin } => match origin {
+                    RegionGroupOrigin::FirstOperand => {
+                        if let Some(asset) = self.document.assets.get_mut(active_index) {
+                            asset.mesh = (*mesh).into();
+                            asset.parametric = None;
+                        }
+                    }
+                    RegionGroupOrigin::SecondOperand => {
+                        if let Some(asset) = self.document.assets.get_mut(operand_index) {
+                            asset.mesh = (*mesh).into();
+                            asset.parametric = None;
+                        }
+                    }
+                    RegionGroupOrigin::Created => {
+                        let name = format!("SolidResult_{}", report.created_objects + 1);
+                        let mut new_asset = petunia_project::Asset::new(&name, *mesh);
+                        new_asset.transform = active_transform;
+                        self.document.assets.push(new_asset);
+                        report.created_objects += 1;
+                    }
+                },
+            }
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(report)
+    }
+
     /// **Join**: funde o operando no ativo como um único objeto, sem kernel
     /// booleano — a topologia dos dois é preservada lado a lado.
     /// **Join**: funde o operando no ativo como um único objeto, sem kernel

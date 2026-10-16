@@ -69,9 +69,9 @@ pub struct CleanupReport {
 
 /// Face de origem: `side` 0 = operando A, 1 = operando B.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Origin {
-    side: u8,
-    face: u32,
+pub(crate) struct Origin {
+    pub(crate) side: u8,
+    pub(crate) face: u32,
 }
 
 struct SourceFace {
@@ -93,7 +93,7 @@ fn drop_axis(p: DVec3, axis: usize) -> [f64; 2] {
     }
 }
 
-fn dvec(v: Vec3) -> DVec3 {
+pub(crate) fn dvec(v: Vec3) -> DVec3 {
     DVec3::new(f64::from(v.x), f64::from(v.y), f64::from(v.z))
 }
 
@@ -124,7 +124,7 @@ fn point_in_polygon(point: [f64; 2], poly: &[[f64; 2]]) -> bool {
 }
 
 /// Índice espacial das faces de A e B para achar a origem de cada triângulo.
-struct SourceIndex {
+pub(crate) struct SourceIndex {
     faces: Vec<SourceFace>,
     cell: f64,
     grid: HashMap<(i32, i32, i32), Vec<u32>>,
@@ -133,7 +133,26 @@ struct SourceIndex {
 }
 
 impl SourceIndex {
-    fn new(a: &Mesh, b: &Mesh, diag: f64, eps: f64) -> Self {
+    pub(crate) fn from_operands(a: &Mesh, b: &Mesh) -> Self {
+        let mut min = DVec3::splat(f64::INFINITY);
+        let mut max = DVec3::splat(f64::NEG_INFINITY);
+        for mesh in [a, b] {
+            for v in &mesh.verts {
+                let p = dvec(v.vec());
+                min = min.min(p);
+                max = max.max(p);
+            }
+        }
+        let diag = if min.x.is_infinite() {
+            1.0
+        } else {
+            (max - min).length().max(1.0e-6)
+        };
+        let eps = diag * REL_TOLERANCE;
+        Self::new(a, b, diag, eps)
+    }
+
+    pub(crate) fn new(a: &Mesh, b: &Mesh, diag: f64, eps: f64) -> Self {
         let mut index = Self {
             faces: Vec::new(),
             cell: (diag / 32.0).max(1.0e-6),
@@ -218,7 +237,7 @@ impl SourceIndex {
     }
 
     /// Face de origem coplanar em que o triângulo está contido.
-    fn locate(&self, tri: [DVec3; 3]) -> Option<Origin> {
+    pub(crate) fn locate(&self, tri: [DVec3; 3]) -> Option<Origin> {
         let cross = (tri[1] - tri[0]).cross(tri[2] - tri[0]);
         if cross.length_squared() < 1.0e-30 {
             return None;
@@ -562,7 +581,7 @@ impl ColorLookup {
 }
 
 /// Interpola cores na face de origem para pontos criados pelo kernel.
-fn inherited_color(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 3] {
+pub(crate) fn inherited_color(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 3] {
     let face = &mesh.faces[face_index];
     let Some(&first) = face.verts.first() else {
         return NEW_VERTEX_COLOR;
@@ -593,7 +612,7 @@ fn inherited_color(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 3] {
 }
 
 /// UV follows the source triangulation, including non-affine quad mappings.
-fn inherited_uv(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 2] {
+pub(crate) fn inherited_uv(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 2] {
     let face = &mesh.faces[face_index];
     let mut best = ([0.0; 2], f32::NEG_INFINITY);
     for corners in mesh.face_triangle_corners(face_index) {
@@ -620,6 +639,47 @@ fn inherited_uv(mesh: &Mesh, face_index: usize, point: Vec3) -> [f32; 2] {
         }
     }
     best.0
+}
+
+/// Anota procedência de UV, cores e slots de material nas faces de uma malha decomposta.
+pub(crate) fn annotate_mesh_provenance(mesh: &mut Mesh, a: &Mesh, b: &Mesh, index: &SourceIndex) {
+    for face in &mut mesh.faces {
+        if face.verts.len() < 3 {
+            continue;
+        }
+        let p0 = mesh
+            .verts
+            .get(face.verts[0] as usize)
+            .map(|v| dvec(v.vec()));
+        let p1 = mesh
+            .verts
+            .get(face.verts[1] as usize)
+            .map(|v| dvec(v.vec()));
+        let p2 = mesh
+            .verts
+            .get(face.verts[2] as usize)
+            .map(|v| dvec(v.vec()));
+        let (Some(p0), Some(p1), Some(p2)) = (p0, p1, p2) else {
+            continue;
+        };
+        if let Some(origin) = index.locate([p0, p1, p2]) {
+            let source = if origin.side == 0 { a } else { b };
+            if let Some(src_face) = source.faces.get(origin.face as usize) {
+                face.material_slot = src_face.material_slot;
+                face.uv = face
+                    .verts
+                    .iter()
+                    .map(|&vi| {
+                        if let Some(v) = mesh.verts.get(vi as usize) {
+                            inherited_uv(source, origin.face as usize, v.vec())
+                        } else {
+                            [0.0, 0.0]
+                        }
+                    })
+                    .collect();
+            }
+        }
+    }
 }
 
 /// Volume com sinal (teorema da divergência) da malha triangulada.

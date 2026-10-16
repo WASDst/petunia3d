@@ -126,7 +126,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H22 | P2         | Seleção contextual e alvos heterogêneos         | DONE                    | SEL-002/006; filtros, resolução e Undo verificados.           | SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.                                                                                                                                                                                                                     |
 | H23 | P2         | Gizmo universal, orientação e snap              | DONE                    | SEL-001/003/005/007; frame congelado e orientações ok.       | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
 | H24 | P2         | ShapeBuilder planar com operandos explícitos    | DONE                    | Operandos explícitos, furos e Undo testados no delta.         | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
-| H25 | P2         | ShapeBuilder sólido de dois operandos           | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
+| H25 | P2         | ShapeBuilder sólido de dois operandos           | DONE                    | Partição, RegionPlan, proveniência e Undo no delta.           | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
 | H26 | P2         | Composição reeditável e múltiplos sólidos       | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
 | H27 | P2         | Construção sobre superfícies                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
 | H28 | P2         | Feedback comum de operações                     | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
@@ -343,5 +343,45 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 
 **Risks / Next checkpoint:**
 - Próximo checkpoint: H25 (ShapeBuilder sólido de dois operandos: BooleanSolid, partição A-only/overlap/B-only, resultado vazio e proveniência UV/material).
+
+
+## Continuação H25 — ShapeBuilder sólido de dois operandos (2026-10-15)
+
+**Intent / Sources:** Implementar o ShapeBuilder sólido de dois operandos (`A` e `B`) sobre o kernel booleano e decomposição em componentes por aresta (`crates/mesh/src/boolean_partition.rs`), estruturando o plano de ownership transitório (`RegionPlan`), proveniência de faces, UV e materiais (`crates/mesh/src/boolean_cleanup.rs`), preservação de objetos intocados e integração atômica no despachante de comandos (`SolidShapeEditCmd`).
+
+**Gap / Changed:**
+- `crates/mesh/src/solid_builder.rs`:
+  - `SolidRegionProvenance` (`FirstOnly`, `Overlap`, `SecondOnly`) e `SolidRegion` com bounding boxes finitos e procedência estrita.
+  - `RegionGroupOrigin` (`FirstOperand`, `SecondOperand`, `Created`) e `CommittedObject` (`PreserveFirst`, `PreserveSecond`, `Empty`, `Mesh`).
+  - `RegionPlan`: `build` decompondo operandos e componentes conexos por aresta, `remove`, `extract`, `unite`, `is_first_untouched`, `is_second_untouched` e `commit` com fast-path exato para união global e objetos intocados.
+- `crates/mesh/src/boolean_cleanup.rs`:
+  - `SourceIndex::from_operands` calculando diagonal e tolerância relativa automaticamente.
+  - `annotate_mesh_provenance` transferindo coordenadas de textura UV e slots de material para cada componente decomposto.
+- `crates/core/src/solid_commands.rs`:
+  - `SolidOperation` (`UniteAll`, `RemoveOverlap`, `ExtractOverlap`).
+  - `SolidShapeEditCmd` com validação estrita em `can_execute` (rejeitando ausência de operando e auto-referência sem panics).
+- `crates/core/src/state.rs`:
+  - `apply_solid_shape_builder`: avaliação em coordenadas locais, decomposição, aplicação sobre o `RegionPlan`, commit seguro, criação de novos assets para extração, preservação de objetos intocados e mutação atômica protegida por checkpoint de Undo.
+- `crates/core/src/command.rs`: registro de metadados canônicos para `model.shape_builder_solid`, `model.solid_unite`, `model.solid_remove_overlap` e `model.solid_extract_overlap`, além de aliases.
+- `crates/editor/tests/contextual_interactions.rs`:
+  - Teste de integração `solid_shape_builder_two_operands_and_undo_invariants_h25` validando extração de overlap para novo asset, remoção de overlap com preservação de material slots, união sólida, preservação de objeto não-participante e restauração via Undo em passos atômicos.
+- `crates/core/tests/command_tests.rs`:
+  - Teste `test_solid_shape_builder_commands_and_undo_redo` validando o ciclo completo no despachante com Undo/Redo roundtrip.
+- `crates/mesh/tests/solid_builder_tests.rs`:
+  - 10 testes unitários cobrindo partição de cubos, cubos disjuntos, cubos idênticos, cubos contidos, integridade de slots de material e UVs, e rejeição de malhas abertas ou inválidas sem panics.
+
+**Verification:**
+- `crates/mesh/tests/solid_builder_tests.rs`: 10 passed; 0 failed.
+- `crates/mesh/tests/solid_partition.rs`: 4 passed; 0 failed.
+- `crates/mesh --lib`: 261 passed; 0 failed.
+- `crates/core/tests/command_tests.rs`: 61 passed; 0 failed.
+- `crates/core --lib`: 189 passed; 0 failed.
+- `crates/editor/tests/contextual_interactions.rs`: 13 passed; 0 failed.
+- `crates/editor --lib`: 126 passed; 0 failed.
+- Clippy e fmt pass em todos os alvos afetados.
+
+**Risks / Next checkpoint:**
+- Próximo checkpoint: H26 (Composição reeditável e múltiplos sólidos: fontes estáveis, receita persistente e orçamento/cancelamento).
+
 
 

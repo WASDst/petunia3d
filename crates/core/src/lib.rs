@@ -171,10 +171,12 @@ pub use selection::{
 pub use shape_builder::{
     PathfinderOp, ShapeEdit, ShapeEditCmd, ShapeEditError, ShapeEditReport, ShapePlane,
 };
+pub mod solid_commands;
 pub use snap::{
     SnapElement, SnapQuery, SnapResult, SnapSettings, SnapTarget, snap_point, snap_point_to_edges,
     snap_point_to_faces, snap_point_to_grid, snap_point_to_increment, snap_point_to_vertices,
 };
+pub use solid_commands::{SolidOperation, SolidShapeBuilderReport, SolidShapeEditCmd};
 pub use state::{
     ASSET_NAME_MAX_LEN, ActiveTool, ActiveToolSessionKind, AnnotationItem, AnnotationStroke,
     AppState, AssetRenameError, DirtyReason, DockOrientation, DockSide, Document, DocumentHistory,

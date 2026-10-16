@@ -785,6 +785,15 @@ impl AppState {
     }
 
     #[inline]
+    pub fn apply_solid_shape_builder(
+        &mut self,
+        explicit_operand: Option<uuid::Uuid>,
+        op: crate::solid_commands::SolidOperation,
+    ) -> Result<crate::solid_commands::SolidShapeBuilderReport, crate::command::CommandError> {
+        self.in_context(|ctx| ctx.apply_solid_shape_builder(explicit_operand, op))
+    }
+
+    #[inline]
     pub fn join_active_with_operand(&mut self) -> Result<usize, &'static str> {
         self.in_context(|ctx| ctx.join_active_with_operand())
     }

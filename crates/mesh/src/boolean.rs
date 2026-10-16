@@ -75,6 +75,280 @@ impl PreparedBooleanOperands {
             second_only: solid_from_provider(&self.b.difference(&self.a))?,
         })
     }
+
+    /// Decomposes the two operands into edge-connected `SolidRegion`s with provenance,
+    /// material slots and UV preservation.
+    pub fn decompose_regions(&self, a: &Mesh, b: &Mesh) -> Result<Vec<SolidRegion>, BooleanError> {
+        let partition = self.partition()?;
+        let source_index = crate::boolean_cleanup::SourceIndex::from_operands(a, b);
+        let mut regions = Vec::new();
+        let mut next_id = 1u32;
+
+        for (class, solid) in [
+            (SolidRegionClass::FirstOnly, partition.first_only),
+            (SolidRegionClass::Overlap, partition.overlap),
+            (SolidRegionClass::SecondOnly, partition.second_only),
+        ] {
+            let components = solid.connected_regions()?;
+            for mut mesh in components {
+                let mut provenance = Vec::with_capacity(mesh.faces.len());
+                for face in &mut mesh.faces {
+                    if face.verts.len() >= 3 {
+                        let v0 = mesh.verts.get(face.verts[0] as usize);
+                        let v1 = mesh.verts.get(face.verts[1] as usize);
+                        let v2 = mesh.verts.get(face.verts[2] as usize);
+                        if let (Some(v0), Some(v1), Some(v2)) = (v0, v1, v2) {
+                            let tri = [
+                                crate::boolean_cleanup::dvec(v0.vec()),
+                                crate::boolean_cleanup::dvec(v1.vec()),
+                                crate::boolean_cleanup::dvec(v2.vec()),
+                            ];
+                            let origin = source_index.locate(tri);
+                            match origin {
+                                Some(crate::boolean_cleanup::Origin { side: 0, face: fa }) => {
+                                    provenance.push(SurfaceOrigin::First(fa));
+                                    face.material_slot =
+                                        a.faces.get(fa as usize).and_then(|f| f.material_slot);
+                                    face.uv = face
+                                        .verts
+                                        .iter()
+                                        .map(|&v| {
+                                            if let Some(v_ref) = mesh.verts.get(v as usize) {
+                                                crate::boolean_cleanup::source_uv(
+                                                    a,
+                                                    fa as usize,
+                                                    v_ref.vec(),
+                                                )
+                                            } else {
+                                                [0.0, 0.0]
+                                            }
+                                        })
+                                        .collect();
+                                }
+                                Some(crate::boolean_cleanup::Origin { side: 1, face: fb }) => {
+                                    provenance.push(SurfaceOrigin::Second(fb));
+                                    face.material_slot =
+                                        b.faces.get(fb as usize).and_then(|f| f.material_slot);
+                                    face.uv = face
+                                        .verts
+                                        .iter()
+                                        .map(|&v| {
+                                            if let Some(v_ref) = mesh.verts.get(v as usize) {
+                                                crate::boolean_cleanup::source_uv(
+                                                    b,
+                                                    fb as usize,
+                                                    v_ref.vec(),
+                                                )
+                                            } else {
+                                                [0.0, 0.0]
+                                            }
+                                        })
+                                        .collect();
+                                }
+                                _ => {
+                                    provenance.push(SurfaceOrigin::Generated);
+                                    face.material_slot =
+                                        a.faces.first().and_then(|f| f.material_slot);
+                                    if face.uv.len() != face.verts.len() {
+                                        face.uv = vec![[0.0, 0.0]; face.verts.len()];
+                                    }
+                                }
+                            }
+                        } else {
+                            provenance.push(SurfaceOrigin::Generated);
+                        }
+                    } else {
+                        provenance.push(SurfaceOrigin::Generated);
+                    }
+                }
+                regions.push(SolidRegion::new(next_id, class, mesh, provenance));
+                next_id = next_id.saturating_add(1);
+            }
+        }
+
+        Ok(regions)
+    }
+}
+
+/// Class of a solid region in a two-operand partition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum SolidRegionClass {
+    FirstOnly,
+    Overlap,
+    SecondOnly,
+}
+
+/// Provenance of a face in a solid region.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SurfaceOrigin {
+    First(u32),
+    Second(u32),
+    Generated,
+}
+
+/// A disjoint solid region resulting from decomposing prepared boolean operands.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SolidRegion {
+    pub id: u32,
+    pub class: SolidRegionClass,
+    pub mesh: Mesh,
+    pub bounds_min: [f32; 3],
+    pub bounds_max: [f32; 3],
+    pub provenance: Vec<SurfaceOrigin>,
+}
+
+impl SolidRegion {
+    pub fn new(
+        id: u32,
+        class: SolidRegionClass,
+        mesh: Mesh,
+        provenance: Vec<SurfaceOrigin>,
+    ) -> Self {
+        let mut min = [f32::INFINITY; 3];
+        let mut max = [f32::NEG_INFINITY; 3];
+        for v in &mesh.verts {
+            for i in 0..3 {
+                if v.pos[i] < min[i] {
+                    min[i] = v.pos[i];
+                }
+                if v.pos[i] > max[i] {
+                    max[i] = v.pos[i];
+                }
+            }
+        }
+        if min[0].is_infinite() {
+            min = [0.0; 3];
+            max = [0.0; 3];
+        }
+        Self {
+            id,
+            class,
+            mesh,
+            bounds_min: min,
+            bounds_max: max,
+            provenance,
+        }
+    }
+}
+
+/// Transient ownership plan for solid regions before commit.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RegionPlan {
+    /// Output groups containing region IDs.
+    /// Index 0 = Group A (default owner of FirstOnly + Overlap).
+    /// Index 1 = Group B (default owner of SecondOnly + Overlap).
+    /// Index 2+ = Extracted or separate output groups.
+    pub groups: Vec<Vec<u32>>,
+}
+
+impl RegionPlan {
+    /// Creates the initial ownership plan from a set of solid regions.
+    /// Group 0 (A) owns FirstOnly + Overlap.
+    /// Group 1 (B) owns SecondOnly + Overlap.
+    pub fn initial(regions: &[SolidRegion]) -> Self {
+        let mut group_a = Vec::new();
+        let mut group_b = Vec::new();
+        for r in regions {
+            match r.class {
+                SolidRegionClass::FirstOnly => group_a.push(r.id),
+                SolidRegionClass::SecondOnly => group_b.push(r.id),
+                SolidRegionClass::Overlap => {
+                    group_a.push(r.id);
+                    group_b.push(r.id);
+                }
+            }
+        }
+        Self {
+            groups: vec![group_a, group_b],
+        }
+    }
+
+    /// Removes region IDs from all groups.
+    pub fn remove(&mut self, region_ids: &[u32]) {
+        for group in &mut self.groups {
+            group.retain(|id| !region_ids.contains(id));
+        }
+    }
+
+    /// Removes region IDs from existing groups and creates a new output group containing them.
+    /// Returns the index of the newly created group.
+    pub fn extract(&mut self, region_ids: &[u32]) -> usize {
+        self.remove(region_ids);
+        self.groups.push(region_ids.to_vec());
+        self.groups.len().saturating_sub(1)
+    }
+
+    /// Merges specified regions into a single target group, removing them from other groups.
+    pub fn unite(&mut self, region_ids: &[u32]) -> usize {
+        self.remove(region_ids);
+        self.groups.push(region_ids.to_vec());
+        self.groups.len().saturating_sub(1)
+    }
+
+    /// Unites all regions into Group 0 (equivalent to A ∪ B) and empties other groups.
+    pub fn unite_all(&mut self, regions: &[SolidRegion]) {
+        self.groups = vec![regions.iter().map(|r| r.id).collect()];
+    }
+
+    /// Commits the plan into output meshes.
+    /// Each group with regions is converted into an output `Mesh`.
+    /// Groups with 0 regions produce `None`.
+    pub fn commit(&self, regions: &[SolidRegion]) -> Result<Vec<Option<Mesh>>, BooleanError> {
+        let mut outputs = Vec::with_capacity(self.groups.len());
+        for group in &self.groups {
+            if group.is_empty() {
+                outputs.push(None);
+                continue;
+            }
+            if group.len() == 1 {
+                let id = group[0];
+                let Some(region) = regions.iter().find(|r| r.id == id) else {
+                    return Err(BooleanError::InvalidOutput("referenced region not found"));
+                };
+                outputs.push(Some(region.mesh.clone()));
+                continue;
+            }
+            // Multiple regions in this group: combine them.
+            let mut combined = Mesh::default();
+            let mut first = true;
+            for &id in group {
+                let Some(region) = regions.iter().find(|r| r.id == id) else {
+                    return Err(BooleanError::InvalidOutput("referenced region not found"));
+                };
+                if first {
+                    combined = region.mesh.clone();
+                    first = false;
+                } else {
+                    let mut a = combined.clone();
+                    let mut b = region.mesh.clone();
+                    a.triangulate();
+                    b.triangulate();
+                    match boolean_solids(&a, &b, BooleanOp::Union) {
+                        Ok(BooleanSolid::Mesh(m)) => {
+                            combined = *m;
+                        }
+                        Ok(BooleanSolid::Empty) => {}
+                        Err(_) => {
+                            // Fallback concatenation of loose parts
+                            let v_offset = u32::try_from(combined.verts.len()).map_err(|_| {
+                                BooleanError::InvalidOutput("combined mesh too large")
+                            })?;
+                            combined.verts.extend(region.mesh.verts.iter().cloned());
+                            for f in &region.mesh.faces {
+                                let mut face = f.clone();
+                                for idx in &mut face.verts {
+                                    *idx = idx.saturating_add(v_offset);
+                                }
+                                combined.faces.push(face);
+                            }
+                        }
+                    }
+                }
+            }
+            outputs.push(Some(combined));
+        }
+        Ok(outputs)
+    }
 }
 
 impl BooleanSolid {

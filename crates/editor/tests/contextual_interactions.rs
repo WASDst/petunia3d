@@ -415,3 +415,103 @@ fn shape_builder_explicit_operands_and_hole_preservation_invariants_h24() {
         .expect("sq1 must be restored");
     assert_eq!(sq1_restored.holes.len(), 1);
 }
+
+#[test]
+fn solid_shape_builder_two_operands_and_undo_invariants_h25() {
+    let mut b = bridge();
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    for f in &mut cube1.faces {
+        f.material_slot = Some(1);
+    }
+    b.state.project.assets[0].mesh = cube1.into();
+    let asset1_id = b.state.project.assets[0].id;
+
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    for f in &mut cube2.faces {
+        f.material_slot = Some(2);
+    }
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    b.state.project.assets.push(asset2);
+
+    let mut cube3 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube3.verts {
+        v.pos[0] += 10.0;
+    }
+    cube3.triangulate();
+    let asset3 = petunia_project::Asset::new("Cube3", cube3);
+    let asset3_id = asset3.id;
+    b.state.project.assets.push(asset3);
+
+    assert_eq!(b.state.project.assets.len(), 3);
+    let initial_undo = b.state.project.undo.depth().0;
+
+    // 0. Invalid operands rejection: non-existent operand or active asset as operand
+    let cmd_invalid = petunia_core::SolidShapeEditCmd::with_operand(
+        petunia_core::SolidOperation::UniteAll,
+        uuid::Uuid::new_v4(),
+    );
+    assert!(b.state.dispatch(&cmd_invalid).is_err());
+
+    let cmd_self = petunia_core::SolidShapeEditCmd::with_operand(
+        petunia_core::SolidOperation::UniteAll,
+        asset1_id,
+    );
+    assert!(b.state.dispatch(&cmd_self).is_err());
+
+    // 1. Extract Overlap: extracts shared volume into a 4th asset atomically
+    let cmd_extract = petunia_core::SolidShapeEditCmd::extract_overlap_with_operand(asset2_id);
+    b.state
+        .dispatch(&cmd_extract)
+        .expect("extract overlap should succeed");
+    assert_eq!(b.state.project.assets.len(), 4);
+    assert_eq!(b.state.project.assets[2].id, asset3_id, "Cube3 untouched");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+
+    // 2. Undo restores the 3 original objects
+    b.state.undo();
+    assert_eq!(b.state.project.assets.len(), 3);
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+
+    // 3. Remove Overlap: cuts overlap from both operands, preserving material slots
+    let cmd_remove = petunia_core::SolidShapeEditCmd::remove_overlap_with_operand(asset2_id);
+    b.state
+        .dispatch(&cmd_remove)
+        .expect("remove overlap should succeed");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+    assert!(
+        b.state.project.assets[0]
+            .mesh
+            .faces
+            .iter()
+            .any(|f| f.material_slot == Some(1))
+    );
+    assert!(
+        b.state.project.assets[1]
+            .mesh
+            .faces
+            .iter()
+            .any(|f| f.material_slot == Some(2))
+    );
+    assert_eq!(b.state.project.assets[2].id, asset3_id, "Cube3 untouched");
+
+    b.state.undo();
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+
+    // 4. Unite: merges all regions
+    let cmd_unite = petunia_core::SolidShapeEditCmd::unite_with_operand(asset2_id);
+    b.state
+        .dispatch(&cmd_unite)
+        .expect("solid unite should succeed");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+    assert_eq!(b.state.project.assets[2].id, asset3_id, "Cube3 untouched");
+
+    b.state.undo();
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+    assert_eq!(b.state.project.assets.len(), 3);
+}

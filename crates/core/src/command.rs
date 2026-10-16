@@ -863,6 +863,54 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "model.shape_builder_solid",
+                "Solid Shape Builder",
+                "Execute 3D solid partition operations with transient RegionPlan",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::unite(),
+        );
+        d.alias("solid.edit", "model.shape_builder_solid");
+        d.alias("model.solid_edit", "model.shape_builder_solid");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_unite",
+                "Solid Unite",
+                "Unite all partition regions into a single solid mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::unite(),
+        );
+        d.alias("solid.unite", "model.solid_unite");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_remove_overlap",
+                "Solid Remove Overlap",
+                "Remove overlapping regions from all solid operands",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::remove_overlap(),
+        );
+        d.alias("solid.remove_overlap", "model.solid_remove_overlap");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_extract_overlap",
+                "Solid Extract Overlap",
+                "Extract overlapping region as a new scene object",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::SolidShapeEditCmd::extract_overlap(),
+        );
+        d.alias("solid.extract_overlap", "model.solid_extract_overlap");
+        d.register_with_meta(
+            CommandMetadata::new(
                 "draw.unite",
                 "Unite",
                 "Merge the closed shapes of the sketch plane into one",

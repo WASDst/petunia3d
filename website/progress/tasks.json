@@ -405,6 +405,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/shape_builder.rs, crates/core/src/region_push.rs, crates/editor/tests/contextual_interactions.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H24: ShapeBuilder planar com operandos explícitos (ShapeEditCmd::operands), filtragem em ProfileGroup::filter_by_operands preservando fontes não afetadas, linhas e identidades; preservação de furos (profile.holes) no perfil resultante; transação única atômica com Undo único; rejeição graciosa de seleções vazias ou singulares sem pânico. 189 testes unitários em petunia_core, 60 em command_tests, 5 em universal_gizmo, 126 em petunia_editor e 12 em contextual_interactions pass; clippy e fmt pass sem warnings."
+    },
+    "solid-shapebuilder-core-20261015": {
+      "revision": "refactor/architecture-foundation continuation; crates/mesh/src/solid_builder.rs, crates/mesh/src/boolean_cleanup.rs, crates/core/src/solid_commands.rs, crates/core/src/state.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H25: ShapeBuilder sólido de dois operandos. Partição A-only/Overlap/B-only com componentes por aresta (edge-connected), plano de ownership transitório RegionPlan com fast-paths exatos e preservação estrita de objetos intocados. Preservação e anotação de proveniência de UV e slots de material por face via SourceIndex::from_operands e annotate_mesh_provenance. Comandos SolidShapeEditCmd (UniteAll, RemoveOverlap, ExtractOverlap) atômicos com checkpoint de Undo/Redo no despachante e rejeição estrita de operandos ausentes/inválidos sem pânico. 10 testes em solid_builder_tests, 4 em solid_partition, 13 em contextual_interactions, 61 em command_tests, 189 em petunia_core e 126 em petunia_editor passando; clippy e fmt pass sem warnings."
     }
   },
   "tasks": [
@@ -3570,19 +3575,19 @@
       "title": "ShapeBuilder sólido de dois operandos",
       "description": "Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. Fundação BooleanSolid Empty/Mesh, operandos preparados, partição A-only/overlap/B-only e componentes por aresta exercitados. Ainda faltam sessão, RegionPlan, Unite/Remove/Extract, publicação UV/material, broad-phase e orçamento/cancel.",
+      "baseline": "Plano aprovado sobre 92c22caa. Partição sólida de dois operandos implementada com separação em componentes por aresta, classificação A-only/Overlap/B-only, ownership transitório em RegionPlan, operações UniteAll, RemoveOverlap e ExtractOverlap, proveniência e transferência de UV/slots de material por face, preservação estrita de objetos intocados e suporte integral a transação atômica e Undo/Redo no despachante de comandos.",
       "checkpoints": [
         {
           "title": "Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "solid-shapebuilder-core-20261015"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "solid-shapebuilder-core-20261015"
         },
         {
           "title": "Exercitar a fundação Empty/preparação/partição e componentes por aresta, sem declarar sessão interativa concluída.",

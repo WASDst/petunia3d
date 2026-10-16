@@ -385,6 +385,11 @@ pub mod boolean;
 pub mod boolean_cleanup;
 mod boolean_partition;
 pub mod cleanup;
+pub mod solid_builder;
+
+pub use solid_builder::{
+    CommittedObject, RegionGroup, RegionGroupOrigin, RegionPlan, SolidRegion, SolidRegionProvenance,
+};
 mod connect;
 pub mod curve;
 pub mod half_edge;
