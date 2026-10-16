@@ -3432,3 +3432,96 @@ fn test_modeling_feedback_and_ghost_invariants_h28() {
     );
     assert!(!partial_fb.partial_selection.unwrap().is_compatible);
 }
+
+#[test]
+fn test_spatial_dimension_and_comparison_invariants_h29() {
+    let mut state = AppState::default();
+    let cube_id = state.project.active().unwrap().id;
+
+    // 1. Invariante VSP-003: Volume Frame World vs ObjectLocal sobre objeto rotacionado
+    state.project.active_mut().unwrap().transform = petunia_project::ObjectTransform::from_trs(
+        glam::Vec3::ZERO,
+        glam::Quat::from_rotation_z(std::f32::consts::PI * 0.25),
+        glam::Vec3::ONE,
+    );
+
+    let vf_world = state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::World,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame World");
+    let vf_local = state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame ObjectLocal");
+
+    assert!(
+        vf_world.volume > vf_local.volume + 5.0,
+        "World AABB cresce com a rotação em relação à OBB local"
+    );
+    assert!(
+        (vf_local.volume - 8.0).abs() < 1e-3,
+        "Volume local do cubo 2x2x2 deve ser 8.0"
+    );
+
+    // 2. Formatação dimensional sem inventar unidades em cenas genéricas
+    assert_eq!(vf_local.formatted_dimensions(), "2.000 × 2.000 × 2.000");
+
+    // 3. Dispatch de comando model.scale_to_dimension com Undo/Redo
+    let exec_res = state.scale_to_dimension(
+        cube_id,
+        0, // X
+        5.0,
+        false,
+        petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+    );
+    assert!(exec_res.is_ok());
+
+    let vf_scaled = state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .unwrap();
+    assert!((vf_scaled.size[0] - 5.0).abs() < 1e-3);
+
+    // 4. Consultas espaciais através da API de AppState
+    let query_dist = state
+        .query_spatial(
+            petunia_core::spatial_query::SpatialQueryKind::EuclideanDistance {
+                from: [0.0, 0.0, 0.0],
+                to: [0.0, 3.0, 4.0],
+            },
+        )
+        .expect("Query distância");
+    assert!((query_dist.distance - 5.0).abs() < 1e-4);
+
+    // 5. Invariante VSP-004: Companion View desacoplada
+    assert!(!state.is_companion_view_open());
+    state.open_companion_view();
+    assert!(state.is_companion_view_open());
+    assert!(state.companion_view_state().is_orthographic);
+    state.close_companion_view();
+    assert!(!state.is_companion_view_open());
+
+    // 6. Invariante VSP-004: X-Ray vs Select Through
+    state.set_show_xray(true);
+    assert!(state.show_xray);
+    assert!(
+        !state.select_through,
+        "Ativar X-Ray visual nunca altera Select Through"
+    );
+    state.set_select_through(true);
+    state.set_show_xray(false);
+    assert!(!state.show_xray);
+    assert!(
+        state.select_through,
+        "Desativar X-Ray nunca altera Select Through"
+    );
+}

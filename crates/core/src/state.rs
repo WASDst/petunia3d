@@ -1142,6 +1142,8 @@ pub struct EditorSession {
     /// Instante (s) da reprodução das trilhas de variantes de decalque; `None`
     /// = parado (cada decalque mostra a variante escolhida). Não persistido.
     pub decal_time: Option<f32>,
+    /// Estado da Companion View secundária ortográfica desacoplada (VSP-004 / H29).
+    pub companion_view: crate::spatial_query::CompanionViewState,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -1212,6 +1214,7 @@ impl EditorSession {
             last_primitive: None,
             animate: crate::animate_session::AnimateSession::default(),
             decal_time: None,
+            companion_view: crate::spatial_query::CompanionViewState::default(),
         }
     }
 
@@ -5229,6 +5232,29 @@ impl<'a> EditorView<'a> {
         let target_name = active_asset.map(|a| a.name.as_str());
         let active_mesh = self.document.project.active_mesh();
         Some(modal.feedback(current_revision, target_id, target_name, active_mesh))
+    }
+
+    /// Computa o Volume Frame orientado de um objeto de cena no frame desejado (VSP-003 / H29).
+    pub fn query_volume_frame(
+        self,
+        asset_id: uuid::Uuid,
+        frame: crate::spatial_query::SpatialFrameKind,
+        rep: crate::spatial_query::GeometryRepresentation,
+    ) -> Option<crate::spatial_query::VolumeFrame> {
+        crate::spatial_query::SpatialQueryInspector::compute_volume_frame(
+            &self.document.project,
+            asset_id,
+            frame,
+            rep,
+        )
+    }
+
+    /// Executa uma consulta espacial pura sobre o projeto (VSP-004 / H29).
+    pub fn query_spatial(
+        self,
+        query: crate::spatial_query::SpatialQueryKind,
+    ) -> Result<crate::spatial_query::SpatialQueryResult, crate::command::CommandError> {
+        crate::spatial_query::SpatialQueryInspector::execute_query(&self.document.project, query)
     }
 
     /// Descriptor canônico do pincel (iniciativa Paint — P3D-056/057).

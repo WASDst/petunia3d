@@ -130,7 +130,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H26 | P2         | Composição reeditável e múltiplos sólidos       | DONE                    | Receita persistente, fontes, orçamento e bake explícito ok.   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
 | H27 | P2         | Construção sobre superfícies                    | DONE                    | Plano de face, imprint e Push/Pull verificados.               | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
 | H28 | P2         | Feedback comum de operações                     | DONE                    | Preview fonte fixa, ghost, limites MF-001–008 e guards ok.    | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
-| H29 | P2         | Dimensões e comparação espacial                 | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
+| H29 | P2         | Dimensões e comparação espacial                 | DONE                    | Frames, representação e consultas espaciais VSP-003/004.       | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
 | H30 | P2         | Section, Thickness e Organic Profiles           | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
 | H31 | P2         | Smart Rig manual e assistido                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
 | H32 | P2         | Smart Rig estrutural e Live opcional            | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.                                                                                                                                                                                                   |
@@ -497,4 +497,54 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 
 **Risks / Next checkpoint:**
 - Checkpoint concluído: H28. Próximo checkpoint: H29 (Dimensões e comparação espacial: VSP-003/004 — frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta).
+
+---
+
+### Entrega H29 — Dimensões e comparação espacial (VSP-003 e VSP-004) (2026-10-16)
+
+**Intent:**
+- Implementar o subsistema de medição de volume, dimensões espaciais e consultas comparativas (VSP-003 e VSP-004):
+  1. `VSP-003`: `VolumeFrame` com representação `Evaluated` (padrão) e `Source` identificada separadamente. Frames canônicos suportados: `World`, `ObjectLocal`, `Custom` (base ortonormal via Gram-Schmidt), `Structural` (eixos principais de inércia / PCA calculados via autovetores Jacobi 3x3 com fallback automático para `ObjectLocal` em geometrias isotrópicas) e `View` (espaço de câmera). Invariante comprovado: frames não são redutíveis a uma simples `World AABB`.
+  2. Qualidade de medição explícita (`MeasurementQuality::Exact`, `Approximate`, `Unavailable`, `Stale`).
+  3. Formatação dimensional neutra e configurável (`formatted_dimensions`, `format_measurement`) respeitando unidades de cena e sem inventar sufixos `cm`/`m` em cenas genéricas.
+  4. Separação estrita entre medir/consultar, escalar até dimensão (`ScaleToDimensionCmd` / `model.scale_to_dimension`, `transform.scale_to_dimension`) e editar parâmetros. Prevenção comprovada contra divisão por zero em geometrias com dimensão zero (ex: planos ou malhas degeneradas) e integridade transacional de Undo/Redo.
+  5. `VSP-004`: Seis consultas espaciais distintas (`SpatialQueryKind`): distância euclidiana (`EuclideanDistance`), delta de componente em eixo no frame (`AxisDelta`), profundidade de câmera (`CameraDepth`), clearance de superfície com par de pontos mais próximos (`SurfaceClearance`), contato sob tolerância (`ContactUnderTolerance`) e interseção volumétrica via SAT de 15 eixos (`VolumetricIntersection`).
+  6. Companion View (`CompanionViewState`) com projeção ortográfica independente, opt-in explícito, sem roubo de foco nem alteração da câmera principal da viewport.
+  7. Invariante estrito X-Ray vs Select Through: ativação de raio-X visual nunca altera a política de seleção transparente/select through.
+
+**Sources:**
+- `crates/core/src/spatial_query.rs`
+- `crates/core/src/lib.rs`
+- `crates/core/src/command.rs`
+- `crates/core/src/context_api.rs`
+- `crates/core/src/state.rs`
+- `crates/core/src/modal.rs`
+- `crates/core/tests/spatial_query_tests.rs`
+- `crates/core/tests/command_tests.rs`
+- `crates/editor/tests/contextual_interactions.rs`
+
+**Gap:**
+- O Petunia3D carecia de um subsistema robusto para medição de caixas delimitadoras orientadas (OBB) em múltiplos frames de referência (especialmente eixos principais estruturais via PCA), consultas analíticas de folga de superfície (clearance) e interseção volumétrica SAT, além de controle ortogonal de visualização auxiliar (Companion View) e separação de X-Ray/Select Through.
+
+**Changed:**
+- Criado o módulo `spatial_query.rs` em `crates/core/src/` com todos os tipos, kernels matemáticos (Jacobi 3x3, Gram-Schmidt, SAT 15 eixos, point-to-triangle distance), comando `ScaleToDimensionCmd` e inspetor `SpatialQueryInspector`.
+- Registrado `pub mod spatial_query;` e exportados os tipos principais em `crates/core/src/lib.rs`.
+- Registrado o comando `model.scale_to_dimension` (e alias `transform.scale_to_dimension`) no despachante canônico em `crates/core/src/command.rs`.
+- Integrado `companion_view` no `EditorSession` e expostos métodos de consulta no `EditorView` (`crates/core/src/state.rs`).
+- Adicionados métodos de consulta e controle em `AppState` e `CommandContext` (`crates/core/src/context_api.rs`).
+- Corrigida atualização de `published_revision` no `update_modal_fast` em `crates/core/src/modal.rs`.
+- Desenvolvida suíte unitária completa `crates/core/tests/spatial_query_tests.rs` com 7 testes cobrindo todos os invariantes VSP-003 e VSP-004.
+- Adicionados testes de integração em `crates/core/tests/command_tests.rs` e `crates/editor/tests/contextual_interactions.rs`.
+
+**Verification:**
+- `crates/core/tests/spatial_query_tests.rs`: 7 passed, 0 failed.
+- `crates/core/tests/command_tests.rs`: `test_spatial_dimension_and_comparison_invariants_h29` (pass).
+- `crates/editor/tests/contextual_interactions.rs`: `spatial_dimensions_and_companion_view_invariants_h29` (pass).
+- `crates/core` unit tests: 190 passed, 0 failed.
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_editor --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Degenerescência de autovalores em geometrias isotrópicas: mitigada pelo fallback automático do frame `Structural` para o frame `ObjectLocal`.
+- Checkpoint concluído: H29. Próximo checkpoint: H30 (Section, Thickness e Organic Profiles: VSP-005 — seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais).
 

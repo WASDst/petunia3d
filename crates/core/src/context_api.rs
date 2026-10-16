@@ -1005,6 +1005,79 @@ impl AppState {
             requested_domain,
         )
     }
+
+    #[inline]
+    pub fn query_volume_frame(
+        &self,
+        asset_id: uuid::Uuid,
+        frame: crate::spatial_query::SpatialFrameKind,
+        rep: crate::spatial_query::GeometryRepresentation,
+    ) -> Option<crate::spatial_query::VolumeFrame> {
+        self.view().query_volume_frame(asset_id, frame, rep)
+    }
+
+    #[inline]
+    pub fn query_spatial(
+        &self,
+        query: crate::spatial_query::SpatialQueryKind,
+    ) -> Result<crate::spatial_query::SpatialQueryResult, CommandError> {
+        self.view().query_spatial(query)
+    }
+
+    pub fn scale_to_dimension(
+        &mut self,
+        asset_id: uuid::Uuid,
+        axis: usize,
+        target_dimension: f32,
+        uniform: bool,
+        frame: crate::spatial_query::SpatialFrameKind,
+    ) -> Result<(), CommandError> {
+        let cmd = crate::spatial_query::ScaleToDimensionCmd::new(
+            asset_id,
+            axis,
+            target_dimension,
+            uniform,
+            frame,
+        );
+        crate::command::CommandDispatcher::dispatch(self, &cmd)
+    }
+
+    #[inline]
+    pub fn open_companion_view(&mut self) {
+        self.session.companion_view.enabled = true;
+    }
+
+    #[inline]
+    pub fn close_companion_view(&mut self) {
+        self.session.companion_view.enabled = false;
+    }
+
+    #[inline]
+    pub fn toggle_companion_view(&mut self) {
+        self.session.companion_view.enabled = !self.session.companion_view.enabled;
+    }
+
+    #[inline]
+    pub fn is_companion_view_open(&self) -> bool {
+        self.session.companion_view.enabled
+    }
+
+    #[inline]
+    pub fn companion_view_state(&self) -> &crate::spatial_query::CompanionViewState {
+        &self.session.companion_view
+    }
+
+    #[inline]
+    pub fn set_show_xray(&mut self, enabled: bool) {
+        self.session.show_xray = enabled;
+        // Invariante VSP-004: X-Ray visual nunca altera select_through!
+    }
+
+    #[inline]
+    pub fn set_select_through(&mut self, enabled: bool) {
+        self.session.select_through = enabled;
+        // Invariante VSP-004: select_through nunca altera show_xray!
+    }
 }
 
 #[allow(dead_code)]
@@ -1125,6 +1198,42 @@ impl CommandContext<'_> {
     }
 
     #[inline]
+    pub fn query_volume_frame(
+        &self,
+        asset_id: uuid::Uuid,
+        frame: crate::spatial_query::SpatialFrameKind,
+        rep: crate::spatial_query::GeometryRepresentation,
+    ) -> Option<crate::spatial_query::VolumeFrame> {
+        self.view().query_volume_frame(asset_id, frame, rep)
+    }
+
+    #[inline]
+    pub fn query_spatial(
+        &self,
+        query: crate::spatial_query::SpatialQueryKind,
+    ) -> Result<crate::spatial_query::SpatialQueryResult, CommandError> {
+        self.view().query_spatial(query)
+    }
+
+    pub fn scale_to_dimension(
+        &mut self,
+        asset_id: uuid::Uuid,
+        axis: usize,
+        target_dimension: f32,
+        uniform: bool,
+        frame: crate::spatial_query::SpatialFrameKind,
+    ) -> Result<(), CommandError> {
+        let cmd = crate::spatial_query::ScaleToDimensionCmd::new(
+            asset_id,
+            axis,
+            target_dimension,
+            uniform,
+            frame,
+        );
+        crate::command::CommandDispatcher::dispatch_context(self, &cmd)
+    }
+
+    #[inline]
     pub fn active_is_parametric(&self) -> bool {
         self.view().active_is_parametric()
     }
@@ -1209,5 +1318,42 @@ impl CommandContext<'_> {
     #[inline]
     pub fn last_operation_is_current(&self, last: &LastOperation) -> bool {
         self.view().last_operation_is_current(last)
+    }
+
+    #[inline]
+    pub fn open_companion_view(&mut self) {
+        self.editor.companion_view.enabled = true;
+    }
+
+    #[inline]
+    pub fn close_companion_view(&mut self) {
+        self.editor.companion_view.enabled = false;
+    }
+
+    #[inline]
+    pub fn toggle_companion_view(&mut self) {
+        self.editor.companion_view.enabled = !self.editor.companion_view.enabled;
+    }
+
+    #[inline]
+    pub fn is_companion_view_open(&self) -> bool {
+        self.editor.companion_view.enabled
+    }
+
+    #[inline]
+    pub fn companion_view_state(&self) -> &crate::spatial_query::CompanionViewState {
+        &self.editor.companion_view
+    }
+
+    #[inline]
+    pub fn set_show_xray(&mut self, enabled: bool) {
+        self.editor.show_xray = enabled;
+        // Invariante VSP-004: X-Ray visual nunca altera select_through!
+    }
+
+    #[inline]
+    pub fn set_select_through(&mut self, enabled: bool) {
+        self.editor.select_through = enabled;
+        // Invariante VSP-004: select_through nunca altera show_xray!
     }
 }

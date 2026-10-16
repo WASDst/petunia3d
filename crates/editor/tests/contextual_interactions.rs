@@ -899,3 +899,154 @@ fn modeling_feedback_mf001_to_mf008_invariants_h28() {
     let _ = b.state.preflight_boolean_feedback(cube_id, open_id);
     assert_eq!(b.state.project.undo.depth().0, before_state);
 }
+
+#[test]
+fn spatial_dimensions_and_companion_view_invariants_h29() {
+    let mut b = bridge();
+    let cube_id = b.state.project.assets[0].id;
+
+    // VSP-003: Volume Frame World vs ObjectLocal sobre cubo rotacionado
+    b.state.project.assets[0].transform = petunia_project::ObjectTransform::from_trs(
+        glam::Vec3::new(5.0, 5.0, 0.0),
+        glam::Quat::from_rotation_z(std::f32::consts::PI * 0.25),
+        glam::Vec3::ONE,
+    );
+
+    let vf_world = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::World,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame World");
+    let vf_local = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .expect("Volume frame ObjectLocal");
+
+    assert!(
+        vf_world.volume > vf_local.volume + 5.0,
+        "World AABB cresce em relação ao volume mínimo da OBB local"
+    );
+    assert!(
+        (vf_local.volume - 8.0).abs() < 1e-3,
+        "Volume local do cubo 2x2x2 deve ser 8.0"
+    );
+    assert_eq!(vf_local.formatted_dimensions(), "2.000 × 2.000 × 2.000");
+
+    // VSP-003: ScaleToDimensionCmd com Undo/Redo no editor
+    let scale_res = b.state.scale_to_dimension(
+        cube_id,
+        0, // X
+        4.0,
+        false,
+        petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+    );
+    assert!(scale_res.is_ok());
+
+    let vf_scaled = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .unwrap();
+    assert!((vf_scaled.size[0] - 4.0).abs() < 1e-3);
+
+    assert!(b.state.undo(), "Undo da escala para dimensão");
+    let vf_undone = b
+        .state
+        .query_volume_frame(
+            cube_id,
+            petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+            petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+        )
+        .unwrap();
+    assert!((vf_undone.size[0] - 2.0).abs() < 1e-3);
+
+    // VSP-003: Zero dimension guard previne divisão por zero sem pânico
+    let plane_asset = petunia_project::Asset::new("FlatPlane", petunia_mesh::Mesh::plane(2.0));
+    let plane_id = plane_asset.id;
+    b.state.project.assets.push(plane_asset);
+
+    let zero_scale_res = b.state.scale_to_dimension(
+        plane_id,
+        1, // Y do plano é 0.0
+        3.0,
+        false,
+        petunia_core::spatial_query::SpatialFrameKind::ObjectLocal,
+    );
+    assert!(
+        zero_scale_res.is_err(),
+        "Escala em dimensão zero deve ser rejeitada"
+    );
+
+    // VSP-004: Consultas espaciais entre assets
+    let second_cube = petunia_project::Asset::new("SecondCube", petunia_mesh::Mesh::cube(2.0));
+    let second_id = second_cube.id;
+    b.state.project.assets.push(second_cube);
+
+    // Reposiciona segundo cubo em X = 20.0
+    b.state
+        .project
+        .assets
+        .iter_mut()
+        .find(|a| a.id == second_id)
+        .unwrap()
+        .transform = petunia_project::ObjectTransform::from_trs(
+        glam::Vec3::new(20.0, 0.0, 0.0),
+        glam::Quat::IDENTITY,
+        glam::Vec3::ONE,
+    );
+
+    let clearance_res = b
+        .state
+        .query_spatial(
+            petunia_core::spatial_query::SpatialQueryKind::SurfaceClearance {
+                object_a: cube_id,
+                object_b: second_id,
+            },
+        )
+        .expect("Clearance query");
+    assert!(clearance_res.distance > 10.0);
+    assert!(!clearance_res.is_in_contact);
+    assert!(!clearance_res.is_intersecting);
+
+    // VSP-004: Companion View
+    assert!(!b.state.is_companion_view_open());
+    b.state.open_companion_view();
+    assert!(b.state.is_companion_view_open());
+    assert!(b.state.companion_view_state().is_orthographic);
+    b.state.close_companion_view();
+    assert!(!b.state.is_companion_view_open());
+
+    // VSP-004: X-Ray vs Select Through
+    b.state.set_show_xray(true);
+    assert!(b.state.show_xray);
+    assert!(!b.state.select_through);
+    b.state.set_select_through(true);
+    b.state.set_show_xray(false);
+    assert!(!b.state.show_xray);
+    assert!(b.state.select_through);
+
+    // Pureza: consultas não poluem pilha de undo
+    let undo_depth_before = b.state.project.undo.depth().0;
+    let _ = b.state.query_volume_frame(
+        cube_id,
+        petunia_core::spatial_query::SpatialFrameKind::World,
+        petunia_core::spatial_query::GeometryRepresentation::Evaluated,
+    );
+    let _ = b.state.query_spatial(
+        petunia_core::spatial_query::SpatialQueryKind::EuclideanDistance {
+            from: [0.0, 0.0, 0.0],
+            to: [1.0, 1.0, 1.0],
+        },
+    );
+    assert_eq!(b.state.project.undo.depth().0, undo_depth_before);
+}

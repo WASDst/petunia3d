@@ -1022,6 +1022,24 @@ impl CommandDispatcher {
 
         d.register_with_meta(
             CommandMetadata::new(
+                "model.scale_to_dimension",
+                "Scale To Dimension",
+                "Scale object along an axis to target dimension in the specified coordinate frame",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::spatial_query::ScaleToDimensionCmd::new(
+                uuid::Uuid::nil(),
+                0,
+                1.0,
+                false,
+                crate::spatial_query::SpatialFrameKind::World,
+            ),
+        );
+        d.alias("transform.scale_to_dimension", "model.scale_to_dimension");
+
+        d.register_with_meta(
+            CommandMetadata::new(
                 "draw.unite",
                 "Unite",
                 "Merge the closed shapes of the sketch plane into one",

@@ -1149,6 +1149,10 @@ impl CommandContext<'_> {
         };
         modal.snap = snap;
         self.emit_project_changed(changes);
+        let rev = self.document.project.revision_id();
+        if let Some(m) = self.editor.tools.modal.as_mut() {
+            m.published_revision = rev;
+        }
         Some(Ok(()))
     }
 

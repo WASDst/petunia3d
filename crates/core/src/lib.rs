@@ -44,6 +44,7 @@ pub mod schema_contracts;
 pub mod selection;
 pub mod shape_builder;
 pub mod snap;
+pub mod spatial_query;
 pub mod state;
 pub mod tool_session;
 pub mod transform_projection;
@@ -184,6 +185,10 @@ pub use snap::{
 pub use solid_commands::{
     BakeSolidCompositionCmd, CreateSolidCompositionCmd, ReorderSolidCompositionStepCmd,
     SolidOperation, SolidShapeBuilderReport, SolidShapeEditCmd, ToggleSolidCompositionStepCmd,
+};
+pub use spatial_query::{
+    CompanionViewState, GeometryRepresentation, ScaleToDimensionCmd, SpatialFrame,
+    SpatialFrameKind, SpatialQueryInspector, SpatialQueryKind, SpatialQueryResult, VolumeFrame,
 };
 pub mod surface_commands;
 pub use state::{
