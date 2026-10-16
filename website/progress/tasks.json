@@ -435,6 +435,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/section_analysis.rs, crates/core/src/lib.rs, crates/core/src/command.rs, crates/core/src/context_api.rs, crates/core/src/state.rs, crates/core/tests/section_analysis_tests.rs, crates/core/tests/spatial_query_tests.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H30: Section, Thickness e Organic Profiles (VSP-005). Section Inspector analítico não-destrutivo desacoplado de GPU clipping e Geometry Split, suportando contornos abertos (LoopKind::Open), fechados (LoopKind::Closed) com perímetro e área 2D (Shoelace), detecção de furos coplanares aninhados (is_hole) e geração de caps sintéticas não-selecionáveis para visualização (is_selectable = false). Controles de Section Plane ancorado ao Mundo ou Objeto, com offset paramétrico e inversão de normal (flip), expostos via comandos model.set_section_plane, clear, flip e offset. Thickness Probe direcional via traçado de raios Möller-Trumbore em triângulos locais com classificação de paralelismo de parede (WallType::ParallelWall, ObliqueWall, NoOpposingWall) e qualidade explícita (MeasurementQuality::Exact, Approximate, Unavailable). Organic Profiles ao longo de linhas de centro com estações orientadas via Parallel Transport Frame (Bishop Frame / RMF com rotação de Rodrigues) garantindo matematicamente zero flips e sem inversão de normais, com suporte a bifurcações como segmentos independentes. 9 testes em section_analysis_tests.rs, 10 testes em spatial_query_tests.rs passando 100% com zero warnings no clippy e formatação limpa."
+    },
+    "smart-rig-manual-assisted-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/project/src/rig.rs, crates/project/src/lib.rs, crates/project/src/format.rs, crates/core/src/rig_commands.rs, crates/core/src/lib.rs, crates/core/tests/smart_rig_tests.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H31: Smart Rig manual e assistido (RIG-001/002/004/008/009/010/011). Criação e edição manual de ossos para anatomias arbitrárias (bípede, quadrúpede, multípode, serpente, peixe, asas, assimétricos; determinístico local). Preview revisável (SkinningPreviewState) com overrides e commit_cmd isolado do Undo. Bind transacional com Proximity, RigidPerPart e SmoothEnvelope, clamping max 4 influências e normalização sum(w_i)=1.0. Pose Test isolado do Rest Pose (ResetAllBonePosesCmd restaura rest pose, ApplyPoseAsRestCmd grava a pose atual como nova rest pose e deforma a malha). Desativação não-destrutiva de skinning (SetSkinningEnabledCmd) sem apagar ossos ou pesos. Testes: 7 testes sintéticos completos em crates/core/tests/smart_rig_tests.rs pass (0.06s), 8 testes em rig_command_tests.rs pass, 246 testes em petunia_project pass, 190 testes em petunia_core lib pass. Clippy com zero warnings e cargo fmt limpo com CARGO_BUILD_JOBS=1."
     }
   },
   "tasks": [
@@ -3761,19 +3766,19 @@
       "title": "Smart Rig manual e assistido",
       "description": "RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita concluídos com testes.",
       "checkpoints": [
         {
           "title": "RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "smart-rig-manual-assisted-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "smart-rig-manual-assisted-20261016"
         }
       ],
       "documents": [

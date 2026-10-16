@@ -151,7 +151,10 @@ pub use posing::{
     fit_skeleton_to_bounds, mesh_bounds, mesh_to_draw, posed_meshes, skeleton_bounds, skin_mesh,
 };
 pub use profile::{ProfileError, ProfileResource, ProfileWorkplane};
-pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight};
+pub use rig::{
+    Bone, RigError, Skeleton, SkinBindMethod, SkinData, Transform3D, VertexSkinWeight,
+    compute_skin_weights,
+};
 pub use rig_roles::{
     ArmPart, LegChain, LimbPart, RigRequirement, RigRole, RigRoleMap, RoleAssignment,
     RoleContractError, RoleError,
@@ -459,6 +462,9 @@ pub struct Asset {
     pub skeleton_id: Option<Uuid>,
     #[serde(default)]
     pub skin_data: Option<SkinData>,
+    /// Habilita ou desabilita a avaliação de skinning sem apagar pesos ou ossos (RIG-012).
+    #[serde(default = "default_true")]
+    pub skinning_enabled: bool,
     #[serde(default)]
     pub favorite: bool,
     #[serde(default)]
@@ -522,6 +528,7 @@ impl Asset {
             material_id: None,
             skeleton_id: None,
             skin_data: None,
+            skinning_enabled: true,
             favorite: false,
             tags: Vec::new(),
             modifiers: Vec::new(),

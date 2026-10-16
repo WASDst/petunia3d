@@ -335,6 +335,47 @@ impl Skeleton {
         Ok(())
     }
 
+    /// Atualiza as posições de repouso (head e tail) de um osso e recalcula as matrizes de bind.
+    pub fn edit_bone_rest_pose(
+        &mut self,
+        bone_id: u32,
+        head: [f32; 3],
+        tail: [f32; 3],
+    ) -> Result<(), RigError> {
+        let bone = self
+            .bones
+            .iter_mut()
+            .find(|b| b.id == bone_id)
+            .ok_or(RigError::BoneNotFound(bone_id))?;
+        bone.head = head;
+        bone.tail = tail;
+        self.compute_bind_pose_matrices();
+        Ok(())
+    }
+
+    /// Renomeia um osso existente, garantindo unicidade do nome dentro do esqueleto.
+    pub fn rename_bone(
+        &mut self,
+        bone_id: u32,
+        new_name: impl Into<String>,
+    ) -> Result<(), RigError> {
+        let name_str = new_name.into();
+        if self
+            .bones
+            .iter()
+            .any(|b| b.id != bone_id && b.name == name_str)
+        {
+            return Err(RigError::BoneNameAlreadyExists(name_str));
+        }
+        let bone = self
+            .bones
+            .iter_mut()
+            .find(|b| b.id == bone_id)
+            .ok_or(RigError::BoneNotFound(bone_id))?;
+        bone.name = name_str;
+        Ok(())
+    }
+
     /// Valida a integridade do esqueleto: unicidade de nomes, integridade de pais e ausência de ciclos.
     pub fn validate(&self) -> Result<(), RigError> {
         let mut names = HashSet::new();
@@ -658,6 +699,111 @@ impl SkinData {
         }
         deformed
     }
+}
+
+/// Método de vinculação (Skin Binding) de malha a esqueleto (RIG-002/004/009).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SkinBindMethod {
+    /// Ponderação por proximidade quadrática inversamente proporcional à distância dos ossos.
+    Proximity,
+    /// Vínculo rígido por parte/componente (100% de peso ao osso mais próximo).
+    RigidPerPart,
+    /// Envelope suave contínuo com raio de transição ajustado.
+    SmoothEnvelope,
+}
+
+fn distance_to_segment(p: Vec3, a: Vec3, b: Vec3) -> f32 {
+    let ab = b - a;
+    let len_sq = ab.length_squared();
+    if len_sq < 1e-8 {
+        return p.distance(a);
+    }
+    let ap = p - a;
+    let t = (ap.dot(ab) / len_sq).clamp(0.0, 1.0);
+    let projection = a + ab * t;
+    p.distance(projection)
+}
+
+/// Computa os pesos de deformação (SkinData) para uma malha a partir de um esqueleto
+/// usando o método especificado (`Proximity`, `RigidPerPart`, `SmoothEnvelope`).
+/// Garante no máximo 4 influências por vértice e normalização estrita (soma = 1.0).
+pub fn compute_skin_weights(
+    mesh: &petunia_mesh::Mesh,
+    skeleton: &Skeleton,
+    method: SkinBindMethod,
+    max_influences: usize,
+) -> Result<SkinData, RigError> {
+    if skeleton.bones.is_empty() {
+        return Err(RigError::MatrixCountMismatch {
+            expected: 1,
+            found: 0,
+        });
+    }
+    let n_verts = mesh.verts.len();
+    let mut skin = SkinData::new(skeleton.id, n_verts);
+    if n_verts == 0 {
+        return Ok(skin);
+    }
+
+    let max_inf = max_influences.clamp(1, 4);
+    let avg_bone_len: f32 = skeleton.bones.iter().map(|b| b.length()).sum::<f32>()
+        / (skeleton.bones.len() as f32).max(1.0);
+    let blend_radius = (avg_bone_len * 0.5).max(0.05);
+
+    for (v_idx, v) in mesh.verts.iter().enumerate() {
+        let p = Vec3::from(v.pos);
+
+        // Classificar ossos por distância ao segmento do osso (head -> tail)
+        let mut ranked: Vec<(usize, f32)> = skeleton
+            .bones
+            .iter()
+            .enumerate()
+            .map(|(idx, b)| {
+                (
+                    idx,
+                    distance_to_segment(p, Vec3::from(b.head), Vec3::from(b.tail)),
+                )
+            })
+            .collect();
+
+        ranked.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+
+        let mut bones = [0u32; 4];
+        let mut weights = [0.0f32; 4];
+
+        match method {
+            SkinBindMethod::RigidPerPart => {
+                // 100% no osso mais próximo
+                bones[0] = ranked[0].0 as u32;
+                weights[0] = 1.0;
+            }
+            SkinBindMethod::Proximity => {
+                let limit = max_inf.min(ranked.len());
+                for slot in 0..limit {
+                    let (bone_idx, dist) = ranked[slot];
+                    bones[slot] = bone_idx as u32;
+                    weights[slot] = 1.0 / (dist.powi(2) + 0.05);
+                }
+            }
+            SkinBindMethod::SmoothEnvelope => {
+                let d_min = ranked[0].1;
+                let limit = max_inf.min(ranked.len());
+                for slot in 0..limit {
+                    let (bone_idx, dist) = ranked[slot];
+                    let t = ((dist - d_min) / blend_radius).clamp(0.0, 1.0);
+                    bones[slot] = bone_idx as u32;
+                    weights[slot] = (1.0 - t) * (1.0 - t);
+                }
+            }
+        }
+
+        let mut vw = VertexSkinWeight { bones, weights };
+        vw.normalize();
+        skin.vertex_weights[v_idx] = vw;
+    }
+
+    skin.validate(n_verts, skeleton.bones.len())?;
+    Ok(skin)
 }
 
 #[cfg(test)]

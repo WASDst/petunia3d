@@ -132,7 +132,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H28 | P2         | Feedback comum de operações                     | DONE                    | Preview fonte fixa, ghost, limites MF-001–008 e guards ok.    | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
 | H29 | P2         | Dimensões e comparação espacial                 | DONE                    | Frames, representação e consultas espaciais VSP-003/004.       | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
 | H30 | P2         | Section, Thickness e Organic Profiles           | DONE                    | VSP-005: Section, Thickness e Organic Profiles concluídos.     | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
-| H31 | P2         | Smart Rig manual e assistido                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
+| H31 | P2         | Smart Rig manual e assistido                    | DONE                    | RIG-001/002/004/008/009/010/011 concluídos com testes.        | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
 | H32 | P2         | Smart Rig estrutural e Live opcional            | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.                                                                                                                                                                                                   |
 | H33 | P2         | Integração visual e acessibilidade posterior    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.                                                                                                                                                                                                                    |
 <!-- END TOOL IMPLEMENTATION MATRIX -->
@@ -587,6 +587,47 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 
 **Risks / Next checkpoint:**
 - Degenerescência de malhas abertas ou raios divergentes: tratada com retorno gracioso de `WallType::NoOpposingWall` e qualidade `MeasurementQuality::Unavailable` sem pânicos.
-- Checkpoint concluído: H30. Próximo checkpoint: H31 (Smart Rig manual e assistido: RIG-001/002/004/008/009/010/011 — edição manual, preview revisável, bind transacional e pose explícita).
+- Checkpoint concluído: H30. Checkpoint concluído: H30. Próximo checkpoint: H31 (Smart Rig manual e assistido).
 
+---
+
+### Entrega H31 — Smart Rig manual e assistido (RIG-001/002/004/008/009/010/011) (2026-10-16)
+
+**Intent:**
+- Implementar as capacidades fundamentais do Smart Rig manual e assistido:
+  1. Criação e edição manual de esqueletos e ossos para anatomias arbitrárias (bípede, quadrúpede, multípode/inseto, serpente, peixe, asas, criaturas assimétricas; determinístico local sem suposições anatômicas embutidas). Comandos: `CreateEmptySkeletonCmd`, `AddBoneCmd`, `RemoveBoneCmd`, `ReparentBoneCmd` (com validação estrita anti-ciclos e preservação de rest offsets absolutos), `EditBoneRestPoseCmd` e `RenameBoneCmd`.
+  2. Preview de skinning revisável (`SkinningPreviewState`) com overrides manuais por vértice/osso antes do commit, desacoplado de mutações prematuras no documento ou Undo stack.
+  3. Bind transacional (`BindRigCmd`, `UnbindRigCmd`) suportando métodos `Proximity`, `RigidPerPart` e `SmoothEnvelope`, com limite rígido de até 4 influências por vértice e normalização invariante $\sum w_i = 1.0$.
+  4. Isolamento estrito entre Modo de Pose e Rest Pose: `ResetAllBonePosesCmd` restaura todos os ossos para suas posições de repouso canônicas; `ApplyPoseAsRestCmd` assenta explicitamente a pose de deformação atual como nova Rest Pose de repouso, recalculando as matrizes de bind inversas e deformando a geometria do asset correspondente.
+  5. Desativação não-destrutiva de skinning (`SetSkinningEnabledCmd` / `asset.skinning_enabled`) permitindo desligar a deformação de malha instantaneamente sem deletar ossos, pesos de skinning associados ou clipes de animação (RIG-012).
+
+**Sources:**
+- `crates/project/src/rig.rs`
+- `crates/project/src/lib.rs`
+- `crates/project/src/format.rs`
+- `crates/core/src/rig_commands.rs`
+- `crates/core/src/lib.rs`
+- `crates/core/tests/smart_rig_tests.rs`
+
+**Gap:**
+- O Petunia3D carecia de comandos transacionais e de domínio para criação manual de anatomias de esqueletos arbitrárias (além de presets humanóides/quadrúpedes), cálculo automático de bind weights por Proximity/Rigid/Smooth com capping e normalização, preview volátil antes do bind, desacoplamento seguro entre poses de teste e rest pose com capacidade de assentar nova rest pose deformando a malha, e toggle não-destrutivo de deformação.
+
+**Changed:**
+- Em `crates/project/src/rig.rs`: adicionados `edit_bone_rest_pose`, `rename_bone`, `SkinBindMethod` (`Proximity`, `RigidPerPart`, `SmoothEnvelope`) e função pura `compute_skin_weights` com clamp a max 4 influências e normalização unitária.
+- Em `crates/project/src/lib.rs` e `format.rs`: adicionado campo `pub skinning_enabled: bool` ao `Asset` (com default `true` serializável).
+- Em `crates/core/src/rig_commands.rs`: implementados comandos `CreateEmptySkeletonCmd`, `AddBoneCmd`, `RemoveBoneCmd`, `ReparentBoneCmd`, `EditBoneRestPoseCmd`, `RenameBoneCmd`, `BindRigCmd`, `UnbindRigCmd`, `ResetAllBonePosesCmd`, `ApplyPoseAsRestCmd`, `SetSkinningEnabledCmd` e a struct `SkinningPreviewState`.
+- Em `crates/core/src/lib.rs`: exportados todos os novos tipos e comandos de smart rig.
+- Em `crates/core/tests/smart_rig_tests.rs`: desenvolvidos 7 testes cobrindo todas as anatomias, anti-ciclo, reparent, rest pose edit, bind methods, unbind, preview overrides, pose test vs rest pose e desativação não-destrutiva.
+
+**Verification:**
+- `crates/core/tests/smart_rig_tests.rs`: 7 passed, 0 failed (0.06s).
+- `crates/core/tests/rig_command_tests.rs`: 8 passed, 0 failed (0.08s).
+- `crates/project/src/lib.rs`: 246 passed, 0 failed (0.44s).
+- `crates/core/src/lib.rs`: 190 passed, 0 failed (1.20s).
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_project --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_project -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Degenerescência de ossos com comprimento zero ou coordenadas não finitas: rejeitada com `CommandError::InvalidInput` em `can_execute` e nas funções de esqueleto.
+- Checkpoint concluído: H31. Próximo checkpoint: H32 (Smart Rig estrutural e Live opcional: RIG-003/005/006/007/012 — identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig).
 

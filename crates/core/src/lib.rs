@@ -131,14 +131,17 @@ pub use project_service::{
     ProjectService, ProjectServiceError, RecoverySummary, sanitize_filename,
 };
 pub use rig_commands::{
-    AddAnimationCmd, AddIkChainCmd, AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd,
-    ApplyMotionNowCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, ClearBoneTrackCmd, ClearRigRoleCmd,
-    DeleteBoneKeyCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd, FitBlocked,
+    AddAnimationCmd, AddBoneCmd, AddIkChainCmd, AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd,
+    ApplyMotionNowCmd, ApplyPoseAsRestCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, BindRigCmd,
+    ClearBoneTrackCmd, ClearRigRoleCmd, CreateEmptySkeletonCmd, DeleteBoneKeyCmd,
+    DeleteBoneKeyframeCmd, DuplicateMotionCmd, EditBoneRestPoseCmd, FitBlocked,
     FitRigToActiveAssetCmd, InferRigRolesCmd, InsertBoneKeyframeCmd, RemoveAnimationCmd,
-    RemoveIkChainCmd, RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd, ResetBonePoseCmd,
-    RigPresetKind, SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd,
+    RemoveBoneCmd, RemoveIkChainCmd, RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd,
+    RenameBoneCmd, ReparentBoneCmd, ResetAllBonePosesCmd, ResetBonePoseCmd, RigPresetKind,
+    SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd,
     SetMotionLayerBlendModeCmd, SetMotionLayerWeightCmd, SetMotionParamCmd, SetMotionStyleCmd,
-    ToggleMotionLayerEnabledCmd, UpdateIkChainCmd, UpdateMotionCmd, fit_availability,
+    SetSkinningEnabledCmd, SkinningPreviewState, ToggleMotionLayerEnabledCmd, UnbindRigCmd,
+    UpdateIkChainCmd, UpdateMotionCmd, fit_availability,
 };
 
 pub use brush::{

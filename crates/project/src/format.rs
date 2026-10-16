@@ -813,6 +813,7 @@ mod tests {
                 material_id: None,
                 skeleton_id: None,
                 skin_data: None,
+                skinning_enabled: true,
                 favorite: false,
                 tags: vec![],
                 modifiers: vec![],
