@@ -57,6 +57,25 @@ Evolução do [ShapeBuilder3D](../03-geometry/shape-builder-3d.md), sem substitu
 
 **VSP-005:** Section Inspector é consulta não destrutiva. Clipping GPU, interseção geométrica e Geometry Split real são operações distintas. Contornos podem estar abertos, desconectados e conter furos; caps sintéticas não são faces selecionáveis. Plano pode ser ancorado em mundo/objeto, invertido e editado numericamente. Espessura direcional, parede pareada, largura de seção e diâmetro são grandezas distintas; começar por probe direcional com método/qualidade explícitos. Perfis orgânicos começam por linha central manual/estrutural e estações com frames transportados, segmentos separados em bifurcações; não inferir anatomia nem prometer espessura mínima exata por raycast.
 
+### Diretrizes técnicas para medições e consultas espaciais (VSP-003 / VSP-004)
+
+Para garantir estabilidade numérica, invariância à tesselação e desempenho interativo na aplicação das consultas espaciais, o núcleo segue os seguintes direcionamentos técnicos:
+
+#### 1. Estabilidade e Invariância de Volume Frames Estruturais (PCA e Simetrias)
+- **Invariância à Densidade de Tesselação:** A estimação de eixos principais de inércia não deve ser enviesada por áreas com maior densidade de subdivisão adaptativa ou bevels. O cálculo canônico evolui do PCA pontual de vértices para o **tensor de momentos de inércia integrado sobre a superfície triangular** (método Mirtich/Eberly), onde cada face contribui proporcionalmente à sua área e centróide.
+- **Tratamento de Degenerescência Total (Isotropia):** Em geometrias perfeitamente ou quase-esféricas/cúbicas onde a dispersão dos três autovalores é inferior ao limiar relativo ($\frac{\lambda_{\max} - \lambda_{\min}}{\lambda_{\max}} < 0.02$), o frame `Structural` realiza fallback transparente para o frame `ObjectLocal`. Isso previne rotações espúrias decorrentes de ruído numérico infinitesimal na decomposição de Jacobi.
+- **Tratamento de Degenerescência Parcial (Simetria Axial e Corpos de Revolução):** Em peças cilíndricas, cápsulas ou tubulações onde dois autovalores são equivalentes ($\lambda_1 \gg \lambda_2 \approx \lambda_3$), o eixo dominante $\mathbf{v}_1$ permanece fixo e o plano ortogonal degenerado é estabilizado por **projeção canônica (Anchor Alignment)**: projeta-se o eixo canônico de `ObjectLocal` mais alinhado sobre o plano normal a $\mathbf{v}_1$ e ortogonaliza-se via Gram-Schmidt, garantindo continuidade temporal estrita durante transformações e edições.
+- **Sinalização de Qualidade:** Em geometrias isotrópicas ou axissimétricas, o metadata do `VolumeFrame` reporta `MeasurementQuality::Approximate`, informando a existência de graus de liberdade rotacionais invariantes.
+
+#### 2. Escalabilidade e Desempenho de Consultas de Folga (Clearance) e Colisão
+- **Aceleração Espacial Hierárquica (BVH / AABB-Tree):** Consultas de distância de superfície e contato entre malhas com mais de $1.000$ triângulos não devem percorrer todos os pares de faces de forma ingênua ($O(V \cdot F)$). Utiliza-se indexação hierárquica por BVH (AABB-tree de faces) com complexidade de consulta média $O(\log F)$ e travessia concorrente de árvores (*dual-tree traversal*).
+- **Avaliação em Camadas (Coarse-to-Fine):**
+  - *Fase 0 (Fast Bound):* Teste de separação em $O(1)$ entre as caixas OBBs dos respectivos `VolumeFrame`s. Se a distância entre as OBBs exceder a tolerância solicitada ou a área de interesse, a consulta encerra sem avaliar polígonos.
+  - *Fase 1 (Upper-Bound Pruning):* A menor distância ponto-triângulo encontrada até o momento atua como teto de poda rígido: qualquer nó da BVH cuja distância mínima à caixa envolvente for maior que o recorde atual é imediatamente descartado da árvore de busca.
+  - *Fase 2 (Early Exit para Contato):* Para consultas do tipo `ContactUnderTolerance(tol)`, a travessia encerra no primeiro par de triângulos cuja distância seja $\le tol$, sem necessidade de mapear a menor distância global.
+- **Cache de Estruturas Derivadas por Revisão (`geometry_revision`):** A BVH e os tensores de inércia da malha residem em cache vinculado à revisão topológica do ativo (`mesh.revision`). Movimentações de posição, rotação ou escala em nível de cena (`SceneObject.transform`) atualizam a raiz espacial da BVH em $O(1)$ sem recomputar as caixas internas ou a topologia local.
+- **Isolamento de Threads (Zero UI Freezes):** Consultas de clearance ou contato em malhas massivas (> $20.000$ faces) são despachadas como tarefas assíncronas em background (worker threads), retornando estimativas preliminares imediatas (`MeasurementQuality::Approximate`) e emitindo evento tipado `SpatialQueryComputed` ao concluir, sem travar o loop de renderização da viewport ou a interface.
+
 ## Feedback de modelagem — VSP-006 / MF-001 a MF-008
 
 Uma operação expõe fonte/revisão, transação, alvos, frame/pivô, parâmetros, prévia, estado anterior e diagnósticos tipados. O renderer consome esse resultado, sem repetir o cálculo geométrico. Fonte fixa impede drift entre updates; resultado stale não confirma.
