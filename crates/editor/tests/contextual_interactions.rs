@@ -1050,3 +1050,60 @@ fn spatial_dimensions_and_companion_view_invariants_h29() {
     );
     assert_eq!(b.state.project.undo.depth().0, undo_depth_before);
 }
+
+#[test]
+fn visual_assistance_and_accessibility_intents_h33() {
+    let mut b = bridge();
+
+    // 1. VSP-001: Intent para alterar perfil de assistência visual
+    assert_eq!(
+        b.state.visual_assistance_profile(),
+        petunia_core::VisualAssistanceProfile::Assisted
+    );
+    b.apply(UiIntent::SetVisualAssistanceProfile(
+        petunia_core::VisualAssistanceProfile::Analytical,
+    ));
+    assert_eq!(
+        b.state.visual_assistance_profile(),
+        petunia_core::VisualAssistanceProfile::Analytical
+    );
+
+    // 2. VSP-002: Intents para alterar modo Clay e iluminação
+    assert_eq!(b.state.clay_mode(), petunia_core::ClayMode::Disabled);
+    b.apply(UiIntent::SetClayMode(petunia_core::ClayMode::Technical));
+    assert_eq!(b.state.clay_mode(), petunia_core::ClayMode::Technical);
+
+    b.apply(UiIntent::SetClayLighting(
+        petunia_core::LightingAnchor::WorldFixed,
+    ));
+    assert_eq!(
+        b.state.clay_lighting(),
+        petunia_core::LightingAnchor::WorldFixed
+    );
+
+    // 3. VSP-004: Intents de Companion View
+    assert!(!b.state.is_companion_view_open());
+    b.apply(UiIntent::ToggleCompanionView);
+    assert!(b.state.is_companion_view_open());
+    assert!(!b.state.companion_view_state().steals_focus);
+
+    b.apply(UiIntent::SetCompanionViewTrigger(
+        petunia_core::CompanionViewTrigger::OptInAuto,
+    ));
+    assert_eq!(
+        b.state.companion_view_state().trigger_mode,
+        petunia_core::CompanionViewTrigger::OptInAuto
+    );
+
+    b.apply(UiIntent::ToggleCompanionView);
+    assert!(!b.state.is_companion_view_open());
+
+    // 4. SEL-007: Feedback semântico acessível do gizmo
+    let feedback = b.state.gizmo_accessibility_feedback();
+    assert_eq!(feedback.mode, "Idle");
+    assert!(feedback.high_contrast_compliant);
+    assert!(feedback.minimum_hit_target_dp >= 24.0);
+
+    // Invariante de histórico: zero poluição de Undo
+    assert_eq!(b.state.project.undo.depth().0, 0);
+}

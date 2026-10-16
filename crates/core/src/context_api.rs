@@ -1111,6 +1111,60 @@ impl AppState {
     pub fn clear_active_section_plane(&mut self) {
         self.session.active_section = None;
     }
+
+    #[inline]
+    pub fn visual_assistance_profile(&self) -> crate::visual_assistance::VisualAssistanceProfile {
+        self.session.visual_assistance
+    }
+
+    #[inline]
+    pub fn set_visual_assistance_profile(
+        &mut self,
+        profile: crate::visual_assistance::VisualAssistanceProfile,
+    ) {
+        self.session.visual_assistance = profile;
+        // Invariante VSP-001: nunca altera keymap, ferramentas ou documento!
+    }
+
+    #[inline]
+    pub fn clay_mode(&self) -> crate::visual_assistance::ClayMode {
+        self.session.clay_settings.mode
+    }
+
+    #[inline]
+    pub fn set_clay_mode(&mut self, mode: crate::visual_assistance::ClayMode) {
+        self.session.clay_settings.mode = mode;
+        // Invariante VSP-002: modo de trabalho desacoplado do documento!
+    }
+
+    #[inline]
+    pub fn clay_lighting(&self) -> crate::visual_assistance::LightingAnchor {
+        self.session.clay_settings.lighting
+    }
+
+    #[inline]
+    pub fn set_clay_lighting(&mut self, anchor: crate::visual_assistance::LightingAnchor) {
+        self.session.clay_settings.lighting = anchor;
+    }
+
+    #[inline]
+    pub fn set_companion_view_trigger(
+        &mut self,
+        trigger: crate::visual_assistance::CompanionViewTrigger,
+    ) {
+        self.session.companion_view.trigger_mode = trigger;
+    }
+
+    #[inline]
+    pub fn gizmo_accessibility_feedback(
+        &self,
+    ) -> crate::visual_assistance::GizmoAccessibilityFeedback {
+        crate::visual_assistance::evaluate_gizmo_accessibility(
+            self.modal.as_ref(),
+            self.session.transform_orientation,
+            self.session.snap_enabled,
+        )
+    }
 }
 
 #[allow(dead_code)]
@@ -1421,5 +1475,48 @@ impl CommandContext<'_> {
     #[inline]
     pub fn clear_active_section_plane(&mut self) {
         self.editor.active_section = None;
+    }
+
+    #[inline]
+    pub fn visual_assistance_profile(&self) -> crate::visual_assistance::VisualAssistanceProfile {
+        self.editor.visual_assistance
+    }
+
+    #[inline]
+    pub fn set_visual_assistance_profile(
+        &mut self,
+        profile: crate::visual_assistance::VisualAssistanceProfile,
+    ) {
+        self.editor.visual_assistance = profile;
+        // Invariante VSP-001: nunca altera keymap, ferramentas ou documento!
+    }
+
+    #[inline]
+    pub fn clay_mode(&self) -> crate::visual_assistance::ClayMode {
+        self.editor.clay_settings.mode
+    }
+
+    #[inline]
+    pub fn set_clay_mode(&mut self, mode: crate::visual_assistance::ClayMode) {
+        self.editor.clay_settings.mode = mode;
+        // Invariante VSP-002: modo de trabalho desacoplado do documento!
+    }
+
+    #[inline]
+    pub fn clay_lighting(&self) -> crate::visual_assistance::LightingAnchor {
+        self.editor.clay_settings.lighting
+    }
+
+    #[inline]
+    pub fn set_clay_lighting(&mut self, anchor: crate::visual_assistance::LightingAnchor) {
+        self.editor.clay_settings.lighting = anchor;
+    }
+
+    #[inline]
+    pub fn set_companion_view_trigger(
+        &mut self,
+        trigger: crate::visual_assistance::CompanionViewTrigger,
+    ) {
+        self.editor.companion_view.trigger_mode = trigger;
     }
 }

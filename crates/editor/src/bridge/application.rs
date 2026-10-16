@@ -1219,6 +1219,26 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 petunia_module_model::profile_align_camera_to_workplane(&mut self.state);
                 self.state.mark_dirty();
             }
+            UiIntent::SetVisualAssistanceProfile(profile) => {
+                self.state.set_visual_assistance_profile(profile);
+                self.state.mark_dirty();
+            }
+            UiIntent::SetClayMode(mode) => {
+                self.state.set_clay_mode(mode);
+                self.state.mark_dirty();
+            }
+            UiIntent::SetClayLighting(lighting) => {
+                self.state.set_clay_lighting(lighting);
+                self.state.mark_dirty();
+            }
+            UiIntent::ToggleCompanionView => {
+                self.state.toggle_companion_view();
+                self.state.mark_dirty();
+            }
+            UiIntent::SetCompanionViewTrigger(trigger) => {
+                self.state.set_companion_view_trigger(trigger);
+                self.state.mark_dirty();
+            }
         }
         self.sync_viewport_context();
     }

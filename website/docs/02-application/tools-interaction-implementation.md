@@ -134,7 +134,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H30 | P2         | Section, Thickness e Organic Profiles           | DONE                    | VSP-005: Section, Thickness e Organic Profiles concluídos.     | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
 | H31 | P2         | Smart Rig manual e assistido                    | DONE                    | RIG-001/002/004/008/009/010/011 concluídos com testes.        | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
 | H32 | P2         | Smart Rig estrutural e Live opcional            | DONE                    | RIG-003/005/006/007/012 concluídos com testes.        | RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.                                                                                                                                                                                                   |
-| H33 | P2         | Integração visual e acessibilidade posterior    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.                                                                                                                                                                                                                    |
+| H33 | P2         | Integração visual e acessibilidade posterior    | DONE                    | VSP-001/002/004, SEL-007 concluídos com testes.                | VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.                                                                                                                                                                                                                    |
 <!-- END TOOL IMPLEMENTATION MATRIX -->
 
 ### Atualização obrigatória e preservação do histórico
@@ -674,5 +674,37 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 **Risks / Next checkpoint:**
 - Topologia destrutiva durante live rig: adequadamente interceptada pelo solver, definindo `RigReviewStatus::NeedsReview` com mensagem detalhada e rejeitando atualizações automáticas silenciosas até que o usuário execute `RemapRigWeightsCmd` ou re-faça o bind intencionalmente.
 - Checkpoint concluído: H32. Próximo checkpoint: H33 (Integração visual e acessibilidade posterior: VSP-001/002/004, SEL-007 — Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux).
+
+
+## Continuação H33 — Integração visual e acessibilidade posterior (VSP-001, VSP-002, VSP-004, SEL-007) (2026-10-16)
+
+**Intent / Sources:** Implementar os contratos de perfis de assistência visual (VSP-001), shading Clay e âncoras de iluminação (VSP-002), Companion View desacoplada com câmera independente e sem roubo de foco (VSP-004) e avaliação de acessibilidade para gizmos universais com identificação não-cromática (SEL-007), integrando seus `UiIntent`s no `petunia_editor`.
+
+**Gap:**
+- O Petunia3D carecia de suporte formal a perfis de assistência cognitiva e visual (`Essential`, `Assisted` [padrão para iniciantes], `Analytical`) sem alterar keymap, ferramentas ativas ou poluir Undo.
+- Não havia modos de trabalho Clay desacoplados de materiais de projeto e exportação (`Disabled`, `Soft`, `Form`, `Technical`, `MatCap`) e âncoras de iluminação (`CameraRelative`, `WorldFixed`).
+- A Companion View não possuía contratos estritos para garantir `steals_focus: false` (evitando cancelar ou usurpar foco de transformações ativas em andamento), câmera ortográfica independente e desacoplamento total entre `show_xray` e `select_through`.
+- Faltava verificação analítica de acessibilidade para o gizmo universal (SEL-007), incluindo rótulos de texto não-cromáticos ("X", "Y", "Z", "Screen", "Plane"), conformidade de alto contraste e hit targets mínimos de 24 dp.
+
+**Changed:**
+- Em `crates/core/src/visual_assistance.rs`: implementados `VisualAssistanceProfile`, `ClayMode`, `LightingAnchor`, `ClaySettings`, `CompanionViewTrigger`, `GizmoAccessibilityFeedback` e a função de avaliação `evaluate_gizmo_accessibility`.
+- Em `crates/core/src/spatial_query.rs`: adicionados campos `trigger_mode` e `steals_focus: bool` (default `false`) a `CompanionViewState`.
+- Em `crates/core/src/state.rs`: adicionados `visual_assistance: VisualAssistanceProfile` e `clay_settings: ClaySettings` a `EditorSession`.
+- Em `crates/core/src/context_api.rs`: expostos getters e setters para perfil de assistência e configurações de Clay em `AppState`, `EditorView` e `CommandContext`.
+- Em `crates/core/src/lib.rs`: re-exportados todos os novos tipos e funções.
+- Em `crates/editor/src/lib.rs` e `crates/editor/src/bridge/application.rs`: implementados os intents `SetVisualAssistanceProfile`, `SetClayMode`, `SetClayLighting`, `ToggleCompanionView` e `SetCompanionViewTrigger`.
+- Em `crates/core/tests/visual_spatial_accessibility_tests.rs`: criados 8 testes sintéticos cobrindo valores padrão, ausência de poluição no Undo, isolamento de materiais de projeto, Companion View com `steals_focus: false`, desacoplamento de raios X e seleção passante, e conformidade acessível de gizmo (SEL-007).
+- Em `crates/editor/tests/contextual_interactions.rs`: adicionado teste de integração end-to-end `visual_assistance_and_accessibility_intents_h33`.
+
+**Verification:**
+- `crates/core/tests/visual_spatial_accessibility_tests.rs`: 8 passed, 0 failed (0.04s).
+- `crates/editor/tests/contextual_interactions.rs`: 18 passed, 0 failed (0.10s).
+- `crates/core --lib`: 190 passed, 0 failed (1.23s).
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_editor --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Shading Clay e Companion View testados no Core e no Editor Controller; a apresentação em hardware OpenGL físico e shaders GLSL específicos da viewport Qt permanece sob as suítes e gates de renderização/plataforma.
+- Checkpoint concluído: H33. Todos os checkpoints do contrato contextual de ferramentas (H01–H33) foram entregues e validados no Core/Editor.
 
 

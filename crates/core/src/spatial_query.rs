@@ -542,6 +542,10 @@ pub struct CompanionViewState {
     pub ortho_scale: f32,
     pub auto_open_opt_in: bool,
     pub suggested: bool,
+    #[serde(default)]
+    pub trigger_mode: crate::visual_assistance::CompanionViewTrigger,
+    #[serde(default)]
+    pub steals_focus: bool,
 }
 
 impl Default for CompanionViewState {
@@ -554,6 +558,8 @@ impl Default for CompanionViewState {
             ortho_scale: 5.0,
             auto_open_opt_in: false,
             suggested: false,
+            trigger_mode: crate::visual_assistance::CompanionViewTrigger::Manual,
+            steals_focus: false,
         }
     }
 }

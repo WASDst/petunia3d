@@ -769,6 +769,16 @@ pub enum UiIntent {
     SetModelingMode(ModelingMode),
     /// "Olhar para o plano": alinha a câmera ao plano sob comando (cap. 01).
     ProfileLookAtPlane,
+    /// Perfil de assistência visual (VSP-001).
+    SetVisualAssistanceProfile(petunia_core::VisualAssistanceProfile),
+    /// Modo de trabalho Clay na viewport (VSP-002).
+    SetClayMode(petunia_core::ClayMode),
+    /// Ancoragem de iluminação de modelagem na viewport (VSP-002).
+    SetClayLighting(petunia_core::LightingAnchor),
+    /// Alterna exibição da Companion View desacoplada (VSP-004).
+    ToggleCompanionView,
+    /// Define modo de disparo da Companion View (VSP-004).
+    SetCompanionViewTrigger(petunia_core::CompanionViewTrigger),
 }
 
 // Presentation ViewModels and Data Transfer Objects (DTOs) for the Slint shell.

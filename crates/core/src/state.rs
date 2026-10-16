@@ -1146,6 +1146,10 @@ pub struct EditorSession {
     pub companion_view: crate::spatial_query::CompanionViewState,
     /// Estado da seção transversal ativa (VSP-005 / H30).
     pub active_section: Option<crate::section_analysis::SectionPlane>,
+    /// Perfil de assistência visual da viewport (VSP-001 / H33).
+    pub visual_assistance: crate::visual_assistance::VisualAssistanceProfile,
+    /// Configurações do modo Clay de visualização na viewport (VSP-002 / H33).
+    pub clay_settings: crate::visual_assistance::ClaySettings,
 }
 
 impl std::ops::Deref for EditorSession {
@@ -1218,6 +1222,8 @@ impl EditorSession {
             decal_time: None,
             companion_view: crate::spatial_query::CompanionViewState::default(),
             active_section: None,
+            visual_assistance: crate::visual_assistance::VisualAssistanceProfile::Assisted,
+            clay_settings: crate::visual_assistance::ClaySettings::default(),
         }
     }
 

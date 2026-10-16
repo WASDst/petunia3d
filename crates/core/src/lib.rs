@@ -60,6 +60,12 @@ pub mod uv_transform_session;
 pub use uv_transform_session::{UvTransformKind, UvTransformSession};
 pub mod viewport;
 pub mod viewport_query;
+pub mod visual_assistance;
+
+pub use visual_assistance::{
+    ClayMode, ClaySettings, CompanionViewTrigger, GizmoAccessibilityFeedback, LightingAnchor,
+    VisualAssistanceProfile, evaluate_gizmo_accessibility,
+};
 
 pub use animate_session::{
     AnimatePreview, AnimateSession, BoneDraft, MotionCatalogEntry, MotionUnavailable, PosePreview,
