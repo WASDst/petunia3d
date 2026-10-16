@@ -420,6 +420,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/mesh/src/imprint.rs, crates/core/src/surface_commands.rs, crates/core/src/state.rs, crates/core/src/command.rs, crates/core/tests/command_tests.rs, crates/editor/tests/contextual_interactions.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H27: Construção sobre superfícies. Alinhamento de plano de trabalho à face (AlignWorkplaneToFaceCmd e AlignWorkplaneToSelectionCmd) com rejeição informativa de faces curvas/não-planares; Imprint de perfis com furos (ImprintProfileCmd) com preservação de loops internos e triangulação earcut; Push/Pull contextual (ContextualPushPullCmd) discriminando entre contornos livres e regiões internas embedadas; integridade transacional de Undo/Redo e conformidade 'Everything is a Command'. Testes em imprint.rs, command_tests.rs, contextual_interactions.rs e editor_parity (Qt offscreen) passando 100% com zero warnings de clippy."
+    },
+    "modeling-feedback-core-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/modeling_feedback.rs, crates/core/src/modal.rs, crates/core/src/state.rs, crates/core/src/context_api.rs, crates/core/tests/modeling_feedback_tests.rs, crates/core/tests/command_tests.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H28: Feedback comum de operações (MF-001–008). Projeção unificada OperationFeedback (ModelingFeedback) expondo fonte e revisão de documento, ghost mesh (fonte fixa congelada), prévia reversível sem poluição de histórico no cancelamento e transação atômica única no commit. Parâmetros com bounds e limites seguros (APPROACHING_LIMIT, EXCEEDED_LIMIT, INSET_COLLAPSE_LIMIT, BEVEL_OVERLAP_LIMIT, EXTRUDE_NEGATIVE). Preflights de booleana (detecção de operandos abertos/não-manifold via is_closed_manifold() e auto-booleana), mirror/simetria com marcador PlaneDisc e detecção de assimetria artística sem correção forçada, sculpt com BrushFootprint e falloff, remesh em malhas skinned com aviso de perda de pesos de rig, e seleção parcial/incompatível com relatório de alvos ignorados. Consultas 100% puras sem mutação de documento ou estado. Safe commit guard bloqueando confirmação em caso de mutação externa/concorrente. 8 testes em modeling_feedback_tests, 1 teste em command_tests, 1 teste em contextual_interactions passando 100% com zero warnings de clippy e formatação limpa."
     }
   },
   "tasks": [
@@ -3668,19 +3673,19 @@
       "title": "Feedback comum de operações",
       "description": "MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Plano aprovado sobre 92c22caa. Implementado ModelingFeedback unificado (MF-001–008) com fonte/revisão fixa, ghost mesh, prévia reversível, parâmetros com limites, diagnósticos de incompatibilidade prévios ao commit e queries 100% puras.",
       "checkpoints": [
         {
           "title": "MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "modeling-feedback-core-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "modeling-feedback-core-20261016"
         }
       ],
       "documents": [

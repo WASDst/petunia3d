@@ -5,10 +5,10 @@ use petunia_mesh::Mesh;
 use petunia_project::Project;
 
 pub struct MeshPreview {
-    original: Project,
-    selection: Selection,
-    label: &'static str,
-    changed: bool,
+    pub(crate) original: Project,
+    pub(crate) selection: Selection,
+    pub(crate) label: &'static str,
+    pub(crate) changed: bool,
 }
 
 impl CommandContext<'_> {

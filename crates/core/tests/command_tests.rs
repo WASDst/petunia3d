@@ -3251,3 +3251,184 @@ fn test_surface_construction_commands_and_undo_redo() {
             .any(|v| (v.pos[2] - 1.5).abs() < 1e-4)
     );
 }
+
+#[test]
+fn test_modeling_feedback_and_ghost_invariants_h28() {
+    use petunia_core::modal::ModalKind;
+    use petunia_core::{Mesh, SelectMode, SelectionDomain};
+    use uuid::Uuid;
+
+    let mut state = petunia_core::AppState::default();
+    let cube = Mesh::cube(2.0);
+    let original_cube = cube.clone();
+    state.project.add("Target Cube", cube);
+    let cube_id = state.project.active().unwrap().id;
+
+    state.select_mode = SelectMode::Face;
+    state.selection_domain = SelectionDomain::Face;
+    // Seleciona a face superior (normal +Z)
+    if let Some(mesh) = state.project.active_mesh_mut() {
+        mesh.deselect_all();
+        mesh.faces[4].selected = true;
+    }
+
+    // --- MF-001: Extrude com preview de fonte fixa, distância signed e ghost mesh ---
+    state.begin_modal(ModalKind::Extrude).unwrap();
+    state
+        .update_modal(glam::Vec3::new(0.0, 0.0, 1.75), 1.75)
+        .unwrap();
+
+    let extrude_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Extrude");
+    assert_eq!(extrude_fb.operation_name, "Extrude");
+    assert!(extrude_fb.can_commit);
+    assert!(!extrude_fb.is_stale);
+    assert_eq!(extrude_fb.affected_region.faces_count, 1);
+    assert_eq!(extrude_fb.affected_region.vertices_count, 4);
+    assert!(extrude_fb.ghost_mesh.is_some());
+    let ghost = extrude_fb.ghost_mesh.as_ref().unwrap();
+    assert_eq!(ghost.verts.len(), original_cube.verts.len());
+    assert_eq!(ghost.faces.len(), original_cube.faces.len());
+    assert!(extrude_fb.hud_summary().contains("Extrude"));
+    assert!(extrude_fb.hud_summary().contains("1.750 m"));
+    assert!(extrude_fb.hud_summary().contains("[VALID]"));
+
+    state.cancel_modal();
+
+    // --- MF-002: Inset com limites de parâmetros e warnings de colapso geométrico ---
+    state.begin_modal(ModalKind::Inset).unwrap();
+    state.update_modal(glam::Vec3::ZERO, 0.90).unwrap();
+
+    let inset_warning_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Inset");
+    assert!(inset_warning_fb.has_warnings());
+    assert!(inset_warning_fb.can_commit);
+    assert!(
+        inset_warning_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "APPROACHING_LIMIT")
+    );
+    assert!(inset_warning_fb.hud_summary().contains("[WARNING]"));
+
+    // Excede o limite seguro (> 1.0)
+    state.update_modal(glam::Vec3::ZERO, 1.25).unwrap();
+    let inset_error_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Inset excedido");
+    assert!(inset_error_fb.has_errors());
+    assert!(!inset_error_fb.can_commit);
+    assert!(
+        inset_error_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "EXCEEDED_LIMIT")
+    );
+    assert!(inset_error_fb.hud_summary().contains("[BLOCKED]"));
+
+    state.cancel_modal();
+
+    // --- MF-002 / MF-006: Scale negativo com aviso de inversão de normais ---
+    state.begin_modal(ModalKind::Scale).unwrap();
+    state.update_modal(glam::Vec3::splat(-1.0), -1.0).unwrap();
+    let scale_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Scale");
+    assert!(scale_fb.has_warnings());
+    assert!(scale_fb.warnings.iter().any(|w| w.code == "NEGATIVE_SCALE"));
+    state.cancel_modal();
+
+    // --- MF-001 / MF-007: Stale revision guard impede commit de fonte defasada ---
+    state.begin_modal(ModalKind::Move).unwrap();
+    state
+        .update_modal(glam::Vec3::new(1.0, 0.0, 0.0), 1.0)
+        .unwrap();
+    let move_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback emitido para Move");
+    assert!(!move_fb.is_stale);
+    assert!(move_fb.can_commit);
+
+    // Simula mutação concorrente/externa no documento durante o gesto
+    state.project.project.bump_topology();
+    let stale_fb = state
+        .current_modeling_feedback()
+        .expect("Feedback após mutação externa");
+    assert!(stale_fb.is_stale);
+    assert!(!stale_fb.can_commit);
+    assert!(stale_fb.hud_summary().contains("[STALE]"));
+
+    // O commit modal deve recusar e restaurar a fonte com segurança
+    assert!(!state.commit_modal());
+    assert!(state.modal.is_none());
+
+    // --- MF-003 / MF-004: Preflight de Boolean e Mirror ---
+    state.project.add("Operand B", Mesh::cube(1.0));
+    let box_b_id = state.project.active().unwrap().id;
+
+    let self_bool_fb = state.preflight_boolean_feedback(cube_id, cube_id);
+    assert!(!self_bool_fb.can_commit);
+    assert!(
+        self_bool_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "SELF_BOOLEAN")
+    );
+
+    let valid_bool_fb = state.preflight_boolean_feedback(cube_id, box_b_id);
+    assert!(valid_bool_fb.can_commit);
+    assert_eq!(valid_bool_fb.operand_a, Some(cube_id));
+    assert_eq!(valid_bool_fb.operand_b, Some(box_b_id));
+
+    let mirror_fb = state.preflight_mirror_feedback(cube_id, [1.0, 0.0, 0.0], 2.5);
+    assert!(mirror_fb.can_commit);
+    assert_eq!(mirror_fb.dimensions[0].value, 2.5);
+    assert_eq!(mirror_fb.plane, Some([1.0, 0.0, 0.0, 2.5]));
+
+    // --- MF-005: Preflight de Sculpt ---
+    let sculpt_fb = state.preflight_sculpt_feedback(0.5, 0.75, [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]);
+    assert!(sculpt_fb.can_commit);
+    assert_eq!(sculpt_fb.dimensions[0].value, 0.5);
+    assert_eq!(sculpt_fb.dimensions[1].value, 0.75);
+
+    // --- MF-007: Preflight de Remesh com Skin Bind ---
+    let remesh_clean = state.preflight_remesh_skin_feedback(cube_id);
+    assert!(remesh_clean.can_commit);
+    assert!(!remesh_clean.has_warnings());
+
+    // Atribui skeleton/skin
+    let asset = state
+        .project
+        .project
+        .assets
+        .iter_mut()
+        .find(|a| a.id == cube_id)
+        .unwrap();
+    asset.skeleton_id = Some(Uuid::new_v4());
+
+    let remesh_skin = state.preflight_remesh_skin_feedback(cube_id);
+    assert!(remesh_skin.has_warnings());
+    assert!(
+        remesh_skin
+            .warnings
+            .iter()
+            .any(|w| w.code == "RIG_BIND_LOSS")
+    );
+
+    // --- MF-007 / MF-T08: Preflight de Seleção Parcial / Incompatível ---
+    if let Some(mesh) = state.project.active_mesh_mut() {
+        mesh.deselect_all();
+        mesh.verts[0].selected = true; // apenas vértice selecionado
+    }
+    let partial_fb = state.preflight_partial_selection_feedback("Face");
+    assert!(!partial_fb.can_commit);
+    assert!(
+        partial_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "INCOMPATIBLE_SELECTION")
+    );
+    assert!(!partial_fb.partial_selection.unwrap().is_compatible);
+}

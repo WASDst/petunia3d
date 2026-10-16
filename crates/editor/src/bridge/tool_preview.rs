@@ -92,6 +92,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         preview.mesh_for(id)
     }
 
+    /// Feedback de modelagem da operação ativa ou prévia em andamento (H28 / MF-001–008).
+    pub fn current_modeling_feedback(&self) -> Option<petunia_core::OperationFeedback> {
+        self.state.current_modeling_feedback()
+    }
+
     /// Prévia a desenhar neste frame: a da ferramenta vence a pose do Animate.
     pub(crate) fn draw_override(&self) -> Option<Arc<PoseOverride>> {
         self.tool_preview.clone()

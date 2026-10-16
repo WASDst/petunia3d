@@ -8,7 +8,7 @@ use petunia_project::{Project, ProjectChanges};
 
 use crate::{AppState, EditMode, Selection, SnapKind};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ModalKind {
     Move,
     Rotate,
@@ -102,6 +102,8 @@ pub struct ModalOp {
     object_mode: bool,
     edit_origin: bool,
     original: Project,
+    pub source_revision: u64,
+    pub published_revision: u64,
     selection: Selection,
     source: Mesh,
     changed: bool,
@@ -233,6 +235,239 @@ impl ModalOp {
                 Some(self.pivot + self.normal * self.value)
             }
             ModalKind::Rotate | ModalKind::Scale | ModalKind::Inset | ModalKind::Bevel => None,
+        }
+    }
+
+    /// Produz a projeção de feedback unificado da operação modal (MF-001 a MF-008).
+    pub fn feedback(
+        &self,
+        current_revision: u64,
+        target_id: Option<uuid::Uuid>,
+        target_name: Option<&str>,
+        active_mesh: Option<&Mesh>,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        use crate::modeling_feedback::{
+            ActiveDimension, ActiveDimensionDescriptor, AffectedRegion, FeedbackMarker,
+            FeedbackWarning, MeasurementQuality, OperationFeedback, WarningSeverity,
+        };
+
+        let is_stale = current_revision != self.published_revision;
+        let mut warnings = Vec::new();
+        let mut dimensions = Vec::new();
+        let mut markers = Vec::new();
+
+        if is_stale {
+            warnings.push(FeedbackWarning::error(
+                "STALE_REVISION",
+                format!(
+                    "Document revision modified from {} to {} during operation",
+                    self.source_revision, current_revision
+                ),
+            ));
+        }
+
+        match self.kind {
+            ModalKind::Extrude | ModalKind::ExtrudeIndividual => {
+                dimensions.push(ActiveDimensionDescriptor {
+                    label: "Distance".to_string(),
+                    value: self.value,
+                    unit: "m".into(),
+                    min: None,
+                    max: None,
+                });
+                if !self.value.is_finite() {
+                    warnings.push(FeedbackWarning::error(
+                        "INVALID_DISTANCE",
+                        "Extrude distance must be finite",
+                    ));
+                } else if self.value < 0.0 {
+                    warnings.push(FeedbackWarning::info(
+                        "EXTRUDE_NEGATIVE",
+                        "Extrusion in negative direction creates internal cavity",
+                    ));
+                }
+            }
+            ModalKind::Inset => {
+                dimensions.push(ActiveDimensionDescriptor {
+                    label: "Offset".to_string(),
+                    value: self.value,
+                    unit: "".into(),
+                    min: Some(0.0),
+                    max: Some(1.0),
+                });
+                if !self.value.is_finite() || self.value < 0.0 || self.value > 1.0 {
+                    warnings.push(FeedbackWarning::exceeded_limit(
+                        "factor",
+                        self.value,
+                        1.0,
+                        "Inset factor must be between 0.0 and 1.0",
+                    ));
+                }
+                if self.value >= 0.85 {
+                    if self.value <= 1.0 {
+                        warnings.push(FeedbackWarning::approaching_limit(
+                            "factor",
+                            self.value,
+                            1.0,
+                            "Inset factor approaching self-intersection threshold (> 0.85)",
+                        ));
+                    }
+                    warnings.push(FeedbackWarning::warning(
+                        "INSET_COLLAPSE_LIMIT",
+                        "Inset factor approaching face collapse limit",
+                    ));
+                    markers.push(FeedbackMarker::LimitBoundary {
+                        center: self.pivot.to_array(),
+                        radius: 1.0,
+                        label: "Collapse Limit".to_string(),
+                    });
+                }
+            }
+            ModalKind::Bevel => {
+                dimensions.push(ActiveDimensionDescriptor {
+                    label: "Offset".to_string(),
+                    value: self.value,
+                    unit: "m".into(),
+                    min: Some(0.0),
+                    max: None,
+                });
+                if !self.value.is_finite() || self.value < 0.0 {
+                    warnings.push(FeedbackWarning::exceeded_limit(
+                        "offset",
+                        self.value,
+                        0.0,
+                        "Bevel offset must be non-negative",
+                    ));
+                }
+                if self.value > 0.5 {
+                    warnings.push(FeedbackWarning::warning(
+                        "BEVEL_OVERLAP_LIMIT",
+                        "Bevel offset exceeds half edge length, causing geometric overlap",
+                    ));
+                }
+            }
+            ModalKind::Scale => {
+                dimensions.push(ActiveDimensionDescriptor {
+                    label: "Factor".to_string(),
+                    value: self.value,
+                    unit: "×".into(),
+                    min: Some(0.0),
+                    max: None,
+                });
+                if self.value.abs() < 1e-4 {
+                    warnings.push(FeedbackWarning::warning(
+                        "SCALE_NEAR_ZERO",
+                        "Scale factor near zero will collapse geometry",
+                    ));
+                }
+                if self.value < 0.0
+                    || self.components.x < 0.0
+                    || self.components.y < 0.0
+                    || self.components.z < 0.0
+                {
+                    warnings.push(FeedbackWarning::warning(
+                        "NEGATIVE_SCALE",
+                        "Negative scale inverts normal orientation and face winding",
+                    ));
+                }
+            }
+            ModalKind::Rotate => {
+                dimensions.push(ActiveDimensionDescriptor {
+                    label: "Angle".to_string(),
+                    value: self.value,
+                    unit: "°".into(),
+                    min: None,
+                    max: None,
+                });
+            }
+            ModalKind::Move | ModalKind::PushPull => {
+                dimensions.push(ActiveDimensionDescriptor {
+                    label: "Distance".to_string(),
+                    value: self.value,
+                    unit: "m".into(),
+                    min: None,
+                    max: None,
+                });
+                if !self.value.is_finite() || !self.components.is_finite() {
+                    warnings.push(FeedbackWarning::error(
+                        "INVALID_VALUE",
+                        "Transform values must be finite",
+                    ));
+                }
+            }
+        }
+
+        if let Some(curr) = self.current_point() {
+            markers.push(FeedbackMarker::Point {
+                position: curr.to_array(),
+                label: format!("{} Current", self.kind.label()),
+                is_snapped: self.snapped(),
+            });
+        }
+
+        let (verts, edges, faces) = if self.object_mode {
+            (
+                self.source.verts.len(),
+                self.source.edges_unique().len(),
+                self.source.faces.len(),
+            )
+        } else {
+            (
+                self.source.verts.iter().filter(|v| v.selected).count(),
+                self.source.selected_edges.len(),
+                self.source.faces.iter().filter(|f| f.selected).count(),
+            )
+        };
+
+        let can_commit = !is_stale
+            && !warnings
+                .iter()
+                .any(|w| w.severity == WarningSeverity::Error);
+
+        let (op_id, active_dim) = match self.kind {
+            ModalKind::Extrude => ("Extrude", ActiveDimension::Distance),
+            ModalKind::ExtrudeIndividual => ("ExtrudeIndividual", ActiveDimension::Distance),
+            ModalKind::Inset => ("Inset", ActiveDimension::Offset),
+            ModalKind::Bevel => ("Bevel", ActiveDimension::Offset),
+            ModalKind::Scale => ("Scale", ActiveDimension::Factor),
+            ModalKind::Rotate => ("Rotate", ActiveDimension::Angle),
+            ModalKind::Move => ("Move", ActiveDimension::Distance),
+            ModalKind::PushPull => ("PushPull", ActiveDimension::Distance),
+        };
+
+        OperationFeedback {
+            operation_id: op_id.to_string(),
+            operation_name: self.kind.label().to_string(),
+            active_dimension: active_dim,
+            numeric_value: self.value,
+            preview_mesh: active_mesh.cloned(),
+            commit_enabled: can_commit,
+            source_revision: self.source_revision,
+            current_revision,
+            is_stale,
+            can_commit,
+            target_id,
+            target_name: target_name.unwrap_or("Active Mesh").to_string(),
+            quality: if is_stale {
+                MeasurementQuality::Stale
+            } else {
+                MeasurementQuality::Exact
+            },
+            affected_region: AffectedRegion {
+                vertices_count: verts,
+                edges_count: edges,
+                faces_count: faces,
+            },
+            ghost_mesh: Some(self.source.clone()),
+            dimensions,
+            markers,
+            warnings,
+            partial_selection: None,
+            operand_a: target_id,
+            operand_b: None,
+            plane: None,
+            radius: None,
+            strength: None,
         }
     }
 }
@@ -611,6 +846,8 @@ impl CommandContext<'_> {
                 Vec3::ZERO
             },
             original: self.document.project.clone(),
+            source_revision: self.document.project.revision_id(),
+            published_revision: self.document.project.revision_id(),
             selection: self.editor.selection.clone(),
             source,
             changed: false,
@@ -1343,10 +1580,20 @@ impl CommandContext<'_> {
             ModalKind::Move | ModalKind::Rotate | ModalKind::Scale => ProjectChanges::POSITIONS,
             _ => ProjectChanges::GEOMETRY,
         });
+        let current_rev = self.document.project.revision_id();
+        if let Some(modal) = self.modal.as_mut() {
+            modal.published_revision = current_rev;
+        }
         Ok(())
     }
 
     pub fn commit_modal(&mut self) -> bool {
+        if let Some(modal) = self.modal.as_ref()
+            && self.document.project.revision_id() != modal.published_revision
+        {
+            self.cancel_modal();
+            return false;
+        }
         // O resultado confirmado é sempre o da operação exata.
         if let Some((value, components, snap)) = self
             .modal
@@ -1540,6 +1787,10 @@ impl CommandContext<'_> {
         } else {
             ProjectChanges::TRANSFORMS
         });
+        let current_rev = self.document.project.revision_id();
+        if let Some(modal) = self.modal.as_mut() {
+            modal.published_revision = current_rev;
+        }
         Ok(())
     }
 }

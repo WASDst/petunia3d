@@ -941,6 +941,70 @@ impl AppState {
     ) -> Result<Option<LastOperation>, ModalError> {
         self.in_context(|ctx| ctx.adjust_last_operation(last, value))
     }
+
+    /// Inspeciona a operação em andamento e devolve o descritor canônico de feedback (H28 / MF-001–008).
+    #[inline]
+    pub fn current_modeling_feedback(&self) -> Option<crate::modeling_feedback::OperationFeedback> {
+        crate::modeling_feedback::ModelingFeedbackInspector::inspect_current_operation(self)
+    }
+
+    /// Preflight de operação Booleana (MF-003 / MF-T04).
+    #[inline]
+    pub fn preflight_boolean_feedback(
+        &self,
+        op_a: uuid::Uuid,
+        op_b: uuid::Uuid,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_boolean(self, op_a, op_b)
+    }
+
+    /// Preflight de simetria / Mirror (MF-004 / MF-T05).
+    #[inline]
+    pub fn preflight_mirror_feedback(
+        &self,
+        asset_id: uuid::Uuid,
+        normal: [f32; 3],
+        offset: f32,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_mirror(
+            self, asset_id, normal, offset,
+        )
+    }
+
+    /// Preflight de pincel de escultura / deformação (MF-005 / MF-T06).
+    #[inline]
+    pub fn preflight_sculpt_feedback(
+        &self,
+        radius: f32,
+        strength: f32,
+        hit: [f32; 3],
+        normal: [f32; 3],
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_sculpt(
+            radius, strength, hit, normal,
+        )
+    }
+
+    /// Preflight de remesh sobre malha com skin bind (MF-007 / MF-T07).
+    #[inline]
+    pub fn preflight_remesh_skin_feedback(
+        &self,
+        asset_id: uuid::Uuid,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_remesh_skin(self, asset_id)
+    }
+
+    /// Preflight de seleção mista ou parcialmente incompatível (MF-007 / MF-T08).
+    #[inline]
+    pub fn preflight_partial_selection_feedback(
+        &self,
+        requested_domain: &str,
+    ) -> crate::modeling_feedback::OperationFeedback {
+        crate::modeling_feedback::ModelingFeedbackInspector::preflight_partial_selection(
+            self,
+            requested_domain,
+        )
+    }
 }
 
 #[allow(dead_code)]
@@ -1110,6 +1174,11 @@ impl CommandContext<'_> {
     #[inline]
     pub fn current_tool_feedback(&self) -> Option<crate::modal_feedback::ToolFeedback> {
         self.view().current_tool_feedback()
+    }
+
+    #[inline]
+    pub fn current_modeling_feedback(&self) -> Option<crate::modeling_feedback::OperationFeedback> {
+        self.view().current_modeling_feedback()
     }
 
     #[inline]

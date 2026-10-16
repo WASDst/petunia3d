@@ -785,3 +785,117 @@ fn surface_construction_face_plane_imprint_with_holes_and_push_pull_h27() {
             .any(|v| (v.pos[2] - 1.6).abs() < 1e-4)
     );
 }
+
+#[test]
+fn modeling_feedback_mf001_to_mf008_invariants_h28() {
+    let mut b = bridge();
+    let initial_undo = b.state.project.undo.depth().0;
+    let initial_faces = b.state.project.active_mesh().unwrap().faces.len();
+
+    // MF-001: Preview ativa com ghost e cancelamento limpo sem poluir histórico
+    b.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+    b.state.sync_selection();
+    b.state
+        .begin_modal(petunia_core::ModalKind::Extrude)
+        .unwrap();
+    b.state.update_modal(Vec3::Z * 2.0, 2.0).unwrap();
+
+    let feedback = b
+        .state
+        .current_modeling_feedback()
+        .expect("feedback disponível");
+    assert_eq!(feedback.operation_id, "Extrude");
+    assert_eq!(
+        feedback.active_dimension,
+        petunia_core::modeling_feedback::ActiveDimension::Distance
+    );
+    assert_eq!(feedback.numeric_value, 2.0);
+    assert!(feedback.ghost_mesh.is_some());
+    assert!(feedback.preview_mesh.is_some());
+
+    b.state.cancel_modal();
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+    assert_eq!(
+        b.state.project.active_mesh().unwrap().faces.len(),
+        initial_faces
+    );
+
+    // MF-002: Bounds e limites em operações modais (Extrude negativo)
+    b.state.project.active_mesh_mut().unwrap().faces[0].selected = true;
+    b.state.sync_selection();
+    b.state
+        .begin_modal(petunia_core::ModalKind::Extrude)
+        .unwrap();
+    b.state.update_modal(Vec3::Z * -1.5, -1.5).unwrap();
+    let fb_cavity = b.state.current_modeling_feedback().unwrap();
+    assert!(
+        fb_cavity
+            .warnings
+            .iter()
+            .any(|w| w.code == "EXTRUDE_NEGATIVE")
+    );
+    b.state.cancel_modal();
+
+    // MF-003: Preflight de booleana com operando aberto
+    let cube_id = b.state.project.assets[0].id;
+    let mut open_m = petunia_mesh::Mesh::default();
+    open_m.verts.push(petunia_mesh::Vertex::new(0.0, 0.0, 0.0));
+    open_m.verts.push(petunia_mesh::Vertex::new(1.0, 0.0, 0.0));
+    open_m.verts.push(petunia_mesh::Vertex::new(1.0, 1.0, 0.0));
+    open_m.faces.push(petunia_mesh::Face::new(vec![0, 1, 2]));
+    let open_asset = petunia_project::Asset::new("OpenSurface", open_m);
+    let open_id = open_asset.id;
+    b.state.project.assets.push(open_asset);
+
+    let bool_fb = b.state.preflight_boolean_feedback(cube_id, open_id);
+    assert!(!bool_fb.commit_enabled);
+    assert!(
+        bool_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "OPEN_BOOLEAN_OPERAND")
+    );
+
+    // MF-004: Mirror preflight com assimetria
+    let mirror_fb = b
+        .state
+        .preflight_mirror_feedback(cube_id, [1.0, 0.0, 0.0], 0.0);
+    assert!(mirror_fb.commit_enabled);
+
+    // MF-005: Pincel de escultura
+    let sculpt_fb = b
+        .state
+        .preflight_sculpt_feedback(0.35, 0.8, [0.0, 0.5, 0.0], [0.0, 1.0, 0.0]);
+    assert_eq!(sculpt_fb.operation_id, "sculpt");
+    assert_eq!(
+        sculpt_fb.active_dimension,
+        petunia_core::modeling_feedback::ActiveDimension::Distance
+    );
+
+    // MF-007: Remesh skin bind & seleção parcial
+    let mut skinned = petunia_project::Asset::new("Skinned", petunia_mesh::Mesh::cube(1.0));
+    skinned.skeleton_id = Some(uuid::Uuid::new_v4());
+    let skinned_id = skinned.id;
+    b.state.project.assets.push(skinned);
+
+    let skin_fb = b.state.preflight_remesh_skin_feedback(skinned_id);
+    assert!(
+        skin_fb
+            .warnings
+            .iter()
+            .any(|w| w.code == "SKIN_REMAP_REQUIRED")
+    );
+
+    b.state.project.assets[0].locked = true;
+    b.state.session.selection.assets = vec![cube_id, skinned_id];
+    let partial_fb = b
+        .state
+        .preflight_partial_selection_feedback("face_operation");
+    assert!(partial_fb.is_partial());
+
+    // MF-008: Pureza irrestrita das consultas
+    let before_state = b.state.project.undo.depth().0;
+    let _ = b.state.current_modeling_feedback();
+    let _ = b.state.preflight_boolean_feedback(cube_id, open_id);
+    assert_eq!(b.state.project.undo.depth().0, before_state);
+}

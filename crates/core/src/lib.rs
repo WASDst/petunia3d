@@ -22,6 +22,7 @@ pub mod material_commands;
 pub mod mesh_preview;
 pub mod modal;
 pub mod modal_feedback;
+pub mod modeling_feedback;
 pub mod modifier_commands;
 pub mod module;
 pub mod object_metadata_commands;
@@ -154,6 +155,10 @@ pub use material_commands::{
     SetMaterialPropertiesCmd,
 };
 pub use modal_feedback::ToolFeedback;
+pub use modeling_feedback::{
+    ActiveDimension, FeedbackMarker, FeedbackWarning, MeasurementQuality,
+    ModelingFeedbackInspector, OperationFeedback, PartialSelectionReport, WarningSeverity,
+};
 pub use modifier_commands::{ModifierCmd, ModifierOp};
 pub use module::{Module, ModuleRegistry};
 pub use petunia_mesh::poly_pen::PenPoint;

@@ -129,7 +129,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H25 | P2         | ShapeBuilder sólido de dois operandos           | DONE                    | Partição, RegionPlan, proveniência e Undo no delta.           | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
 | H26 | P2         | Composição reeditável e múltiplos sólidos       | DONE                    | Receita persistente, fontes, orçamento e bake explícito ok.   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
 | H27 | P2         | Construção sobre superfícies                    | DONE                    | Plano de face, imprint e Push/Pull verificados.               | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
-| H28 | P2         | Feedback comum de operações                     | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
+| H28 | P2         | Feedback comum de operações                     | DONE                    | Preview fonte fixa, ghost, limites MF-001–008 e guards ok.    | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
 | H29 | P2         | Dimensões e comparação espacial                 | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
 | H30 | P2         | Section, Thickness e Organic Profiles           | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
 | H31 | P2         | Smart Rig manual e assistido                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
@@ -459,4 +459,42 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 - `cargo clippy`: zero warnings em `petunia_core` e `petunia_editor`.
 
 **Risks / Next checkpoint:**
-- Próximo checkpoint: H28 (Feedback comum de operações: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar).
+- Checkpoint concluído: H27. Próximo checkpoint: H28 (Feedback comum de operações: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar).
+
+---
+
+### Entrega H28 — Feedback comum de operações (MF-001 a MF-008) (2026-10-16)
+
+**Intent:**
+- Implementar o subsistema de feedback comum e unificado de operações de modelagem (MF-001 a MF-008):
+  1. `MF-001`: Projeção unificada `OperationFeedback` (`ModelingFeedback`) expondo fonte/revisão fixa, malha ghost (geometria de origem congelada), malha de prévia ativa, reversibilidade não-destrutiva sem poluição de histórico no cancelamento e transação única de Undo no commit.
+  2. `MF-002`: Parâmetros ativos com bounds explícitos e limites de advertência (`APPROACHING_LIMIT`, `EXCEEDED_LIMIT`, `INSET_COLLAPSE_LIMIT`, `BEVEL_OVERLAP_LIMIT`, `EXTRUDE_NEGATIVE`).
+  3. `MF-003`: Preflight de operações booleanas identificando incompatibilidades explícitas (detecção de operandos abertos/não-manifold via `is_closed_manifold()` e auto-booleana) antes da confirmação, sem auto-reparo silencioso.
+  4. `MF-004`: Preflight de espelhamento/simetria com marcador de plano discreto (`FeedbackMarker::PlaneDisc`) e detecção de assimetria artística sem imposição de correção forçada.
+  5. `MF-005`: Preflight de pincéis de escultura e deformação com marcadores de footprint e falloff (`FeedbackMarker::BrushFootprint`).
+  6. `MF-006`: Diagnósticos e avisos contextuais não-bloqueantes (`FeedbackWarning`, `WarningSeverity`) sem interrupção de fluxo modal.
+  7. `MF-007`: Incompatibilidades estruturais e seleções heterogêneas reportando alvos ignorados (`ignored_targets`, `supported_targets`, aviso de rebind ao fazer remesh em malhas skinned).
+  8. `MF-008`: Pureza irrestrita das consultas de feedback — nenhuma consulta altera ferramenta ativa, atalhos, documento ou pilha de Undo.
+  9. Safe commit guard: rejeição transacional e restauração automática segura caso a revisão do documento tenha sofrido mutação concorrente durante o gesto (`is_stale == true`).
+
+**Sources:**
+- `crates/core/src/modeling_feedback.rs`
+- `crates/core/src/modal.rs`
+- `crates/core/src/state.rs`
+- `crates/core/src/context_api.rs`
+- `crates/core/src/lib.rs`
+- `crates/editor/src/bridge/tool_preview.rs`
+- `crates/core/tests/modeling_feedback_tests.rs`
+- `crates/core/tests/command_tests.rs`
+- `crates/editor/tests/contextual_interactions.rs`
+
+**Verification:**
+- `crates/core/tests/modeling_feedback_tests.rs`: 8 passed, 0 failed.
+- `crates/core/tests/command_tests.rs`: `test_modeling_feedback_and_ghost_invariants_h28` (pass).
+- `crates/editor/tests/contextual_interactions.rs`: `modeling_feedback_mf001_to_mf008_invariants_h28` (pass).
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_editor --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Checkpoint concluído: H28. Próximo checkpoint: H29 (Dimensões e comparação espacial: VSP-003/004 — frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta).
+

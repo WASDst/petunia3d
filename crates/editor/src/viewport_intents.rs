@@ -70,8 +70,13 @@ impl RegionSelectionMode {
 pub struct ViewportLassoPolygon(Vec<[f32; 2]>);
 
 impl ViewportLassoPolygon {
-    pub fn from_slint_path(path: &str) -> Option<Self> {
+    pub fn from_polygon_path(path: &str) -> Option<Self> {
         crate::projection::parse_lasso_path(path).map(Self)
+    }
+
+    #[inline]
+    pub fn from_slint_path(path: &str) -> Option<Self> {
+        Self::from_polygon_path(path)
     }
 
     pub fn ndc_points(&self) -> &[[f32; 2]] {

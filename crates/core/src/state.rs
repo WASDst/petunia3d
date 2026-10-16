@@ -5220,6 +5220,17 @@ impl<'a> EditorView<'a> {
         Some(fb)
     }
 
+    /// Constrói o descritor de feedback de modelagem da operação modal ativa (H28 / MF-001 a MF-008).
+    pub fn current_modeling_feedback(self) -> Option<crate::modeling_feedback::OperationFeedback> {
+        let modal = self.modal.as_ref()?;
+        let current_revision = self.document.project.revision_id();
+        let active_asset = self.document.project.active();
+        let target_id = active_asset.map(|a| a.id);
+        let target_name = active_asset.map(|a| a.name.as_str());
+        let active_mesh = self.document.project.active_mesh();
+        Some(modal.feedback(current_revision, target_id, target_name, active_mesh))
+    }
+
     /// Descriptor canônico do pincel (iniciativa Paint — P3D-056/057).
     ///
     /// Fonte única da verdade: une os campos legados de sessão (`canvas_brush`,
