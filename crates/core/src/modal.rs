@@ -1608,6 +1608,7 @@ impl CommandContext<'_> {
             let _ = self.update_modal_slow(components, value, snap);
         }
         let Some(modal) = self.modal.take() else {
+            self.restore_origin_tool();
             return false;
         };
         let mut restored_changes = None;
@@ -1653,6 +1654,7 @@ impl CommandContext<'_> {
         if let Some(changes) = restored_changes {
             self.emit_project_changed(changes);
         }
+        self.restore_origin_tool();
         true
     }
 
@@ -1660,12 +1662,14 @@ impl CommandContext<'_> {
         self.pointer_session = None;
         self.pending_modal = None;
         let Some(modal) = self.modal.take() else {
+            self.restore_origin_tool();
             return false;
         };
         if let Some(before) = modal.before_prelude {
             let (before, selection) = *before;
             self.restore_before_prelude(before, selection);
             self.locked_axes = [false; 3];
+            self.restore_origin_tool();
             return true;
         }
         let revision_clock = self.document.project.revision_clock();
@@ -1685,6 +1689,7 @@ impl CommandContext<'_> {
             _ => ProjectChanges::GEOMETRY,
         };
         self.emit_project_changed(changes);
+        self.restore_origin_tool();
         true
     }
     fn frame_modal(&self) -> bool {

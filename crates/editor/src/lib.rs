@@ -779,6 +779,16 @@ pub enum UiIntent {
     ToggleCompanionView,
     /// Define modo de disparo da Companion View (VSP-004).
     SetCompanionViewTrigger(petunia_core::CompanionViewTrigger),
+    /// Inicia uma transformação modal temporária (G/R/S) guardando a ferramenta de origem (H11).
+    BeginModalTransform(TransformKind),
+    /// Confirma a transformação modal ativa retornando à ferramenta de origem (H11).
+    CommitModalTransform,
+    /// Cancela a transformação modal ativa retornando à ferramenta de origem sem criar Undo (H11).
+    CancelModalTransform,
+    /// Define restrição de eixo ou plano para a transformação modal (H11).
+    SetModalConstraint(petunia_core::ModalConstraint),
+    /// Define preferência de ativação da ferramenta (Drag vs Instant) (H11).
+    SetToolActivation(petunia_core::ToolActivation),
 }
 
 // Presentation ViewModels and Data Transfer Objects (DTOs) for the Slint shell.
@@ -1092,8 +1102,8 @@ pub struct SlintUiBridge<V: PetuniaViewport> {
     pub preferences_path_override: Option<std::path::PathBuf>,
     /// Home (cap. 23) aberta: só no arranque sem projeto, se a preferência pedir.
     pub home_open: bool,
-    /// Rastreamento de duplo toque em atalhos de ferramenta: (nome da ferramenta, instante).
-    pub last_tool_press: Option<(String, std::time::Instant)>,
+    /// Rastreamento de duplo toque em atalhos de ferramenta: (nome da ferramenta, ferramenta de origem prévia, instante).
+    pub last_tool_press: Option<(String, String, std::time::Instant)>,
     pub slice_trim: bool,
     pub micro_inspector_open: bool,
     pub micro_inspector_pos: [f32; 2],

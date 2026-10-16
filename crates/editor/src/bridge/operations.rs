@@ -218,6 +218,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         self.gizmo_drag = None;
         self.tool_session.clear_numeric();
         self.instant_transform = false;
+        self.last_tool_press = None;
         cancelled
     }
 

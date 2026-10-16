@@ -659,6 +659,9 @@ pub struct ToolState {
     pub tool_activation: ToolActivation,
     /// Componente sob o cursor (preselection).
     pub hover: HoverTarget,
+    /// Ferramenta de origem antes de uma ativação temporária de transformação (G/R/S),
+    /// restaurada deterministicamente após commit ou cancel (H11).
+    pub temporary_modal_origin_tool: Option<String>,
 }
 
 impl Default for ToolState {
@@ -743,7 +746,31 @@ impl ToolState {
             selected_measurement: None,
             active_measurement: None,
             active_annotation: None,
+            temporary_modal_origin_tool: None,
         }
+    }
+
+    /// Inicia uma transformação temporária guardando a ferramenta de origem (H11).
+    pub fn begin_temporary_transform(&mut self, target_tool: &str) {
+        if self.temporary_modal_origin_tool.is_none() {
+            self.temporary_modal_origin_tool = Some(self.active_tool.clone());
+        }
+        self.active_tool = target_tool.to_string();
+    }
+
+    /// Restaura a ferramenta de origem se uma transformação temporária estava ativa (H11).
+    pub fn restore_origin_tool(&mut self) -> Option<String> {
+        if let Some(origin) = self.temporary_modal_origin_tool.take() {
+            self.active_tool = origin.clone();
+            Some(origin)
+        } else {
+            None
+        }
+    }
+
+    /// Ferramenta de origem antes da transformação temporária, se ativa (H11).
+    pub fn temporary_modal_origin_tool(&self) -> Option<&str> {
+        self.temporary_modal_origin_tool.as_deref()
     }
 
     pub fn active_tool_info(&self) -> ActiveTool {

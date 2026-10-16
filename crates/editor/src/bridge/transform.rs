@@ -404,7 +404,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let interval_ms = self.preferences.double_tap_interval_ms;
 
         let is_double_tap = if interval_ms > 0 {
-            if let Some((ref last_tool, last_time)) = self.last_tool_press {
+            if let Some((ref last_tool, _, last_time)) = self.last_tool_press {
                 last_tool == tool
                     && now.duration_since(last_time).as_millis() <= interval_ms as u128
             } else {
@@ -414,9 +414,30 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             self.state.session.tools.active_tool == tool
         };
 
-        if is_double_tap {
+        let is_instant_activation = self.state.session.tools.tool_activation
+            == petunia_core::ToolActivation::Instant
+            || self.state.ui.active_keymap_id.starts_with("blender")
+            || self.preferences.active_keymap_id.starts_with("blender")
+            || is_double_tap;
+
+        if is_instant_activation {
+            let double_tap_origin = if is_double_tap {
+                self.last_tool_press
+                    .as_ref()
+                    .map(|(_, origin, _)| origin.clone())
+            } else {
+                None
+            };
             self.last_tool_press = None;
-            self.apply(UiIntent::SetActiveTool(tool.into()));
+            if self.state.session.tools.modal.is_some() {
+                self.cancel_transform();
+            }
+            if let Some(origin) = double_tap_origin {
+                self.state.session.tools.temporary_modal_origin_tool = Some(origin);
+                self.state.session.tools.active_tool = tool.to_string();
+            } else {
+                self.state.begin_temporary_transform(tool);
+            }
             let [x, y] = self.pointer_position;
             if self.begin_viewport_transform(kind, x, y) {
                 self.instant_transform = true;
@@ -436,10 +457,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                         .t_id(petunia_config::text_id::STATUS_FREE_MODE_MOVE_THE_MOUSE_CLICK_OR),
                     &[("0", label.to_string())],
                 ));
+            } else {
+                self.state.restore_origin_tool();
             }
         } else {
-            self.last_tool_press = Some((tool.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
             self.apply(UiIntent::SetActiveTool(tool.into()));
+            self.last_tool_press = Some((tool.to_string(), origin_tool, now));
             self.instant_transform = false;
             let label = match kind {
                 TransformKind::Position => "Mover",

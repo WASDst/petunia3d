@@ -1239,6 +1239,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
                 self.state.set_companion_view_trigger(trigger);
                 self.state.mark_dirty();
             }
+            UiIntent::BeginModalTransform(kind) => {
+                self.begin_keyboard_transform(kind);
+            }
+            UiIntent::CommitModalTransform => {
+                self.confirm_active_operation();
+            }
+            UiIntent::CancelModalTransform => {
+                self.cancel_active_operation();
+            }
+            UiIntent::SetModalConstraint(constraint) => {
+                let _ = self.state.set_modal_constraint(constraint);
+                if let Some(drag) = self.drag.as_mut() {
+                    drag.rotation_angle = 0.0;
+                    drag.last_angle = 0.0;
+                }
+                if !self.tool_session.numeric_text().is_empty() {
+                    self.preview_modal_text();
+                } else {
+                    let [x, y] = self.pointer_position;
+                    self.update_viewport_transform(x, y);
+                }
+            }
+            UiIntent::SetToolActivation(activation) => {
+                self.state.session.tools.tool_activation = activation;
+            }
         }
         self.sync_viewport_context();
     }

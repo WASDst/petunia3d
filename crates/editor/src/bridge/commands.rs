@@ -328,7 +328,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         let interval_ms = self.preferences.double_tap_interval_ms;
 
         let is_double_tap = if interval_ms > 0 {
-            if let Some((ref last_tool, last_time)) = self.last_tool_press {
+            if let Some((ref last_tool, _, last_time)) = self.last_tool_press {
                 last_tool == id && now.duration_since(last_time).as_millis() <= interval_ms as u128
             } else {
                 false
@@ -377,11 +377,13 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             // Gramática única: a tecla seleciona a ferramenta persistente; a
             // operação acontece pelo arrasto (ADR 007). O duplo toque continua
             // abrindo o modo que segue o ponteiro.
-            self.last_tool_press = Some((id.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
+            self.last_tool_press = Some((id.to_string(), origin_tool, now));
             self.keyboard_tool_modal_active = false;
             self.activate_parametric_tool(kind);
         } else {
-            self.last_tool_press = Some((id.to_string(), now));
+            let origin_tool = self.state.session.tools.active_tool.clone();
+            self.last_tool_press = Some((id.to_string(), origin_tool, now));
             if self.tool_modal.is_none() {
                 let _ = self.execute_core_command(id);
             }

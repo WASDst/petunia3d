@@ -112,7 +112,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H08 | P2         | Perfis efetivos e conflitos coerentes           | IN PROGRESS             | K-D/E; Maya W colide e detectores divergem.                   | Resolver todos os perfis efetivos sem colisão arbitrária; preservar aliases semânticos legítimos. Unificar conflitos em global/view/window/workspace e provar Maya W e demais colisões auditadas.                                                                                                                         |
 | H09 | P2         | Executor compartilhado de ações semânticas      | IN PROGRESS             | K-F; handlers diferem entre Application e adapters.           | Mapear ações de seleção, transformação e Paint por contratos compartilhados. Retornar resultado/erro para ação desconhecida e manter validação, permissões e Undo.                                                                                                                                                        |
 | H10 | P2         | Seleção integrada e arrasto protegido MODEL     | IN PROGRESS             | ToolSession/ModalOp existem; política de Select ausente.      | SEL-004 substitui a proposta de movimento ao arrastar geometria: transformação por alça ou comando; vazio inicia box; fonte fixa, cancelamento e Undo único.                                                                                                                                                              |
-| H11 | P2         | G/R/S temporários e operação sem arrasto        | TODO                    | Transformação existe; retorno temporário é proposta.          | Retornar à ferramenta de origem após confirmar/cancelar, compatível com perfil e preferência de ativação. Cobrir valores digitados, eixos/planos, snap e clique/mover/clique sem botão mantido.                                                                                                                           |
+| H11 | P2         | G/R/S temporários e operação sem arrasto        | DONE                    | Transformação existe; retorno temporário é proposta.          | Retornar à ferramenta de origem após confirmar/cancelar, compatível com perfil e preferência de ativação. Cobrir valores digitados, eixos/planos, snap e clique/mover/clique sem botão mantido.                                                                                                                           |
 | H12 | P2         | Sessão contínua de transformação UV             | IN PROGRESS             | V01 parcial; comandos discretos e previews diretos existem.   | Fixar UVs/seleção/revisão de origem e atualizar preview sem checkpoints por evento. Commit único, Esc exato, pins/Sync preservados e nenhuma alteração de posições 3D.                                                                                                                                                    |
 | H13 | P2         | Ações e atalhos contextuais UV                  | IN PROGRESS             | Sem binding padrão UV G/R/S; kernels reutilizáveis.           | Definir ações de seleção/move/rotate/scale UV com handlers na Application. Respeitar superfície focada, remapeamento, constraints e entrada numérica UV.                                                                                                                                                                  |
 | H14 | P2         | Atalhos de transporte e chaves ANIMATE          | IN PROGRESS             | Space resolve para ferramenta anterior no keymap global.      | Criar ações de play/pause, passo/frame e autoria de chaves no contexto apropriado. Separar foco de timeline/viewport/texto e evitar Delete de geometria ou comandos globais indevidos.                                                                                                                                    |
@@ -705,6 +705,40 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 
 **Risks / Next checkpoint:**
 - Shading Clay e Companion View testados no Core e no Editor Controller; a apresentação em hardware OpenGL físico e shaders GLSL específicos da viewport Qt permanece sob as suítes e gates de renderização/plataforma.
-- Checkpoint concluído: H33. Todos os checkpoints do contrato contextual de ferramentas (H01–H33) foram entregues e validados no Core/Editor.
+- Checkpoint concluído: H33.
+
+## Continuação H11 — G/R/S temporários e operação sem arrasto (2026-10-16)
+
+**Intent / Sources:** Implementar a restauração determinística da ferramenta de origem após confirmar ou cancelar transformações modais temporárias (G/R/S), compatibilizando os perfis de keymap (Blender vs Maya/padrão) e as preferências de ativação (`ToolActivation::Instant` vs `ToolActivation::Drag`), além de assegurar operação latched (clicar-mover-clicar) sem manter botão pressionado, entrada numérica direta com override sobre o mouse e restrições de eixo/plano com alternância para Free.
+
+**Gap:**
+- O Petunia3D já possuía `begin_viewport_transform` e suporte a transformações modais básicas, porém ativar atalhos temporários de transformação (G/R/S) sobrescrevia a ferramenta ativa de forma persistente, sem retornar deterministicamente à ferramenta anterior (`select`, `draw_profile`, `poly_pen`, `brush`, etc.) após confirmar ou cancelar.
+- Não havia garantia de isolamento do histórico de Undo em cancelamentos de transformações temporárias iniciadas por atalho, nem restauração precisa do estado de origem quando a ativação se dava por duplo toque (`double-tap`) em perfis de arrasto.
+- Faltava cobertura integrada e explícita de `UiIntent`s para ciclo de vida de transformações modais (`BeginModalTransform`, `CommitModalTransform`, `CancelModalTransform`, `SetModalConstraint`, `SetToolActivation`) utilizáveis de forma desacoplada por frontends e automações.
+
+**Changed:**
+- Em `crates/core/src/state.rs`: adicionados `temporary_modal_origin_tool: Option<String>`, `begin_temporary_transform(&mut self, target_tool: &str)`, `restore_origin_tool(&mut self) -> Option<String>` e `temporary_modal_origin_tool(&self) -> Option<&str>` em `ToolState`, propagados naturalmente para `AppState`, `EditorSession`, `CommandContext` e `EditorView` via `Deref`.
+- Em `crates/core/src/modal.rs`: atualizados `commit_modal()` e `cancel_modal()` para invocar `self.restore_origin_tool()` em todos os caminhos de saída (inclusive caminhos preliminares e defensivos quando `self.modal` é `None`), garantindo que tanto a confirmação (com 1 entrada de Undo) quanto o cancelamento (com 0 entradas de Undo) restaurem a ferramenta de origem.
+- Em `crates/editor/src/lib.rs`: estendido o enum `UiIntent` com as variantes `BeginModalTransform(TransformKind)`, `CommitModalTransform`, `CancelModalTransform`, `SetModalConstraint(ModalConstraint)` e `SetToolActivation(ToolActivation)`; atualizado `last_tool_press` para armazenar a tupla `(tool_id, origin_tool, instant)` permitindo que o duplo toque em modo de arrasto preserve a ferramenta anterior ao primeiro toque.
+- Em `crates/editor/src/bridge/transform.rs`: atualizado `begin_keyboard_transform` para verificar `ToolActivation::Instant`, IDs de keymap estilo Blender (`active_keymap_id.starts_with("blender")`) e duplo toque, iniciando a transformação temporária com `self.state.begin_temporary_transform`, travando a sessão na gramática com `self.tool_session.begin_latched` e cancelando operações modais prévias se o usuário alternar diretamente entre ferramentas de transformação (ex.: G seguido de R).
+- Em `crates/editor/src/bridge/operations.rs`: atualizados `confirm_active_operation` e `cancel_active_operation` para limpar `last_tool_press` e consolidar commit/cancel em transformações ativas mesmo na ausência de arrasto de viewport (ex.: confirmação puramente numérica).
+- Em `crates/editor/src/bridge/application.rs`: implementados os despachos dos novos `UiIntent`s em `apply()`.
+- Em `crates/editor/tests/temporary_transform_h11_tests.rs`: desenvolvida suíte com 8 testes de integração cobrindo retorno à ferramenta de origem no commit (com 1 Undo) e no cancel (com 0 Undo), perfil Blender instantâneo, duplo clique em modo drag com preservação de ferramenta de origem, valores digitados sobrepondo movimento de cursor, eixos (X, Y, Z) e planos (Shift+X, Shift+Y, Shift+Z) com toggle para Free, operação clicar-mover-clicar sem botão mantido (WCAG 2.5.7) e alternância direta de modos de transformação.
+
+**Verification:**
+- `crates/editor/tests/temporary_transform_h11_tests.rs`: 8 passed, 0 failed (0.04s).
+- `crates/editor/tests/contextual_interactions.rs`: 18 passed, 0 failed (0.10s).
+- `crates/editor/tests/primitive_frame_bridge.rs`: 2 passed, 0 failed (0.02s).
+- `crates/core --lib`: 190 passed, 0 failed (1.17s).
+- `crates/editor --lib`: 126 passed, 0 failed (0.46s).
+- `crates/ui-cxxqt bridge_test`: 10 passed, 0 failed (0.47s).
+- `crates/ui-cxxqt editor_parity`: 21 passed, 0 failed (2.69s).
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_editor --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_editor -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Operação sem arrasto e retorno temporário validados no editor e na ponte SlintUiBridge/EditorController. Frontends nativos (Qt Widgets) consom os intents `BeginModalTransform`, `CommitModalTransform` e `CancelModalTransform` já mapeados.
+- Checkpoint concluído: H11.
+
 
 

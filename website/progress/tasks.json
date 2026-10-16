@@ -450,6 +450,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/visual_assistance.rs, crates/core/src/spatial_query.rs, crates/core/src/state.rs, crates/core/src/context_api.rs, crates/core/src/lib.rs, crates/editor/src/lib.rs, crates/editor/src/bridge/application.rs, crates/core/tests/visual_spatial_accessibility_tests.rs, crates/editor/tests/contextual_interactions.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H33: Integração visual e acessibilidade posterior (VSP-001/002/004, SEL-007). Perfis de assistência visual (VisualAssistanceProfile: Essential, Assisted [padrão], Analytical) sem alterar keymap, ferramentas ativas ou histórico de Undo. Shading Clay (ClayMode: Disabled, Soft, Form, Technical, MatCap) e âncoras de iluminação (LightingAnchor: CameraRelative, WorldFixed) desacoplados de materiais de projeto, exportações e Undo. Companion View (CompanionViewState com CompanionViewTrigger: Manual, Suggested, OptInAuto) com câmera ortográfica desacoplada da primária e steals_focus: false (nunca cancela ou rouba foco de transformações modais ativas); desacoplamento total entre show_xray e select_through (VSP-004). Gizmo universal acessível (evaluate_gizmo_accessibility) com identificação não-cromática (tokens X, Y, Z, Screen, Plane), readouts formatados, conformidade de alto contraste e hit targets mínimos de 24 dp (SEL-007). 5 UiIntents integrados no petunia_editor. Testes: 8 testes sintéticos em crates/core/tests/visual_spatial_accessibility_tests.rs pass (0.04s), 18 testes em crates/editor/tests/contextual_interactions.rs pass (0.10s), 190 testes em petunia_core lib pass. Clippy zero warnings e cargo fmt limpo com CARGO_BUILD_JOBS=1."
+    },
+    "temporary-transform-h11-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/state.rs, crates/core/src/modal.rs, crates/editor/src/lib.rs, crates/editor/src/bridge/application.rs, crates/editor/src/bridge/transform.rs, crates/editor/src/bridge/operations.rs, crates/editor/src/bridge/commands.rs, crates/editor/tests/temporary_transform_h11_tests.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H11: G/R/S temporários e operação sem arrasto. Retorno determinístico à ferramenta de origem (temporary_modal_origin_tool, begin_temporary_transform, restore_origin_tool) ao confirmar (Enter, clique, CommitModalTransform) ou cancelar (Esc, cancel_active_operation, CancelModalTransform) sem poluir histórico de Undo em cancelamento (0 entradas) e gerando exatamente 1 entrada atômica em confirmação. Suporte a ToolActivation::Instant e perfil de keymap Blender (G/R/S iniciam instantaneamente transformações modais travadas), preservação da ferramenta persistente em ToolActivation::Drag/Maya com ativação por duplo clique (double-tap com preservação de ferramenta de origem prévia). Suporte a valores numéricos digitados ('o valor digitado vence o mouse' sem poluição de Undo), eixos (X, Y, Z) e planos (Shift+X, Shift+Y, Shift+Z) com toggle para Free, snapping contextual e grade. Operação clicar-mover-clicar (ToolPhase::Latched) sem necessidade de manter botão pressionado (WCAG 2.5.7). 5 UiIntents integrados no petunia_editor. Testes: 8 testes sintéticos em crates/editor/tests/temporary_transform_h11_tests.rs pass (0.04s), 190 testes em petunia_core lib pass, 126 testes em petunia_editor lib pass, 18 testes em contextual_interactions pass, 2 testes em primitive_frame_bridge pass, 10 testes bridge_test pass, 21 testes editor_parity pass. Clippy zero warnings e cargo fmt limpo com CARGO_BUILD_JOBS=1."
     }
   },
   "tasks": [
@@ -3174,24 +3179,24 @@
       "title": "G/R/S temporários e operação sem arrasto",
       "description": "Retornar à ferramenta de origem após confirmar/cancelar, compatível com perfil e preferência de ativação. Cobrir valores digitados, eixos/planos, snap e clique/mover/clique sem botão mantido.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "P2. Auditoria de 2026-10-15: Transformação existe; retorno temporário é proposta. Desenvolvimento do delta não iniciado; documentação/reprodução não equivalem à correção.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Implementado em crates/core/src/state.rs, crates/core/src/modal.rs, crates/editor/src/lib.rs, crates/editor/src/bridge/transform.rs, crates/editor/src/bridge/operations.rs, crates/editor/src/bridge/commands.rs e crates/editor/src/bridge/application.rs. Retorno determinístico à ferramenta de origem após commit/cancel, operação latched sem arrasto, valores digitados, restrições e snap validados por suíte de testes dedicada.",
       "checkpoints": [
         {
           "title": "Retornar à ferramenta de origem após confirmar/cancelar, compatível com perfil e preferência de ativação.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "temporary-transform-h11-20261016"
         },
         {
           "title": "Cobrir valores digitados, eixos/planos, snap e clique/mover/clique sem botão mantido.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "temporary-transform-h11-20261016"
         },
         {
           "title": "Executar e registrar as regressões e os gates aplicáveis ao escopo, com revisão, ambiente e limitações.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "temporary-transform-h11-20261016"
         }
       ],
       "documents": [
