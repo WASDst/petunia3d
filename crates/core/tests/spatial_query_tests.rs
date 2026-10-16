@@ -479,3 +479,178 @@ fn test_vsp004_xray_vs_select_through_strict_invariance() {
     assert!(!state.show_xray);
     assert!(!state.select_through);
 }
+
+#[test]
+fn test_vsp003_axial_symmetry_anchor_alignment_and_quality() {
+    let cylinder_mesh = Mesh::cylinder(32, 1.0, 6.0); // Raio 1.0, altura 6.0 em Y
+    let transform = ObjectTransform::default();
+
+    let (frame, quality) = SpatialFrame::structural_with_quality(&cylinder_mesh, &transform);
+
+    // 1. Simetria axial detectada e tratada com Anchor Alignment
+    assert_eq!(
+        quality,
+        petunia_core::modeling_feedback::MeasurementQuality::Approximate,
+        "Cilindro com simetria axial deve reportar qualidade Approximate"
+    );
+
+    // 2. O eixo longitudinal dominante deve estar alinhado com o eixo Y ([0, 1, 0])
+    let dominant_axis = Vec3::from(frame.axes[0]);
+    assert!(
+        (dominant_axis.y.abs() - 1.0).abs() < 1e-2,
+        "Eixo dominante deve alinhar com Y: {:?}",
+        dominant_axis
+    );
+
+    // 3. Os eixos transversais devem estar perfeitamente ortogonalizados e ancorados
+    let axis_1 = Vec3::from(frame.axes[1]);
+    let axis_2 = Vec3::from(frame.axes[2]);
+
+    assert!(
+        dominant_axis.dot(axis_1).abs() < 1e-3,
+        "Eixos devem ser mutuamente ortogonais"
+    );
+    assert!(
+        dominant_axis.dot(axis_2).abs() < 1e-3,
+        "Eixos devem ser mutuamente ortogonais"
+    );
+    assert!(
+        axis_1.dot(axis_2).abs() < 1e-3,
+        "Eixos transversais devem ser mutuamente ortogonais"
+    );
+}
+
+#[test]
+fn test_vsp004_clearance_acceleration_culling_and_early_exit() {
+    let mut project = Project::new();
+    project.assets.clear();
+
+    // Asset A: Cubo em [0, 0, 0] (tamanho 2x2x2 -> X vai de -1 a +1)
+    let mesh_a = Mesh::cube(2.0);
+    let mut asset_a = Asset::new("Cube A", mesh_a);
+    let id_a = asset_a.id;
+    asset_a.transform =
+        ObjectTransform::from_trs(Vec3::new(0.0, 0.0, 0.0), Quat::IDENTITY, Vec3::ONE);
+    project.assets.push(asset_a);
+
+    // Asset B: Cubo em [20, 0, 0] (tamanho 2x2x2 -> X vai de 19 a 21)
+    // Separação real de 18.0 unidades
+    let mesh_b = Mesh::cube(2.0);
+    let mut asset_b = Asset::new("Cube B", mesh_b);
+    let id_b = asset_b.id;
+    asset_b.transform =
+        ObjectTransform::from_trs(Vec3::new(20.0, 0.0, 0.0), Quat::IDENTITY, Vec3::ONE);
+    project.assets.push(asset_b);
+
+    // Teste 1: ContactCheck com tolerância 2.0 (muito menor que a separação de 18.0)
+    // Dispara a Camada 0 (rejeição em O(1) via AABB culling)
+    let q_contact_far = SpatialQueryKind::ContactCheck {
+        object_a: id_a,
+        object_b: id_b,
+        tolerance: 2.0,
+    };
+    let res_far =
+        SpatialQueryInspector::execute_query(&project, q_contact_far).expect("Query Contact Far");
+    assert!(
+        !res_far.is_in_contact,
+        "Objetos distantes não devem estar em contato"
+    );
+    assert!(
+        res_far.distance >= 18.0,
+        "Distância deve ser pelo menos 18.0"
+    );
+
+    // Teste 2: Move Cubo B para colidir/tangenciar Cubo A (X = 2.0001 -> separação ~0.0001)
+    project
+        .assets
+        .iter_mut()
+        .find(|a| a.id == id_b)
+        .unwrap()
+        .transform =
+        ObjectTransform::from_trs(Vec3::new(2.0001, 0.0, 0.0), Quat::IDENTITY, Vec3::ONE);
+
+    // ContactCheck com tolerância 0.1 -> deve detectar contato imediatamente via Camada 2 (Early Exit)
+    let q_contact_touch = SpatialQueryKind::ContactCheck {
+        object_a: id_a,
+        object_b: id_b,
+        tolerance: 0.1,
+    };
+    let res_touch = SpatialQueryInspector::execute_query(&project, q_contact_touch)
+        .expect("Query Contact Touch");
+    assert!(
+        res_touch.is_in_contact,
+        "Objetos muito próximos devem ser detectados em contato"
+    );
+    assert!(res_touch.distance < 0.01, "Distância deve ser minúscula");
+
+    // Teste 3: SurfaceClearance exato
+    let q_clearance = SpatialQueryKind::SurfaceClearance {
+        object_a: id_a,
+        object_b: id_b,
+    };
+    let res_clearance =
+        SpatialQueryInspector::execute_query(&project, q_clearance).expect("Query Clearance");
+    assert!(
+        (res_clearance.distance - 0.0001).abs() < 1e-3,
+        "Clearance exato deve ser ~0.0001"
+    );
+}
+
+#[test]
+fn test_vsp003_surface_inertia_tessellation_invariance() {
+    // Malha A: Caixa canônica 2.0 x 4.0 x 6.0 centrada em [0, 0, 0]
+    let box_clean = Mesh::box_dim(2.0, 4.0, 6.0);
+    let transform = ObjectTransform::default();
+
+    let frame_clean = SpatialFrame::structural(&box_clean, &transform);
+    assert!(
+        Vec3::from(frame_clean.origin).length() < 1e-4,
+        "Centroide da caixa canônica deve ser [0, 0, 0]"
+    );
+
+    // Malha B: Mesma caixa, mas a face +Z (quad [4, 5, 6, 7] em Z=3.0) é subdividida
+    // adicionando um vértice central em (0, 0, 3) e 4 triângulos.
+    // Em um PCA ingênuo por vértices, o centroide seria puxado para Z positivo (3/9 = 0.333).
+    // Com o cálculo por integral de superfície (área), o centroide e os eixos permanecem invariantes.
+    let mut box_subdivided = Mesh::box_dim(2.0, 4.0, 6.0);
+    // Adiciona vértice no centro da face +Z
+    box_subdivided
+        .verts
+        .push(petunia_mesh::Vertex::new(0.0, 0.0, 3.0));
+    // Remove o quad face[1]
+    box_subdivided.faces.remove(1);
+    // Adiciona 4 triângulos cobrindo a mesma face
+    box_subdivided
+        .faces
+        .push(petunia_mesh::Face::new(vec![4, 5, 8]));
+    box_subdivided
+        .faces
+        .push(petunia_mesh::Face::new(vec![5, 6, 8]));
+    box_subdivided
+        .faces
+        .push(petunia_mesh::Face::new(vec![6, 7, 8]));
+    box_subdivided
+        .faces
+        .push(petunia_mesh::Face::new(vec![7, 4, 8]));
+
+    let frame_subdivided = SpatialFrame::structural(&box_subdivided, &transform);
+
+    assert!(
+        (frame_subdivided.origin[2] - 0.0).abs() < 1e-3,
+        "Centroide Z deve permanecer 0.0 após subdivisão de face: obtido {}",
+        frame_subdivided.origin[2]
+    );
+
+    // Os eixos principais de inércia devem ser idênticos (alinhados com Z, Y, X)
+    for i in 0..3 {
+        let axis_clean = Vec3::from(frame_clean.axes[i]);
+        let axis_sub = Vec3::from(frame_subdivided.axes[i]);
+        assert!(
+            axis_clean.dot(axis_sub).abs() > 0.99,
+            "Eixo {} deve permanecer alinhado (invariância à tesselação): {:?} vs {:?}",
+            i,
+            axis_clean,
+            axis_sub
+        );
+    }
+}

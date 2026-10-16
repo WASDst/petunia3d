@@ -108,68 +108,269 @@ impl SpatialFrame {
         })
     }
 
-    /// Frame estrutural derivado da análise dos eixos principais de inércia (PCA) dos vértices.
+    /// Frame estrutural derivado da análise dos eixos principais de inércia (PCA) das superfícies.
     pub fn structural(mesh: &Mesh, transform: &ObjectTransform) -> Self {
+        Self::structural_with_quality(mesh, transform).0
+    }
+
+    /// Frame estrutural acompanhado da qualidade de medição (Exact ou Approximate em caso de simetria/isotropia).
+    ///
+    /// Pondera analiticamente a área dos triângulos da malha (fórmula de Eberly / Mirtich),
+    /// garantindo que áreas densamente subdivididas (ex: costuras de corte booleano ou bevels)
+    /// não enviesem nem desloquem arbitrariamente o centroide e os eixos estruturais.
+    ///
+    /// Para corpos com simetria de revolução (cilindro, cápsula, disco), utiliza Anchor Alignment
+    /// projetando os eixos locais canônicos sobre o subespaço degenerado, evitando rotações espúrias.
+    pub fn structural_with_quality(
+        mesh: &Mesh,
+        transform: &ObjectTransform,
+    ) -> (Self, MeasurementQuality) {
         let world_mat = transform.to_mat4();
         if mesh.verts.is_empty() {
-            return Self::object_local(transform);
+            return (Self::object_local(transform), MeasurementQuality::Exact);
         }
 
-        // Calcula centroide em coordenadas de mundo
-        let mut center = Vec3::ZERO;
-        let mut count = 0.0f32;
-        for v in &mesh.verts {
-            let p = world_mat.transform_point3(v.vec());
-            if p.is_finite() {
-                center += p;
-                count += 1.0;
+        // Transforma vértices para coordenadas de mundo
+        let world_verts: Vec<Vec3> = mesh
+            .verts
+            .iter()
+            .map(|v| world_mat.transform_point3(v.vec()))
+            .collect();
+
+        // 1. Calcula centróide ponderado pela área das faces trianguladas
+        let mut total_area = 0.0f32;
+        let mut weighted_center = Vec3::ZERO;
+
+        for face in &mesh.faces {
+            if face.verts.len() < 3 {
+                continue;
+            }
+            let v0_idx = face.verts[0] as usize;
+            let Some(&p0) = world_verts.get(v0_idx) else {
+                continue;
+            };
+            if !p0.is_finite() {
+                continue;
+            }
+
+            for i in 1..face.verts.len() - 1 {
+                let v1_idx = face.verts[i] as usize;
+                let v2_idx = face.verts[i + 1] as usize;
+                let (Some(&p1), Some(&p2)) = (world_verts.get(v1_idx), world_verts.get(v2_idx))
+                else {
+                    continue;
+                };
+                if !p1.is_finite() || !p2.is_finite() {
+                    continue;
+                }
+
+                let cross = (p1 - p0).cross(p2 - p0);
+                let area = 0.5 * cross.length();
+                if area > 1e-8 && area.is_finite() {
+                    let tri_center = (p0 + p1 + p2) / 3.0;
+                    weighted_center += tri_center * area;
+                    total_area += area;
+                }
             }
         }
 
-        if count < 1.0 {
-            return Self::object_local(transform);
-        }
-        center /= count;
+        let center = if total_area > 1e-6 {
+            weighted_center / total_area
+        } else {
+            // Fallback para centróide de vértices se a malha não tiver faces com área (nuvem de pontos ou degenerada)
+            let mut sum = Vec3::ZERO;
+            let mut count = 0.0f32;
+            for &p in &world_verts {
+                if p.is_finite() {
+                    sum += p;
+                    count += 1.0;
+                }
+            }
+            if count > 0.0 {
+                sum / count
+            } else {
+                return (Self::object_local(transform), MeasurementQuality::Exact);
+            }
+        };
 
-        // Matriz de covariância 3x3
+        // 2. Matriz de covariância 3x3 integrada analiticamente sobre a superfície triangular
         let mut cov = [[0.0f32; 3]; 3];
-        for v in &mesh.verts {
-            let p = world_mat.transform_point3(v.vec()) - center;
-            if p.is_finite() {
-                cov[0][0] += p.x * p.x;
-                cov[0][1] += p.x * p.y;
-                cov[0][2] += p.x * p.z;
-                cov[1][1] += p.y * p.y;
-                cov[1][2] += p.y * p.z;
-                cov[2][2] += p.z * p.z;
+
+        if total_area > 1e-6 {
+            for face in &mesh.faces {
+                if face.verts.len() < 3 {
+                    continue;
+                }
+                let v0_idx = face.verts[0] as usize;
+                let Some(&p0) = world_verts.get(v0_idx) else {
+                    continue;
+                };
+                if !p0.is_finite() {
+                    continue;
+                }
+
+                for i in 1..face.verts.len() - 1 {
+                    let v1_idx = face.verts[i] as usize;
+                    let v2_idx = face.verts[i + 1] as usize;
+                    let (Some(&p1), Some(&p2)) = (world_verts.get(v1_idx), world_verts.get(v2_idx))
+                    else {
+                        continue;
+                    };
+                    if !p1.is_finite() || !p2.is_finite() {
+                        continue;
+                    }
+
+                    let cross = (p1 - p0).cross(p2 - p0);
+                    let area = 0.5 * cross.length();
+                    if area > 1e-8 && area.is_finite() {
+                        let a = p0 - center;
+                        let b = p1 - center;
+                        let d = p2 - center;
+                        let s = a + b + d;
+
+                        // Integral da díade (p - c)(p - c)^T sobre o triângulo:
+                        // (Area / 24) * [ (a a^T + b b^T + d d^T) + s s^T ]
+                        let factor = area / 24.0;
+                        for r in 0..3 {
+                            let ar = a[r];
+                            let br = b[r];
+                            let dr = d[r];
+                            let sr = s[r];
+                            for c in r..3 {
+                                let term = ar * a[c] + br * b[c] + dr * d[c] + sr * s[c];
+                                cov[r][c] += factor * term;
+                            }
+                        }
+                    }
+                }
+            }
+            cov[1][0] = cov[0][1];
+            cov[2][0] = cov[0][2];
+            cov[2][1] = cov[1][2];
+
+            for row in &mut cov {
+                for val in row {
+                    *val /= total_area;
+                }
+            }
+        } else {
+            // Fallback para covariância de vértices
+            let mut count = 0.0f32;
+            for &p in &world_verts {
+                if p.is_finite() {
+                    let d = p - center;
+                    cov[0][0] += d.x * d.x;
+                    cov[0][1] += d.x * d.y;
+                    cov[0][2] += d.x * d.z;
+                    cov[1][1] += d.y * d.y;
+                    cov[1][2] += d.y * d.z;
+                    cov[2][2] += d.z * d.z;
+                    count += 1.0;
+                }
+            }
+            if count > 0.0 {
+                cov[1][0] = cov[0][1];
+                cov[2][0] = cov[0][2];
+                cov[2][1] = cov[1][2];
+                for row in &mut cov {
+                    for val in row {
+                        *val /= count;
+                    }
+                }
             }
         }
-        cov[1][0] = cov[0][1];
-        cov[2][0] = cov[0][2];
-        cov[2][1] = cov[1][2];
 
-        for row in &mut cov {
-            for val in row {
-                *val /= count;
+        // 3. Autovetores e autovalores via método de Jacobi
+        let (raw_axes, eigenvalues) = jacobi_eigenvectors_3x3(cov);
+
+        // Ordena autovalores decrescentes e seus autovetores correspondentes
+        let mut order = [0, 1, 2];
+        order.sort_by(|&i, &j| {
+            eigenvalues[j]
+                .partial_cmp(&eigenvalues[i])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let e0 = eigenvalues[order[0]];
+        let e1 = eigenvalues[order[1]];
+        let e2 = eigenvalues[order[2]];
+
+        let mut v0 = Vec3::from(raw_axes[order[0]]).normalize_or_zero();
+        let mut v1 = Vec3::from(raw_axes[order[1]]).normalize_or_zero();
+        let mut v2 = Vec3::from(raw_axes[order[2]]).normalize_or_zero();
+
+        // 4. Tratamento de Isotropia Total (esfera, cubo perfeito)
+        // Se a dispersão entre o maior e menor autovalor for mínima (< 3%),
+        // não há eixos preferenciais: recorre à orientação local do objeto.
+        if e0 > 1e-5 && (e0 - e2) / e0 < 0.03 {
+            return (
+                Self::object_local(transform),
+                MeasurementQuality::Approximate,
+            );
+        }
+
+        // 5. Tratamento de Degenerescência Parcial / Simetria Axial (cilindro, cápsula, disco)
+        // Anchor Alignment: ancora os eixos do subespaço degenerado ao frame canônico do objeto
+        // para evitar rotações espúrias no plano transversal.
+        let local_axes = [
+            world_mat.transform_vector3(Vec3::X).normalize_or_zero(),
+            world_mat.transform_vector3(Vec3::Y).normalize_or_zero(),
+            world_mat.transform_vector3(Vec3::Z).normalize_or_zero(),
+        ];
+
+        let mut quality = MeasurementQuality::Exact;
+
+        if e0 > 1e-5 {
+            let diff_transversal = (e1 - e2) / e0;
+            let diff_planar = (e0 - e1) / e0;
+
+            if diff_transversal < 0.03 {
+                // Caso Cilindro / Haste: v0 é o eixo longitudinal fixo; e1 e e2 são degenerados.
+                quality = MeasurementQuality::Approximate;
+                let mut best_axis = local_axes[0];
+                let mut min_dot = best_axis.dot(v0).abs();
+                for la in &local_axes[1..] {
+                    let d = la.dot(v0).abs();
+                    if d < min_dot {
+                        min_dot = d;
+                        best_axis = *la;
+                    }
+                }
+                let proj = best_axis - best_axis.dot(v0) * v0;
+                let u1 = proj.normalize_or_zero();
+                if u1.length_squared() > 1e-4 {
+                    v1 = u1;
+                    v2 = v0.cross(v1).normalize_or_zero();
+                }
+            } else if diff_planar < 0.03 {
+                // Caso Disco / Moeda: v2 é o eixo normal fixo; e0 e e1 são degenerados no plano do disco.
+                quality = MeasurementQuality::Approximate;
+                let mut best_axis = local_axes[0];
+                let mut min_dot = best_axis.dot(v2).abs();
+                for la in &local_axes[1..] {
+                    let d = la.dot(v2).abs();
+                    if d < min_dot {
+                        min_dot = d;
+                        best_axis = *la;
+                    }
+                }
+                let proj = best_axis - best_axis.dot(v2) * v2;
+                let u0 = proj.normalize_or_zero();
+                if u0.length_squared() > 1e-4 {
+                    v0 = u0;
+                    v1 = v2.cross(v0).normalize_or_zero();
+                }
             }
         }
 
-        // Autovetores da matriz simétrica via algoritmo clássico de Jacobi
-        let (axes, eigenvalues) = jacobi_eigenvectors_3x3(cov);
-
-        // Se a distribuição for isotrópica (autovalores iguais, ex: cubo ou esfera),
-        // o PCA não possui eixos preferenciais: recorre à orientação local do objeto.
-        let max_eig = eigenvalues[0].max(eigenvalues[1]).max(eigenvalues[2]);
-        let min_eig = eigenvalues[0].min(eigenvalues[1]).min(eigenvalues[2]);
-        if max_eig > 1e-5 && (max_eig - min_eig) / max_eig < 0.02 {
-            return Self::object_local(transform);
-        }
-
-        Self {
-            kind: SpatialFrameKind::Structural,
-            origin: center.to_array(),
-            axes,
-        }
+        (
+            Self {
+                kind: SpatialFrameKind::Structural,
+                origin: center.to_array(),
+                axes: [v0.to_array(), v1.to_array(), v2.to_array()],
+            },
+            quality,
+        )
     }
 
     /// Frame orientado pela câmera / visão.
@@ -378,19 +579,25 @@ impl SpatialQueryInspector {
         let current_revision = project.revision_id();
         let transform = asset.transform;
 
-        let frame = match frame_kind {
-            SpatialFrameKind::World => SpatialFrame::world(),
-            SpatialFrameKind::ObjectLocal => SpatialFrame::object_local(&transform),
-            SpatialFrameKind::Structural => SpatialFrame::structural(mesh, &transform),
-            SpatialFrameKind::Custom => SpatialFrame::object_local(&transform),
-            SpatialFrameKind::View => SpatialFrame::world(),
+        let (frame, quality) = match frame_kind {
+            SpatialFrameKind::World => (SpatialFrame::world(), MeasurementQuality::Exact),
+            SpatialFrameKind::ObjectLocal => (
+                SpatialFrame::object_local(&transform),
+                MeasurementQuality::Exact,
+            ),
+            SpatialFrameKind::Structural => SpatialFrame::structural_with_quality(mesh, &transform),
+            SpatialFrameKind::Custom => (
+                SpatialFrame::object_local(&transform),
+                MeasurementQuality::Exact,
+            ),
+            SpatialFrameKind::View => (SpatialFrame::world(), MeasurementQuality::Exact),
         };
 
         if mesh.verts.is_empty() {
             return Some(VolumeFrame {
                 frame,
                 representation: rep,
-                quality: MeasurementQuality::Exact,
+                quality,
                 center: transform.translation,
                 min: [0.0, 0.0, 0.0],
                 max: [0.0, 0.0, 0.0],
@@ -445,7 +652,7 @@ impl SpatialQueryInspector {
         Some(VolumeFrame {
             frame,
             representation: rep,
-            quality: MeasurementQuality::Exact,
+            quality,
             center: world_center.to_array(),
             min: min_c.to_array(),
             max: max_c.to_array(),
@@ -588,7 +795,8 @@ impl SpatialQueryInspector {
                         CommandError::Execution(format!("Object B {object_b} not found"))
                     })?;
 
-                let (min_dist, pt_a, pt_b) = compute_mesh_clearance(asset_a, asset_b);
+                let (min_dist, pt_a, pt_b) =
+                    compute_mesh_clearance_with_tolerance(asset_a, asset_b, Some(tolerance));
                 let is_contact = min_dist <= tolerance;
                 Ok(SpatialQueryResult {
                     query_name: "Contact Check".to_string(),
@@ -677,10 +885,19 @@ impl SpatialQueryInspector {
     }
 }
 
-/// Helper para computar clearance entre vértices de duas malhas transformadas.
+/// Helper para computar clearance entre vértices de duas malhas transformadas
+/// com aceleração em camadas (bounding box culling, upper-bound pruning e early exit sob tolerância).
 fn compute_mesh_clearance(
     asset_a: &petunia_project::Asset,
     asset_b: &petunia_project::Asset,
+) -> (f32, [f32; 3], [f32; 3]) {
+    compute_mesh_clearance_with_tolerance(asset_a, asset_b, None)
+}
+
+fn compute_mesh_clearance_with_tolerance(
+    asset_a: &petunia_project::Asset,
+    asset_b: &petunia_project::Asset,
+    tolerance: Option<f32>,
 ) -> (f32, [f32; 3], [f32; 3]) {
     let mat_a = asset_a.transform.to_mat4();
     let mat_b = asset_b.transform.to_mat4();
@@ -705,17 +922,72 @@ fn compute_mesh_clearance(
         return (f32::INFINITY, [0.0; 3], [0.0; 3]);
     }
 
+    // Calcula AABBs de A e B
+    let mut min_a = Vec3::splat(f32::INFINITY);
+    let mut max_a = Vec3::splat(f32::NEG_INFINITY);
+    for va in &verts_a {
+        min_a = min_a.min(*va);
+        max_a = max_a.max(*va);
+    }
+
+    let mut min_b = Vec3::splat(f32::INFINITY);
+    let mut max_b = Vec3::splat(f32::NEG_INFINITY);
+    for vb in &verts_b {
+        min_b = min_b.min(*vb);
+        max_b = max_b.max(*vb);
+    }
+
+    // Camada 0: Teste rápido de separação entre AABBs
+    let dx = (min_b.x - max_a.x).max(min_a.x - max_b.x).max(0.0);
+    let dy = (min_b.y - max_a.y).max(min_a.y - max_b.y).max(0.0);
+    let dz = (min_b.z - max_a.z).max(min_a.z - max_b.z).max(0.0);
+    let aabb_dist_sq = dx * dx + dy * dy + dz * dz;
+
+    // Se estivermos checando contato sob tolerância e as caixas estiverem mais longe que a tolerância,
+    // garantidamente não há contato (rejeição em O(1)).
+    if let Some(tol) = tolerance
+        && aabb_dist_sq > tol * tol
+    {
+        let center_a = (min_a + max_a) * 0.5;
+        let center_b = (min_b + max_b) * 0.5;
+        return (
+            aabb_dist_sq.sqrt(),
+            center_a.to_array(),
+            center_b.to_array(),
+        );
+    }
+
+    let early_exit_sq = tolerance.map(|t| t * t);
     let mut min_dist_sq = f32::INFINITY;
     let mut best_a = verts_a[0];
     let mut best_b = verts_b[0];
 
+    // Camada 1: Poda por cota superior (upper-bound pruning) e early exit
     for &va in &verts_a {
+        // Distância mínima do ponto va à caixa envolvente de B
+        let px = (min_b.x - va.x).max(va.x - max_b.x).max(0.0);
+        let py = (min_b.y - va.y).max(va.y - max_b.y).max(0.0);
+        let pz = (min_b.z - va.z).max(va.z - max_b.z).max(0.0);
+        let dist_to_b_box_sq = px * px + py * py + pz * pz;
+
+        // Se va já está mais longe da caixa B inteira do que o recorde atual, pula va
+        if dist_to_b_box_sq >= min_dist_sq {
+            continue;
+        }
+
         for &vb in &verts_b {
             let d_sq = (vb - va).length_squared();
             if d_sq < min_dist_sq {
                 min_dist_sq = d_sq;
                 best_a = va;
                 best_b = vb;
+
+                // Camada 2: Early exit se já estiver dentro da tolerância de contato
+                if let Some(target_sq) = early_exit_sq
+                    && min_dist_sq <= target_sq
+                {
+                    return (min_dist_sq.sqrt(), best_a.to_array(), best_b.to_array());
+                }
             }
         }
     }
