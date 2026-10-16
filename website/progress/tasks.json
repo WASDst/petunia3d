@@ -440,6 +440,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/project/src/rig.rs, crates/project/src/lib.rs, crates/project/src/format.rs, crates/core/src/rig_commands.rs, crates/core/src/lib.rs, crates/core/tests/smart_rig_tests.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H31: Smart Rig manual e assistido (RIG-001/002/004/008/009/010/011). Criação e edição manual de ossos para anatomias arbitrárias (bípede, quadrúpede, multípode, serpente, peixe, asas, assimétricos; determinístico local). Preview revisável (SkinningPreviewState) com overrides e commit_cmd isolado do Undo. Bind transacional com Proximity, RigidPerPart e SmoothEnvelope, clamping max 4 influências e normalização sum(w_i)=1.0. Pose Test isolado do Rest Pose (ResetAllBonePosesCmd restaura rest pose, ApplyPoseAsRestCmd grava a pose atual como nova rest pose e deforma a malha). Desativação não-destrutiva de skinning (SetSkinningEnabledCmd) sem apagar ossos ou pesos. Testes: 7 testes sintéticos completos em crates/core/tests/smart_rig_tests.rs pass (0.06s), 8 testes em rig_command_tests.rs pass, 246 testes em petunia_project pass, 190 testes em petunia_core lib pass. Clippy com zero warnings e cargo fmt limpo com CARGO_BUILD_JOBS=1."
+    },
+    "structural-live-rig-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/project/src/rig.rs, crates/project/src/lib.rs, crates/project/src/format.rs, crates/core/src/rig_commands.rs, crates/core/src/lib.rs, crates/core/tests/structural_live_rig_tests.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H32: Smart Rig estrutural e Live opcional (RIG-003/005/006/007/012). Grafo semântico de forma estrutural (StructuralShapeGraph) desacoplado de receitas geométricas transitórias com IDs estáveis (PartId, JointId, ConnectionId). Overrides manuais e travas (locked_parts, locked_bones) preservados em atualizações. Solver localizado e idempotente update_structural_rig_localized: atualiza apenas partes com geometria alterada e devolve changed: false em malha inalterada. Isolamento estrito de material e UV: alterações em material_revision e uv_revision não disparam regeneração de pesos (RIG-007). Guarda contra alterações topológicas destrutivas ativando RigReviewStatus::NeedsReview em vez de reutilização silenciosa de índices. Remapeamento explícito de pesos (RemapRigWeightsCmd / remap_skin_weights) restaurando RigReviewStatus::UpToDate. Três operações distintas de desligamento no RIG-012 (SetLiveAutoUpdateCmd para pausar live rig, SetSkinningEnabledCmd para desativar deformação e UnbindRigCmd para desvincular rig; nenhuma opção 'Off' deleta ossos, pesos ou animações). Testes: 8 testes sintéticos em crates/core/tests/structural_live_rig_tests.rs pass (0.04s), 7 testes em smart_rig_tests.rs pass, 8 testes em rig_command_tests.rs pass, 246 testes em petunia_project pass. Clippy zero warnings e cargo fmt limpo com CARGO_BUILD_JOBS=1."
     }
   },
   "tasks": [
@@ -3792,19 +3797,19 @@
       "title": "Smart Rig estrutural e Live opcional",
       "description": "RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Implementado em crates/project/src/rig.rs, crates/project/src/lib.rs, crates/core/src/rig_commands.rs e crates/core/tests/structural_live_rig_tests.rs. RIG-003/005/006/007/012 concluídos com testes sintéticos.",
       "checkpoints": [
         {
           "title": "RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "structural-live-rig-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "structural-live-rig-20261016"
         }
       ],
       "documents": [

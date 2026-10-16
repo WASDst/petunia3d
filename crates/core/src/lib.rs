@@ -132,16 +132,19 @@ pub use project_service::{
 };
 pub use rig_commands::{
     AddAnimationCmd, AddBoneCmd, AddIkChainCmd, AddMotionCmd, AddMotionLayerCmd, AddRigPresetCmd,
-    ApplyMotionNowCmd, ApplyPoseAsRestCmd, AssignRigRoleCmd, AutoRigActiveAssetCmd, BindRigCmd,
-    ClearBoneTrackCmd, ClearRigRoleCmd, CreateEmptySkeletonCmd, DeleteBoneKeyCmd,
-    DeleteBoneKeyframeCmd, DuplicateMotionCmd, EditBoneRestPoseCmd, FitBlocked,
-    FitRigToActiveAssetCmd, InferRigRolesCmd, InsertBoneKeyframeCmd, RemoveAnimationCmd,
-    RemoveBoneCmd, RemoveIkChainCmd, RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd,
+    AddStructuralJointCmd, AddStructuralPartCmd, ApplyMotionNowCmd, ApplyPoseAsRestCmd,
+    AssignRigRoleCmd, AutoRigActiveAssetCmd, BindRigCmd, ClearBoneTrackCmd, ClearRigRoleCmd,
+    ClearVertexWeightOverrideCmd, ConnectStructuralPartsCmd, CreateEmptySkeletonCmd,
+    CreateStructuralGraphCmd, DeleteBoneKeyCmd, DeleteBoneKeyframeCmd, DuplicateMotionCmd,
+    EditBoneRestPoseCmd, FitBlocked, FitRigToActiveAssetCmd, InferRigRolesCmd,
+    InsertBoneKeyframeCmd, RemapRigWeightsCmd, RemoveAnimationCmd, RemoveBoneCmd, RemoveIkChainCmd,
+    RemoveMotionCmd, RemoveMotionLayerCmd, RemoveSkeletonCmd, RemoveStructuralPartCmd,
     RenameBoneCmd, ReparentBoneCmd, ResetAllBonePosesCmd, ResetBonePoseCmd, RigPresetKind,
-    SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd,
+    SetBoneKeyCmd, SetBoneKeyframeInterpolationCmd, SetBoneTransformCmd, SetLiveAutoUpdateCmd,
     SetMotionLayerBlendModeCmd, SetMotionLayerWeightCmd, SetMotionParamCmd, SetMotionStyleCmd,
-    SetSkinningEnabledCmd, SkinningPreviewState, ToggleMotionLayerEnabledCmd, UnbindRigCmd,
-    UpdateIkChainCmd, UpdateMotionCmd, fit_availability,
+    SetSkinningEnabledCmd, SetStructuralBoneLockedCmd, SetStructuralPartLockedCmd,
+    SetVertexWeightOverrideCmd, SkinningPreviewState, ToggleMotionLayerEnabledCmd, UnbindRigCmd,
+    UpdateIkChainCmd, UpdateMotionCmd, UpdateStructuralRigCmd, fit_availability,
 };
 
 pub use brush::{

@@ -16,11 +16,12 @@
 use crate::command::{Command, CommandError};
 use crate::context::{CommandContext, EditorView};
 use petunia_project::{
-    AnimationAsset, AnimationClip, BakeOptions, IkChain, IkSolver, Interpolation, Keyframe,
-    MotionGenerator, MotionRecipe, MotionStyle, RigError, RigPreset, RigRole, RootMode, Skeleton,
-    SkinBindMethod, SkinData, Transform3D, VertexSkinWeight, auto_fit_humanoid,
-    compute_auto_skin_weights, compute_blended_skin_weights, compute_skin_weights,
-    default_blend_radius, fit_skeleton_to_bounds, mesh_bounds,
+    AnimationAsset, AnimationClip, BakeOptions, ConnectionKind, IkChain, IkSolver, Interpolation,
+    JointId, Keyframe, LiveRigData, MotionGenerator, MotionRecipe, MotionStyle, PartId, RigError,
+    RigPreset, RigRole, RootMode, Skeleton, SkinBindMethod, SkinData, StructuralShapeGraph,
+    Transform3D, VertexSkinWeight, auto_fit_humanoid, compute_auto_skin_weights,
+    compute_blended_skin_weights, compute_skin_weights, default_blend_radius,
+    fit_skeleton_to_bounds, mesh_bounds, remap_skin_weights, update_structural_rig_localized,
 };
 use uuid::Uuid;
 
@@ -2448,5 +2449,772 @@ impl SkinningPreviewState {
             max_influences: self.max_influences,
             custom_skin: Some(self.skin_data.clone()),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// H32: Smart Rig Estrutural & Live Opcional (RIG-003/005/006/007/012)
+// ---------------------------------------------------------------------------
+
+/// Habilita ou desabilita a auto-atualização do Live Rig sem apagar dados (RIG-012).
+#[derive(Debug, Clone)]
+pub struct SetLiveAutoUpdateCmd {
+    pub asset_id: Option<Uuid>,
+    pub enabled: bool,
+}
+
+impl Command for SetLiveAutoUpdateCmd {
+    fn label(&self) -> &'static str {
+        "set live auto-update"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset does not have a live rig configured");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset_name = {
+            let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            let live = asset
+                .live_rig
+                .as_mut()
+                .ok_or_else(|| exec_err("Live rig not found"))?;
+
+            if live.auto_update_enabled == self.enabled {
+                return Err(CommandError::NoChange(format!(
+                    "Live auto-update is already {}",
+                    if self.enabled { "enabled" } else { "disabled" }
+                )));
+            }
+
+            live.auto_update_enabled = self.enabled;
+            asset.name.clone()
+        };
+
+        state.set_status(format!(
+            "Live auto-update {} for asset '{asset_name}'",
+            if self.enabled { "enabled" } else { "disabled" }
+        ));
+        Ok(())
+    }
+}
+
+/// Cria e inicializa um Grafo de Forma Estrutural (StructuralShapeGraph) no asset (RIG-003).
+#[derive(Debug, Clone)]
+pub struct CreateStructuralGraphCmd {
+    pub asset_id: Option<Uuid>,
+    pub name: String,
+}
+
+impl Command for CreateStructuralGraphCmd {
+    fn label(&self) -> &'static str {
+        "create structural shape graph"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if self.name.trim().is_empty() {
+            return Err("Graph name cannot be empty");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let name = self.name.trim().to_string();
+        let asset_name = {
+            let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+
+            let graph = StructuralShapeGraph::new(&name);
+            asset.live_rig = Some(LiveRigData::new(graph));
+            asset.name.clone()
+        };
+
+        state.set_status(format!(
+            "Created structural shape graph '{name}' for '{asset_name}'"
+        ));
+        Ok(())
+    }
+}
+
+/// Adiciona uma parte anatômica/estrutural ao grafo de forma (RIG-003/005).
+#[derive(Debug, Clone)]
+pub struct AddStructuralPartCmd {
+    pub asset_id: Option<Uuid>,
+    pub name: String,
+    pub vertex_indices: Vec<usize>,
+    pub center: [f32; 3],
+    pub bounds: ([f32; 3], [f32; 3]),
+}
+
+impl Command for AddStructuralPartCmd {
+    fn label(&self) -> &'static str {
+        "add structural part"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        let name = self.name.trim();
+        if name.is_empty() {
+            return Err("Part name cannot be empty");
+        }
+        if live.graph.parts.iter().any(|p| p.name == name) {
+            return Err("A structural part with this name already exists");
+        }
+        if !finite3(&self.center) || !finite3(&self.bounds.0) || !finite3(&self.bounds.1) {
+            return Err("Coordinates and bounds must be finite numbers");
+        }
+        let n_verts = asset.mesh.verts.len();
+        if self.vertex_indices.iter().any(|&i| i >= n_verts) {
+            return Err("Vertex index out of mesh bounds");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let name = self.name.trim();
+        let part_id = live
+            .graph
+            .add_part(name, self.vertex_indices.clone(), self.center, self.bounds)
+            .map_err(exec_err)?;
+
+        state.set_status(format!("Added structural part '{name}' (id: {part_id})"));
+        Ok(())
+    }
+}
+
+/// Remove uma parte estrutural do grafo (RIG-003).
+#[derive(Debug, Clone)]
+pub struct RemoveStructuralPartCmd {
+    pub asset_id: Option<Uuid>,
+    pub part_id: PartId,
+}
+
+impl Command for RemoveStructuralPartCmd {
+    fn label(&self) -> &'static str {
+        "remove structural part"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if live.graph.get_part(self.part_id).is_none() {
+            return Err("Structural part not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        live.graph.remove_part(self.part_id).map_err(exec_err)?;
+        state.set_status(format!("Removed structural part id: {}", self.part_id));
+        Ok(())
+    }
+}
+
+/// Adiciona uma junta ao grafo de forma estrutural (RIG-003/005).
+#[derive(Debug, Clone)]
+pub struct AddStructuralJointCmd {
+    pub asset_id: Option<Uuid>,
+    pub name: String,
+    pub bone_id: Option<u32>,
+    pub position: [f32; 3],
+    pub parent: Option<JointId>,
+}
+
+impl Command for AddStructuralJointCmd {
+    fn label(&self) -> &'static str {
+        "add structural joint"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        let name = self.name.trim();
+        if name.is_empty() {
+            return Err("Joint name cannot be empty");
+        }
+        if live.graph.joints.iter().any(|j| j.name == name) {
+            return Err("A structural joint with this name already exists");
+        }
+        if !finite3(&self.position) {
+            return Err("Position coordinates must be finite numbers");
+        }
+        if let Some(pid) = self.parent
+            && live.graph.get_joint(pid).is_none()
+        {
+            return Err("Parent joint not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let name = self.name.trim();
+        let joint_id = live
+            .graph
+            .add_joint(name, self.bone_id, self.position, self.parent)
+            .map_err(exec_err)?;
+
+        state.set_status(format!("Added structural joint '{name}' (id: {joint_id})"));
+        Ok(())
+    }
+}
+
+/// Conecta duas partes estruturais no grafo (RIG-003).
+#[derive(Debug, Clone)]
+pub struct ConnectStructuralPartsCmd {
+    pub asset_id: Option<Uuid>,
+    pub from_part: PartId,
+    pub to_part: PartId,
+    pub kind: ConnectionKind,
+}
+
+impl Command for ConnectStructuralPartsCmd {
+    fn label(&self) -> &'static str {
+        "connect structural parts"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if self.from_part == self.to_part {
+            return Err("Cannot connect a part to itself");
+        }
+        if live.graph.get_part(self.from_part).is_none() {
+            return Err("Source part not found");
+        }
+        if live.graph.get_part(self.to_part).is_none() {
+            return Err("Target part not found");
+        }
+        if live.graph.connections.iter().any(|c| {
+            (c.from_part == self.from_part && c.to_part == self.to_part)
+                || (c.from_part == self.to_part && c.to_part == self.from_part)
+        }) {
+            return Err("Connection between these parts already exists");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let conn_id = live
+            .graph
+            .connect_parts(self.from_part, self.to_part, self.kind)
+            .map_err(exec_err)?;
+
+        state.set_status(format!(
+            "Connected parts {} and {} (connection id: {conn_id})",
+            self.from_part, self.to_part
+        ));
+        Ok(())
+    }
+}
+
+/// Define o estado de bloqueio (lock) de uma parte estrutural (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct SetStructuralPartLockedCmd {
+    pub asset_id: Option<Uuid>,
+    pub part_id: PartId,
+    pub locked: bool,
+}
+
+impl Command for SetStructuralPartLockedCmd {
+    fn label(&self) -> &'static str {
+        "set structural part locked"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if live.graph.get_part(self.part_id).is_none() {
+            return Err("Structural part not found");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Asset has no structural shape graph"))?;
+
+        let part = live
+            .graph
+            .get_part_mut(self.part_id)
+            .ok_or_else(|| exec_err("Part not found"))?;
+
+        if part.locked == self.locked {
+            return Err(CommandError::NoChange(format!(
+                "Part {} is already {}",
+                self.part_id,
+                if self.locked { "locked" } else { "unlocked" }
+            )));
+        }
+
+        part.locked = self.locked;
+        state.set_status(format!(
+            "Part {} {}",
+            self.part_id,
+            if self.locked { "locked" } else { "unlocked" }
+        ));
+        Ok(())
+    }
+}
+
+/// Define o estado de bloqueio (lock) de um osso no Live Rig (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct SetStructuralBoneLockedCmd {
+    pub asset_id: Option<Uuid>,
+    pub bone_id: u32,
+    pub locked: bool,
+}
+
+impl Command for SetStructuralBoneLockedCmd {
+    fn label(&self) -> &'static str {
+        "set structural bone locked"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        let skel_id = asset.skeleton_id.ok_or("Asset has no skeleton bound")?;
+        let skel = state
+            .document
+            .project
+            .get_skeleton(skel_id)
+            .ok_or("Skeleton not found")?;
+        if skel.get_bone(self.bone_id).is_none() {
+            return Err("Bone not found in skeleton");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        let changed = if self.locked {
+            live.locked_bones.insert(self.bone_id)
+        } else {
+            live.locked_bones.remove(&self.bone_id)
+        };
+
+        if !changed {
+            return Err(CommandError::NoChange(format!(
+                "Bone {} is already {}",
+                self.bone_id,
+                if self.locked { "locked" } else { "unlocked" }
+            )));
+        }
+
+        state.set_status(format!(
+            "Bone {} {}",
+            self.bone_id,
+            if self.locked { "locked" } else { "unlocked" }
+        ));
+        Ok(())
+    }
+}
+
+/// Define um override manual de pesos para um vértice que DEVE ser preservado (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct SetVertexWeightOverrideCmd {
+    pub asset_id: Option<Uuid>,
+    pub vertex_index: usize,
+    pub bones: [u32; 4],
+    pub weights: [f32; 4],
+}
+
+impl Command for SetVertexWeightOverrideCmd {
+    fn label(&self) -> &'static str {
+        "set vertex weight override"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        if self.vertex_index >= asset.mesh.verts.len() {
+            return Err("Vertex index out of mesh bounds");
+        }
+        if !self.weights.iter().all(|w| w.is_finite() && *w >= 0.0) {
+            return Err("Weights must be finite non-negative numbers");
+        }
+        if self.weights.iter().sum::<f32>() < 1e-6 {
+            return Err("Weight sum cannot be zero");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let mut vw = VertexSkinWeight::new(self.bones, self.weights);
+        vw.normalize();
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        live.overrides.insert(self.vertex_index, vw);
+
+        if let Some(skin) = asset.skin_data.as_mut()
+            && let Some(target) = skin.vertex_weights.get_mut(self.vertex_index)
+        {
+            *target = vw;
+        }
+
+        state.set_status(format!(
+            "Set weight override for vertex {}",
+            self.vertex_index
+        ));
+        Ok(())
+    }
+}
+
+/// Remove o override manual de um vértice (RIG-005/006).
+#[derive(Debug, Clone)]
+pub struct ClearVertexWeightOverrideCmd {
+    pub asset_id: Option<Uuid>,
+    pub vertex_index: usize,
+}
+
+impl Command for ClearVertexWeightOverrideCmd {
+    fn label(&self) -> &'static str {
+        "clear vertex weight override"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let live = asset
+            .live_rig
+            .as_ref()
+            .ok_or("Asset has no structural shape graph")?;
+
+        if !live.overrides.contains_key(&self.vertex_index) {
+            return Err("Vertex does not have a weight override");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let live = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        if live.overrides.remove(&self.vertex_index).is_none() {
+            return Err(CommandError::NoChange("No override found to clear".into()));
+        }
+
+        state.set_status(format!(
+            "Cleared weight override for vertex {}",
+            self.vertex_index
+        ));
+        Ok(())
+    }
+}
+
+/// Executa a atualização localizada e idempotente do Smart Rig estrutural (RIG-003/005/006/007).
+#[derive(Debug, Clone)]
+pub struct UpdateStructuralRigCmd {
+    pub asset_id: Option<Uuid>,
+    pub method: SkinBindMethod,
+    pub max_influences: usize,
+}
+
+impl Command for UpdateStructuralRigCmd {
+    fn label(&self) -> &'static str {
+        "update structural rig"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        if asset.skeleton_id.is_none() {
+            return Err("Asset has no skeleton bound");
+        }
+        if asset.skin_data.is_none() {
+            return Err("Asset has no skin data");
+        }
+        if self.max_influences == 0 || self.max_influences > 4 {
+            return Err("Max influences must be between 1 and 4");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let (skel_clone, mesh_clone, pos_rev, topo_rev, mat_rev, uv_rev) = {
+            let asset = find_asset(&state.document.project, self.asset_id)
+                .ok_or_else(|| exec_err("Asset not found"))?;
+            let skel_id = asset
+                .skeleton_id
+                .ok_or_else(|| exec_err("Asset has no skeleton"))?;
+            let skel = state
+                .document
+                .project
+                .get_skeleton(skel_id)
+                .ok_or_else(|| exec_err("Skeleton not found"))?;
+
+            (
+                skel.clone(),
+                asset.mesh.clone(),
+                state.document.project.position_revision,
+                state.document.project.topology_revision,
+                state.document.project.material_revision,
+                state.document.project.uv_revision,
+            )
+        };
+
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let skin_data = asset
+            .skin_data
+            .as_mut()
+            .ok_or_else(|| exec_err("Skin data not found"))?;
+
+        let live_data = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        let report = update_structural_rig_localized(
+            &mesh_clone,
+            &skel_clone,
+            skin_data,
+            live_data,
+            pos_rev,
+            topo_rev,
+            mat_rev,
+            uv_rev,
+            self.method,
+            self.max_influences,
+        )
+        .map_err(exec_err)?;
+
+        if !report.changed {
+            return Err(CommandError::NoChange(report.message));
+        }
+
+        state.set_status(report.message);
+        Ok(())
+    }
+}
+
+/// Remapeia explicitamente os pesos e o grafo após alterações na topologia (RIG-005/007).
+#[derive(Debug, Clone)]
+pub struct RemapRigWeightsCmd {
+    pub asset_id: Option<Uuid>,
+    pub old_to_new_indices: Vec<Option<usize>>,
+    pub new_vertex_count: usize,
+}
+
+impl Command for RemapRigWeightsCmd {
+    fn label(&self) -> &'static str {
+        "remap rig weights"
+    }
+
+    fn changes(&self) -> petunia_project::ProjectChanges {
+        petunia_project::ProjectChanges::NONE
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = find_asset(&state.document.project, self.asset_id).ok_or("Asset not found")?;
+        if asset.locked {
+            return Err("Asset is locked");
+        }
+        let skin = asset.skin_data.as_ref().ok_or("Asset has no skin data")?;
+        if asset.live_rig.is_none() {
+            return Err("Asset has no structural shape graph");
+        }
+        if self.old_to_new_indices.len() != skin.vertex_weights.len() {
+            return Err("Remap table size does not match skin weights count");
+        }
+        if self.new_vertex_count != asset.mesh.verts.len() {
+            return Err("New vertex count does not match mesh vertex count");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let asset = find_asset_mut(&mut state.document.project, self.asset_id)
+            .ok_or_else(|| exec_err("Asset not found"))?;
+
+        let skin_data = asset
+            .skin_data
+            .as_mut()
+            .ok_or_else(|| exec_err("Skin data not found"))?;
+
+        let live_data = asset
+            .live_rig
+            .as_mut()
+            .ok_or_else(|| exec_err("Live rig not found"))?;
+
+        remap_skin_weights(
+            skin_data,
+            live_data,
+            &self.old_to_new_indices,
+            self.new_vertex_count,
+        )
+        .map_err(exec_err)?;
+
+        state.set_status(format!(
+            "Successfully remapped rig weights to {} vertices",
+            self.new_vertex_count
+        ));
+        Ok(())
     }
 }

@@ -814,6 +814,7 @@ mod tests {
                 skeleton_id: None,
                 skin_data: None,
                 skinning_enabled: true,
+                live_rig: None,
                 favorite: false,
                 tags: vec![],
                 modifiers: vec![],

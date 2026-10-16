@@ -152,8 +152,10 @@ pub use posing::{
 };
 pub use profile::{ProfileError, ProfileResource, ProfileWorkplane};
 pub use rig::{
-    Bone, RigError, Skeleton, SkinBindMethod, SkinData, Transform3D, VertexSkinWeight,
-    compute_skin_weights,
+    Bone, ConnectionId, ConnectionKind, JointId, LiveRigData, PartId, RigError, RigReviewStatus,
+    Skeleton, SkinBindMethod, SkinData, StructuralConnection, StructuralJoint, StructuralPart,
+    StructuralRigUpdateReport, StructuralShapeGraph, Transform3D, VertexSkinWeight,
+    compute_skin_weights, remap_skin_weights, update_structural_rig_localized,
 };
 pub use rig_roles::{
     ArmPart, LegChain, LimbPart, RigRequirement, RigRole, RigRoleMap, RoleAssignment,
@@ -465,6 +467,9 @@ pub struct Asset {
     /// Habilita ou desabilita a avaliação de skinning sem apagar pesos ou ossos (RIG-012).
     #[serde(default = "default_true")]
     pub skinning_enabled: bool,
+    /// Configuração e estado de Smart Rig estrutural e Live (H32 / RIG-003/005/006/007/012).
+    #[serde(default)]
+    pub live_rig: Option<LiveRigData>,
     #[serde(default)]
     pub favorite: bool,
     #[serde(default)]
@@ -529,6 +534,7 @@ impl Asset {
             skeleton_id: None,
             skin_data: None,
             skinning_enabled: true,
+            live_rig: None,
             favorite: false,
             tags: Vec::new(),
             modifiers: Vec::new(),

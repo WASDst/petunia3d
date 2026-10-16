@@ -133,7 +133,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H29 | P2         | Dimensões e comparação espacial                 | DONE                    | Frames, representação e consultas espaciais VSP-003/004.       | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
 | H30 | P2         | Section, Thickness e Organic Profiles           | DONE                    | VSP-005: Section, Thickness e Organic Profiles concluídos.     | VSP-005: seção geométrica separada de clipping/split, contornos abertos/furos, espessura direcional e estações manuais.                                                                                                                                                                                                   |
 | H31 | P2         | Smart Rig manual e assistido                    | DONE                    | RIG-001/002/004/008/009/010/011 concluídos com testes.        | RIG-001/002/004/008/009/010/011: edição manual, preview revisável, bind transacional e pose explícita.                                                                                                                                                                                                                    |
-| H32 | P2         | Smart Rig estrutural e Live opcional            | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.                                                                                                                                                                                                   |
+| H32 | P2         | Smart Rig estrutural e Live opcional            | DONE                    | RIG-003/005/006/007/012 concluídos com testes.        | RIG-003/005/006/007/012: identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig.                                                                                                                                                                                                   |
 | H33 | P2         | Integração visual e acessibilidade posterior    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-001/002/004, SEL-007: Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux.                                                                                                                                                                                                                    |
 <!-- END TOOL IMPLEMENTATION MATRIX -->
 
@@ -630,4 +630,49 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 **Risks / Next checkpoint:**
 - Degenerescência de ossos com comprimento zero ou coordenadas não finitas: rejeitada com `CommandError::InvalidInput` em `can_execute` e nas funções de esqueleto.
 - Checkpoint concluído: H31. Próximo checkpoint: H32 (Smart Rig estrutural e Live opcional: RIG-003/005/006/007/012 — identidades estáveis, overrides, atualização localizada idempotente e desligar sem apagar rig).
+
+---
+
+### Entrega H32: Smart Rig estrutural e Live opcional (RIG-003/005/006/007/012)
+
+**Intent:**
+- Implementar o subsistema de Smart Rig Estrutural e sincronização Live opcional com conformidade transacional estrita:
+  1. Grafo semântico de forma estrutural (`StructuralShapeGraph`) com identidades estáveis (`PartId`, `JointId`, `ConnectionId`) independente e desacoplado de receitas geométricas transitórias (RIG-003).
+  2. Preservação de overrides manuais de pesos (`overrides: HashMap<usize, VertexSkinWeight>`) e travas granulares (`locked_parts`, `locked_bones`) em atualizações subsequentes (RIG-005/006).
+  3. Solver localizado e estritamente idempotente (`update_structural_rig_localized`): avalia revisões de fonte, recalcula somente partes com geometria mutada e devolve `changed: false` quando o documento não foi alterado.
+  4. Isolamento de materiais e UVs: mutações em `material_revision` e `uv_revision` avançam o snapshot do live rig sem recomputar pesos de skinning ou deformação (RIG-007).
+  5. Guarda contra mutações topológicas destrutivas: discrepâncias em contagem de vértices acionam explicitamente `RigReviewStatus::NeedsReview(reason)` em vez de reutilização silenciosa de índices corrompidos.
+  6. Remapeamento explícito de pesos (`RemapRigWeightsCmd` / `remap_skin_weights`) restaurando `RigReviewStatus::UpToDate`.
+  7. Três operações independentes de desligamento no RIG-012: `SetLiveAutoUpdateCmd` (desliga sincronização automática sem desativar deformação), `SetSkinningEnabledCmd` (desativa deformação sem apagar pesos ou ossos) e `UnbindRigCmd` / `RemoveSkeletonCmd` (desvinculação explícita; nenhuma opção "Off" destrói ossos, pesos ou animações acidentalmente).
+
+**Sources:**
+- `crates/project/src/rig.rs`
+- `crates/project/src/lib.rs`
+- `crates/project/src/format.rs`
+- `crates/core/src/rig_commands.rs`
+- `crates/core/src/lib.rs`
+- `crates/core/tests/structural_live_rig_tests.rs`
+
+**Gap:**
+- O Petunia3D não dispunha de grafo estrutural desacoplado com identificadores estáveis, persistência de overrides de pesos e travas em atualizações, solver localizado e idempotente de rig, diferenciação entre alterações de UV/material e alterações de geometria, e separação conceitual entre pausar live sync, desligar skinning e remover rig (RIG-012).
+
+**Changed:**
+- Em `crates/project/src/rig.rs`: adicionados tipos `PartId`, `JointId`, `ConnectionId`, `ConnectionKind`, `StructuralPart`, `StructuralJoint`, `StructuralConnection`, `StructuralShapeGraph`, `RigReviewStatus`, `LiveRigData`, `StructuralRigUpdateReport` e funções puras `update_structural_rig_localized` e `remap_skin_weights`.
+- Em `crates/project/src/lib.rs` e `format.rs`: adicionado campo `pub live_rig: Option<LiveRigData>` ao `Asset`.
+- Em `crates/core/src/rig_commands.rs`: implementados comandos `SetLiveAutoUpdateCmd`, `CreateStructuralGraphCmd`, `AddStructuralPartCmd`, `RemoveStructuralPartCmd`, `AddStructuralJointCmd`, `ConnectStructuralPartsCmd`, `SetStructuralPartLockedCmd`, `SetStructuralBoneLockedCmd`, `SetVertexWeightOverrideCmd`, `ClearVertexWeightOverrideCmd`, `UpdateStructuralRigCmd` e `RemapRigWeightsCmd`.
+- Em `crates/core/src/lib.rs`: exportados todos os novos tipos e comandos.
+- Em `crates/core/tests/structural_live_rig_tests.rs`: desenvolvidos 8 testes sintéticos cobrindo criação de grafo, conexões, juntas, bounds, idempotência, isolamento UV/material, preservação de overrides/locks, detecção de topologia destrutiva com status `NeedsReview`, remapeamento transacional e as 3 operações distintas de desligamento do RIG-012.
+
+**Verification:**
+- `crates/core/tests/structural_live_rig_tests.rs`: 8 passed, 0 failed (0.04s).
+- `crates/core/tests/smart_rig_tests.rs`: 7 passed, 0 failed (0.04s).
+- `crates/core/tests/rig_command_tests.rs`: 8 passed, 0 failed (0.06s).
+- `crates/project/src/lib.rs`: 246 passed, 0 failed (0.47s).
+- `CARGO_BUILD_JOBS=1 cargo clippy -p petunia_core -p petunia_project --all-targets -- -D warnings`: zero warnings.
+- `CARGO_BUILD_JOBS=1 cargo fmt -p petunia_core -p petunia_project -- --check`: clean.
+
+**Risks / Next checkpoint:**
+- Topologia destrutiva durante live rig: adequadamente interceptada pelo solver, definindo `RigReviewStatus::NeedsReview` com mensagem detalhada e rejeitando atualizações automáticas silenciosas até que o usuário execute `RemapRigWeightsCmd` ou re-faça o bind intencionalmente.
+- Checkpoint concluído: H32. Próximo checkpoint: H33 (Integração visual e acessibilidade posterior: VSP-001/002/004, SEL-007 — Clay, Companion View, gizmo, feedback acessível e gates Qt/GL/Windows/Linux).
+
 

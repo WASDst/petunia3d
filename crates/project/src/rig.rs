@@ -9,6 +9,10 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 use uuid::Uuid;
 
+pub type PartId = u32;
+pub type JointId = u32;
+pub type ConnectionId = u32;
+
 /// Erros estruturados do subsistema de Skeleton & Rigging.
 #[derive(Debug, Clone, Error, PartialEq)]
 pub enum RigError {
@@ -36,6 +40,27 @@ pub enum RigError {
         "Contagem incompatível de matrizes de skinning: esqueleto possui {expected}, fornecidas {found}"
     )]
     MatrixCountMismatch { expected: usize, found: usize },
+
+    #[error("Parte estrutural {0} não encontrada")]
+    PartNotFound(PartId),
+
+    #[error("Parte estrutural com o nome '{0}' já existe")]
+    PartNameAlreadyExists(String),
+
+    #[error("Junta estrutural {0} não encontrada")]
+    JointNotFound(JointId),
+
+    #[error("Junta estrutural com o nome '{0}' já existe")]
+    JointNameAlreadyExists(String),
+
+    #[error("Conexão estrutural {0} não encontrada")]
+    ConnectionNotFound(ConnectionId),
+
+    #[error("Conexão estrutural inválida: {0}")]
+    InvalidConnection(String),
+
+    #[error("Tabela de remapeamento de vértices inválida: {0}")]
+    InvalidRemap(String),
 }
 
 /// Transformação tridimensional desacoplada: translação, rotação (quaternion) e escala.
@@ -804,6 +829,485 @@ pub fn compute_skin_weights(
 
     skin.validate(n_verts, skeleton.bones.len())?;
     Ok(skin)
+}
+
+// ---------------------------------------------------------------------------
+// H32: Smart Rig Estrutural & Live Opcional (RIG-003/005/006/007/012)
+// ---------------------------------------------------------------------------
+
+/// Tipo de conexão semântica entre partes estruturais (RIG-003).
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ConnectionKind {
+    Articulated,
+    Rigid,
+    Flexible,
+}
+
+/// Parte anatômica/estrutural identificável com ID estável (RIG-003/005).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StructuralPart {
+    pub id: PartId,
+    pub name: String,
+    pub vertex_indices: Vec<usize>,
+    pub center: [f32; 3],
+    pub bounds: ([f32; 3], [f32; 3]),
+    pub locked: bool,
+}
+
+/// Junta cinemática com ID estável (RIG-003/005).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StructuralJoint {
+    pub id: JointId,
+    pub name: String,
+    pub bone_id: Option<u32>,
+    pub position: [f32; 3],
+    pub parent: Option<JointId>,
+    pub locked: bool,
+}
+
+/// Aresta de conexão no grafo estrutural (RIG-003).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StructuralConnection {
+    pub id: ConnectionId,
+    pub from_part: PartId,
+    pub to_part: PartId,
+    pub kind: ConnectionKind,
+}
+
+/// Grafo de Forma Estrutural semântico desacoplado da receita geométrica (RIG-003).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct StructuralShapeGraph {
+    pub id: Uuid,
+    pub name: String,
+    pub parts: Vec<StructuralPart>,
+    pub joints: Vec<StructuralJoint>,
+    pub connections: Vec<StructuralConnection>,
+    next_part_id: PartId,
+    next_joint_id: JointId,
+    next_connection_id: ConnectionId,
+}
+
+impl StructuralShapeGraph {
+    pub fn new(name: &str) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            parts: Vec::new(),
+            joints: Vec::new(),
+            connections: Vec::new(),
+            next_part_id: 0,
+            next_joint_id: 0,
+            next_connection_id: 0,
+        }
+    }
+
+    pub fn add_part(
+        &mut self,
+        name: &str,
+        vertex_indices: Vec<usize>,
+        center: [f32; 3],
+        bounds: ([f32; 3], [f32; 3]),
+    ) -> Result<PartId, RigError> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(RigError::PartNameAlreadyExists("".to_string()));
+        }
+        if self.parts.iter().any(|p| p.name == trimmed) {
+            return Err(RigError::PartNameAlreadyExists(trimmed.to_string()));
+        }
+
+        let id = self.next_part_id;
+        self.next_part_id = self.next_part_id.saturating_add(1);
+        self.parts.push(StructuralPart {
+            id,
+            name: trimmed.to_string(),
+            vertex_indices,
+            center,
+            bounds,
+            locked: false,
+        });
+        Ok(id)
+    }
+
+    pub fn get_part(&self, id: PartId) -> Option<&StructuralPart> {
+        self.parts.iter().find(|p| p.id == id)
+    }
+
+    pub fn get_part_mut(&mut self, id: PartId) -> Option<&mut StructuralPart> {
+        self.parts.iter_mut().find(|p| p.id == id)
+    }
+
+    pub fn remove_part(&mut self, id: PartId) -> Result<(), RigError> {
+        let pos = self
+            .parts
+            .iter()
+            .position(|p| p.id == id)
+            .ok_or(RigError::PartNotFound(id))?;
+        self.parts.remove(pos);
+        self.connections
+            .retain(|c| c.from_part != id && c.to_part != id);
+        Ok(())
+    }
+
+    pub fn add_joint(
+        &mut self,
+        name: &str,
+        bone_id: Option<u32>,
+        position: [f32; 3],
+        parent: Option<JointId>,
+    ) -> Result<JointId, RigError> {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(RigError::JointNameAlreadyExists("".to_string()));
+        }
+        if self.joints.iter().any(|j| j.name == trimmed) {
+            return Err(RigError::JointNameAlreadyExists(trimmed.to_string()));
+        }
+        if let Some(pid) = parent
+            && self.get_joint(pid).is_none()
+        {
+            return Err(RigError::JointNotFound(pid));
+        }
+
+        let id = self.next_joint_id;
+        self.next_joint_id = self.next_joint_id.saturating_add(1);
+        self.joints.push(StructuralJoint {
+            id,
+            name: trimmed.to_string(),
+            bone_id,
+            position,
+            parent,
+            locked: false,
+        });
+        Ok(id)
+    }
+
+    pub fn get_joint(&self, id: JointId) -> Option<&StructuralJoint> {
+        self.joints.iter().find(|j| j.id == id)
+    }
+
+    pub fn get_joint_mut(&mut self, id: JointId) -> Option<&mut StructuralJoint> {
+        self.joints.iter_mut().find(|j| j.id == id)
+    }
+
+    pub fn connect_parts(
+        &mut self,
+        from_part: PartId,
+        to_part: PartId,
+        kind: ConnectionKind,
+    ) -> Result<ConnectionId, RigError> {
+        if from_part == to_part {
+            return Err(RigError::InvalidConnection(
+                "Não é permitido conectar uma parte a ela mesma".to_string(),
+            ));
+        }
+        if self.get_part(from_part).is_none() {
+            return Err(RigError::PartNotFound(from_part));
+        }
+        if self.get_part(to_part).is_none() {
+            return Err(RigError::PartNotFound(to_part));
+        }
+        if self.connections.iter().any(|c| {
+            (c.from_part == from_part && c.to_part == to_part)
+                || (c.from_part == to_part && c.to_part == from_part)
+        }) {
+            return Err(RigError::InvalidConnection(
+                "Conexão entre estas partes já existe".to_string(),
+            ));
+        }
+
+        let id = self.next_connection_id;
+        self.next_connection_id = self.next_connection_id.saturating_add(1);
+        self.connections.push(StructuralConnection {
+            id,
+            from_part,
+            to_part,
+            kind,
+        });
+        Ok(id)
+    }
+
+    pub fn find_part_for_vertex(&self, v_idx: usize) -> Option<PartId> {
+        self.parts
+            .iter()
+            .find(|p| p.vertex_indices.contains(&v_idx))
+            .map(|p| p.id)
+    }
+
+    pub fn set_part_locked(&mut self, id: PartId, locked: bool) -> Result<(), RigError> {
+        let part = self.get_part_mut(id).ok_or(RigError::PartNotFound(id))?;
+        part.locked = locked;
+        Ok(())
+    }
+
+    pub fn set_joint_locked(&mut self, id: JointId, locked: bool) -> Result<(), RigError> {
+        let joint = self.get_joint_mut(id).ok_or(RigError::JointNotFound(id))?;
+        joint.locked = locked;
+        Ok(())
+    }
+}
+
+/// Status de revisão e sincronismo do Smart Rig (RIG-005/007).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RigReviewStatus {
+    UpToDate,
+    NeedsReview(String),
+    DirtyRegions(Vec<PartId>),
+}
+
+/// Dados persistentes de Smart Rig Estrutural e Live (RIG-003/005/006/007/012).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct LiveRigData {
+    pub graph: StructuralShapeGraph,
+    pub auto_update_enabled: bool,
+    pub last_mesh_revision: u64,
+    pub last_topology_hash: u64,
+    pub last_material_revision: u64,
+    pub last_uv_revision: u64,
+    pub overrides: HashMap<usize, VertexSkinWeight>,
+    pub locked_bones: HashSet<u32>,
+    pub review_status: RigReviewStatus,
+}
+
+impl LiveRigData {
+    pub fn new(graph: StructuralShapeGraph) -> Self {
+        Self {
+            graph,
+            auto_update_enabled: true,
+            last_mesh_revision: 0,
+            last_topology_hash: 0,
+            last_material_revision: 0,
+            last_uv_revision: 0,
+            overrides: HashMap::new(),
+            locked_bones: HashSet::new(),
+            review_status: RigReviewStatus::UpToDate,
+        }
+    }
+}
+
+/// Relatório resultante da execução de uma atualização do rig estrutural.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StructuralRigUpdateReport {
+    pub changed: bool,
+    pub updated_parts: Vec<PartId>,
+    pub preserved_overrides_count: usize,
+    pub status: RigReviewStatus,
+    pub message: String,
+}
+
+/// Executa a atualização localizada e idempotente do Smart Rig estrutural (RIG-003/005/006/007/012).
+#[allow(clippy::too_many_arguments)]
+pub fn update_structural_rig_localized(
+    mesh: &petunia_mesh::Mesh,
+    skeleton: &Skeleton,
+    skin_data: &mut SkinData,
+    live_data: &mut LiveRigData,
+    mesh_revision: u64,
+    topology_hash: u64,
+    material_revision: u64,
+    uv_revision: u64,
+    method: SkinBindMethod,
+    max_influences: usize,
+) -> Result<StructuralRigUpdateReport, RigError> {
+    if !live_data.auto_update_enabled {
+        return Ok(StructuralRigUpdateReport {
+            changed: false,
+            updated_parts: Vec::new(),
+            preserved_overrides_count: live_data.overrides.len(),
+            status: live_data.review_status.clone(),
+            message: "Auto-atualização desligada (RIG-012)".to_string(),
+        });
+    }
+
+    if mesh_revision == live_data.last_mesh_revision
+        && topology_hash == live_data.last_topology_hash
+        && material_revision == live_data.last_material_revision
+        && uv_revision == live_data.last_uv_revision
+    {
+        return Ok(StructuralRigUpdateReport {
+            changed: false,
+            updated_parts: Vec::new(),
+            preserved_overrides_count: live_data.overrides.len(),
+            status: live_data.review_status.clone(),
+            message: "Idempotente: nenhuma alteração detectada".to_string(),
+        });
+    }
+
+    if mesh_revision == live_data.last_mesh_revision
+        && topology_hash == live_data.last_topology_hash
+        && (material_revision != live_data.last_material_revision
+            || uv_revision != live_data.last_uv_revision)
+    {
+        live_data.last_material_revision = material_revision;
+        live_data.last_uv_revision = uv_revision;
+        return Ok(StructuralRigUpdateReport {
+            changed: false,
+            updated_parts: Vec::new(),
+            preserved_overrides_count: live_data.overrides.len(),
+            status: live_data.review_status.clone(),
+            message: "Material/UV alterado: regeneração de pesos ignorada (RIG-007)".to_string(),
+        });
+    }
+
+    if mesh.verts.len() != skin_data.vertex_weights.len() {
+        let msg = format!(
+            "Topologia destrutiva detectada: contagem de vértices da malha ({}) difere de skin data ({}). Requer remap explícito.",
+            mesh.verts.len(),
+            skin_data.vertex_weights.len()
+        );
+        let status_changed = live_data.review_status != RigReviewStatus::NeedsReview(msg.clone());
+        live_data.review_status = RigReviewStatus::NeedsReview(msg.clone());
+        return Ok(StructuralRigUpdateReport {
+            changed: status_changed,
+            updated_parts: Vec::new(),
+            preserved_overrides_count: live_data.overrides.len(),
+            status: live_data.review_status.clone(),
+            message: msg,
+        });
+    }
+
+    let mut affected_parts = Vec::new();
+    let max_inf = max_influences.clamp(1, 4);
+    let avg_bone_len: f32 = skeleton.bones.iter().map(|b| b.length()).sum::<f32>()
+        / (skeleton.bones.len() as f32).max(1.0);
+    let blend_radius = (avg_bone_len * 0.75).max(1e-4);
+
+    let candidate_parts: Vec<PartId> = match &live_data.review_status {
+        RigReviewStatus::DirtyRegions(parts) if !parts.is_empty() => parts.clone(),
+        _ => live_data.graph.parts.iter().map(|p| p.id).collect(),
+    };
+
+    for &part_id in &candidate_parts {
+        let Some(part) = live_data.graph.get_part(part_id) else {
+            continue;
+        };
+
+        if part.locked {
+            continue;
+        }
+
+        affected_parts.push(part_id);
+
+        for &v_idx in &part.vertex_indices {
+            if let Some(ov) = live_data.overrides.get(&v_idx) {
+                if let Some(target) = skin_data.vertex_weights.get_mut(v_idx) {
+                    *target = *ov;
+                }
+                continue;
+            }
+
+            let Some(v) = mesh.verts.get(v_idx) else {
+                continue;
+            };
+            let p = Vec3::from(v.pos);
+
+            let mut bone_dists: Vec<(usize, f32)> = Vec::new();
+            for (b_idx, bone) in skeleton.bones.iter().enumerate() {
+                let head = Vec3::from(bone.head);
+                let tail = Vec3::from(bone.tail);
+                let d = distance_to_segment(p, head, tail);
+                bone_dists.push((b_idx, d));
+            }
+            bone_dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let mut bones = [0u32; 4];
+            let mut weights = [0.0f32; 4];
+
+            match method {
+                SkinBindMethod::RigidPerPart => {
+                    if let Some(&(best_bone, _)) = bone_dists.first() {
+                        bones[0] = best_bone as u32;
+                        weights[0] = 1.0;
+                    }
+                }
+                SkinBindMethod::Proximity => {
+                    let limit = max_inf.min(bone_dists.len());
+                    for slot in 0..limit {
+                        let (bone_idx, dist) = bone_dists[slot];
+                        bones[slot] = bone_idx as u32;
+                        weights[slot] = 1.0 / (dist.powi(2) + 0.05);
+                    }
+                }
+                SkinBindMethod::SmoothEnvelope => {
+                    let d_min = bone_dists.first().map(|x| x.1).unwrap_or(0.0);
+                    let limit = max_inf.min(bone_dists.len());
+                    for slot in 0..limit {
+                        let (bone_idx, dist) = bone_dists[slot];
+                        let t = ((dist - d_min) / blend_radius).clamp(0.0, 1.0);
+                        bones[slot] = bone_idx as u32;
+                        weights[slot] = (1.0 - t) * (1.0 - t);
+                    }
+                }
+            }
+
+            let mut vw = VertexSkinWeight { bones, weights };
+            vw.normalize();
+
+            if let Some(target) = skin_data.vertex_weights.get_mut(v_idx) {
+                *target = vw;
+            }
+        }
+    }
+
+    live_data.last_mesh_revision = mesh_revision;
+    live_data.last_topology_hash = topology_hash;
+    live_data.last_material_revision = material_revision;
+    live_data.last_uv_revision = uv_revision;
+    live_data.review_status = RigReviewStatus::UpToDate;
+
+    let preserved_count = live_data.overrides.len();
+    Ok(StructuralRigUpdateReport {
+        changed: !affected_parts.is_empty(),
+        updated_parts: affected_parts.clone(),
+        preserved_overrides_count: preserved_count,
+        status: RigReviewStatus::UpToDate,
+        message: format!("Atualizadas {} partes estruturais", affected_parts.len()),
+    })
+}
+
+/// Remapeia explicitamente os pesos e o grafo de rig após alterações topológicas (RIG-005/007).
+pub fn remap_skin_weights(
+    skin_data: &mut SkinData,
+    live_data: &mut LiveRigData,
+    old_to_new_indices: &[Option<usize>],
+    new_vertex_count: usize,
+) -> Result<(), RigError> {
+    let mut new_weights = vec![VertexSkinWeight::default(); new_vertex_count];
+
+    for (old_idx, &opt_new) in old_to_new_indices.iter().enumerate() {
+        if let Some(new_idx) = opt_new {
+            if new_idx >= new_vertex_count {
+                return Err(RigError::InvalidRemap(format!(
+                    "Índice de destino {new_idx} fora dos limites ({new_vertex_count})"
+                )));
+            }
+            if let Some(old_w) = skin_data.vertex_weights.get(old_idx) {
+                new_weights[new_idx] = *old_w;
+            }
+        }
+    }
+
+    let mut new_overrides = HashMap::new();
+    for (old_idx, w) in &live_data.overrides {
+        if let Some(&Some(new_idx)) = old_to_new_indices.get(*old_idx) {
+            new_overrides.insert(new_idx, *w);
+        }
+    }
+    live_data.overrides = new_overrides;
+
+    for part in &mut live_data.graph.parts {
+        let mut new_part_indices = Vec::new();
+        for old_idx in &part.vertex_indices {
+            if let Some(&Some(new_idx)) = old_to_new_indices.get(*old_idx) {
+                new_part_indices.push(new_idx);
+            }
+        }
+        part.vertex_indices = new_part_indices;
+    }
+
+    skin_data.vertex_weights = new_weights;
+    live_data.review_status = RigReviewStatus::UpToDate;
+    Ok(())
 }
 
 #[cfg(test)]
