@@ -2934,3 +2934,162 @@ fn test_solid_shape_builder_commands_and_undo_redo() {
     assert_eq!(state.project.undo.depth().0, initial_undo);
     assert_eq!(state.project.assets.len(), 2);
 }
+
+#[test]
+fn test_solid_composition_commands_and_undo_redo() {
+    let mut state = AppState::default();
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    state.project.assets[0].mesh = cube1.into();
+    let base_id = state.project.assets[0].id;
+
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    state.project.assets.push(asset2);
+
+    let mut cube3 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube3.verts {
+        v.pos[1] += 1.0;
+    }
+    cube3.triangulate();
+    let asset3 = petunia_project::Asset::new("Cube3", cube3);
+    let asset3_id = asset3.id;
+    state.project.assets.push(asset3);
+
+    let dispatcher = petunia_core::command::CommandDispatcher::canonical();
+    assert!(dispatcher.contains("model.solid_composition_create"));
+    assert!(dispatcher.contains("solid.composition_create"));
+    assert!(dispatcher.contains("model.solid_composition_bake"));
+    assert!(dispatcher.contains("solid.bake"));
+    assert!(dispatcher.contains("model.solid_composition_toggle_step"));
+    assert!(dispatcher.contains("model.solid_composition_reorder_step"));
+
+    // 1. Validation: operands cannot be empty or contain base
+    let empty_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        Vec::new(),
+        petunia_core::SolidOperation::UniteAll,
+    );
+    assert!(
+        state.dispatch(&empty_cmd).is_err(),
+        "Empty operands must be rejected"
+    );
+
+    let self_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        vec![base_id],
+        petunia_core::SolidOperation::UniteAll,
+    );
+    assert!(
+        state.dispatch(&self_cmd).is_err(),
+        "Base as operand must be rejected"
+    );
+
+    // 2. Create composition with 2 operands
+    let initial_undo = state.project.undo.depth().0;
+    let create_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        vec![asset2_id, asset3_id],
+        petunia_core::SolidOperation::UniteAll,
+    );
+    state
+        .dispatch(&create_cmd)
+        .expect("Create solid composition should succeed");
+
+    assert!(
+        state.project.assets[0].is_composition(),
+        "Base asset must have composition recipe"
+    );
+    assert!(
+        !state.project.assets[1].visible,
+        "Secondary operand 1 must be hidden"
+    );
+    assert!(
+        !state.project.assets[2].visible,
+        "Secondary operand 2 must be hidden"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 1);
+
+    // Rejeição estrita de edição poligonal direta sem bake prévio ("Sem bake silencioso")
+    let subdivide_cmd = petunia_core::command::SubdivideSelectionCmd;
+    assert_eq!(
+        state.dispatch(&subdivide_cmd),
+        Err(CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+    let bevel_cmd = petunia_core::command::BevelCmd::default();
+    assert_eq!(
+        state.dispatch(&bevel_cmd),
+        Err(CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    let recipe = state.project.assets[0].composition.as_ref().unwrap();
+    assert_eq!(recipe.steps.len(), 2);
+    let step2_id = recipe.steps[1].id;
+
+    // 3. Toggle step (disable operand 3)
+    let toggle_cmd = petunia_core::ToggleSolidCompositionStepCmd::new(step2_id, false);
+    state
+        .dispatch(&toggle_cmd)
+        .expect("Toggle step should succeed");
+    assert_eq!(state.project.undo.depth().0, initial_undo + 2);
+    let recipe_after = state.project.assets[0].composition.as_ref().unwrap();
+    assert!(!recipe_after.steps[1].enabled);
+
+    // 4. Bake composition (converts to static mesh - "Sem bake silencioso")
+    let bake_cmd = petunia_core::BakeSolidCompositionCmd::new();
+    state
+        .dispatch(&bake_cmd)
+        .expect("Bake composition should succeed");
+    assert!(
+        !state.project.assets[0].is_composition(),
+        "Bake must consume the recipe and leave static mesh"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo + 3);
+
+    // Após bake explícito, edição poligonal direta não é mais bloqueada pelo guard de composição
+    assert_ne!(
+        state.dispatch(&subdivide_cmd),
+        Err(CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    // 5. Undo sequence
+    assert!(state.undo(), "Undo bake");
+    assert!(
+        state.project.assets[0].is_composition(),
+        "Undo must restore recipe"
+    );
+
+    assert!(state.undo(), "Undo toggle step");
+    let restored_recipe = state.project.assets[0].composition.as_ref().unwrap();
+    assert!(
+        restored_recipe.steps[1].enabled,
+        "Step 2 re-enabled by undo"
+    );
+
+    assert!(state.undo(), "Undo create composition");
+    assert!(
+        !state.project.assets[0].is_composition(),
+        "Undo must clear composition"
+    );
+    assert!(
+        state.project.assets[1].visible,
+        "Undo must restore operand 1 visibility"
+    );
+    assert!(
+        state.project.assets[2].visible,
+        "Undo must restore operand 2 visibility"
+    );
+    assert_eq!(state.project.undo.depth().0, initial_undo);
+
+    // 6. Redo sequence
+    assert!(state.redo(), "Redo create composition");
+    assert!(state.project.assets[0].is_composition());
+}

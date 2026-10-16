@@ -388,7 +388,8 @@ pub mod cleanup;
 pub mod solid_builder;
 
 pub use solid_builder::{
-    CommittedObject, RegionGroup, RegionGroupOrigin, RegionPlan, SolidRegion, SolidRegionProvenance,
+    CommittedObject, RegionGroup, RegionGroupOrigin, RegionPlan, ShapeBuilderBudget,
+    SolidOperation, SolidRegion, SolidRegionProvenance, evaluate_multi_solid,
 };
 mod connect;
 pub mod curve;

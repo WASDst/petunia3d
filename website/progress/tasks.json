@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "branch": "refactor/architecture-foundation",
   "baselineSha": "bafd02b15fcc006a32f783236e0c87ec74354f51",
-  "updated": "2026-10-15",
+  "updated": "2026-10-16",
   "phases": [
     {
       "id": "integrity",
@@ -410,6 +410,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/mesh/src/solid_builder.rs, crates/mesh/src/boolean_cleanup.rs, crates/core/src/solid_commands.rs, crates/core/src/state.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H25: ShapeBuilder sólido de dois operandos. Partição A-only/Overlap/B-only com componentes por aresta (edge-connected), plano de ownership transitório RegionPlan com fast-paths exatos e preservação estrita de objetos intocados. Preservação e anotação de proveniência de UV e slots de material por face via SourceIndex::from_operands e annotate_mesh_provenance. Comandos SolidShapeEditCmd (UniteAll, RemoveOverlap, ExtractOverlap) atômicos com checkpoint de Undo/Redo no despachante e rejeição estrita de operandos ausentes/inválidos sem pânico. 10 testes em solid_builder_tests, 4 em solid_partition, 13 em contextual_interactions, 61 em command_tests, 189 em petunia_core e 126 em petunia_editor passando; clippy e fmt pass sem warnings."
+    },
+    "solid-composition-core-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/mesh/src/solid_builder.rs, crates/project/src/solid_composition.rs, crates/core/src/solid_commands.rs, crates/core/src/state.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H26: Composição reeditável e múltiplos sólidos. SolidCompositionRecipe persistente (schema v1) com fontes estáveis (SolidSource), passos de composição habilitáveis/reordenáveis (SolidCompositionStep), auto-triangulação intermediária e controle estrito de orçamento (ShapeBuilderBudget). Invalidação automática (CompositionStatus::NeedsEvaluation / Invalidated) em mutações topológicas ou perda de operandos. Política estrita 'Sem bake silencioso': materialização de malha poligonal estática sob comando explícito BakeSolidCompositionCmd. Comandos CreateSolidCompositionCmd, ToggleSolidCompositionStepCmd, ReorderSolidCompositionStepCmd e BakeSolidCompositionCmd com integridade transacional de Undo/Redo. 12 testes em solid_builder_tests, 7 em solid_composition_tests, 62 em command_tests, 14 em contextual_interactions e 21 em editor_parity pass; clippy e fmt pass sem warnings."
     }
   },
   "tasks": [
@@ -3606,19 +3611,19 @@
       "title": "Composição reeditável e múltiplos sólidos",
       "description": "Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
-      "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Plano aprovado sobre 92c22caa. SolidCompositionRecipe, fontes com identidade estável, passos de composição, ShapeBuilderBudget, status NeedsEvaluation/Invalidated, e proteção contra bake silencioso implementados e verificados.",
       "checkpoints": [
         {
           "title": "Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "solid-composition-core-20261016"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "solid-composition-core-20261016"
         }
       ],
       "documents": [

@@ -272,3 +272,73 @@ fn invalid_or_open_mesh_is_rejected_without_panics() {
     assert!(RegionPlan::build(&open, &valid).is_err());
     assert!(RegionPlan::build(&valid, &open).is_err());
 }
+
+#[test]
+fn multi_solid_evaluation_with_three_cubes_respects_budget_and_order() {
+    use petunia_mesh::solid_builder::{ShapeBuilderBudget, SolidOperation, evaluate_multi_solid};
+
+    let base = cube([0.0; 3], 1);
+    let operand_b = cube([0.5, 0.0, 0.0], 2);
+    let operand_c = cube([1.0, 0.0, 0.0], 3);
+
+    let budget = ShapeBuilderBudget::default();
+
+    // 1. Base U B U C
+    let steps = [
+        (&operand_b, SolidOperation::UniteAll),
+        (&operand_c, SolidOperation::UniteAll),
+    ];
+    let result =
+        evaluate_multi_solid(&base, &steps, &budget).expect("Multi-solid union must succeed");
+    assert!(!result.faces.is_empty());
+    assert!(
+        result
+            .faces
+            .iter()
+            .all(|f| f.verts.iter().all(|&v| (v as usize) < result.verts.len()))
+    );
+
+    // 2. Base U B, then remove overlap with C
+    let steps_remove = [
+        (&operand_b, SolidOperation::UniteAll),
+        (&operand_c, SolidOperation::RemoveOverlap),
+    ];
+    let result_remove = evaluate_multi_solid(&base, &steps_remove, &budget)
+        .expect("Multi-solid union + remove overlap must succeed");
+    assert!(!result_remove.faces.is_empty());
+}
+
+#[test]
+fn budget_enforces_input_triangle_limit_and_operation_depth() {
+    use petunia_mesh::solid_builder::{ShapeBuilderBudget, SolidOperation, evaluate_multi_solid};
+
+    let a = cube([0.0; 3], 0);
+    let b = cube([0.5, 0.0, 0.0], 0);
+
+    // Limit input triangles to 10 (each cube has 12 tris, total 24 > 10)
+    let restrictive_budget = ShapeBuilderBudget {
+        max_input_triangles: 10,
+        ..Default::default()
+    };
+    let steps = [(&b, SolidOperation::UniteAll)];
+    let err = evaluate_multi_solid(&a, &steps, &restrictive_budget);
+    assert!(
+        err.is_err(),
+        "Must reject when input triangles exceed budget"
+    );
+
+    // Limit depth to 1 step, but give 2 steps
+    let depth_budget = ShapeBuilderBudget {
+        max_depth: 1,
+        ..Default::default()
+    };
+    let steps_two = [
+        (&b, SolidOperation::UniteAll),
+        (&b, SolidOperation::UniteAll),
+    ];
+    let err_depth = evaluate_multi_solid(&a, &steps_two, &depth_budget);
+    assert!(
+        err_depth.is_err(),
+        "Must reject when operation depth exceeds budget"
+    );
+}

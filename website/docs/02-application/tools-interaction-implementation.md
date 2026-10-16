@@ -127,7 +127,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H23 | P2         | Gizmo universal, orientação e snap              | DONE                    | SEL-001/003/005/007; frame congelado e orientações ok.       | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
 | H24 | P2         | ShapeBuilder planar com operandos explícitos    | DONE                    | Operandos explícitos, furos e Undo testados no delta.         | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
 | H25 | P2         | ShapeBuilder sólido de dois operandos           | DONE                    | Partição, RegionPlan, proveniência e Undo no delta.           | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
-| H26 | P2         | Composição reeditável e múltiplos sólidos       | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
+| H26 | P2         | Composição reeditável e múltiplos sólidos       | DONE                    | Receita persistente, fontes, orçamento e bake explícito ok.  | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
 | H27 | P2         | Construção sobre superfícies                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
 | H28 | P2         | Feedback comum de operações                     | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | MF-001–008: preview de fonte fixa, ghost, parâmetros, revisão e incompatibilidades antes de confirmar.                                                                                                                                                                                                                    |
 | H29 | P2         | Dimensões e comparação espacial                 | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | VSP-003/004: frames World/Local/Custom/Structural, source/evaluated e qualidade; escala dimensional separada de consulta.                                                                                                                                                                                                 |
@@ -381,7 +381,55 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 - Clippy e fmt pass em todos os alvos afetados.
 
 **Risks / Next checkpoint:**
-- Próximo checkpoint: H26 (Composição reeditável e múltiplos sólidos: fontes estáveis, receita persistente e orçamento/cancelamento).
+- Checkpoint concluído: H25.
+
+---
+
+## Continuação H26 — Composição reeditável e múltiplos sólidos (2026-10-16)
+
+**Intent / Sources:** Implementar a composição reeditável e avaliação sequencial de múltiplos sólidos com receitas persistentes (`SolidCompositionRecipe`, schema v1), fontes estáveis (`SolidSource`), passos ativáveis e reordenáveis (`SolidCompositionStep`), limites de orçamento paramétrico (`ShapeBuilderBudget`), detecção automática de invalidação topológica (`CompositionStatus::NeedsEvaluation` / `Invalidated`), garantia estrita de "Sem bake silencioso", e comandos transacionais sob Undo/Redo no despachante (`CreateSolidCompositionCmd`, `BakeSolidCompositionCmd`, `ToggleSolidCompositionStepCmd`, `ReorderSolidCompositionStepCmd`).
+
+**Gap / Changed:**
+- `crates/mesh/src/solid_builder.rs`:
+  - `ShapeBuilderBudget`: limites configuráveis de `max_input_triangles`, `max_decomposed_triangles`, `max_components` e `max_depth` com métodos `check_input`, `check_decomposed` e `check_depth`.
+  - `RegionPlan::build_with_budget(a, b, budget)` integrando checagem estrita de complexidade antes e após decomposição booleana.
+  - `evaluate_multi_solid`: avaliador com auto-triangulação intermediária (garantindo compatibilidade com kernels booleanos de 3 vértices por face), anotação de proveniência cumulativa e restrições de orçamento a cada profundidade da composição.
+- `crates/project/src/solid_composition.rs`:
+  - `SOLID_COMPOSITION_SCHEMA_VERSION = 1`.
+  - `SolidSource` (`id`, `name`, `topology_hash`), `SolidCompositionStep` (`id`, `operand_id`, `operation`, `enabled`), `CompositionStatus` (`Valid`, `NeedsEvaluation`, `Invalidated { reason }`).
+  - `SolidCompositionRecipe`: estrutura serializável no projeto Petunia3D com `sources`, `steps`, `cached_mesh`, `budget` e `status`. Métodos: `add_step`, `toggle_step`, `reorder_step`, `evaluate`, `bake`, `check_invalidation`.
+- `crates/project/src/lib.rs`:
+  - Adicionado `composition: Option<SolidCompositionRecipe>` na struct `Asset`.
+  - `Asset::is_composition()` e `Asset::bake_composition()` ("Sem bake silencioso" — consome a receita e materializa a malha estática).
+  - `Asset::source_mesh_hash(&self) -> u64` tornado público para fingerprinting topológico rápido.
+- `crates/core/src/solid_commands.rs`:
+  - `CreateSolidCompositionCmd`: cria a composição a partir do asset base e operandos secundários; valida auto-referência e existência dos ativos.
+  - `BakeSolidCompositionCmd`: converte explicitamente a receita em malha estática B-Rep editável, consumindo a receita.
+  - `ToggleSolidCompositionStepCmd`: ativa/desativa um passo específico da receita e dispara reavaliação.
+  - `ReorderSolidCompositionStepCmd`: reordena os passos da receita mantendo determinismo.
+- `crates/core/src/state.rs`:
+  - Métodos transacionais em `CommandContext`: `create_solid_composition`, `bake_solid_composition`, `toggle_solid_composition_step`, `reorder_solid_composition_steps` com emissão de eventos e marcação dirty.
+  - Exposição de métodos equivalentes em `AppState`.
+- `crates/core/src/command.rs`:
+  - Registro canônico dos comandos: `model.solid_composition_create`, `model.solid_composition_bake`, `model.solid_composition_toggle_step`, `model.solid_composition_reorder_step` e seus aliases.
+- Testes e Validação:
+  - `crates/mesh/tests/solid_builder_tests.rs`: 12 testes (adicionados testes de budget e evaluate_multi_solid).
+  - `crates/project/tests/solid_composition_tests.rs`: 7 testes cobrindo encadeamento de 3 cubos, toggle/reorder, invalidação por mutação geométrica e por remoção de operando, håndling de budget e bake explícito.
+  - `crates/core/tests/command_tests.rs`: `test_solid_composition_commands_and_undo_redo` validando o ciclo completo no despachante de comandos.
+  - `crates/editor/tests/contextual_interactions.rs`: `solid_composition_multi_solid_and_reedit_invariants_h26` validando integração do editor, ocultação de operandos secundários, bake explícito e reversibilidade integral em múltiplos passos de Undo.
+
+**Verification:**
+- `crates/mesh/tests/solid_builder_tests.rs`: 12 passed; 0 failed.
+- `crates/project/tests/solid_composition_tests.rs`: 7 passed; 0 failed.
+- `crates/project --lib`: 244 passed; 0 failed.
+- `crates/core/tests/command_tests.rs`: 62 passed; 0 failed.
+- `crates/editor/tests/contextual_interactions.rs`: 14 passed; 0 failed.
+- `crates/ui-cxxqt --test editor_parity`: 21 passed; 0 failed (gate Qt offscreen).
+- Clippy e fmt: zero warnings e zero erros em todos os pacotes.
+
+**Risks / Next checkpoint:**
+- Próximo checkpoint: H27 (Construção sobre superfícies: plano de face, imprint, furos e Push/Pull contextual).
+
 
 
 

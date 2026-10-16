@@ -1,7 +1,9 @@
 //! Estado global do editor (vive em `core`, sem conhecer backends).
 //! Renderers/módulos/UI operam sobre este estado + eventos.
 
+use crate::command::CommandError;
 use crate::context::{CommandContext, EditorView};
+use petunia_mesh::SolidOperation;
 use serde::{Deserialize, Serialize};
 
 use glam::Vec3;
@@ -3877,6 +3879,225 @@ impl CommandContext<'_> {
         Ok(report)
     }
 
+    /// Cria uma composição sólida reeditável a partir de fontes estáveis (H26).
+    pub fn create_solid_composition(
+        &mut self,
+        base_id: Option<Uuid>,
+        operands: &[Uuid],
+        op: SolidOperation,
+        budget: Option<petunia_mesh::ShapeBuilderBudget>,
+    ) -> Result<(), CommandError> {
+        let base_index = match base_id {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Base asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let base_uuid = self.document.assets[base_index].id;
+        if operands.contains(&base_uuid) {
+            return Err(CommandError::Execution(
+                "Base asset cannot be used as an operand".to_string(),
+            ));
+        }
+
+        let mut recipe = petunia_project::SolidCompositionRecipe::new(base_uuid);
+        if let Some(b) = budget {
+            recipe = recipe.with_budget(b);
+        }
+
+        for &op_id in operands {
+            if !self.document.assets.iter().any(|a| a.id == op_id) {
+                return Err(CommandError::Execution(format!(
+                    "Operand {op_id} not found"
+                )));
+            }
+            recipe.add_step(op_id, op);
+        }
+
+        let evaluated_mesh = recipe
+            .evaluate(&self.document.assets)
+            .map_err(|e| {
+                CommandError::Execution(format!("Solid composition evaluation failed: {e}"))
+            })?
+            .clone();
+
+        self.checkpoint("create_solid_composition");
+
+        if let Some(base_asset) = self.document.assets.get_mut(base_index) {
+            base_asset.mesh = evaluated_mesh.into();
+            base_asset.composition = Some(recipe);
+            base_asset.parametric = None;
+        }
+
+        // Deixar os operandos secundários ocultos para que apenas o composto seja exibido
+        for &op_id in operands {
+            if let Some(op_asset) = self.document.assets.iter_mut().find(|a| a.id == op_id) {
+                op_asset.visible = false;
+            }
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Converte explicitamente a composição sólida em malha poligonal editável (bake explícito, H26).
+    pub fn bake_solid_composition(&mut self, target: Option<Uuid>) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        if !self.document.assets[target_index].is_composition() {
+            return Err(CommandError::Execution(
+                "Target asset is not a solid composition".to_string(),
+            ));
+        }
+
+        self.checkpoint("bake_solid_composition");
+
+        if let Some(asset) = self.document.assets.get_mut(target_index) {
+            asset.bake_composition();
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Habilita ou desabilita um passo na receita de composição sólida.
+    pub fn toggle_solid_composition_step(
+        &mut self,
+        target: Option<Uuid>,
+        step_id: Uuid,
+        enabled: bool,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let Some(mut recipe) = self.document.assets[target_index].composition.clone() else {
+            return Err(CommandError::Execution(
+                "Target is not a solid composition".to_string(),
+            ));
+        };
+
+        if !recipe.toggle_step(step_id, enabled) {
+            return Err(CommandError::Execution(
+                "Step not found in recipe".to_string(),
+            ));
+        }
+
+        let evaluated_mesh = recipe
+            .evaluate(&self.document.assets)
+            .map_err(|e| CommandError::Execution(format!("Re-evaluation failed: {e}")))?
+            .clone();
+
+        self.checkpoint("toggle_solid_composition_step");
+
+        if let Some(asset) = self.document.assets.get_mut(target_index) {
+            asset.mesh = evaluated_mesh.into();
+            asset.composition = Some(recipe);
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    /// Reordena passos na receita de composição sólida.
+    pub fn reorder_solid_composition_steps(
+        &mut self,
+        target: Option<Uuid>,
+        from: usize,
+        to: usize,
+    ) -> Result<(), CommandError> {
+        let target_index = match target {
+            Some(id) => self
+                .document
+                .assets
+                .iter()
+                .position(|a| a.id == id)
+                .ok_or_else(|| CommandError::Execution("Target asset not found".to_string()))?,
+            None => {
+                let active = self.document.active;
+                if active < self.document.assets.len() {
+                    active
+                } else {
+                    return Err(CommandError::Execution("No active asset".to_string()));
+                }
+            }
+        };
+
+        let Some(mut recipe) = self.document.assets[target_index].composition.clone() else {
+            return Err(CommandError::Execution(
+                "Target is not a solid composition".to_string(),
+            ));
+        };
+
+        if !recipe.reorder_step(from, to) {
+            return Err(CommandError::Execution(
+                "Failed to reorder steps".to_string(),
+            ));
+        }
+
+        let evaluated_mesh = recipe
+            .evaluate(&self.document.assets)
+            .map_err(|e| CommandError::Execution(format!("Re-evaluation failed: {e}")))?
+            .clone();
+
+        self.checkpoint("reorder_solid_composition_steps");
+
+        if let Some(asset) = self.document.assets.get_mut(target_index) {
+            asset.mesh = evaluated_mesh.into();
+            asset.composition = Some(recipe);
+        }
+
+        self.sync_selection();
+        self.emit_mesh_changed();
+        self.mark_dirty();
+        Ok(())
+    }
+
     /// **Join**: funde o operando no ativo como um único objeto, sem kernel
     /// booleano — a topologia dos dois é preservada lado a lado.
     /// **Join**: funde o operando no ativo como um único objeto, sem kernel
@@ -4231,6 +4452,11 @@ impl<'a> EditorView<'a> {
     /// O asset ativo é uma primitiva paramétrica viva?
     pub fn active_is_parametric(self) -> bool {
         self.document.active().is_some_and(|a| a.is_parametric())
+    }
+
+    /// O asset ativo é uma composição sólida reeditável?
+    pub fn active_is_composition(self) -> bool {
+        self.document.active().is_some_and(|a| a.is_composition())
     }
 
     /// Retorna o descritor paramétrico do asset ativo, se houver.

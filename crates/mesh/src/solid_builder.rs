@@ -17,6 +17,79 @@ use crate::Mesh;
 use crate::boolean::{BooleanError, BooleanOp, PreparedBooleanOperands, boolean_meshes_clean};
 use crate::boolean_cleanup::{SourceIndex, annotate_mesh_provenance};
 
+/// Operação do ShapeBuilder sólido sobre o RegionPlan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SolidOperation {
+    /// Une todas as regiões ativas em um único sólido (equivalente a A ∪ B).
+    UniteAll,
+    /// Remove as regiões de overlap de todos os operandos.
+    RemoveOverlap,
+    /// Extrai o overlap como um novo objeto na cena, retirando-o dos operandos de origem.
+    ExtractOverlap,
+}
+
+/// Orçamento e limites de complexidade para o ShapeBuilder e composição sólida.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShapeBuilderBudget {
+    /// Limite de triângulos nas malhas de entrada somadas.
+    pub max_input_triangles: usize,
+    /// Limite de triângulos nas malhas decompostas/resultantes.
+    pub max_decomposed_triangles: usize,
+    /// Limite de componentes conexos por aresta (edge-connected).
+    pub max_components: usize,
+    /// Profundidade máxima de operações encadeadas em uma composição.
+    pub max_depth: usize,
+}
+
+impl Default for ShapeBuilderBudget {
+    fn default() -> Self {
+        Self {
+            max_input_triangles: 250_000,
+            max_decomposed_triangles: 500_000,
+            max_components: 128,
+            max_depth: 32,
+        }
+    }
+}
+
+impl ShapeBuilderBudget {
+    pub fn check_input(&self, triangle_count: usize) -> Result<(), BooleanError> {
+        if triangle_count > self.max_input_triangles {
+            return Err(BooleanError::InvalidInput(
+                "input triangle count exceeds ShapeBuilderBudget",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn check_decomposed(
+        &self,
+        triangle_count: usize,
+        component_count: usize,
+    ) -> Result<(), BooleanError> {
+        if triangle_count > self.max_decomposed_triangles {
+            return Err(BooleanError::InvalidOutput(
+                "decomposed triangle count exceeds ShapeBuilderBudget",
+            ));
+        }
+        if component_count > self.max_components {
+            return Err(BooleanError::InvalidOutput(
+                "connected component count exceeds ShapeBuilderBudget",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn check_depth(&self, depth: usize) -> Result<(), BooleanError> {
+        if depth > self.max_depth {
+            return Err(BooleanError::InvalidInput(
+                "operation depth exceeds ShapeBuilderBudget",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Proveniência da região sólida particionada.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SolidRegionProvenance {
@@ -171,6 +244,19 @@ impl RegionPlan {
         })
     }
 
+    /// Constrói a partição de sólidos aplicando um orçamento de complexidade (`ShapeBuilderBudget`).
+    pub fn build_with_budget(
+        a: &Mesh,
+        b: &Mesh,
+        budget: &ShapeBuilderBudget,
+    ) -> Result<Self, BooleanError> {
+        budget.check_input(a.faces.len().saturating_add(b.faces.len()))?;
+        let plan = Self::build(a, b)?;
+        let total_triangles: usize = plan.regions.iter().map(|r| r.mesh.faces.len()).sum();
+        budget.check_decomposed(total_triangles, plan.regions.len())?;
+        Ok(plan)
+    }
+
     /// Remove as regiões selecionadas de todos os grupos existentes.
     pub fn remove(&mut self, region_ids: &[usize]) {
         for group in &mut self.groups {
@@ -312,4 +398,83 @@ impl RegionPlan {
 
         Ok(results)
     }
+}
+
+/// Avalia uma sequência ordenada de múltiplos operandos sólidos sob um orçamento de segurança.
+pub fn evaluate_multi_solid(
+    base: &Mesh,
+    steps: &[(&Mesh, SolidOperation)],
+    budget: &ShapeBuilderBudget,
+) -> Result<Mesh, BooleanError> {
+    budget.check_depth(steps.len())?;
+    let mut current = base.clone();
+    current.triangulate();
+
+    for (depth, &(operand, op)) in steps.iter().enumerate() {
+        budget.check_depth(depth.saturating_add(1))?;
+        budget.check_input(current.faces.len().saturating_add(operand.faces.len()))?;
+
+        let mut operand_tri = operand.clone();
+        operand_tri.triangulate();
+
+        let plan = RegionPlan::build_with_budget(&current, &operand_tri, budget)?;
+        match op {
+            SolidOperation::UniteAll => {
+                let (union_mesh, _) =
+                    boolean_meshes_clean(&current, &operand_tri, BooleanOp::Union)?;
+                current = union_mesh;
+                current.triangulate();
+            }
+            SolidOperation::RemoveOverlap => {
+                let overlap_ids: Vec<usize> = plan
+                    .regions
+                    .iter()
+                    .filter(|r| r.provenance == SolidRegionProvenance::Overlap)
+                    .map(|r| r.id)
+                    .collect();
+                let mut p = plan;
+                p.remove(&overlap_ids);
+                let results = p.commit(&current, &operand_tri)?;
+                if let Some(first_res) = results.into_iter().next() {
+                    match first_res {
+                        CommittedObject::PreserveFirst => {}
+                        CommittedObject::Mesh { mesh, .. } => {
+                            current = *mesh;
+                            current.triangulate();
+                        }
+                        CommittedObject::Empty => {
+                            current = Mesh::default();
+                        }
+                        CommittedObject::PreserveSecond => {}
+                    }
+                }
+            }
+            SolidOperation::ExtractOverlap => {
+                let overlap_ids: Vec<usize> = plan
+                    .regions
+                    .iter()
+                    .filter(|r| r.provenance == SolidRegionProvenance::Overlap)
+                    .map(|r| r.id)
+                    .collect();
+                let mut p = plan;
+                if let Some(group_id) = p.extract(&overlap_ids) {
+                    let results = p.commit(&current, &operand_tri)?;
+                    if let Some(res) = results.get(group_id) {
+                        match res {
+                            CommittedObject::Mesh { mesh, .. } => {
+                                current = *(mesh.clone());
+                                current.triangulate();
+                            }
+                            _ => {
+                                current = Mesh::default();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        budget.check_decomposed(current.faces.len(), 1)?;
+    }
+
+    Ok(current)
 }

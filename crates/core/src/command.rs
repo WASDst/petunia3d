@@ -909,6 +909,65 @@ impl CommandDispatcher {
             crate::solid_commands::SolidShapeEditCmd::extract_overlap(),
         );
         d.alias("solid.extract_overlap", "model.solid_extract_overlap");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_create",
+                "Create Solid Composition",
+                "Create a re-editable solid composition from stable source operands",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::CreateSolidCompositionCmd::new(
+                Vec::new(),
+                crate::solid_commands::SolidOperation::UniteAll,
+            ),
+        );
+        d.alias("solid.composition_create", "model.solid_composition_create");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_bake",
+                "Bake Solid Composition",
+                "Explicitly bake solid composition recipe to editable static mesh",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::BakeSolidCompositionCmd::new(),
+        );
+        d.alias("solid.composition_bake", "model.solid_composition_bake");
+        d.alias("solid.bake", "model.solid_composition_bake");
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_toggle_step",
+                "Toggle Solid Composition Step",
+                "Enable or disable a specific step in the solid composition recipe",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::ToggleSolidCompositionStepCmd::new(uuid::Uuid::nil(), true),
+        );
+        d.alias(
+            "solid.composition_toggle",
+            "model.solid_composition_toggle_step",
+        );
+
+        d.register_with_meta(
+            CommandMetadata::new(
+                "model.solid_composition_reorder_step",
+                "Reorder Solid Composition Steps",
+                "Reorder evaluation steps in the solid composition recipe",
+                CommandCategory::Model,
+            )
+            .with_docs(DocsTopic::Modeling),
+            crate::solid_commands::ReorderSolidCompositionStepCmd::new(0, 0),
+        );
+        d.alias(
+            "solid.composition_reorder",
+            "model.solid_composition_reorder_step",
+        );
+
         d.register_with_meta(
             CommandMetadata::new(
                 "draw.unite",
@@ -2833,6 +2892,8 @@ impl Command for SubdivideSelectionCmd {
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.document.active_mesh().is_none() {
             Err("No active mesh")
+        } else if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
         } else if state.selection.is_empty()
             && state
                 .document
@@ -3998,6 +4059,8 @@ impl Command for ExtrudeSelectedCmd {
             Err("Requires Edit mode")
         } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
+        } else if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
         } else if !state.selection.faces.is_empty()
             || state
                 .document
@@ -4051,6 +4114,8 @@ impl Command for PushPullToolCmd {
             Err("Requires Edit mode")
         } else if state.document.active_mesh().is_none() {
             Err("No active mesh")
+        } else if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
         } else if state
             .document
             .active_mesh()
@@ -4346,7 +4411,9 @@ impl Command for BevelCmd {
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
-        if let Some(mesh) = state.document.active_mesh() {
+        if state.active_is_composition() {
+            Err("Bake solid composition before direct polygon editing")
+        } else if let Some(mesh) = state.document.active_mesh() {
             let has_edges = !state.selection.edges.is_empty() || !mesh.selected_edges.is_empty();
             let has_verts =
                 !state.selection.verts.is_empty() || mesh.verts.iter().any(|v| v.selected);

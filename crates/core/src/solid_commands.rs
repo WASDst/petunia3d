@@ -3,22 +3,12 @@
 //! Integra partição A-only/overlap/B-only, componentes por aresta e RegionPlan
 //! com o sistema transacional de comandos do Petunia3D.
 
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::command::{Command, CommandError};
 use crate::context::{CommandContext, EditorView};
 
-/// Operação do ShapeBuilder sólido sobre o RegionPlan.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SolidOperation {
-    /// Une todas as regiões ativas em um único sólido (equivalente a A ∪ B).
-    UniteAll,
-    /// Remove as regiões de overlap de todos os operandos.
-    RemoveOverlap,
-    /// Extrai o overlap como um novo objeto na cena, retirando-o dos operandos de origem.
-    ExtractOverlap,
-}
+pub use petunia_mesh::SolidOperation;
 
 /// Relatório de execução do ShapeBuilder sólido.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -131,6 +121,233 @@ impl Command for SolidShapeEditCmd {
             "Solid Shape Builder: {} regions, {} objects created",
             report.regions_count, report.created_objects
         ));
+        Ok(())
+    }
+}
+
+/// Comando para criar uma composição sólida reeditável a partir de fontes estáveis (H26).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CreateSolidCompositionCmd {
+    pub base: Option<Uuid>,
+    pub operands: Vec<Uuid>,
+    pub op: SolidOperation,
+    pub budget: Option<petunia_mesh::ShapeBuilderBudget>,
+}
+
+impl CreateSolidCompositionCmd {
+    pub fn new(operands: Vec<Uuid>, op: SolidOperation) -> Self {
+        Self {
+            base: None,
+            operands,
+            op,
+            budget: None,
+        }
+    }
+
+    pub fn with_base(base: Uuid, operands: Vec<Uuid>, op: SolidOperation) -> Self {
+        Self {
+            base: Some(base),
+            operands,
+            op,
+            budget: None,
+        }
+    }
+}
+
+impl Command for CreateSolidCompositionCmd {
+    fn label(&self) -> &'static str {
+        "create solid composition"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let base_id = match self.base {
+            Some(id) => id,
+            None => {
+                let Some(active) = state.document.active() else {
+                    return Err("No active asset for solid composition");
+                };
+                active.id
+            }
+        };
+
+        if self.operands.is_empty() {
+            return Err("At least one operand required for solid composition");
+        }
+
+        if self.operands.contains(&base_id) {
+            return Err("Base asset cannot be used as its own operand");
+        }
+
+        for &op_id in &self.operands {
+            if !state.document.assets.iter().any(|a| a.id == op_id) {
+                return Err("Referenced operand asset does not exist in document");
+            }
+        }
+
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.create_solid_composition(self.base, &self.operands, self.op, self.budget)?;
+        state.set_status(format!(
+            "Solid Composition created with {} operands",
+            self.operands.len()
+        ));
+        Ok(())
+    }
+}
+
+/// Comando explícito para conversão de composição sólida em malha poligonal estática (Bake, H26).
+/// Sem bake silencioso: apenas este comando consome a receita e materializa EditableMesh.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BakeSolidCompositionCmd {
+    pub target: Option<Uuid>,
+}
+
+impl BakeSolidCompositionCmd {
+    pub const fn new() -> Self {
+        Self { target: None }
+    }
+
+    pub const fn for_asset(target: Uuid) -> Self {
+        Self {
+            target: Some(target),
+        }
+    }
+}
+
+impl Command for BakeSolidCompositionCmd {
+    fn label(&self) -> &'static str {
+        "bake solid composition"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = match self.target {
+            Some(id) => state.document.assets.iter().find(|a| a.id == id),
+            None => state.document.active(),
+        };
+        let Some(asset) = asset else {
+            return Err("Target asset not found");
+        };
+        if !asset.is_composition() {
+            return Err("Target asset is not a solid composition");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.bake_solid_composition(self.target)?;
+        state.set_status("Solid Composition baked to static mesh");
+        Ok(())
+    }
+}
+
+/// Comando para habilitar ou desabilitar um passo de composição sólida reeditável.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ToggleSolidCompositionStepCmd {
+    pub target: Option<Uuid>,
+    pub step_id: Uuid,
+    pub enabled: bool,
+}
+
+impl ToggleSolidCompositionStepCmd {
+    pub fn new(step_id: Uuid, enabled: bool) -> Self {
+        Self {
+            target: None,
+            step_id,
+            enabled,
+        }
+    }
+}
+
+impl Command for ToggleSolidCompositionStepCmd {
+    fn label(&self) -> &'static str {
+        "toggle solid composition step"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = match self.target {
+            Some(id) => state.document.assets.iter().find(|a| a.id == id),
+            None => state.document.active(),
+        };
+        let Some(asset) = asset else {
+            return Err("Target asset not found");
+        };
+        let Some(recipe) = &asset.composition else {
+            return Err("Target asset is not a solid composition");
+        };
+        if !recipe.steps.iter().any(|s| s.id == self.step_id) {
+            return Err("Step not found in solid composition recipe");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.toggle_solid_composition_step(self.target, self.step_id, self.enabled)?;
+        state.set_status("Solid composition step updated");
+        Ok(())
+    }
+}
+
+/// Comando para reordenar passos de composição sólida reeditável.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReorderSolidCompositionStepCmd {
+    pub target: Option<Uuid>,
+    pub from: usize,
+    pub to: usize,
+}
+
+impl ReorderSolidCompositionStepCmd {
+    pub fn new(from: usize, to: usize) -> Self {
+        Self {
+            target: None,
+            from,
+            to,
+        }
+    }
+}
+
+impl Command for ReorderSolidCompositionStepCmd {
+    fn label(&self) -> &'static str {
+        "reorder solid composition step"
+    }
+
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
+        let asset = match self.target {
+            Some(id) => state.document.assets.iter().find(|a| a.id == id),
+            None => state.document.active(),
+        };
+        let Some(asset) = asset else {
+            return Err("Target asset not found");
+        };
+        let Some(recipe) = &asset.composition else {
+            return Err("Target asset is not a solid composition");
+        };
+        if self.from >= recipe.steps.len() || self.to >= recipe.steps.len() {
+            return Err("Step index out of range");
+        }
+        Ok(())
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        state.reorder_solid_composition_steps(self.target, self.from, self.to)?;
+        state.set_status("Solid composition steps reordered");
         Ok(())
     }
 }

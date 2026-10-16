@@ -478,6 +478,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn active_is_composition(&self) -> bool {
+        self.view().active_is_composition()
+    }
+
+    #[inline]
     pub fn active_primitive_descriptor(
         &self,
     ) -> Option<crate::primitive_session::PrimitiveDescriptor> {
@@ -791,6 +796,45 @@ impl AppState {
         op: crate::solid_commands::SolidOperation,
     ) -> Result<crate::solid_commands::SolidShapeBuilderReport, crate::command::CommandError> {
         self.in_context(|ctx| ctx.apply_solid_shape_builder(explicit_operand, op))
+    }
+
+    #[inline]
+    pub fn create_solid_composition(
+        &mut self,
+        base_id: Option<uuid::Uuid>,
+        operands: &[uuid::Uuid],
+        op: crate::solid_commands::SolidOperation,
+        budget: Option<petunia_mesh::ShapeBuilderBudget>,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.create_solid_composition(base_id, operands, op, budget))
+    }
+
+    #[inline]
+    pub fn bake_solid_composition(
+        &mut self,
+        target: Option<uuid::Uuid>,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.bake_solid_composition(target))
+    }
+
+    #[inline]
+    pub fn toggle_solid_composition_step(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        step_id: uuid::Uuid,
+        enabled: bool,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.toggle_solid_composition_step(target, step_id, enabled))
+    }
+
+    #[inline]
+    pub fn reorder_solid_composition_steps(
+        &mut self,
+        target: Option<uuid::Uuid>,
+        from: usize,
+        to: usize,
+    ) -> Result<(), crate::command::CommandError> {
+        self.in_context(|ctx| ctx.reorder_solid_composition_steps(target, from, to))
     }
 
     #[inline]

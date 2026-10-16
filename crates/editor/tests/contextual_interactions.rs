@@ -515,3 +515,143 @@ fn solid_shape_builder_two_operands_and_undo_invariants_h25() {
     assert_eq!(b.state.project.undo.depth().0, initial_undo);
     assert_eq!(b.state.project.assets.len(), 3);
 }
+
+#[test]
+fn solid_composition_multi_solid_and_reedit_invariants_h26() {
+    let mut b = bridge();
+
+    // Setup 3 cubes:
+    // Base cube at origin
+    let mut cube1 = petunia_mesh::Mesh::cube(2.0);
+    cube1.triangulate();
+    b.state.project.assets[0].mesh = cube1.into();
+    let _base_id = b.state.project.assets[0].id;
+
+    // Cube 2 at (1.0, 0, 0)
+    let mut cube2 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube2.verts {
+        v.pos[0] += 1.0;
+    }
+    cube2.triangulate();
+    let asset2 = petunia_project::Asset::new("Cube2", cube2);
+    let asset2_id = asset2.id;
+    b.state.project.assets.push(asset2);
+
+    // Cube 3 at (2.0, 0, 0)
+    let mut cube3 = petunia_mesh::Mesh::cube(2.0);
+    for v in &mut cube3.verts {
+        v.pos[0] += 2.0;
+    }
+    cube3.triangulate();
+    let asset3 = petunia_project::Asset::new("Cube3", cube3);
+    let asset3_id = asset3.id;
+    b.state.project.assets.push(asset3);
+
+    let initial_undo = b.state.project.undo.depth().0;
+
+    // 1. Create composition with Cube2 and Cube3 into Base
+    let create_cmd = petunia_core::CreateSolidCompositionCmd::new(
+        vec![asset2_id, asset3_id],
+        petunia_core::SolidOperation::UniteAll,
+    );
+    b.state
+        .dispatch(&create_cmd)
+        .expect("Create solid composition should succeed");
+
+    assert!(
+        b.state.project.assets[0].is_composition(),
+        "Base asset must have composition recipe"
+    );
+    assert!(
+        !b.state.project.assets[1].visible,
+        "Secondary operand 1 must be hidden"
+    );
+    assert!(
+        !b.state.project.assets[2].visible,
+        "Secondary operand 2 must be hidden"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+
+    let recipe = b.state.project.assets[0].composition.as_ref().unwrap();
+    assert_eq!(recipe.steps.len(), 2);
+    assert_eq!(recipe.status, petunia_project::CompositionStatus::Valid);
+    let step2_id = recipe.steps[1].id;
+
+    // Direct polygon editing is rejected before bake ("Sem bake silencioso")
+    let subdivide_cmd = petunia_core::command::SubdivideSelectionCmd;
+    assert_eq!(
+        b.state.dispatch(&subdivide_cmd),
+        Err(petunia_core::command::CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    // 2. Toggle step (disable operand 3)
+    let toggle_cmd = petunia_core::ToggleSolidCompositionStepCmd::new(step2_id, false);
+    b.state
+        .dispatch(&toggle_cmd)
+        .expect("Toggle step should succeed");
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 2);
+    let recipe_after = b.state.project.assets[0].composition.as_ref().unwrap();
+    assert!(!recipe_after.steps[1].enabled);
+
+    // 3. Invalidation check when an operand mesh changes topology
+    let mut modified_mesh = petunia_mesh::Mesh::cube(3.0);
+    modified_mesh.triangulate();
+    b.state.project.assets[1].mesh = modified_mesh.into();
+    let mut recipe_check = b.state.project.assets[0].composition.clone().unwrap();
+    let invalidated = recipe_check.check_invalidation(&b.state.project.assets);
+    assert!(invalidated);
+    assert_eq!(
+        recipe_check.status,
+        petunia_project::CompositionStatus::NeedsEvaluation
+    );
+
+    // 4. Bake composition (converts to static mesh - "Sem bake silencioso")
+    let bake_cmd = petunia_core::BakeSolidCompositionCmd::new();
+    b.state
+        .dispatch(&bake_cmd)
+        .expect("Bake composition should succeed");
+    assert!(
+        !b.state.project.assets[0].is_composition(),
+        "Bake must consume the recipe and leave static mesh"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 3);
+
+    // After explicit bake, direct polygon editing is permitted
+    assert_ne!(
+        b.state.dispatch(&subdivide_cmd),
+        Err(petunia_core::command::CommandError::Execution(
+            "Bake solid composition before direct polygon editing".to_string()
+        ))
+    );
+
+    // 5. Transactional Undo sequence
+    assert!(b.state.undo(), "Undo bake");
+    assert!(
+        b.state.project.assets[0].is_composition(),
+        "Undo must restore recipe"
+    );
+
+    assert!(b.state.undo(), "Undo toggle step");
+    let restored_recipe = b.state.project.assets[0].composition.as_ref().unwrap();
+    assert!(
+        restored_recipe.steps[1].enabled,
+        "Step 2 re-enabled by undo"
+    );
+
+    assert!(b.state.undo(), "Undo create composition");
+    assert!(
+        !b.state.project.assets[0].is_composition(),
+        "Undo must clear composition"
+    );
+    assert!(
+        b.state.project.assets[1].visible,
+        "Undo must restore operand 1 visibility"
+    );
+    assert!(
+        b.state.project.assets[2].visible,
+        "Undo must restore operand 2 visibility"
+    );
+    assert_eq!(b.state.project.undo.depth().0, initial_undo);
+}

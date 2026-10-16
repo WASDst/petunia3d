@@ -94,6 +94,7 @@ pub mod profile;
 pub mod profile_tools;
 pub mod rig;
 pub mod rig_roles;
+pub mod solid_composition;
 pub mod spline;
 pub mod surface_attachment;
 pub mod surface_recipe;
@@ -154,6 +155,10 @@ pub use rig::{Bone, RigError, Skeleton, SkinData, Transform3D, VertexSkinWeight}
 pub use rig_roles::{
     ArmPart, LegChain, LimbPart, RigRequirement, RigRole, RigRoleMap, RoleAssignment,
     RoleContractError, RoleError,
+};
+pub use solid_composition::{
+    CompositionError, CompositionStatus, RecipeStatus, SOLID_COMPOSITION_SCHEMA_VERSION,
+    SolidCompositionError, SolidCompositionRecipe, SolidCompositionStep, SolidSource,
 };
 pub use spline::{
     ArcLengthTable, SplineError, SplineEvaluationCache, SplineFrame, SplineHandleMode,
@@ -488,6 +493,9 @@ pub struct Asset {
     /// este TRS; consumidores em mundo leem world_matrix/world_mesh.
     #[serde(default)]
     pub transform: object_transform::ObjectTransform,
+    /// Receita persistente de composição sólida reeditável (H26).
+    #[serde(default)]
+    pub composition: Option<solid_composition::SolidCompositionRecipe>,
     #[serde(skip)]
     eval_cache: Option<(u64, u64, Mesh)>,
 }
@@ -526,7 +534,27 @@ impl Asset {
             scale: [1.0, 1.0, 1.0],
             surface_shading: petunia_mesh::shading::SurfaceShading::Flat,
             transform: object_transform::ObjectTransform::IDENTITY,
+            composition: None,
             eval_cache: None,
+        }
+    }
+
+    /// Retorna verdadeiro se este asset é uma composição sólida reeditável.
+    pub fn is_composition(&self) -> bool {
+        self.composition.is_some()
+    }
+
+    /// Converte explicitamente a composição sólida em malha estática editável (bake explícito).
+    /// Retorna `true` se havia composição e ela foi convertida em malha estática.
+    pub fn bake_composition(&mut self) -> bool {
+        if let Some(recipe) = self.composition.take() {
+            let baked = recipe.bake();
+            if !baked.faces.is_empty() {
+                self.mesh = baked.into();
+            }
+            true
+        } else {
+            false
         }
     }
 
@@ -592,7 +620,7 @@ impl Asset {
         h
     }
 
-    fn source_mesh_hash(&self) -> u64 {
+    pub fn source_mesh_hash(&self) -> u64 {
         let mut hash = 0xcbf29ce484222325_u64;
         let mix = |mut value: u64, next: u64| {
             value ^= next;
