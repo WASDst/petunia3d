@@ -314,3 +314,104 @@ fn draw_poly_preset_switching_and_roundtrip_invariants_h21() {
     assert_eq!(b.state.session.selection, initial_selection);
     assert!(!b.state.project.undo.can_undo());
 }
+
+#[test]
+fn shape_builder_explicit_operands_and_hole_preservation_invariants_h24() {
+    let mut b = bridge();
+    let plane = petunia_core::ProfileWorkplane {
+        origin: [0.0, 0.0, 5.0],
+        right: [1.0, 0.0, 0.0],
+        up: [0.0, 1.0, 0.0],
+        normal: [0.0, 0.0, 1.0],
+    };
+
+    let add_square =
+        |b: &mut SlintUiBridge<PlaceholderViewport>, x: f64, y: f64, size: f64, name: &str| {
+            let pts = [
+                [x, y, 0.0],
+                [x + size, y, 0.0],
+                [x + size, y + size, 0.0],
+                [x, y + size, 0.0],
+            ];
+            let spline = petunia_core::SplineResource::from_polyline(name, &pts, true);
+            let profile = petunia_core::ProfileResource::new(name, spline.id, plane);
+            let id = profile.id;
+            b.state.project.project.splines.push(spline);
+            b.state.project.project.profiles.push(profile);
+            id
+        };
+
+    // 1. Setup 3 squares: sq1 and sq2 overlap, sq3 is distant
+    let sq1_id = add_square(&mut b, 0.0, 0.0, 2.0, "sq1");
+    let sq2_id = add_square(&mut b, 1.0, 1.0, 2.0, "sq2");
+    let sq3_id = add_square(&mut b, 10.0, 10.0, 2.0, "sq3");
+
+    // Add a hole in sq1
+    let hole = vec![[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]];
+    if let Some(sq1) = b.state.project.get_profile_mut(sq1_id) {
+        sq1.holes.push(hole);
+    }
+
+    assert_eq!(b.state.project.project.profiles.len(), 3);
+    let initial_undo = b.state.project.undo.depth().0;
+
+    // 2. Reject invalid operands gracefully without panicking
+    let cmd_empty = petunia_core::ShapeEditCmd {
+        plane: None,
+        operands: Some(vec![]),
+        edit: petunia_core::ShapeEdit::Pathfinder(petunia_core::PathfinderOp::Unite),
+    };
+    assert!(b.state.dispatch(&cmd_empty).is_err());
+
+    let cmd_single = petunia_core::ShapeEditCmd {
+        plane: None,
+        operands: Some(vec![sq1_id]),
+        edit: petunia_core::ShapeEdit::Pathfinder(petunia_core::PathfinderOp::Unite),
+    };
+    assert!(b.state.dispatch(&cmd_single).is_err());
+
+    // 3. Dispatch Unite with explicit operands (sq1 and sq2 only)
+    let cmd = petunia_core::ShapeEditCmd::pathfinder_with_operands(
+        petunia_core::PathfinderOp::Unite,
+        vec![sq1_id, sq2_id],
+    );
+    b.state
+        .dispatch(&cmd)
+        .expect("Unite with explicit operands should succeed");
+
+    // 4. Untouched sq3 preserves ID, name and spline
+    let sq3 = b
+        .state
+        .project
+        .get_profile(sq3_id)
+        .expect("sq3 must be preserved");
+    assert_eq!(sq3.id, sq3_id);
+    assert_eq!(sq3.name, "sq3");
+
+    // 5. Resulting merged shape preserves the hole from sq1
+    assert_eq!(b.state.project.project.profiles.len(), 2);
+    let merged = b
+        .state
+        .project
+        .project
+        .profiles
+        .iter()
+        .find(|p| p.id != sq3_id)
+        .expect("merged profile must exist");
+    assert_eq!(
+        merged.holes.len(),
+        1,
+        "Hole must be preserved in merged profile"
+    );
+
+    // 6. Undo restores all 3 original profiles atomically (single undo step)
+    assert_eq!(b.state.project.undo.depth().0, initial_undo + 1);
+    b.state.undo();
+    assert_eq!(b.state.project.project.profiles.len(), 3);
+    let sq1_restored = b
+        .state
+        .project
+        .get_profile(sq1_id)
+        .expect("sq1 must be restored");
+    assert_eq!(sq1_restored.holes.len(), 1);
+}

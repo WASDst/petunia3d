@@ -45,6 +45,7 @@ impl RegionPlane {
 }
 
 /// Perfis coplanares e suas polilinhas no espaço do plano.
+#[derive(Clone)]
 pub(crate) struct ProfileGroup {
     pub plane: RegionPlane,
     pub profiles: Vec<uuid::Uuid>,
@@ -53,6 +54,29 @@ pub(crate) struct ProfileGroup {
 }
 
 impl ProfileGroup {
+    pub(crate) fn filter_by_operands(&self, operands: &[uuid::Uuid]) -> Self {
+        let mut profiles = Vec::new();
+        let mut lines = Vec::new();
+        let mut shapes = Vec::new();
+        for (i, id) in self.profiles.iter().enumerate() {
+            if operands.contains(id) {
+                profiles.push(*id);
+                if let Some(line) = self.lines.get(i) {
+                    lines.push(line.clone());
+                }
+                if let Some(shape) = self.shapes.get(i) {
+                    shapes.push(shape.clone());
+                }
+            }
+        }
+        Self {
+            plane: self.plane,
+            profiles,
+            lines,
+            shapes,
+        }
+    }
+
     pub(crate) fn regions(&self) -> Vec<Region2> {
         let mut boundaries = self.lines.clone();
         for shape in self.shapes.iter().flatten() {

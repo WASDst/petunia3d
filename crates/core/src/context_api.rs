@@ -402,7 +402,17 @@ impl AppState {
         hint: Option<&RegionPlane>,
         edit: &ShapeEdit,
     ) -> Result<ShapeEditReport, ShapeEditError> {
-        self.in_context(|ctx| ctx.apply_shape_edit(hint, edit))
+        self.in_context(|ctx| ctx.apply_shape_edit(hint, None, edit))
+    }
+
+    #[inline]
+    pub fn apply_shape_edit_with_operands(
+        &mut self,
+        hint: Option<&RegionPlane>,
+        operands: Option<&[uuid::Uuid]>,
+        edit: &ShapeEdit,
+    ) -> Result<ShapeEditReport, ShapeEditError> {
+        self.in_context(|ctx| ctx.apply_shape_edit(hint, operands, edit))
     }
 
     #[inline]

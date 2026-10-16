@@ -125,7 +125,7 @@ Checkpoints e percentual permanecem no [painel de acompanhamento](#/progress). H
 | H21 | P2         | DRAW como preset de POLY                        | DONE                    | Presets DRAW/POLY, projeção planar e restauração livre ok.    | Ferramentas e perfis compartilhados; vista planar ortográfica e retorno livre preservam documento e seleção.                                                                                                                                                                                                              |
 | H22 | P2         | Seleção contextual e alvos heterogêneos         | DONE                    | SEL-002/006; filtros, resolução e Undo verificados.           | SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.                                                                                                                                                                                                                     |
 | H23 | P2         | Gizmo universal, orientação e snap              | DONE                    | SEL-001/003/005/007; frame congelado e orientações ok.       | SEL-001/003/005/007: centro, exibição e orientação independentes; frame congelado e snap contextual.                                                                                                                                                                                                                      |
-| H24 | P2         | ShapeBuilder planar com operandos explícitos    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
+| H24 | P2         | ShapeBuilder planar com operandos explícitos    | DONE                    | Operandos explícitos, furos e Undo testados no delta.         | Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.                                                                                                                                                                                                                     |
 | H25 | P2         | ShapeBuilder sólido de dois operandos           | IN PROGRESS             | Baseline 92c22caa; ver contrato contextual.                   | Partição A-only/overlap/B-only, componentes por aresta, resultado vazio, Unite/Remove/Extract e proveniência UV/material.                                                                                                                                                                                                 |
 | H26 | P2         | Composição reeditável e múltiplos sólidos       | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Fontes estáveis e receita persistente; regiões transitórias, revisão, orçamento e cancelamento; sem bake silencioso.                                                                                                                                                                                                      |
 | H27 | P2         | Construção sobre superfícies                    | TODO                    | Baseline 92c22caa; ver contrato contextual.                   | Plano de face, imprint, furos e Push/Pull contextual; superfícies curvas como extensão posterior.                                                                                                                                                                                                                         |
@@ -316,5 +316,32 @@ H03 foi reaberto durante a revisão: desfazer a criação do primeiro clipe deix
 **Risks / Next checkpoint:**
 - Integração de UI nativa Qt para os botões DRAW/POLY e Cursor3D verificada em paridade de bridge; gates de apresentação visual e eventos de viewport permanecem sob H33.
 - Próximos checkpoints: H24 (ShapeBuilder planar com operandos explícitos) e H25 (ShapeBuilder sólido).
+
+
+## Continuação H24 — ShapeBuilder planar com operandos explícitos (2026-10-15)
+
+**Intent / Sources:** Implementar suporte a operandos explícitos e preservação de regiões com furos no ShapeBuilder planar (`ShapeEditCmd` e `PathfinderOp`), garantindo que perfis e linhas de construção não envolvidos permaneçam intactos no plano, operando sob transação única atômica com suporte integral a Undo/Redo.
+
+**Gap / Changed:**
+- `crates/core/src/region_push.rs`: derivado `Clone` em `ProfileGroup`; adicionado `filter_by_operands(&self, operands: &[uuid::Uuid]) -> Self` preservando indexação paralela de `profiles`, `lines` e `shapes` coplanares para perfis selecionados.
+- `crates/core/src/context_api.rs`: adicionado `apply_shape_edit_with_operands` delegando ao `CommandContext`.
+- `crates/core/src/shape_builder.rs`:
+  - Campo `pub operands: Option<Vec<uuid::Uuid>>` em `ShapeEditCmd`, construtores `new`, `with_plane`, `with_operands`, `pathfinder`, `pathfinder_with_operands`.
+  - Validação estrita em `Command::can_execute` rejeitando listas vazias ou operações de Pathfinder com menos de 2 operandos sem entrar em pânico.
+  - `apply_shape_edit` filtra `ProfileGroup` pelos operandos indicados; formas fechadas não participantes e linhas de construção abertas fora da união são preservadas sem alteração de ID, nome ou atributos.
+  - Preservação estrita de furos internos (`profile.holes` ↔ `Region2.holes`).
+  - 13 testes unitários em `crates/core/src/shape_builder.rs`, incluindo cobertura de operandos explícitos, preservação de fontes não afetadas, validação de erros e furos.
+- `crates/editor/src/shape_builder_tool.rs`: atualizadas invocações de `ShapeEditCmd` para explicitar `operands: None`.
+- `crates/editor/tests/contextual_interactions.rs`: teste de integração dedicado `shape_builder_explicit_operands_and_hole_preservation_invariants_h24` provando preservação de formas e furos em fusão parcial e restauração atômica em único passo de Undo.
+
+**Verification:**
+- `crates/core/src/shape_builder.rs`: 13 passed; 0 failed.
+- `crates/core --lib`: 189 passed; 0 failed.
+- `crates/editor/tests/contextual_interactions.rs`: 12 passed; 0 failed.
+- `crates/editor --lib`: 126 passed; 0 failed.
+- Clippy e fmt pass.
+
+**Risks / Next checkpoint:**
+- Próximo checkpoint: H25 (ShapeBuilder sólido de dois operandos: BooleanSolid, partição A-only/overlap/B-only, resultado vazio e proveniência UV/material).
 
 

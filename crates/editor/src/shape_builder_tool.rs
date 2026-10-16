@@ -217,7 +217,11 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         } else {
             ShapeEdit::Merge { samples }
         };
-        let command = ShapeEditCmd { plane, edit };
+        let command = ShapeEditCmd {
+            plane,
+            operands: None,
+            edit,
+        };
         match self.state.dispatch(&command) {
             Ok(()) => {
                 self.after_shape_edit();
@@ -276,6 +280,7 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         });
         let command = ShapeEditCmd {
             plane,
+            operands: None,
             edit: ShapeEdit::Pathfinder(op),
         };
         match self.state.dispatch(&command) {

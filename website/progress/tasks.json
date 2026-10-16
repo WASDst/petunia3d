@@ -400,6 +400,11 @@
       "revision": "b34d93e5 + functional continuation; crates/editor/src/lib.rs, crates/editor/src/bridge/application.rs, crates/editor/tests/contextual_interactions.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H21: DRAW como preset de apresentação de POLY. Compartilhamento integral do workspace Model, ferramentas e perfis 2D. DRAW define projeção Ortho e redireciona órbita livre para pan planar. Retorno para POLY restaura câmera original sem dirty state, sem mutação de malha ou seleção e com zero entradas de Undo. Perfis persistentes visíveis e utilizáveis pelo ShapeBuilder sem sair do modo. 11 testes passando em contextual_interactions.rs. Aceite visual Qt registrado para H33."
+    },
+    "planar-shapebuilder-core-20261015": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/shape_builder.rs, crates/core/src/region_push.rs, crates/editor/tests/contextual_interactions.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H24: ShapeBuilder planar com operandos explícitos (ShapeEditCmd::operands), filtragem em ProfileGroup::filter_by_operands preservando fontes não afetadas, linhas e identidades; preservação de furos (profile.holes) no perfil resultante; transação única atômica com Undo único; rejeição graciosa de seleções vazias ou singulares sem pânico. 189 testes unitários em petunia_core, 60 em command_tests, 5 em universal_gizmo, 126 em petunia_editor e 12 em contextual_interactions pass; clippy e fmt pass sem warnings."
     }
   },
   "tasks": [
@@ -3539,19 +3544,19 @@
       "title": "ShapeBuilder planar com operandos explícitos",
       "description": "Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta.",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável exercitada no delta. Operandos explícitos em ShapeEditCmd::pathfinder_with_operands e apply_shape_edit_with_operands; filtragem em ProfileGroup::filter_by_operands preservando fontes não afetadas, linhas de construção e seus identificadores; preservação de furos em Region2/profile.holes; transação única e restauração completa por Undo. Testes unitários dedicados em crates/core/src/shape_builder.rs e teste de integração em crates/editor/tests/contextual_interactions.rs validados.",
       "checkpoints": [
         {
           "title": "Regiões com furos, seleção de fontes explícita, preservação de fontes não afetadas e transação única.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "planar-shapebuilder-core-20261015"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "planar-shapebuilder-core-20261015"
         }
       ],
       "documents": [
