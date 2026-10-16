@@ -380,6 +380,11 @@
       "revision": "93c4ed782a64ae374bc8646c12635455c71d6f61 + functional continuation; source hashes: evidence/primitive-frame-2026-10-15/source-snapshot.json",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H19 complementar: primitivas locais e regeneração com TRS preservado, compatibilidade por validação de fonte, recusa de edições assadas/livres incompatíveis, rig, locks e valores inválidos. Sessão/Cancel/adapter respeitam alvo ativo. 700 pass / 16 suítes com animation-workspace, incluindo 10 regressões Core e 2 de adapter; fmt e Clippy all-targets -D warnings pass. Software3dViewport: reedição altera 18721 pixels, referência local+TRS difere em 0; três imagens inspecionadas. Rebase paramétrico/skin, legado completo e aceite nativo permanecem pendentes; H19 IN PROGRESS."
+    },
+    "contextual-selection-20261015": {
+      "revision": "c1fd6f77 + functional continuation; crates/core/src/selection.rs, state.rs, crates/editor/src/bridge/picking.rs",
+      "document": "02-application/tools-interaction-implementation.md",
+      "summary": "H22 (SEL-002, SEL-006): SelectionRef heterogêneo (Object, Vertex, Edge, Face, Shape), SelectionFilters, ActiveElement tipado, SelectionResolver com desduplicação de vértices de arestas/faces adjacentes, dominância de objeto inteiro sobre seus componentes, filtragem de raízes hierárquicas com proteção contra ciclos, redirecionamento de assets bloqueados para locked_targets. Picking contextual na viewport com prioridade Vertex -> Edge -> Face -> Object. Sincronização bidirecional de seleção, active_element e poda de referências obsoletas em Undo/Redo e sync_selection. 8 unitários em selection.rs, 10 testes em contextual_selection.rs e 10 testes em contextual_interactions.rs passando. Clippy e fmt pass. Limites nativos/Qt registrados para H33."
     }
   },
   "tasks": [
@@ -3467,19 +3472,19 @@
       "title": "Seleção contextual e alvos heterogêneos",
       "description": "SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.",
       "document": "02-application/tools-interaction-implementation.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-15",
-      "baseline": "Plano aprovado sobre 92c22caa; base recuperável deve ser exercitada antes de encerrar o delta. SelectThrough separado de X-Ray/Wireframe no picking, box/lasso, preselection e snap. Seleção heterogênea, auto picking sem troca global e ActiveElement tipado ainda não implementados.",
+      "baseline": "Plano aprovado sobre 92c22caa; base recuperável exercitada no delta. SEL-002/006: filtros, ActiveElement, desduplicação de vértices de arestas/faces, dominância de objeto inteiro sobre componentes, raízes hierárquicas com proteção contra ciclos e exclusão de locked_targets. Picking contextual e sincronização/reconciliação em Undo/Redo e sync_selection validadas com 20 testes dedicados. Gates de apresentação visual/Qt permanecem em H33.",
       "checkpoints": [
         {
           "title": "SEL-002/006: filtros, ActiveElement, resolução sem duplicidade e hierarquias sem dupla transformação.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-selection-20261015"
         },
         {
           "title": "Executar regressões, compatibilidade, Undo/cancel e gates aplicáveis; registrar revisão e limites.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "contextual-selection-20261015"
         }
       ],
       "documents": [

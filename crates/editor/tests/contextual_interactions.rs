@@ -199,3 +199,28 @@ fn effective_profiles_override_physical_fallbacks_and_removed_keys_stay_removed(
     assert!(!b.route_shortcut("[", false, false, false));
     assert_eq!(b.state.canvas_brush, size);
 }
+
+#[test]
+fn contextual_picking_prioritizes_subcomponents_over_objects_when_all_filters_enabled() {
+    let mut b = bridge();
+    assert!(b.state.project.active().is_some());
+
+    b.state.session.selection.filters = petunia_core::SelectionFilters::objects_only();
+    let hit_obj = b.pick_viewport_target(0.5, 0.5);
+    assert!(matches!(hit_obj, petunia_core::HoverTarget::Object(_)));
+
+    b.state.session.selection.filters = petunia_core::SelectionFilters::all();
+    let hit_ctx = b.pick_viewport_target(0.5, 0.5);
+    assert!(matches!(
+        hit_ctx,
+        petunia_core::HoverTarget::Face(_)
+            | petunia_core::HoverTarget::Vertex(_)
+            | petunia_core::HoverTarget::Edge(_, _)
+    ));
+
+    b.state.session.selection.filters.faces = false;
+    b.state.session.selection.filters.vertices = false;
+    b.state.session.selection.filters.edges = false;
+    let hit_fallback = b.pick_viewport_target(0.5, 0.5);
+    assert!(matches!(hit_fallback, petunia_core::HoverTarget::Object(_)));
+}

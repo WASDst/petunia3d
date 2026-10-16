@@ -73,6 +73,16 @@ O Petunia3D combina Rust moderno com macros do Slint e uma camada C++ profunda (
 - **Tabelas Markdown com colunas alinhadas por espaços:** tabelas devem ser legíveis em texto puro, terminais e diffs de git, mantendo padding consistente em cada célula.
 - **Tabelas de matriz de implementação (iterativa e complementar com status/check):** sempre que criar ou atualizar uma tabela de matriz de implementação, ela deve ser uma tabela iterativa e complementar (preservando o histórico e agregando novas etapas sem descartar contexto anterior). Ela deve conter obrigatoriamente uma coluna de status/check (ex.: `[ ] TODO`, `[-] IN PROGRESS`, `[x] DONE` ou `not run / pass / fail / blocked`) que deve sempre ser rigorosamente preenchida e mantida atualizada conforme o real estado de implementação de cada feature.
 
+### 8. Pirâmide de testes em camadas e prevenção de regressão (Padrão QA Qt Creator / Craft)
+Inspirado nas lições de QA do Qt Creator (automação de fluxos sob a perspectiva do usuário final, combinação de E2E + unitários + fuzzing contínuo), o Petunia3D adota uma estratégia de testes em camadas estritamente aberta, gratuita e de baixo consumo de recursos, sem dependência de ferramentas comerciais proprietárias como Squish:
+- **E2E e prevenção contínua de regressões:** Todo bug ou regressão reportada deve gerar um teste automatizado reproduzível antes da correção ("provado por teste"). O produto é testado de ponta a ponta na perspectiva do usuário ("como um todo"), além de testes unitários isolados.
+- **Camada 1 — Domínio puro & Invariantes (Rust Core, Geometry, Mesh, Project):** Testes unitários puros, determinísticos e rápidos (< 2s). Cobrem topologia, tolerâncias matemáticas, ausência de panics, validação estrita de schema e serialização/desserialização round-trip.
+- **Camada 2 — Contratos transacionais e fluxos em memória (`petunia_editor::EditorController`):** Toda ação observável do usuário é exercitável via `UiIntent` e `EditorController` headless em memória. Testes ponta a ponta (como em `crates/ui-cxxqt/tests/editor_parity.rs`) validam fluxos complexos de criação, transformação, seleções contextuais, modificadores, troca de workspace e integridade irrestrita de Undo/Redo sem flakiness de GUI ou dependência de servidor gráfico.
+- **Camada 3 — Automação de interface nativa gratuita e headless (`QTestLib` / `QT_QPA_PLATFORM=offscreen`):** A automação de GUI rejeita ferramentas pagas/proprietárias em favor de `QTestLib` nativo do Qt (`QTest::mouseClick`, `QTest::keyClicks`, `QSignalSpy`). Os testes de interface rodam serialmente (`-- --test-threads=1`) em modo offscreen (`QT_QPA_PLATFORM=offscreen`), garantindo que cliques, atalhos de teclado, diálogos e sincronização de DTO disparem os comandos corretos sem overhead de display.
+- **Camada 4 — Fuzzing e dados hostis (Padrão OSS-Fuzz):** Injeção contínua de dados aleatórios e hostis (arquivos `.petunia`, OBJ e glTF malformados, buffers truncados, valores não-finitos `NaN`/`Inf`, caminhos inexistentes e strings de entrada inválidas). A aplicação deve rejeitar graciosamente com `Result::Err` e nunca entrar em pânico ou vazar memória.
+- **Camada 5 — Regressão visual de Viewport & Shaders (Golden Frames FBO):** Como a viewport 3D (`QOpenGLWidget`) não possui widgets filhos para inspeção de UI, sua integridade gráfica é protegida por renderização offscreen em FBO com comparação determinística de frames PNG contra *golden images* (com limiar estrito de tolerância de cor/pixel).
+- **Camada 6 — Acessibilidade e navegação por teclado como gate:** Toda superfície de UI deve expor metadados semânticos para `QAccessible` e garantir ciclo completo de foco via `F6`/`Tab`, atalhos de teclado e legibilidade em alto contraste, servindo também como base para automação caixa-preta externa via APIs nativas de acessibilidade do SO (ex: AT-SPI / pywinauto).
+
 
 ## Context reading order (progressive disclosure)
 
@@ -132,6 +142,7 @@ CARGO_BUILD_JOBS=1 cargo test -p petunia_editor --features animation-workspace -
 # A integração visual/Qt é posterior no plano contextual; executar somente quando afetada.
 # Gate isolado para Qt com budget de jobs e threads restritas:
 CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=target/agent-<id> QT_QPA_PLATFORM=offscreen cargo test -p petunia_ui_cxxqt --test bridge_test -- --test-threads=1 --skip test_widgets_studio_window_creation
+CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR=target/agent-<id> QT_QPA_PLATFORM=offscreen cargo test -p petunia_ui_cxxqt --test editor_parity -- --test-threads=1
 ```
 
 Run affected core/geometry/project/render tests when those crates change. For GPU rendering, Windows/Linux, screen reader and low-end performance, **record manual gates and test environment**; Linux compilation alone is not enough. Never weaken tests to produce green.

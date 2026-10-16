@@ -12,7 +12,10 @@ use uuid::Uuid;
 
 use super::camera::Camera;
 use super::events::{AppEvent, EventBus};
-use super::selection::{SelectMode, Selection, SelectionDomain, Workspace};
+use super::selection::{
+    ActiveElement, SelectMode, Selection, SelectionDomain, SelectionFilters, SelectionRef,
+    Workspace,
+};
 
 /// Modo de sombreamento da viewport.
 ///
@@ -1165,7 +1168,12 @@ impl EditorSession {
     }
 
     pub fn sync_selection(&mut self, project: &Project, events: &mut EventBus) -> bool {
-        let mut sel = Selection::default();
+        let mut sel = Selection {
+            filters: self.selection.filters,
+            items: self.selection.items.clone(),
+            active_element: self.selection.active_element,
+            ..Default::default()
+        };
         if let Some(a) = project.assets.get(project.active) {
             sel.asset = Some(a.id);
             sel.assets = self
@@ -1195,6 +1203,70 @@ impl EditorSession {
                 .map(|(i, _)| i)
                 .collect();
             sel.edges = a.mesh.selected_edges.iter().copied().collect();
+
+            // Sincroniza items com as flags da malha do ativo e remove referências a assets inexistentes
+            sel.items.retain(|item| {
+                let obj_id = match item {
+                    SelectionRef::Object(id) => *id,
+                    SelectionRef::Vertex { object, .. } => *object,
+                    SelectionRef::Edge { object, .. } => *object,
+                    SelectionRef::Face { object, .. } => *object,
+                    SelectionRef::Shape { object, .. } => *object,
+                };
+                if !project.assets.iter().any(|asset| asset.id == obj_id) {
+                    return false;
+                }
+                match item {
+                    SelectionRef::Object(id) => sel.assets.contains(id),
+                    SelectionRef::Vertex { object, vertex } if *object == a.id => {
+                        sel.verts.contains(vertex)
+                    }
+                    SelectionRef::Edge { object, edge } if *object == a.id => {
+                        let k = if edge.0 < edge.1 {
+                            *edge
+                        } else {
+                            (edge.1, edge.0)
+                        };
+                        sel.edges.contains(&k)
+                    }
+                    SelectionRef::Face { object, face } if *object == a.id => {
+                        sel.faces.contains(face)
+                    }
+                    _ => true,
+                }
+            });
+            for &v in &sel.verts {
+                let r = SelectionRef::vertex(a.id, v);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            for &(e0, e1) in &sel.edges {
+                let r = SelectionRef::edge(a.id, e0, e1);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            for &f in &sel.faces {
+                let r = SelectionRef::face(a.id, f);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            for &obj_id in &sel.assets {
+                let r = SelectionRef::Object(obj_id);
+                if !sel.items.contains(&r) {
+                    sel.items.push(r);
+                }
+            }
+            if sel.active_element.is_none()
+                || !sel
+                    .items
+                    .iter()
+                    .any(|i| sel.active_element.map(|ae| ae.item) == Some(*i))
+            {
+                sel.active_element = sel.items.last().copied().map(ActiveElement::new);
+            }
         }
         if self.selection == sel {
             return false;
@@ -2899,12 +2971,17 @@ impl CommandContext<'_> {
         let id = self.document.assets[index].id;
         if !extend {
             self.editor.selection.assets.clear();
+            self.editor.selection.items.retain(|i| !i.is_object());
         }
         if extend && self.editor.selection.assets.contains(&id) {
             self.editor
                 .selection
                 .assets
                 .retain(|selected| *selected != id);
+            self.editor
+                .selection
+                .items
+                .retain(|selected| *selected != SelectionRef::Object(id));
             self.document.active = self
                 .editor
                 .selection
@@ -2914,27 +2991,27 @@ impl CommandContext<'_> {
                 .unwrap_or(usize::MAX);
         } else {
             self.editor.selection.assets.push(id);
+            if !self
+                .editor
+                .selection
+                .items
+                .contains(&SelectionRef::Object(id))
+            {
+                self.editor.selection.items.push(SelectionRef::Object(id));
+            }
             self.document.active = index;
         }
         self.editor.selection.asset = self.document.active().map(|a| a.id);
+        self.editor.selection.active_element = self
+            .editor
+            .selection
+            .items
+            .last()
+            .copied()
+            .map(ActiveElement::new);
         self.sync_selection();
     }
 
-    /// Define o estado de edição por via semântica (P3D-015).
-    ///
-    /// `EditMode` é derivado, então escrever nele significa:
-    /// `Object` → domínio `Object`; `Edit` → último domínio de componente;
-    /// `TexturePaint` → workspace PAINT. Não há estado paralelo a manter.
-    /// Define o estado de edição por via semântica (P3D-015).
-    ///
-    /// `EditMode` é derivado, então escrever nele significa:
-    /// `Object` → domínio `Object`; `Edit` → último domínio de componente;
-    /// `TexturePaint` → workspace PAINT. Não há estado paralelo a manter.
-    /// Define o estado de edição por via semântica (P3D-015).
-    ///
-    /// `EditMode` é derivado, então escrever nele significa:
-    /// `Object` → domínio `Object`; `Edit` → último domínio de componente;
-    /// `TexturePaint` → workspace PAINT. Não há estado paralelo a manter.
     /// Define o estado de edição por via semântica (P3D-015).
     ///
     /// `EditMode` é derivado, então escrever nele significa:
@@ -2958,16 +3035,8 @@ impl CommandContext<'_> {
     /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
     ///
     /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
-    /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
-    ///
-    /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
-    /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
-    ///
-    /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
-    /// Define o domínio de seleção (Object, Point, Edge, Face) e sincroniza sub-estados.
-    ///
-    /// `EditMode` é derivado deste estado — não existe escrita separada de modo.
     pub fn set_selection_domain(&mut self, domain: SelectionDomain) {
+        self.editor.selection.filters = SelectionFilters::from_domain(domain);
         let previous = self.editor.selection_domain;
         let source = if previous == SelectionDomain::Object {
             self.editor.last_component_domain

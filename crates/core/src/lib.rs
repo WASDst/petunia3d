@@ -163,8 +163,9 @@ pub use primitive_session::{
 pub use proportional::{ProportionalFalloff, ProportionalSettings, calculate_falloff_weight};
 pub use region_push::{RegionHit, RegionPlane, RegionPlanes, RegionPushError, region_at_ray};
 pub use selection::{
-    EdgeKey, FaceIndex, SelectMode, Selection, SelectionDomain, SelectionState, VertexIndex,
-    Workspace,
+    ActiveElement, EdgeKey, FaceIndex, ResolvedTransformTargets, SelectMode, Selection,
+    SelectionDomain, SelectionFilters, SelectionRef, SelectionResolver, SelectionState,
+    VertexIndex, Workspace,
 };
 pub use shape_builder::{
     PathfinderOp, ShapeEdit, ShapeEditCmd, ShapeEditError, ShapeEditReport, ShapePlane,
