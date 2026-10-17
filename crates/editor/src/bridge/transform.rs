@@ -611,6 +611,31 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         };
         // Reject malformed text before opening a transaction.
         let value = numeric::parse_numeric_with_base(text, current_base)?;
+        // Um único objeto: os campos mostram o TRS **local**, então o valor digitado
+        // define o TRS local (um comando, um Undo). O gesto modal compõe no espaço do
+        // mundo e, num objeto girado, trocaria eixos ou cisalharia a escala.
+        if let Some(index) = self.single_object_transform_target() {
+            let mut current = match kind {
+                TransformKind::Position => self.position.map(|f| f.value()),
+                TransformKind::Rotation => self.rotation.map(|f| f.value()),
+                TransformKind::Scale => self.scale.map(|f| f.value()),
+            };
+            current[axis.min(2)] = value;
+            let cmd = petunia_core::SetAssetTransformCmd {
+                asset_index: Some(index),
+                translation: (kind == TransformKind::Position).then_some(current),
+                rotation_euler_deg: (kind == TransformKind::Rotation).then_some(current),
+                scale: (kind == TransformKind::Scale).then_some(current),
+            };
+            if let Err(error) = self.state.dispatch(&cmd) {
+                self.state.set_status(error.to_string());
+                self.reset_transform_fields();
+                return Err(numeric::NumericInputError::Invalid);
+            }
+            self.state.mark_dirty();
+            self.reset_transform_fields();
+            return Ok(value);
+        }
         let kind_modal = match kind {
             TransformKind::Position => petunia_core::ModalKind::Move,
             TransformKind::Rotation => petunia_core::ModalKind::Rotate,
@@ -684,6 +709,21 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
         Ok(value)
     }
 
+    /// Índice do objeto cujo TRS os campos editam diretamente: modo objeto, sem
+    /// gesto em curso, sem edição de pivô e exatamente o objeto ativo selecionado.
+    fn single_object_transform_target(&self) -> Option<usize> {
+        if self.state.session.tools.modal.is_some()
+            || self.state.session.edit_pivot
+            || self.state.selection_domain() != petunia_core::SelectionDomain::Object
+        {
+            return None;
+        }
+        let active = self.state.project.active()?;
+        let selected = &self.state.session.selection.assets;
+        (selected.len() == 1 && selected.first() == Some(&active.id))
+            .then_some(self.state.project.active)
+    }
+
     pub fn cancel_transform(&mut self) -> bool {
         self.release_latched_session();
         let cancelled = self.state.cancel_modal();
@@ -724,5 +764,66 @@ impl<V: PetuniaViewport> SlintUiBridge<V> {
             TransformKind::Rotation => self.rotation[axis].value(),
             TransformKind::Scale => self.scale[axis].value(),
         }
+    }
+}
+
+#[cfg(test)]
+mod typed_transform_tests {
+    use super::*;
+
+    fn bridge() -> SlintUiBridge<PlaceholderViewport> {
+        let mut b = SlintUiBridge::new(AppState::default(), PlaceholderViewport::default());
+        b.resize_viewport(800, 600);
+        b.apply(UiIntent::SetActiveTool("select".into()));
+        b.state.dispatch(&petunia_core::SelectAllCmd).unwrap();
+        b
+    }
+
+    fn close(a: [f32; 3], b: [f32; 3]) -> bool {
+        a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-3)
+    }
+
+    /// Regressão (U19): os campos da seção Transform mostram a escala **local**;
+    /// digitar nela num objeto já girado deve definir a escala local, sem
+    /// cisalhamento nem troca de eixos.
+    #[test]
+    fn typed_scale_on_rotated_object_sets_local_scale() {
+        let mut b = bridge();
+        b.commit_transform_text(TransformKind::Rotation, 2, "90")
+            .unwrap();
+        for (axis, text) in ["2", "3", "0.5"].iter().enumerate() {
+            b.commit_transform_text(TransformKind::Scale, axis, text)
+                .unwrap();
+        }
+        let asset = b.state.project.active().unwrap();
+        assert!(
+            close(asset.scale, [2.0, 3.0, 0.5]),
+            "escala local {:?}",
+            asset.scale
+        );
+        assert!(
+            close(asset.rotation, [0.0, 0.0, 90.0]),
+            "rotação {:?}",
+            asset.rotation
+        );
+        // Os campos exibem o que o documento guarda.
+        assert!(close(b.scale.map(|f| f.value()), [2.0, 3.0, 0.5]));
+        // Cada valor digitado é um passo de Undo.
+        b.apply(UiIntent::Undo);
+        assert!(close(
+            b.state.project.active().unwrap().scale,
+            [2.0, 3.0, 1.0]
+        ));
+    }
+
+    #[test]
+    fn typed_rotation_sets_each_local_euler_component() {
+        let mut b = bridge();
+        b.commit_transform_text(TransformKind::Rotation, 0, "30")
+            .unwrap();
+        b.commit_transform_text(TransformKind::Rotation, 2, "90")
+            .unwrap();
+        let rotation = b.state.project.active().unwrap().rotation;
+        assert!(close(rotation, [30.0, 0.0, 90.0]), "rotação {rotation:?}");
     }
 }

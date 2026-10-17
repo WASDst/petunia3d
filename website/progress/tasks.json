@@ -865,7 +865,7 @@
     "u19-gates": {
       "revision": "8fb9c5d5+working tree",
       "document": "09-ui/shell-v2-proposal.md",
-      "summary": "CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen, --test-threads=1: bridge_test 12, ui_thread_guard 1, editor_parity 21, shell_v2 1, gallery_test 1, component_contracts 1, ui_contract_ids 3, ui_i18n_catalog 3 (21 textos de petunia_structure_panel adicionados ao catálogo), lib 2 — pass; clippy -p petunia_ui_cxxqt --all-targets -D warnings limpo; fmt limpo. Achado: escala digitada na seção Transform em objeto já girado (Z 90°) resulta em escala local diferente dos campos (ex.: [1.5, 2, 0.5] para 2/3/0.5) — investigar. Manuais (GPU física, Windows, leitor de tela) seguem em Q08: not run."
+      "summary": "CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen, --test-threads=1: bridge_test 12, ui_thread_guard 1, editor_parity 21, shell_v2 1, gallery_test 1, component_contracts 1, ui_contract_ids 3, ui_i18n_catalog 3 (21 textos de petunia_structure_panel adicionados ao catálogo), lib 2 — pass; clippy -p petunia_ui_cxxqt --all-targets -D warnings limpo; fmt limpo. Achado e corrigido: escala/rotação digitadas na seção Transform em objeto já girado eram compostas como gesto no espaço do mundo (escala [1.5, 2, 0.5] para 2/3/0.5; rotação X=30 virava Y). Para um único objeto no modo objeto, o valor digitado agora define o TRS local via SetAssetTransformCmd (um Undo); regressões petunia_editor typed_transform_tests (2) pass; multisseleção e componentes seguem pelo gesto. Manuais (GPU física, Windows, leitor de tela) seguem em Q08: not run."
     }
   },
   "tasks": [
