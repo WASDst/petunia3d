@@ -62,8 +62,12 @@ class PetuniaGlWidget : public QWidget {
     void wheelEvent(QWheelEvent *event) override;
     void tabletEvent(QTabletEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void focusOutEvent(QFocusEvent *event) override;
 
   private:
+    /// Encerra um gesto interrompido (foco perdido ou Escape): traço de pintura
+    /// confirma ou cancela conforme `commitPaint`; gesto geométrico cancela.
+    void finishInterruptedGesture(bool commitPaint);
     friend class PetuniaNativeGlCanvas;
     void initializeGL();
     void resizeGL(int w, int h);

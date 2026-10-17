@@ -131,6 +131,8 @@ impl QtEditor {
         v["document_revision"] = json!(self.state.project.project.revision_id().to_string());
         v["active_asset_id"] = json!(self.state.project.active().map(|a| a.id.to_string()));
         v["selected_count"] = json!(self.state.session.selection.assets.len());
+        // Traço de pintura com transação aberta (U05: nenhum gesto fica pendurado).
+        v["paint_stroke_open"] = json!(self.state.session.tools.paint_stroke.is_some());
         v["project_path"] = json!(self.state.project.project_path);
         // Native per-axis forms consume the same slot projection as Slint.
         for slot in v["reference_slots"].as_array().cloned().unwrap_or_default() {
@@ -1117,7 +1119,7 @@ impl QtEditor {
                             if b.is_shape_tool() {
                                 b.begin_paint_shape_at(x, y)
                             } else {
-                                b.begin_paint_stroke_with_modifiers(x, y, shift, ctrl)
+                                b.begin_paint_stroke_with_modifiers(x, y, shift, ctrl, alt)
                             }
                         }
                         1 => b.paint_stroke_to_with_modifiers(x, y, shift, ctrl),
@@ -1353,6 +1355,7 @@ fn dispatch_controller(
             number(v, "y")?,
             boolean(v, "is_shift")?,
             boolean(v, "is_ctrl")?,
+            v["is_alt"].as_bool().unwrap_or(false),
         ),
         "begin_rename" => b.begin_rename(),
         "begin_slice" => b.begin_slice(number(v, "x")?, number(v, "y")?),

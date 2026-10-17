@@ -29,6 +29,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QSettings>
 #include <QSplitter>
 #include <QStandardPaths>
@@ -372,6 +373,54 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         settle(8);
         window.syncNow();
         settle(4);
+    }
+
+    // U05: um gesto de pintura interrompido por perda de foco não fica aberto;
+    // o traço é confirmado (um passo de Undo) e o próximo começa limpo.
+    {
+        c->request("workspace", {{"id", "PAINT"}});
+        settle(8);
+        window.syncNow();
+        c->request("tool", {{"id", "brush"}});
+        settle(2);
+        auto press = [](QWidget *w, QPointF at, QEvent::Type type, Qt::MouseButton button, Qt::MouseButtons buttons) {
+            QMouseEvent event(type, at, w->mapToGlobal(at), button, buttons, Qt::NoModifier);
+            QCoreApplication::sendEvent(w, &event);
+        };
+        auto interrupted = [&](QWidget *target, const QString &name) {
+            if (!target || !target->isVisible()) {
+                h.add("paint:" + name + "-available", false);
+                return;
+            }
+            target->setFocus(Qt::MouseFocusReason);
+            settle(2);
+            const QPointF center(target->width() / 2.0, target->height() / 2.0);
+            press(target, center, QEvent::MouseButtonPress, Qt::LeftButton, Qt::LeftButton);
+            press(target, center + QPointF(12, 6), QEvent::MouseMove, Qt::NoButton, Qt::LeftButton);
+            settle(2);
+            window.syncNow();
+            const bool opened = c->flag("paint_stroke_open");
+            // Solta o botão direito no meio: o traço do esquerdo continua.
+            press(target, center + QPointF(14, 6), QEvent::MouseButtonRelease, Qt::RightButton, Qt::LeftButton);
+            window.syncNow();
+            const bool survivesOtherButton = c->flag("paint_stroke_open") == opened;
+            window.appBar()->searchButton()->setFocus(Qt::ActiveWindowFocusReason);
+            settle(4);
+            window.syncNow();
+            h.add("paint:" + name + "-stroke-opens", opened);
+            h.add("paint:" + name + "-other-button-release-keeps-stroke", survivesOtherButton);
+            h.add("paint:" + name + "-focus-loss-closes-stroke", !c->flag("paint_stroke_open"));
+            // O botão esquerdo ainda "solto" depois do foco: nenhum efeito residual.
+            press(target, center, QEvent::MouseButtonRelease, Qt::LeftButton, Qt::NoButton);
+            settle(2);
+            window.syncNow();
+            h.add("paint:" + name + "-late-release-is-harmless", !c->flag("paint_stroke_open"));
+        };
+        interrupted(window.workspaceCanvas("PAINT"), "canvas2d");
+        interrupted(window.viewport(), "viewport3d");
+        c->request("workspace", {{"id", "POLY"}});
+        settle(6);
+        window.syncNow();
     }
 
     // Foco por regiões (F6): percorre regiões distintas e volta ao ponto de partida.

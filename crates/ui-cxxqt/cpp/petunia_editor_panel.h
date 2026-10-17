@@ -30,6 +30,7 @@ class PetuniaEditorCanvas : public QWidget {
     void wheelEvent(QWheelEvent *) override;
     void tabletEvent(QTabletEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
+    void focusOutEvent(QFocusEvent *) override;
     void enterEvent(QEnterEvent *) override;
     void leaveEvent(QEvent *) override;
 

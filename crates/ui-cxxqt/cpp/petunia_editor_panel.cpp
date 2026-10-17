@@ -1678,6 +1678,17 @@ void PetuniaEditorCanvas::mouseMoveEvent(QMouseEvent *e) {
     e->accept();
 }
 void PetuniaEditorCanvas::mouseReleaseEvent(QMouseEvent *e) {
+    // Só o botão que iniciou o gesto o encerra (soltar o direito no meio de um
+    // traço com o esquerdo não fecha o traço).
+    if (e->button() == Qt::MiddleButton) {
+        m_panning = false;
+        e->accept();
+        return;
+    }
+    if (e->button() != Qt::LeftButton) {
+        e->accept();
+        return;
+    }
     if (m_stroking) {
         stroke(e->position(), 2);
         m_stroking = false;
@@ -1768,6 +1779,22 @@ void PetuniaEditorCanvas::keyPressEvent(QKeyEvent *e) {
         return;
     }
     QWidget::keyPressEvent(e);
+}
+
+// Perder o foco no meio de um gesto (Alt+Tab, popup, F6) não pode deixar o
+// traço aberto: o traço pintado é trabalho intencional e é confirmado (um Undo);
+// arrastos de UV e seleção retangular são descartados sem efeito.
+void PetuniaEditorCanvas::focusOutEvent(QFocusEvent *e) {
+    QWidget::focusOutEvent(e);
+    if (m_stroking) {
+        stroke(m_previous, 2);
+        m_stroking = false;
+        petuniaRequest("tablet_reset");
+    }
+    m_uvDragging = false;
+    m_selecting = false;
+    m_panning = false;
+    update();
 }
 
 void setPetuniaTabletInput(float pressure, float tiltX, float tiltY,

@@ -42,6 +42,8 @@ class PetuniaShellWindow : public QMainWindow {
     PetuniaToolRail *toolRail() const { return m_rail; }
     PetuniaViewportHeader *viewportHeader() const { return m_header; }
     PetuniaGlWidget *viewport() const { return m_viewport; }
+    /// Canvas 2D de um workspace especializado (PAINT/UV/ANIMATE), se já criado.
+    QWidget *workspaceCanvas(const QString &workspace) const { return m_canvases.value(workspace); }
     PetuniaOperationHud *hud() const { return m_hud; }
     PetuniaContextActions *contextActions() const { return m_context; }
     PetuniaStructurePanel *structure() const { return m_structure; }

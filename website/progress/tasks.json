@@ -876,6 +876,16 @@
       "revision": "a6fc87dc+working tree",
       "document": "03-geometry/operation-graph.md",
       "summary": "OpGraph::repair (chamado por Project::validate antes do último recurso de descartar o grafo): limites, ids duplicados, parâmetros inválidos → default, arestas reconstruídas pelas regras de connect (órfãs, portas, tipos, duplicatas, ocupação, ciclos) e ligações de nós fantasmas preservadas. Antes, um único defeito descartava todas as operações do documento e parâmetros fora da faixa não eram verificados. Testes op_graph::tests::repair_* (4) e suíte petunia_project completa pass; core 198 pass; clippy -D warnings limpo."
+    },
+    "u05-semantic-pointer": {
+      "revision": "89b4aa64+working tree",
+      "document": "09-ui/viewport-input-boundary.md",
+      "summary": "Ações de ponteiro do PAINT (reta, origem do Clone, escala/giro do decalque) já eram resolvidas pelo keymap [pointer] (PaintPointerActions::resolve), mas Alt nunca chegava (resolve(..., false)): ações revinculadas a Alt não disparavam. begin_paint_stroke_with_modifiers recebe Alt (ponteiro do Shell v2 e pedido JSON). Regressão crates/editor/tests/paint_pointer_actions_u05.rs falha com o código antigo e passa com a correção."
+    },
+    "u05-gesture-lifecycle": {
+      "revision": "89b4aa64+working tree",
+      "document": "09-ui/viewport-input-boundary.md",
+      "summary": "Shell v2, canvas 2D (PetuniaEditorCanvas) e viewport 3D (PetuniaGlWidget): perder o foco no meio do gesto confirma o traço de pintura (sem transação pendurada; snapshot paint_stroke_open) e cancela gizmo/ferramenta geométrica; Escape cancela explicitamente (fase 3 / cancel_transform); soltar outro botão durante o arrasto do esquerdo não encerra o gesto (defeito encontrado nos dois canvases). Harness shell_v2 offscreen (paint:canvas2d-* e paint:viewport3d-*) pass. Não verificado: click-move-click em DPR 2 e na vista secundária do split (coordenadas lógicas nos dois sentidos via resize_viewport_scaled; not run)."
     }
   },
   "tasks": [
@@ -1092,12 +1102,12 @@
       "document": "09-ui/viewport-input-boundary.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). AINDA RELEVANTE no v2: o canvas PAINT reutiliza PetuniaEditorCanvas; ações semânticas para clone/decal/linha reta e o ciclo Press/Move/Release/Cancel em DPI/split não foram reverificados. Migrar para U16 ou manter aqui.",
+      "baseline": "2026-10-17 (Shell v2): ações semânticas completas com Alt e ciclo Press/Move/Release/Cancel, foco perdido e Escape verificados offscreen; pendente click-move-click em DPI alto/split.",
       "checkpoints": [
         {
           "title": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u05-semantic-pointer"
         },
         {
           "title": "fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split",

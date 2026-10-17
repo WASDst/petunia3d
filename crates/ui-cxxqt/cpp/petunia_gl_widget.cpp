@@ -693,6 +693,12 @@ void PetuniaGlWidget::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void PetuniaGlWidget::mouseReleaseEvent(QMouseEvent *event) {
+    // Só o botão esquerdo encerra gestos de ferramenta/gizmo: soltar outro botão
+    // no meio do arrasto (ex.: o direito) não fecha o traço nem a transformação.
+    if (event->button() != Qt::LeftButton && (m_toolPressed || m_isTransformGizmoDragging)) {
+        event->accept();
+        return;
+    }
     if (m_isTransformGizmoDragging) {
         PetuniaViewScope scope(m_surfaceId);
         m_overlayState = petuniaRequest("end_gizmo_drag");
@@ -792,15 +798,42 @@ void PetuniaGlWidget::tabletEvent(QTabletEvent *event) {
     event->accept();
 }
 
-void PetuniaGlWidget::keyPressEvent(QKeyEvent *event) {
-    if (event->key() == Qt::Key_Escape) {
-        m_toolPressed = false;
-        m_regionSelecting = false;
-        m_isInteracting = false;
-        m_isGizmoInteracting = false;
-        m_isTransformGizmoDragging = false;
-        petuniaRequest("tablet_reset");
+void PetuniaGlWidget::finishInterruptedGesture(bool commitPaint) {
+    const bool active = m_isTransformGizmoDragging || (m_toolPressed && !m_regionSelecting);
+    if (active) {
+        PetuniaViewScope scope(m_surfaceId);
+        if (m_isTransformGizmoDragging) {
+            m_overlayState = petuniaRequest("cancel_transform");
+        } else {
+            const bool painting = m_overlayState["workspace"].toString() == QLatin1String("Paint");
+            // Fase 2 confirma (um Undo); fase 3 cancela sem efeito.
+            pointer(painting && commitPaint ? 2 : 3, QPointF(m_lastMousePos), Qt::NoModifier);
+        }
     }
+    m_toolPressed = false;
+    m_regionSelecting = false;
+    m_regionPoints.clear();
+    m_isInteracting = false;
+    m_isGizmoInteracting = false;
+    m_isTransformGizmoDragging = false;
+    petuniaRequest("tablet_reset");
+    if (active) {
+        emit selectionChanged();
+        update();
+    }
+}
+
+// Foco perdido no meio de um gesto (Alt+Tab, popup, F6): o traço de pintura é
+// confirmado (trabalho intencional); gizmo e ferramentas geométricas cancelam,
+// para nada se mover por acidente.
+void PetuniaGlWidget::focusOutEvent(QFocusEvent *event) {
+    QWidget::focusOutEvent(event);
+    finishInterruptedGesture(true);
+}
+
+void PetuniaGlWidget::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Escape)
+        finishInterruptedGesture(false);
     PetuniaViewScope scope(m_surfaceId);
     const auto text = petuniaKeyText(event);
     const auto state = petuniaRequest(
