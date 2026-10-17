@@ -813,9 +813,8 @@ void PetuniaNodeCanvas::nudgeSelected(int dx, int dy) {
         return;
     item->setPos(item->pos() + QPointF(dx, dy));
     updateWires();
-    if (m_domain == Domain::Material)
-        return; // posição da receita é só da sessão (sem dado de documento)
-    m_controller->request(QStringLiteral("graph_move_node"),
+    m_controller->request(m_domain == Domain::Material ? QStringLiteral("material_recipe_move")
+                                                       : QStringLiteral("graph_move_node"),
                           {{"node", m_selected}, {"x", item->pos().x()}, {"y", item->pos().y()}});
 }
 
@@ -1133,11 +1132,8 @@ void PetuniaNodeCanvas::mouseReleaseEvent(QMouseEvent *event) {
     if (m_dragNode) {
         auto *node = m_dragNode;
         m_dragNode = nullptr;
-        if (m_domain == Domain::Material) {
-            event->accept();
-            return;
-        }
-        m_controller->request(QStringLiteral("graph_move_node"),
+        m_controller->request(m_domain == Domain::Material ? QStringLiteral("material_recipe_move")
+                                                           : QStringLiteral("graph_move_node"),
                               {{"node", node->id()}, {"x", node->pos().x()}, {"y", node->pos().y()}});
         event->accept();
         return;

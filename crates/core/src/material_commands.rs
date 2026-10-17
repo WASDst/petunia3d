@@ -410,6 +410,11 @@ pub enum RecipeOp {
     RemoveNode {
         node: Uuid,
     },
+    /// Posição do nó no editor (não reavalia os mapas).
+    MoveNode {
+        node: Uuid,
+        position: [f32; 2],
+    },
     /// Mantém os mapas gerados e descarta a receita (Bake / tornar estático).
     Detach,
 }
@@ -438,12 +443,17 @@ impl Command for MaterialRecipeCmd {
             RecipeOp::Disconnect { .. } => "disconnect recipe nodes",
             RecipeOp::SetParam { .. } => "edit recipe node",
             RecipeOp::RemoveNode { .. } => "remove recipe node",
+            RecipeOp::MoveNode { .. } => "move recipe node",
             RecipeOp::Detach => "bake material recipe",
         }
     }
 
     fn changes(&self) -> ProjectChanges {
-        ProjectChanges::MATERIALS | ProjectChanges::TEXTURES
+        match self.op {
+            // Posição de nó não muda a aparência do material.
+            RecipeOp::MoveNode { .. } => ProjectChanges::NONE,
+            _ => ProjectChanges::MATERIALS | ProjectChanges::TEXTURES,
+        }
     }
 
     fn freezes_active_primitive(&self) -> bool {
@@ -504,6 +514,11 @@ impl Command for MaterialRecipeCmd {
                 } else {
                     Err(CommandError::StaleReference(node.to_string()))
                 }
+            }
+            RecipeOp::MoveNode { node, position } => {
+                let moved = recipe.set_position(*node, *position).map_err(refuse);
+                material.recipe = Some(recipe);
+                return moved;
             }
             RecipeOp::Detach => {
                 // Os mapas já avaliados ficam no material; só a receita sai.
@@ -633,6 +648,42 @@ mod recipe_tests {
         );
         state.redo();
         assert!(material(&state, id).roughness_texture.is_some());
+    }
+
+    #[test]
+    fn moving_a_node_is_undoable_and_does_not_touch_the_maps() {
+        let (mut state, id) = state_with_material();
+        state
+            .dispatch(&MaterialRecipeCmd::new(id, RecipeOp::Create))
+            .unwrap();
+        let node = recipe_node(&state, id, false);
+        let maps = material(&state, id).albedo_texture.clone();
+        state
+            .dispatch(&MaterialRecipeCmd::new(
+                id,
+                RecipeOp::MoveNode {
+                    node,
+                    position: [40.0, 80.0],
+                },
+            ))
+            .unwrap();
+        let recipe = material(&state, id).recipe.as_ref().unwrap();
+        assert_eq!(recipe.positions.get(&node), Some(&[40.0, 80.0]));
+        assert_eq!(material(&state, id).albedo_texture, maps);
+        state.undo();
+        let recipe = material(&state, id).recipe.as_ref().unwrap();
+        assert_eq!(recipe.positions.get(&node), Some(&[0.0, 0.0]));
+        assert!(
+            state
+                .dispatch(&MaterialRecipeCmd::new(
+                    id,
+                    RecipeOp::MoveNode {
+                        node,
+                        position: [f32::INFINITY, 0.0],
+                    },
+                ))
+                .is_err()
+        );
     }
 
     #[test]

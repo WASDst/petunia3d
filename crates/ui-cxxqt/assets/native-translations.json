@@ -4142,5 +4142,13 @@
   "Emission": {
     "pt-BR": "Emissão",
     "en": "Emission"
+  },
+  "Propriedades do objeto": {
+    "pt-BR": "Propriedades do objeto",
+    "en": "Object properties"
+  },
+  "Propriedades de %1": {
+    "pt-BR": "Propriedades de %1",
+    "en": "%1 properties"
   }
 }

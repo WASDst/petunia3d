@@ -452,6 +452,24 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
             h.add("material:param-edit-roundtrips", cell == 8, QString::number(cell));
             auto *iface = QAccessible::queryAccessibleInterface(canvas);
             h.add("material:a11y-lists-recipe-nodes", iface && iface->childCount() == canvas->nodeCount());
+            // Posição do nó vira dado do documento (Ctrl+→ move e persiste).
+            {
+                const QPointF before = canvas->nodeScenePosition(checker);
+                canvas->setFocus();
+                QKeyEvent right(QEvent::KeyPress, Qt::Key_Right, Qt::ControlModifier);
+                QCoreApplication::sendEvent(canvas, &right);
+                settle(2);
+                window.syncNow();
+                double stored = -1e9;
+                for (const auto &value : c->state()["material_recipe"].toObject()["nodes"].toArray())
+                    if (value.toObject()["id"].toString() == checker)
+                        stored = value.toObject()["position"].toArray().at(0).toDouble();
+                h.add("material:node-position-persists", std::abs(stored - (before.x() + 16)) < 0.5,
+                      QStringLiteral("%1 vs %2").arg(stored).arg(before.x() + 16));
+                c->request("undo");
+                settle(2);
+                window.syncNow();
+            }
             canvas->fitAll();
             h.shot(&window, "shell_POLY_material_nodes");
             // Paridade visual: o mapa gerado pela receita chega ao viewport (Material preview).
@@ -530,6 +548,40 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         };
         interrupted(window.workspaceCanvas("PAINT"), "canvas2d");
         interrupted(window.viewport(), "viewport3d");
+        c->request("workspace", {{"id", "POLY"}});
+        settle(6);
+        window.syncNow();
+    }
+
+    // Camada 6 (a11y): todo controle visível alcançável por teclado tem nome acessível.
+    {
+        for (const QString &ws : {QStringLiteral("DRAW"), QStringLiteral("POLY"), QStringLiteral("PAINT"),
+                                  QStringLiteral("UV"), QStringLiteral("ANIMATE")}) {
+            c->request("workspace", {{"id", ws}});
+            settle(6);
+            window.syncNow();
+            settle(4);
+            QStringList offenders;
+            int audited = 0;
+            const auto widgets = window.findChildren<QWidget *>();
+            for (auto *w : widgets) {
+                if (!w->isVisible() || !w->isEnabled() || !(w->focusPolicy() & Qt::TabFocus))
+                    continue;
+                ++audited;
+                auto *iface = QAccessible::queryAccessibleInterface(w);
+                const QString name = iface ? iface->text(QAccessible::Name).trimmed() : QString();
+                if (name.isEmpty()) {
+                    QString path = QString::fromLatin1(w->metaObject()->className());
+                    for (auto *p = w->parentWidget(); p && path.size() < 160; p = p->parentWidget())
+                        path += QStringLiteral(" < ") + QString::fromLatin1(p->metaObject()->className());
+                    offenders << path;
+                }
+            }
+            offenders.removeDuplicates();
+            h.add("a11y:" + ws + ":focusable-controls-have-names", offenders.isEmpty(),
+                  QStringLiteral("%1 sem nome de %2: %3").arg(offenders.size()).arg(audited)
+                      .arg(offenders.mid(0, 12).join(QStringLiteral(" | "))));
+        }
         c->request("workspace", {{"id", "POLY"}});
         settle(6);
         window.syncNow();

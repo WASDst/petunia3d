@@ -30,6 +30,7 @@ void PetuniaPropertiesPanel::buildModeling() {
     m_scroll = new QScrollArea(m_stack);
     m_scroll->setFrameShape(QFrame::NoFrame);
     m_scroll->setWidgetResizable(true);
+    m_scroll->setAccessibleName(tr("Propriedades do objeto"));
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_column = new QWidget(m_scroll);
     m_layout = new QVBoxLayout(m_column);
@@ -114,6 +115,21 @@ void PetuniaPropertiesPanel::setHosted(const QString &workspaceId, QWidget *widg
         tabs->setUsesScrollButtons(true);
         tabs->tabBar()->setUsesScrollButtons(true);
         tabs->setElideMode(Qt::ElideRight);
+        // Contêineres focáveis também precisam de nome (leitor de tela anuncia a região).
+        tabs->setAccessibleName(tr("Propriedades de %1").arg(workspaceId));
+        auto nameScrollAreas = [tabs] {
+            for (int i = 0; i < tabs->count(); ++i) {
+                const auto areas = tabs->widget(i)->findChildren<QScrollArea *>();
+                QList<QScrollArea *> all = areas;
+                if (auto *self = qobject_cast<QScrollArea *>(tabs->widget(i)))
+                    all.prepend(self);
+                for (auto *area : all)
+                    if (area->accessibleName().isEmpty())
+                        area->setAccessibleName(tabs->tabText(i).remove(QLatin1Char('&')));
+            }
+        };
+        nameScrollAreas();
+        connect(tabs, &QTabWidget::currentChanged, tabs, nameScrollAreas);
     }
     m_stack->addWidget(widget);
 }

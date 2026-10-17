@@ -17,6 +17,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "assets" / "native-translations.json"
 
 PT_TO_EN = {
+    "Propriedades do objeto": "Object properties",
+    "Propriedades de %1": "%1 properties",
     "Remover nó": "Remove node",
     "Editar nós do material…": "Edit material nodes…",
     "Abre o editor de nós com a receita de texturas deste material": "Opens the node editor with this material's texture recipe",

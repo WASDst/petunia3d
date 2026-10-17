@@ -190,6 +190,9 @@ pub struct MaterialRecipe {
     /// Canais escritos pela última avaliação (limpos antes da próxima).
     #[serde(default)]
     pub generated: Vec<RecipeOutputChannel>,
+    /// Posição de cada nó no editor (dado de documento; não afeta a avaliação).
+    #[serde(default)]
+    pub positions: std::collections::BTreeMap<Uuid, [f32; 2]>,
     /// Erro da última avaliação, para a GUI (não persistido).
     #[serde(skip)]
     pub last_error: Option<String>,
@@ -214,10 +217,14 @@ impl MaterialRecipe {
             },
         ));
         let _ = graph.connect(image, 0, output, 0);
+        let mut positions = std::collections::BTreeMap::new();
+        positions.insert(image, [0.0, 0.0]);
+        positions.insert(output, [520.0, 0.0]);
         Self {
             graph,
             source,
             generated: Vec::new(),
+            positions,
             last_error: None,
         }
     }
@@ -281,8 +288,22 @@ impl MaterialRecipe {
             return false;
         }
         self.graph.edges.retain(|e| e.from != id && e.to != id);
+        self.positions.remove(&id);
         self.bump();
         true
+    }
+
+    /// Move um nó no editor. Recusa nó inexistente ou coordenada não finita.
+    pub fn set_position(&mut self, id: Uuid, position: [f32; 2]) -> RecipeResult<()> {
+        if !self.graph.nodes.iter().any(|n| n.id == id) {
+            return Err(RecipeError::UnknownNode(id));
+        }
+        if !position.iter().all(|v| v.is_finite()) {
+            return Err(RecipeError::InvalidSocket { edge: 0 });
+        }
+        self.positions
+            .insert(id, position.map(|v| v.clamp(-1.0e6, 1.0e6)));
+        Ok(())
     }
 
     /// Define um parâmetro validado pelo catálogo.
@@ -385,6 +406,12 @@ impl MaterialRecipe {
                 fixes += 1;
             }
         }
+        let alive: std::collections::HashSet<Uuid> =
+            self.graph.nodes.iter().map(|n| n.id).collect();
+        let before = self.positions.len();
+        self.positions
+            .retain(|id, p| alive.contains(id) && p.iter().all(|v| v.is_finite()));
+        fixes += before - self.positions.len();
         self.source.validate();
         fixes
     }
@@ -862,6 +889,20 @@ mod tests {
                 .spec,
         );
         assert!(params.contains(&("cell_size", RecipeParamValue::Int(1))));
+    }
+
+    #[test]
+    fn positions_are_validated_and_follow_node_removal() {
+        let (_, mut recipe) = recipe();
+        let tint = recipe.add_node("tint").unwrap();
+        recipe.set_position(tint, [120.0, -40.0]).unwrap();
+        assert_eq!(recipe.positions.get(&tint), Some(&[120.0, -40.0]));
+        assert!(recipe.set_position(tint, [f32::NAN, 0.0]).is_err());
+        assert!(recipe.set_position(Uuid::new_v4(), [0.0, 0.0]).is_err());
+        recipe.remove_node(tint);
+        assert!(!recipe.positions.contains_key(&tint));
+        recipe.positions.insert(Uuid::new_v4(), [0.0, 0.0]);
+        assert!(recipe.repair() >= 1, "posição órfã removida");
     }
 
     #[test]

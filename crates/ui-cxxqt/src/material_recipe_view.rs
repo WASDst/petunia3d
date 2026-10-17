@@ -80,6 +80,7 @@ pub(crate) fn snapshot(project: &Project, material: Option<Uuid>) -> Value {
                 "known": kind.is_some(),
                 "params": params,
                 "specs": kind.map(|k| k.params.iter().map(spec_json).collect::<Vec<_>>()).unwrap_or_default(),
+                "position": recipe.positions.get(&node.id).copied().unwrap_or([0.0, 0.0]),
                 "inputs": inputs.iter().map(|s| socket_id(*s)).collect::<Vec<_>>(),
                 "outputs": outputs.iter().map(|s| socket_id(*s)).collect::<Vec<_>>(),
             })
@@ -191,6 +192,13 @@ pub(crate) fn command_for(
         },
         "material_recipe_remove" => RecipeOp::RemoveNode {
             node: uuid(request, "node")?,
+        },
+        "material_recipe_move" => RecipeOp::MoveNode {
+            node: uuid(request, "node")?,
+            position: [
+                request["x"].as_f64().ok_or("Número inválido: x")? as f32,
+                request["y"].as_f64().ok_or("Número inválido: y")? as f32,
+            ],
         },
         "material_recipe_bake" => RecipeOp::Detach,
         _ => return Ok(None),
