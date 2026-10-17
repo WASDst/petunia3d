@@ -820,6 +820,10 @@ impl ToolState {
             ActiveToolSessionKind::Pointer
         } else if self.cut_session.is_some() {
             ActiveToolSessionKind::Cut
+        } else if self.uv_transform.is_some() {
+            ActiveToolSessionKind::UvTransform
+        } else if self.paint_stroke.is_some() {
+            ActiveToolSessionKind::PaintStroke
         } else {
             ActiveToolSessionKind::None
         }
@@ -828,6 +832,81 @@ impl ToolState {
     pub fn is_session_active(&self) -> bool {
         self.active_session_kind() != ActiveToolSessionKind::None
     }
+
+    /// Descarta qualquer sessão de ferramenta ativa sem alterar configurações
+    /// persistentes nem histórico de Undo (A06).
+    pub fn cancel_active_session(&mut self) -> bool {
+        let had_session = self.is_session_active();
+        self.modal = None;
+        self.pending_modal = None;
+        self.pointer_session = None;
+        self.cut_session = None;
+        self.uv_transform = None;
+        self.paint_stroke = None;
+        self.mesh_preview = None;
+        had_session
+    }
+
+    /// Captura as configurações persistentes atuais das ferramentas (A06).
+    pub fn settings_snapshot(&self) -> ToolSettingsSnapshot {
+        ToolSettingsSnapshot {
+            extrude_dist: self.extrude_dist,
+            inset_distance: self.inset_distance,
+            inset_mode: self.inset_mode,
+            bevel_amount: self.bevel_amount,
+            bevel_segments: self.bevel_segments,
+            bevel_clamp_overlap: self.bevel_clamp_overlap,
+            paint_color: self.paint_color,
+            paint_radius: self.paint_radius,
+            paint_strength: self.paint_strength,
+            brush_hardness: self.brush_hardness,
+            brush_flow: self.brush_flow,
+            brush_spacing: self.brush_spacing,
+            push_dist: self.push_dist,
+            merge_dist: self.merge_dist,
+            tool_activation: self.tool_activation,
+        }
+    }
+
+    /// Restaura as configurações persistentes das ferramentas (A06).
+    pub fn restore_settings(&mut self, settings: &ToolSettingsSnapshot) {
+        self.extrude_dist = settings.extrude_dist;
+        self.inset_distance = settings.inset_distance;
+        self.inset_mode = settings.inset_mode;
+        self.bevel_amount = settings.bevel_amount;
+        self.bevel_segments = settings.bevel_segments;
+        self.bevel_clamp_overlap = settings.bevel_clamp_overlap;
+        self.paint_color = settings.paint_color;
+        self.paint_radius = settings.paint_radius;
+        self.paint_strength = settings.paint_strength;
+        self.brush_hardness = settings.brush_hardness;
+        self.brush_flow = settings.brush_flow;
+        self.brush_spacing = settings.brush_spacing;
+        self.push_dist = settings.push_dist;
+        self.merge_dist = settings.merge_dist;
+        self.tool_activation = settings.tool_activation;
+    }
+}
+
+/// Instantâneo das configurações persistentes das ferramentas (A06).
+/// Isola parâmetros persistentes de qualquer sessão de ferramenta efêmera.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolSettingsSnapshot {
+    pub extrude_dist: f32,
+    pub inset_distance: f32,
+    pub inset_mode: petunia_mesh::InsetMode,
+    pub bevel_amount: f32,
+    pub bevel_segments: u32,
+    pub bevel_clamp_overlap: bool,
+    pub paint_color: [f32; 3],
+    pub paint_radius: f32,
+    pub paint_strength: f32,
+    pub brush_hardness: f32,
+    pub brush_flow: f32,
+    pub brush_spacing: f32,
+    pub push_dist: f32,
+    pub merge_dist: f32,
+    pub tool_activation: ToolActivation,
 }
 
 /// Ferramenta ativa e seu modo de ativação (website/docs/02-application/state-separation.md).
@@ -854,6 +933,8 @@ pub enum ActiveToolSessionKind {
     Modal,
     Pointer,
     Cut,
+    UvTransform,
+    PaintStroke,
 }
 
 /// Orientação de coordenadas para transformações (P3D-026, SEL-003).
@@ -2422,6 +2503,14 @@ impl AppState {
         crate::command::CommandDispatcher::dispatch(self, cmd)
     }
 
+    /// Despacha um comando devolvendo o relatório DTO pós-commit com invalidações (A04).
+    pub fn dispatch_detailed(
+        &mut self,
+        cmd: &dyn crate::command::Command,
+    ) -> Result<crate::command::CommandExecutionReport, crate::command::CommandError> {
+        crate::command::CommandDispatcher::dispatch_detailed(self, cmd)
+    }
+
     /// Transação atômica (website/docs/13-extensions/lua-plugins-public-api.md,
     /// "Batch atômico"; website/docs/11-project/project-persistence.md, "Uma
     /// operação do usuário → uma transação"): tudo que `body` despachar vira
@@ -2454,6 +2543,38 @@ impl AppState {
             .get(id)
             .ok_or_else(|| crate::command::CommandError::UnknownCommand(id.to_string()))?;
         crate::command::CommandDispatcher::dispatch(self, cmd.as_ref())
+    }
+
+    /// Despacha um comando registrado por id devolvendo o relatório DTO pós-commit (A04).
+    pub fn dispatch_command_detailed(
+        &mut self,
+        id: &str,
+    ) -> Result<crate::command::CommandExecutionReport, crate::command::CommandError> {
+        let cmd = self
+            .commands
+            .get(id)
+            .ok_or_else(|| crate::command::CommandError::UnknownCommand(id.to_string()))?;
+        crate::command::CommandDispatcher::dispatch_detailed(self, cmd.as_ref())
+    }
+
+    /// Há alterações não salvas no projeto? (A única autoridade é o histórico).
+    pub fn is_dirty(&self) -> bool {
+        self.project.is_dirty()
+    }
+
+    /// Descarta a sessão ativa das ferramentas sem alterar histórico (A06).
+    pub fn cancel_active_tool_session(&mut self) -> bool {
+        self.session.tools.cancel_active_session()
+    }
+
+    /// Captura as configurações persistentes das ferramentas (A06).
+    pub fn tool_settings_snapshot(&self) -> ToolSettingsSnapshot {
+        self.session.tools.settings_snapshot()
+    }
+
+    /// Restaura as configurações persistentes das ferramentas (A06).
+    pub fn restore_tool_settings(&mut self, settings: &ToolSettingsSnapshot) {
+        self.session.tools.restore_settings(settings);
     }
 
     /// Carrega um projeto do disco e atualiza a sessão e os projetos recentes.

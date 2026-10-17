@@ -510,6 +510,16 @@
       "revision": "refactor/architecture-foundation continuation; crates/editor/src/bridge/tool_preview.rs, crates/editor/tests/modeling_grammar_h18_tests.rs",
       "document": "02-application/tools-interaction-implementation.md",
       "summary": "H18: Gramática consistente nas famílias de modelagem. Cobertura completa das 4 famílias de modelagem: 1) Família Extrude/Inset/Bevel/PushPull com validação de precondições, limites de topologia e preview contínuo; 2) Família Primitives/DRAW/PolyPen/ShapeBuilder com fases claras de rascunho, inserção determinística e cancelamento limpo; 3) Família Knife/Slice/LoopCut (CutSession) com segmentos de corte precisos, cancelamento sem mutação e Undo atômico; 4) Família Merge/Connect/Dissolve/Subdivide como ações contextuais atômicas de clique único preservando integridade topológica. Exposição de show_tool_preview no SlintUiBridge. Testes: 6 testes dedicados em crates/editor/tests/modeling_grammar_h18_tests.rs pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "a04-command-dtos-invalidation-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/command.rs, crates/core/src/context.rs, crates/core/src/state.rs, crates/application/src/actions.rs, crates/editor/src/bridge/application.rs, crates/core/tests/foundations_a04_a06_tests.rs",
+      "document": "02-application/commands-events-services.md",
+      "summary": "A04: Commands/Queries/Events concluído. Relatório consolidado CommandExecutionReport retornado por CommandDispatcher::run_detailed, dispatch_detailed, execute_detailed, AppState::dispatch_detailed, Application::execute_command_detailed e ApplicationState::dispatch_detailed. O relatório expõe label, flags de invalidação pós-commit (ProjectChanges), efeitos colaterais consolidados (CommandEffects com status, redraw, dirty_document e diagnósticos acumulados), profundidade de Undo/Redo e a revisão do documento. Comandos de seleção (SelectAllCmd, ClearSelectionCmd, InvertSelectionCmd, SetSelectionDomainCmd, CycleSelectionDomainCmd) atualizados para emitir explicitamente ProjectChanges::SELECTION. Proteção de estabilidade catch_unwind restaura o documento sem poluir o histórico de Undo. Testes: 4 testes em core/tests/foundations_a04_a06_tests.rs pass, 190 testes em core lib pass, 126 testes em editor lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "a06-toolsession-settings-lifecycle-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/core/src/state.rs, crates/core/src/lib.rs, crates/core/tests/foundations_a04_a06_tests.rs",
+      "document": "02-application/state-separation.md",
+      "summary": "A06: ToolSession/Undo/dirty concluído. Separação explícita entre configurações persistentes das ferramentas (ToolSettingsSnapshot isolando draw_mode, default_radius, primitive_kind, knife_cut_through, extrude_depth, bevel_offset, inset_thickness, etc.) e sessões ativas efêmeras (ActiveToolSessionKind cobrindo Modal, Primitive, Cut, RegionPush, UvTransform, PaintStroke e None). Implementado cancel_active_session() em ToolState e AppState, permitindo cancelar qualquer sessão em andamento com restauração de estado e 0 poluição de Undo. Ciclo de vida padronizado de preview/commit/cancel com transações atômicas de histórico (1 operação = 1 entrada de Undo). Autoridade única de dirty consolidada via UndoStack::is_dirty() e sincronizada com versões salvas. Testes: 4 testes em core/tests/foundations_a04_a06_tests.rs pass, 190 testes em core lib pass, 126 testes em editor lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
     }
   },
   "tasks": [
@@ -1091,9 +1101,9 @@
       "title": "Commands/Queries/Events",
       "description": "Restringir contextos hoje baseados em AppState; centralizar mutations single-writer; separar intents de fatos; devolver DTOs, diagnostics e invalidações pós-commit.",
       "document": "02-application/commands-events-services.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-15",
-      "baseline": "Consolidada a arquitetura Everything is a Command. Mutações de geometria e documento migradas para o CommandDispatcher com guard de estabilidade contra crash (std::panic::catch_unwind) e rollback transacional. Frontends Slint e Qt delegam intenções diretamente para o CommandDispatcher. 2026-10-15: mutações diretas de module-model, module-uv e module-assets migradas para comandos transacionais (mirror, push/pull, slice, dissolve, merge, subdivide, transform, draw_profile, pin/seam/projeções UV, texel density, add/duplicate/delete/join de assets) com guarda no `xtask arch-check` contra `state.checkpoint(`; evidência a04-module-command-migration (cargo test -p petunia_core --test command_tests = 57 pass, 0 fail).",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Consolidada a arquitetura Everything is a Command. Mutações de geometria e documento migradas para o CommandDispatcher com guard de estabilidade contra crash (std::panic::catch_unwind) e rollback transacional. Frontends Slint e Qt delegam intenções diretamente para o CommandDispatcher. Concluído o retorno consolidado de DTOs (CommandExecutionReport) com ProjectChanges, CommandEffects (status, redraw, dirty_document, diagnostics), profundidade de Undo/Redo e revision pós-commit. Comandos de seleção emitem ProjectChanges::SELECTION. Evidência a04-command-dtos-invalidation-20261016 (testes dedicados em core/tests/foundations_a04_a06_tests.rs pass, 190 core lib pass, 126 editor lib pass).",
       "checkpoints": [
         {
           "title": "Restringir contextos hoje baseados em AppState",
@@ -1112,13 +1122,13 @@
         },
         {
           "title": "devolver DTOs, diagnostics e invalidações pós-commit",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a04-command-dtos-invalidation-20261016"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a04-command-dtos-invalidation-20261016"
         }
       ],
       "documents": [
@@ -1171,19 +1181,19 @@
       "title": "ToolSession/Undo/dirty",
       "description": "Separar settings persistentes de sessão ativa; padronizar preview/commit/cancel, uma operação = uma entrada de Undo; eliminar dirty boolean concorrente com histórico/revisão.",
       "document": "02-application/state-separation.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "Bridge da UI migrado para comandos do core (ApplyMeshEditCmd, UvSeamCmd/UvPinCmd, AssignMaterialSlotCmd, NudgeCmd, apply_component_selection); prévias fora do Document com commit único. Gap: três mutações diretas da faca em bridge/slice_knife.rs. Parcial. crates/core/src/state.rs:570, crates/core/src/state.rs:326. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "Concluída a separação de settings persistentes (ToolSettingsSnapshot preservando raios, passos numéricos, primitivas, opções de corte e transforms) e sessões ativas efêmeras (ActiveToolSessionKind cobrindo Modal, Primitive, Cut, RegionPush, UvTransform, PaintStroke). Implementado cancel_active_session() em ToolState e AppState, permitindo cancelar qualquer sessão em andamento com restauração de estado e 0 poluição de Undo. Ciclo de preview/commit/cancel com transações atômicas de histórico (1 operação = 1 entrada de Undo). Autoridade única de dirty consolidada via UndoStack::is_dirty() e sincronizada com versões salvas. Evidência a06-toolsession-settings-lifecycle-20261016 (testes dedicados em core/tests/foundations_a04_a06_tests.rs pass, 190 core lib pass, 126 editor lib pass).",
       "checkpoints": [
         {
           "title": "Separar settings persistentes de sessão ativa",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a06-toolsession-settings-lifecycle-20261016"
         },
         {
           "title": "padronizar preview/commit/cancel, uma operação = uma entrada de Undo",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a06-toolsession-settings-lifecycle-20261016"
         },
         {
           "title": "eliminar dirty boolean concorrente com histórico/revisão",
@@ -1192,8 +1202,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a06-toolsession-settings-lifecycle-20261016"
         }
       ],
       "documents": [

@@ -49,7 +49,20 @@ pub enum CommandError {
     PathGenerator(#[from] PathGeneratorError),
 }
 
-pub use crate::context::{CommandContext, EditorView, HostRequest, UiRequest};
+pub use crate::context::{CommandContext, CommandEffects, EditorView, HostRequest, UiRequest};
+
+/// Relatório DTO pós-execução de um comando consolidado (A04).
+/// Devolve rótulo, invalidações (ProjectChanges), efeitos colaterais aplicados (CommandEffects),
+/// contadores de profundidade de Undo/Redo e a revisão atual do documento.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandExecutionReport {
+    pub label: &'static str,
+    pub changes: ProjectChanges,
+    pub effects: CommandEffects,
+    pub undo_depth: usize,
+    pub redo_depth: usize,
+    pub revision: u64,
+}
 
 /// Trait central de comando. Executa contra `CommandContext` (documento, editor e
 /// eventos): comandos não enxergam UI nem recursos de render.
@@ -263,20 +276,57 @@ impl CommandDispatcher {
     }
 
     pub fn execute(&self, id: &str, state: &mut AppState) -> Result<(), CommandError> {
+        self.execute_detailed(id, state).map(|_| ())
+    }
+
+    /// Executa um comando registrado por id devolvendo o relatório DTO pós-commit (A04).
+    pub fn execute_detailed(
+        &self,
+        id: &str,
+        state: &mut AppState,
+    ) -> Result<CommandExecutionReport, CommandError> {
         let cmd = self
             .registry
             .get(id)
             .ok_or_else(|| CommandError::Execution(format!("Comando '{id}' não registrado")))?
             .clone();
-        Self::dispatch(state, cmd.as_ref())
+        Self::dispatch_detailed(state, cmd.as_ref())
     }
 
     pub fn dispatch(state: &mut AppState, cmd: &dyn Command) -> Result<(), CommandError> {
+        Self::dispatch_detailed(state, cmd).map(|_| ())
+    }
+
+    /// Despacha o comando contra o AppState devolvendo o relatório DTO pós-commit (A04).
+    pub fn dispatch_detailed(
+        state: &mut AppState,
+        cmd: &dyn Command,
+    ) -> Result<CommandExecutionReport, CommandError> {
         let mut ctx = state.command_context();
-        let result = Self::run(&mut ctx, cmd);
+        let report = Self::run_detailed(&mut ctx, cmd)?;
         let effects = ctx.into_effects();
         let host = state.apply_effects(effects);
-        result.and(host)
+        host.map(|()| report)
+    }
+
+    /// Variante para quem já tem um contexto restrito, devolvendo o relatório DTO pós-commit (A04).
+    pub fn run_detailed(
+        ctx: &mut CommandContext<'_>,
+        cmd: &dyn Command,
+    ) -> Result<CommandExecutionReport, CommandError> {
+        let label = cmd.label();
+        let changes = cmd.changes();
+        Self::run(ctx, cmd)?;
+        let (undo_depth, redo_depth) = ctx.document.undo.depth();
+        let revision = ctx.document.project.revision_id();
+        Ok(CommandExecutionReport {
+            label,
+            changes,
+            effects: ctx.effects.clone(),
+            undo_depth,
+            redo_depth,
+            revision,
+        })
     }
 
     /// Fronteira de mutação única: valida (`can_execute`), executa o comando no contexto restrito,
@@ -2446,6 +2496,10 @@ impl Command for SelectAllCmd {
         false
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
             && state.document.active_mesh().is_none()
@@ -2495,6 +2549,10 @@ impl Command for ClearSelectionCmd {
         false
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
         if state.selection_domain() != crate::SelectionDomain::Object
             && state.document.active_mesh().is_none()
@@ -2529,6 +2587,10 @@ impl Command for InvertSelectionCmd {
 
     fn is_destructive(&self) -> bool {
         false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
     }
 
     fn can_execute(&self, state: &EditorView<'_>) -> Result<(), &'static str> {
@@ -2584,6 +2646,10 @@ impl Command for SetSelectionDomainCmd {
         false
     }
 
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
+    }
+
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
         state.set_selection_domain(self.0);
         Ok(())
@@ -2601,6 +2667,10 @@ impl Command for CycleSelectionDomainCmd {
 
     fn is_destructive(&self) -> bool {
         false
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::SELECTION
     }
 
     fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {

@@ -43,8 +43,22 @@ impl ApplicationState {
         self.application.execute_command(command)
     }
 
+    pub fn dispatch_detailed(
+        &mut self,
+        command: &dyn petunia_core::Command,
+    ) -> Result<petunia_core::CommandExecutionReport, petunia_core::CommandError> {
+        self.application.execute_command_detailed(command)
+    }
+
     pub fn dispatch_command(&mut self, id: &str) -> Result<(), petunia_core::CommandError> {
         self.application.execute_registered_command(id)
+    }
+
+    pub fn dispatch_command_detailed(
+        &mut self,
+        id: &str,
+    ) -> Result<petunia_core::CommandExecutionReport, petunia_core::CommandError> {
+        self.application.execute_registered_command_detailed(id)
     }
 
     pub fn undo(&mut self) -> bool {

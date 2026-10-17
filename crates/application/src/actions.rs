@@ -33,10 +33,27 @@ impl Application {
         self.state.dispatch(command)
     }
 
+    /// Executa um comando tipado devolvendo o relatório DTO com invalidações,
+    /// efeitos aplicados, contadores de histórico e revisão pós-commit (A04).
+    pub fn execute_command_detailed(
+        &mut self,
+        command: &dyn Command,
+    ) -> Result<petunia_core::command::CommandExecutionReport, CommandError> {
+        self.state.dispatch_detailed(command)
+    }
+
     /// Fronteira para comandos registrados; desconhecidos ou indisponíveis
     /// devolvem o erro canônico sem alterar documento nem histórico.
     pub fn execute_registered_command(&mut self, id: &str) -> Result<(), CommandError> {
         self.state.dispatch_command(id)
+    }
+
+    /// Executa um comando registrado por id devolvendo o relatório DTO pós-commit (A04).
+    pub fn execute_registered_command_detailed(
+        &mut self,
+        id: &str,
+    ) -> Result<petunia_core::command::CommandExecutionReport, CommandError> {
+        self.state.dispatch_command_detailed(id)
     }
 
     /// Undo e Redo usam o histórico e as sessões de preview já existentes.

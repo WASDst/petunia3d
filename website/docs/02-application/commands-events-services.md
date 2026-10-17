@@ -23,6 +23,28 @@ Não criaremos múltiplas hierarquias de command antecipadamente. Contextos meno
 
 `ProjectChanges` deve ser reutilizado sempre que possível para comunicar invalidações e mudanças do documento.
 
+### Retorno consolidado pós-commit (CommandExecutionReport)
+
+A fronteira de despacho única (`CommandDispatcher::run_detailed`, `dispatch_detailed`, `execute_detailed`, `Application::execute_command_detailed`, `ApplicationState::dispatch_detailed`) devolve um relatório transacional pós-commit:
+
+```rust
+pub struct CommandExecutionReport {
+    pub label: &'static str,
+    pub changes: ProjectChanges,
+    pub effects: CommandEffects,
+    pub undo_depth: usize,
+    pub redo_depth: usize,
+    pub revision: u64,
+}
+```
+
+Propriedades do contrato:
+- **Invalidações (`changes`):** `ProjectChanges` reporta as áreas afetadas pelo comando (`GEOMETRY`, `SELECTION`, `UVS`, etc.). Comandos de seleção emitem explicitamente `ProjectChanges::SELECTION`.
+- **Efeitos colaterais (`effects`):** `CommandEffects` consolida mensagens de status, requisições de redraw, dirty flag do documento e a lista acumulada de diagnósticos (`Vec<String>`) adicionados via `ctx.add_diagnostic(...)`.
+- **Histórico e revisão:** expõe as profundidades ativas de Undo e Redo e o `revision_id` corrente do documento após o commit.
+- **Envelope de segurança (Never Crash):** comandos em execução são isolados via `std::panic::catch_unwind`. Pânicos inesperados restauram o documento e a seleção para o estado pré-comando sem registrar entrada no Undo e retornam erro legível para a UI.
+
+
 ## Eventos
 
 A fila simples atual será preservada.
