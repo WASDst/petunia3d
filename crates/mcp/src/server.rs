@@ -17,7 +17,7 @@
 //! - **Audit:** a bounded, redacted log (operation, command, outcome — never
 //!   args or paths).
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use petunia_core::{
@@ -37,33 +37,93 @@ pub const MAX_AUDIT_ENTRIES: usize = 256;
 
 /// Authorization policy of an MCP session. Everything that mutates the
 /// Document is denied unless the host enabled authoring explicitly.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct McpPolicy {
+    /// Authoring: mutations through Application commands.
     pub allow_authoring: bool,
+    /// Export: export scene or meshes.
+    pub allow_export: bool,
+    /// Plugins: allow invoking tools provided by approved plugins.
+    pub allow_plugins: bool,
+    /// Stable session identifier.
+    pub session_id: String,
+}
+
+impl Default for McpPolicy {
+    fn default() -> Self {
+        Self::read_only()
+    }
 }
 
 impl McpPolicy {
     /// Read/validate only.
-    pub const fn read_only() -> Self {
+    pub fn read_only() -> Self {
         Self {
             allow_authoring: false,
+            allow_export: true,
+            allow_plugins: false,
+            session_id: uuid::Uuid::new_v4().to_string(),
         }
     }
 
     /// Reads plus undoable authoring through Application commands.
-    pub const fn authoring() -> Self {
+    pub fn authoring() -> Self {
         Self {
             allow_authoring: true,
+            allow_export: true,
+            allow_plugins: true,
+            session_id: uuid::Uuid::new_v4().to_string(),
         }
     }
 
     /// Host-side decision for stdio launches: authoring only when
     /// `PETUNIA_MCP_ALLOW_AUTHORING=1` was set explicitly by the user.
     pub fn from_env() -> Self {
+        let allow_authoring = std::env::var("PETUNIA_MCP_ALLOW_AUTHORING").as_deref() == Ok("1");
+        let allow_export = std::env::var("PETUNIA_MCP_ALLOW_EXPORT").as_deref() != Ok("0");
+        let allow_plugins = std::env::var("PETUNIA_MCP_ALLOW_PLUGINS").as_deref() == Ok("1");
         Self {
-            allow_authoring: std::env::var("PETUNIA_MCP_ALLOW_AUTHORING").as_deref() == Ok("1"),
+            allow_authoring,
+            allow_export,
+            allow_plugins,
+            session_id: uuid::Uuid::new_v4().to_string(),
         }
     }
+
+    pub fn grant_authoring(&mut self) {
+        self.allow_authoring = true;
+    }
+
+    pub fn revoke_authoring(&mut self) {
+        self.allow_authoring = false;
+    }
+
+    pub fn grant_export(&mut self) {
+        self.allow_export = true;
+    }
+
+    pub fn revoke_export(&mut self) {
+        self.allow_export = false;
+    }
+
+    pub fn grant_plugins(&mut self) {
+        self.allow_plugins = true;
+    }
+
+    pub fn revoke_plugins(&mut self) {
+        self.allow_plugins = false;
+    }
+}
+
+/// Status summary of an active MCP session.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct SessionStatusDto {
+    pub session_id: String,
+    pub allow_authoring: bool,
+    pub allow_export: bool,
+    pub allow_plugins: bool,
+    pub revision: u64,
+    pub audit_count: usize,
 }
 
 /// One redacted audit record.
@@ -79,11 +139,21 @@ pub struct AuditEntry {
     pub revision: u64,
 }
 
+/// Registration details of an approved plugin in this MCP session.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct McpPluginRegistration {
+    pub plugin_id: String,
+    pub name: String,
+    pub is_mcp_exposable: bool,
+    pub allowed_commands: Vec<String>,
+}
+
 /// Shared Application session behind the tool boundary.
 struct McpSession {
     state: AppState,
     policy: McpPolicy,
     audit: VecDeque<AuditEntry>,
+    plugins: BTreeMap<String, McpPluginRegistration>,
 }
 
 impl McpSession {
@@ -94,6 +164,7 @@ impl McpSession {
             state,
             policy,
             audit: VecDeque::new(),
+            plugins: BTreeMap::new(),
         }
     }
 
@@ -123,6 +194,30 @@ impl McpSession {
         Err(coded(
             "permission_denied",
             format!("{operation}: authoring is not allowed in this MCP session"),
+        ))
+    }
+
+    /// Fails (and audits) when export is not allowed.
+    fn require_export(&mut self, operation: &str) -> Result<(), McpError> {
+        if self.policy.allow_export {
+            return Ok(());
+        }
+        self.record(operation, None, "permission_denied");
+        Err(coded(
+            "permission_denied",
+            format!("{operation}: export is not allowed in this MCP session"),
+        ))
+    }
+
+    /// Fails (and audits) when plugin tools are not allowed.
+    fn require_plugins(&mut self, operation: &str) -> Result<(), McpError> {
+        if self.policy.allow_plugins {
+            return Ok(());
+        }
+        self.record(operation, None, "permission_denied");
+        Err(coded(
+            "permission_denied",
+            format!("{operation}: plugin tools are not allowed in this MCP session"),
         ))
     }
 
@@ -159,97 +254,123 @@ fn command_error_code(error: &CommandError) -> &'static str {
 }
 
 /// Parameters for [`PetuniaMcp::add_primitive`].
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct AddPrimitiveParams {
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct AddPrimitiveParams {
     /// Primitive kind: `"cube"`, `"plane"`, `"sphere"`, …
-    kind: String,
+    pub kind: String,
     /// Edge size in world units (0.01..=100). Reserved; V1 uses default mesh.
-    size: f64,
+    pub size: f64,
     /// Fail with `revision_mismatch` if the document is not at this revision.
     #[serde(default)]
-    expected_revision: Option<u64>,
+    pub expected_revision: Option<u64>,
 }
 
 /// Parameters for [`PetuniaMcp::export_obj`].
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ExportObjParams {
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct ExportObjParams {
     /// Asset index in scene order (legacy; prefer `id`).
     #[serde(default)]
-    index: Option<usize>,
+    pub index: Option<usize>,
     /// Stable object id (UUID) from `list_assets`.
     #[serde(default)]
-    id: Option<String>,
+    pub id: Option<String>,
 }
 
 /// One command intent (validate, execute or batch item).
-#[derive(Clone, Debug, Deserialize, schemars::JsonSchema)]
-struct IntentParams {
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct IntentParams {
     /// Command id, e.g. `"model.extrude"`.
-    command: String,
+    pub command: String,
     /// Optional target object UUID (for `model.add_primitive`: the kind).
     #[serde(default)]
-    asset_id: Option<String>,
+    pub asset_id: Option<String>,
     /// Numeric args in command-defined order.
     #[serde(default)]
-    args: Vec<f64>,
+    pub args: Vec<f64>,
 }
 
 /// Parameters for [`PetuniaMcp::execute_intent`].
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct ExecuteIntentParams {
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct ExecuteIntentParams {
     #[serde(flatten)]
-    intent: IntentParams,
+    pub intent: IntentParams,
     /// Fail with `revision_mismatch` if the document is not at this revision.
     #[serde(default)]
-    expected_revision: Option<u64>,
+    pub expected_revision: Option<u64>,
 }
 
 /// Parameters for [`PetuniaMcp::execute_batch`].
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct BatchParams {
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct BatchParams {
     /// Commands applied in order as one transaction (max 64).
-    commands: Vec<IntentParams>,
+    pub commands: Vec<IntentParams>,
     /// Fail with `revision_mismatch` if the document is not at this revision.
     #[serde(default)]
-    expected_revision: Option<u64>,
+    pub expected_revision: Option<u64>,
     /// Validate everything without changing the Document.
     #[serde(default)]
-    dry_run: bool,
+    pub dry_run: bool,
 }
 
 /// Validation report returned by [`PetuniaMcp::validate_intent`].
-#[derive(Debug, Serialize, schemars::JsonSchema)]
-struct IntentReport {
+#[derive(Clone, Debug, Serialize, schemars::JsonSchema)]
+pub struct IntentReport {
     /// Whether the intent is well-formed and registered.
-    valid: bool,
+    pub valid: bool,
     /// Stable reason code (`"ok"`, `"bad_shape"`, `"not_allowlisted"`,
     /// `"stale_reference"`).
-    reason: String,
+    pub reason: String,
     /// Document revision after the call.
-    revision: u64,
+    pub revision: u64,
 }
 
 /// Result of [`PetuniaMcp::execute_batch`].
-#[derive(Debug, Serialize, schemars::JsonSchema)]
-struct BatchReport {
+#[derive(Clone, Debug, Serialize, schemars::JsonSchema)]
+pub struct BatchReport {
     /// Commands applied (0 on dry run).
-    applied: usize,
-    dry_run: bool,
+    pub applied: usize,
+    pub dry_run: bool,
     /// Document revision after the call.
-    revision: u64,
+    pub revision: u64,
 }
 
 /// Asset summary DTO returned by scene tools.
-#[derive(Debug, Serialize, schemars::JsonSchema)]
-struct AssetSummaryDto {
+#[derive(Clone, Debug, Serialize, schemars::JsonSchema)]
+pub struct AssetSummaryDto {
     /// Stable object id (UUID).
-    id: String,
+    pub id: String,
     /// Display name.
-    name: String,
+    pub name: String,
     /// Always `"object"` on this boundary.
-    kind: String,
+    pub kind: String,
     /// Visibility flag.
-    visible: bool,
+    pub visible: bool,
+}
+
+/// Parameters for [`PetuniaMcp::execute_plugin_tool`].
+#[derive(Clone, Debug, Deserialize, Serialize, schemars::JsonSchema)]
+pub struct PluginToolParams {
+    /// Target plugin id.
+    pub plugin_id: String,
+    /// Command to execute on behalf of the plugin.
+    pub command: String,
+    /// Optional target asset id.
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    /// Command args.
+    #[serde(default)]
+    pub args: Vec<f64>,
+    /// Fail with `revision_mismatch` if the document is not at this revision.
+    #[serde(default)]
+    pub expected_revision: Option<u64>,
+}
+
+/// Result of [`PetuniaMcp::execute_plugin_tool`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PluginToolReport {
+    pub success: bool,
+    pub reason: String,
+    pub revision: u64,
 }
 
 /// Petunia MCP server. Clone shares the same Application session.
@@ -275,6 +396,44 @@ impl PetuniaMcp {
         Self {
             session: Arc::new(Mutex::new(McpSession::new(policy))),
         }
+    }
+
+    /// Host API: updates the session authorization policy.
+    pub async fn update_policy(&self, policy: McpPolicy) {
+        let mut session = self.session.lock().await;
+        session.policy = policy;
+    }
+
+    /// Host API: retrieves the current policy.
+    pub async fn get_policy(&self) -> McpPolicy {
+        let session = self.session.lock().await;
+        session.policy.clone()
+    }
+
+    /// Host API: registers an approved plugin in this MCP session.
+    pub async fn register_plugin(&self, manifest: &petunia_plugins::PluginManifest) {
+        let mut session = self.session.lock().await;
+        let is_mcp_exposable = manifest
+            .required_capabilities
+            .contains(&petunia_plugins::Capability::McpExposable)
+            || manifest
+                .optional_capabilities
+                .contains(&petunia_plugins::Capability::McpExposable);
+        session.plugins.insert(
+            manifest.plugin_id.clone(),
+            McpPluginRegistration {
+                plugin_id: manifest.plugin_id.clone(),
+                name: manifest.name.clone(),
+                is_mcp_exposable,
+                allowed_commands: manifest.commands.clone(),
+            },
+        );
+    }
+
+    /// Host API: unregisters a plugin from this MCP session.
+    pub async fn unregister_plugin(&self, plugin_id: &str) {
+        let mut session = self.session.lock().await;
+        session.plugins.remove(plugin_id);
     }
 
     fn asset_summaries(state: &AppState) -> Vec<AssetSummaryDto> {
@@ -355,21 +514,21 @@ impl Default for PetuniaMcp {
 impl PetuniaMcp {
     /// Lists scene assets as `{id, name, kind, visible}` DTOs.
     #[tool(description = "List scene assets (id, name, kind, visible).")]
-    async fn list_assets(&self) -> Result<Json<Vec<AssetSummaryDto>>, McpError> {
+    pub async fn list_assets(&self) -> Result<Json<Vec<AssetSummaryDto>>, McpError> {
         let session = self.session.lock().await;
         Ok(Json(Self::asset_summaries(&session.state)))
     }
 
     /// Current document revision (for `expected_revision` preconditions).
     #[tool(description = "Current document revision, used as expected_revision precondition.")]
-    async fn document_revision(&self) -> Result<Json<u64>, McpError> {
+    pub async fn document_revision(&self) -> Result<Json<u64>, McpError> {
         let session = self.session.lock().await;
         Ok(Json(session.revision()))
     }
 
     /// Adds a primitive through the Application command spine.
     #[tool(description = "Add a primitive to the scene (undoable; requires authoring).")]
-    async fn add_primitive(
+    pub async fn add_primitive(
         &self,
         Parameters(params): Parameters<AddPrimitiveParams>,
     ) -> Result<Json<AssetSummaryDto>, McpError> {
@@ -411,7 +570,7 @@ impl PetuniaMcp {
 
     /// Undoes the last Application mutation.
     #[tool(description = "Undo the last scene mutation (requires authoring).")]
-    async fn undo(&self) -> Result<Json<bool>, McpError> {
+    pub async fn undo(&self) -> Result<Json<bool>, McpError> {
         let mut session = self.session.lock().await;
         session.require_authoring("undo")?;
         let undone = session.state.dispatch(&UndoCmd).is_ok();
@@ -425,11 +584,12 @@ impl PetuniaMcp {
 
     /// Exports one asset as OBJ text (bounded by scene content).
     #[tool(description = "Export one scene asset as OBJ text by id (or legacy index).")]
-    async fn export_obj(
+    pub async fn export_obj(
         &self,
         Parameters(params): Parameters<ExportObjParams>,
     ) -> Result<String, McpError> {
-        let session = self.session.lock().await;
+        let mut session = self.session.lock().await;
+        session.require_export("export_obj")?;
         let assets = &session.state.project.assets;
         let asset = match (&params.id, params.index) {
             (Some(id), _) => uuid::Uuid::parse_str(id)
@@ -449,7 +609,7 @@ impl PetuniaMcp {
 
     /// Validates a command intent against the Application registry without executing it.
     #[tool(description = "Validate a command intent (id, target, args) without executing.")]
-    async fn validate_intent(
+    pub async fn validate_intent(
         &self,
         Parameters(params): Parameters<IntentParams>,
     ) -> Result<Json<IntentReport>, McpError> {
@@ -469,7 +629,7 @@ impl PetuniaMcp {
     #[tool(
         description = "Execute a command intent through the Application command spine (requires authoring)."
     )]
-    async fn execute_intent(
+    pub async fn execute_intent(
         &self,
         Parameters(params): Parameters<ExecuteIntentParams>,
     ) -> Result<Json<IntentReport>, McpError> {
@@ -508,7 +668,7 @@ impl PetuniaMcp {
     #[tool(
         description = "Run up to 64 command intents atomically (one Undo entry, all-or-nothing); dry_run validates only."
     )]
-    async fn execute_batch(
+    pub async fn execute_batch(
         &self,
         Parameters(params): Parameters<BatchParams>,
     ) -> Result<Json<BatchReport>, McpError> {
@@ -570,14 +730,14 @@ impl PetuniaMcp {
 
     /// Redacted audit log of this session (newest last).
     #[tool(description = "Redacted audit log of this MCP session (operation, command, outcome).")]
-    async fn audit_log(&self) -> Result<Json<Vec<AuditEntry>>, McpError> {
+    pub async fn audit_log(&self) -> Result<Json<Vec<AuditEntry>>, McpError> {
         let session = self.session.lock().await;
         Ok(Json(session.audit.iter().cloned().collect()))
     }
 
     /// Exposes the scene as query DTOs (mirrors Application Queries shape).
     #[tool(description = "Scene items as query DTOs (name, kind, visible).")]
-    async fn scene_items(&self) -> Result<Json<Vec<SceneItemContract>>, McpError> {
+    pub async fn scene_items(&self) -> Result<Json<Vec<SceneItemContract>>, McpError> {
         let session = self.session.lock().await;
         Ok(Json(
             session
@@ -592,6 +752,93 @@ impl PetuniaMcp {
                 })
                 .collect(),
         ))
+    }
+
+    /// Current session status (session_id, permissions, revision, audit count).
+    #[tool(description = "Get status and capabilities of current MCP session.")]
+    pub async fn session_status(&self) -> Result<Json<SessionStatusDto>, McpError> {
+        let session = self.session.lock().await;
+        Ok(Json(SessionStatusDto {
+            session_id: session.policy.session_id.clone(),
+            allow_authoring: session.policy.allow_authoring,
+            allow_export: session.policy.allow_export,
+            allow_plugins: session.policy.allow_plugins,
+            revision: session.revision(),
+            audit_count: session.audit.len(),
+        }))
+    }
+
+    /// Execute a tool provided by an approved mcp_exposable plugin.
+    #[tool(
+        description = "Execute an approved plugin tool (requires allow_plugins and mcp_exposable)."
+    )]
+    pub async fn execute_plugin_tool(
+        &self,
+        Parameters(params): Parameters<PluginToolParams>,
+    ) -> Result<Json<PluginToolReport>, McpError> {
+        let mut session = self.session.lock().await;
+        session.require_plugins("execute_plugin_tool")?;
+        session.require_revision("execute_plugin_tool", params.expected_revision)?;
+
+        let reg = match session.plugins.get(&params.plugin_id) {
+            Some(r) => r.clone(),
+            None => {
+                session.record("execute_plugin_tool", None, "not_installed");
+                return Err(coded(
+                    "not_installed",
+                    format!(
+                        "plugin '{}' is not registered in this MCP session",
+                        params.plugin_id
+                    ),
+                ));
+            }
+        };
+
+        if !reg.is_mcp_exposable {
+            session.record("execute_plugin_tool", None, "plugin_not_exposable");
+            return Err(coded(
+                "plugin_not_exposable",
+                format!("plugin '{}' is not marked mcp_exposable", params.plugin_id),
+            ));
+        }
+
+        if !reg.allowed_commands.contains(&params.command) {
+            session.record(
+                "execute_plugin_tool",
+                Some(&params.command),
+                "not_allowlisted",
+            );
+            return Err(coded(
+                "not_allowlisted",
+                format!(
+                    "command '{}' is not exposed by plugin '{}'",
+                    params.command, params.plugin_id
+                ),
+            ));
+        }
+
+        session.require_authoring("execute_plugin_tool")?;
+        let cmd_intent = CommandIntent {
+            command: params.command.clone(),
+            asset_id: params.asset_id,
+            args: params.args,
+        };
+
+        match session.state.dispatch_intent(&cmd_intent) {
+            Ok(()) => {
+                session.record("execute_plugin_tool", Some(&params.command), "ok");
+                Ok(Json(PluginToolReport {
+                    success: true,
+                    reason: "ok".to_string(),
+                    revision: session.revision(),
+                }))
+            }
+            Err(err) => {
+                let code = command_error_code(&err);
+                session.record("execute_plugin_tool", Some(&params.command), code);
+                Err(coded(code, err.to_string()))
+            }
+        }
     }
 }
 
@@ -715,8 +962,7 @@ mod tests {
                 id: None,
             }))
             .await
-            .err()
-            .expect("expected an error");
+            .expect_err("expected an error");
         assert_eq!(code(&missing), Some("stale_reference"));
     }
 

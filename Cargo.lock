@@ -1944,6 +1944,7 @@ name = "petunia_mcp"
 version = "0.1.0"
 dependencies = [
  "petunia_core",
+ "petunia_plugins",
  "petunia_project",
  "rmcp",
  "schemars",

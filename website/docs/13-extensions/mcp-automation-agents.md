@@ -86,3 +86,17 @@ Toda decisão é navegável por teclado, com foco explícito, contrastes e leitu
 ## Decisões fechadas
 
 MCP é adaptador semântico da Application; capabilities com deny-by-default; revisões explícitas; mutations undoáveis e auditáveis; confirmação quando risco; sem automação de cliques como regra; sem exec arbitrário; plugins opt-in por capability dupla.
+
+## Matriz de implementação e conformidade (E03)
+
+| Requisito / Invariante                                     | Status    | Evidência / Implementação em Código                                                               |
+|------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------|
+| Deny-by-default & Capabilities por sessão                  | [x] DONE  | `McpPolicy` com flags tipadas, métodos dinâmicos `grant_*`/`revoke_*` e tool `session_status`.     |
+| Precondições de Revisão & Otimismo estrito                 | [x] DONE  | `expected_revision` em mutações (`add_primitive`, `execute_intent`, `execute_batch`); mismatch.   |
+| Prevenção de Stale ObjectIds                               | [x] DONE  | Resolução estrita por Uuid/nome; IDs inexistentes rejeitados com `stale_reference`.                |
+| Batch Atômico, Rollback total & Dry Run                    | [x] DONE  | Tool `execute_batch`: all-or-nothing com transação de 1 único Undo; dry run sem mutações.         |
+| Redacted Audit Log                                         | [x] DONE  | Histórico circular (`audit_log`), sem persistência de args sensíveis ou paths arbitrários.       |
+| Opt-in Duplo de Plugins em MCP                             | [x] DONE  | `Capability::McpExposable` no manifest + `allow_plugins` na sessão; tool `execute_plugin_tool`.   |
+| Concorrência Segura & Single-Writer                        | [x] DONE  | Arquitetura `Arc<RwLock<DesktopHost>>` garantindo atomicidade sem corrida em tarefas Tokio.        |
+| Proteção contra Pânico (Never Crash)                       | [x] DONE  | Propagação total via `rmcp::ErrorData` estruturado com `code` descritivo e zero `unwrap()` em src.|
+
