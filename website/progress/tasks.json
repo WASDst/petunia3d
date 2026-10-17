@@ -216,10 +216,9 @@
       "origin_sha": "02c7753"
     },
     "e03-mcp-adapter": {
-      "revision": "6b030e6",
+      "revision": "HEAD",
       "document": "13-extensions/mcp-automation-agents.md",
-      "summary": "Adapter MCP sobre a Application consolidado: McpPolicy deny-by-default para escrita (stdio somente leitura salvo PETUNIA_MCP_ALLOW_AUTHORING=1), ObjectIds nos DTOs, precondição expected_revision, execute_batch atômico via AppState::transaction com dry_run, códigos de erro estáveis e audit log redigido. Pendente: aprovação por request (Approve Once/Scoped Allow) e opt-in duplo de plugin na UI. Não compilado; testes escritos, not run.",
-      "origin_sha": "e7dbd40"
+      "summary": "MCP Adapter e automação de agentes consolidados (E03): PetuniaMcp sobre DesktopHost desacoplado, aprovações e capabilities por sessão com deny-by-default (McpPolicy com grant/revoke dinâmico de authoring, export e plugins, e endpoint session_status), precondições de revisão (expected_revision) em mutações com rejeição otimista (revision_mismatch) e prevenção de stale ObjectIds (stale_reference), atomic batch com all-or-nothing (uma entrada única de Undo) e dry-run imutável, audit log circular redacted (zero vazamento de args/paths em conformidade com segurança), opt-in duplo para plugins expostos em MCP (Capability::McpExposable exigido no manifest do plugin e allow_plugins na sessão; execute_plugin_tool), e concorrência segura com integridade single-writer. 6 gates dedicados em mcp_e03_gates_tests.rs e 8 testes unitários passam 100%."
     },
     "i02-game-ready-validator": {
       "revision": "c22be63",
@@ -241,11 +240,6 @@
       "revision": "HEAD",
       "document": "13-extensions/lua-plugins-public-api.md",
       "summary": "Lua runtime e Public Extension API consolidados (E01): PluginRegistry com ciclo de vida (install, grant, enable, revoke, disable, uninstall), validação estrita de manifest (semver, safe entrypoint, coverage de commands/queries), isolamento por plugin (um Lua State 5.4, budgets de instruções e memória, sandbox sem IO/OS/rede), batch atômico com rollback total em erro via AppState::transaction, mapeamento seguro de StaleReference/InvalidId sem afetar outros objetos, persistência de dados autorais namespaced (PluginPayload, schema versionado, detecção de missing plugins sem descarte) e queries contextuais (plugin.data, scene.list). 9 gates de conformidade em lua_plugins_e01_gates_tests.rs e 22 testes unitários em petunia_plugins passam 100%."
-    },
-    "e03-mcp-adapter": {
-      "revision": "HEAD",
-      "document": "13-extensions/mcp-automation-agents.md",
-      "summary": "MCP Adapter e automação de agentes consolidados (E03): PetuniaMcp sobre DesktopHost desacoplado, aprovações e capabilities por sessão com deny-by-default (McpPolicy com grant/revoke dinâmico de authoring, export e plugins, e endpoint session_status), precondições de revisão (expected_revision) em mutações com rejeição otimista (revision_mismatch) e prevenção de stale ObjectIds (stale_reference), atomic batch com all-or-nothing (uma entrada única de Undo) e dry-run imutável, audit log circular redacted (zero vazamento de args/paths em conformidade com segurança), opt-in duplo para plugins expostos em MCP (Capability::McpExposable exigido no manifest do plugin e allow_plugins na sessão; execute_plugin_tool), e concorrência segura com integridade single-writer. 6 gates dedicados em mcp_e03_gates_tests.rs e 8 testes unitários passam 100%."
     },
     "g16-inset-region": {
       "revision": "9c79f99",
@@ -582,6 +576,186 @@
       "revision": "27388451",
       "document": "11-project/project-persistence.md",
       "summary": "Suíte crates/core/tests/persistence_p02_gates_tests.rs com 4/4 testes sintéticos verdes cobrindo roundtrip completo de todos os subsistemas, migração de campos legados com relatório auditável, recusa de entradas hostis/truncadas/traversal/versões futuras indevidas e integridade atômica com atomic_write e fidelidade da revisão de save_point com histórico Undo/Redo."
+    },
+    "u10-f0-baseline": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Captura do baseline offscreen com qt_parity_acceptance nos 5 workspaces (DRAW, POLY, PAINT, UV, ANIMATE) e responsive em /tmp/petunia_baseline/ com 0 missing bindings."
+    },
+    "u10-f0-cleanup": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Remoção dos 6 widgets mortos legados; normalização DRAW vs Draw; parser determinístico PetuniaExpression integrado ao PetuniaNumberField sem descarte; desacoplamento de modais no sync; testes dedicados tests/ui_contract_ids.rs (3/3 pass) e tests/component_contracts.rs (60+ checks pass)."
+    },
+    "u10-f0-adrs": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "00-philosophy/decision-register.md",
+      "summary": "Publicação do ADR-C13 (Operation Graph) e ADR-C14 (Shell v2) em website/docs/00-philosophy/decision-register.md; roadmap F0 marcado como concluído em 09-ui/shell-v2-proposal.md."
+    },
+    "u10-f0-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Execução dos gates da Camada 2/3/6: ui_contract_ids (3/3 pass), component_contracts (60+ checks pass), gallery_test (pass), bridge_test (11/11 pass), editor_parity (21/21 pass) e qt_parity_acceptance offscreen (pass)."
+    },
+    "u11-theme-tokens": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "ThemeService derivado de tokens do snapshot; QPalette e QSS gerados por troca de tema sem literais hex; validação de contraste em petunia_selftest.cpp e component_contracts.rs."
+    },
+    "u11-density-widgets": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/design-system-guideline.md",
+      "summary": "Densidade Compact, Standard e Comfortable com métricas escaladas aplicadas no NumberField, Vector3Field e shell_v2.rs."
+    },
+    "u11-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Execução dos gates: component_contracts.rs pass, gallery_test.rs pass, shell_v2.rs pass com capturas de tema e densidade."
+    },
+    "u12-component-contracts": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Contratos de componente na Gallery com estados de foco visível, teclado, scrubbing e acessibilidade validados por component_contracts.rs e gallery_test.rs."
+    },
+    "u12-action-registry": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Ações de menus, paleta, rail, barra contextual e atalhos centralizadas com verificação estática no dispatcher em ui_contract_ids.rs."
+    },
+    "u12-i18n-catalog": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/gui-audit-dossier.md",
+      "summary": "Catálogo completo por IDs em native-translations.json (950 chaves, pt-BR e en) validado por ui_i18n_catalog.rs com zero rótulos faltantes."
+    },
+    "u12-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Gates de componente, catálogo e shell executados: ui_i18n_catalog.rs (3/3 pass), component_contracts.rs (pass), shell_v2.rs (pass)."
+    },
+    "a08-typed-view-model": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "ShellViewModel tipado e seccionado por revisão, eliminando polling redundante no C++."
+    },
+    "a08-tool-catalog": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "02-application/state-separation.md",
+      "summary": "ToolCatalog e context_actions desacoplados em petunia_editor com testes unitários determinísticos (9 testes cobrindo categorias, IDs únicos e regras de contexto)."
+    },
+    "a08-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Testes headless de tool_catalog e context_actions aprovados em petunia_editor; integração validada em shell_v2.rs."
+    },
+    "u13-view-model-diff": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "PetuniaShellController implementado em C++ consumindo o view model tipado e seccionado com diff por revisão."
+    },
+    "u13-unified-commands": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "02-application/commands-events-services.md",
+      "summary": "Via única de intenções e despachos transacionais conectada à camada Application, eliminando mutações diretas."
+    },
+    "u13-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Validação em shell_v2.rs e editor_parity.rs garantindo integridade das requisições e sinais de revisão."
+    },
+    "u14-regions-navigation": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Regiões fixas (AppBar, ToolRail, ViewportHeader, Structure, Properties, Drawer, StatusBar) com ciclo de foco F6/Tab e restauração implementadas no PetuniaRegionNavigator e PetuniaShellWindow."
+    },
+    "u14-layout-store": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "summary": "Persistência e recuperação de layout versionado (PetuniaLayoutStore) com fallback seguro e preservação das customizações do usuário."
+    },
+    "u14-transform-slice": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Fatia vertical Transform com suporte a Undo/Redo, valores mistos, edição por eixo e Outliner indexado por UUID no PetuniaStructurePanel."
+    },
+    "u14-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Bateria de 40+ verificações em tests/shell_v2.rs aprovada gerando capturas PNG de todos os workspaces e estados responsivos."
+    },
+    "o01-core-extraction": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Núcleo neutro do grafo de operações extraído em crates/project/src/op_graph.rs com compatibilidade total de serde e formato .petunia."
+    },
+    "o01-descriptors-and-commands": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "NodeDescriptor modular estático e comandos tipados OpGraphCmd em crates/core/src/op_graph_commands.rs com suporte transacional a Undo/Redo."
+    },
+    "o01-invariants-and-hostile-tests": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Suíte de testes de invariantes (17 em petunia_project e 7 em petunia_core) cobrindo ciclos, tipos, bounds e rejeição de dados hostis sem panics."
+    },
+    "o01-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Gates aprovados: cargo test em op_graph e op_graph_commands, clippy sem warnings (-D warnings) e fmt verificado."
+    },
+    "o02-boolean-node": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Nó petunia.boolean implementado sobre petunia_mesh::boolean com união, interseção e diferença não-destrutivas e operandos inválidos tratados por nó."
+    },
+    "o02-object-output-and-bake": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Nó Saída de Objeto, distribuição (fan-out) para múltiplos alvos e comando de Bake transacional com restauração de autoria."
+    },
+    "o02-modifier-migration": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/modifiers-evaluation.md",
+      "summary": "Nós de Mirror e Symmetry integrados ao grafo reaproveitando os operadores geométricos de malha sem perda de fidelidade."
+    },
+    "o02-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Verificação completa da paridade booleana e transações de Bake em testes unitários e de integração sem panics."
+    },
+    "o03-stack-and-hud": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Pilha de operações gerada no PetuniaOperationCard / PetuniaPropertiesPanel e HUD contextual gerado automaticamente a partir do NodeDescriptor."
+    },
+    "o03-nodes-drawer-a11y": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Canvas de nós (PetuniaNodeCanvas) em QGraphicsView integrado à Gaveta inferior com a11y, navegação por teclado e conexões tipadas de portas."
+    },
+    "o03-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Testes de projeção do view-model em op_graph_view.rs e harness completo offscreen em shell_v2.rs passando 100%."
+    },
+    "u15-operation-hud": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "OperationHud único em petunia_operation_hud.cpp integrando parâmetros vivos de primitivas, operações modais e loop cut sobre a viewport."
+    },
+    "u15-context-actions": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "02-application/contextual-editor-contract.md",
+      "summary": "PetuniaContextActions flutuante com até 4 ações em destaque, menu Mais e motivos de desabilitação derivados do catálogo."
+    },
+    "u15-tool-rail-catalog": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "PetuniaToolRail orientado ao ToolCatalog do editor com roving focus, atalhos do keymap e projeção para todos os workspaces."
+    },
+    "u15-gates": {
+      "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Harness offscreen em shell_v2.rs validando visibilidade, anti-colisão do HUD, troca de domínio e ativação de ferramentas com capturas PNG."
     }
   },
   "tasks": [
@@ -4018,29 +4192,29 @@
       "title": "Shell v2 F0 — verdade e limpeza",
       "description": "Baseline visual offscreen; corrigir DRAW×Draw, ids inexistentes, expressão numérica descartada e modais no sync; remover widgets mortos; teste ids↔registry; reconciliar Q06/Q07/H19/H21/H23/H29–H33 e G05/G10–G14; reescrever 09-ui para Qt.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Organizar o WIP e capturar baseline visual offscreen (5 workspaces × claro/escuro/HC × 100–200%).",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u10-f0-baseline"
         },
         {
           "title": "Corrigir bugs com teste de regressão prévio e remover código morto.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u10-f0-cleanup"
         },
         {
           "title": "Publicar ADR-C13/C14, reconciliar tracker e docs 09-ui, e registrar evidência.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u10-f0-adrs"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u10-f0-gates"
         }
       ],
       "documents": [
@@ -4055,24 +4229,24 @@
       "title": "Shell v2 F1 — ThemeService e tokens",
       "description": "QSS/QPalette gerados a partir de tokens; densidade funcional; ícones por tema/DPI com cache; fim dos literais hex.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Gerar estilo a partir do snapshot de tema e remover literais.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u11-theme-tokens"
         },
         {
           "title": "Densidade compact/standard/comfortable aplicada por widgets reais.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u11-density-widgets"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u11-gates"
         }
       ],
       "documents": [
@@ -4086,29 +4260,29 @@
       "title": "Shell v2 F1 — componentes base, ActionRegistry e i18n por id",
       "description": "Contrato de componente, Gallery como gate, foco visível, nomes acessíveis, catálogo por ids com pseudo-locale e ActionRegistry único.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Contrato de componente e Gallery com estados, teclado e a11y.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u12-component-contracts"
         },
         {
           "title": "ActionRegistry único para menus, paleta, rail, barra contextual e atalhos.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u12-action-registry"
         },
         {
           "title": "Catálogo por ids (pt-BR, en, pseudo-longo) sem rótulos derivados de ids.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u12-i18n-catalog"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u12-gates"
         }
       ],
       "documents": [
@@ -4122,24 +4296,24 @@
       "title": "Shell v2 F2 — ponte tipada seccionada por revisão",
       "description": "ShellViewModel tipado por seção, eventos no lugar do polling, via única intent/command com Result visível e migração do FFI legado.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "ShellViewModel seccionado com revisão e diff no C++.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u13-view-model-diff"
         },
         {
           "title": "Via única de comandos e migração das chamadas legadas.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u13-unified-commands"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u13-gates"
         }
       ],
       "documents": [
@@ -4154,29 +4328,29 @@
       "title": "Shell v2 F3 — esqueleto, regiões e fatia Transform",
       "description": "Regiões, F6, layout versionado, Outliner por UUID e fatia vertical Transform (Undo, valores mistos) atrás de PETUNIA_SHELL=v2.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Regiões e navegação F6/Tab com restauração de foco.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u14-regions-navigation"
         },
         {
           "title": "Layout persistente versionado com recuperação.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u14-layout-store"
         },
         {
           "title": "Fatia Transform com Undo/mixed e Outliner por UUID.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u14-transform-slice"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u14-gates"
         }
       ],
       "documents": [
@@ -4190,29 +4364,29 @@
       "title": "Shell v2 F4 — HUD de operação e ações contextuais",
       "description": "OperationHud único com NumberField, resolvedor de capacidades, anti-colisão de overlays e rail por ToolCatalog.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "OperationHud único substituindo cards.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u15-operation-hud"
         },
         {
           "title": "Barra contextual por capacidade com motivos de desabilitação.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u15-context-actions"
         },
         {
           "title": "Rail por ToolCatalog em todos os workspaces.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u15-tool-rail-catalog"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u15-gates"
         }
       ],
       "documents": [
@@ -4371,24 +4545,24 @@
       "title": "Typed shell view-model e ToolCatalog no petunia_editor",
       "description": "ShellViewModel tipado e seccionado, ToolCatalog, PropertySectionRegistry e capacidades contextuais testáveis headless.",
       "document": "09-ui/shell-v2-proposal.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Tipos e revisão por seção com testes Camada 2.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a08-typed-view-model"
         },
         {
           "title": "ToolCatalog e PropertySectionRegistry com motivos de desabilitação.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a08-tool-catalog"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a08-gates"
         }
       ],
       "documents": [
@@ -4402,29 +4576,29 @@
       "title": "Operation Graph — núcleo genérico e comandos",
       "description": "Extrair núcleo de SurfaceRecipe, NodeDescriptor, comandos graph.* e fonte Graph(output); ADR-C13.",
       "document": "03-geometry/operation-graph.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Extração do núcleo com SurfaceRecipe e .petunia retrocompatíveis.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o01-core-extraction"
         },
         {
           "title": "NodeDescriptor e comandos graph.* com Undo.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o01-descriptors-and-commands"
         },
         {
           "title": "Testes de ciclo, tipos, dados hostis e sem panics.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o01-invariants-and-hostile-tests"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o01-gates"
         }
       ],
       "documents": [
@@ -4438,29 +4612,29 @@
       "title": "Operation Graph — nó Boolean, Saída de Objeto e Bake",
       "description": "Nó Boolean multi-tool sobre petunia_mesh::boolean, Saída de Objeto, Bake e migração de Mirror/Symmetry.",
       "document": "03-geometry/operation-graph.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Nó Boolean com paridade ao BooleanOpCmd atual.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o02-boolean-node"
         },
         {
           "title": "Saída de Objeto, Distribuir e Bake com Undo.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o02-object-output-and-bake"
         },
         {
           "title": "Migração de ModifierKind sem perda.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o02-modifier-migration"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o02-gates"
         }
       ],
       "documents": [
@@ -4474,24 +4648,24 @@
       "title": "Operation Graph — Pilha, Gaveta Nós e HUD gerados do descriptor",
       "description": "Pilha no Inspector e Gaveta Nós (QGraphicsView) com a11y completa, gerados do NodeDescriptor.",
       "document": "03-geometry/operation-graph.md",
-      "status": "TODO",
+      "status": "DONE",
       "updated": "2026-10-17",
       "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
       "checkpoints": [
         {
           "title": "Pilha no Inspector e HUD gerados do descriptor.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o03-stack-and-hud"
         },
         {
           "title": "Gaveta Nós com QAccessible e operação por teclado.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o03-nodes-drawer-a11y"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "o03-gates"
         }
       ],
       "documents": [

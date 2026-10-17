@@ -229,6 +229,16 @@ badge('paint_decal', p('M14 18h8m-2-2 2 2-2 2'), p('M14 17h7l-2-2 1-1 4 4-4 4-1-
 badge('reference_image', p('M14 18h8m-2-2 2 2-2 2'), p('M14 17h7l-2-2 1-1 4 4-4 4-1-1 2-2h-7z'), 'bake_reference', B, 'Bake Reference')
 add('paint_2d', B, 'Paint in 2D', ink(r(3, 3, 18, 18, 1), p('M7 17 16 7m-3 0h3v3M6 18l4-1')), solid(r(3, 3, 18, 18, 1)) + ink(p('M7 17 16 7m-3 0h3v3M6 18l4-1', stroke='#252735')))
 add('paint_3d', B, 'Paint on Model', ink(p(CUBE_EDGE), p('M3 7v10l9 5 9-5V7'), p('M6 16c3-5 7-3 8-5')), solid(p(CUBE)) + ink(p('M6 16c3-5 7-3 8-5', stroke='#252735', stroke_width='2.5')))
+add('paint_pixel', B, 'Pixel Brush', ink(r(8, 8, 8, 8, 1), p('M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5')), solid(r(7, 7, 10, 10, 1)) + detail(p('M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5')))
+add('paint_airbrush', B, 'Airbrush', ink(p('M4 20l7-7 3 3-7 7z'), c(15, 6, .7), c(19, 9, .7), c(18, 4, .7), c(21, 6, .7), c(17, 11, .7)), solid(p('M3 20l8-8 4 4-8 8z'), c(15, 6, 1.1), c(19, 9, 1.1), c(18, 4, 1.1), c(21, 6, 1.1), c(17, 11, 1.1)))
+add('paint_spray', B, 'Spray', ink(r(6, 10, 9, 12, 2), p('M8 10V6h5v4'), c(18, 6, .7), c(21, 9, .7), c(18, 12, .7), c(21, 3, .7)), solid(r(5, 10, 11, 13, 2), p('M8 9V5h5v4'), c(18, 6, 1.1), c(21, 9, 1.1), c(18, 12, 1.1), c(21, 3, 1.1)))
+add('paint_blur', B, 'Blur', ink(p('M12 3c-3 4-6 7-6 11a6 6 0 0 0 12 0c0-4-3-7-6-11z'), p('M8 15h8M9 18h6')), solid(p('M12 2C8 7 5 10 5 14a7 7 0 0 0 14 0c0-4-3-7-7-12z')) + ink(p('M8 15h8M9 18h6', stroke='#252735')))
+add('paint_dodge', B, 'Dodge (Lighten)', ink(c(12, 12, 4), p('M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2')), solid(c(12, 12, 5)) + detail(p('M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2')))
+add('paint_burn', B, 'Burn (Darken)', ink(p('M12 22c-4 0-7-3-7-7 0-3 2-5 3-7 1 2 2 3 3 3 0-4 2-7 4-9 0 4 4 6 4 12 0 4-3 8-7 8z')), solid(p('M12 23c-5 0-8-3-8-8 0-3 2-5 4-8 1 2 2 3 3 3 0-4 2-7 4-9 0 4 5 6 5 12 0 5-3 10-8 10z')))
+add('paint_gradient', B, 'Linear Gradient', ink(r(3, 4, 18, 16, 1), p('M6 4v16M9 4v16M13 4v16M18 4v16')), solid(r(3, 4, 18, 16, 1)) + ink(p('M6 4v16M9 4v16M13 4v16M18 4v16', stroke='#252735')))
+add('paint_gradient_radial', B, 'Radial Gradient', ink(r(3, 4, 18, 16, 1), c(12, 12, 2), c(12, 12, 5.5)), solid(r(3, 4, 18, 16, 1)) + ink(c(12, 12, 2, stroke='#252735'), c(12, 12, 5.5, stroke='#252735')))
+add('paint_path', B, 'Path Paint', ink(p('M4 18C8 8 16 22 20 6'), c(4, 18, 1.8), c(20, 6, 1.8)), solid(p('M3 17c4-10 12 4 16-12l2 1c-4 16-12 2-16 12z'), c(4, 18, 2.4), c(20, 6, 2.4)))
+add('paint_projection', B, 'Projection Paint', ink(r(3, 6, 5, 5, 1), p('M8 7l13-4v18L8 10M3 21h4')), solid(r(2, 5, 7, 7, 1), p('M9 6l13-4v20L9 11z')))
 
 V = 'Viewport & scene'
 add('camera', V, 'Camera', ink(r(2, 6, 13, 12, 2), p('m15 9 7-4v14l-7-4z'), c(8.5, 12, 2)), solid(r(2, 6, 13, 12, 2), p('m15 9 7-4v14l-7-4z')) + detail(c(8.5, 12, 2, stroke='#252735')))

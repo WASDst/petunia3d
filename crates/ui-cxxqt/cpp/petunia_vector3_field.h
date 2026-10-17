@@ -29,6 +29,11 @@ public:
 
     PetuniaNumberField *field(int axis) const;
 
+    /// Nome acessível do vetor; cada eixo recebe "<label> X/Y/Z".
+    void setLabel(const QString &label);
+
+    QSize minimumSizeHint() const override;
+
 signals:
     void axisValueChanged(int axis, double val);
     void editStarted(int axis);
@@ -38,6 +43,7 @@ signals:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void applyThemeColors();

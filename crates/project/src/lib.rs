@@ -87,6 +87,7 @@ pub mod model_library;
 pub mod motion;
 mod motion_gen;
 pub mod object_transform;
+pub mod op_graph;
 pub mod origin;
 pub mod package;
 pub mod paint_layers;
@@ -524,6 +525,10 @@ pub struct Asset {
     pub composition: Option<solid_composition::SolidCompositionRecipe>,
     #[serde(skip)]
     eval_cache: Option<(u64, u64, Mesh)>,
+    /// Resultado das operações do Operation Graph (ADR-C13) para este objeto, com a
+    /// chave de dependência que o gerou. A malha autoral (`mesh`) nunca é alterada.
+    #[serde(skip)]
+    graph_cache: Option<(u64, Mesh)>,
 }
 
 impl Asset {
@@ -564,6 +569,7 @@ impl Asset {
             transform: object_transform::ObjectTransform::IDENTITY,
             composition: None,
             eval_cache: None,
+            graph_cache: None,
         }
     }
 
@@ -705,15 +711,39 @@ impl Asset {
         hash
     }
 
-    /// Há algum modifier habilitado que altere a malha avaliada?
+    /// A malha avaliada difere da autoral? (modifier habilitado **ou** operações do
+    /// Operation Graph ativas). Chamadores usam a malha avaliada quando é `true`.
     pub fn has_enabled_modifiers(&self) -> bool {
-        self.modifiers.iter().any(|modifier| modifier.enabled)
+        self.graph_cache.is_some() || self.modifiers.iter().any(|modifier| modifier.enabled)
+    }
+
+    /// Há resultado de operações do grafo para este objeto?
+    pub fn has_graph_result(&self) -> bool {
+        self.graph_cache.is_some()
+    }
+
+    /// Resultado das operações do grafo (cache), se houver.
+    pub fn graph_mesh(&self) -> Option<&Mesh> {
+        self.graph_cache.as_ref().map(|(_, mesh)| mesh)
+    }
+
+    /// Chave de dependência do resultado em cache (para evitar reavaliar).
+    pub fn graph_cache_key(&self) -> Option<u64> {
+        self.graph_cache.as_ref().map(|(key, _)| *key)
+    }
+
+    /// Instala (ou limpa) o resultado das operações do grafo.
+    pub fn set_graph_cache(&mut self, cache: Option<(u64, Mesh)>) {
+        self.graph_cache = cache;
     }
 
     /// Malha avaliada emprestada quando não há modifiers (caso comum: zero
     /// cópia e zero hash) e calculada quando há. Preferir esta API em caminhos
     /// por frame (render, seleção, picking).
     pub fn evaluated_mesh_ref(&self) -> std::borrow::Cow<'_, Mesh> {
+        if let Some((_, graph)) = &self.graph_cache {
+            return std::borrow::Cow::Borrowed(graph);
+        }
         if !self.has_enabled_modifiers() {
             return std::borrow::Cow::Borrowed(&self.mesh);
         }
@@ -796,7 +826,16 @@ impl Asset {
     /// Render, preview e export usam este resultado; edição continua operando
     /// sobre `mesh`, preservando a natureza não destrutiva da pilha.
     pub fn evaluated_mesh(&self) -> Mesh {
-        if !self.has_enabled_modifiers() {
+        if let Some((_, graph)) = &self.graph_cache {
+            return graph.clone();
+        }
+        self.modifier_evaluated_mesh()
+    }
+
+    /// Malha após **só** a pilha de modifiers legados (ponto de partida das
+    /// operações do grafo); ignora o cache do Operation Graph.
+    pub fn modifier_evaluated_mesh(&self) -> Mesh {
+        if !self.modifiers.iter().any(|modifier| modifier.enabled) {
             return self.mesh.to_owned_value();
         }
         let key = (self.source_mesh_hash(), self.modifier_hash());
@@ -826,6 +865,9 @@ impl Asset {
 
     /// Cache-aware evaluation. Callers with `&mut Asset` reuse the last result.
     pub fn evaluated_mesh_cached(&mut self) -> &Mesh {
+        if let Some((_, graph)) = &self.graph_cache {
+            return graph;
+        }
         let key = (self.source_mesh_hash(), self.modifier_hash());
         let miss = self
             .eval_cache
@@ -1286,6 +1328,13 @@ pub struct Project {
     /// Camadas de movimento, mesclagem e tweaks manuais (P3D-170, Fatia 4). Append-only.
     #[serde(default)]
     pub motion_layers: Vec<MotionLayer>,
+    /// Operation Graph (ADR-C13): operações persistentes e re-editáveis como nós.
+    /// Append-only; `document.json` usa `serde(default)`, arquivos antigos carregam vazio.
+    #[serde(default)]
+    pub op_graph: op_graph::OpGraph,
+    /// Último erro por nó do grafo (derivado; nunca serializado).
+    #[serde(skip)]
+    pub op_graph_errors: std::collections::BTreeMap<Uuid, String>,
 }
 
 impl Project {
@@ -1312,6 +1361,46 @@ impl Project {
         changed
     }
 
+    /// Reavalia as operações do Operation Graph cujo resultado está desatualizado e
+    /// limpa o cache dos objetos sem operações. Barato quando nada mudou (só hashes).
+    /// Devolve os ids de objetos cujo resultado foi recalculado.
+    pub fn refresh_op_graph(&mut self) -> Vec<Uuid> {
+        let targets = self.op_graph.targets();
+        let mut recomputed = Vec::new();
+        for asset in &mut self.assets {
+            if !targets.contains(&asset.id) && asset.has_graph_result() {
+                asset.set_graph_cache(None);
+                recomputed.push(asset.id);
+            }
+        }
+        let alive: std::collections::HashSet<Uuid> =
+            self.op_graph.nodes.iter().map(|node| node.id).collect();
+        self.op_graph_errors.retain(|id, _| alive.contains(id));
+        for target in targets {
+            let key = self.op_graph.dependency_key(&self.assets, target);
+            let current = self
+                .assets
+                .iter()
+                .find(|asset| asset.id == target)
+                .and_then(Asset::graph_cache_key);
+            if current == Some(key) {
+                continue;
+            }
+            let evaluation = self.op_graph.evaluate_asset(&self.assets, target);
+            for operation in self.op_graph.operations_on(target) {
+                self.op_graph_errors.remove(&operation.id);
+            }
+            for (node, message) in evaluation.errors {
+                self.op_graph_errors.insert(node, message);
+            }
+            if let Some(asset) = self.assets.iter_mut().find(|asset| asset.id == target) {
+                asset.set_graph_cache(evaluation.mesh.map(|mesh| (key, mesh)));
+                recomputed.push(target);
+            }
+        }
+        recomputed
+    }
+
     /// Primeira luz habilitada da cena, se houver.
     pub fn active_light(&self) -> Option<&Light> {
         self.lights.iter().find(|light| light.enabled)
@@ -1335,6 +1424,8 @@ impl Default for Project {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -1914,6 +2005,8 @@ impl Project {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
             references: Vec::new(),
             active: 0,
             history_selection: Vec::new(),
@@ -2562,6 +2655,25 @@ impl Project {
     /// Normaliza projeto vindo de arquivo (M2/M3): malhas válidas,
     /// no mínimo 1 asset, `active` dentro dos limites e materiais íntegros (P3D-050).
     pub fn validate(&mut self) {
+        // Operation Graph vindo de arquivo é entrada hostil: inválido = descartado
+        // (a malha autoral dos objetos nunca depende dele).
+        if self.op_graph.validate().is_err() {
+            self.op_graph = Default::default();
+        }
+        let asset_ids: std::collections::HashSet<Uuid> =
+            self.assets.iter().map(|asset| asset.id).collect();
+        let stale: Vec<Uuid> = self
+            .op_graph
+            .nodes
+            .iter()
+            .filter_map(|node| match node.params.get("asset") {
+                Some(op_graph::ParamValue::Asset(id)) if !asset_ids.contains(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        for id in stale {
+            self.op_graph.forget_asset(id);
+        }
         // Migra a lista legada de Smooth para o objeto e a esvazia (uma só autoridade).
         for legacy_id in std::mem::take(&mut self.smooth_shaded_assets) {
             if let Some(asset) = self.assets.iter_mut().find(|asset| asset.id == legacy_id) {

@@ -77,6 +77,7 @@ class PetuniaMainWindow : public QMainWindow {
     void applyPreferences(const QJsonObject &);
     void updateToolRail(const QString &, const QJsonObject &);
     QString m_toolRailMode;
+    bool m_hostDialogPending{false};
     bool confirmDiscard();
     QList<PetuniaEditorPanel *> m_editorPanels;
     QJsonObject m_editorState;
@@ -112,10 +113,6 @@ private:
     QDockWidget *m_paintDock{nullptr};
     QDockWidget *m_uvDock{nullptr};
 
-    class PetuniaPaintPanel *m_paintPanel{nullptr};
-    class PetuniaUvPanel *m_uvPanel{nullptr};
-    class PetuniaTimelineWidget *m_timelineWidget{nullptr};
-    class PetuniaAssetLibraryWidget *m_assetLibraryWidget{nullptr};
     class PetuniaPrimitiveCard *m_primitiveCard{nullptr};
     class PetuniaLoopCutCard *m_loopCutCard{nullptr};
     class PetuniaToolOptionsBar *m_toolOptionsBar{nullptr};

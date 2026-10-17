@@ -31,6 +31,13 @@ class PetuniaGlWidget : public QWidget {
         update();
     }
     bool isSnapEnabled() const { return m_snapEnabled; }
+    /// Shell v2: o cromo da vista (rótulo da vista, pílula de sombreamento) vive no
+    /// cabeçalho do shell e o estado vem do controlador (sem snapshot por quadro).
+    void setShellChrome(bool enabled) { m_shellChrome = enabled; }
+    void setExternalState(const QJsonObject &state) {
+        m_externalState = state;
+        m_hasExternalState = true;
+    }
     void setZoomSensitivity(float s) { m_zoomSensitivity = qBound(0.1f, s, 5.0f); }
     float zoomSensitivity() const { return m_zoomSensitivity; }
 
@@ -82,8 +89,12 @@ class PetuniaGlWidget : public QWidget {
 
     void cleanupGl();
     QJsonObject pointer(int phase, const QPointF &, Qt::KeyboardModifiers);
+    void refreshOverlayState();
     uint64_t m_surfaceId{1};
     QJsonObject m_overlayState;
+    QJsonObject m_externalState;
+    bool m_hasExternalState{false};
+    bool m_shellChrome{false};
     QPointF m_pressPoint;
     QPolygonF m_regionPoints;
     bool m_toolPressed{false}, m_regionSelecting{false}, m_lasso{false};

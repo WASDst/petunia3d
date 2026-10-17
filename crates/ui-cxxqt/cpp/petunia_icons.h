@@ -9,6 +9,8 @@
 #include <QStringList>
 #include <QSvgRenderer>
 
+#include "petunia_theme.h"
+
 namespace PetuniaIcons {
 
 inline QHash<QString, QIcon> &iconCache() {
@@ -20,7 +22,17 @@ inline void clearCache() {
     iconCache().clear();
 }
 
-inline QIcon get(const QString &name, const QString &colorHex = QStringLiteral("#eeeeee")) {
+/// Ícone do conjunto `petunia-outline` (embutido em `:/icons/<id>.svg`).
+/// Sem `colorHex`, usa os tokens do tema (texto normal e texto atenuado para o
+/// modo Disabled); o cache é invalidado quando o tema muda.
+inline QIcon get(const QString &name, const QString &colorHexArg = QString()) {
+    static const bool connected = [] {
+        QObject::connect(&PetuniaTheme::instance(), &PetuniaTheme::changed, [] { iconCache().clear(); });
+        return true;
+    }();
+    (void)connected;
+    const auto &theme = PetuniaTheme::instance();
+    const QString colorHex = colorHexArg.isEmpty() ? theme.textPrimary().name() : colorHexArg;
     const QString cacheKey = name + QLatin1Char(':') + colorHex;
     auto &cache = iconCache();
     auto it = cache.constFind(cacheKey);
@@ -66,17 +78,26 @@ inline QIcon get(const QString &name, const QString &colorHex = QStringLiteral("
     QIcon result;
     QFile file(foundPath);
     if (file.open(QIODevice::ReadOnly)) {
-        QByteArray svgData = file.readAll();
-        svgData.replace("currentColor", colorHex.toUtf8());
-        QSvgRenderer renderer(svgData);
-        if (renderer.isValid()) {
+        const QByteArray source = file.readAll();
+        auto render = [&](const QString &color) {
+            QByteArray svgData = source;
+            svgData.replace("currentColor", color.toUtf8());
+            QSvgRenderer renderer(svgData);
             QPixmap pix(64, 64);
             pix.fill(Qt::transparent);
-            QPainter painter(&pix);
-            painter.setRenderHint(QPainter::Antialiasing);
-            painter.setRenderHint(QPainter::SmoothPixmapTransform);
-            renderer.render(&painter);
-            result = QIcon(pix);
+            if (renderer.isValid()) {
+                QPainter painter(&pix);
+                painter.setRenderHint(QPainter::Antialiasing);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform);
+                renderer.render(&painter);
+            }
+            return pix;
+        };
+        const QPixmap normal = render(colorHex);
+        if (!normal.isNull()) {
+            result.addPixmap(normal, QIcon::Normal);
+            result.addPixmap(normal, QIcon::Active);
+            result.addPixmap(render(theme.textMuted().name()), QIcon::Disabled);
         }
     }
 

@@ -180,6 +180,60 @@ impl QtEditor {
         if let Some(r) = &self.controller.pending_recovery {
             v["recovery"] = json!({"name":r.project_name,"path":r.snapshot_path.display().to_string(),"newer":r.is_newer_than_main});
         }
+        // Atalhos efetivos (keymap do usuário) por ação: menus e tooltips derivam
+        // daqui, nunca de texto fixo no widget (rebind propaga).
+        v["shortcut_map"] = Value::Object(
+            self.state
+                .ui
+                .keybinds
+                .all_bindings()
+                .into_iter()
+                .map(|(action, shortcut)| (action, Value::String(shortcut)))
+                .collect(),
+        );
+        // Catálogo único do rail (A08): a GUI projeta, nunca mantém listas.
+        v["tool_catalog"] = json!(
+            petunia_editor::tool_catalog::tools_for(
+                self.state.workspace,
+                self.controller.modeling_mode
+            )
+            .iter()
+            .map(|tool| json!({
+                "id": tool.id,
+                "label": tool.label,
+                "icon": tool.icon,
+                "group": tool.group.id(),
+                "kind": tool.kind.id(),
+                "shortcut": tool
+                    .keymap_action
+                    .and_then(|action| self.state.ui.keybinds.format_shortcut(action)),
+            }))
+            .collect::<Vec<_>>()
+        );
+        v["op_graph"] = crate::op_graph_view::snapshot(
+            &self.state.project.project,
+            self.state.project.active().map(|asset| asset.id),
+        );
+        v["context_actions"] = json!(
+            petunia_editor::context_actions::context_actions(
+                self.state.workspace,
+                self.controller.modeling_mode,
+                self.state.selection_domain()
+            )
+            .iter()
+            .map(|action| json!({
+                "id": action.id,
+                "label": action.label,
+                "icon": action.icon,
+                "kind": action.kind.id(),
+                "target": action.target,
+                "primary": action.primary,
+                "shortcut": action
+                    .keymap_action
+                    .and_then(|name| self.state.ui.keybinds.format_shortcut(name)),
+            }))
+            .collect::<Vec<_>>()
+        );
         v["primitive_parameters"] = json!(match vm.primitive_kind.as_str() {
             "box" | "cube" => vec!["width", "height", "depth"],
             "plane" => vec!["width", "height"],
@@ -447,6 +501,15 @@ impl QtEditor {
             "command" => {
                 self.execute_registered_command(string(request, "id")?)
                     .map_err(|e| e.to_string())?;
+                return Ok(true);
+            }
+            action if action.starts_with("graph_") => {
+                let active = self.state.project.active().map(|asset| asset.id);
+                let selected: Vec<uuid::Uuid> = self.state.session.selection.assets.clone();
+                let command =
+                    crate::op_graph_view::command_for(action, request, active, &selected)?
+                        .ok_or_else(|| format!("Ação desconhecida: {action}"))?;
+                self.execute_command(&command).map_err(|e| e.to_string())?;
                 return Ok(true);
             }
             _ => {}
@@ -862,6 +925,16 @@ impl QtEditor {
                 return Ok(true);
             }
             _ => {}
+        }
+        if action == "workspace" {
+            // DRAW e POLY são presets do mesmo workspace: o editor é dono do
+            // modo, então a troca de workspace nunca depende de um segundo
+            // request da UI para publicar `modeling_mode` coerente.
+            match string(request, "id")? {
+                "DRAW" => b.apply(UiIntent::SetModelingMode(ModelingMode::Draw)),
+                "POLY" => b.apply(UiIntent::SetModelingMode(ModelingMode::Poly)),
+                _ => {}
+            }
         }
         let intent = match action {
             "workspace" => UiIntent::SetWorkspace(match string(request, "id")? {

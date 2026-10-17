@@ -127,6 +127,8 @@ impl LegacyProjectWithSplines {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
             references: Vec::new(),
         }
     }
@@ -203,6 +205,8 @@ impl LegacyProjectBeforeSplines {
             prefab_links: Vec::new(),
             plugin_data: Default::default(),
             motion_layers: Vec::new(),
+            op_graph: Default::default(),
+            op_graph_errors: Default::default(),
             references: Vec::new(),
         }
     }
@@ -833,6 +837,7 @@ mod tests {
                 surface_shading: Default::default(),
                 transform: Default::default(),
                 eval_cache: None,
+                graph_cache: None,
                 parametric: None,
                 selection_overlay_color: None,
                 position: [0.0, 0.0, 0.0],

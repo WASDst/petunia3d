@@ -2806,5 +2806,997 @@
   "ASSETS · editor controls": {
     "pt-BR": "ASSETS · controles do editor",
     "en": "ASSETS · editor controls"
+  },
+  "%1 ativa(s)": {
+    "pt-BR": "%1 ativa(s)",
+    "en": "%1 active"
+  },
+  "&Ferramentas": {
+    "pt-BR": "&Ferramentas",
+    "en": "&Tools"
+  },
+  "&Objeto": {
+    "pt-BR": "&Objeto",
+    "en": "&Object"
+  },
+  "&Seleção": {
+    "pt-BR": "&Seleção",
+    "en": "&Selection"
+  },
+  "A&juda": {
+    "pt-BR": "A&juda",
+    "en": "&Help"
+  },
+  "Abas da gaveta": {
+    "pt-BR": "Abas da gaveta",
+    "en": "Drawer tabs"
+  },
+  "Abrir a gaveta": {
+    "pt-BR": "Abrir a gaveta",
+    "en": "Open the drawer"
+  },
+  "Abrir projeto Petunia3D": {
+    "pt-BR": "Abrir projeto Petunia3D",
+    "en": "Open Petunia3D project"
+  },
+  "Abrir…": {
+    "pt-BR": "Abrir…",
+    "en": "Open…"
+  },
+  "Adicionar operação ao objeto": {
+    "pt-BR": "Adicionar operação ao objeto",
+    "en": "Add operation to the object"
+  },
+  "Afetar vértices": {
+    "pt-BR": "Afetar vértices",
+    "en": "Affect vertices"
+  },
+  "Alinhar e distribuir": {
+    "pt-BR": "Alinhar e distribuir",
+    "en": "Align and distribute"
+  },
+  "Alternar visibilidade\tH": {
+    "pt-BR": "Alternar visibilidade\tH",
+    "en": "Toggle visibility\tH"
+  },
+  "Aparar o corte": {
+    "pt-BR": "Aparar o corte",
+    "en": "Trim the cut"
+  },
+  "Aplicar à malha (destrutivo)": {
+    "pt-BR": "Aplicar à malha (destrutivo)",
+    "en": "Apply to mesh (destructive)"
+  },
+  "Aresta": {
+    "pt-BR": "Aresta",
+    "en": "Edge"
+  },
+  "Assets": {
+    "pt-BR": "Assets",
+    "en": "Assets"
+  },
+  "Ativar ou desativar a operação": {
+    "pt-BR": "Ativar ou desativar a operação",
+    "en": "Enable or disable the operation"
+  },
+  "Ativar snap": {
+    "pt-BR": "Ativar snap",
+    "en": "Enable snapping"
+  },
+  "Automático": {
+    "pt-BR": "Automático",
+    "en": "Automatic"
+  },
+  "Ações da seleção": {
+    "pt-BR": "Ações da seleção",
+    "en": "Selection actions"
+  },
+  "Barra do aplicativo": {
+    "pt-BR": "Barra do aplicativo",
+    "en": "Application bar"
+  },
+  "Biblioteca de assets…": {
+    "pt-BR": "Biblioteca de assets…",
+    "en": "Asset library…"
+  },
+  "Bloqueado — clique para liberar": {
+    "pt-BR": "Bloqueado — clique para liberar",
+    "en": "Locked — click to unlock"
+  },
+  "Bloquear / desbloquear\tL": {
+    "pt-BR": "Bloquear / desbloquear\tL",
+    "en": "Lock / unlock\tL"
+  },
+  "Booleana (direta)": {
+    "pt-BR": "Booleana (direta)",
+    "en": "Boolean (direct)"
+  },
+  "Caixa delimitadora": {
+    "pt-BR": "Caixa delimitadora",
+    "en": "Bounding box"
+  },
+  "Cancelar": {
+    "pt-BR": "Cancelar",
+    "en": "Cancel"
+  },
+  "Cena vazia": {
+    "pt-BR": "Cena vazia",
+    "en": "Empty scene"
+  },
+  "Chão": {
+    "pt-BR": "Chão",
+    "en": "Ground"
+  },
+  "Confirmar": {
+    "pt-BR": "Confirmar",
+    "en": "Confirm"
+  },
+  "Controles da vista": {
+    "pt-BR": "Controles da vista",
+    "en": "View controls"
+  },
+  "Cor base do material": {
+    "pt-BR": "Cor base do material",
+    "en": "Material base color"
+  },
+  "Cor base…": {
+    "pt-BR": "Cor base…",
+    "en": "Base color…"
+  },
+  "Cor de seleção": {
+    "pt-BR": "Cor de seleção",
+    "en": "Selection color"
+  },
+  "Cor de seleção da parte…": {
+    "pt-BR": "Cor de seleção da parte…",
+    "en": "Part selection color…"
+  },
+  "Corte": {
+    "pt-BR": "Corte",
+    "en": "Cut"
+  },
+  "Criar primitiva": {
+    "pt-BR": "Criar primitiva",
+    "en": "Create primitive"
+  },
+  "Câmera": {
+    "pt-BR": "Câmera",
+    "en": "Camera"
+  },
+  "Câmera e navegação": {
+    "pt-BR": "Câmera e navegação",
+    "en": "Camera and navigation"
+  },
+  "Deslizamento": {
+    "pt-BR": "Deslizamento",
+    "en": "Slide"
+  },
+  "Distribuir": {
+    "pt-BR": "Distribuir",
+    "en": "Distribute"
+  },
+  "Distribuir em X": {
+    "pt-BR": "Distribuir em X",
+    "en": "Distribute along X"
+  },
+  "Distribuir em Y": {
+    "pt-BR": "Distribuir em Y",
+    "en": "Distribute along Y"
+  },
+  "Distribuir em Z": {
+    "pt-BR": "Distribuir em Z",
+    "en": "Distribute along Z"
+  },
+  "Dividir": {
+    "pt-BR": "Dividir",
+    "en": "Split"
+  },
+  "Dividir a vista 3D": {
+    "pt-BR": "Dividir a vista 3D",
+    "en": "Split the 3D view"
+  },
+  "Domínio de seleção": {
+    "pt-BR": "Domínio de seleção",
+    "en": "Selection domain"
+  },
+  "Duplicar\tCtrl+D": {
+    "pt-BR": "Duplicar\tCtrl+D",
+    "en": "Duplicate\tCtrl+D"
+  },
+  "E&xibir": {
+    "pt-BR": "E&xibir",
+    "en": "&View"
+  },
+  "Eixo X": {
+    "pt-BR": "Eixo X",
+    "en": "X axis"
+  },
+  "Eixo Y": {
+    "pt-BR": "Eixo Y",
+    "en": "Y axis"
+  },
+  "Eixo Z": {
+    "pt-BR": "Eixo Z",
+    "en": "Z axis"
+  },
+  "Eixo de simetria": {
+    "pt-BR": "Eixo de simetria",
+    "en": "Symmetry axis"
+  },
+  "Emissivo": {
+    "pt-BR": "Emissivo",
+    "en": "Emissive"
+  },
+  "Estatísticas da cena": {
+    "pt-BR": "Estatísticas da cena",
+    "en": "Scene statistics"
+  },
+  "Estrutura e propriedades": {
+    "pt-BR": "Estrutura e propriedades",
+    "en": "Structure and properties"
+  },
+  "Estrutura: partes da cena": {
+    "pt-BR": "Estrutura: partes da cena",
+    "en": "Structure: scene parts"
+  },
+  "Excluir\tDel": {
+    "pt-BR": "Excluir\tDel",
+    "en": "Delete\tDel"
+  },
+  "Exibição": {
+    "pt-BR": "Exibição",
+    "en": "Display"
+  },
+  "Expandida": {
+    "pt-BR": "Expandida",
+    "en": "Expanded"
+  },
+  "Expandir %1": {
+    "pt-BR": "Expandir %1",
+    "en": "Expand %1"
+  },
+  "Exportar": {
+    "pt-BR": "Exportar",
+    "en": "Export"
+  },
+  "Exportar Wavefront OBJ": {
+    "pt-BR": "Exportar Wavefront OBJ",
+    "en": "Export Wavefront OBJ"
+  },
+  "Exportar glTF binário": {
+    "pt-BR": "Exportar glTF binário",
+    "en": "Export binary glTF"
+  },
+  "Face": {
+    "pt-BR": "Face",
+    "en": "Face"
+  },
+  "Ferramenta ativa": {
+    "pt-BR": "Ferramenta ativa",
+    "en": "Active tool"
+  },
+  "Gaveta inferior": {
+    "pt-BR": "Gaveta inferior",
+    "en": "Bottom drawer"
+  },
+  "Geometria": {
+    "pt-BR": "Geometria",
+    "en": "Geometry"
+  },
+  "Importar SVG…": {
+    "pt-BR": "Importar SVG…",
+    "en": "Import SVG…"
+  },
+  "Inverter seleção": {
+    "pt-BR": "Inverter seleção",
+    "en": "Invert selection"
+  },
+  "Início…": {
+    "pt-BR": "Início…",
+    "en": "Start…"
+  },
+  "Isolar\tShift+H": {
+    "pt-BR": "Isolar\tShift+H",
+    "en": "Isolate\tShift+H"
+  },
+  "Limitar sobreposição": {
+    "pt-BR": "Limitar sobreposição",
+    "en": "Limit overlap"
+  },
+  "Limpar seleção": {
+    "pt-BR": "Limpar seleção",
+    "en": "Clear selection"
+  },
+  "Limpar topologia": {
+    "pt-BR": "Limpar topologia",
+    "en": "Clean up topology"
+  },
+  "Linha do tempo": {
+    "pt-BR": "Linha do tempo",
+    "en": "Timeline"
+  },
+  "Livre — clique para bloquear": {
+    "pt-BR": "Livre — clique para bloquear",
+    "en": "Unlocked — click to lock"
+  },
+  "Loop cut": {
+    "pt-BR": "Loop cut",
+    "en": "Loop cut"
+  },
+  "Mais": {
+    "pt-BR": "Mais",
+    "en": "More"
+  },
+  "Mais ações": {
+    "pt-BR": "Mais ações",
+    "en": "More actions"
+  },
+  "Mensagem de estado": {
+    "pt-BR": "Mensagem de estado",
+    "en": "Status message"
+  },
+  "Menus": {
+    "pt-BR": "Menus",
+    "en": "Menus"
+  },
+  "Mirror (espelhar)": {
+    "pt-BR": "Mirror (espelhar)",
+    "en": "Mirror"
+  },
+  "Modo de exibição": {
+    "pt-BR": "Modo de exibição",
+    "en": "Display mode"
+  },
+  "Mostrar nomes das ferramentas": {
+    "pt-BR": "Mostrar nomes das ferramentas",
+    "en": "Show tool names"
+  },
+  "Mostrar só partes selecionadas": {
+    "pt-BR": "Mostrar só partes selecionadas",
+    "en": "Show selected parts only"
+  },
+  "Mover para baixo": {
+    "pt-BR": "Mover para baixo",
+    "en": "Move down"
+  },
+  "Mover para cima": {
+    "pt-BR": "Mover para cima",
+    "en": "Move up"
+  },
+  "Nenhum objeto na cena. Crie uma primitiva para começar a modelar.": {
+    "pt-BR": "Nenhum objeto na cena. Crie uma primitiva para começar a modelar.",
+    "en": "No objects in the scene. Create a primitive to start modeling."
+  },
+  "Nenhum objeto selecionado": {
+    "pt-BR": "Nenhum objeto selecionado",
+    "en": "No object selected"
+  },
+  "Nenhuma operação. Use “+” para adicionar Mirror ou Symmetry ao objeto selecionado.": {
+    "pt-BR": "Nenhuma operação. Use “+” para adicionar Mirror ou Symmetry ao objeto selecionado.",
+    "en": "No operations. Use “+” to add Mirror or Symmetry to the selected object."
+  },
+  "Nenhuma primitiva disponível": {
+    "pt-BR": "Nenhuma primitiva disponível",
+    "en": "No primitives available"
+  },
+  "Nova cena vazia": {
+    "pt-BR": "Nova cena vazia",
+    "en": "New empty scene"
+  },
+  "Novo projeto": {
+    "pt-BR": "Novo projeto",
+    "en": "New project"
+  },
+  "Objeto": {
+    "pt-BR": "Objeto",
+    "en": "Object"
+  },
+  "Oculto": {
+    "pt-BR": "Oculto",
+    "en": "Hidden"
+  },
+  "Oculto — clique para exibir": {
+    "pt-BR": "Oculto — clique para exibir",
+    "en": "Hidden — click to show"
+  },
+  "Opaco": {
+    "pt-BR": "Opaco",
+    "en": "Opaque"
+  },
+  "Operações": {
+    "pt-BR": "Operações",
+    "en": "Operations"
+  },
+  "Ordenar por nome (A–Z)": {
+    "pt-BR": "Ordenar por nome (A–Z)",
+    "en": "Sort by name (A–Z)"
+  },
+  "Origem do pivô": {
+    "pt-BR": "Origem do pivô",
+    "en": "Pivot origin"
+  },
+  "Origens individuais": {
+    "pt-BR": "Origens individuais",
+    "en": "Individual origins"
+  },
+  "Orto": {
+    "pt-BR": "Orto",
+    "en": "Ortho"
+  },
+  "Overlays": {
+    "pt-BR": "Overlays",
+    "en": "Overlays"
+  },
+  "Overlays da vista": {
+    "pt-BR": "Overlays da vista",
+    "en": "View overlays"
+  },
+  "PBR": {
+    "pt-BR": "PBR",
+    "en": "PBR"
+  },
+  "Paleta de comandos": {
+    "pt-BR": "Paleta de comandos",
+    "en": "Command palette"
+  },
+  "Paleta de comandos…": {
+    "pt-BR": "Paleta de comandos…",
+    "en": "Command palette…"
+  },
+  "Parte da cena": {
+    "pt-BR": "Parte da cena",
+    "en": "Scene part"
+  },
+  "Parâmetros da operação": {
+    "pt-BR": "Parâmetros da operação",
+    "en": "Operation parameters"
+  },
+  "Perfil e volume": {
+    "pt-BR": "Perfil e volume",
+    "en": "Profile and volume"
+  },
+  "Persp.": {
+    "pt-BR": "Persp.",
+    "en": "Persp."
+  },
+  "Petunia3D — modelagem 3D acessível e de baixo consumo.\nInterface Qt Widgets (Shell v2).": {
+    "pt-BR": "Petunia3D — modelagem 3D acessível e de baixo consumo.\nInterface Qt Widgets (Shell v2).",
+    "en": "Petunia3D — accessible, low-footprint 3D modeling.\nQt Widgets interface (Shell v2)."
+  },
+  "Plano de trabalho": {
+    "pt-BR": "Plano de trabalho",
+    "en": "Work plane"
+  },
+  "Ponto médio": {
+    "pt-BR": "Ponto médio",
+    "en": "Median point"
+  },
+  "Preferências…": {
+    "pt-BR": "Preferências…",
+    "en": "Preferences…"
+  },
+  "Projeto": {
+    "pt-BR": "Projeto",
+    "en": "Project"
+  },
+  "Projeto ainda não salvo": {
+    "pt-BR": "Projeto ainda não salvo",
+    "en": "Project not saved yet"
+  },
+  "Projetos Petunia (*.petunia *.json);;Todos os arquivos (*)": {
+    "pt-BR": "Projetos Petunia (*.petunia *.json);;Todos os arquivos (*)",
+    "en": "Petunia projects (*.petunia *.json);;All files (*)"
+  },
+  "Projetos Petunia (*.petunia);;Todos os arquivos (*)": {
+    "pt-BR": "Projetos Petunia (*.petunia);;Todos os arquivos (*)",
+    "en": "Petunia projects (*.petunia);;All files (*)"
+  },
+  "Projeção em perspectiva": {
+    "pt-BR": "Projeção em perspectiva",
+    "en": "Perspective projection"
+  },
+  "Projeção ortográfica": {
+    "pt-BR": "Projeção ortográfica",
+    "en": "Orthographic projection"
+  },
+  "Proporcional": {
+    "pt-BR": "Proporcional",
+    "en": "Proportional"
+  },
+  "Propriedades": {
+    "pt-BR": "Propriedades",
+    "en": "Properties"
+  },
+  "Recolher %1": {
+    "pt-BR": "Recolher %1",
+    "en": "Collapse %1"
+  },
+  "Recolher a gaveta": {
+    "pt-BR": "Recolher a gaveta",
+    "en": "Collapse the drawer"
+  },
+  "Recolhida": {
+    "pt-BR": "Recolhida",
+    "en": "Collapsed"
+  },
+  "Recorte": {
+    "pt-BR": "Recorte",
+    "en": "Cutout"
+  },
+  "Recuperar sessão…": {
+    "pt-BR": "Recuperar sessão…",
+    "en": "Recover session…"
+  },
+  "Redefinir a origem na geometria": {
+    "pt-BR": "Redefinir a origem na geometria",
+    "en": "Reset the origin to the geometry"
+  },
+  "Referências…": {
+    "pt-BR": "Referências…",
+    "en": "References…"
+  },
+  "Remover operação": {
+    "pt-BR": "Remover operação",
+    "en": "Remove operation"
+  },
+  "Renomear\tF2": {
+    "pt-BR": "Renomear\tF2",
+    "en": "Rename\tF2"
+  },
+  "Restaurar layout deste workspace": {
+    "pt-BR": "Restaurar layout deste workspace",
+    "en": "Reset this workspace layout"
+  },
+  "Restaurar todos os layouts": {
+    "pt-BR": "Restaurar todos os layouts",
+    "en": "Reset all layouts"
+  },
+  "SVG (*.svg)": {
+    "pt-BR": "SVG (*.svg)",
+    "en": "SVG (*.svg)"
+  },
+  "Salvar": {
+    "pt-BR": "Salvar",
+    "en": "Save"
+  },
+  "Salvar como…": {
+    "pt-BR": "Salvar como…",
+    "en": "Save as…"
+  },
+  "Salvar projeto Petunia3D": {
+    "pt-BR": "Salvar projeto Petunia3D",
+    "en": "Save Petunia3D project"
+  },
+  "Salvo": {
+    "pt-BR": "Salvo",
+    "en": "Saved"
+  },
+  "Selecionar cor na roda de cores": {
+    "pt-BR": "Selecionar cor na roda de cores",
+    "en": "Pick a color on the color wheel"
+  },
+  "Selecionar tudo": {
+    "pt-BR": "Selecionar tudo",
+    "en": "Select all"
+  },
+  "Selecione um objeto para editar suas propriedades.": {
+    "pt-BR": "Selecione um objeto para editar suas propriedades.",
+    "en": "Select an object to edit its properties."
+  },
+  "Seleção": {
+    "pt-BR": "Seleção",
+    "en": "Selection"
+  },
+  "Sem luz": {
+    "pt-BR": "Sem luz",
+    "en": "Unlit"
+  },
+  "Sem título": {
+    "pt-BR": "Sem título",
+    "en": "Untitled"
+  },
+  "Separar seleção em nova parte": {
+    "pt-BR": "Separar seleção em nova parte",
+    "en": "Separate selection into a new part"
+  },
+  "Snap": {
+    "pt-BR": "Snap",
+    "en": "Snap"
+  },
+  "Sobre o Petunia3D": {
+    "pt-BR": "Sobre o Petunia3D",
+    "en": "About Petunia3D"
+  },
+  "Sombreamento": {
+    "pt-BR": "Sombreamento",
+    "en": "Shading"
+  },
+  "Sombreamento da superfície": {
+    "pt-BR": "Sombreamento da superfície",
+    "en": "Surface shading"
+  },
+  "Sombreamento plano": {
+    "pt-BR": "Sombreamento plano",
+    "en": "Flat shading"
+  },
+  "Sombreamento suave": {
+    "pt-BR": "Sombreamento suave",
+    "en": "Smooth shading"
+  },
+  "Suave": {
+    "pt-BR": "Suave",
+    "en": "Smooth"
+  },
+  "Symmetry (simetrizar)": {
+    "pt-BR": "Symmetry (simetrizar)",
+    "en": "Symmetry"
+  },
+  "Toon": {
+    "pt-BR": "Toon",
+    "en": "Toon"
+  },
+  "Usar a cor de seleção global": {
+    "pt-BR": "Usar a cor de seleção global",
+    "en": "Use the global selection color"
+  },
+  "Vidro": {
+    "pt-BR": "Vidro",
+    "en": "Glass"
+  },
+  "Vista 3D": {
+    "pt-BR": "Vista 3D",
+    "en": "3D view"
+  },
+  "Vista 3D secundária": {
+    "pt-BR": "Vista 3D secundária",
+    "en": "Secondary 3D view"
+  },
+  "Visível — clique para ocultar": {
+    "pt-BR": "Visível — clique para ocultar",
+    "en": "Visible — click to hide"
+  },
+  "Vértice": {
+    "pt-BR": "Vértice",
+    "en": "Vertex"
+  },
+  "Wavefront OBJ (*.obj);;Todos os arquivos (*)": {
+    "pt-BR": "Wavefront OBJ (*.obj);;Todos os arquivos (*)",
+    "en": "Wavefront OBJ (*.obj);;All files (*)"
+  },
+  "Wavefront OBJ (.obj)…": {
+    "pt-BR": "Wavefront OBJ (.obj)…",
+    "en": "Wavefront OBJ (.obj)…"
+  },
+  "Workspace ANIMATE — animação": {
+    "pt-BR": "Workspace ANIMATE — animação",
+    "en": "ANIMATE workspace — animation"
+  },
+  "Workspace DRAW — desenho de formas": {
+    "pt-BR": "Workspace DRAW — desenho de formas",
+    "en": "DRAW workspace — shape drawing"
+  },
+  "Workspace PAINT — pintura": {
+    "pt-BR": "Workspace PAINT — pintura",
+    "en": "PAINT workspace — painting"
+  },
+  "Workspace POLY — modelagem poligonal": {
+    "pt-BR": "Workspace POLY — modelagem poligonal",
+    "en": "POLY workspace — polygon modeling"
+  },
+  "Workspace UV — mapeamento": {
+    "pt-BR": "Workspace UV — mapeamento",
+    "en": "UV workspace — mapping"
+  },
+  "Workspaces": {
+    "pt-BR": "Workspaces",
+    "en": "Workspaces"
+  },
+  "glTF binário (*.glb)": {
+    "pt-BR": "glTF binário (*.glb)",
+    "en": "Binary glTF (*.glb)"
+  },
+  "glTF binário (.glb)…": {
+    "pt-BR": "glTF binário (.glb)…",
+    "en": "Binary glTF (.glb)…"
+  },
+  "Lasso select": {
+    "pt-BR": "Seleção por laço",
+    "en": "Lasso select"
+  },
+  "Create primitive": {
+    "pt-BR": "Criar primitiva",
+    "en": "Create primitive"
+  },
+  "Poly pen": {
+    "pt-BR": "Poly pen",
+    "en": "Poly pen"
+  },
+  "Extrude": {
+    "pt-BR": "Extrudar",
+    "en": "Extrude"
+  },
+  "Inset": {
+    "pt-BR": "Inset",
+    "en": "Inset"
+  },
+  "Bevel": {
+    "pt-BR": "Chanfro",
+    "en": "Bevel"
+  },
+  "Push/Pull": {
+    "pt-BR": "Push/Pull",
+    "en": "Push/Pull"
+  },
+  "Knife": {
+    "pt-BR": "Faca",
+    "en": "Knife"
+  },
+  "Slice": {
+    "pt-BR": "Fatiar",
+    "en": "Slice"
+  },
+  "Draw profile": {
+    "pt-BR": "Desenhar perfil",
+    "en": "Draw profile"
+  },
+  "Shape builder": {
+    "pt-BR": "Shape builder",
+    "en": "Shape builder"
+  },
+  "3D cursor": {
+    "pt-BR": "Cursor 3D",
+    "en": "3D cursor"
+  },
+  "Pixel": {
+    "pt-BR": "Pixel",
+    "en": "Pixel"
+  },
+  "Path paint": {
+    "pt-BR": "Pintura por caminho",
+    "en": "Path paint"
+  },
+  "Separate": {
+    "pt-BR": "Separar",
+    "en": "Separate"
+  },
+  "Shade smooth": {
+    "pt-BR": "Sombreamento suave",
+    "en": "Shade smooth"
+  },
+  "Shade flat": {
+    "pt-BR": "Sombreamento plano",
+    "en": "Shade flat"
+  },
+  "Merge": {
+    "pt-BR": "Fundir",
+    "en": "Merge"
+  },
+  "Connect": {
+    "pt-BR": "Conectar",
+    "en": "Connect"
+  },
+  "Make face": {
+    "pt-BR": "Criar face",
+    "en": "Make face"
+  },
+  "Dissolve": {
+    "pt-BR": "Dissolver",
+    "en": "Dissolve"
+  },
+  "Subdivide": {
+    "pt-BR": "Subdividir",
+    "en": "Subdivide"
+  },
+  "Flip normals": {
+    "pt-BR": "Inverter normais",
+    "en": "Flip normals"
+  },
+  "Unite": {
+    "pt-BR": "Unir formas",
+    "en": "Unite"
+  },
+  "Subtract": {
+    "pt-BR": "Subtrair",
+    "en": "Subtract"
+  },
+  "Intersect": {
+    "pt-BR": "Interseção",
+    "en": "Intersect"
+  },
+  "Exclude": {
+    "pt-BR": "Excluir sobreposição",
+    "en": "Exclude"
+  },
+  "Unwrap": {
+    "pt-BR": "Desdobrar UV",
+    "en": "Unwrap"
+  },
+  "Pack islands": {
+    "pt-BR": "Empacotar ilhas",
+    "en": "Pack islands"
+  },
+  "Relax": {
+    "pt-BR": "Relaxar",
+    "en": "Relax"
+  },
+  "Stitch": {
+    "pt-BR": "Costurar",
+    "en": "Stitch"
+  },
+  "Project from view": {
+    "pt-BR": "Projetar da vista",
+    "en": "Project from view"
+  },
+  "Planar projection": {
+    "pt-BR": "Projeção planar",
+    "en": "Planar projection"
+  },
+  "Cube projection": {
+    "pt-BR": "Projeção em cubo",
+    "en": "Cube projection"
+  },
+  "Split island": {
+    "pt-BR": "Dividir ilha",
+    "en": "Split island"
+  },
+  "Facetado": {
+    "pt-BR": "Facetado",
+    "en": "Faceted"
+  },
+  "Grava o resultado das operações na malha do objeto (Make Editable)": {
+    "pt-BR": "Grava o resultado das operações na malha do objeto (Make Editable)",
+    "en": "Writes the result of the operations into the object's mesh (Make Editable)"
+  },
+  "Modificadores (legado)": {
+    "pt-BR": "Modificadores (legado)",
+    "en": "Modifiers (legacy)"
+  },
+  "Nenhuma operação. Use “+” para adicionar uma booleana, Mirror ou Symmetry.": {
+    "pt-BR": "Nenhuma operação. Use “+” para adicionar uma booleana, Mirror ou Symmetry.",
+    "en": "No operations. Use “+” to add a boolean, Mirror or Symmetry."
+  },
+  "Tornar editável (aplicar à malha)": {
+    "pt-BR": "Tornar editável (aplicar à malha)",
+    "en": "Make editable (apply to mesh)"
+  },
+  "Usado como ferramenta": {
+    "pt-BR": "Usado como ferramenta",
+    "en": "Used as a tool"
+  },
+  "Aplicar em %1": {
+    "pt-BR": "Aplicar em %1",
+    "en": "Apply to %1"
+  },
+  "Aplicar em:": {
+    "pt-BR": "Aplicar em:",
+    "en": "Apply to:"
+  },
+  "Desligar a operação deste objeto": {
+    "pt-BR": "Desligar a operação deste objeto",
+    "en": "Detach the operation from this object"
+  },
+  "Ferramenta: %1": {
+    "pt-BR": "Ferramenta: %1",
+    "en": "Tool: %1"
+  },
+  "Nenhum outro objeto na cena.": {
+    "pt-BR": "Nenhum outro objeto na cena.",
+    "en": "No other object in the scene."
+  },
+  "Booleana (este objeto é a ferramenta)": {
+    "pt-BR": "Booleana (este objeto é a ferramenta)",
+    "en": "Boolean (this object is the tool)"
+  },
+  "Union": {
+    "pt-BR": "União",
+    "en": "Union"
+  },
+  "Difference": {
+    "pt-BR": "Diferença",
+    "en": "Difference"
+  },
+  "Intersection": {
+    "pt-BR": "Interseção",
+    "en": "Intersection"
+  },
+  "Operation": {
+    "pt-BR": "Operação",
+    "en": "Operation"
+  },
+  "Weld distance": {
+    "pt-BR": "Distância de solda",
+    "en": "Weld distance"
+  },
+  "Clean up topology": {
+    "pt-BR": "Limpar topologia",
+    "en": "Clean up topology"
+  },
+  "Positive to negative": {
+    "pt-BR": "Positivo para negativo",
+    "en": "Positive to negative"
+  },
+  "Boolean": {
+    "pt-BR": "Booleana",
+    "en": "Boolean"
+  },
+  "Mirror": {
+    "pt-BR": "Espelhar",
+    "en": "Mirror"
+  },
+  "Symmetry": {
+    "pt-BR": "Simetria",
+    "en": "Symmetry"
+  },
+  "Object": {
+    "pt-BR": "Objeto",
+    "en": "Object"
+  },
+  "Operations": {
+    "pt-BR": "Operações",
+    "en": "Operations"
+  },
+  "Geometry": {
+    "pt-BR": "Geometria",
+    "en": "Geometry"
+  },
+  " Desativada.": {
+    "pt-BR": " Desativada.",
+    "en": " Disabled."
+  },
+  " Erro: %1": {
+    "pt-BR": " Erro: %1",
+    "en": " Error: %1"
+  },
+  ". Aplicada em: %1.": {
+    "pt-BR": ". Aplicada em: %1.",
+    "en": ". Applied to: %1."
+  },
+  ". Operações: %1.": {
+    "pt-BR": ". Operações: %1.",
+    "en": ". Operations: %1."
+  },
+  ". Saída sem destino.": {
+    "pt-BR": ". Saída sem destino.",
+    "en": ". Unconnected output."
+  },
+  ". Sem operações aplicadas.": {
+    "pt-BR": ". Sem operações aplicadas.",
+    "en": ". No applied operations."
+  },
+  "Adicionar operação": {
+    "pt-BR": "Adicionar operação",
+    "en": "Add operation"
+  },
+  "Aplicar em": {
+    "pt-BR": "Aplicar em",
+    "en": "Apply to"
+  },
+  "Aplicar em…": {
+    "pt-BR": "Aplicar em…",
+    "en": "Apply to…"
+  },
+  "Booleana (objeto ativo é a ferramenta)": {
+    "pt-BR": "Booleana (objeto ativo é a ferramenta)",
+    "en": "Boolean (active object is tool)"
+  },
+  "Editor de nós": {
+    "pt-BR": "Editor de nós",
+    "en": "Node editor"
+  },
+  "Nenhum nó. Shift+A adiciona uma operação ao objeto ativo.": {
+    "pt-BR": "Nenhum nó. Shift+A adiciona uma operação ao objeto ativo.",
+    "en": "No nodes. Shift+A adds an operation to the active object."
+  },
+  "Nenhum objeto disponível": {
+    "pt-BR": "Nenhum objeto disponível",
+    "en": "No objects available"
+  },
+  "Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona": {
+    "pt-BR": "Nós: setas navegam, Enter aplica em…, Delete remove, Ctrl+setas movem, Shift+A adiciona",
+    "en": "Nodes: arrows navigate, Enter applies to…, Delete removes, Ctrl+arrows move, Shift+A adds"
+  },
+  "Nós": {
+    "pt-BR": "Nós",
+    "en": "Nodes"
   }
 }

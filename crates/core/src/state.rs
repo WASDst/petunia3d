@@ -3154,6 +3154,12 @@ impl CommandContext<'_> {
             return;
         }
         self.document.project.bump_changes(changes);
+        // Operation Graph: reavalia só os objetos cujas dependências mudaram (hash).
+        if changes
+            .intersects(ProjectChanges::GEOMETRY | ProjectChanges::UVS | ProjectChanges::TRANSFORMS)
+        {
+            self.document.project.refresh_op_graph();
+        }
         // Objetos com modifiers: a malha avaliada fica em cache para que
         // render, picking e hover a emprestem sem reavaliar nem clonar.
         if changes

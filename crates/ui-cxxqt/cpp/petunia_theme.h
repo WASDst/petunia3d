@@ -3,81 +3,55 @@
 #include <QColor>
 #include <QJsonObject>
 #include <QObject>
+#include <QPalette>
 #include <QString>
 
-/// Canonical C++ theme tokens provider synchronized with petunia_config snapshots.
-class PetuniaTheme {
+/// Fonte única de tokens visuais da GUI Qt (newdocs UI-001 §5, UI-002/011).
+///
+/// Os valores de cor vêm do snapshot `petunia_config` (nenhuma paleta paralela
+/// no C++). Aqui moram as métricas derivadas da densidade e da escala de UI, a
+/// paleta Qt e a folha de estilo global — gerada **uma vez por troca de tema**,
+/// nunca por evento. Widgets pintam e estilizam a partir destes tokens; literais
+/// hex em widgets são proibidos (teste `ui_theme_tokens`).
+class PetuniaTheme : public QObject {
+    Q_OBJECT
+
 public:
-    enum class Density {
-        Compact,
-        Standard,
-        Comfortable
-    };
+    enum class Density { Compact, Standard, Comfortable };
+    /// Papéis tipográficos (px lógicos, já escalados por densidade e ui_scale).
+    enum class TextRole { Caption, Body, Title, Mono };
 
-    static PetuniaTheme &instance() {
-        static PetuniaTheme theme;
-        return theme;
-    }
+    static PetuniaTheme &instance();
 
-    void updateFromSnapshot(const QJsonObject &themeColors, const QString &themeId = QStringLiteral("petunia-dark")) {
-        m_themeId = themeId;
-        auto parse = [&](const QString &key, const QString &def) -> QColor {
-            QString val = themeColors.value(key).toString();
-            return val.isEmpty() ? QColor(def) : QColor(val);
-        };
+    /// Atualiza as cores. Emite `changed()` somente se algum token mudou.
+    void updateFromSnapshot(const QJsonObject &themeColors,
+                            const QString &themeId = QStringLiteral("petunia-dark"));
+    void setDensity(Density density);
+    void setUiScale(double scale);
+    void setReducedMotion(bool reduced);
 
-        m_bgCanvas = parse(QStringLiteral("bg_canvas"), QStringLiteral("#121212"));
-        m_bgHeader = parse(QStringLiteral("bg_header"), QStringLiteral("#191919"));
-        m_bgPanel = parse(QStringLiteral("bg_panel"), QStringLiteral("#202020"));
-        m_bgPanelHeader = parse(QStringLiteral("bg_panel_header"), QStringLiteral("#252525"));
-        m_bgSurface = parse(QStringLiteral("bg_surface"), QStringLiteral("#292929"));
-        m_bgSurfaceHover = parse(QStringLiteral("bg_surface_hover"), QStringLiteral("#353535"));
-        m_bgSurfaceActive = parse(QStringLiteral("bg_surface_active"), QStringLiteral("#404040"));
-
-        m_textPrimary = parse(QStringLiteral("text_primary"), QStringLiteral("#eeeeee"));
-        m_textSecondary = parse(QStringLiteral("text_secondary"), QStringLiteral("#b5b5b5"));
-        m_textMuted = parse(QStringLiteral("text_muted"), QStringLiteral("#777777"));
-        m_textActive = parse(QStringLiteral("text_active"), QStringLiteral("#121212"));
-
-        m_accentPrimary = parse(QStringLiteral("accent_blue"), QStringLiteral("#b58cff")); // floral purple
-        m_accentSelection = parse(QStringLiteral("accent_orange"), QStringLiteral("#e96a00")); // selection orange
-        m_accentSelectionActive = parse(QStringLiteral("accent_hover"), QStringLiteral("#ffaf29"));
-
-        m_borderSubtle = parse(QStringLiteral("border_subtle"), QStringLiteral("#404040"));
-        m_borderStrong = parse(QStringLiteral("border_strong"), QStringLiteral("#5a5a5a"));
-        m_borderFocus = parse(QStringLiteral("border_focus"), QStringLiteral("#b58cff"));
-
-        m_statusInfo = parse(QStringLiteral("status_info"), QStringLiteral("#6cb6ff"));
-        m_statusWarning = parse(QStringLiteral("status_warning"), QStringLiteral("#e5bd67"));
-        m_statusError = parse(QStringLiteral("status_error"), QStringLiteral("#ef6b73"));
-        m_statusSuccess = parse(QStringLiteral("status_success"), QStringLiteral("#73d59b"));
-
-        // High contrast overrides for axes if needed
-        if (themeId == QStringLiteral("petunia-high-contrast")) {
-            m_axisX = QColor(QStringLiteral("#ff3333"));
-            m_axisY = QColor(QStringLiteral("#33ff33"));
-            m_axisZ = QColor(QStringLiteral("#3399ff"));
-        } else {
-            m_axisX = QColor(QStringLiteral("#ff6e6e"));
-            m_axisY = QColor(QStringLiteral("#69db7c"));
-            m_axisZ = QColor(QStringLiteral("#4dabf7"));
-        }
-    }
-
-    // Getters
     const QString &themeId() const { return m_themeId; }
     Density density() const { return m_density; }
-    void setDensity(Density d) { m_density = d; }
+    double uiScale() const { return m_uiScale; }
+    bool reducedMotion() const { return m_reducedMotion; }
+    bool isHighContrast() const { return m_themeId == QLatin1String("petunia-high-contrast"); }
 
-    int controlHeight() const {
-        switch (m_density) {
-        case Density::Compact: return 24;
-        case Density::Standard: return 28;
-        case Density::Comfortable: return 36;
-        }
-        return 28;
-    }
+    // ── Métricas (px lógicos) ────────────────────────────────────────────
+    int controlHeight() const;
+    int fontPx(TextRole role) const;
+    /// `step` em unidades de espaçamento (0, 1, 2, 3, 4, 6, 8…).
+    int space(int step) const;
+    int radius() const;
+    int iconPx() const;
+    int railWidth() const;
+    /// Escala um valor em px lógicos pela escala de UI.
+    int scaled(int px) const;
+    int minHitTarget() const { return scaled(28); }
+    int focusRingWidth() const { return isHighContrast() ? 3 : 2; }
+    /// Duração de transição em ms; 0 com movimento reduzido.
+    int motionMs(int normal = 140) const { return m_reducedMotion ? 0 : normal; }
 
+    // ── Cores ───────────────────────────────────────────────────────────
     const QColor &bgCanvas() const { return m_bgCanvas; }
     const QColor &bgHeader() const { return m_bgHeader; }
     const QColor &bgPanel() const { return m_bgPanel; }
@@ -104,23 +78,33 @@ public:
     const QColor &statusError() const { return m_statusError; }
     const QColor &statusSuccess() const { return m_statusSuccess; }
 
-    QColor axisColor(int axis) const {
-        switch (axis) {
-        case 0: return m_axisX;
-        case 1: return m_axisY;
-        case 2: return m_axisZ;
-        default: return m_textPrimary;
-        }
-    }
+    QColor axisColor(int axis) const;
+    /// Letra do eixo (0 → "X"…): o eixo nunca depende só de cor (UI-015).
+    static QString axisLetter(int axis);
+    /// Painel translúcido para HUD/overlays sobre o viewport.
+    QColor overlaySurface() const;
+
+    // ── Derivados ───────────────────────────────────────────────────────
+    QPalette palette() const;
+    /// Folha de estilo global (regenerada só quando o tema muda).
+    const QString &styleSheet() const;
+    /// Aplica paleta + folha de estilo ao `QApplication`.
+    void applyToApplication() const;
+    /// Razão de contraste WCAG entre duas cores opacas.
+    static double contrastRatio(const QColor &a, const QColor &b);
+
+signals:
+    void changed();
 
 private:
-    PetuniaTheme() {
-        QJsonObject defaultColors;
-        updateFromSnapshot(defaultColors);
-    }
+    PetuniaTheme();
+    QString buildStyleSheet() const;
+    void markDirty();
 
     QString m_themeId{QStringLiteral("petunia-dark")};
     Density m_density{Density::Standard};
+    double m_uiScale{1.0};
+    bool m_reducedMotion{false};
 
     QColor m_bgCanvas{QStringLiteral("#121212")};
     QColor m_bgHeader{QStringLiteral("#191919")};
@@ -132,7 +116,7 @@ private:
 
     QColor m_textPrimary{QStringLiteral("#eeeeee")};
     QColor m_textSecondary{QStringLiteral("#b5b5b5")};
-    QColor m_textMuted{QStringLiteral("#777777")};
+    QColor m_textMuted{QStringLiteral("#8a8a8a")};
     QColor m_textActive{QStringLiteral("#121212")};
 
     QColor m_accentPrimary{QStringLiteral("#b58cff")};
@@ -151,4 +135,7 @@ private:
     QColor m_axisX{QStringLiteral("#ff6e6e")};
     QColor m_axisY{QStringLiteral("#69db7c")};
     QColor m_axisZ{QStringLiteral("#4dabf7")};
+
+    mutable QString m_styleSheet;
+    mutable bool m_styleDirty{true};
 };

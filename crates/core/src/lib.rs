@@ -28,6 +28,7 @@ pub mod modeling_feedback;
 pub mod modifier_commands;
 pub mod module;
 pub mod object_metadata_commands;
+pub mod op_graph_commands;
 pub mod origin_commands;
 pub use object_metadata_commands::SetAssetSelectionColorCmd;
 pub mod picking;
@@ -184,6 +185,7 @@ pub use modeling_feedback::{
 };
 pub use modifier_commands::{ModifierCmd, ModifierOp};
 pub use module::{Module, ModuleRegistry};
+pub use op_graph_commands::{GraphOp, OpGraphCmd};
 pub use petunia_mesh::poly_pen::PenPoint;
 pub use poly_pen::{PenStrip, PolyPenCommandError};
 pub use primitive_session::{

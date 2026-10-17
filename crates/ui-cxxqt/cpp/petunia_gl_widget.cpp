@@ -149,7 +149,7 @@ void PetuniaGlWidget::paintGL(uint32_t fbo, QPaintDevice *device) {
     PetuniaViewScope scope(m_surfaceId);
     petunia_qt_gl_surface_paint(m_surfaceId, fbo, width(), height(),
                                 devicePixelRatioF());
-    m_overlayState = petuniaRequest("snapshot");
+    refreshOverlayState();
 
     // 2. Sobrepõe overlays interativos 2D fiéis via QPainter nativo
     QPainter painter(device);
@@ -196,17 +196,26 @@ void PetuniaGlWidget::paintEvent(QPaintEvent *) {
                                              w, h, QImage::Format_RGBA8888));
     }
     PetuniaViewScope scope(m_surfaceId);
-    m_overlayState = petuniaRequest("snapshot");
+    refreshOverlayState();
     drawOverlays(painter);
 }
+void PetuniaGlWidget::refreshOverlayState() {
+    if (m_shellChrome && m_hasExternalState)
+        m_overlayState = m_externalState;
+    else
+        m_overlayState = petuniaRequest("snapshot");
+}
+
 void PetuniaGlWidget::drawOverlays(QPainter &painter) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::TextAntialiasing);
     drawSelectionOutline(painter);
     draw3dCursor(painter);
     drawDecalGizmo(painter);
-    drawViewportHud(painter);
-    drawShadingPill(painter);
+    if (!m_shellChrome) {
+        drawViewportHud(painter);
+        drawShadingPill(painter);
+    }
     drawNavigationGizmo(painter);
     drawTransformGizmo(painter);
     drawSnapIndicator(painter);
@@ -288,6 +297,8 @@ void PetuniaGlWidget::drawShadingPill(QPainter &painter) {
 }
 
 bool PetuniaGlWidget::handleShadingClick(const QPoint &pos) {
+    if (m_shellChrome)
+        return false;
     if (!m_shadingPillRect.contains(pos)) {
         return false;
     }

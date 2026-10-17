@@ -1,4 +1,5 @@
 #pragma once
+#include "petunia_bound_form.h"
 #include "petunia_editor_api.h"
 #include <QComboBox>
 #include <QFormLayout>
@@ -56,46 +57,21 @@ class PetuniaEditorCanvas : public QWidget {
 
 /// Native widgets read the shared DTO; every control sends a typed adapter
 /// action.
-class PetuniaEditorPanel : public QWidget {
+class PetuniaEditorPanel : public PetuniaBoundForm {
     Q_OBJECT
   public:
     explicit PetuniaEditorPanel(const QString &mode, QWidget *parent = nullptr);
-    void sync(const QJsonObject &state);
     PetuniaEditorCanvas *canvas() const { return m_canvas; }
-    QStringList missingBindings(const QJsonObject &state) const;
-  signals:
-    void editorChanged();
+    /// Shell v2: entrega o canvas e as abas para regiões próprias do shell. O painel
+    /// continua sendo o motor de sincronização (`sync`) dos dois.
+    QWidget *takeCanvas();
+    QTabWidget *takeTabs();
+
+  protected:
+    void afterSync(const QJsonObject &state) override;
 
   private:
     QFormLayout *page(const QString &title);
-    void button(QFormLayout *, const QString &label, const QString &action,
-                QJsonObject args = {}, const QString &enabledKey = {});
-    void number(QFormLayout *, const QString &label, const QString &key,
-                const QString &action, const QString &arg, qreal min, qreal max,
-                qreal step = 0.01, QJsonObject args = {});
-    void check(QFormLayout *, const QString &label, const QString &key,
-               const QString &action,
-               const QString &arg = QStringLiteral("value"),
-               QJsonObject args = {});
-    void choice(QFormLayout *, const QString &label, const QString &key,
-                const QString &action, const QString &arg,
-                const QStringList &ids, const QStringList &labels = {},
-                QJsonObject args = {});
-    void text(QFormLayout *, const QString &label, const QString &key,
-              const QString &action, const QString &arg, QJsonObject args = {});
-    void colorField(QFormLayout *, const QString &label, const QString &key,
-                    const QString &action, const QString &arg, QJsonObject args = {});
-    void xyz(QFormLayout *, const QString &label, const QString &keyPrefix,
-             const QString &action,
-             const QString &arg = QStringLiteral("text"),
-             QJsonObject baseArgs = {});
-    void rows(QFormLayout *, const QString &label, const QString &key,
-              const QString &action, const QString &arg = QStringLiteral("id"),
-              QJsonObject args = {});
-    void fileButton(QFormLayout *, const QString &label, const QString &action,
-                    const QString &filter, bool save = false,
-                    QJsonObject args = {});
-    void send(const QString &action, QJsonObject args = {});
     void setupModel();
     void setupPaint();
     void setupPaintGizmo();
@@ -105,27 +81,10 @@ class PetuniaEditorPanel : public QWidget {
     void setupReferences();
     void setupAssets();
     void updateDynamic(const QJsonObject &state);
-    struct Binding {
-        QWidget *widget;
-        QString key;
-        QString enabledKey;
-        QString labelKey;
-    };
-    QList<Binding> m_bindings;
-    struct RowBinding {
-        QListWidget *widget;
-        QString key;
-        QString action;
-        QString arg;
-        QJsonObject args;
-    };
-    QList<RowBinding> m_rows;
     QString m_mode;
-    QJsonObject m_state;
     QTabWidget *m_tabs{nullptr};
     PetuniaEditorCanvas *m_canvas{nullptr};
     QComboBox *m_gizmoAxisCombo{nullptr};
     QFormLayout *m_dynamic{nullptr};
     QString m_dynamicSignature;
-    bool m_syncing{false};
 };

@@ -80,11 +80,11 @@
 
 | Fase | Entrega                                                                                                                                         | IDs do tracker | Status       |
 |------|-------------------------------------------------------------------------------------------------------------------------------------------------|----------------|--------------|
-| F0   | Verdade e limpeza: baseline visual offscreen, bugs DRAW/ids/expressão/modais, remoção de código morto, teste "ids ↔ registry", ADRs, reabrir DONE inflados | U10            | [ ] TODO     |
-| F1   | Fundações: `ThemeService`, catálogo por ids (+ pseudo-locale), `ActionRegistry`, contrato de componente, Gallery como gate, foco visível e nomes acessíveis | U11, U12       | [ ] TODO     |
-| F2   | Ponte tipada: `ShellViewModel` seccionado, eventos, via única, `ToolCatalog`, `PropertySectionRegistry`, capacidades                           | U13, A08       | [ ] TODO     |
-| F3   | Shell v2 esqueleto atrás de flag: AppBar, Rail, Viewport Header, regiões, F6, layout versionado, Outliner por UUID, fatia **Transform**          | U14            | [ ] TODO     |
-| F4   | HUD e ações contextuais: `OperationHud` único, resolvedor de capacidades, anti-colisão, rail por catálogo                                       | U15            | [ ] TODO     |
+| F0   | Verdade e limpeza: baseline visual offscreen, bugs DRAW/ids/expressão/modais, remoção de código morto, teste "ids ↔ registry", ADRs, reabrir DONE inflados | U10            | [x] DONE     |
+| F1   | Fundações: `ThemeService`, catálogo por ids (+ pseudo-locale), `ActionRegistry`, contrato de componente, Gallery como gate, foco visível e nomes acessíveis | U11, U12       | [x] DONE     |
+| F2   | Ponte tipada: `ShellViewModel` seccionado, eventos, via única, `ToolCatalog`, `PropertySectionRegistry`, capacidades                           | U13, A08       | [x] DONE     |
+| F3   | Shell v2 esqueleto atrás de flag: AppBar, Rail, Viewport Header, regiões, F6, layout versionado, Outliner por UUID, fatia **Transform**          | U14            | [x] DONE     |
+| F4   | HUD e ações contextuais: `OperationHud` único, resolvedor de capacidades, anti-colisão, rail por catálogo                                       | U15            | [x] DONE     |
 | F5   | Núcleo de operações (só Rust, paralelo desde F1): ver [Operation Graph](../03-geometry/operation-graph.md)                                      | O01, O02       | [ ] TODO     |
 | F6   | UI de nós: Pilha no Inspector → Gaveta "Nós" → materiais/texturas → descriptors                                                                 | O03, O04       | [ ] TODO     |
 | F7   | Workspaces PAINT, UV e ANIMATE no v2                                                                                                            | U16–U18        | [ ] TODO     |

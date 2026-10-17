@@ -511,16 +511,16 @@ void PetuniaToolOptionsBar::openOriginMenu() {
     auto *actCenter = menu.addAction(QStringLiteral("Geometria para Origem"));
 
     connect(actGeom, &QAction::triggered, this, [this]() {
-        emit actionTriggered(QStringLiteral("model.origin_to_geometry"));
+        emit actionTriggered(QStringLiteral("model.origin_geometry"));
     });
     connect(actBottom, &QAction::triggered, this, [this]() {
-        emit actionTriggered(QStringLiteral("model.origin_to_bottom"));
+        emit actionTriggered(QStringLiteral("model.origin_bottom"));
     });
     connect(actCursor, &QAction::triggered, this, [this]() {
-        emit actionTriggered(QStringLiteral("model.origin_to_cursor"));
+        emit actionTriggered(QStringLiteral("model.origin_cursor"));
     });
     connect(actSelect, &QAction::triggered, this, [this]() {
-        emit actionTriggered(QStringLiteral("model.origin_to_selection"));
+        emit actionTriggered(QStringLiteral("model.origin_selection"));
     });
     connect(actCenter, &QAction::triggered, this, [this]() {
         emit actionTriggered(QStringLiteral("model.geometry_to_origin"));
@@ -793,8 +793,8 @@ void PetuniaToolOptionsBar::sync(const QJsonObject &state) {
 
     const auto ws = state["workspace"].toString();
     const auto mode = state["modeling_mode"].toString();
-    const bool isDraw = (ws == "Model" && mode == "Draw");
-    const bool isPoly = (ws == "Model" && mode != "Draw");
+    const bool isDraw = (ws == "Model" && mode == "DRAW");
+    const bool isPoly = (ws == "Model" && mode != "DRAW");
     const bool isPaint = (ws == "Paint");
 
     // Domain Adaptability
@@ -987,8 +987,8 @@ PetuniaFloatingContextBar::PetuniaFloatingContextBar(QWidget *parent) : QFrame(p
     objLayout->addWidget(makeSep(m_domainObjectWidget));
     objLayout->addWidget(makeMoreBtn(m_domainObjectWidget, {
         {"origin_geometry", tr("Definir Origem na Geometria")},
-        {"view.shade_smooth", tr("Sombreamento Suave")},
-        {"view.shade_flat", tr("Sombreamento Plano")},
+        {"model.shade_smooth", tr("Sombreamento Suave")},
+        {"model.shade_flat", tr("Sombreamento Plano")},
         {"delete", tr("Excluir Objeto (X)")}
     }));
     modelLayout->addWidget(m_domainObjectWidget);
@@ -1298,8 +1298,8 @@ void PetuniaFloatingContextBar::sync(const QJsonObject &state) {
 
     const auto ws = state["workspace"].toString();
     const auto mode = state["modeling_mode"].toString();
-    const bool isDraw = (ws == "Model" && mode == "Draw");
-    const bool isPoly = (ws == "Model" && mode != "Draw");
+    const bool isDraw = (ws == "Model" && mode == "DRAW");
+    const bool isPoly = (ws == "Model" && mode != "DRAW");
     const bool isPaint = (ws == "Paint");
     const bool isUv = (ws == "Uv");
     const bool isAnimate = (ws == "Animate");

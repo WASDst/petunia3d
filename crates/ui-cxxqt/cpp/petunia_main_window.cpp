@@ -4,22 +4,17 @@
 extern "C" size_t petunia_qt_software_frame_rgba(uint64_t, uint32_t, uint32_t,
                                                  uint8_t *, size_t, uint32_t *,
                                                  uint32_t *);
-#include "petunia_asset_library_widget.h"
 #include "petunia_command_palette.h"
 #include "petunia_home_dialog.h"
 #include "petunia_main_window.h"
 #include "petunia_overlay_cards.h"
-#include "petunia_paint_panel.h"
-#include "petunia_preferences_dialog.h"
 #include "petunia_recovery_dialog.h"
-#include "petunia_reference_dialog.h"
-#include "petunia_timeline_widget.h"
-#include "petunia_uv_panel.h"
 #include "petunia_pie_menu.h"
 #include "petunia_placeholder_message.h"
 #include "petunia_dock_manager.h"
 #include "petunia_icons.h"
 #include "petunia_theme.h"
+#include "shell/petunia_shell_window.h"
 #include "petunia_number_field.h"
 #include <QScrollArea>
 
@@ -2178,17 +2173,21 @@ void petunia_qt_app_destroy(void *app) {
 void *petunia_main_window_create() {
     if (!qApp || QThread::currentThread() != qApp->thread())
         return nullptr;
-    return new PetuniaMainWindow();
+    // Shell v2 (ADR-C14) atrás de flag até a paridade; o legado segue como padrão.
+    QWidget *window = qEnvironmentVariable("PETUNIA_SHELL") == QLatin1String("v2")
+                          ? static_cast<QWidget *>(new PetuniaShellWindow())
+                          : static_cast<QWidget *>(new PetuniaMainWindow());
+    return window;
 }
 
 void petunia_main_window_show(void *win) {
     if (win) {
-        static_cast<PetuniaMainWindow *>(win)->show();
+        static_cast<QWidget *>(win)->show();
     }
 }
 
 void petunia_main_window_destroy(void *win) {
-    delete static_cast<PetuniaMainWindow *>(win);
+    delete static_cast<QWidget *>(win);
 }
 }
 
@@ -2282,14 +2281,28 @@ void PetuniaMainWindow::syncEditorState(const QJsonObject &state) {
         state["reference_manager_open"].toBool() ||
         state["asset_library_visible"].toBool()) {
         petuniaRequest("consume_host_requests");
-        if (state["command_search_visible"].toBool())
-            openCommandPalette();
-        else if (state["settings_visible"].toBool())
-            openPreferences();
-        else if (state["reference_manager_open"].toBool())
-            openReferenceManager();
-        else if (state["asset_library_visible"].toBool())
-            openAssetLibrary();
+        // Diálogos do host nunca abrem de dentro do slot de sync (o timer de
+        // 33 ms reentraria no `exec`). Abrimos pelo laço de eventos, uma vez.
+        enum class Host { Palette, Settings, References, Assets };
+        const Host kind = state["command_search_visible"].toBool()
+                              ? Host::Palette
+                          : state["settings_visible"].toBool()
+                              ? Host::Settings
+                          : state["reference_manager_open"].toBool()
+                              ? Host::References
+                              : Host::Assets;
+        if (!m_hostDialogPending) {
+            m_hostDialogPending = true;
+            QTimer::singleShot(0, this, [this, kind]() {
+                switch (kind) {
+                case Host::Palette: openCommandPalette(); break;
+                case Host::Settings: openPreferences(); break;
+                case Host::References: openReferenceManager(); break;
+                case Host::Assets: openAssetLibrary(); break;
+                }
+                m_hostDialogPending = false;
+            });
+        }
     }
     applyPreferences(state);
     if (m_viewport)
