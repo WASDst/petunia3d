@@ -131,3 +131,24 @@ Decisões de engenharia e viabilidade de ferramentas:
 5. **Prevenção contínua de regressões ("Prove"):** Toda correção de crash ou bug deve vir acompanhada de teste automatizado sintético que reproduzia a falha antes da correção.
 6. **Acessibilidade como gate funcional e canal de teste:** Toda superfície expõe semântica para `QAccessible` e suporta ciclo completo de teclado (`F6`/`Tab`), viabilizando auditoria a11y contínua e automação externa gratuita via APIs de acessibilidade do SO (AT-SPI / pywinauto).
 
+
+## ADR-C13 — Operation Graph: operações persistentes e re-editáveis (2026-10-17) — PROPOSTO
+
+Direção aprovada pelo usuário em 2026-10-17; o contrato detalhado está em [Operation Graph](../03-geometry/operation-graph.md) e **não está implementado**. Reabre de forma controlada a restrição "sem node graph" da V1 (modifiers, geradores, materiais), preservando a deferência de GPU shader graph.
+
+1. **Escopo inicial:** booleana e materiais/texturas. Nó de operação ligado ao objeto selecionado, com parâmetros, operação e saída; a saída liga a um objeto ou a outro nó.
+2. **Simplicidade:** nenhum nó é necessário para começar; a mesma receita tem vista de Pilha (Inspector) e de Grafo (Gaveta). Tudo é comando, com Undo, teclado e a11y.
+3. **Reuso:** extrair o núcleo genérico de `SurfaceRecipe`; `Graph(output)` como nova fonte de geometria avaliada e não editável até Bake; `BooleanOpCmd` vira Aplicar/Bake; `ModifierKind` migra para cadeia de nós.
+4. **Modularidade:** `NodeDescriptor` estático com portas e parâmetros tipados; UI gerada do descriptor; extensão Lua posterior sob E01/E02; nó desconhecido carrega como nó fantasma.
+5. **Pendências:** semântica de ligar a mais de um objeto (compartilhar × por objeto); formato de persistência e versão de schema; limites de avaliação.
+
+## ADR-C14 — Shell v2 da GUI Qt: regiões fixas, layout versionado e construção em paralelo (2026-10-17) — PROPOSTO
+
+Direção aprovada pelo usuário em 2026-10-17; detalhes em [Shell v2](../09-ui/shell-v2-proposal.md) e evidências em [dossiê](../09-ui/gui-audit-dossier.md). **Não implementado.**
+
+1. **Regiões fixas por padrão** (AppBar, Rail, Viewport Header, Work Surface, Estrutura, Propriedades, Gaveta, Status) com layout do usuário persistido e versionado, conforme `newdocs/design-system`; sem nova biblioteca de dock (KDDockWidgets/Qt-ADS fora de escopo). Substitui a recomendação de KDDockWidgets da matriz Qt.
+2. **Novo shell em paralelo**, atrás de `PETUNIA_SHELL=v2`, reaproveitando componentes sadios; troca única na paridade, remoção do legado depois.
+3. **Onde cada coisa mora:** Rail, HUD, ação contextual, propriedade, nó/pilha, diálogo (regra em Shell v2 §3). Domínio de seleção só no Viewport Header; ações contextuais flutuantes (≤ 4 + Mais).
+4. **Uma fonte por responsabilidade:** tokens, ações, ferramentas, seções de propriedade e strings por id; ponte tipada e seccionada por revisão.
+5. **Mapeamento de ids:** UI-001…015 do pacote `newdocs` passam a ser rastreados por este ADR, sem aprovação retroativa de UI-011…015 (guardrails).
+6. **Supera** os trechos dependentes de Slint em `09-ui` e nas rotas de `AGENTS.md`, cuja reescrita é pendência (U10).

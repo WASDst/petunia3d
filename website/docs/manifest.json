@@ -113,6 +113,10 @@
           "title": "Object e Geometry Source — aprovado"
         },
         {
+          "path": "03-geometry/operation-graph.md",
+          "title": "Operation Graph — sistema de nós simples e modular — proposta"
+        },
+        {
           "path": "03-geometry/scene-hierarchy-transforms.md",
           "title": "Scene Hierarchy e Transforms — aprovado"
         },
@@ -243,6 +247,14 @@
         {
           "path": "09-ui/qt-library-adoption.md",
           "title": "Qt — adoção de bibliotecas e componentes nativos"
+        },
+        {
+          "path": "09-ui/gui-audit-dossier.md",
+          "title": "Dossiê de auditoria da GUI Qt — diagnóstico"
+        },
+        {
+          "path": "09-ui/shell-v2-proposal.md",
+          "title": "Shell v2 — proposta de refatoração da GUI Qt"
         }
       ]
     },

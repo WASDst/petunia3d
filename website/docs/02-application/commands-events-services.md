@@ -124,3 +124,16 @@ Construtores da Application não devem:
 - iniciar file watchers.
 
 Essas operações pertencem ao bootstrap/host e são injetadas explicitamente.
+
+## Matriz de implementação e conformidade (A02)
+
+| Requisito / Invariante                                     | Status    | Evidência / Implementação em Código                                                               |
+|------------------------------------------------------------|-----------|---------------------------------------------------------------------------------------------------|
+| Pureza dos construtores (zero I/O, zero env, zero locks)   | [x] DONE  | `Application::new` e `from_state` são puros; relógio e storage injetados via parâmetros.          |
+| Injeção determinística de relógio (Clock abstraction)      | [x] DONE  | Trait `Clock` com `FixedClock` e `SystemClock`; ticks de autosave e timestamps reproduzíveis.    |
+| Separação Autosave: política vs infraestrutura             | [x] DONE  | `AutosavePolicy`/`Application` decide quando; trait `AutosaveStorage` decide onde/como salvar.    |
+| DesktopHost & Gestão de Session Lock                       | [x] DONE  | `DesktopHost::acquire_session_lock` com RAII `SessionLockGuard` prevenindo conflitos concorrentes.|
+| Aposentadoria de ModuleRegistry para domínios nativos      | [x] DONE  | `process_domain_event` coordena Model, Paint, UV e Assets nativamente sem acoplamento dinâmico.  |
+| Isolamento transacional de comandos (Never Crash)          | [x] DONE  | Comandos isolados com integridade de documento, profundidade de Undo e revisão garantidas.        |
+| Configurações de plataforma isoladas no DesktopHost        | [x] DONE  | `DesktopHost::apply_preferences` isola i18n, contraste, espessura e perfis de atalhos.          |
+

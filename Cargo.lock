@@ -1840,6 +1840,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glam",
+ "petunia_config",
  "petunia_core",
  "petunia_mesh",
  "petunia_module_assets",
@@ -1849,7 +1850,9 @@ dependencies = [
  "petunia_plugins",
  "petunia_project",
  "petunia_render",
+ "postcard",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

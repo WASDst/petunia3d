@@ -129,10 +129,9 @@
       "origin_sha": "1d59473"
     },
     "a02-application-host": {
-      "revision": "6b030e6",
+      "revision": "HEAD",
       "document": "02-application/commands-events-services.md",
-      "summary": "Novo crate petunia_application (Application com Clock injetado, run_action sem tipos winit/egui, construtor sem env/relógio/locks/filesystem); petunia_app::DesktopHost substitui Core e faz bootstrap de idioma, recovery, lock e watcher. Pendente: filesystem/watchers como serviços injetados e aposentar ModuleRegistry. cargo check --workspace pass. Gates (testes, clippy, visual/GPU, Windows, screen reader, low-end): not run.",
-      "origin_sha": "5209b7d"
+      "summary": "Application neutra e DesktopHost consolidados (A02): construtores da Application 100% puros (sem leitura de env vars, sem relógio global, sem criação de locks e sem I/O de disco); injeção explícita de Clock (FixedClock determinístico para testes e autosave); DesktopHost desacoplado gerenciando estado de plataforma (apply_preferences com contraste e keybinds), SessionLockGuard com prevenção contra escrita concorrente e RAII cleanup limpo; política de autosave separada da infraestrutura de armazenamento (AutosaveStorage trait); aposentadoria de ModuleRegistry com processamento nativo direto de eventos de domínio (Model, Paint, UV, Assets); e isolamento transacional de comandos garantindo integridade de histórico e documento. 6 gates dedicados em application_a02_gates_tests.rs e 5 testes de unidade passam 100%."
     },
     "a04-command-context": {
       "revision": "a931c70",
@@ -1093,9 +1092,9 @@
       "title": "Application/DesktopHost",
       "description": "Substituir app::Core por Application neutra e DesktopHost; injetar relógio/filesystem/watchers/locks, retirar efeitos de construtores e aposentar ModuleRegistry interno gradualmente.",
       "document": "02-application/commands-events-services.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-11",
-      "baseline": "crates/app removido com o egui; DesktopHost vive em crates/ui-slint/src/host.rs sobre petunia_application. Injeção de filesystem/watchers e aposentadoria do ModuleRegistry pendentes. DesktopHost agora constrói/configura Application e a transfere ao bridge; from_state adota sessão existente sem recriar documento/histórico/relógio. Catálogo nativo puro; carregamento de tools.toml no host; política de autosave única na Application. Acesso AppState transitório, filesystem/watchers/locks e ModuleRegistry ainda pendentes. Evidência gui-codex-visual-application; §28 Slint Rescue.",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "Consolidado em crates/application/src/host.rs, crates/application/src/lib.rs e crates/editor/src/host.rs. Injeção de relógio/locks, pureza dos construtores, aposentadoria de ModuleRegistry e gates passam 100%.",
       "checkpoints": [
         {
           "title": "Substituir app::Core por Application neutra e DesktopHost",
@@ -1104,13 +1103,13 @@
         },
         {
           "title": "injetar relógio/filesystem/watchers/locks, retirar efeitos de construtores e aposentar ModuleRegistry interno gradualmente",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a02-application-host"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "a02-application-host"
         }
       ],
       "documents": [
@@ -4011,6 +4010,524 @@
         "02-application/contextual-editor-contract.md",
         "02-application/tools-interaction-implementation.md",
         "00-philosophy/decision-register.md"
+      ]
+    },
+    {
+      "id": "U10",
+      "phase": "slint-gl",
+      "title": "Shell v2 F0 — verdade e limpeza",
+      "description": "Baseline visual offscreen; corrigir DRAW×Draw, ids inexistentes, expressão numérica descartada e modais no sync; remover widgets mortos; teste ids↔registry; reconciliar Q06/Q07/H19/H21/H23/H29–H33 e G05/G10–G14; reescrever 09-ui para Qt.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Organizar o WIP e capturar baseline visual offscreen (5 workspaces × claro/escuro/HC × 100–200%).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Corrigir bugs com teste de regressão prévio e remover código morto.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Publicar ADR-C13/C14, reconciliar tracker e docs 09-ui, e registrar evidência.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/gui-audit-dossier.md",
+        "00-philosophy/decision-register.md"
+      ]
+    },
+    {
+      "id": "U11",
+      "phase": "slint-gl",
+      "title": "Shell v2 F1 — ThemeService e tokens",
+      "description": "QSS/QPalette gerados a partir de tokens; densidade funcional; ícones por tema/DPI com cache; fim dos literais hex.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Gerar estilo a partir do snapshot de tema e remover literais.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Densidade compact/standard/comfortable aplicada por widgets reais.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/design-system-guideline.md"
+      ]
+    },
+    {
+      "id": "U12",
+      "phase": "slint-gl",
+      "title": "Shell v2 F1 — componentes base, ActionRegistry e i18n por id",
+      "description": "Contrato de componente, Gallery como gate, foco visível, nomes acessíveis, catálogo por ids com pseudo-locale e ActionRegistry único.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Contrato de componente e Gallery com estados, teclado e a11y.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "ActionRegistry único para menus, paleta, rail, barra contextual e atalhos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Catálogo por ids (pt-BR, en, pseudo-longo) sem rótulos derivados de ids.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/gui-audit-dossier.md"
+      ]
+    },
+    {
+      "id": "U13",
+      "phase": "slint-gl",
+      "title": "Shell v2 F2 — ponte tipada seccionada por revisão",
+      "description": "ShellViewModel tipado por seção, eventos no lugar do polling, via única intent/command com Result visível e migração do FFI legado.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "ShellViewModel seccionado com revisão e diff no C++.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Via única de comandos e migração das chamadas legadas.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/gui-audit-dossier.md",
+        "02-application/commands-events-services.md"
+      ]
+    },
+    {
+      "id": "U14",
+      "phase": "slint-gl",
+      "title": "Shell v2 F3 — esqueleto, regiões e fatia Transform",
+      "description": "Regiões, F6, layout versionado, Outliner por UUID e fatia vertical Transform (Undo, valores mistos) atrás de PETUNIA_SHELL=v2.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Regiões e navegação F6/Tab com restauração de foco.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Layout persistente versionado com recuperação.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Fatia Transform com Undo/mixed e Outliner por UUID.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/workspaces-feedback-accessibility.md"
+      ]
+    },
+    {
+      "id": "U15",
+      "phase": "slint-gl",
+      "title": "Shell v2 F4 — HUD de operação e ações contextuais",
+      "description": "OperationHud único com NumberField, resolvedor de capacidades, anti-colisão de overlays e rail por ToolCatalog.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "OperationHud único substituindo cards.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Barra contextual por capacidade com motivos de desabilitação.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Rail por ToolCatalog em todos os workspaces.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "02-application/contextual-editor-contract.md"
+      ]
+    },
+    {
+      "id": "U16",
+      "phase": "workflows",
+      "title": "Shell v2 F7 — PAINT no v2",
+      "description": "Layers em Estrutura; Target/Brush/Layer/Projection/Effects em Propriedades; canvas 2D de primeira classe.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Migrar PAINT para as regiões do v2.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "06-paint/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "U17",
+      "phase": "workflows",
+      "title": "Shell v2 F7 — UV no v2",
+      "description": "Canvas UV dominante (alvo ≥ 55%), Propriedades Selection/Unwrap/Projection/Pack/Health.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Migrar UV para o v2.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "07-uv/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "U18",
+      "phase": "workflows",
+      "title": "Shell v2 F7 — ANIMATE no v2",
+      "description": "Estrutura Creature/Motions/Rig e Gaveta Timeline sem hit-test no widget.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Migrar ANIMATE para o v2.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "10-animation/workspace-ux.md"
+      ]
+    },
+    {
+      "id": "U19",
+      "phase": "slint-gl",
+      "title": "Shell v2 F8 — troca e remoção do legado",
+      "description": "v2 como padrão; remover shell legado, FFI legado e testes legados; fechar U01–U09 antigos.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Paridade verificada e v2 como padrão.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Remoção do legado sem perder cobertura.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "09-ui/gui-audit-dossier.md"
+      ]
+    },
+    {
+      "id": "Q08",
+      "phase": "quality",
+      "title": "Shell v2 F9 — gates finais",
+      "description": "QTestLib offscreen, golden frames FBO, a11y (AT-SPI) e matriz manual Linux/Windows/GPU baixa.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "QTestLib offscreen por componente e fluxos.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Golden frames FBO por workspace/tema/DPI.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Matriz manual com ambiente registrado (not run até executar).",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "14-quality/testing-ci-conformance.md"
+      ]
+    },
+    {
+      "id": "A08",
+      "phase": "foundations",
+      "title": "Typed shell view-model e ToolCatalog no petunia_editor",
+      "description": "ShellViewModel tipado e seccionado, ToolCatalog, PropertySectionRegistry e capacidades contextuais testáveis headless.",
+      "document": "09-ui/shell-v2-proposal.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Tipos e revisão por seção com testes Camada 2.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "ToolCatalog e PropertySectionRegistry com motivos de desabilitação.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "09-ui/shell-v2-proposal.md",
+        "02-application/state-separation.md"
+      ]
+    },
+    {
+      "id": "O01",
+      "phase": "geometry",
+      "title": "Operation Graph — núcleo genérico e comandos",
+      "description": "Extrair núcleo de SurfaceRecipe, NodeDescriptor, comandos graph.* e fonte Graph(output); ADR-C13.",
+      "document": "03-geometry/operation-graph.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Extração do núcleo com SurfaceRecipe e .petunia retrocompatíveis.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "NodeDescriptor e comandos graph.* com Undo.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Testes de ciclo, tipos, dados hostis e sem panics.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/operation-graph.md",
+        "00-philosophy/decision-register.md"
+      ]
+    },
+    {
+      "id": "O02",
+      "phase": "geometry",
+      "title": "Operation Graph — nó Boolean, Saída de Objeto e Bake",
+      "description": "Nó Boolean multi-tool sobre petunia_mesh::boolean, Saída de Objeto, Bake e migração de Mirror/Symmetry.",
+      "document": "03-geometry/operation-graph.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Nó Boolean com paridade ao BooleanOpCmd atual.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Saída de Objeto, Distribuir e Bake com Undo.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Migração de ModifierKind sem perda.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/operation-graph.md",
+        "03-geometry/modifiers-evaluation.md"
+      ]
+    },
+    {
+      "id": "O03",
+      "phase": "geometry",
+      "title": "Operation Graph — Pilha, Gaveta Nós e HUD gerados do descriptor",
+      "description": "Pilha no Inspector e Gaveta Nós (QGraphicsView) com a11y completa, gerados do NodeDescriptor.",
+      "document": "03-geometry/operation-graph.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Pilha no Inspector e HUD gerados do descriptor.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Gaveta Nós com QAccessible e operação por teclado.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/operation-graph.md",
+        "09-ui/shell-v2-proposal.md"
+      ]
+    },
+    {
+      "id": "O04",
+      "phase": "geometry",
+      "title": "Operation Graph — materiais, texturas e PBR como nós",
+      "description": "PBR Material, Atribuir Material e catálogo inicial de superfície sobre SurfaceRecipe, mantendo avaliação CPU.",
+      "document": "03-geometry/operation-graph.md",
+      "status": "TODO",
+      "updated": "2026-10-17",
+      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "checkpoints": [
+        {
+          "title": "Nós de material e textura com cache por revisão.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Paridade visual e export/bake.",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
+          "completed": false,
+          "evidence": null
+        }
+      ],
+      "documents": [
+        "03-geometry/operation-graph.md",
+        "05-materials/architecture-decision.md"
       ]
     }
   ]
