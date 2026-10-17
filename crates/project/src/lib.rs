@@ -98,6 +98,7 @@ pub mod profile;
 pub mod profile_tools;
 pub mod rig;
 pub mod rig_roles;
+pub mod snapshot;
 pub mod solid_composition;
 pub mod spline;
 pub mod surface_attachment;
@@ -165,6 +166,7 @@ pub use rig_roles::{
     ArmPart, LegChain, LimbPart, RigRequirement, RigRole, RigRoleMap, RoleAssignment,
     RoleContractError, RoleError,
 };
+pub use snapshot::DocumentSnapshot;
 pub use solid_composition::{
     CompositionError, CompositionStatus, RecipeStatus, SOLID_COMPOSITION_SCHEMA_VERSION,
     SolidCompositionError, SolidCompositionRecipe, SolidCompositionStep, SolidSource,
@@ -189,6 +191,7 @@ pub use svg::{
     MAX_RASTER_PX, MAX_SVG_BYTES, MAX_SVG_NODES, SvgError, SvgInfo, SvgNode, SvgSubpath,
     rasterize_svg, svg_info, svg_subpaths, svg_to_splines,
 };
+pub use zip;
 
 /// Canvas de textura simples (albedo) por asset — workspace PAINT.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

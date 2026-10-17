@@ -548,6 +548,21 @@
       "document": "11-project/project-persistence.md",
       "summary": "Implementação e fechamento dos testes obrigatórios restantes de P03 (website/docs/11-project/project-persistence.md, seção Autosave e Crash Recovery). Nova suíte dedicada crates/core/tests/recovery_autosave_p03_gates_tests.rs cobrindo: 1) test_p03_gate_recover_inspect_discard_lifecycle (ciclo completo com detecção por session.lock de unclean shutdown; ProjectService::inspect_recovery inspeciona metadados sem tocar no documento aberto; recover_generation carrega como dirty preservando arquivo em disco; discard_generation e discard_recovery removem snapshots e locks); 2) test_p03_gate_five_generations_retention_and_coalescing (retenção de no máximo 5 gerações eliminando snapshots excedentes mais antigos e coalescimento estrito por revisão onde revisões inalteradas não geram novos snapshots); 3) test_p03_gate_untitled_documents_isolated_by_project_id (isolamento estrito de autosave por project_id para documentos sem caminho). Bateria executada com CARGO_BUILD_JOBS=1: 3/3 testes verdes, fmt e clippy limpos.",
       "origin_sha": "b9110020"
+    },
+    "p02-snapshots-staged-load": {
+      "revision": "27388451",
+      "document": "11-project/project-persistence.md",
+      "summary": "DocumentSnapshot desacoplado introduzido em crates/project/src/snapshot.rs para persistência e staged load sem tocar no documento mutável publicado nem na sessão ativa; DocumentSnapshot::load_atomic e ProjectService::staged_load validam integridade em staging."
+    },
+    "p02-roundtrip-invariants": {
+      "revision": "27388451",
+      "document": "11-project/project-persistence.md",
+      "summary": "Roundtrip completo cobrindo malhas com vértices, faces, sharp edges, UVs por corner, canvas de textura, materiais PBR, luzes, esqueletos, ossos, splines, perfis 2D, geradores de caminho sweep, anotações, medições, referências e animações sob LoadMode::Strict com 100% de preservação de IDs estáveis."
+    },
+    "p02-persistence-gates": {
+      "revision": "27388451",
+      "document": "11-project/project-persistence.md",
+      "summary": "Suíte crates/core/tests/persistence_p02_gates_tests.rs com 4/4 testes sintéticos verdes cobrindo roundtrip completo de todos os subsistemas, migração de campos legados com relatório auditável, recusa de entradas hostis/truncadas/traversal/versões futuras indevidas e integridade atômica com atomic_write e fidelidade da revisão de save_point com histórico Undo/Redo."
     }
   },
   "tasks": [
@@ -1328,9 +1343,9 @@
       "title": "Persistência",
       "description": "Preservar codec/atomic writer existentes; migrar snapshots autorais, schema/IDs/refs e staged load; saved revision fiel durante edição, limites/corrupt input, migrations e round-trip completo.",
       "document": "11-project/project-persistence.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Parcial; validar contrato. crates/project/src/format.rs, crates/project/src/io_atomic.rs:33, crates/core/src/project_service.rs. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-17",
+      "baseline": "Implementado e validado em 2026-10-17: DocumentSnapshot desacoplado para staged load e persistência atômica (crates/project/src/snapshot.rs); roundtrip integral cobrindo todos os subsistemas autorais com IDs preservados; migração auditada de esquemas legados via LoadReport; recusa de arquivos corrompidos, truncados, path traversal e versões futuras incompatíveis sob LoadMode::Strict; integridade atômica com atomic_write e fidelidade da revisão de save_point com histórico Undo/Redo (crates/core/tests/persistence_p02_gates_tests.rs, evidência p02-persistence-gates).",
       "checkpoints": [
         {
           "title": "Preservar codec/atomic writer existentes",
@@ -1339,18 +1354,18 @@
         },
         {
           "title": "migrar snapshots autorais, schema/IDs/refs e staged load",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "p02-snapshots-staged-load"
         },
         {
           "title": "saved revision fiel durante edição, limites/corrupt input, migrations e round-trip completo",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "p02-roundtrip-invariants"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "p02-persistence-gates"
         }
       ],
       "documents": [
