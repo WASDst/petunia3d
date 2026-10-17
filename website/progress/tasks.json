@@ -756,6 +756,21 @@
       "revision": "845c113054109e665fb8e5cc1f490051f1636ac9",
       "document": "09-ui/shell-v2-proposal.md",
       "summary": "Harness offscreen em shell_v2.rs validando visibilidade, anti-colisão do HUD, troca de domínio e ativação de ferramentas com capturas PNG."
+    },
+    "o01-core-commands": {
+      "revision": "6341ddf4+working tree (não commitado)",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "crates/project/src/op_graph.rs (NodeDescriptor/ParamSpec, grafo tipado com ciclo/tipo/ocupação, graph_cache, nó fantasma) e crates/core/src/op_graph_commands.rs (OpGraphCmd: AddBoolean, AddOperation, SetParam, SetEnabled, Apply, Unapply, RemoveNode, MoveNode, Bake; Undo). 2026-10-17, CARGO_TARGET_DIR=target/agent-shell: petunia_project --lib 263 pass; petunia_core --lib 197 pass (inclui 7 de op_graph_commands). Pendente: extrair o núcleo genérico de SurfaceRecipe (não feito) e fuzz de .petunia hostil."
+    },
+    "o02-boolean-bake": {
+      "revision": "6341ddf4+working tree (não commitado)",
+      "document": "03-geometry/operation-graph.md",
+      "summary": "Nó petunia.boolean (tool, operação União/Diferença/Interseção, cleanup), petunia.object (fonte e sumidouro, fan-out inerente), petunia.mirror e petunia.symmetry; Bake grava o resultado e remove as operações, com Undo. Harness shell_v2 (offscreen) cria dois objetos, adiciona booleana, aplica ao alvo, edita parâmetro, desfaz e faz Bake: pass. Pendente: paridade medida com BooleanOpCmd, nó 'Distribuir' explícito e migração de ModifierKind legado (coexistem)."
+    },
+    "o03-stack-drawer": {
+      "revision": "6341ddf4+working tree (não commitado)",
+      "document": "09-ui/shell-v2-proposal.md",
+      "summary": "Pilha no Inspector: PetuniaOperationCard gerado do descriptor (segmentado/combo/checkbox/NumberField, alvo 'Aplicar em'), menu '+' com Booleana/Mirror/Symmetry, 'Tornar editável'. Gaveta 'Nós': PetuniaNodeCanvas (QGraphicsView) com fios tipados (sólido=operação, tracejado=geometria + rótulo), arrasto de saída a objeto = graph_apply, teclado (setas, Enter 'Aplicar em…', Delete, Ctrl+setas, Shift+A), nome/descrição acessíveis resumindo ligações. shell_v2 (offscreen) 1/1 pass com capturas em target/shell-captures/shell_POLY_nodes.png e shell_POLY_boolean_applied.png; editor_parity 21, gallery_test 1, component_contracts 1, ui_contract_ids 3, ui_i18n_catalog 3, bridge_test 11 (skip test_widgets_studio_window_creation) pass. Corrigido: gaveta não abria (applyLayout relia layout salvo) e canvas não pode herdar o atalho Delete do editor. Limitações: sem QAccessibleInterface por nó/porta (só descrição da view), sem leitor de tela/AT-SPI testado, undo de MoveNode não reflete no canvas, HUD ainda não gerado do descriptor, sem nós de material."
     }
   },
   "tasks": [
@@ -4576,9 +4591,9 @@
       "title": "Operation Graph — núcleo genérico e comandos",
       "description": "Extrair núcleo de SurfaceRecipe, NodeDescriptor, comandos graph.* e fonte Graph(output); ADR-C13.",
       "document": "03-geometry/operation-graph.md",
-      "status": "DONE",
+      "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "baseline": "2026-10-17: núcleo do Operation Graph implementado e testado (project 263, core 197 pass); extração genérica de SurfaceRecipe pendente.",
       "checkpoints": [
         {
           "title": "Extração do núcleo com SurfaceRecipe e .petunia retrocompatíveis.",
@@ -4588,12 +4603,12 @@
         {
           "title": "NodeDescriptor e comandos graph.* com Undo.",
           "completed": true,
-          "evidence": "o01-descriptors-and-commands"
+          "evidence": "o01-core-commands"
         },
         {
           "title": "Testes de ciclo, tipos, dados hostis e sem panics.",
           "completed": true,
-          "evidence": "o01-invariants-and-hostile-tests"
+          "evidence": "o01-core-commands"
         },
         {
           "title": "Executar e registrar os gates aplicáveis (Rust, QTestLib offscreen, visual, a11y) com regressões e limites de ambiente.",
@@ -4612,9 +4627,9 @@
       "title": "Operation Graph — nó Boolean, Saída de Objeto e Bake",
       "description": "Nó Boolean multi-tool sobre petunia_mesh::boolean, Saída de Objeto, Bake e migração de Mirror/Symmetry.",
       "document": "03-geometry/operation-graph.md",
-      "status": "DONE",
+      "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "baseline": "2026-10-17: nós Boolean/Object/Mirror/Symmetry e Bake com Undo funcionando de ponta a ponta no shell v2; paridade com BooleanOpCmd e migração de ModifierKind pendentes.",
       "checkpoints": [
         {
           "title": "Nó Boolean com paridade ao BooleanOpCmd atual.",
@@ -4624,7 +4639,7 @@
         {
           "title": "Saída de Objeto, Distribuir e Bake com Undo.",
           "completed": true,
-          "evidence": "o02-object-output-and-bake"
+          "evidence": "o02-boolean-bake"
         },
         {
           "title": "Migração de ModifierKind sem perda.",
@@ -4648,9 +4663,9 @@
       "title": "Operation Graph — Pilha, Gaveta Nós e HUD gerados do descriptor",
       "description": "Pilha no Inspector e Gaveta Nós (QGraphicsView) com a11y completa, gerados do NodeDescriptor.",
       "document": "03-geometry/operation-graph.md",
-      "status": "DONE",
+      "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Proposta 2026-10-17 (dossiê estático, nada executado); direção aprovada pelo usuário, implementação não iniciada.",
+      "baseline": "2026-10-17: Pilha no Inspector e canvas de nós na gaveta funcionando offscreen; QAccessible completo, HUD gerado e leitor de tela pendentes.",
       "checkpoints": [
         {
           "title": "Pilha no Inspector e HUD gerados do descriptor.",
