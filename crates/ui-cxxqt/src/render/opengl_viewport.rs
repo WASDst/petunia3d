@@ -1491,3 +1491,37 @@ pub unsafe extern "C" fn petunia_qt_software_frame_rgba(
         })
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod split_view_tests {
+    use super::*;
+
+    /// U05: cada vista (principal, split) tem câmera e tamanho lógico próprios; o
+    /// ponteiro de uma vista é mapeado com as dimensões dela, nunca da outra.
+    #[test]
+    fn activating_a_view_switches_its_logical_size_ratio_and_camera() {
+        let mut host = QtViewportRenderer::new();
+        host.dimensions.insert(1, (800, 600, 1.0));
+        host.dimensions.insert(2, (400, 300, 2.0));
+
+        host.activate(1);
+        assert_eq!(host.app.controller.viewport_size, [800.0, 600.0]);
+        host.app.state.session.camera.yaw = 0.25;
+
+        host.activate(2);
+        assert_eq!(host.app.controller.viewport_size, [400.0, 300.0]);
+        host.app.state.session.camera.yaw = -1.0;
+
+        host.activate(1);
+        assert_eq!(host.app.controller.viewport_size, [800.0, 600.0]);
+        assert_eq!(
+            host.app.state.session.camera.yaw, 0.25,
+            "câmera da vista principal preservada"
+        );
+        host.activate(2);
+        assert_eq!(
+            host.app.state.session.camera.yaw, -1.0,
+            "split tem câmera independente"
+        );
+    }
+}

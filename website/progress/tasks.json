@@ -886,6 +886,16 @@
       "revision": "89b4aa64+working tree",
       "document": "09-ui/viewport-input-boundary.md",
       "summary": "Shell v2, canvas 2D (PetuniaEditorCanvas) e viewport 3D (PetuniaGlWidget): perder o foco no meio do gesto confirma o traço de pintura (sem transação pendurada; snapshot paint_stroke_open) e cancela gizmo/ferramenta geométrica; Escape cancela explicitamente (fase 3 / cancel_transform); soltar outro botão durante o arrasto do esquerdo não encerra o gesto (defeito encontrado nos dois canvases). Harness shell_v2 offscreen (paint:canvas2d-* e paint:viewport3d-*) pass. Não verificado: click-move-click em DPR 2 e na vista secundária do split (coordenadas lógicas nos dois sentidos via resize_viewport_scaled; not run)."
+    },
+    "u05-dpi-split": {
+      "revision": "011f097b+working tree",
+      "document": "09-ui/viewport-input-boundary.md",
+      "summary": "click-move-click em DPI alto: petunia_editor test_u05_click_move_click_is_independent_of_device_pixel_ratio (mesmo caminho lógico, mesmo resultado em DPR 1 e 2) pass. Split: petunia_ui_cxxqt render::opengl_viewport::split_view_tests (ativar a vista troca tamanho lógico, razão e câmera; split com câmera independente) pass. Junto com u05-gesture-lifecycle fecha Press/Move/Release/Cancel, foco perdido, Escape e click-move-click."
+    },
+    "u05-gates": {
+      "revision": "011f097b+working tree",
+      "document": "09-ui/viewport-input-boundary.md",
+      "summary": "2026-10-17, CARGO_BUILD_JOBS=2, QT_QPA_PLATFORM=offscreen: petunia_editor (lib 137 + integração, incl. paint_pointer_actions_u05 e temporary_transform_h11 9) pass; petunia_ui_cxxqt shell_v2 1, bridge_test 12, editor_parity 21, lib split_view pass; clippy -D warnings e fmt limpos. Não executado (Q08): mouse/tablet físicos em display real, Windows, DPR físico 2."
     }
   },
   "tasks": [
@@ -1100,9 +1110,9 @@
       "title": "Input PAINT",
       "description": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas; fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split.",
       "document": "09-ui/viewport-input-boundary.md",
-      "status": "IN PROGRESS",
+      "status": "DONE",
       "updated": "2026-10-17",
-      "baseline": "2026-10-17 (Shell v2): ações semânticas completas com Alt e ciclo Press/Move/Release/Cancel, foco perdido e Escape verificados offscreen; pendente click-move-click em DPI alto/split.",
+      "baseline": "2026-10-17 (Shell v2): ações semânticas de ponteiro com Alt, ciclo de gesto interrompido e click-move-click em DPI/split verificados offscreen; dispositivos físicos em Q08.",
       "checkpoints": [
         {
           "title": "Migrar clone/decal/straight stroke de Shift/Ctrl crus para ações semânticas",
@@ -1111,13 +1121,13 @@
         },
         {
           "title": "fechar Press/Move/Release/Cancel, lost focus, Escape e click-move-click em DPI/split",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u05-dpi-split"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "u05-gates"
         }
       ],
       "documents": [

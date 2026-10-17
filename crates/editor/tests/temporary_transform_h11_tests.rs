@@ -267,3 +267,31 @@ fn test_h11_switching_transform_modes_preserves_origin_tool() {
     assert_eq!(b.state.session.tools.active_tool, "draw_profile");
     assert_eq!(b.state.session.tools.temporary_modal_origin_tool(), None);
 }
+
+/// U05: o mesmo caminho de ponteiro em px lógicos produz o mesmo resultado em
+/// DPR 1 e 2 (o host Qt passa tamanho lógico + razão; ponteiro sempre lógico).
+#[test]
+fn test_u05_click_move_click_is_independent_of_device_pixel_ratio() {
+    let run = |ratio: f32| {
+        let mut b = bridge();
+        b.resize_viewport_scaled(800, 600, ratio);
+        let before = b.state.project.active().unwrap().position;
+        b.apply(UiIntent::SetToolActivation(ToolActivation::Instant));
+        b.apply(UiIntent::BeginModalTransform(TransformKind::Position));
+        b.tool_pointer(1, 400.0, 300.0, false, false);
+        b.tool_pointer(1, 470.0, 335.0, false, false);
+        b.tool_pointer(0, 470.0, 335.0, false, false);
+        assert!(!b.tool_session.is_latched(), "o segundo clique confirma");
+        let after = b.state.project.active().unwrap().position;
+        (before, after)
+    };
+    let (before, at_1x) = run(1.0);
+    let (_, at_2x) = run(2.0);
+    assert_ne!(before, at_1x, "o movimento latched deslocou o objeto");
+    for axis in 0..3 {
+        assert!(
+            (at_1x[axis] - at_2x[axis]).abs() < 1e-4,
+            "DPR muda o resultado: {at_1x:?} × {at_2x:?}"
+        );
+    }
+}
