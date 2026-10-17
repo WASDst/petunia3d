@@ -28,6 +28,9 @@
 #include <QAbstractButton>
 #include <QAccessible>
 #include <QApplication>
+#include <functional>
+#include <QTimer>
+#include <QLineEdit>
 #include <cmath>
 #include <QDir>
 #include <QJsonArray>
@@ -649,6 +652,73 @@ extern "C" const char *petunia_shell_harness(const char *directory) {
         c->request("workspace", {{"id", "POLY"}});
         settle(6);
         window.syncNow();
+    }
+
+    // U07: diálogos recebem o foco, Esc fecha só o topo e o foco volta ao invocador.
+    {
+        c->request("workspace", {{"id", "POLY"}});
+        settle(4);
+        window.syncNow();
+        QLineEdit *invoker = nullptr;
+        const auto edits = window.structure()->findChildren<QLineEdit *>();
+        for (auto *edit : edits)
+            if (edit->isVisible() && !invoker)
+                invoker = edit;
+        struct Probe { bool opened{false}; bool focusInside{false}; };
+        auto probeModal = [](Probe *probe) {
+            QTimer::singleShot(150, [probe] {
+                QWidget *top = QApplication::activeModalWidget();
+                if (!top)
+                    top = QApplication::activePopupWidget();
+                probe->opened = top != nullptr;
+                QWidget *focus = QApplication::focusWidget();
+                probe->focusInside = top && focus && (focus == top || top->isAncestorOf(focus));
+                QWidget *target = focus ? focus : top;
+                if (target) {
+                    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+                    QCoreApplication::sendEvent(target, &esc);
+                }
+                // Rede de segurança: nunca deixar o harness preso num diálogo.
+                QTimer::singleShot(400, [] {
+                    if (auto *modal = QApplication::activeModalWidget())
+                        modal->close();
+                });
+            });
+        };
+        auto check = [&](const QString &name, const std::function<void()> &open, bool modal) {
+            if (!invoker) {
+                h.add("focus:" + name + "-invoker-available", false);
+                return;
+            }
+            invoker->setFocus(Qt::OtherFocusReason);
+            settle(2);
+            Probe probe;
+            if (modal) {
+                probeModal(&probe);
+                open();
+            } else {
+                open();
+                settle(4);
+                QWidget *top = QApplication::activePopupWidget();
+                if (!top)
+                    top = QApplication::activeWindow() != &window ? QApplication::activeWindow() : nullptr;
+                probe.opened = top != nullptr;
+                QWidget *focus = QApplication::focusWidget();
+                probe.focusInside = top && focus && (focus == top || top->isAncestorOf(focus));
+                if (focus) {
+                    QKeyEvent esc(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+                    QCoreApplication::sendEvent(focus, &esc);
+                }
+            }
+            settle(4);
+            h.add("focus:" + name + "-opens-with-focus-inside", probe.opened && probe.focusInside);
+            h.add("focus:" + name + "-escape-returns-focus-to-invoker", QApplication::focusWidget() == invoker,
+                  QApplication::focusWidget() ? QString::fromLatin1(QApplication::focusWidget()->metaObject()->className())
+                                              : QStringLiteral("sem foco"));
+        };
+        check("palette", [&] { window.openPalette(); }, false);
+        check("preferences", [&] { window.openPreferences(); }, true);
+        check("references", [&] { window.openReferences(); }, true);
     }
 
     // Foco por regiões (F6): percorre regiões distintas e volta ao ponto de partida.

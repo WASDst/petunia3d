@@ -223,6 +223,22 @@ int PetuniaShellWindow::focusedRegion() const {
     return m_navigator ? m_navigator->regionOf(QApplication::focusWidget()) : -1;
 }
 
+namespace {
+/// Memória do invocador (U07): guarda o widget com foco ao abrir um diálogo e o
+/// devolve ao fechar, se ainda estiver visível.
+struct PetuniaFocusReturn {
+    QPointer<QWidget> invoker{QApplication::focusWidget()};
+    ~PetuniaFocusReturn() {
+        if (!invoker || !invoker->isVisible())
+            return;
+        // A janela do invocador volta a ser a ativa: sem isso o foco fica só
+        // "guardado" nela e o teclado (F6, atalhos) não chega a lugar nenhum.
+        invoker->window()->activateWindow();
+        invoker->setFocus(Qt::OtherFocusReason);
+    }
+};
+} // namespace
+
 PetuniaNodeCanvas *PetuniaShellWindow::nodeCanvas() const {
     return m_nodePage ? m_nodePage->canvas() : nullptr;
 }
@@ -597,14 +613,22 @@ void PetuniaShellWindow::openPalette() {
         m_palette = new PetuniaCommandPalette(this);
         connect(m_palette, &PetuniaCommandPalette::commandSelected, this,
                 [this](const QString &id) { m_controller.command(id); });
+        // Popup não-modal: devolve o foco ao invocador quando fecha.
+        connect(m_palette, &QDialog::finished, this, [this] {
+            if (m_paletteInvoker && m_paletteInvoker->isVisible()) {
+                m_paletteInvoker->window()->activateWindow();
+                m_paletteInvoker->setFocus(Qt::OtherFocusReason);
+            }
+        });
     }
+    m_paletteInvoker = QApplication::focusWidget();
     const QPoint center = mapToGlobal(rect().center()) - QPoint(m_palette->width() / 2, m_palette->height() / 2);
     m_palette->move(center);
     m_palette->show();
 }
 
 void PetuniaShellWindow::openPreferences() {
-    const QPointer<QWidget> invoker = QApplication::focusWidget();
+    PetuniaFocusReturn focusReturn;
     QDialog dialog(this);
     dialog.setWindowTitle(tr("Preferências"));
     dialog.resize(680, 680);
@@ -618,12 +642,11 @@ void PetuniaShellWindow::openPreferences() {
     connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
     petuniaLocalize(&dialog);
     dialog.exec();
-    if (invoker && invoker->isVisible())
-        invoker->setFocus();
     m_controller.request(QStringLiteral("preferences_save"));
 }
 
 void PetuniaShellWindow::openReferences() {
+    PetuniaFocusReturn focusReturn;
     QDialog dialog(this);
     dialog.setWindowTitle(tr("Referências"));
     dialog.resize(640, 600);

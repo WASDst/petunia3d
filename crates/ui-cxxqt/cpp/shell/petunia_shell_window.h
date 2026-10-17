@@ -65,6 +65,10 @@ class PetuniaShellWindow : public QMainWindow {
     PetuniaNodePage *nodePage() const { return m_nodePage; }
     /// Abre a gaveta "Nós" no grafo de operações ou no do material ativo.
     void openNodeEditor(bool material);
+    /// Diálogos do host: o foco entra no diálogo e volta ao invocador ao fechar.
+    void openPalette();
+    void openPreferences();
+    void openReferences();
     PetuniaDrawer *drawerRegion() const { return m_drawer; }
 
   protected:
@@ -93,9 +97,6 @@ class PetuniaShellWindow : public QMainWindow {
     bool saveProject();
     bool saveProjectAs();
     void exportTo(const QString &kind);
-    void openPalette();
-    void openPreferences();
-    void openReferences();
     void openAssets();
     void openHome();
     void openRecovery();
@@ -133,6 +134,7 @@ class PetuniaShellWindow : public QMainWindow {
     QHash<QString, QWidget *> m_canvases;
     QWidget *m_assetsHost{nullptr};
     PetuniaNodePage *m_nodePage{nullptr};
+    QPointer<QWidget> m_paletteInvoker;
     PetuniaEditorPanel *m_assetsPanel{nullptr};
     QString m_projectPath;
     QString m_language;

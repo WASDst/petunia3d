@@ -916,6 +916,11 @@
       "revision": "805657e4+working tree",
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "summary": "Auditoria automática no harness shell_v2 (QAccessible, offscreen): em DRAW/POLY/PAINT/UV/ANIMATE e com a gaveta aberta (Assets, Nós Operações/Material, Linha do tempo) todo controle visível alcançável por teclado tem nome acessível, todo botão desabilitado explica o motivo (dica ou descrição) e controles de valor expõem o valor. Corrigidos: rolagem de Propriedades, abas hospedadas e suas áreas de rolagem (petuniaNameTabContainers), viewport do canvas de nós, setas de rolagem de abas do Qt. Não coberto: IME, rotas alternativas ao ponteiro além das já testadas, leitor de tela real (Q08)."
+    },
+    "u07-dialog-focus": {
+      "revision": "5407fc3e+working tree",
+      "document": "09-ui/workspaces-feedback-accessibility.md",
+      "summary": "Harness shell_v2 (offscreen): paleta de comandos, Preferências e Referências abrem com o foco dentro, Esc fecha só o topo e o foco volta ao invocador (campo de busca da Estrutura); F6/Shift+F6 seguem funcionando depois. Corrigido: Referências não devolviam o foco; diálogos modais devolviam o foco sem reativar a janela (teclado ficava sem destino). PetuniaFocusReturn (memória do invocador) usado pelos diálogos do host. Não coberto: menus de contexto, painéis pinados e validação com tecnologia assistiva real (Q08)."
     }
   },
   "tasks": [
@@ -1298,7 +1303,7 @@
       "document": "09-ui/workspaces-feedback-accessibility.md",
       "status": "IN PROGRESS",
       "updated": "2026-10-17",
-      "baseline": "Reconciliação U19 (2026-10-17): escrito para o frontend Slint, removido pelo decision register (2026-10-15); o shell Qt legado também foi removido (U19). Parte coberta no v2 (foco por regiões e restauração U14, diálogos fora do sync U10); validação de focus trap/menus/painéis com tecnologia assistiva real segue aberta (Q08).",
+      "baseline": "2026-10-17 (Shell v2): foco entra nos diálogos do host, Esc fecha o topo e o foco volta ao invocador com a janela reativada (harness); menus de contexto e painéis pinados ainda sem verificação automática.",
       "checkpoints": [
         {
           "title": "Completar focus trap de modais, memória do invocador, restauração de foco, Esc no topo e click-away seguro",
