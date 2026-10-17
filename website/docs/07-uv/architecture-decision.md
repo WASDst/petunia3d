@@ -140,6 +140,14 @@ Scale
 
 Reutilizar modal transforms da Application, com numeric input e snapping. Um gesto = um Undo.
 
+### Ciclo de vida e garantias transacionais (V01)
+
+- **Pins tipados:** gerenciados por `UvPinCmd` com `FaceCornerIndex` e operações semânticas (`Pin`, `Unpin`, `Toggle`, `ClearAll`).
+- **Split UV:** implementado via `UvSplitCmd` e `Mesh::split_uv`, marcando seams na fronteira da seleção e garantindo invariante estrito de que nenhum vértice 3D (`mesh.verts`) é duplicado.
+- **Stitch UV:** implementado via `UvStitchCmd` e `Mesh::stitch_uv_to(stationary_face, filter)` alinhando bordas compartilhadas, fundindo cantos coincidentes, limpando a seam e recusando mover ilhas com pins ativos.
+- **Modal Preview:** ciclo `begin_uv_transform`, `update_uv_transform`, `commit_uv_transform` e `cancel_uv_transform`. Mutações contínuas de drag alteram apenas a prévia em memória; cancelamento via Esc descarta a prévia com 0 entradas de Undo; confirmação via Enter/Clique gera exatamente 1 entrada de Undo. Rejeição estrita de entradas não-finitas (`NaN`/`Inf`).
+- Suítes de regressão e gates automatizados: `crates/core/tests/uv_foundations_v01_tests.rs` e `crates/core/tests/uv_transform_session.rs`.
+
 ## UV Snapping
 
 Snap 2D pequeno e próprio do UV editor:

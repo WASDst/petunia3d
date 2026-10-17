@@ -525,6 +525,11 @@
       "revision": "refactor/architecture-foundation continuation; crates/core/src/camera.rs, crates/core/src/state.rs, crates/core/src/command.rs, crates/core/tests/camera_foundations_a07_tests.rs",
       "document": "01-core/camera-and-selection.md",
       "summary": "A07: Câmera concluído. Ownership da câmera movido para EditorSession/Application e ViewportSession, completamente desacoplada do DocumentSession/ProjectState (mutações de câmera como orbit/pan/zoom não alteram a revisão do documento nem poluem o histórico de Undo). Preset clássico pseudo-isométrico 2:1 (ViewPreset::PseudoIsometric2To1, 26,565° ortográfico com preservação estrita de framing) e presets cardinais/isométricos/perspectiva existentes mantidos e integrados aos comandos transacionais (SetViewPresetCmd) via CommandDispatcher. Navegação explícita com NavigationAnchor::ViewTarget (default) e Cursor3D, garantindo que pan e frame não alteram a posição do cursor 3D. Rejeição de valores não-finitos (NaN/Inf) em dimensões de viewport e escala de projeção. Testes: 5 testes dedicados em core/tests/camera_foundations_a07_tests.rs pass (0.03s), 190 testes em core lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
+    },
+    "v01-uv-selection-transform-20261016": {
+      "revision": "refactor/architecture-foundation continuation; crates/mesh/src/uv_stitch.rs, crates/core/src/edit_api.rs, crates/core/src/command.rs, crates/core/src/uv_transform.rs, crates/core/tests/uv_foundations_v01_tests.rs",
+      "document": "07-uv/architecture-decision.md",
+      "summary": "V01: UV selection/transform concluído. Pins tipados gerenciados via UvPinCmd com FaceCornerIndex e operações de Pin, Unpin, Toggle e ClearAll. Split UV implementado via UvSplitCmd e Mesh::split_uv criando descontinuidades de seam sem duplicar vértices 3D (mesh.verts inalterado). Stitch UV implementado via UvStitchCmd e Mesh::stitch_uv_to com alinhamento estacionário/móvel, fusão de cantos compartilhados, remoção de seams e respeito estrito a solver constraints (recusa de ilhas com pin). Transformação interativa de UV integrada ao ciclo modal (begin_uv_transform, update_uv_transform, commit_uv_transform, cancel_uv_transform) com preview isolado do documento, cancelamento limpo sem poluir Undo (0 entradas) e commit atômico gerando exatamente 1 entrada de histórico. Rejeição de parâmetros não-finitos (NaN/Inf). Testes: 4 testes em core/tests/uv_foundations_v01_tests.rs pass (0.03s), 4 testes em core/tests/uv_transform_session.rs pass, 190 testes em core lib pass (CARGO_BUILD_JOBS=1). Fmt e Clippy zero warnings."
     }
   },
   "tasks": [
@@ -2117,9 +2122,9 @@
       "title": "UV selection/transform",
       "description": "Corner/Edge/Face/Island e Sync explícito on/off; pins tipados, solver constraints, transform modal preview/Enter/Esc/Undo único, Stitch stationary/moving e Split sem duplicar vértice 3D.",
       "document": "07-uv/architecture-decision.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-10",
-      "baseline": "Parcial. crates/mesh/src/lib.rs:87, crates/ui-slint/src/lib.rs:8072. Estado da migração a confirmar; preservar as capacidades existentes.",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "UV selection/transform consolidado: seleção Corner/Edge/Face/Island com Sync explícito on/off; pins tipados com FaceCornerIndex; Split UV sem duplicação de vértices 3D; Stitch UV com suporte stationary/moving e respeito a pins; ciclo modal de UV transform com preview contínuo, cancelamento (0 Undo) e commit atômico (1 Undo). Evidência v01-uv-selection-transform-20261016 (4 testes dedicados em core/tests/uv_foundations_v01_tests.rs pass, 4 em uv_transform_session.rs pass, 190 core lib pass).",
       "checkpoints": [
         {
           "title": "Corner/Edge/Face/Island e Sync explícito on/off",
@@ -2128,13 +2133,13 @@
         },
         {
           "title": "pins tipados, solver constraints, transform modal preview/Enter/Esc/Undo único, Stitch stationary/moving e Split sem duplicar vértice 3D",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "v01-uv-selection-transform-20261016"
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "v01-uv-selection-transform-20261016"
         }
       ],
       "documents": [
