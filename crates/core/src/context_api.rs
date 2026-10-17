@@ -376,6 +376,11 @@ impl AppState {
     }
 
     #[inline]
+    pub fn query_uv_diagnostics(&self) -> UvDiagnosticsDto {
+        self.view().query_uv_diagnostics()
+    }
+
+    #[inline]
     pub fn set_active_asset_by_id(&mut self, id: Uuid) -> bool {
         self.in_context(|ctx| ctx.set_active_asset_by_id(id))
     }

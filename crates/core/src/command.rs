@@ -1585,6 +1585,26 @@ impl CommandDispatcher {
         );
         d.register_with_meta(
             CommandMetadata::new(
+                "uv.project_cylindrical",
+                "Cylindrical UV Projection",
+                "Project UVs cylindrically around the Y axis on selected faces (or all)",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvProjectCylindricalCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
+                "uv.project_spherical",
+                "Spherical UV Projection",
+                "Project UVs spherically from the bounding center on selected faces (or all)",
+                CommandCategory::Tools,
+            )
+            .with_docs(DocsTopic::UvUnwrapping),
+            UvProjectSphericalCmd,
+        );
+        d.register_with_meta(
+            CommandMetadata::new(
                 "uv.equalize_texel_density",
                 "Equalize Texel Density",
                 "Equalize texel density across UV islands",
@@ -7344,6 +7364,64 @@ impl Command for UvProjectCubeCmd {
             return Err(CommandError::NoActiveAsset);
         };
         mesh.project_cube();
+        state.editor.tools.uv_selection.clear();
+        Ok(())
+    }
+}
+
+/// Projeção UV cilíndrica sobre as faces selecionadas (ou toda a malha se vazio).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvProjectCylindricalCmd;
+
+impl Command for UvProjectCylindricalCmd {
+    fn label(&self) -> &'static str {
+        "uv cylindrical projection"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let faces = {
+            let Some(mesh) = state.document.active_mesh() else {
+                return Err(CommandError::NoActiveAsset);
+            };
+            state.editor.uv_selection.faces(mesh)
+        };
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.project_cylindrical(&faces);
+        state.editor.tools.uv_selection.clear();
+        Ok(())
+    }
+}
+
+/// Projeção UV esférica sobre as faces selecionadas (ou toda a malha se vazio).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UvProjectSphericalCmd;
+
+impl Command for UvProjectSphericalCmd {
+    fn label(&self) -> &'static str {
+        "uv spherical projection"
+    }
+
+    fn changes(&self) -> ProjectChanges {
+        ProjectChanges::UVS
+    }
+
+    fn execute(&self, state: &mut CommandContext<'_>) -> Result<(), CommandError> {
+        let faces = {
+            let Some(mesh) = state.document.active_mesh() else {
+                return Err(CommandError::NoActiveAsset);
+            };
+            state.editor.uv_selection.faces(mesh)
+        };
+        let Some(mesh) = state.document.active_mesh_mut() else {
+            return Err(CommandError::NoActiveAsset);
+        };
+        mesh.project_spherical(&faces);
         state.editor.tools.uv_selection.clear();
         Ok(())
     }

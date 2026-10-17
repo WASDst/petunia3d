@@ -347,6 +347,14 @@ Cada item pode oferecer `Select` e somente oferece `Fix` quando a correção for
 
 UV fora de 0..1 é diagnostic, não validation error.
 
+### Consolidação de Operações e UV Health (V02)
+
+- **Projeções canônicas completas:** expostas como comandos transacionais no `CommandDispatcher`: `UvProjectPlanarCmd` (`uv.project_planar`), `UvProjectCubeCmd` (`uv.project_cube`), `UvProjectCylindricalCmd` (`uv.project_cylindrical`), `UvProjectSphericalCmd` (`uv.project_spherical`), e `UvProjectFromViewCmd` (`uv.project_view`), atuando na seleção parcial de faces ou na malha inteira caso vazia.
+- **Auto Unwrap conservativo:** provider xatlas preserva quads e n-gons autorais sem qualquer triangulação destrutiva de geometria 3D, mapeando UVs geradas de volta aos FaceCorners autorais.
+- **Pack determinístico:** implementado com padding parametrizado em pixels (`UvPackIslandsCmd`), rotação condicional de 90° e confinamento estrito a `0..=1` sem sobreposição acidental de ilhas.
+- **UV Health & Diagnostics (`UvDiagnosticsDto`):** consolidado no `AppState` e `EditorController` via `query_uv_diagnostics()`, computando ilhas conexas, contagem de overlaps, faces de área zero, cantos fora de `0..=1` (apenas telemetria, não erro), distorção de área média e máxima (Area Stretch) e densidade de texels real em px/world-unit (`UvSetTexelDensityCmd`, `UvEqualizeTexelDensityCmd`).
+- **Suíte sintética de gates V02:** `crates/core/tests/uv_health_v02_gates_tests.rs` (5/5 testes verdes cobrindo topologia autoral em unwrap, projeções parciais/totais, padding em pixels, métricas de health e integridade estrita de Undo/Redo).
+
 ## Multi-material
 
 O background/canal ativo vem do `MaterialSlotIndex` selecionado.

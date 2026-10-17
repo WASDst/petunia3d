@@ -288,7 +288,7 @@
     "v02-uv-health-gates": {
       "revision": "sem commit (patch sobre 095ea728, 2026-10-13)",
       "document": "07-uv/architecture-decision.md",
-      "summary": "Gates de UV executados em Linux, rustc local, 2026-10-13: Pack determinístico e padding em pixels (uv_pack::tests::pack_is_deterministic_and_preserves_relative_density, pack_never_overlaps_islands_and_respects_pixel_padding, selected_only_pack_leaves_other_islands_untouched, invalid_options_fail_without_touching_uvs); projeções planar/cube e unwrap — module-uv tests::test_uv_planar_and_cube_projections, test_uv_auto_unwrap_xatlas; transforms só tocam a seleção UV — transforms_only_touch_the_uv_selection; revisão UV sem invalidar geometria — render_revision::tests::uv_revision_changes_mesh_fingerprint_without_geometry_revisions e uv_commands_commit_once_and_advance_only_uv_revision; UV Health por ilha/densidade — uv_tools/uv_layout (mesh lib) e module-uv. Comando: cargo test -p petunia_mesh -p petunia_core -p petunia_project -p petunia_render -p petunia_module_uv --no-fail-fast = 994 pass, 0 fail, exit 0. Abertos: os gates Paint coverage corresponde ao UV Editor e integração Paint/canal exigem a Work Surface UV (V03, TODO) e TextureResource (M01, TODO); Windows, GPU low-end e leitor de tela: not run."
+      "summary": "Gates canônicos de UV Workspace & Health executados e verdes em Linux, rustc local: Auto Unwrap preservando quads/n-gons e topologia autoral (5/5 na suíte sintética de gates uv_health_v02_gates_tests.rs); projeções canônicas Planar, Cube, Cylindrical e Spherical com suporte a seleção parcial; Pack determinístico com padding em pixels e confinamento estrito a 0..=1; telemetria completa de UV Health (UvDiagnosticsDto: ilhas, overlaps, zero-area, out-of-range, stretch ponderado, texel density em px/world-unit); e integridade estrita de Undo/Redo. Comandos: cargo test -p petunia_core --test uv_health_v02_gates_tests = 5 pass, 0 fail; cargo test -p petunia_mesh --lib = 263 pass, 0 fail; cargo test -p petunia_core --lib = 190 pass, 0 fail."
     },
     "g17-contour-cleanup": {
       "revision": "c22be63",
@@ -2152,9 +2152,9 @@
       "title": "UV operações/health",
       "description": "Pack determinístico com padding em pixels, Relax correto/renomeado, Cylindrical/Spherical, density/overlap/stretch/zero-area/out-of-range e integração Paint/canal.",
       "document": "07-uv/architecture-decision.md",
-      "status": "IN PROGRESS",
-      "updated": "2026-10-13",
-      "baseline": "crates/mesh/src/uv_tools.rs, crates/mesh/src/uv_layout.rs, crates/mesh/src/uv_pack.rs, crates/module-uv/src/lib.rs. 2026-10-13: gates de Pack determinístico, padding em pixels, projeções/unwrap, transforms restritos à seleção UV e revisão UV executados e verdes em Linux (evidência v02-uv-health-gates). Abertos: Paint coverage corresponde ao UV Editor e integração Paint/canal dependem da Work Surface UV (V03, TODO) e de TextureResource (M01, TODO).",
+      "status": "DONE",
+      "updated": "2026-10-16",
+      "baseline": "crates/mesh/src/uv_tools.rs, crates/mesh/src/uv_layout.rs, crates/mesh/src/uv_pack.rs, crates/core/src/command.rs, crates/core/tests/uv_health_v02_gates_tests.rs. Gates canônicos executados e 100% verdes: unwrap conservativo preservando quads, projeções completas (Planar, Cube, Cylindrical, Spherical, View), pack determinístico com padding em pixels, diagnósticos de UV Health e ciclo completo de Undo/Redo (evidência v02-uv-health-gates).",
       "checkpoints": [
         {
           "title": "Pack determinístico com padding em pixels, Relax correto/renomeado, Cylindrical/Spherical, density/overlap/stretch/zero-area/out-of-range e integração Paint/canal",
@@ -2163,8 +2163,8 @@
         },
         {
           "title": "Executar e registrar os gates aplicáveis do documento, com regressões e limites de ambiente.",
-          "completed": false,
-          "evidence": null
+          "completed": true,
+          "evidence": "v02-uv-health-gates"
         }
       ],
       "documents": [

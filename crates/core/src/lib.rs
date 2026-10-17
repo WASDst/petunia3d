@@ -127,8 +127,9 @@ pub use command::{
     ToggleProjectionCmd, ToggleSettingsCmd, ToggleVisibilityAssetCmd, ToggleWireframeCmd,
     ToggleXRayCmd, TranslateSelectionCmd, TriangulateMeshCmd, UndoCmd, UnwrapAutoCmd,
     UpdateProfileCmd, UpdateSplineCmd, UpdateSweepGeneratorCmd, UvEqualizeTexelDensityCmd,
-    UvNormalizeTexelDensityCmd, UvPackIslandsCmd, UvProjectCubeCmd, UvProjectFromViewCmd,
-    UvProjectPlanarCmd, UvSetTexelDensityCmd, UvSplitCmd, UvTransformCmd, WeldCmd,
+    UvNormalizeTexelDensityCmd, UvPackIslandsCmd, UvProjectCubeCmd, UvProjectCylindricalCmd,
+    UvProjectFromViewCmd, UvProjectPlanarCmd, UvProjectSphericalCmd, UvSetTexelDensityCmd,
+    UvSplitCmd, UvTransformCmd, WeldCmd,
 };
 pub use context::{
     CommandEffects, EditorView, HostRequest, KeyText, TextSource, TextureOp, UiRequest,
